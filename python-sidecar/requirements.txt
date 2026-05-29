@@ -1,0 +1,4 @@
+faster-whisper==1.0.3
+# requests is not declared in faster-whisper 1.0.3's metadata but is imported by
+# faster_whisper/utils.py at runtime. Pinning here until upstream fixes the packaging.
+requests>=2.28

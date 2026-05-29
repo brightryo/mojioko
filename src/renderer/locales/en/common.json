@@ -1,0 +1,60 @@
+{
+  "app": {
+    "name": "MOJIOKO"
+  },
+  "nav": {
+    "back": "Back",
+    "continue": "Continue",
+    "step1": "Transcribe",
+    "step2": "Edit",
+    "step3": "Render"
+  },
+  "action": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "apply": "Apply",
+    "ok": "OK",
+    "reset": "Reset",
+    "delete": "Delete",
+    "restore": "Restore",
+    "close": "Close",
+    "open": "Open",
+    "browse": "Browse",
+    "download": "Download",
+    "export": "Export",
+    "add": "Add"
+  },
+  "menu": {
+    "file": "File",
+    "tools": "Tools",
+    "help": "Help",
+    "quit": "Quit",
+    "settings": "Settings",
+    "about": "About",
+    "obsGuide": "Audio track setup guide (OBS)",
+    "donations": "Support this project (Donations)",
+    "openDownloadPage": "Open Download Page",
+    "keyboardShortcuts": "Keyboard shortcuts"
+  },
+  "status": {
+    "local": "Local rendering · no network"
+  },
+  "dialog": {
+    "discardChanges": "Discard changes?",
+    "discardChangesDesc": "You have edited rows. Navigate back anyway?",
+    "dontAskAgain": "Don't ask again this session"
+  },
+  "error": {
+    "unknown": "An unknown error occurred"
+  },
+  "shortcuts": {
+    "scopeGlobal": "Global",
+    "scopeStep1": "Step 1 — Transcribe",
+    "scopeStep2": "Step 2 — Edit",
+    "scopeStep3": "Step 3 — Render"
+  },
+  "colorPicker": {
+    "presets": "Presets",
+    "recent": "Recent"
+  }
+}

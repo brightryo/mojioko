@@ -1,0 +1,139 @@
+{
+  "title": "Edit transcription",
+  "subtitle": "Review and correct subtitle text and timing.",
+  "table": {
+    "colIndex": "#",
+    "colTime": "Time",
+    "colSize": "Size",
+    "colStyle": "Style",
+    "colText": "Text",
+    "colState": "State",
+    "colActions": "",
+    "fadeTooltip": "Fade"
+  },
+  "tab": {
+    "all": "All",
+    "ready": "Ready",
+    "edited": "Edited",
+    "warnings": "Warnings",
+    "deleted": "Deleted"
+  },
+  "filter": {
+    "all": "All",
+    "edited": "Edited",
+    "overflow": "Overflow",
+    "deleted": "Deleted"
+  },
+  "state": {
+    "edited": "Edited",
+    "overflow": "Overflow",
+    "deleted": "Deleted"
+  },
+  "badge": {
+    "overflow": "Overflow",
+    "overlap": "Overlap",
+    "overDuration": "Over duration",
+    "exceedsDuration": "Over duration",
+    "timeInvalid": "Invalid time",
+    "emptyText": "No text",
+    "invalidSize": "Invalid size"
+  },
+  "empty": {
+    "all": "No subtitle entries.",
+    "ready": "All entries are ready to output.",
+    "edited": "No edited entries.",
+    "warnings": "No entries with warnings.",
+    "overflow": "No overflow entries.",
+    "deleted": "No deleted entries."
+  },
+  "action": {
+    "addRow": "Add row",
+    "addRowAt": "Add at position {{index}}",
+    "adjustTime": "Adjust time",
+    "export": "Export text",
+    "exportText": "Export as text",
+    "exportSrt": "Export as SRT",
+    "continueToRender": "Continue to render",
+    "resetRow": "Reset this row",
+    "deleteRow": "Delete this row",
+    "restoreRow": "Restore this row"
+  },
+  "dialog": {
+    "timeEditor": {
+      "title": {
+        "add": "Add Row",
+        "edit": "Adjust Time"
+      },
+      "startTime": "Start time",
+      "endTime": "End time",
+      "setFromPlayhead": "Set from playhead",
+      "currentPlayhead": "current",
+      "setFromPrevStart": "Set from previous row start",
+      "setFromPrevEnd": "Set from previous row end",
+      "setFromNextStart": "Set from next row start",
+      "setFromNextEnd": "Set from next row end",
+      "setFromSelectedStart": "Set from selected row start",
+      "setFromSelectedEnd": "Set from selected row end",
+      "add": "Add",
+      "apply": "Apply",
+      "cancel": "Cancel"
+    }
+  },
+  "addRowPopover": {
+    "label": "Insert position",
+    "hint": "Enter row number"
+  },
+  "addRowDialog": {
+    "startTime": "Start time",
+    "endTime": "End time",
+    "insertAfter": "Insert after row {{n}}",
+    "appendEnd": "Append to end",
+    "errorTimeOrder": "End time must be after start time",
+    "errorOverlap": "Overlaps with an existing subtitle"
+  },
+  "footer": {
+    "summary": "{{edited}} edits · {{warnings}} warnings · {{deleted}} deleted",
+    "warnings": "warnings"
+  },
+  "toast": {
+    "rowAdded": "Row added at position {{index}}",
+    "rowDeleted": "Row deleted",
+    "rowRestored": "Row restored",
+    "rowReset": "Row reset",
+    "exported": "Transcript exported",
+    "exportedSrt": "SRT exported",
+    "undo": "Undo: {{label}}",
+    "redo": "Redo: {{label}}"
+  },
+  "tooltip": {
+    "undo": "Undo (Ctrl+Z)",
+    "redo": "Redo (Ctrl+Y)"
+  },
+  "styleCell": {
+    "textColor": "Text color",
+    "outlineColor": "Outline color",
+    "outlineWidth": "Outline width",
+    "fade": "Fade"
+  },
+  "history": {
+    "editText": "Edit text",
+    "editTime": "Edit time",
+    "editSize": "Edit size",
+    "editColor": "Change color",
+    "editStroke": "Change stroke width",
+    "editFade": "Change fade",
+    "deleteRow": "Delete row",
+    "restoreRow": "Restore row",
+    "resetRow": "Reset row",
+    "addRow": "Add row"
+  },
+  "videoPreview": {
+    "play": "Play",
+    "pause": "Pause",
+    "error": "Failed to load video",
+    "showInFolder": "Show in Folder"
+  },
+  "warning": {
+    "exceedsDuration": "Exceeds video duration"
+  }
+}

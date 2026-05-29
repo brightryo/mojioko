@@ -1,0 +1,55 @@
+import * as React from 'react'
+import { Slot } from '@radix-ui/react-slot'
+import { cva, type VariantProps } from 'class-variance-authority'
+import { cn } from '@/lib/utils'
+
+const buttonVariants = cva(
+  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-40',
+  {
+    variants: {
+      variant: {
+        /** Main action per screen — green background. */
+        primary: 'bg-green-500 text-green-950 hover:bg-green-600 active:bg-green-700 rounded-lg',
+        /** Secondary emphasis — light background. */
+        secondary: 'bg-zinc-50 text-zinc-950 hover:bg-zinc-200 active:bg-zinc-300 rounded-md',
+        /** Tertiary / ghost — transparent with border. */
+        ghost:
+          'bg-transparent text-zinc-400 border border-zinc-800 hover:bg-zinc-900 hover:text-zinc-100 active:bg-zinc-800 rounded-md',
+        /** Destructive action — red tint. */
+        danger:
+          'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 active:bg-red-500/30 rounded-md',
+        /** Icon-only action — transparent with border. */
+        icon: 'bg-transparent text-zinc-500 border border-zinc-800 hover:text-zinc-300 hover:border-zinc-700 active:bg-zinc-800 rounded-md',
+        /** Link-like, no border. */
+        link: 'bg-transparent text-zinc-400 hover:text-zinc-100 underline-offset-4 hover:underline'
+      },
+      size: {
+        sm: 'h-7 px-3 py-1.5 text-xs',
+        md: 'h-9 px-4 py-2.5 text-[13px]',
+        lg: 'h-11 px-5 py-3 text-sm',
+        /** Square icon button. */
+        icon: 'h-8 w-8 p-0 text-[13px]'
+      }
+    },
+    defaultVariants: {
+      variant: 'ghost',
+      size: 'md'
+    }
+  }
+)
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : 'button'
+    return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+  }
+)
+Button.displayName = 'Button'
+
+export { Button, buttonVariants }

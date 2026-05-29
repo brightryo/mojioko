@@ -1,0 +1,19 @@
+{
+  "title": "プロジェクトを支援する",
+  "description": "MOJIOKO は無料でご利用いただけます。お役に立てましたら、開発の支援をご検討ください。",
+  "booth": {
+    "title": "BOOTH",
+    "subtitle": "PayPay・コンビニ・クレジットカード対応 · ¥300〜",
+    "cta": "BOOTH で支援する"
+  },
+  "buymeacoffee": {
+    "title": "Buy Me a Coffee",
+    "subtitle": "グローバル・アカウント不要 · $3〜",
+    "cta": "Buy Me a Coffee で支援する"
+  },
+  "github": {
+    "title": "GitHub Sponsors",
+    "subtitle": "月額・単発どちらも可能 · GitHub アカウント必要",
+    "cta": "GitHub Sponsors で支援する"
+  }
+}

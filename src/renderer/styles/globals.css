@@ -1,0 +1,104 @@
+@import './fonts.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Background scale */
+    --background: 0 0% 3.9%;         /* #0a0a0a — app base */
+    --card: 0 0% 7.8%;               /* #141414 — bg-surface */
+    --popover: 0 0% 9%;              /* #171717 — bg-elevated */
+
+    /* Foreground */
+    --foreground: 0 0% 98%;          /* #fafafa — zinc-50 */
+    --card-foreground: 0 0% 98%;
+    --popover-foreground: 0 0% 98%;
+
+    /* Primary action: green-500 */
+    --primary: 142.1 70.6% 45.3%;
+    --primary-foreground: 144.3 80.1% 10%; /* green-950 */
+
+    /* Secondary: zinc-800 */
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+
+    /* Muted: zinc-800 bg, zinc-500 fg */
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 3.9% 46.1%;  /* zinc-500 */
+
+    /* Accent: same as secondary for shadcn compat */
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+
+    /* Destructive: red-500 */
+    --destructive: 0 72.2% 50.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Borders and inputs */
+    --border: 240 3.7% 15.9%;        /* zinc-800 */
+    --input: 0 0% 3.9%;              /* zinc-950 — inputs use dark bg */
+    --ring: 142.1 70.6% 45.3%;       /* green-500 focus ring */
+
+    /* shadcn radius — matches our rounded-lg (8px) */
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable],
+  .selectable {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  html {
+    @apply antialiased;
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    height: 100%;
+    overflow: hidden;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * react-colorful overrides — scoped to the .mojioko-cp wrapper class so
+ * specificity beats the library's own single-class selectors.
+ * ------------------------------------------------------------------------- */
+.mojioko-cp .react-colorful {
+  width: 100%;
+  height: 186px;
+}
+.mojioko-cp .react-colorful__saturation {
+  border-radius: 4px 4px 0 0;
+}
+.mojioko-cp .react-colorful__hue {
+  height: 12px;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+.mojioko-cp .react-colorful__pointer {
+  width: 16px;
+  height: 16px;
+}

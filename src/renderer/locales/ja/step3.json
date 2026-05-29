@@ -1,0 +1,101 @@
+{
+  "title": "動画書き出し",
+  "subtitle": "字幕を焼き込んだ動画を書き出します。",
+  "preview": {
+    "label": "出力イメージ",
+    "empty": "字幕がありません",
+    "disclaimer": "※ 近似表示です。実際の出力は書き出し後の動画でご確認ください",
+    "alignmentSummary": "{{align}} · {{margin}}px",
+    "list": {
+      "title": "字幕プレビュー一覧",
+      "empty": "字幕がありません"
+    }
+  },
+  "result": {
+    "label": "書き出し結果"
+  },
+  "summary": {
+    "label": "出力情報",
+    "resolution": "解像度",
+    "duration": "長さ",
+    "format": "フォーマット",
+    "subtitles": "字幕数",
+    "estimatedTime": "推定時間",
+    "estimatedSize": "推定サイズ",
+    "encoder": "エンコーダー",
+    "estimatedTimeValue": "約{{minutes}}分",
+    "estimatedSizeValue": "約{{size}}MB"
+  },
+  "audio": {
+    "label": "音声出力モード",
+    "simple": "音声トラックを1つにまとめて出力",
+    "simpleDesc": "YouTube などでは音声トラック1のみ再生されます",
+    "preserve": "音声トラックはそのまま出力",
+    "preserveDesc": "出力した動画を別な編集ソフトで加工する場合に適しています"
+  },
+  "output": {
+    "label": "出力先",
+    "change": "変更"
+  },
+  "footer": {
+    "privacyNote": "ローカル処理 · ネットワーク不使用"
+  },
+  "action": {
+    "startRender": "書き出し開始",
+    "cancel": "キャンセル",
+    "openFile": "ファイルを開く",
+    "showInFolder": "フォルダで表示",
+    "renderAgain": "再度書き出す",
+    "donate": "☕ 寄付をする"
+  },
+  "progress": {
+    "label": "書き出し中…",
+    "elapsed": "経過: {{time}}",
+    "remaining": "残り: {{time}}"
+  },
+  "success": {
+    "title": "書き出し完了",
+    "fileSize": "{{size}}MB"
+  },
+  "error": {
+    "title": "書き出し失敗",
+    "renderFailed": "書き出しに失敗しました: {{reason}}",
+    "viewLog": "ログを見る"
+  },
+  "overwriteDialog": {
+    "title": "ファイルを上書きしますか？",
+    "body": "同名のファイルが既に存在します。書き出しを続行すると上書きされます。\n\n{{path}}",
+    "confirm": "上書きする",
+    "cancel": "キャンセル"
+  },
+  "toast": {
+    "renderComplete": "書き出し完了",
+    "encoderFallback": "エンコーダー {{requested}} は使用できないため、{{actual}} にフォールバックします"
+  },
+  "subtitlePosition": {
+    "title": "字幕の位置",
+    "horizontal": "水平位置",
+    "vertical": "垂直位置",
+    "margin": "縦マージン (px)",
+    "left": "左",
+    "center": "中央",
+    "right": "右",
+    "top": "上",
+    "bottom": "下"
+  },
+  "background": {
+    "title": "字幕の背景",
+    "color": "背景色",
+    "black": "黒",
+    "white": "白",
+    "opacity": "透過率",
+    "outlineNote": "※ 背景を有効にするとアウトライン表示は無効になります"
+  },
+  "outputFormat": {
+    "label": "出力形式",
+    "labelWithInput": "出力形式 (入力動画: {{ext}})",
+    "mp4": "MP4 で書き出し",
+    "sameAsInput": "入力動画と同じ形式で書き出し",
+    "sameAsInputWithExt": "入力動画と同じ形式で書き出し ({{ext}})"
+  }
+}
