@@ -1,0 +1,9 @@
+{
+  "INVALID_VIDEO": "無効な動画ファイルです",
+  "FFMPEG_ERROR": "ffmpegエラーが発生しました",
+  "TRANSCRIPTION_ERROR": "文字起こしに失敗しました",
+  "WHISPER_MODEL_NOT_FOUND": "Whisperモデルが見つかりません",
+  "MODEL_DOWNLOAD_ERROR": "モデルのダウンロードに失敗しました",
+  "SETTINGS_CORRUPT": "設定ファイルが破損していました。デフォルト値で再作成しました。",
+  "unknown": "不明なエラーが発生しました"
+}

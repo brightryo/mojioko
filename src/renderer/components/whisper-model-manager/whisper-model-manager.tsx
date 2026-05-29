@@ -1,0 +1,626 @@
+import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  Sparkles,
+  Download,
+  Trash2,
+  Check,
+  Target,
+  Database,
+  HardDrive,
+  ShieldCheck,
+  FolderOpen,
+  AlertTriangle,
+  ChevronUp,
+  ChevronDown
+} from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '@/components/ui/dialog'
+import { HelpIcon } from '@/components/help-icon'
+import { cn } from '@/lib/utils'
+import { formatBytes } from '@/lib/format'
+import {
+  listModels,
+  uninstallModel,
+  setActiveModel,
+  openModelsFolder,
+  downloadModel
+} from '@/services/transcription'
+import type { DownloadRun } from '@/services/transcription'
+import type { ModelInfo, ModelsState, WhisperModelId } from '../../../shared/types'
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const MODEL_INSTALL_TIME: Record<string, Record<string, string>> = {
+  ja: { small: '約2〜10分', medium: '約5〜30分', 'large-v3': '約10〜60分' },
+  en: { small: '~2–10 min', medium: '~5–30 min', 'large-v3': '~10–60 min' }
+}
+
+const DESC_KEY: Record<string, string> = {
+  small: 'whisperModel.descSmall',
+  medium: 'whisperModel.descMedium',
+  'large-v3': 'whisperModel.descLargeV3'
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface WhisperModelManagerProps {
+  onActiveModelChange?: (modelId: WhisperModelId | null) => void
+  disabled?: boolean
+}
+
+type DialogKind =
+  | { kind: 'install-confirm'; model: ModelInfo }
+  | { kind: 'disk-full'; model: ModelInfo; required: number; available: number }
+  | { kind: 'uninstall-confirm'; model: ModelInfo }
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function WhisperModelManager({ onActiveModelChange, disabled }: WhisperModelManagerProps) {
+  const { t, i18n } = useTranslation('step1')
+
+  const [state, setState] = useState<ModelsState | null>(null)
+  // Start closed so "open → immediately close" jitter never shows when a model is
+  // already active.  The effect below opens it when no active model is found.
+  const [isOpen, setIsOpen] = useState(false)
+  const initializedRef = useRef(false)
+  const [downloadingId, setDownloadingId] = useState<WhisperModelId | null>(null)
+  const [downloadPercent, setDownloadPercent] = useState(0)
+  const [downloadFile, setDownloadFile] = useState('')
+  const [dialog, setDialog] = useState<DialogKind | null>(null)
+  const downloadRunRef = useRef<DownloadRun | null>(null)
+
+  async function refresh() {
+    const result = await listModels()
+    if (result.ok) {
+      setState(result.data)
+      onActiveModelChange?.(result.data.activeModelId)
+    }
+  }
+
+  useEffect(() => {
+    refresh().catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // On first data load: open accordion only when there is no active model.
+  // Because isOpen starts false, the "active model" case never animates at all —
+  // the accordion was already closed so no jitter occurs.
+  // The "no active model" case smoothly animates open (200ms ease-out), which is
+  // correct UX — the user is prompted to download / select a model.
+  useEffect(() => {
+    if (state && !initializedRef.current) {
+      initializedRef.current = true
+      if (!state.activeModelId) setIsOpen(true)
+    }
+  }, [state])
+
+  // --- Install flow ---
+
+  function handleInstallClick(model: ModelInfo) {
+    if (!state) return
+    const required = model.expectedSizeBytes * 1.5
+    if (state.diskFreeBytes > 0 && state.diskFreeBytes < required) {
+      setDialog({ kind: 'disk-full', model, required, available: state.diskFreeBytes })
+      return
+    }
+    setDialog({ kind: 'install-confirm', model })
+  }
+
+  async function handleConfirmInstall(model: ModelInfo) {
+    setDialog(null)
+    setDownloadingId(model.id)
+    setDownloadPercent(0)
+    setDownloadFile('')
+
+    const run = downloadModel(model.id, (evt) => {
+      if (evt.event === 'progress') {
+        setDownloadFile(evt.file)
+        setDownloadPercent(evt.percent)
+      }
+    })
+    downloadRunRef.current = run
+
+    try {
+      await run.promise
+      const currentActive = state?.activeModelId
+      if (!currentActive) {
+        await setActiveModel(model.id)
+        setIsOpen(false) // auto-activated → collapse so user can continue
+      }
+      toast.success(t('model.install_success', { modelName: model.displayName }))
+      await refresh()
+    } catch (err) {
+      const msg = String(err)
+      if (!msg.includes('Cancelled')) {
+        toast.error(t('toast.modelDownloadFailed', { error: msg }))
+      }
+    } finally {
+      setDownloadingId(null)
+      downloadRunRef.current = null
+    }
+  }
+
+  function handleCancelDownload() {
+    downloadRunRef.current?.cancel()
+    downloadRunRef.current = null
+    setDownloadingId(null)
+    setDownloadPercent(0)
+    setDownloadFile('')
+  }
+
+  // --- Activate ---
+
+  async function handleActivate(model: ModelInfo) {
+    const result = await setActiveModel(model.id)
+    if (result.ok) {
+      setState(result.data)
+      onActiveModelChange?.(result.data.activeModelId)
+      toast.success(t('model.activate_success', { modelName: model.displayName }))
+      setIsOpen(false) // switched active model → collapse
+    } else {
+      toast.error(result.error.message)
+    }
+  }
+
+  // --- Uninstall flow ---
+
+  function handleUninstallClick(model: ModelInfo) {
+    setDialog({ kind: 'uninstall-confirm', model })
+  }
+
+  async function handleConfirmUninstall(model: ModelInfo) {
+    setDialog(null)
+    const result = await uninstallModel(model.id)
+    if (result.ok) {
+      setState(result.data)
+      onActiveModelChange?.(result.data.activeModelId)
+      toast.success(t('model.uninstall_success', { modelName: model.displayName }))
+      if (!result.data.activeModelId) {
+        setIsOpen(true) // no active model left → expand to prompt re-selection
+      }
+    } else {
+      toast.error(result.error.message)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Render helpers
+  // ---------------------------------------------------------------------------
+
+  const hasActive = Boolean(state?.activeModelId)
+  const activeModel = state?.models.find((m) => m.id === state?.activeModelId) ?? null
+  const hasAnyInstalled = state?.models.some((m) => m.status !== 'not-installed') ?? false
+
+  const diskWarnColor =
+    state && state.diskFreeBytes > 0
+      ? state.diskFreeBytes < 1_000_000_000
+        ? 'text-red-400'
+        : state.diskFreeBytes < 5_000_000_000
+        ? 'text-amber-400'
+        : 'text-zinc-400'
+      : 'text-zinc-600'
+
+  // Header status badge (always visible regardless of open/closed)
+  const headerBadge = !state ? null : hasActive ? (
+    <div className="flex items-center gap-1.5 flex-shrink-0">
+      <span className="flex items-center gap-1 text-[12px] text-zinc-300">
+        <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+        <span className="font-mono">{activeModel?.displayName}</span>
+      </span>
+      <span className="flex items-center gap-0.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-500 text-green-950 whitespace-nowrap">
+        {t('model.active')}
+      </span>
+    </div>
+  ) : (
+    <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 whitespace-nowrap flex-shrink-0">
+      <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+      {hasAnyInstalled ? t('model.noActiveBadge') : t('model.notInstalledBadge')}
+    </span>
+  )
+
+  return (
+    <div className={cn(disabled && 'opacity-50 pointer-events-none')}>
+      {/* ---- Accordion Header ---- */}
+      <div
+        role="button"
+        aria-expanded={isOpen}
+        tabIndex={0}
+        onClick={() => setIsOpen((prev) => !prev)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setIsOpen((prev) => !prev)
+          }
+        }}
+        className="flex items-center gap-2 w-full cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
+      >
+        <Sparkles className="h-4 w-4 text-zinc-400 flex-shrink-0" />
+        <span className="text-[13px] font-medium text-zinc-300 uppercase tracking-wider">
+          {t('whisperModel.label')}
+        </span>
+        {/* Stop propagation so tooltip interaction doesn't toggle accordion */}
+        <span onClick={(e) => e.stopPropagation()}>
+          <HelpIcon content={t('whisperModel.tooltip')} />
+        </span>
+
+        <div className="flex-1" />
+
+        {/* Status badge */}
+        {headerBadge}
+
+        {/* "Click to change" hint — only when collapsed with active model */}
+        {!isOpen && hasActive && (
+          <span className="text-[11px] text-zinc-500 flex-shrink-0 ml-1">
+            {t('model.clickToChange')}
+          </span>
+        )}
+
+        {/* Chevron */}
+        {isOpen ? (
+          <ChevronUp className="h-4 w-4 text-zinc-500 flex-shrink-0 ml-1" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-zinc-500 flex-shrink-0 ml-1" />
+        )}
+      </div>
+
+      {/* ---- Accordion Content ---- */}
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-3 pt-3">
+              {/* Long description */}
+              <p className="text-[12px] text-zinc-500 leading-relaxed">
+                {t('whisperModel.descriptionLong')}
+              </p>
+
+              {/* 3-column model grid */}
+              <div className="grid grid-cols-3 gap-3">
+                {state
+                  ? state.models.map((model) => (
+                      <ModelCard
+                        key={model.id}
+                        model={model}
+                        isDownloading={downloadingId === model.id}
+                        downloadPercent={downloadPercent}
+                        downloadFile={downloadFile}
+                        onInstall={() => handleInstallClick(model)}
+                        onActivate={() => handleActivate(model)}
+                        onUninstall={() => handleUninstallClick(model)}
+                        onCancelDownload={handleCancelDownload}
+                        t={t}
+                      />
+                    ))
+                  : [0, 1, 2].map((i) => <ModelCardSkeleton key={i} />)}
+              </div>
+
+              {/* Bottom status bar */}
+              <div className="rounded-lg border border-zinc-800 px-4 py-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-5 text-[12px]">
+                  <span className="flex items-center gap-1.5 text-zinc-400">
+                    <Database className="h-3.5 w-3.5 flex-shrink-0" />
+                    {t('model.totalUsed')}: {state ? formatBytes(state.totalUsedBytes) : '—'}
+                  </span>
+                  <span className={cn('flex items-center gap-1.5', diskWarnColor)}>
+                    <HardDrive className="h-3.5 w-3.5 flex-shrink-0" />
+                    {state?.diskDrive ?? 'C:\\'} {t('model.diskFree')}:{' '}
+                    {state && state.diskFreeBytes > 0 ? formatBytes(state.diskFreeBytes) : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {state && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-[11px] text-zinc-500 hover:text-zinc-300"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openModelsFolder().catch(() => {})
+                      }}
+                    >
+                      <FolderOpen className="h-3 w-3 mr-1" />
+                      {t('model.openFolder')}
+                    </Button>
+                  )}
+                  <span className="flex items-center gap-1.5 text-[11px] text-green-600">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    {t('model.localOnly')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ---- Dialogs ---- */}
+      {dialog?.kind === 'disk-full' && (
+        <Dialog open onOpenChange={() => setDialog(null)}>
+          <DialogContent className="max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-400" />
+                {t('model.diskFull_title')}
+              </DialogTitle>
+              <DialogDescription>
+                {t('model.diskFull', {
+                  required: formatBytes(dialog.required),
+                  available: formatBytes(dialog.available)
+                })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => setDialog(null)}>
+                {t('common:action.close')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {dialog?.kind === 'install-confirm' && (
+        <Dialog open onOpenChange={() => setDialog(null)}>
+          <DialogContent className="max-w-[460px]">
+            <DialogHeader>
+              <DialogTitle>{t('model.install_confirm_title')}</DialogTitle>
+              <DialogDescription>
+                {t('model.install_confirm_body', {
+                  model: dialog.model.displayName,
+                  size: formatBytes(dialog.model.expectedSizeBytes)
+                })}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-lg bg-zinc-900/60 border border-zinc-800 px-3 py-2.5 space-y-1.5">
+              <InstallInfoRow
+                label={t('model.install_info_developer')}
+                value={t('model.install_developer_value')}
+              />
+              <InstallInfoRow
+                label={t('model.install_info_license')}
+                value={t('model.install_license_value')}
+              />
+              <InstallInfoRow
+                label={t('model.install_info_source')}
+                value={t('model.install_source_value')}
+              />
+              <InstallInfoRow
+                label={t('model.install_info_path')}
+                value={state?.modelsDir ?? '—'}
+                mono
+              />
+              <InstallInfoRow
+                label={t('model.install_info_time')}
+                value={
+                  (MODEL_INSTALL_TIME[i18n.language] ?? MODEL_INSTALL_TIME.en)[
+                    dialog.model.id
+                  ] ?? '—'
+                }
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => setDialog(null)}>
+                {t('common:action.cancel')}
+              </Button>
+              <Button variant="primary" onClick={() => handleConfirmInstall(dialog.model)}>
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                {t('model.install_confirm_ok')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {dialog?.kind === 'uninstall-confirm' && (
+        <Dialog open onOpenChange={() => setDialog(null)}>
+          <DialogContent className="max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>{t('model.uninstall_confirm_title')}</DialogTitle>
+              <DialogDescription>
+                {t('model.uninstall_confirm_body', {
+                  modelName: dialog.model.displayName,
+                  size: formatBytes(dialog.model.sizeBytes || dialog.model.expectedSizeBytes)
+                })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => setDialog(null)}>
+                {t('common:action.cancel')}
+              </Button>
+              <Button
+                className="bg-red-600 hover:bg-red-500 text-white"
+                onClick={() => handleConfirmUninstall(dialog.model)}
+              >
+                {t('model.uninstall_confirm_ok')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// InstallInfoRow
+// ---------------------------------------------------------------------------
+
+function InstallInfoRow({
+  label,
+  value,
+  mono
+}: {
+  label: string
+  value: string
+  mono?: boolean
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 text-[12px]">
+      <span className="text-zinc-500 flex-shrink-0">{label}</span>
+      <span
+        className={cn('text-zinc-300 text-right min-w-0 break-all', mono && 'font-mono text-[11px]')}
+        title={mono ? value : undefined}
+      >
+        {value}
+      </span>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ModelCard
+// ---------------------------------------------------------------------------
+
+interface ModelCardProps {
+  model: ModelInfo
+  isDownloading: boolean
+  downloadPercent: number
+  downloadFile: string
+  onInstall: () => void
+  onActivate: () => void
+  onUninstall: () => void
+  onCancelDownload: () => void
+  t: ReturnType<typeof useTranslation<'step1'>>['t']
+}
+
+function ModelCard({
+  model,
+  isDownloading,
+  downloadPercent,
+  downloadFile,
+  onInstall,
+  onActivate,
+  onUninstall,
+  onCancelDownload,
+  t
+}: ModelCardProps) {
+  const isActive = model.status === 'active'
+  const isInstalled = model.status === 'installed' || isActive
+
+  return (
+    <div
+      className={cn(
+        'rounded-xl border p-4 flex flex-col gap-3 transition-colors duration-150',
+        isActive ? 'border-green-500 bg-[rgba(34,197,94,0.05)]' : 'border-zinc-800 bg-zinc-950'
+      )}
+    >
+      {/* Top: name + status badge */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[14px] font-semibold text-zinc-100 leading-tight">
+            {model.displayName}
+          </p>
+          <p className={cn('text-[11px] mt-0.5', isActive ? 'text-green-600' : 'text-zinc-600')}>
+            {formatBytes(model.expectedSizeBytes)}
+          </p>
+        </div>
+        {isInstalled && (
+          <span
+            className={cn(
+              'flex-shrink-0 flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
+              isActive ? 'bg-green-500 text-green-950' : 'bg-blue-500/15 text-blue-400'
+            )}
+          >
+            <Check className="h-2.5 w-2.5" />
+            {isActive ? t('model.active') : t('model.installed')}
+          </span>
+        )}
+      </div>
+
+      {/* Description */}
+      <p className="text-[11px] text-zinc-500 leading-relaxed flex-1">
+        {t(DESC_KEY[model.id] ?? 'whisperModel.descMedium')}
+      </p>
+
+      {/* Action area */}
+      {isDownloading ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-[10px] text-zinc-500">
+            <span className="truncate mr-2">{downloadFile || t('model.downloading')}</span>
+            <span className="tabular-nums flex-shrink-0">{downloadPercent}%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+            <div
+              className="h-full bg-green-500 transition-all duration-300 rounded-full"
+              style={{ width: `${downloadPercent}%` }}
+            />
+          </div>
+          <Button variant="ghost" size="sm" className="w-full h-7 text-[11px]" onClick={onCancelDownload}>
+            {t('model.cancelDownload')}
+          </Button>
+        </div>
+      ) : model.status === 'not-installed' ? (
+        <Button variant="secondary" size="sm" className="w-full" onClick={onInstall}>
+          <Download className="h-3.5 w-3.5 mr-1.5" />
+          {t('model.install')}
+        </Button>
+      ) : isActive ? (
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex-1 text-green-600 cursor-default hover:text-green-600 hover:bg-transparent"
+            disabled
+          >
+            <Check className="h-3.5 w-3.5 mr-1.5" />
+            {t('model.selected')}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-zinc-600 hover:text-red-400"
+            onClick={onUninstall}
+            title={t('model.uninstall_confirm_title')}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" className="flex-1" onClick={onActivate}>
+            <Target className="h-3.5 w-3.5 mr-1.5" />
+            {t('model.useThis')}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-zinc-600 hover:text-red-400"
+            onClick={onUninstall}
+            title={t('model.uninstall_confirm_title')}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ModelCardSkeleton() {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 space-y-3 animate-pulse">
+      <div className="h-4 w-16 bg-zinc-800 rounded" />
+      <div className="h-3 w-full bg-zinc-800 rounded" />
+      <div className="h-8 w-full bg-zinc-800 rounded-md" />
+    </div>
+  )
+}

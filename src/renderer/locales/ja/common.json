@@ -1,0 +1,60 @@
+{
+  "app": {
+    "name": "MOJIOKO"
+  },
+  "nav": {
+    "back": "戻る",
+    "continue": "次へ",
+    "step1": "文字起こし",
+    "step2": "編集",
+    "step3": "書き出し"
+  },
+  "action": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "apply": "適用",
+    "ok": "OK",
+    "reset": "リセット",
+    "delete": "削除",
+    "restore": "復元",
+    "close": "閉じる",
+    "open": "開く",
+    "browse": "参照",
+    "download": "ダウンロード",
+    "export": "書き出し",
+    "add": "追加"
+  },
+  "menu": {
+    "file": "ファイル",
+    "tools": "ツール",
+    "help": "ヘルプ",
+    "quit": "終了",
+    "settings": "設定",
+    "about": "このアプリについて",
+    "obsGuide": "入力動画の音声トラック設定方法 (OBS)",
+    "donations": "プロジェクトを支援する (寄付)",
+    "openDownloadPage": "ダウンロードページを開く",
+    "keyboardShortcuts": "キーボードショートカット"
+  },
+  "status": {
+    "local": "ローカル処理・ネットワーク不使用"
+  },
+  "dialog": {
+    "discardChanges": "変更を破棄しますか？",
+    "discardChangesDesc": "編集済みの行がありますが、このまま戻りますか？",
+    "dontAskAgain": "今後このセッションでは確認しない"
+  },
+  "error": {
+    "unknown": "不明なエラーが発生しました"
+  },
+  "shortcuts": {
+    "scopeGlobal": "グローバル",
+    "scopeStep1": "ステップ1 — 文字起こし",
+    "scopeStep2": "ステップ2 — 編集",
+    "scopeStep3": "ステップ3 — 書き出し"
+  },
+  "colorPicker": {
+    "presets": "プリセット",
+    "recent": "最近使った色"
+  }
+}

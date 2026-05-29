@@ -1,0 +1,101 @@
+{
+  "title": "Render video",
+  "subtitle": "Burn subtitles into a new video using ffmpeg.",
+  "preview": {
+    "label": "Output preview",
+    "empty": "No subtitles",
+    "disclaimer": "Approximate preview. Verify with the actual exported video.",
+    "alignmentSummary": "{{align}} · {{margin}}px margin",
+    "list": {
+      "title": "Subtitle preview list",
+      "empty": "No subtitles"
+    }
+  },
+  "result": {
+    "label": "Result"
+  },
+  "summary": {
+    "label": "Output summary",
+    "resolution": "Resolution",
+    "duration": "Duration",
+    "format": "Format",
+    "subtitles": "Subtitles",
+    "estimatedTime": "Est. time",
+    "estimatedSize": "Est. size",
+    "encoder": "Encoder",
+    "estimatedTimeValue": "~{{minutes}} min",
+    "estimatedSizeValue": "~{{size}} MB"
+  },
+  "audio": {
+    "label": "Audio output mode",
+    "simple": "Combine all tracks into one",
+    "simpleDesc": "YouTube and similar platforms only play the first audio track",
+    "preserve": "Preserve track structure",
+    "preserveDesc": "Use this when you plan to edit the output in another video editor"
+  },
+  "output": {
+    "label": "Output destination",
+    "change": "Change"
+  },
+  "footer": {
+    "privacyNote": "Local rendering · no network"
+  },
+  "action": {
+    "startRender": "Start render",
+    "cancel": "Cancel",
+    "openFile": "Open file",
+    "showInFolder": "Show in folder",
+    "renderAgain": "Render again",
+    "donate": "☕ Donate"
+  },
+  "progress": {
+    "label": "Rendering…",
+    "elapsed": "Elapsed: {{time}}",
+    "remaining": "Remaining: {{time}}"
+  },
+  "success": {
+    "title": "Render complete",
+    "fileSize": "{{size}} MB"
+  },
+  "error": {
+    "title": "Render failed",
+    "renderFailed": "Render failed: {{reason}}",
+    "viewLog": "View log"
+  },
+  "overwriteDialog": {
+    "title": "Overwrite this file?",
+    "body": "A file with this name already exists. Continuing will overwrite it.\n\n{{path}}",
+    "confirm": "Overwrite",
+    "cancel": "Cancel"
+  },
+  "toast": {
+    "renderComplete": "Render complete",
+    "encoderFallback": "Encoder {{requested}} is not available; falling back to {{actual}}"
+  },
+  "subtitlePosition": {
+    "title": "Subtitle position",
+    "horizontal": "Horizontal",
+    "vertical": "Vertical",
+    "margin": "Vertical margin (px)",
+    "left": "Left",
+    "center": "Center",
+    "right": "Right",
+    "top": "Top",
+    "bottom": "Bottom"
+  },
+  "background": {
+    "title": "Subtitle background",
+    "color": "Color",
+    "black": "Black",
+    "white": "White",
+    "opacity": "Opacity",
+    "outlineNote": "Note: Outline is disabled when background is enabled"
+  },
+  "outputFormat": {
+    "label": "Output Format",
+    "labelWithInput": "Output Format (Input: {{ext}})",
+    "mp4": "Export as MP4",
+    "sameAsInput": "Export in same format as input",
+    "sameAsInputWithExt": "Export in same format as input ({{ext}})"
+  }
+}

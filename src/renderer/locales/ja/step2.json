@@ -1,0 +1,139 @@
+{
+  "title": "編集",
+  "subtitle": "字幕テキストとタイミングを確認・修正してください。",
+  "table": {
+    "colIndex": "#",
+    "colTime": "時間",
+    "colSize": "サイズ",
+    "colStyle": "スタイル",
+    "colText": "テキスト",
+    "colState": "状態",
+    "colActions": "",
+    "fadeTooltip": "フェード"
+  },
+  "tab": {
+    "all": "すべて",
+    "ready": "出力対象",
+    "edited": "編集済み",
+    "warnings": "警告あり",
+    "deleted": "削除済み"
+  },
+  "filter": {
+    "all": "すべて",
+    "edited": "編集済み",
+    "overflow": "はみ出し",
+    "deleted": "削除済み"
+  },
+  "state": {
+    "edited": "編集済み",
+    "overflow": "はみ出し",
+    "deleted": "削除済み"
+  },
+  "badge": {
+    "overflow": "はみ出し",
+    "overlap": "時間重複",
+    "overDuration": "時間超過",
+    "exceedsDuration": "時間超過",
+    "timeInvalid": "時間不正",
+    "emptyText": "テキスト未入力",
+    "invalidSize": "サイズ不正"
+  },
+  "empty": {
+    "all": "字幕がありません",
+    "ready": "警告のある行はありません",
+    "edited": "編集済みの行はありません",
+    "warnings": "警告のある行はありません",
+    "overflow": "はみ出しの行はありません",
+    "deleted": "削除済みの行はありません"
+  },
+  "action": {
+    "addRow": "行を追加",
+    "addRowAt": "{{index}}行目に追加",
+    "adjustTime": "時間調整",
+    "export": "テキスト出力",
+    "exportText": "テキスト出力",
+    "exportSrt": "SRT形式で出力",
+    "continueToRender": "書き出しへ",
+    "resetRow": "この行をリセット",
+    "deleteRow": "この行を削除",
+    "restoreRow": "この行を復元"
+  },
+  "dialog": {
+    "timeEditor": {
+      "title": {
+        "add": "行を追加",
+        "edit": "時間を調整"
+      },
+      "startTime": "開始時間",
+      "endTime": "終了時間",
+      "setFromPlayhead": "再生ヘッド位置をセット",
+      "currentPlayhead": "現在",
+      "setFromPrevStart": "前の行の開始時間をセット",
+      "setFromPrevEnd": "前の行の終了時間をセット",
+      "setFromNextStart": "次の行の開始時間をセット",
+      "setFromNextEnd": "次の行の終了時間をセット",
+      "setFromSelectedStart": "選択行の開始時間をセット",
+      "setFromSelectedEnd": "選択行の終了時間をセット",
+      "add": "追加",
+      "apply": "適用",
+      "cancel": "キャンセル"
+    }
+  },
+  "addRowPopover": {
+    "label": "挿入位置",
+    "hint": "行番号を入力"
+  },
+  "addRowDialog": {
+    "startTime": "開始時間",
+    "endTime": "終了時間",
+    "insertAfter": "行 {{n}} の後に挿入",
+    "appendEnd": "最後に追加",
+    "errorTimeOrder": "終了時間は開始時間より後にしてください",
+    "errorOverlap": "既存の字幕と重複しています"
+  },
+  "footer": {
+    "summary": "{{edited}}件編集 · {{warnings}}件警告 · {{deleted}}件削除",
+    "warnings": "件警告"
+  },
+  "toast": {
+    "rowAdded": "{{index}}行目に追加しました",
+    "rowDeleted": "行を削除しました",
+    "rowRestored": "行を復元しました",
+    "rowReset": "行をリセットしました",
+    "exported": "テキストを書き出しました",
+    "exportedSrt": "SRTを書き出しました",
+    "undo": "元に戻す: {{label}}",
+    "redo": "やり直し: {{label}}"
+  },
+  "tooltip": {
+    "undo": "元に戻す (Ctrl+Z)",
+    "redo": "やり直す (Ctrl+Y)"
+  },
+  "styleCell": {
+    "textColor": "文字色",
+    "outlineColor": "アウトライン色",
+    "outlineWidth": "アウトライン幅",
+    "fade": "フェード"
+  },
+  "history": {
+    "editText": "テキストを編集",
+    "editTime": "時間を編集",
+    "editSize": "サイズを編集",
+    "editColor": "色を変更",
+    "editStroke": "アウトライン太さを変更",
+    "editFade": "フェードを変更",
+    "deleteRow": "行を削除",
+    "restoreRow": "行を復元",
+    "resetRow": "行をリセット",
+    "addRow": "行を追加"
+  },
+  "videoPreview": {
+    "play": "再生",
+    "pause": "一時停止",
+    "error": "動画の読み込みに失敗しました",
+    "showInFolder": "フォルダで表示"
+  },
+  "warning": {
+    "exceedsDuration": "動画の総再生時間を超えています"
+  }
+}

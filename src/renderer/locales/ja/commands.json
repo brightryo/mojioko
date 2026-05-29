@@ -1,0 +1,47 @@
+{
+  "group": {
+    "navigation": "ナビゲーション",
+    "file": "ファイル",
+    "edit": "編集",
+    "settings": "設定",
+    "help": "ヘルプ"
+  },
+  "navigation": {
+    "goToStep1": "ステップ1へ — 文字起こし",
+    "goToStep2": "ステップ2へ — 編集",
+    "goToStep3": "ステップ3へ — 書き出し",
+    "back": "前のステップへ戻る",
+    "filterAll": "フィルター: すべて",
+    "filterReady": "フィルター: 出力対象",
+    "filterEdited": "フィルター: 編集済み",
+    "filterWarnings": "フィルター: 警告あり",
+    "filterDeleted": "フィルター: 削除済み"
+  },
+  "file": {
+    "openVideo": "動画を開く…",
+    "openRecent": "最近のファイルを開く",
+    "exportText": "テキストを書き出す…"
+  },
+  "edit": {
+    "addRow": "行を末尾に追加",
+    "deleteRow": "選択行を削除",
+    "resetRow": "選択行をリセット",
+    "undo": "元に戻す",
+    "redo": "やり直し"
+  },
+  "settings": {
+    "openSettings": "設定を開く",
+    "switchToJapanese": "言語: 日本語",
+    "switchToEnglish": "言語: English",
+    "modelSmall": "Whisperモデル: small",
+    "modelMedium": "Whisperモデル: medium",
+    "modelLargeV3": "Whisperモデル: large-v3"
+  },
+  "help": {
+    "showShortcuts": "キーボードショートカットを表示",
+    "about": "MOJIOKOについて",
+    "openLicenseFolder": "ライセンスフォルダを開く",
+    "openDocumentation": "ドキュメントを開く",
+    "support": "プロジェクトを支援する"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "title": "Support this project",
+  "description": "MOJIOKO is free to use. If you find it helpful, please consider supporting its development.",
+  "booth": {
+    "title": "BOOTH",
+    "subtitle": "PayPay · convenience store · credit card · from ¥300",
+    "cta": "Open BOOTH"
+  },
+  "buymeacoffee": {
+    "title": "Buy Me a Coffee",
+    "subtitle": "Global · no account needed · from $3",
+    "cta": "Open Buy Me a Coffee"
+  },
+  "github": {
+    "title": "GitHub Sponsors",
+    "subtitle": "Monthly or one-time support · GitHub account required",
+    "cta": "Open GitHub Sponsors"
+  }
+}
