@@ -1,0 +1,108 @@
+appId: com.brightryo.mojioko
+productName: MOJIOKO
+copyright: "Copyright © 2026 brightryo"
+
+directories:
+  buildResources: build
+  output: dist
+
+# electron-vite emits the compiled main/preload/renderer bundle under `out/`.
+# These are the files actually loaded at runtime; the source tree is excluded.
+files:
+  - out/**/*
+  - "!out/**/*.map"
+
+extraResources:
+  # ffmpeg/ffprobe are shipped as the LGPL **shared** build, so the surrounding
+  # av*.dll / sw*.dll runtime libraries must travel with the .exe — otherwise
+  # the Windows loader fails before main() and the spawn surfaces as
+  # "Command failed". ffplay.exe is intentionally excluded (unused, ~17MB).
+  - from: resources/bin/ffmpeg
+    to: bin/ffmpeg
+    filter:
+      - "ffmpeg.exe"
+      - "ffprobe.exe"
+      - "*.dll"
+  # PyInstaller --onedir output (mojioko-transcriber.exe + _internal/) goes here.
+  # Shipped only when the directory exists; missing files are silently dropped
+  # by electron-builder, so dev builds without a PyInstaller artifact still work
+  # — the runtime then falls back to the .venv route logged with a warning.
+  - from: resources/bin/transcriber
+    to: bin/transcriber
+    filter:
+      - "**/*"
+  - from: resources/fonts
+    to: fonts
+    filter:
+      - "**/*.ttf"
+  - from: python-sidecar
+    to: python-sidecar
+    filter:
+      - "main.py"
+      - "requirements.txt"
+  - from: installer/licenses
+    to: licenses
+  # icon.ico needs to live next to the packaged app at runtime so the
+  # BrowserWindow constructor can pass it to Windows as the title-bar /
+  # taskbar icon.  Without this entry the EXE itself still has its embedded
+  # icon (from win.icon below), but the live BrowserWindow falls back to
+  # Electron's default logo.  Source is `build/icon.ico` — the
+  # `buildResources` directory — so it lines up with where electron-builder
+  # already reads the installer / EXE icons from.
+  - from: build
+    to: icons
+    filter:
+      - "icon.ico"
+
+win:
+  target:
+    - target: nsis
+      arch: x64
+  # Single source of truth for the app icon: `build/icon.ico`.  electron-builder
+  # embeds this multi-size .ico into the EXE so Windows can pick 16/24/32/48/
+  # 64/128/256-px variants automatically for taskbar, title bar, shortcuts,
+  # Alt-Tab, etc.
+  icon: build/icon.ico
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  # Multi-step wizard installer: welcome → license → install dir → progress →
+  # finish.  Pre-v1.0.0 we shipped oneClick:true, but a published license
+  # (EULA) acceptance step is a legal-feeling requirement that NSIS surfaces
+  # automatically when `license:` is set AND `oneClick:false`.
+  oneClick: false
+  perMachine: false
+  # Suppresses the "Install for all users / current user only" elevation page
+  # — combined with perMachine:false the installer writes to
+  # %LOCALAPPDATA%\Programs\mojioko without any UAC prompt.
+  allowElevation: false
+  # User can override the default install path on the dir-picker page.
+  allowToChangeInstallationDirectory: true
+  # Default UI language; OS locale picks ja_JP vs en_US automatically from the
+  # installerLanguages list below at first launch of the installer.
+  installerLanguages:
+    - ja_JP
+    - en_US
+  language: "1041"
+  include: build/installer.nsh
+  deleteAppDataOnUninstall: false
+  # End-User License Agreement.
+  #
+  # electron-builder NSIS convention: when `license` points at
+  # `build/license_<lang>.txt`, electron-builder also discovers sibling files
+  # following the same `license_<lang>.txt` naming and assigns them to the
+  # matching installer language.  We therefore only need to set the Japanese
+  # file here; `build/license_en.txt` is picked up automatically for the
+  # English installer language.
+  license: build/license_ja.txt
+  # Show the "Run MOJIOKO" checkbox (checked by default) on the finish page.
+  runAfterFinish: true
+  # Render the desktop shortcut option as a pre-checked checkbox on the
+  # finish page so the user can opt out if they want a clean desktop.
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: MOJIOKO
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+
+publish: null
