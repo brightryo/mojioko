@@ -1,0 +1,16 @@
+GNU LESSER GENERAL PUBLIC LICENSE
+Version 2.1, February 1999
+
+Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+
+Everyone is permitted to copy and distribute verbatim copies of this license
+document, but changing it is not allowed.
+
+[This is the first section of the GNU LGPL v2.1. The full text is available at
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html]
+
+The full text of the GNU Lesser General Public License v2.1 can be found at:
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+
+FFmpeg source code is available at: https://ffmpeg.org/download.html
