@@ -1,0 +1,263 @@
+﻿================================================================
+MOJIOKO End User License Agreement
+(English Version)
+
+Copyright (c) 2026 brightryo. All Rights Reserved.
+Version 1.0 - Effective Date: May 30, 2026
+================================================================
+
+
+[ SUMMARY ]
+
+  License Type           : Proprietary EULA
+  Permitted Use          : Personal and commercial use permitted
+  Modification           : Prohibited
+  Redistribution         : Prohibited
+  Reverse Engineering    : Prohibited
+  Source                 : Official distribution only (via GitHub Pages)
+  Warranty               : No warranty
+  Liability              : No liability
+  Copyright              : (c) 2026 brightryo
+  Governing Law          : Laws of Japan
+
+
+[ ABOUT THIS AGREEMENT ]
+
+This End User License Agreement ("Agreement") is a legal contract
+between brightryo ("Licensor") and you ("User") for the use of the
+software titled "MOJIOKO" ("Software") provided by the Licensor.
+
+By installing, copying, or using the Software, the User shall be
+deemed to have agreed to all of the terms and conditions of this
+Agreement. If the User does not agree to the terms of this Agreement,
+the User must not install, copy, or use the Software.
+
+
+Article 1 (Scope)
+
+1.1 This Agreement applies to the Software and all components
+    accompanying it, including but not limited to executable files,
+    configuration files, documentation, and bundled data.
+
+1.2 With respect to third-party libraries, components, and resources
+    bundled with the Software, the license terms set forth separately
+    in "THIRD_PARTY_LICENSES" shall apply. In the event of any conflict
+    between this Agreement and a third-party license, the third-party
+    license shall prevail.
+
+
+Article 2 (Grant of License)
+
+2.1 Subject to the User's compliance with the terms of this Agreement,
+    the Licensor hereby grants the User a non-exclusive,
+    non-transferable right to use the Software.
+
+2.2 The User may use the Software for any purpose, including personal
+    and commercial use, in accordance with the User's own needs.
+
+2.3 The copyright and right of use in any subtitles, videos, or other
+    outputs generated using the Software shall belong to the User.
+    No restrictions are imposed on the commercial use, distribution,
+    or modification of such outputs.
+
+
+Article 3 (Prohibited Acts)
+
+The User shall not engage in any of the following acts with respect
+to the Software.
+
+3.1 Modify, alter, adapt, or create derivative works of the Software,
+    in whole or in part, by any means.
+
+3.2 Reverse engineer, decompile, disassemble, or otherwise convert the
+    Software, in whole or in part, into a human-readable form, except
+    to the extent expressly permitted by applicable law.
+
+3.3 Redistribute, transfer, lend, lease, sublicense, host, or otherwise
+    provide the Software, in whole or in part, to any third party,
+    whether for consideration or free of charge.
+
+3.4 Create, publish, or distribute any modified version, derivative
+    version, imitation, or anything similar to the Software.
+
+3.5 Obtain the Software from any source other than the official
+    distribution (via GitHub Releases linked from
+    https://brightryo.github.io/mojioko/), or use any Software
+    distributed from sources other than the official distribution.
+
+3.6 Remove, alter, or conceal any copyright notice, trademark notice,
+    this Agreement, or other notices affixed to the Software.
+
+3.7 Use the Software for any purpose that violates applicable laws,
+    public order and morals, or the rights of third parties (including
+    but not limited to intellectual property rights, privacy rights,
+    and rights of publicity).
+
+3.8 Exploit or attempt to exploit any vulnerability in the Software.
+
+
+Article 4 (Intellectual Property Rights)
+
+4.1 All intellectual property rights related to the Software (including
+    but not limited to copyrights, patent rights, trademark rights,
+    know-how, and trade secrets) shall belong to the Licensor or the
+    rightful owner.
+
+4.2 This Agreement grants the User the right to use the Software and
+    does not constitute a transfer of the Software or any intellectual
+    property rights therein.
+
+
+Article 5 (No Warranty)
+
+5.1 THE SOFTWARE IS PROVIDED "AS IS," WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+    NONINFRINGEMENT.
+
+5.2 The Licensor makes no warranty as to the operation, performance,
+    reliability, accuracy, completeness, security, legality, or
+    usefulness for a particular purpose of the Software.
+
+5.3 No warranty is made regarding the accuracy, quality, or fitness of
+    any transcription results, subtitles, videos, or other outputs
+    produced by the Software. The User is responsible for verifying
+    the outputs and making any necessary corrections.
+
+
+Article 6 (Limitation of Liability)
+
+6.1 IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY DAMAGES ARISING
+    OUT OF OR IN CONNECTION WITH THE USE OR INABILITY TO USE THE
+    SOFTWARE, INCLUDING WITHOUT LIMITATION DIRECT, INDIRECT, INCIDENTAL,
+    SPECIAL, CONSEQUENTIAL, PUNITIVE, OR ANY OTHER DAMAGES OF ANY KIND.
+
+6.2 Such damages include, but are not limited to, the following:
+
+    (1) Loss, corruption, or alteration of input videos, audio files,
+        subtitles, settings, or other data;
+    (2) Damage to or failure of hardware, software, or systems;
+    (3) Business interruption, loss of opportunity, loss of profits,
+        or loss of revenue;
+    (4) Damage to reputation or goodwill;
+    (5) Any other economic or non-economic damages.
+
+6.3 The total liability of the Licensor to the User under this
+    Agreement shall be limited to the total amount of consideration
+    paid by the User to the Licensor for the Software. If the Software
+    is provided free of charge, the maximum liability shall be JPY 0.
+
+6.4 If applicable law does not permit the Licensor to completely
+    exclude or limit liability, the limitations in this Article shall
+    apply to the maximum extent permitted by such law.
+
+
+Article 7 (User's Responsibilities)
+
+7.1 The User shall use the Software at the User's own risk.
+
+7.2 The User shall make sufficient backups of input videos, audio
+    files, and other data prior to using the Software. The Licensor
+    shall not be liable for any loss or corruption of data.
+
+7.3 The User shall verify the suitability of the User's own environment
+    (hardware, OS, and other software) before using the Software.
+
+7.4 The User shall comply with applicable laws and shall not infringe
+    the rights of third parties when using outputs generated by the
+    Software.
+
+
+Article 8 (Updates and Changes)
+
+8.1 The Licensor may change or discontinue the specifications,
+    features, appearance, file formats, dependent libraries, or other
+    aspects of the Software at any time, without prior notice to the
+    User.
+
+8.2 The Licensor may amend the terms of this Agreement upon the
+    release of a new version of the Software. The agreement accompanying
+    the new version shall apply to that version.
+
+8.3 The Licensor may discontinue the provision of the Software at any
+    time without prior notice to the User. The Licensor shall not be
+    liable for any damages arising from such discontinuation.
+
+
+Article 9 (Privacy)
+
+9.1 The Software operates in the User's local environment and, as a
+    general rule, does not transmit the User's personal information,
+    transcription content, video data, or other data to external
+    parties.
+
+9.2 However, the Software may perform the following communications:
+
+    (1) Browser-based access to GitHub Pages when the User invokes the
+        "Open Download Page" feature;
+    (2) Access to the model provider when the User downloads a Whisper
+        model;
+    (3) Other access required when the User explicitly invokes a
+        feature requiring communication.
+
+9.3 For details, please refer to the separately defined Privacy Policy.
+
+
+Article 10 (Termination)
+
+10.1 If the User breaches any provision of this Agreement, the Licensor
+     may immediately terminate the User's license without any notice or
+     demand.
+
+10.2 Upon termination of this Agreement, the User shall destroy all
+     copies of the Software under the User's control.
+
+10.3 Article 3 (Prohibited Acts), Article 4 (Intellectual Property
+     Rights), Article 5 (No Warranty), Article 6 (Limitation of
+     Liability), Article 10 (Termination), Article 11 (Governing Law
+     and Jurisdiction), Article 12 (Severability), and Article 13
+     (Entire Agreement) shall survive any termination of this Agreement.
+
+
+Article 11 (Governing Law and Jurisdiction)
+
+11.1 This Agreement shall be governed by and construed in accordance
+     with the laws of Japan.
+
+11.2 Any dispute arising between the Licensor and the User in connection
+     with this Agreement shall be subject to the exclusive jurisdiction
+     of the Tokyo District Court as the court of first instance.
+
+
+Article 12 (Severability)
+
+12.1 If any provision of this Agreement is held to be invalid or
+     unenforceable under applicable law, such determination shall not
+     affect the validity or enforceability of the remaining provisions
+     of this Agreement.
+
+12.2 Any invalid or unenforceable provision shall be deemed to be
+     replaced by a valid and enforceable provision that achieves the
+     original intent of the provision to the greatest extent possible.
+
+
+Article 13 (Entire Agreement)
+
+13.1 This Agreement constitutes the entire agreement between the
+     Licensor and the User regarding the use of the Software and
+     supersedes any prior agreements, representations, or
+     understandings, whether oral or written.
+
+
+[ CONTACT ]
+
+For inquiries regarding this Agreement, please contact:
+
+  GitHub Issues: https://github.com/brightryo/mojioko/issues
+
+
+================================================================
+Copyright (c) 2026 brightryo. All Rights Reserved.
+
+Last updated: May 30, 2026
+================================================================
