@@ -334,6 +334,18 @@ footer a:hover {
     grid-template-columns: 1fr 1fr;
     gap: 48px;
   }
+
+  /* Image-right / text-left flip for the shorts section.  Mirrors the
+     .screenshot-item.reverse mechanism used by Step 2 so the four-section
+     left/right rhythm (step1 left, step2 right, step3 left, shorts right)
+     stays consistent.  Below 900px the grid collapses to a single column
+     and this rule has no effect, so mobile layout is unchanged. */
+  .shorts-content.reverse {
+    direction: rtl;
+  }
+  .shorts-content.reverse > * {
+    direction: ltr;
+  }
 }
 
 .shorts-image {
