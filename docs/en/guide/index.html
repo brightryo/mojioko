@@ -158,6 +158,94 @@
         </div>
       </details>
 
+      <!-- Q4: Text / SRT export -->
+      <details class="qa">
+        <summary>
+          <span class="q-label">Q4</span>
+          <span class="q-text">I want to export just the subtitles or text (without rendering the video)</span>
+        </summary>
+        <div class="qa-body">
+          <p>In addition to burning subtitles into video, MOJIOKO can export subtitle files and text files separately.</p>
+
+          <h4>Available Output Formats</h4>
+
+          <h5>■ Plain Text (<code>.txt</code>)</h5>
+          <ul class="guide-list">
+            <li>A simple text file with subtitle texts listed in order</li>
+            <li>No timing information, just the text content</li>
+            <li>Use cases: Blog article drafts, transcription review, meeting notes, importing into AI text-to-speech tools, etc.</li>
+          </ul>
+
+          <h5>■ SRT (<code>.srt</code>) Subtitle File</h5>
+          <ul class="guide-list">
+            <li>A widely-used subtitle format supported by video players and editors</li>
+            <li>Each subtitle includes display timing</li>
+            <li>Use cases: Importing subtitles into other video editors, uploading to YouTube, importing to Premiere Pro / DaVinci Resolve / CapCut, etc.</li>
+          </ul>
+
+          <h4>How to Export</h4>
+          <p>After transcription, in the editing screen (Step 2), use the "Export text" button at the top right:</p>
+          <ol class="guide-list">
+            <li>Click "<strong>Export text</strong>" at the top right of the editing screen</li>
+            <li>Select an output format from the dropdown menu:
+              <ul class="guide-list">
+                <li>Choose "<strong>Export as text</strong>" to save as plain text (<code>.txt</code>)</li>
+                <li>Choose "<strong>Export as SRT</strong>" to save as SRT subtitle file (<code>.srt</code>)</li>
+              </ul>
+            </li>
+            <li>Choose a save location</li>
+          </ol>
+
+          <h4>Use Cases</h4>
+
+          <h5>■ Generate AI voice with text-to-speech tools</h5>
+          <ol class="guide-list">
+            <li>Transcribe in MOJIOKO → "Export as text" to save as plain text</li>
+            <li>Import into AI voice synthesis tools (e.g., VOICEVOX, ElevenLabs) to generate character voices</li>
+            <li>Replace original audio with AI-generated voice for content creation</li>
+          </ol>
+          <p>Perfect for converting gameplay commentary to AI voice, or swapping your own voice with character voices.</p>
+
+          <h5>■ Edit in DaVinci Resolve timeline</h5>
+          <ol class="guide-list">
+            <li>Transcribe in MOJIOKO → "Export as SRT" to save SRT file</li>
+            <li>Import the SRT file into DaVinci Resolve's media pool</li>
+            <li>Drag it onto the timeline — subtitles are automatically placed with their start/end timings</li>
+          </ol>
+          <p>If MOJIOKO's subtitle design doesn't fit your needs, you can freely customize fonts, colors, and animations in DaVinci Resolve. Timing is already handled by MOJIOKO, so you can focus on visual design.</p>
+
+          <h5>■ Add subtitles to YouTube (without burning in)</h5>
+          <ol class="guide-list">
+            <li>Transcribe in MOJIOKO → "Export as SRT" to save SRT file</li>
+            <li>Upload your video in YouTube Studio</li>
+            <li>Upload the SRT file from the Subtitles tab</li>
+          </ol>
+          <p>No need to burn subtitles into the video; viewers can toggle subtitles ON/OFF. Subtitles are also indexed by YouTube search for SEO benefits.</p>
+
+          <h5>■ Edit captions in Premiere Pro or CapCut</h5>
+          <ol class="guide-list">
+            <li>Transcribe in MOJIOKO → "Export as SRT" to save SRT file</li>
+            <li>Import using your editor's caption feature</li>
+            <li>Adjust appearance (font, color, position) in the editor</li>
+          </ol>
+
+          <h5>■ Reuse as a blog article or script</h5>
+          <ol class="guide-list">
+            <li>Transcribe in MOJIOKO → "Export as text" to save as plain text</li>
+            <li>Open the text file in your editor</li>
+            <li>Format and use as a blog article or script</li>
+          </ol>
+          <p>Great for gameplay recap articles, text versions of video content, etc.</p>
+
+          <h4>Notes</h4>
+          <ul class="guide-list">
+            <li>Both output formats reflect text edits made in the editing screen</li>
+            <li>Lines excluded from output (marked as deleted) are not included</li>
+            <li>Can be combined with video rendering (export both subtitle file and video)</li>
+          </ul>
+        </div>
+      </details>
+
     </section>
 
     <!-- Back to top -->
