@@ -1,22 +1,22 @@
 import { Menu, app, BrowserWindow, shell } from 'electron'
 import { mkdirSync } from 'fs'
-import { DOCUMENTATION_URLS, GITHUB_PAGES_URL } from '../shared/app-info'
+import { GITHUB_PAGES_LOCALIZED } from '../shared/app-info'
 import { getLogsDir } from './lib/paths'
 import log from './lib/logger'
 
+type Lang = 'ja' | 'en'
+
 /**
- * Open the public GitHub Pages download landing in the user's default browser.
- * Logs (but does not crash) on failure — this is a fire-and-forget action
- * triggered by a menu click, and `shell.openExternal` rejections are usually
- * non-actionable from inside the app.
+ * Open a GitHub Pages URL in the user's default browser, fire-and-forget.
+ * Logs (but does not crash) on failure — `shell.openExternal` rejections are
+ * usually non-actionable from inside the app and the menu click handler
+ * has no UI surface to display an error in.
  */
-function openDownloadPage(): void {
-  shell.openExternal(GITHUB_PAGES_URL).catch((err) => {
-    log.warn(`[menu] failed to open download page: ${String(err)}`)
+function openExternalSafe(url: string, label: string): void {
+  shell.openExternal(url).catch((err) => {
+    log.warn(`[menu] failed to open ${label}: ${String(err)}`)
   })
 }
-
-type Lang = 'ja' | 'en'
 
 interface MenuLabels {
   file: string
@@ -26,10 +26,10 @@ interface MenuLabels {
   help: string
   about: string
   userGuide: string
-  obsSetup: string
+  sendFeedback: string
   donations: string
   openLogFolder: string
-  openDownloadPage: string
+  downloadSite: string
 }
 
 const JA: MenuLabels = {
@@ -40,10 +40,10 @@ const JA: MenuLabels = {
   help: 'ヘルプ',
   about: 'このアプリについて',
   userGuide: '使い方ガイド',
-  obsSetup: 'OBS 設定ガイド',
+  sendFeedback: 'フィードバックを送る',
   donations: 'プロジェクトを支援する (寄付)',
   openLogFolder: 'ログフォルダを開く',
-  openDownloadPage: 'ダウンロードページを開く'
+  downloadSite: 'ダウンロードサイト'
 }
 
 const EN: MenuLabels = {
@@ -54,10 +54,10 @@ const EN: MenuLabels = {
   help: 'Help',
   about: 'About',
   userGuide: 'User Guide',
-  obsSetup: 'OBS Setup Guide',
+  sendFeedback: 'Send Feedback',
   donations: 'Support this project (Donations)',
   openLogFolder: 'Open log folder',
-  openDownloadPage: 'Open Download Page'
+  downloadSite: 'Download Site'
 }
 
 const LABELS: Record<Lang, MenuLabels> = { ja: JA, en: EN }
@@ -76,6 +76,7 @@ function openLogFolder(): void {
 
 export function buildMenu(win: BrowserWindow, lang: Lang = 'en'): Menu {
   const L = LABELS[lang]
+  const URLS = GITHUB_PAGES_LOCALIZED[lang]
   const send = (channel: string) => win.webContents.send(channel)
 
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -102,13 +103,21 @@ export function buildMenu(win: BrowserWindow, lang: Lang = 'en'): Menu {
     {
       label: L.help,
       submenu: [
+        // 3-item documentation group: guide -> feedback -> download landing.
+        // Order encodes the natural user journey ("read the guide first,
+        // then submit feedback if you're still stuck").  OBS setup is no
+        // longer a top-level entry — it is folded into the User Guide Q&A.
         {
           label: L.userGuide,
-          click: () => shell.openExternal(DOCUMENTATION_URLS.userGuide)
+          click: () => openExternalSafe(URLS.guide, 'User Guide')
         },
         {
-          label: L.obsSetup,
-          click: () => shell.openExternal(DOCUMENTATION_URLS.obsSetup)
+          label: L.sendFeedback,
+          click: () => openExternalSafe(URLS.feedback, 'Send Feedback')
+        },
+        {
+          label: L.downloadSite,
+          click: () => openExternalSafe(URLS.top, 'Download Site')
         },
         { type: 'separator' },
         {
@@ -121,12 +130,6 @@ export function buildMenu(win: BrowserWindow, lang: Lang = 'en'): Menu {
           click: () => openLogFolder()
         },
         { type: 'separator' },
-        {
-          label: L.openDownloadPage,
-          // Direct shell.openExternal — no in-app version comparison.  The
-          // landing page is responsible for surfacing the latest release.
-          click: () => openDownloadPage()
-        },
         {
           label: L.about,
           click: () => send('menu:openAbout')
