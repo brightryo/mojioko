@@ -863,3 +863,87 @@ footer a:hover {
     padding: 14px 16px;
   }
 }
+
+/* =====================================
+   Feedback Page (/feedback/)
+   ===================================== */
+
+/* Shared section frame used by all three blocks (CTA / tips / question
+   redirect). Centred text + generous vertical rhythm to match the rest of
+   the site's section spacing. */
+.feedback-section {
+  padding: 48px 0;
+  text-align: center;
+  border-top: 1px solid var(--border);
+}
+
+.feedback-section:first-of-type {
+  border-top: none;
+  padding-top: 32px;
+}
+
+.feedback-section h2 {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  color: var(--text-primary);
+}
+
+.feedback-section > p {
+  max-width: 640px;
+  margin: 0 auto 20px;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+/* Main CTA block — the primary download-style button is already styled
+   globally via .download-btn; we only need to give the section a stronger
+   visual weight on the page. */
+.feedback-cta {
+  padding-bottom: 56px;
+}
+
+/* Tips block — the inner .guide-faq keeps its left-aligned accordion
+   layout, but we restore left-alignment for the answer body since the
+   parent section is text-align: center. */
+.feedback-tips .guide-faq {
+  text-align: left;
+  padding: 12px 0 0;
+}
+
+/* Question redirect block — the .guide-btn (outlined accent) is used as
+   the secondary CTA. The single-line label variant works because the
+   .guide-btn flex-column will simply have one item. */
+.feedback-questions .guide-btn {
+  margin-top: 12px;
+}
+
+/* Inline code styling used inside answer bodies (Win + Shift + S, main.log,
+   etc.). Mirrors the dark surface of model-card to stay consistent. */
+.qa-body code {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-family: ui-monospace, "SF Mono", "Menlo", "Cascadia Mono",
+    "Roboto Mono", Consolas, monospace;
+  font-size: 0.92em;
+  line-height: 1.4;
+}
+
+/* Mobile tweaks for the feedback page */
+@media (max-width: 700px) {
+  .feedback-section {
+    padding: 36px 0;
+  }
+
+  .feedback-section h2 {
+    font-size: 22px;
+  }
+
+  .feedback-section > p {
+    font-size: 14px;
+  }
+}
