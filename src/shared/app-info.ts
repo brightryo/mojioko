@@ -1,5 +1,5 @@
 export const APP_NAME = 'MOJIOKO'
-export const APP_VERSION = '1.0.0'
+export const APP_VERSION = '1.0.1'
 
 /** Human-readable display string shown in title bar and About dialog. */
 export const APP_DISPLAY = `${APP_NAME} ${APP_VERSION}`
