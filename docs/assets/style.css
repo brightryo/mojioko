@@ -693,6 +693,34 @@ footer a:hover {
   line-height: 1.4;
 }
 
+/* Q&A priority badges (used in the user guide summary line in place of
+   the old Q1/Q2/... numeric labels). Kept under a `.qa-badge` namespace
+   to avoid colliding with the existing `.badge` / `.badge-light` used by
+   the Whisper model cards in this same page. */
+.qa-badge {
+  display: inline-block;
+  padding: 2px 12px;
+  border-radius: 4px;
+  font-size: 0.75em;
+  font-weight: bold;
+  margin-right: 10px;
+  vertical-align: middle;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.qa-badge-important {
+  background-color: transparent;
+  color: #FB8C00;
+  border: 1px solid #FB8C00;
+}
+
+.qa-badge-info {
+  background-color: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
 .qa-body {
   padding: 0 24px 24px;
   color: var(--text-secondary);

@@ -33,10 +33,81 @@
     <!-- Q&A Section -->
     <section class="guide-faq">
 
-      <!-- Q1: Whisper モデルの選び方 -->
+      <!-- 1: OBS settings (revised title and opening, badge: important) -->
       <details class="qa">
         <summary>
-          <span class="q-label">Q1</span>
+          <span class="qa-badge qa-badge-important">重要</span>
+          <span class="q-text">正確に文字起こしをするための OBS 設定方法</span>
+        </summary>
+        <div class="qa-body">
+          <p>MOJIOKO で高精度な文字起こしを行うためには、録画段階でマイク音声を別トラックに分けて保存することが重要です。</p>
+
+          <h4>なぜ必要か</h4>
+          <p>ゲーム BGM、効果音、ゲーム内の音声がマイク音声と同じトラックに保存されると、Whisper が「これは話している声か、音楽か、効果音か」を判別しづらくなり、文字起こし精度が大きく低下します。</p>
+
+          <h4>解決方法</h4>
+          <p>マイク音声を <strong>音声トラック 2</strong> に分けて録画することで、MOJIOKO で「トラック 2 だけを文字起こし対象にする」設定が可能になり、高精度な文字起こしが実現できます。</p>
+          <p><em>※ 動画ファイル自体は 1 つのままで、内部的に複数の音声トラックを持つ形になります。</em></p>
+
+          <h4>OBS の音声トラック設定方法</h4>
+
+          <h5>▼ 設定画面</h5>
+          <ol class="guide-list">
+            <li>OBS の「設定」画面を開く</li>
+            <li>左側メニューから「出力」を選択</li>
+            <li>「出力モード」を「詳細」に切り替える</li>
+            <li>「録画」タブを選択</li>
+            <li>「音声トラック」の「2」にチェックを入れる</li>
+            <li>「適用」→「OK」</li>
+          </ol>
+
+          <h5>▼ 音声ミキサー設定</h5>
+          <ol class="guide-list">
+            <li>メイン画面の音声ミキサーで「Options」ボタンを押下</li>
+            <li>「高度な音声プロパティ」が開く</li>
+            <li>マイクの行の「トラック」の「2」にチェックを入れる</li>
+            <li>「閉じる」</li>
+          </ol>
+
+          <h4>MOJIOKO 側の設定</h4>
+          <p>録画した動画ファイルを MOJIOKO で指定し、文字起こし対象の音声トラックで <strong>「トラック 2」</strong> を選択して文字起こしを実行します。これでマイク音声のみを対象にした高精度な文字起こしが可能になります。</p>
+
+          <h4>補足</h4>
+          <p>文字起こしの精度調整については、MOJIOKO の文字起こし画面最下部にある「詳細設定」で調整できます。</p>
+          <ul class="guide-list">
+            <li>VAD（音声検出）の閾値</li>
+            <li>ビームサイズ</li>
+            <li>言語の指定（自動検出 / 各言語）</li>
+          </ul>
+        </div>
+      </details>
+
+      <!-- 2: SmartScreen warning (badge: important, body unchanged from prior Q3) -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-important">重要</span>
+          <span class="q-text">インストール時に「Windows によって PC が保護されました」と表示されます</span>
+        </summary>
+        <div class="qa-body">
+          <p>これは Microsoft の SmartScreen 機能による警告です。MOJIOKO は現在コード署名されていないため、初回インストール時に表示されます。</p>
+
+          <h4>対処方法</h4>
+          <ol class="guide-list">
+            <li>「詳細情報」をクリック</li>
+            <li>「実行」ボタンが表示されるのでクリック</li>
+            <li>インストーラが起動します</li>
+          </ol>
+
+          <h4>安全性について</h4>
+          <p>このアプリは GitHub の公式リポジトリで全ソースコードを公開しており、データを外部送信することもありません。詳細は GitHub リポジトリのプライバシーポリシーをご確認ください。</p>
+          <p><a href="https://github.com/brightryo/mojioko/blob/main/PRIVACY_JA.md" target="_blank" rel="noopener">プライバシーポリシーを見る →</a></p>
+        </div>
+      </details>
+
+      <!-- 3: Whisper model selection (badge: info, body unchanged from prior Q1) -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">解説</span>
           <span class="q-text">Whisper モデルはどれをダウンロードして選べばいい？</span>
         </summary>
         <div class="qa-body">
@@ -92,76 +163,10 @@
         </div>
       </details>
 
-      <!-- Q2: OBS マルチトラック -->
+      <!-- 4: Text/SRT export (badge: info, body unchanged) -->
       <details class="qa">
         <summary>
-          <span class="q-label">Q2</span>
-          <span class="q-text">マイク音声だけ文字起こし対象にしたい</span>
-        </summary>
-        <div class="qa-body">
-          <p>ゲーム BGM や効果音がマイク音声と同じトラックに保存されると、文字起こし対象の判別が困難になり精度が落ちます。</p>
-          <p>そこで、マイク音声だけを別トラックとして録画する設定を行います。<em>（動画ファイル内の構成が変わるだけで、別ファイルで出力されるわけではありません）</em></p>
-          <p>マイク音声を <strong>音声トラック 2</strong> に指定することで、文字起こし対象を音声トラック 2 だけにして精度を向上させます。</p>
-
-          <h4>OBS の音声トラック設定方法</h4>
-
-          <h5>■ 設定画面</h5>
-          <ol class="guide-list">
-            <li>OBS の「設定」画面を開く</li>
-            <li>左側メニューから「出力」を選択</li>
-            <li>「出力モード」を「詳細」に切り替える</li>
-            <li>「録画」タブを選択</li>
-            <li>「音声トラック」の「2」にチェックを入れる</li>
-            <li>「適用」→「OK」</li>
-          </ol>
-
-          <h5>■ 音声ミキサー設定</h5>
-          <ol class="guide-list">
-            <li>メイン画面の音声ミキサーで「Options」ボタンを押下</li>
-            <li>「高度な音声プロパティ」が開く</li>
-            <li>マイクの行の「トラック」の「2」にチェックを入れる</li>
-            <li>「閉じる」</li>
-          </ol>
-
-          <h4>MOJIOKO 側の設定</h4>
-          <p>録画した動画ファイルを MOJIOKO で指定し、文字起こし対象の音声トラックで <strong>「トラック 2」</strong> を選択して文字起こしを実行します。これでマイク音声のみを対象にした文字起こしが可能になります。</p>
-
-          <h4>補足</h4>
-          <p>文字起こしの精度調整については、MOJIOKO の文字起こし画面最下部にある「詳細設定」で調整できます。</p>
-          <ul class="guide-list">
-            <li>VAD（音声検出）の閾値</li>
-            <li>ビームサイズ</li>
-            <li>言語の指定（自動検出 / 各言語）</li>
-          </ul>
-        </div>
-      </details>
-
-      <!-- Q3: SmartScreen -->
-      <details class="qa">
-        <summary>
-          <span class="q-label">Q3</span>
-          <span class="q-text">インストール時に「Windows によって PC が保護されました」と表示されます</span>
-        </summary>
-        <div class="qa-body">
-          <p>これは Microsoft の SmartScreen 機能による警告です。MOJIOKO は現在コード署名されていないため、初回インストール時に表示されます。</p>
-
-          <h4>対処方法</h4>
-          <ol class="guide-list">
-            <li>「詳細情報」をクリック</li>
-            <li>「実行」ボタンが表示されるのでクリック</li>
-            <li>インストーラが起動します</li>
-          </ol>
-
-          <h4>安全性について</h4>
-          <p>このアプリは GitHub の公式リポジトリで全ソースコードを公開しており、データを外部送信することもありません。詳細は GitHub リポジトリのプライバシーポリシーをご確認ください。</p>
-          <p><a href="https://github.com/brightryo/mojioko/blob/main/PRIVACY_JA.md" target="_blank" rel="noopener">プライバシーポリシーを見る →</a></p>
-        </div>
-      </details>
-
-      <!-- Q4: テキスト/SRT 出力 -->
-      <details class="qa">
-        <summary>
-          <span class="q-label">Q4</span>
+          <span class="qa-badge qa-badge-info">解説</span>
           <span class="q-text">字幕やテキストだけ別ファイルで出力したい（動画書き出し以外の使い方）</span>
         </summary>
         <div class="qa-body">

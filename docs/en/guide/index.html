@@ -33,10 +33,81 @@
     <!-- Q&A Section -->
     <section class="guide-faq">
 
-      <!-- Q1: Whisper model -->
+      <!-- 1: OBS settings (revised title and opening, badge: important) -->
       <details class="qa">
         <summary>
-          <span class="q-label">Q1</span>
+          <span class="qa-badge qa-badge-important">Important</span>
+          <span class="q-text">OBS Settings for Accurate Transcription</span>
+        </summary>
+        <div class="qa-body">
+          <p>To achieve high-accuracy transcription with MOJIOKO, it's important to record your microphone audio on a separate audio track during recording.</p>
+
+          <h4>Why is this necessary?</h4>
+          <p>If game BGM, sound effects, and in-game voices are recorded on the same audio track as your microphone, Whisper will have difficulty distinguishing between "is this someone speaking?" or "is this music or sound effects?" This significantly reduces transcription accuracy.</p>
+
+          <h4>The Solution</h4>
+          <p>By recording your microphone audio on <strong>Audio Track 2</strong>, you can then configure MOJIOKO to "transcribe only Track 2", enabling high-accuracy transcription.</p>
+          <p><em>※ The video file remains as a single file, but internally contains multiple audio tracks.</em></p>
+
+          <h4>How to Configure OBS Audio Tracks</h4>
+
+          <h5>▼ Settings Window</h5>
+          <ol class="guide-list">
+            <li>Open OBS "Settings"</li>
+            <li>Select "Output" from the left menu</li>
+            <li>Change "Output Mode" to "Advanced"</li>
+            <li>Select the "Recording" tab</li>
+            <li>Check "Audio Track 2"</li>
+            <li>Click "Apply" → "OK"</li>
+          </ol>
+
+          <h5>▼ Audio Mixer Settings</h5>
+          <ol class="guide-list">
+            <li>Click the "Options" button in the audio mixer on the main screen</li>
+            <li>The "Advanced Audio Properties" window opens</li>
+            <li>Check "Track 2" in the row for your microphone</li>
+            <li>Close</li>
+          </ol>
+
+          <h4>MOJIOKO Settings</h4>
+          <p>Load the recorded video file in MOJIOKO and select <strong>"Track 2"</strong> as the transcription target audio track. This enables high-accuracy transcription focused only on your microphone audio.</p>
+
+          <h4>Additional Notes</h4>
+          <p>Fine-tuning of transcription accuracy can be done in the "Advanced Settings" at the bottom of MOJIOKO's transcription screen:</p>
+          <ul class="guide-list">
+            <li>VAD (Voice Activity Detection) threshold</li>
+            <li>Beam size</li>
+            <li>Language specification (auto-detect / specific language)</li>
+          </ul>
+        </div>
+      </details>
+
+      <!-- 2: SmartScreen warning (badge: important, body unchanged from prior Q3) -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-important">Important</span>
+          <span class="q-text">"Windows protected your PC" appears during installation</span>
+        </summary>
+        <div class="qa-body">
+          <p>This is a warning from Microsoft's SmartScreen feature. MOJIOKO is currently not code-signed, so this warning appears on first installation.</p>
+
+          <h4>How to Proceed</h4>
+          <ol class="guide-list">
+            <li>Click "More info"</li>
+            <li>Click the "Run anyway" button that appears</li>
+            <li>The installer will launch</li>
+          </ol>
+
+          <h4>About Safety</h4>
+          <p>This application's full source code is published on GitHub, and no data is transmitted externally. See the privacy policy in the GitHub repository for details.</p>
+          <p><a href="https://github.com/brightryo/mojioko/blob/main/PRIVACY.md" target="_blank" rel="noopener">View privacy policy →</a></p>
+        </div>
+      </details>
+
+      <!-- 3: Whisper model selection (badge: info, body unchanged from prior Q1) -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">Info</span>
           <span class="q-text">Which Whisper model should I download and use?</span>
         </summary>
         <div class="qa-body">
@@ -92,76 +163,10 @@
         </div>
       </details>
 
-      <!-- Q2: OBS multi-track -->
+      <!-- 4: Text/SRT export (badge: info, body unchanged) -->
       <details class="qa">
         <summary>
-          <span class="q-label">Q2</span>
-          <span class="q-text">I want to transcribe only microphone audio</span>
-        </summary>
-        <div class="qa-body">
-          <p>When game BGM or sound effects are saved on the same track as microphone audio, it becomes difficult to identify the transcription target and accuracy drops.</p>
-          <p>To solve this, record microphone audio on a separate track. <em>(The video file's internal structure changes, but it's still a single output file.)</em></p>
-          <p>By assigning microphone audio to <strong>Audio Track 2</strong>, you can target only Track 2 for transcription, improving accuracy.</p>
-
-          <h4>OBS Audio Track Configuration</h4>
-
-          <h5>■ Settings Screen</h5>
-          <ol class="guide-list">
-            <li>Open OBS "Settings"</li>
-            <li>Select "Output" from the left menu</li>
-            <li>Change "Output Mode" to "Advanced"</li>
-            <li>Select the "Recording" tab</li>
-            <li>Check "Audio Track" "2"</li>
-            <li>Click "Apply" → "OK"</li>
-          </ol>
-
-          <h5>■ Audio Mixer Configuration</h5>
-          <ol class="guide-list">
-            <li>In the main window, click the "Options" button in the Audio Mixer</li>
-            <li>"Advanced Audio Properties" dialog opens</li>
-            <li>Check "Tracks" "2" for the microphone row</li>
-            <li>Click "Close"</li>
-          </ol>
-
-          <h4>MOJIOKO Configuration</h4>
-          <p>Select the recorded video file in MOJIOKO, choose <strong>"Track 2"</strong> as the transcription target audio track, and run transcription. You can now transcribe only the microphone audio.</p>
-
-          <h4>Notes</h4>
-          <p>Transcription accuracy can be fine-tuned via "Advanced Settings" at the bottom of MOJIOKO's transcription screen:</p>
-          <ul class="guide-list">
-            <li>VAD (Voice Activity Detection) threshold</li>
-            <li>Beam size</li>
-            <li>Language specification (auto-detect / specific language)</li>
-          </ul>
-        </div>
-      </details>
-
-      <!-- Q3: SmartScreen -->
-      <details class="qa">
-        <summary>
-          <span class="q-label">Q3</span>
-          <span class="q-text">"Windows protected your PC" appears during installation</span>
-        </summary>
-        <div class="qa-body">
-          <p>This is a warning from Microsoft's SmartScreen feature. MOJIOKO is currently not code-signed, so this warning appears on first installation.</p>
-
-          <h4>How to Proceed</h4>
-          <ol class="guide-list">
-            <li>Click "More info"</li>
-            <li>Click the "Run anyway" button that appears</li>
-            <li>The installer will launch</li>
-          </ol>
-
-          <h4>About Safety</h4>
-          <p>This application's full source code is published on GitHub, and no data is transmitted externally. See the privacy policy in the GitHub repository for details.</p>
-          <p><a href="https://github.com/brightryo/mojioko/blob/main/PRIVACY.md" target="_blank" rel="noopener">View privacy policy →</a></p>
-        </div>
-      </details>
-
-      <!-- Q4: Text / SRT export -->
-      <details class="qa">
-        <summary>
-          <span class="q-label">Q4</span>
+          <span class="qa-badge qa-badge-info">Info</span>
           <span class="q-text">I want to export just the subtitles or text (without rendering the video)</span>
         </summary>
         <div class="qa-body">
