@@ -158,6 +158,94 @@
         </div>
       </details>
 
+      <!-- Q4: テキスト/SRT 出力 -->
+      <details class="qa">
+        <summary>
+          <span class="q-label">Q4</span>
+          <span class="q-text">字幕やテキストだけ別ファイルで出力したい（動画書き出し以外の使い方）</span>
+        </summary>
+        <div class="qa-body">
+          <p>MOJIOKO では、動画への字幕焼き込み以外にも、字幕ファイルやテキストファイルとして出力できます。</p>
+
+          <h4>出力できる形式</h4>
+
+          <h5>■ プレーンテキスト（<code>.txt</code>）</h5>
+          <ul class="guide-list">
+            <li>字幕テキストのみを順番に並べた、シンプルなテキストファイル</li>
+            <li>時間情報なし、字幕の内容だけ</li>
+            <li>用途：ブログ記事の元ネタ、文字起こし結果の確認、議事録、AI 音声合成ツールへの取り込みなど</li>
+          </ul>
+
+          <h5>■ SRT（<code>.srt</code>）字幕ファイル</h5>
+          <ul class="guide-list">
+            <li>動画再生ソフトや動画編集ソフトで広く使われる字幕形式</li>
+            <li>各字幕に表示時間が含まれる</li>
+            <li>用途：他の動画編集ソフトでの字幕利用、YouTube への字幕アップロード、Premiere Pro / DaVinci Resolve / CapCut などへのインポート</li>
+          </ul>
+
+          <h4>出力方法</h4>
+          <p>文字起こし完了後、編集画面（Step 2）の右上にある「テキスト出力」ボタンから:</p>
+          <ol class="guide-list">
+            <li>編集画面の右上「<strong>テキスト出力</strong>」ボタンをクリック</li>
+            <li>プルダウンメニューから出力形式を選択:
+              <ul class="guide-list">
+                <li>「<strong>テキスト出力</strong>」を選ぶとプレーンテキスト（<code>.txt</code>）形式で保存</li>
+                <li>「<strong>SRT形式で出力</strong>」を選ぶと SRT 字幕ファイル（<code>.srt</code>）形式で保存</li>
+              </ul>
+            </li>
+            <li>保存先を選択して保存</li>
+          </ol>
+
+          <h4>活用例</h4>
+
+          <h5>■ VOICEVOX で AI 音声に置き換える</h5>
+          <ol class="guide-list">
+            <li>MOJIOKO で文字起こし → 「テキスト出力」でプレーンテキスト保存</li>
+            <li>VOICEVOX に取り込んで、ずんだもんや四国めたんなどのキャラクター音声を生成</li>
+            <li>AI 音声で動画を作り直したり、別動画として活用</li>
+          </ol>
+          <p>ゲーム実況のテキストをそのまま AI 音声化、自分の声と差し替えた動画制作などが可能です。</p>
+
+          <h5>■ DaVinci Resolve でタイムライン編集</h5>
+          <ol class="guide-list">
+            <li>MOJIOKO で文字起こし → 「SRT形式で出力」で SRT 保存</li>
+            <li>DaVinci Resolve の「メディアプール」に SRT ファイルをインポート</li>
+            <li>タイムラインにドラッグするだけで、字幕の開始・終了時間まで自動的に配置される</li>
+          </ol>
+          <p>MOJIOKO の字幕デザインに不満があっても、DaVinci Resolve でフォント・色・アニメーションを自由に編集可能。タイミング調整も既に MOJIOKO で済んでいるので、デザインだけに集中できます。</p>
+
+          <h5>■ YouTube に字幕を追加（焼き込みなし）</h5>
+          <ol class="guide-list">
+            <li>MOJIOKO で文字起こし → 「SRT形式で出力」で SRT 保存</li>
+            <li>YouTube Studio で動画をアップロード</li>
+            <li>字幕タブから SRT ファイルをアップロード</li>
+          </ol>
+          <p>動画への焼き込みは不要、視聴者が字幕の ON/OFF を切り替えられます。字幕は YouTube の検索対象になるので SEO 効果もあります。</p>
+
+          <h5>■ Premiere Pro や CapCut で字幕編集</h5>
+          <ol class="guide-list">
+            <li>MOJIOKO で文字起こし → 「SRT形式で出力」で SRT 保存</li>
+            <li>動画編集ソフトのキャプション機能でインポート</li>
+            <li>字幕の見た目（フォント、色、位置）を編集ソフト側で調整</li>
+          </ol>
+
+          <h5>■ ブログ記事や台本として再利用</h5>
+          <ol class="guide-list">
+            <li>MOJIOKO で文字起こし → 「テキスト出力」でプレーンテキスト保存</li>
+            <li>テキストファイルを編集ソフトで開く</li>
+            <li>整形してブログや台本として利用</li>
+          </ol>
+          <p>ゲーム実況の振り返り記事、動画の文字版コンテンツなどに活用できます。</p>
+
+          <h4>補足</h4>
+          <ul class="guide-list">
+            <li>どちらの出力形式でも、編集画面で修正したテキストが反映されます</li>
+            <li>出力対象から除外した行（削除済み）は出力に含まれません</li>
+            <li>動画書き出し（字幕焼き込み）と組み合わせて使えます<br>例：動画も書き出しつつ、SRT も別途保存</li>
+          </ul>
+        </div>
+      </details>
+
     </section>
 
     <!-- Back to top -->
