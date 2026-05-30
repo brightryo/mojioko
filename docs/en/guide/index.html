@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Guide - MOJIOKO</title>
+  <meta name="description" content="MOJIOKO user guide. Covers Whisper model selection, OBS multi-track recording setup, and the Windows SmartScreen warning workaround.">
+  <link rel="icon" type="image/png" href="../../images/icon.png">
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+  <div class="container">
+
+    <!-- Top Navigation -->
+    <nav class="top-nav">
+      <a href="../index.html" class="brand brand-link">
+        <img src="../../images/icon.png" alt="" class="brand-icon">
+        <span>MOJIOKO</span>
+      </a>
+      <div class="lang-switch">
+        <a href="../../guide/" data-lang-link="ja">日本語</a>
+        <a href="./" class="active" data-lang-link="en">English</a>
+      </div>
+    </nav>
+
+    <!-- Guide Hero -->
+    <section class="guide-hero">
+      <p class="guide-back"><a href="../index.html">← Back to top</a></p>
+      <h1>User Guide</h1>
+      <p class="tagline">FAQ, OBS Setup, and More</p>
+    </section>
+
+    <!-- Q&A Section -->
+    <section class="guide-faq">
+
+      <!-- Q1: Whisper model -->
+      <details class="qa">
+        <summary>
+          <span class="q-label">Q1</span>
+          <span class="q-text">Which Whisper model should I download and use?</span>
+        </summary>
+        <div class="qa-body">
+          <p>You can choose from 3 models in the in-app "Whisper Model" screen. <strong>We recommend medium</strong>.</p>
+
+          <div class="model-card model-card-primary">
+            <h3>medium <span class="badge">★ Recommended (Balanced)</span></h3>
+            <ul class="model-specs">
+              <li>File size: ~1.5 GB</li>
+              <li>Memory usage: Medium</li>
+              <li>Processing speed: Medium</li>
+              <li>Accuracy: High</li>
+            </ul>
+            <p class="model-note">Start with this model.</p>
+          </div>
+
+          <div class="model-card">
+            <h3>small <span class="badge-light">Lightweight &amp; Fast</span></h3>
+            <ul class="model-specs">
+              <li>File size: ~466 MB</li>
+              <li>Memory usage: Low</li>
+              <li>Processing speed: Fast</li>
+              <li>Accuracy: Standard</li>
+            </ul>
+            <p class="model-note">Use as alternative if medium feels heavy or slow.</p>
+          </div>
+
+          <div class="model-card">
+            <h3>large-v3 <span class="badge-light">Highest Accuracy</span></h3>
+            <ul class="model-specs">
+              <li>File size: ~3 GB</li>
+              <li>Memory usage: High (16 GB+ RAM recommended)</li>
+              <li>Processing speed: Slow</li>
+              <li>Accuracy: Best</li>
+            </ul>
+            <p class="model-note">Upgrade if medium's accuracy is not sufficient.</p>
+          </div>
+
+          <h4>How to Choose</h4>
+          <ol class="guide-list">
+            <li>Start with medium</li>
+            <li>If accuracy is not enough → Upgrade to large-v3</li>
+            <li>If processing is slow → Downgrade to small</li>
+          </ol>
+
+          <h4>Notes</h4>
+          <ul class="guide-list">
+            <li>Downloaded models are saved and ready to use next time</li>
+            <li>You can switch between multiple models</li>
+            <li>You can download models anytime from the "Whisper Model" screen</li>
+            <li>Keep the app open during download</li>
+          </ul>
+        </div>
+      </details>
+
+      <!-- Q2: OBS multi-track -->
+      <details class="qa">
+        <summary>
+          <span class="q-label">Q2</span>
+          <span class="q-text">I want to transcribe only microphone audio</span>
+        </summary>
+        <div class="qa-body">
+          <p>When game BGM or sound effects are saved on the same track as microphone audio, it becomes difficult to identify the transcription target and accuracy drops.</p>
+          <p>To solve this, record microphone audio on a separate track. <em>(The video file's internal structure changes, but it's still a single output file.)</em></p>
+          <p>By assigning microphone audio to <strong>Audio Track 2</strong>, you can target only Track 2 for transcription, improving accuracy.</p>
+
+          <h4>OBS Audio Track Configuration</h4>
+
+          <h5>■ Settings Screen</h5>
+          <ol class="guide-list">
+            <li>Open OBS "Settings"</li>
+            <li>Select "Output" from the left menu</li>
+            <li>Change "Output Mode" to "Advanced"</li>
+            <li>Select the "Recording" tab</li>
+            <li>Check "Audio Track" "2"</li>
+            <li>Click "Apply" → "OK"</li>
+          </ol>
+
+          <h5>■ Audio Mixer Configuration</h5>
+          <ol class="guide-list">
+            <li>In the main window, click the "Options" button in the Audio Mixer</li>
+            <li>"Advanced Audio Properties" dialog opens</li>
+            <li>Check "Tracks" "2" for the microphone row</li>
+            <li>Click "Close"</li>
+          </ol>
+
+          <h4>MOJIOKO Configuration</h4>
+          <p>Select the recorded video file in MOJIOKO, choose <strong>"Track 2"</strong> as the transcription target audio track, and run transcription. You can now transcribe only the microphone audio.</p>
+
+          <h4>Notes</h4>
+          <p>Transcription accuracy can be fine-tuned via "Advanced Settings" at the bottom of MOJIOKO's transcription screen:</p>
+          <ul class="guide-list">
+            <li>VAD (Voice Activity Detection) threshold</li>
+            <li>Beam size</li>
+            <li>Language specification (auto-detect / specific language)</li>
+          </ul>
+        </div>
+      </details>
+
+      <!-- Q3: SmartScreen -->
+      <details class="qa">
+        <summary>
+          <span class="q-label">Q3</span>
+          <span class="q-text">"Windows protected your PC" appears during installation</span>
+        </summary>
+        <div class="qa-body">
+          <p>This is a warning from Microsoft's SmartScreen feature. MOJIOKO is currently not code-signed, so this warning appears on first installation.</p>
+
+          <h4>How to Proceed</h4>
+          <ol class="guide-list">
+            <li>Click "More info"</li>
+            <li>Click the "Run anyway" button that appears</li>
+            <li>The installer will launch</li>
+          </ol>
+
+          <h4>About Safety</h4>
+          <p>This application's full source code is published on GitHub, and no data is transmitted externally. See the privacy policy in the GitHub repository for details.</p>
+          <p><a href="https://github.com/brightryo/mojioko/blob/main/PRIVACY.md" target="_blank" rel="noopener">View privacy policy →</a></p>
+        </div>
+      </details>
+
+    </section>
+
+    <!-- Back to top -->
+    <section class="guide-back-cta">
+      <a href="../index.html" class="back-btn">Back to top</a>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <div>&copy; 2026 brightryo</div>
+      <div class="footer-links">
+        <a href="https://github.com/brightryo/mojioko" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/brightryo/mojioko/issues" target="_blank" rel="noopener">Contact</a>
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>

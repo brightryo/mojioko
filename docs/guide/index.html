@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>使い方ガイド - MOJIOKO</title>
+  <meta name="description" content="MOJIOKO の使い方ガイド。Whisper モデルの選び方、OBS のマルチトラック録画設定、SmartScreen 警告の対処などをまとめています。">
+  <link rel="icon" type="image/png" href="../images/icon.png">
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+
+    <!-- Top Navigation -->
+    <nav class="top-nav">
+      <a href="../index.html" class="brand brand-link">
+        <img src="../images/icon.png" alt="" class="brand-icon">
+        <span>MOJIOKO</span>
+      </a>
+      <div class="lang-switch">
+        <a href="./" class="active" data-lang-link="ja">日本語</a>
+        <a href="../en/guide/" data-lang-link="en">English</a>
+      </div>
+    </nav>
+
+    <!-- Guide Hero -->
+    <section class="guide-hero">
+      <p class="guide-back"><a href="../index.html">← トップに戻る</a></p>
+      <h1>使い方ガイド</h1>
+      <p class="tagline">よくある質問・OBS 設定方法など</p>
+    </section>
+
+    <!-- Q&A Section -->
+    <section class="guide-faq">
+
+      <!-- Q1: Whisper モデルの選び方 -->
+      <details class="qa">
+        <summary>
+          <span class="q-label">Q1</span>
+          <span class="q-text">Whisper モデルはどれをダウンロードして選べばいい？</span>
+        </summary>
+        <div class="qa-body">
+          <p>アプリ内の「Whisper モデル」画面で 3 つのモデルから選べます。<strong>medium が推奨</strong>です。</p>
+
+          <div class="model-card model-card-primary">
+            <h3>medium <span class="badge">★ 推奨（バランス重視）</span></h3>
+            <ul class="model-specs">
+              <li>ファイルサイズ：約 1.5 GB</li>
+              <li>メモリ使用量：中</li>
+              <li>処理速度：中</li>
+              <li>精度：高い</li>
+            </ul>
+            <p class="model-note">まずはこちらを試してください。</p>
+          </div>
+
+          <div class="model-card">
+            <h3>small <span class="badge-light">軽量・高速重視</span></h3>
+            <ul class="model-specs">
+              <li>ファイルサイズ：約 466 MB</li>
+              <li>メモリ使用量：少</li>
+              <li>処理速度：速い</li>
+              <li>精度：標準的</li>
+            </ul>
+            <p class="model-note">medium で「重い」「処理が遅い」と感じた場合の代替。</p>
+          </div>
+
+          <div class="model-card">
+            <h3>large-v3 <span class="badge-light">最高精度</span></h3>
+            <ul class="model-specs">
+              <li>ファイルサイズ：約 3 GB</li>
+              <li>メモリ使用量：多（メモリ 16 GB 以上推奨）</li>
+              <li>処理速度：遅い</li>
+              <li>精度：最高</li>
+            </ul>
+            <p class="model-note">medium で精度に不満を感じた場合の選択肢。</p>
+          </div>
+
+          <h4>選び方の目安</h4>
+          <ol class="guide-list">
+            <li>まずは medium から</li>
+            <li>「精度に不満」を感じたら → large-v3 にアップグレード</li>
+            <li>「処理が重い・遅い」と感じたら → small にダウングレード</li>
+          </ol>
+
+          <h4>補足</h4>
+          <ul class="guide-list">
+            <li>一度ダウンロードしたモデルは保存され、次回以降の起動ですぐ使えます</li>
+            <li>複数モデルを切り替えて使うこともできます</li>
+            <li>アプリ内の「Whisper モデル」選択画面からいつでもダウンロードできます</li>
+            <li>ダウンロード中はアプリを閉じずにお待ちください</li>
+          </ul>
+        </div>
+      </details>
+
+      <!-- Q2: OBS マルチトラック -->
+      <details class="qa">
+        <summary>
+          <span class="q-label">Q2</span>
+          <span class="q-text">マイク音声だけ文字起こし対象にしたい</span>
+        </summary>
+        <div class="qa-body">
+          <p>ゲーム BGM や効果音がマイク音声と同じトラックに保存されると、文字起こし対象の判別が困難になり精度が落ちます。</p>
+          <p>そこで、マイク音声だけを別トラックとして録画する設定を行います。<em>（動画ファイル内の構成が変わるだけで、別ファイルで出力されるわけではありません）</em></p>
+          <p>マイク音声を <strong>音声トラック 2</strong> に指定することで、文字起こし対象を音声トラック 2 だけにして精度を向上させます。</p>
+
+          <h4>OBS の音声トラック設定方法</h4>
+
+          <h5>■ 設定画面</h5>
+          <ol class="guide-list">
+            <li>OBS の「設定」画面を開く</li>
+            <li>左側メニューから「出力」を選択</li>
+            <li>「出力モード」を「詳細」に切り替える</li>
+            <li>「録画」タブを選択</li>
+            <li>「音声トラック」の「2」にチェックを入れる</li>
+            <li>「適用」→「OK」</li>
+          </ol>
+
+          <h5>■ 音声ミキサー設定</h5>
+          <ol class="guide-list">
+            <li>メイン画面の音声ミキサーで「Options」ボタンを押下</li>
+            <li>「高度な音声プロパティ」が開く</li>
+            <li>マイクの行の「トラック」の「2」にチェックを入れる</li>
+            <li>「閉じる」</li>
+          </ol>
+
+          <h4>MOJIOKO 側の設定</h4>
+          <p>録画した動画ファイルを MOJIOKO で指定し、文字起こし対象の音声トラックで <strong>「トラック 2」</strong> を選択して文字起こしを実行します。これでマイク音声のみを対象にした文字起こしが可能になります。</p>
+
+          <h4>補足</h4>
+          <p>文字起こしの精度調整については、MOJIOKO の文字起こし画面最下部にある「詳細設定」で調整できます。</p>
+          <ul class="guide-list">
+            <li>VAD（音声検出）の閾値</li>
+            <li>ビームサイズ</li>
+            <li>言語の指定（自動検出 / 各言語）</li>
+          </ul>
+        </div>
+      </details>
+
+      <!-- Q3: SmartScreen -->
+      <details class="qa">
+        <summary>
+          <span class="q-label">Q3</span>
+          <span class="q-text">インストール時に「Windows によって PC が保護されました」と表示されます</span>
+        </summary>
+        <div class="qa-body">
+          <p>これは Microsoft の SmartScreen 機能による警告です。MOJIOKO は現在コード署名されていないため、初回インストール時に表示されます。</p>
+
+          <h4>対処方法</h4>
+          <ol class="guide-list">
+            <li>「詳細情報」をクリック</li>
+            <li>「実行」ボタンが表示されるのでクリック</li>
+            <li>インストーラが起動します</li>
+          </ol>
+
+          <h4>安全性について</h4>
+          <p>このアプリは GitHub の公式リポジトリで全ソースコードを公開しており、データを外部送信することもありません。詳細は GitHub リポジトリのプライバシーポリシーをご確認ください。</p>
+          <p><a href="https://github.com/brightryo/mojioko/blob/main/PRIVACY_JA.md" target="_blank" rel="noopener">プライバシーポリシーを見る →</a></p>
+        </div>
+      </details>
+
+    </section>
+
+    <!-- Back to top -->
+    <section class="guide-back-cta">
+      <a href="../index.html" class="back-btn">トップに戻る</a>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <div>&copy; 2026 brightryo</div>
+      <div class="footer-links">
+        <a href="https://github.com/brightryo/mojioko" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/brightryo/mojioko/issues" target="_blank" rel="noopener">お問い合わせ</a>
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>
