@@ -39,8 +39,6 @@ export const GITHUB_PAGES_URL =
 
 /** External URLs. Update once real pages exist. */
 export const DOCUMENTATION_URLS = {
-  userGuide: `${GITHUB_REPO_URL}#usage`,
-  obsSetup: `${GITHUB_REPO_URL}#obs-setup`,
   /** @deprecated kept for fallback; individual donation URLs are preferred */
   donations: `https://github.com/sponsors/${GITHUB_OWNER}`,
   donationBooth: `https://${GITHUB_OWNER}.booth.pm/items/8414334`,
@@ -48,10 +46,27 @@ export const DOCUMENTATION_URLS = {
   donationGitHub: `https://github.com/sponsors/${GITHUB_OWNER}`,
 } as const
 
+/**
+ * Locale-aware GitHub Pages URLs.  Used by the Help menu so each entry opens
+ * the page in the same language as the app's UI.  All keys are guaranteed
+ * to share the `GITHUB_PAGES_URL` prefix, so the existing allowlist entry
+ * for `GITHUB_PAGES_URL` (with trailing slash) covers them via startsWith.
+ */
+export const GITHUB_PAGES_LOCALIZED = {
+  ja: {
+    top: GITHUB_PAGES_URL,
+    guide: `${GITHUB_PAGES_URL}guide/`,
+    feedback: `${GITHUB_PAGES_URL}feedback/`,
+  },
+  en: {
+    top: `${GITHUB_PAGES_URL}en/`,
+    guide: `${GITHUB_PAGES_URL}en/guide/`,
+    feedback: `${GITHUB_PAGES_URL}en/feedback/`,
+  },
+} as const
+
 /** URL whitelisted for shell.openExternal. Add others here as needed. */
 export const ALLOWED_EXTERNAL_URLS: readonly string[] = [
-  DOCUMENTATION_URLS.userGuide,
-  DOCUMENTATION_URLS.obsSetup,
   DOCUMENTATION_URLS.donations,
   DOCUMENTATION_URLS.donationBooth,
   DOCUMENTATION_URLS.donationBuyMeACoffee,
