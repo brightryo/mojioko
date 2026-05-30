@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.1] - 2026-05-30
+
+First patch release.
+
+### Fixed
+
+- Help menu "User Guide" link now points to the GitHub Pages
+  guide page (previously linked to the GitHub repository README)
+
+### Changed
+
+- "OBS Setup Guide" menu item merged into "User Guide"
+  - OBS setup instructions are now part of the User Guide Q&A
+- Added "Send Feedback" menu item
+  - Opens the feedback page in a new tab
+
+---
+
 ## [1.0.0] - 2026-05-30
 
 Initial public release.
