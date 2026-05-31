@@ -49,6 +49,12 @@ export function AboutDialog() {
               value={buildInfo === null ? '…' : buildInfo.pythonAvailable ? t('settings:about.available') : t('settings:about.notAvailable')}
             />
           </div>
+          {/* TODO: add a "Support this project" link row here.  The
+              DonationDialog already exists (uiStore.setDonationDialogOpen)
+              and the Help menu / command palette / Step 3 success footer
+              all reach it; About is currently the only canonical "what is
+              this app" surface that does not offer the door.  Deferred —
+              not part of the UI redesign branch's required scope. */}
         </div>
       </DialogContent>
     </Dialog>
