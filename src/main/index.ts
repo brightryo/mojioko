@@ -41,10 +41,16 @@ function resolveWindowIconPath(): string {
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
+    // useContentSize treats width/height as the renderer's *content area*
+    // rather than the OS-decorated outer frame.  Without it, the ~32px
+    // title bar + ~24px native menu bar (Windows) eat into the figure
+    // we picked here — leaving the actual UI work area 56px shorter
+    // than intended and breaking layout choices keyed to viewport height.
+    useContentSize: true,
     width: 1280,
-    height: 880,
+    height: 820,
     minWidth: 960,
-    minHeight: 680,
+    minHeight: 640,
     title: APP_DISPLAY,
     backgroundColor: '#09090b',
     // Multi-size .ico ensures Windows picks the right size for the title

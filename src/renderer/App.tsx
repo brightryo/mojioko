@@ -28,7 +28,8 @@ import {
   Info,
   RotateCcw,
   Undo2,
-  Redo2
+  Redo2,
+  Heart
 } from 'lucide-react'
 
 const PAGE_VARIANTS = {
@@ -55,6 +56,7 @@ function CommandRegistrar() {
   const navigate = useNavigate()
   const setShortcutsOpen = useUiStore((s) => s.setShortcutsDialogOpen)
   const setAboutOpen = useUiStore((s) => s.setAboutDialogOpen)
+  const setDonationOpen = useUiStore((s) => s.setDonationDialogOpen)
   const setCommandPaletteOpen = useUiStore((s) => s.setCommandPaletteOpen)
   const setTableFilter = useUiStore((s) => s.setTableFilter)
   const setLanguage = useSettingsStore((s) => s.setLanguage)
@@ -91,7 +93,7 @@ function CommandRegistrar() {
       // Help
       { id: 'showShortcuts',    labelKey: 'help.showShortcuts',    group: 'help', icon: Keyboard, shortcut: 'Ctrl+/', run: () => setShortcutsOpen(true) },
       { id: 'about',            labelKey: 'help.about',            group: 'help', icon: Info,     run: () => { setCommandPaletteOpen(false); setAboutOpen(true) } },
-      { id: 'support',          labelKey: 'help.support',          group: 'help', run: () => {} },
+      { id: 'support',          labelKey: 'help.support',          group: 'help', icon: Heart,    run: () => { setCommandPaletteOpen(false); setDonationOpen(true) } },
     ])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t])

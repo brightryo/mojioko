@@ -1,19 +1,6 @@
 {
   "title": "Render video",
   "subtitle": "Burn subtitles into a new video using ffmpeg.",
-  "preview": {
-    "label": "Output preview",
-    "empty": "No subtitles",
-    "disclaimer": "Approximate preview. Verify with the actual exported video.",
-    "alignmentSummary": "{{align}} · {{margin}}px margin",
-    "list": {
-      "title": "Subtitle preview list",
-      "empty": "No subtitles"
-    }
-  },
-  "result": {
-    "label": "Result"
-  },
   "summary": {
     "label": "Output summary",
     "resolution": "Resolution",
@@ -46,7 +33,7 @@
     "openFile": "Open file",
     "showInFolder": "Show in folder",
     "renderAgain": "Render again",
-    "donate": "☕ Donate"
+    "donate": "Support"
   },
   "progress": {
     "label": "Rendering…",
@@ -71,25 +58,6 @@
   "toast": {
     "renderComplete": "Render complete",
     "encoderFallback": "Encoder {{requested}} is not available; falling back to {{actual}}"
-  },
-  "subtitlePosition": {
-    "title": "Subtitle position",
-    "horizontal": "Horizontal",
-    "vertical": "Vertical",
-    "margin": "Vertical margin (px)",
-    "left": "Left",
-    "center": "Center",
-    "right": "Right",
-    "top": "Top",
-    "bottom": "Bottom"
-  },
-  "background": {
-    "title": "Subtitle background",
-    "color": "Color",
-    "black": "Black",
-    "white": "White",
-    "opacity": "Opacity",
-    "outlineNote": "Note: Outline is disabled when background is enabled"
   },
   "outputFormat": {
     "label": "Output Format",

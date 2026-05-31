@@ -9,7 +9,8 @@
     "colText": "テキスト",
     "colState": "状態",
     "colActions": "",
-    "fadeTooltip": "フェード"
+    "fadeTooltip": "フェード",
+    "selectAllAria": "表示中のすべての行を選択"
   },
   "tab": {
     "all": "すべて",
@@ -93,7 +94,8 @@
   },
   "footer": {
     "summary": "{{edited}}件編集 · {{warnings}}件警告 · {{deleted}}件削除",
-    "warnings": "件警告"
+    "warnings": "件警告",
+    "selected": "{{count}}件選択中"
   },
   "toast": {
     "rowAdded": "{{index}}行目に追加しました",
@@ -103,7 +105,9 @@
     "exported": "テキストを書き出しました",
     "exportedSrt": "SRTを書き出しました",
     "undo": "元に戻す: {{label}}",
-    "redo": "やり直し: {{label}}"
+    "redo": "やり直し: {{label}}",
+    "bulkApplied": "{{count}}行に適用しました ({{label}})",
+    "bulkAppliedUndo": "元に戻す"
   },
   "tooltip": {
     "undo": "元に戻す (Ctrl+Z)",
@@ -127,6 +131,28 @@
     "resetRow": "行をリセット",
     "addRow": "行を追加"
   },
+  "bulk": {
+    "regionLabel": "一括編集",
+    "countLabel": "{{count}}件選択中",
+    "clearSelection": "選択を解除",
+    "size": "サイズ",
+    "placeholder": "値",
+    "textColor": "文字色",
+    "outlineColor": "アウトライン色",
+    "outlineWidth": "アウトライン幅",
+    "fade": "フェード",
+    "autoLineBreak": "自動改行",
+    "autoLineBreakHelp": "選択行の改行を引き直します（既存の手動改行はリセット）",
+    "autoLineBreakNoChange": "変更が必要な行はありませんでした",
+    "history": {
+      "size": "サイズを一括変更 ({{count}}行)",
+      "textColor": "文字色を一括変更 ({{count}}行)",
+      "outlineColor": "アウトライン色を一括変更 ({{count}}行)",
+      "outlineWidth": "アウトライン幅を一括変更 ({{count}}行)",
+      "fade": "フェードを一括変更 ({{count}}行)",
+      "autoLineBreak": "自動改行を一括適用 ({{count}}行)"
+    }
+  },
   "videoPreview": {
     "play": "再生",
     "pause": "一時停止",
@@ -135,5 +161,35 @@
   },
   "warning": {
     "exceedsDuration": "動画の総再生時間を超えています"
+  },
+  "subtitleLayout": {
+    "previewNote": "※ 近似表示です。書き出し後の動画で最終確認してください。",
+    "layoutGroup": "字幕レイアウト",
+    "backgroundGroup": "文字背景",
+    "horizontalShort": "水平",
+    "verticalShort": "垂直",
+    "bgToggleLabel": "背景",
+    "bgColorLabel": "色",
+    "bgOpacityLabel": "不透明度"
+  },
+  "subtitlePosition": {
+    "title": "字幕の位置",
+    "horizontal": "水平位置",
+    "vertical": "垂直位置",
+    "margin": "縦マージン (px)",
+    "marginShort": "マージン",
+    "left": "左",
+    "center": "中央",
+    "right": "右",
+    "top": "上",
+    "bottom": "下"
+  },
+  "background": {
+    "title": "字幕の背景",
+    "color": "背景色",
+    "black": "黒",
+    "white": "白",
+    "opacity": "透過率",
+    "outlineNote": "※ 背景を有効にするとアウトライン表示は無効になります"
   }
 }

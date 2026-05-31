@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
-import { Play, Pause, FolderOpen } from 'lucide-react'
+import { Play, Pause, FolderOpen, ChevronUp, ChevronDown } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -7,6 +8,7 @@ import { useUiStore } from '@/stores/ui-store'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
 import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
+import { Switch } from '@/components/ui/switch'
 import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font-metrics'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -105,18 +107,27 @@ function findActiveEntryId(entries: SubtitleEntry[], timeSec: number): string | 
  *   so it does NOT interfere with subtitle text editing in the table.
  */
 export function VideoPreviewPanel() {
-  const { t } = useTranslation(['step2', 'step3'])
+  const { t } = useTranslation(['step2'])
   const video = useProjectStore((s) => s.video)
   const entries = useProjectStore((s) => s.entries)
 
+  // burnin / subtitleBackground used to live behind the Step 3 form;
+  // in the new layout this panel owns the editing UI so the user can
+  // adjust position / background while watching the same preview that
+  // visualises them.  Reads + writes both share the existing settings-
+  // store slices; no schema change.
   const burnin             = useSettingsStore((s) => s.burnin)
+  const updateBurnin       = useSettingsStore((s) => s.updateBurnin)
   const subtitleBackground = useSettingsStore((s) => s.subtitleBackground)
+  const setSubtitleBackground = useSettingsStore((s) => s.setSubtitleBackground)
 
   const videoSeekRequestSec    = useUiStore((s) => s.videoSeekRequestSec)
   const setVideoSeekRequest    = useUiStore((s) => s.setVideoSeekRequest)
   const focusedRowId           = useUiStore((s) => s.focusedRowId)
   const setFocusedRowId        = useUiStore((s) => s.setFocusedRowId)
   const setVideoCurrentTimeSec = useUiStore((s) => s.setVideoCurrentTimeSec)
+  const isExpanded             = useUiStore((s) => s.videoPreviewExpanded)
+  const setExpanded            = useUiStore((s) => s.setVideoPreviewExpanded)
 
   const videoRef  = useRef<HTMLVideoElement>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
@@ -136,7 +147,6 @@ export function VideoPreviewPanel() {
   const activeEntryIdRef = useRef<string | null>(null)
 
   const videoUrl = video ? pathToVideoUrl(video.path) : null
-  const pct      = duration > 0 ? (currentTime / duration) * 100 : 0
 
   /**
    * Pre-filter to non-deleted entries only, sorted by startSec.
@@ -301,135 +311,348 @@ export function VideoPreviewPanel() {
 
   const filename = getBasename(video.path)
 
+  // Compact segmented-control helper for the settings row.  Local
+  // rather than extracted because the styling is bound to this panel's
+  // vertical budget.  Takes an i18n key prefix so the same component
+  // serves both the position pickers (subtitlePosition.*) and the
+  // background colour picker (background.*) without mis-translating
+  // either — the previous version hardcoded "subtitlePosition" as the
+  // prefix and made the background black/white buttons fall through to
+  // their bare key names ("subtitlePosition.black" / ".white").
+  function Segmented<T extends string>({
+    options,
+    value,
+    onChange,
+    labelKeyPrefix,
+    ariaLabel
+  }: {
+    options: readonly T[]
+    value: T
+    onChange: (v: T) => void
+    labelKeyPrefix: string
+    ariaLabel: string
+  }) {
+    return (
+      <div
+        role="group"
+        aria-label={ariaLabel}
+        className="flex rounded-md overflow-hidden border border-border"
+      >
+        {options.map((opt) => (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onChange(opt)}
+            className={cn(
+              'px-2.5 py-1 text-[11px] transition-colors duration-150',
+              value === opt
+                ? 'bg-primary/15 text-primary font-medium'
+                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            )}
+          >
+            {t(`${labelKeyPrefix}.${opt}`)}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
   return (
-    <div className="flex-shrink-0 rounded-lg border border-zinc-800 bg-[#141414] px-3 py-2 space-y-1">
-      {/*
-       * 2-column grid:
-       *   left  = auto  → video shrinks / grows with its aspect ratio
-       *   right = 1fr   → takes remaining panel width
-       */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: 'auto 1fr' }}>
+    <div className="flex-shrink-0 rounded-lg border border-border bg-card">
+      {/* Accordion header — clickable.  Filename + folder button live
+          here (rather than in the right column's middle row) so:
+            - they stay visible when the panel is collapsed, and
+            - the right column has one fewer block, which helps balance
+              its height against the left column's video element.
+          stopPropagation on the folder button so clicking the icon does
+          not also toggle the accordion. */}
+      <div
+        role="button"
+        aria-expanded={isExpanded}
+        tabIndex={0}
+        onClick={() => setExpanded(!isExpanded)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setExpanded(!isExpanded)
+          }
+        }}
+        className="flex items-center gap-2 cursor-pointer select-none hover:opacity-90 transition-opacity duration-150 px-3 py-2"
+      >
+        <Play className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground flex-shrink-0">
+          {t('videoPreview.play')}
+        </span>
 
-        {/* ── Left: video + subtitle overlay ──────────────────────────── */}
-        <div
-          ref={videoContainerRef}
-          className="relative flex items-center justify-center overflow-hidden rounded bg-zinc-950 h-[180px]"
-        >
-          {hasError ? (
-            <span className="px-6 text-xs text-zinc-500">{t('videoPreview.error')}</span>
-          ) : (
-            <>
-              <video
-                ref={videoRef}
-                src={videoUrl}
-                preload="metadata"
-                className="h-[180px] w-auto object-contain"
-                onTimeUpdate={handleTimeUpdate}
-                onLoadedMetadata={handleLoadedMetadata}
-                onPlay={handlePlay}
-                onPause={handlePause}
-                onEnded={handleEnded}
-                onError={handleError}
-              />
-              {overlayEntry && videoContainerWidth > 0 && (
-                <SubtitleOverlay
-                  entry={overlayEntry}
-                  burnin={burnin}
-                  videoWidthPx={video.widthPx}
-                  containerWidthPx={videoContainerWidth}
-                  subtitleBackground={subtitleBackground}
-                />
-              )}
-            </>
-          )}
+        {/* Centred filename + folder shortcut.  flex-1 wrapper grabs the
+            remaining horizontal space so the filename sits in the middle
+            of the header regardless of how wide the panel is. */}
+        <div className="flex-1 flex items-center justify-center gap-1.5 min-w-0 px-2">
+          <span className="min-w-0 truncate text-[12px] text-foreground/80" title={video.path}>
+            {filename}
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              shellShowInFolder(video.path).catch(() => {})
+            }}
+            title={t('videoPreview.showInFolder')}
+            className={cn(
+              'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
+              'hover:text-foreground focus:outline-none focus:text-foreground'
+            )}
+            aria-label={t('videoPreview.showInFolder')}
+          >
+            <FolderOpen className="h-4 w-4" />
+          </button>
         </div>
 
-        {/* ── Right: music-player 3-row layout ─────────────────────────── */}
-        <div className="flex flex-col justify-between py-2">
-
-          {/* Top: filename + open-in-folder icon */}
-          <div className="flex items-center justify-center gap-1.5 min-w-0 px-1">
-            <span
-              className="min-w-0 truncate text-sm text-zinc-400"
-              title={video.path}
-            >
-              {filename}
-            </span>
-            <button
-              type="button"
-              onClick={() => shellShowInFolder(video.path).catch(() => {})}
-              title={t('videoPreview.showInFolder')}
-              className={cn(
-                'flex-shrink-0 rounded p-0.5 text-zinc-500 transition-colors duration-150',
-                'hover:text-zinc-300 focus:outline-none focus:text-zinc-300'
-              )}
-              aria-label={t('videoPreview.showInFolder')}
-            >
-              <FolderOpen className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* Middle: large play/pause button */}
-          <div className="flex items-center justify-center">
-            <button
-              type="button"
-              onClick={togglePlay}
-              disabled={hasError || duration === 0}
-              className={cn(
-                'flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full',
-                'bg-zinc-800 text-zinc-100 transition-all duration-150',
-                'hover:bg-zinc-700 active:scale-95',
-                'focus:outline-none focus:ring-2 focus:ring-green-500/30',
-                'disabled:cursor-not-allowed disabled:opacity-40'
-              )}
-              aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
-            >
-              {isPlaying
-                ? <Pause className="h-9 w-9" />
-                : <Play  className="h-9 w-9 translate-x-0.5" />
-              }
-            </button>
-          </div>
-
-          {/* Bottom: seekbar (flex-1) + time display */}
-          <div className="flex items-center gap-2 px-1">
-            <input
-              type="range"
-              min={0}
-              max={duration > 0 ? duration : 100}
-              step={0.1}
-              value={currentTime}
-              disabled={duration === 0 || hasError}
-              onMouseDown={handleSeekDown}
-              onChange={handleSeekChange}
-              onMouseUp={handleSeekUp}
-              onTouchStart={handleSeekDown}
-              onTouchEnd={handleSeekUp}
-              className={cn(
-                'flex-1 h-1.5 cursor-pointer appearance-none rounded-full',
-                'disabled:cursor-default disabled:opacity-40',
-                '[&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3',
-                '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:border-0',
-                '[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-green-500',
-                '[&::-webkit-slider-thumb]:cursor-pointer',
-                '[&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:duration-100',
-                '[&::-webkit-slider-thumb]:hover:scale-125'
-              )}
-              style={{
-                background: `linear-gradient(to right, #22c55e 0%, #22c55e ${pct}%, #3f3f46 ${pct}%, #3f3f46 100%)`
-              }}
-            />
-            <span className="flex-shrink-0 select-none font-mono tabular-nums text-xs text-zinc-400">
-              {formatTime(currentTime)}&nbsp;/&nbsp;{formatTime(duration)}
-            </span>
-          </div>
-
-        </div>
-
+        {isExpanded
+          ? <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          : <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        }
       </div>
 
-      {/* Approximate-preview disclaimer — same i18n key as Step 3 (preview.disclaimer) */}
-      <p className="text-xs text-zinc-500">{t('step3:preview.disclaimer')}</p>
+      {/* Collapsible body — preview + controls. */}
+      <AnimatePresence initial={false}>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-2 space-y-1 border-t border-border/50 pt-2">
+              <div className="grid gap-4" style={{ gridTemplateColumns: 'auto 1fr' }}>
+
+                {/* ── Left: video + subtitle overlay + disclaimer ─────
+                    The "approximate preview" disclaimer used to sit
+                    below the entire grid; moved here directly under the
+                    video frame so the warning attaches to what it
+                    describes and the left column visually fills toward
+                    the bottom (the right column's stacked controls
+                    pulled it taller). */}
+                <div className="flex flex-col">
+                  <div
+                    ref={videoContainerRef}
+                    className="relative flex items-center justify-center overflow-hidden rounded bg-input h-[180px]"
+                  >
+                    {hasError ? (
+                      <span className="px-6 text-xs text-muted-foreground">{t('videoPreview.error')}</span>
+                    ) : (
+                      <>
+                        <video
+                          ref={videoRef}
+                          src={videoUrl}
+                          preload="metadata"
+                          className="h-[180px] w-auto object-contain"
+                          onTimeUpdate={handleTimeUpdate}
+                          onLoadedMetadata={handleLoadedMetadata}
+                          onPlay={handlePlay}
+                          onPause={handlePause}
+                          onEnded={handleEnded}
+                          onError={handleError}
+                        />
+                        {overlayEntry && videoContainerWidth > 0 && (
+                          <SubtitleOverlay
+                            entry={overlayEntry}
+                            burnin={burnin}
+                            videoWidthPx={video.widthPx}
+                            containerWidthPx={videoContainerWidth}
+                            subtitleBackground={subtitleBackground}
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t('subtitleLayout.previewNote')}
+                  </p>
+                </div>
+
+                {/* ── Right: 2-row layout (settings / player) ──────────
+                    The middle "filename + folder" row moved up into the
+                    accordion header so the right column is shorter and
+                    closer to the left column's height. */}
+                <div className="flex flex-col py-1 min-w-0">
+
+                  {/* Top: two boxed groups (Subtitle layout / Subtitle
+                      background).  Each group is a rounded outline with
+                      its title on top and its items on a single
+                      horizontal row beneath (flex-wrap so narrow widths
+                      degrade gracefully).  This trades vertical density
+                      for horizontal density — the right column has
+                      plenty of horizontal space, so packing the items
+                      side-by-side keeps the panel's overall height
+                      compact and matches the visual rhythm of the rest
+                      of the app.
+                      All controls write to the same useSettingsStore
+                      slices SubtitleOverlay reads, so changes here
+                      render immediately on the video on the left. */}
+                  <div className="space-y-2">
+                    {/* ── Group 1: Subtitle layout ─────────────────── */}
+                    <div className="rounded-md border border-border px-3 py-2">
+                      <p className="text-[10px] font-medium uppercase tracking-wider text-foreground/70 mb-1.5">
+                        {t('subtitleLayout.layoutGroup')}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-muted-foreground">
+                        <div className="flex items-center gap-1.5">
+                          <span>{t('subtitleLayout.horizontalShort')}</span>
+                          <Segmented
+                            options={['left', 'center', 'right'] as const}
+                            value={burnin.horizontalPosition}
+                            onChange={(v) => updateBurnin({ horizontalPosition: v })}
+                            labelKeyPrefix="subtitlePosition"
+                            ariaLabel={t('subtitlePosition.horizontal')}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span>{t('subtitleLayout.verticalShort')}</span>
+                          <Segmented
+                            options={['top', 'bottom'] as const}
+                            value={burnin.verticalPosition}
+                            onChange={(v) => updateBurnin({ verticalPosition: v })}
+                            labelKeyPrefix="subtitlePosition"
+                            ariaLabel={t('subtitlePosition.vertical')}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span>{t('subtitlePosition.marginShort')}</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={300}
+                            value={burnin.verticalMarginPx}
+                            onChange={(e) => updateBurnin({ verticalMarginPx: parseInt(e.target.value, 10) || 0 })}
+                            className="h-7 w-14 rounded border border-border bg-input px-1.5 text-center text-[12px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring/30 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── Group 2: Subtitle background ─────────────── */}
+                    <div className="rounded-md border border-border px-3 py-2">
+                      <p className="text-[10px] font-medium uppercase tracking-wider text-foreground/70 mb-1.5">
+                        {t('subtitleLayout.backgroundGroup')}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-muted-foreground">
+                        {/* Toggle — label-less because the group title
+                            ("文字背景") already names the switch. */}
+                        <Switch
+                          checked={subtitleBackground.enabled}
+                          onCheckedChange={(checked) => setSubtitleBackground({ ...subtitleBackground, enabled: checked })}
+                          aria-label={t('subtitleLayout.backgroundGroup')}
+                        />
+
+                        {/* Colour — disabled when background is off. */}
+                        <div className={cn(
+                          'flex items-center gap-1.5',
+                          !subtitleBackground.enabled && 'opacity-40 pointer-events-none'
+                        )}>
+                          <span>{t('subtitleLayout.bgColorLabel')}</span>
+                          <Segmented
+                            options={['black', 'white'] as const}
+                            value={subtitleBackground.color}
+                            onChange={(v) => setSubtitleBackground({ ...subtitleBackground, color: v })}
+                            labelKeyPrefix="background"
+                            ariaLabel={t('subtitleLayout.bgColorLabel')}
+                          />
+                        </div>
+
+                        {/* Opacity — same disabled treatment. */}
+                        <div className={cn(
+                          'flex items-center gap-1.5',
+                          !subtitleBackground.enabled && 'opacity-40 pointer-events-none'
+                        )}>
+                          <span>{t('subtitleLayout.bgOpacityLabel')}</span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            step={10}
+                            value={subtitleBackground.opacityPercent}
+                            onChange={(e) => setSubtitleBackground({
+                              ...subtitleBackground,
+                              opacityPercent: parseInt(e.target.value, 10)
+                            })}
+                            style={{ accentColor: 'hsl(var(--primary))' }}
+                            aria-label={t('subtitleLayout.bgOpacityLabel')}
+                            className="w-24 h-1.5 cursor-pointer"
+                          />
+                          <span className="font-mono tabular-nums w-9 text-right">
+                            {subtitleBackground.opacityPercent}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Outline-disabled advisory note — only when bg
+                          is on.  Stays inside the background group's box
+                          so the cause/effect link is visually obvious. */}
+                      {subtitleBackground.enabled && (
+                        <p className="mt-1.5 text-[11px] text-[hsl(var(--warning))]">
+                          {t('background.outlineNote')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* flex-1 spacer absorbs whatever vertical slack the
+                      left column's video + disclaimer leaves over so
+                      the player anchors to the bottom and the two
+                      columns visually balance. */}
+                  <div className="flex-1" />
+
+                  {/* Bottom: smaller play/pause + scrub + time */}
+                  <div className="flex items-center gap-2 px-1">
+                    <button
+                      type="button"
+                      onClick={togglePlay}
+                      disabled={hasError || duration === 0}
+                      className={cn(
+                        'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
+                        'bg-secondary text-foreground transition-all duration-150',
+                        'hover:bg-accent active:scale-95',
+                        'focus:outline-none focus:ring-2 focus:ring-ring/30',
+                        'disabled:cursor-not-allowed disabled:opacity-40'
+                      )}
+                      aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
+                    >
+                      {isPlaying
+                        ? <Pause className="h-5 w-5" />
+                        : <Play  className="h-5 w-5 translate-x-0.5" />
+                      }
+                    </button>
+                    <input
+                      type="range"
+                      min={0}
+                      max={duration > 0 ? duration : 100}
+                      step={0.1}
+                      value={currentTime}
+                      disabled={duration === 0 || hasError}
+                      onMouseDown={handleSeekDown}
+                      onChange={handleSeekChange}
+                      onMouseUp={handleSeekUp}
+                      onTouchStart={handleSeekDown}
+                      onTouchEnd={handleSeekUp}
+                      style={{
+                        accentColor: 'hsl(var(--primary))'
+                      }}
+                      className="flex-1 h-1.5 cursor-pointer disabled:cursor-default disabled:opacity-40"
+                    />
+                    <span className="flex-shrink-0 select-none font-mono tabular-nums text-xs text-muted-foreground">
+                      {formatTime(currentTime)}&nbsp;/&nbsp;{formatTime(duration)}
+                    </span>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -38,6 +38,10 @@ export function registerVideoHandlers(): void {
     }
   })
 
+  // TODO: remove with the next IPC-surface cleanup pass.  Originally fed
+  // Step 3's live preview; Step 3 was redesigned to be "render settings &
+  // execute" only, so this handler currently has no renderer-side caller.
+  // Left wired up to keep this branch's diff focused on the redesign.
   ipcMain.handle(Channels.videoExtractFrameForPreview, async (_event, path: string, atSec: number): Promise<OkResult<string> | ErrResult> => {
     try {
       const data = await extractThumbnail(path, atSec)

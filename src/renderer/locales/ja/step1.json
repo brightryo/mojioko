@@ -38,7 +38,15 @@
     "helpTextColor": "字幕の文字色。白（#ffffff）が一般的です。",
     "helpOutlineColor": "字幕の縁取り色。黒（#000000）が視認性に優れています。",
     "helpStroke": "縁取りの太さ（ピクセル）。",
-    "helpFade": "字幕のフェードイン・フェードアウト効果を有効にします（300ms）。"
+    "helpFade": "字幕のフェードイン・フェードアウト効果を有効にします（300ms）。",
+    "previewLabel": "プレビュー",
+    "sampleText": "これはサンプル字幕です。書き出し後の見た目をここで確認できます。",
+    "previewNote": "※ 近似表示です。書き出し後の動画で最終確認してください。"
+  },
+  "subtitleStyle": {
+    "openButton": "字幕スタイル",
+    "dialogTitle": "字幕スタイル設定",
+    "dialogDescription": "文字起こし時に各行の初期値として焼き込まれます。プレビューで確認しながら調整してください。"
   },
   "whisperModel": {
     "label": "Whisperモデル",
@@ -59,6 +67,7 @@
     "notInstalledBadge": "未ダウンロード",
     "noActiveBadge": "使用モデル未選択",
     "clickToChange": "クリックで変更",
+    "clickToSelect": "クリックして選択",
     "openFolder": "開く",
     "totalUsed": "使用容量",
     "diskFree": "空き",
@@ -114,6 +123,7 @@
   },
   "advanced": {
     "title": "詳細設定",
+    "openButton": "詳細設定",
     "textFormatting": "テキスト整形",
     "autoLineBreak": "自動改行",
     "autoLineBreakHelp": "文字起こし完了時に、動画幅を超えるテキストを自動的に改行します。改行位置はフォントサイズと動画解像度に基づいて計算されます。テキスト書き出し時には改行は除去されます。",

@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { Button } from '@/components/ui/button'
 import { SubtitleTable } from '@/components/subtitle-table/subtitle-table'
+import { BulkEditBar } from '@/components/subtitle-table/bulk-edit-bar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
@@ -19,7 +20,9 @@ import { saveFileDialog, writeTextFile } from '@/services/dialog'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { computeEntryWarnings, hasAnyWarning, isOutputTarget, type EntryWarnings } from '@/lib/entry-warnings'
+import { filterEntries } from '@/lib/subtitle-filter'
 import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font-metrics'
+import { AnimatePresence, motion } from 'framer-motion'
 import type { SubtitleEntry } from '../../shared/types'
 import { NEW_ROW_DURATION_SEC, ENABLE_VIDEO_PREVIEW } from '../../shared/constants'
 import { VideoPreviewPanel } from '@/components/video-preview/video-preview-panel'
@@ -113,6 +116,9 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
   const videoCurrentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
+  const selectedRowIds = useUiStore((s) => s.selectedRowIds)
+  const setRowSelection = useUiStore((s) => s.setRowSelection)
+  const clearRowSelection = useUiStore((s) => s.clearRowSelection)
 
   const [editor, setEditor] = useState<EditorState>({ open: false })
   const [discardOpen, setDiscardOpen] = useState(false)
@@ -139,6 +145,21 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   }, { enableOnFormTags: false })
   useHotkeys('ctrl+shift+z', (e) => { e.preventDefault(); redo() }, { enableOnFormTags: false })
   useHotkeys('ctrl+n', (e) => { e.preventDefault(); openAddRowDialog() }, { enableOnFormTags: false })
+  // Ctrl+A — select every row currently visible under the active filter.
+  // Intentionally additive: rows hidden by the filter that were already
+  // selected stay selected, matching how the table-header checkbox behaves.
+  useHotkeys('ctrl+a', (e) => {
+    e.preventDefault()
+    const next = new Set(selectedRowIds)
+    for (const id of visibleEntryIds) next.add(id)
+    setRowSelection(next)
+  }, { enableOnFormTags: false })
+  // Esc clears the bulk-edit selection when one exists.  Yields to the
+  // browser/native handlers when nothing is selected, so dialogs and
+  // inputs keep their own Esc behaviour.
+  useHotkeys('escape', () => {
+    if (selectedRowIds.size > 0) clearRowSelection()
+  }, { enableOnFormTags: false })
 
   const videoWidthPx = video?.widthPx ?? 1920
 
@@ -176,6 +197,44 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     }
     return map
   }, [entries, overflowMap, videoDurationSec])
+
+  // Currently-visible entries under the active filter — drives Ctrl+A's
+  // target list and the bulk-selection pruning effect below.
+  const visibleEntries = useMemo(
+    () => filterEntries(entries, tableFilter, warningsMap),
+    [entries, tableFilter, warningsMap]
+  )
+  const visibleEntryIds = useMemo(() => visibleEntries.map((e) => e.id), [visibleEntries])
+
+  // Prune the bulk selection to the intersection with visible rows.
+  //
+  // Selection is INTENTIONALLY scoped to "what the user can currently
+  // see" so a follow-up bulk apply can never affect rows hidden behind a
+  // filter the user has since switched away from.  The hidden-selection
+  // count UI was retired alongside this rule because there can no
+  // longer be any hidden selection.
+  //
+  // Fires on:
+  //   - filter switch (tableFilter changes → visibleEntries recomputes)
+  //   - entry mutation that causes a selected row to leave the visible
+  //     set (e.g. fixing an empty-text warning row drops it from the
+  //     "Warnings" tab)
+  // Both reduce to the same dep — visibleEntryIds — so a single effect
+  // covers them.
+  useEffect(() => {
+    if (selectedRowIds.size === 0) return
+    const visible = new Set(visibleEntryIds)
+    let needsPrune = false
+    for (const id of selectedRowIds) {
+      if (!visible.has(id)) { needsPrune = true; break }
+    }
+    if (!needsPrune) return
+    const intersection = new Set<string>()
+    for (const id of selectedRowIds) {
+      if (visible.has(id)) intersection.add(id)
+    }
+    setRowSelection(intersection)
+  }, [visibleEntryIds, selectedRowIds, setRowSelection])
 
   const activeEntries = entries.filter((e) => !e.isDeleted)
   const allCount      = activeEntries.length
@@ -482,6 +541,14 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
 
   const footerCenter = (
     <span className="text-[12px] text-zinc-500">
+      {selectedRowIds.size > 0 && (
+        <>
+          <span className="text-foreground">
+            {t('footer.selected', { count: selectedRowIds.size })}
+          </span>
+          {' · '}
+        </>
+      )}
       {t('footer.summary', {
         edited: editedCount,
         warnings: warningCount,
@@ -602,6 +669,40 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
           </Button>
           </div>
         </div>
+
+        {/* Bulk-edit bar — slides in above the table when rows are selected.
+            AnimatePresence keeps the slide-out animation when the user
+            clears the selection so the table doesn't visually jump. */}
+        <AnimatePresence initial={false}>
+          {selectedRowIds.size > 0 && (
+            <motion.div
+              key="bulk-edit-bar"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              style={{ overflow: 'hidden' }}
+              className="flex-shrink-0"
+            >
+              <BulkEditBar
+                onApplied={(rowCount, label) => {
+                  // Surface a one-click undo affordance.  Reads the freshest
+                  // history op so even if state changed between render and
+                  // toast click (unlikely but possible), we still undo the
+                  // op we just registered.
+                  toast.success(t('toast.bulkApplied', { count: rowCount, label }), {
+                    action: {
+                      label: t('toast.bulkAppliedUndo'),
+                      onClick: () => {
+                        useHistoryStore.getState().undo()
+                      }
+                    }
+                  })
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Table — fills remaining height */}
         <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">

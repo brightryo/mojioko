@@ -9,7 +9,8 @@
     "colText": "Text",
     "colState": "State",
     "colActions": "",
-    "fadeTooltip": "Fade"
+    "fadeTooltip": "Fade",
+    "selectAllAria": "Select all visible rows"
   },
   "tab": {
     "all": "All",
@@ -93,7 +94,8 @@
   },
   "footer": {
     "summary": "{{edited}} edits · {{warnings}} warnings · {{deleted}} deleted",
-    "warnings": "warnings"
+    "warnings": "warnings",
+    "selected": "{{count}} selected"
   },
   "toast": {
     "rowAdded": "Row added at position {{index}}",
@@ -103,7 +105,9 @@
     "exported": "Transcript exported",
     "exportedSrt": "SRT exported",
     "undo": "Undo: {{label}}",
-    "redo": "Redo: {{label}}"
+    "redo": "Redo: {{label}}",
+    "bulkApplied": "Applied to {{count}} rows ({{label}})",
+    "bulkAppliedUndo": "Undo"
   },
   "tooltip": {
     "undo": "Undo (Ctrl+Z)",
@@ -127,6 +131,28 @@
     "resetRow": "Reset row",
     "addRow": "Add row"
   },
+  "bulk": {
+    "regionLabel": "Bulk edit",
+    "countLabel": "{{count}} selected",
+    "clearSelection": "Clear selection",
+    "size": "Size",
+    "placeholder": "value",
+    "textColor": "Text color",
+    "outlineColor": "Outline color",
+    "outlineWidth": "Outline width",
+    "fade": "Fade",
+    "autoLineBreak": "Auto wrap",
+    "autoLineBreakHelp": "Recompute line breaks for selected rows (clears existing manual breaks)",
+    "autoLineBreakNoChange": "No rows needed re-wrapping",
+    "history": {
+      "size": "Bulk size change ({{count}} rows)",
+      "textColor": "Bulk text color change ({{count}} rows)",
+      "outlineColor": "Bulk outline color change ({{count}} rows)",
+      "outlineWidth": "Bulk outline width change ({{count}} rows)",
+      "fade": "Bulk fade change ({{count}} rows)",
+      "autoLineBreak": "Bulk auto-wrap ({{count}} rows)"
+    }
+  },
   "videoPreview": {
     "play": "Play",
     "pause": "Pause",
@@ -135,5 +161,35 @@
   },
   "warning": {
     "exceedsDuration": "Exceeds video duration"
+  },
+  "subtitleLayout": {
+    "previewNote": "Approximate preview. Verify with the actual exported video.",
+    "layoutGroup": "Subtitle layout",
+    "backgroundGroup": "Subtitle background",
+    "horizontalShort": "Horizontal",
+    "verticalShort": "Vertical",
+    "bgToggleLabel": "Background",
+    "bgColorLabel": "Color",
+    "bgOpacityLabel": "Opacity"
+  },
+  "subtitlePosition": {
+    "title": "Subtitle position",
+    "horizontal": "Horizontal",
+    "vertical": "Vertical",
+    "margin": "Vertical margin (px)",
+    "marginShort": "Margin",
+    "left": "Left",
+    "center": "Center",
+    "right": "Right",
+    "top": "Top",
+    "bottom": "Bottom"
+  },
+  "background": {
+    "title": "Subtitle background",
+    "color": "Color",
+    "black": "Black",
+    "white": "White",
+    "opacity": "Opacity",
+    "outlineNote": "Note: Outline is disabled when background is enabled"
   }
 }
