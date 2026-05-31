@@ -11,8 +11,9 @@ import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { hasAnyWarning, isOutputTarget, type EntryWarnings } from '@/lib/entry-warnings'
+import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
+import { filterEntries } from '@/lib/subtitle-filter'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX } from '../../../shared/constants'
 
@@ -661,30 +662,7 @@ export function SubtitleTable({
     return () => clearTimeout(timer)
   }, [scrollToRowId, setScrollToRowId])
 
-  const filtered = (() => {
-    switch (tableFilter) {
-      case 'all':
-        return entries.filter((e) => !e.isDeleted)
-      case 'ready':
-        // Output target = warnings allowed, errors (emptyText / deleted) dropped.
-        return entries.filter((e) => {
-          const w = warningsMap.get(e.id)
-          return w !== undefined && isOutputTarget(e, w)
-        })
-      case 'edited':
-        return entries.filter((e) => e.isEdited && !e.isDeleted)
-      case 'warnings':
-        return entries.filter((e) => {
-          if (e.isDeleted) return false
-          const w = warningsMap.get(e.id)
-          return w !== undefined && hasAnyWarning(w)
-        })
-      case 'deleted':
-        return entries.filter((e) => e.isDeleted)
-      default:
-        return entries.filter((e) => !e.isDeleted)
-    }
-  })()
+  const filtered = filterEntries(entries, tableFilter, warningsMap)
 
   const emptyKey =
     tableFilter === 'all'      ? 'empty.all'      :
