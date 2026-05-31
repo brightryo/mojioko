@@ -141,12 +141,16 @@
     "outlineColor": "アウトライン色",
     "outlineWidth": "アウトライン幅",
     "fade": "フェード",
+    "autoLineBreak": "自動改行",
+    "autoLineBreakHelp": "選択行の改行を引き直します（既存の手動改行はリセット）",
+    "autoLineBreakNoChange": "変更が必要な行はありませんでした",
     "history": {
       "size": "サイズを一括変更 ({{count}}行)",
       "textColor": "文字色を一括変更 ({{count}}行)",
       "outlineColor": "アウトライン色を一括変更 ({{count}}行)",
       "outlineWidth": "アウトライン幅を一括変更 ({{count}}行)",
-      "fade": "フェードを一括変更 ({{count}}行)"
+      "fade": "フェードを一括変更 ({{count}}行)",
+      "autoLineBreak": "自動改行を一括適用 ({{count}}行)"
     }
   },
   "videoPreview": {

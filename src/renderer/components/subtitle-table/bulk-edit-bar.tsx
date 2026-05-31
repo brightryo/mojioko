@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X } from 'lucide-react'
+import { X, WrapText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
+import { applyAutoLineBreak } from '@/lib/auto-line-break'
+import { loadSubtitleFont } from '@/lib/font-metrics'
+import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 
@@ -187,6 +191,81 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     )
   }
 
+  // Bulk auto line-break — strip every existing \N from each selected
+  // row's text and rewrap with the row's CURRENT fontSizePx /
+  // outlineThicknessPx (which may have been bumped via the bulk size or
+  // outline controls above on the same selection).  Existing manual \N
+  // are intentionally cleared: this button is documented as a "re-wrap"
+  // action — the user's safety net is the one-click undo on the toast.
+  //
+  // The whole batch goes through one history op (snapshots-by-id Map +
+  // single push) so undo restores every changed row's text + isEdited
+  // state in a single step, matching applyBulk's contract above.
+  // No-op rows (where rewrap === current text) are excluded so an
+  // unchanged row neither bloats the history nor inflates the "applied
+  // to N rows" toast count.
+  async function handleAutoLineBreakApply() {
+    // Await loadSubtitleFont() so applyAutoLineBreak runs the glyph-
+    // accurate path rather than the character-class fallback (which
+    // over-estimates wide-glyph widths by ~45 % and lands breaks too
+    // early).  Module cache + in-flight promise de-dupe means this
+    // resolves immediately when the font is already loaded (typical
+    // case in Step 2).
+    const font = await loadSubtitleFont().catch(() => null)
+    const ids = Array.from(selectedRowIds)
+    if (ids.length === 0) return
+
+    const all = useProjectStore.getState().entries
+    const videoWidthPx = useProjectStore.getState().video?.widthPx ?? 1920
+
+    const snapshots = new Map<string, SubtitleEntry>()
+    const patches = new Map<string, string>()
+
+    for (const id of ids) {
+      const e = all.find((x) => x.id === id)
+      if (!e || e.isDeleted) continue
+      const stripped = e.text.replace(/\\N/g, '')
+      const rewrapped = applyAutoLineBreak(
+        stripped,
+        e.fontSizePx,
+        e.outlineThicknessPx,
+        videoWidthPx,
+        font
+      )
+      if (rewrapped !== e.text) {
+        snapshots.set(id, { ...e })
+        patches.set(id, rewrapped)
+      }
+    }
+
+    if (snapshots.size === 0) {
+      // No row's text would change — surface that explicitly so the
+      // user knows their click was acknowledged, but skip the history
+      // pressure and the "applied / undo" toast.  Info-level, no
+      // action button.
+      toast.info(t('bulk.autoLineBreakNoChange'))
+      return
+    }
+
+    const apply = () => {
+      const s = useProjectStore.getState()
+      for (const [id, newText] of patches) {
+        s.updateEntry(id, { text: newText, isEdited: true })
+      }
+    }
+    const revert = () => {
+      const s = useProjectStore.getState()
+      for (const [id, snap] of snapshots) {
+        s.updateEntry(id, snap)
+      }
+    }
+
+    const label = t('bulk.history.autoLineBreak', { count: snapshots.size })
+    useHistoryStore.getState().push({ label, undo: revert, redo: apply })
+    apply()
+    onApplied(snapshots.size, label)
+  }
+
   // ---------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------
@@ -298,6 +377,28 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           <span>{t('bulk.fade')}</span>
           <Switch onCheckedChange={handleFadeChange} />
         </label>
+
+        {/* Separator + Auto-wrap action.  Visually distinct from the
+            value-controls above: this one is a single-shot action that
+            recomputes line breaks on the selected rows using each row's
+            current font size + outline thickness.  Pre-existing manual
+            \N are cleared as part of the recompute — undo restores both
+            text and isEdited in one click. */}
+        <div
+          className="h-5 w-px flex-shrink-0"
+          style={{ backgroundColor: 'hsl(var(--separator) / var(--separator-alpha))' }}
+          aria-hidden="true"
+        />
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleAutoLineBreakApply}
+          title={t('bulk.autoLineBreakHelp')}
+          aria-label={t('bulk.autoLineBreakHelp')}
+        >
+          <WrapText className="h-3.5 w-3.5 mr-1.5" />
+          {t('bulk.autoLineBreak')}
+        </Button>
       </div>
     </div>
   )
