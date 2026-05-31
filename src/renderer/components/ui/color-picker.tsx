@@ -31,15 +31,28 @@ interface ColorPickerProps {
    * When false (default), render a full-width h-9 button (used in settings rows).
    */
   swatchOnly?: boolean
+  /**
+   * Optional "commit" callback fired on popover close, once, with the
+   * final value — only when the value actually changed since the popover
+   * opened.  Use this from contexts that need a single coarse-grained
+   * history op per pick session (e.g. BulkEditBar applying to N rows),
+   * separately from `onChange` which fires per-pixel during a saturation
+   * drag.  Existing per-row usage that wants live history per micro-move
+   * simply omits this prop and continues to rely on `onChange`.
+   */
+  onCommit?: (hex: string) => void
 }
 
-export function ColorPicker({ value, onChange, className, disabled, swatchOnly }: ColorPickerProps) {
+export function ColorPicker({ value, onChange, className, disabled, swatchOnly, onCommit }: ColorPickerProps) {
   const { t } = useTranslation('common')
   const recentColors = useUiStore((s) => s.recentColors)
   const addRecentColor = useUiStore((s) => s.addRecentColor)
 
   const [open, setOpen] = useState(false)
   const [hexDraft, setHexDraft] = useState(value)
+  // Snapshot taken when the popover opens; compared on close to decide
+  // whether onCommit should fire.  Holds null while the popover is closed.
+  const [valueOnOpen, setValueOnOpen] = useState<string | null>(null)
 
   // -------------------------------------------------------------------------
   // Helpers
@@ -66,13 +79,23 @@ export function ColorPicker({ value, onChange, className, disabled, swatchOnly }
 
   function handleOpenChange(next: boolean) {
     if (next) {
-      // Sync draft when opening
-      setHexDraft(normalise(value))
+      // Sync draft when opening + snapshot the open-time value so close
+      // can decide whether onCommit should fire.
+      const upper = normalise(value)
+      setHexDraft(upper)
+      setValueOnOpen(upper)
     } else {
       // Record the final chosen color on close (captures drag-to-pick usage)
       if (HEX_RE.test(value)) {
         addRecentColor(value)
       }
+      // Coarse-grained commit hook: fire exactly once per pick session and
+      // only when the value moved.  Callers that need it (BulkEditBar) use
+      // it to register a single undoable op per popover open/close cycle.
+      if (onCommit && valueOnOpen !== null && normalise(value) !== valueOnOpen) {
+        onCommit(normalise(value))
+      }
+      setValueOnOpen(null)
     }
     setOpen(next)
   }
