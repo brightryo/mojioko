@@ -9,7 +9,8 @@
     "colText": "テキスト",
     "colState": "状態",
     "colActions": "",
-    "fadeTooltip": "フェード"
+    "fadeTooltip": "フェード",
+    "selectAllAria": "表示中のすべての行を選択"
   },
   "tab": {
     "all": "すべて",
@@ -93,7 +94,8 @@
   },
   "footer": {
     "summary": "{{edited}}件編集 · {{warnings}}件警告 · {{deleted}}件削除",
-    "warnings": "件警告"
+    "warnings": "件警告",
+    "selected": "{{count}}件選択中"
   },
   "toast": {
     "rowAdded": "{{index}}行目に追加しました",
@@ -103,7 +105,9 @@
     "exported": "テキストを書き出しました",
     "exportedSrt": "SRTを書き出しました",
     "undo": "元に戻す: {{label}}",
-    "redo": "やり直し: {{label}}"
+    "redo": "やり直し: {{label}}",
+    "bulkApplied": "{{count}}行に適用しました ({{label}})",
+    "bulkAppliedUndo": "元に戻す"
   },
   "tooltip": {
     "undo": "元に戻す (Ctrl+Z)",
@@ -126,6 +130,25 @@
     "restoreRow": "行を復元",
     "resetRow": "行をリセット",
     "addRow": "行を追加"
+  },
+  "bulk": {
+    "regionLabel": "一括編集",
+    "countLabel": "{{count}}件選択中",
+    "countLabelWithHidden": "{{count}}件選択中 ({{hidden}}件は非表示)",
+    "clearSelection": "選択を解除",
+    "size": "サイズ",
+    "placeholder": "値",
+    "textColor": "文字色",
+    "outlineColor": "アウトライン色",
+    "outlineWidth": "アウトライン幅",
+    "fade": "フェード",
+    "history": {
+      "size": "サイズを一括変更 ({{count}}行)",
+      "textColor": "文字色を一括変更 ({{count}}行)",
+      "outlineColor": "アウトライン色を一括変更 ({{count}}行)",
+      "outlineWidth": "アウトライン幅を一括変更 ({{count}}行)",
+      "fade": "フェードを一括変更 ({{count}}行)"
+    }
   },
   "videoPreview": {
     "play": "再生",
