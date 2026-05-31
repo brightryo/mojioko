@@ -1,19 +1,6 @@
 {
   "title": "動画書き出し",
   "subtitle": "字幕を焼き込んだ動画を書き出します。",
-  "preview": {
-    "label": "出力イメージ",
-    "empty": "字幕がありません",
-    "disclaimer": "※ 近似表示です。実際の出力は書き出し後の動画でご確認ください",
-    "alignmentSummary": "{{align}} · {{margin}}px",
-    "list": {
-      "title": "字幕プレビュー一覧",
-      "empty": "字幕がありません"
-    }
-  },
-  "result": {
-    "label": "書き出し結果"
-  },
   "summary": {
     "label": "出力情報",
     "resolution": "解像度",
@@ -46,7 +33,7 @@
     "openFile": "ファイルを開く",
     "showInFolder": "フォルダで表示",
     "renderAgain": "再度書き出す",
-    "donate": "☕ 寄付をする"
+    "donate": "応援する"
   },
   "progress": {
     "label": "書き出し中…",
@@ -71,25 +58,6 @@
   "toast": {
     "renderComplete": "書き出し完了",
     "encoderFallback": "エンコーダー {{requested}} は使用できないため、{{actual}} にフォールバックします"
-  },
-  "subtitlePosition": {
-    "title": "字幕の位置",
-    "horizontal": "水平位置",
-    "vertical": "垂直位置",
-    "margin": "縦マージン (px)",
-    "left": "左",
-    "center": "中央",
-    "right": "右",
-    "top": "上",
-    "bottom": "下"
-  },
-  "background": {
-    "title": "字幕の背景",
-    "color": "背景色",
-    "black": "黒",
-    "white": "白",
-    "opacity": "透過率",
-    "outlineNote": "※ 背景を有効にするとアウトライン表示は無効になります"
   },
   "outputFormat": {
     "label": "出力形式",

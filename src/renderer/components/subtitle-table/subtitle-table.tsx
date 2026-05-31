@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RotateCcw, Trash2, Undo2, FileText, Clock } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -10,10 +10,26 @@ import { TimeInput } from '@/components/time-input'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { hasAnyWarning, isOutputTarget, type EntryWarnings } from '@/lib/entry-warnings'
+import { Checkbox } from '@/components/ui/checkbox'
+import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
+import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
+import { filterEntries } from '@/lib/subtitle-filter'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
-import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX } from '../../../shared/constants'
+import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
+
+/**
+ * 8-column grid template used by both the table header and every row:
+ *   1. checkbox column (32px) — multi-row selection for bulk edit
+ *   2. row index           (36px)
+ *   3. time start/end stack(110px)
+ *   4. font size           (64px)
+ *   5. per-row style block (220px)
+ *   6. text                (flex 1fr)
+ *   7. badges              (90px)
+ *   8. row actions         (76px)
+ */
+const TABLE_GRID_COLS = 'grid-cols-[32px_36px_110px_64px_220px_1fr_90px_76px]'
 
 /** Fallback when warningsMap is missing an entry (deleted rows; race with stale memo). */
 const NO_WARNINGS: EntryWarnings = {
@@ -114,9 +130,13 @@ interface SubtitleRowProps {
   isEndExceedsDuration: boolean
   /** Open the shared time-editor dialog for this entry. */
   onAdjustTime: (entryId: string) => void
+  /** Whether this row is part of the bulk-edit selection. */
+  isSelected: boolean
+  /** Click handler for the row's checkbox — caller decides toggle vs. range. */
+  onCheckboxClick: (id: string, shiftKey: boolean) => void
 }
 
-function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFocus, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime }: SubtitleRowProps) {
+function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFocus, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick }: SubtitleRowProps) {
   const isOverflow = overflowStartIndex !== -1
   const isStartOverlap = warnings.overlap
   const { t } = useTranslation(['step2'])
@@ -253,20 +273,34 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     if (affectsTime) commitTimeEdit(entry.id)
   }
 
+  // Multi-row selection takes visual priority over warning tints (amber /
+  // red row backgrounds) because the user is actively shaping a bulk
+  // operation and needs to see what is targeted.  The focused-row green
+  // marker still wins over selection on the left-edge border so single-row
+  // focus is never lost in a sea of selected rows.
   const rowBg = cn(
     'group grid items-start gap-0 border-b border-zinc-800/50 transition-colors duration-150',
-    'grid-cols-[36px_110px_64px_220px_1fr_90px_76px]',
-    isFocused ? 'bg-zinc-800/50 border-l-2 border-l-green-500' : 'border-l-2 border-l-transparent',
-    !isFocused && 'hover:bg-zinc-800/20',
+    TABLE_GRID_COLS,
+    isFocused
+      ? 'bg-zinc-800/50 border-l-2 border-l-green-500'
+      : isSelected
+        ? 'border-l-2 border-l-[hsl(var(--row-selected-border))]'
+        : 'border-l-2 border-l-transparent',
+    !isFocused && !isSelected && 'hover:bg-zinc-800/20',
     rowState === 'deleted' && 'opacity-40',
-    rowState === 'edited' && !isFocused && 'bg-amber-400/[0.04]',
-    rowState === 'overflow' && !isFocused && 'bg-red-500/[0.04]'
+    !isSelected && rowState === 'edited' && !isFocused && 'bg-amber-400/[0.04]',
+    !isSelected && rowState === 'overflow' && !isFocused && 'bg-red-500/[0.04]'
   )
 
   return (
     <div
       ref={rowDivRef}
       className={rowBg}
+      style={
+        isSelected && !isFocused
+          ? { backgroundColor: 'hsl(var(--row-selected) / var(--row-selected-alpha))' }
+          : undefined
+      }
       onClick={() => {
         onFocus(entry.id)
         useUiStore.getState().setVideoSeekRequest(entry.startSec)
@@ -274,6 +308,23 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
       role="row"
       aria-selected={isFocused}
     >
+      {/* Selection checkbox — stopPropagation so toggling it does not also
+          set focusedRowId / seek the video.  Shift+click handled by the
+          parent table (range vs. toggle). */}
+      <div
+        className="flex items-center justify-center py-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Checkbox
+          checked={isSelected}
+          onClick={(e) => {
+            e.stopPropagation()
+            onCheckboxClick(entry.id, (e as React.MouseEvent).shiftKey)
+          }}
+          aria-label={`Select row ${displayIndex}`}
+        />
+      </div>
+
       {/* # */}
       <div className="flex items-center justify-center py-3 text-[12px] text-zinc-500 font-mono tabular-nums">
         {displayIndex}
@@ -347,37 +398,20 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.outlineColor')}</span>
           <ColorPicker value={entry.outlineColorHex} onChange={handleOutlineColorChange} disabled={entry.isDeleted} swatchOnly />
         </div>
-        <div className="grid grid-cols-[80px_1fr] items-center gap-2">
+        <div
+          className="grid grid-cols-[80px_1fr] items-center gap-2"
+          // stopPropagation so dragging the slider thumb does not also
+          // trigger the row-level click handler (which would re-focus the
+          // row and seek the video on every onChange frame).
+          onClick={(e) => e.stopPropagation()}
+        >
           <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.outlineWidth')}</span>
-          <div className={cn(
-            'flex rounded overflow-hidden border border-zinc-800',
-            entry.isDeleted && 'opacity-40 pointer-events-none'
-          )}>
-            {Array.from({ length: OUTLINE_THICKNESS_MAX_PX + 1 }, (_, i) => i).map((v) => {
-              const clamped = Math.min(OUTLINE_THICKNESS_MAX_PX, Math.max(0, entry.outlineThicknessPx))
-              return (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (v === clamped) return
-                    withHistory(t('history.editStroke'), { outlineThicknessPx: v })
-                  }}
-                  className={cn(
-                    // 11 values squeezed into the same cell width; tabular-nums keeps
-                    // "1" and "10" the same character width for a tidy row.
-                    'flex-1 py-1 text-[10px] tabular-nums transition-colors duration-150',
-                    clamped === v
-                      ? 'bg-green-500 text-green-950 font-bold'
-                      : 'bg-zinc-950 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
-                  )}
-                >
-                  {v}
-                </button>
-              )
-            })}
-          </div>
+          <OutlineThicknessSlider
+            value={entry.outlineThicknessPx}
+            onCommit={(v) => withHistory(t('history.editStroke'), { outlineThicknessPx: v })}
+            disabled={entry.isDeleted}
+            ariaLabel={t('styleCell.outlineWidth')}
+          />
         </div>
         <div className="grid grid-cols-[80px_1fr] items-center gap-2">
           <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.fade')}</span>
@@ -520,6 +554,10 @@ export function SubtitleTable({
   const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
   const scrollToRowId = useUiStore((s) => s.scrollToRowId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
+  const selectedRowIds = useUiStore((s) => s.selectedRowIds)
+  const setRowSelection = useUiStore((s) => s.setRowSelection)
+  const toggleRowSelected = useUiStore((s) => s.toggleRowSelected)
+  const selectRowRange = useUiStore((s) => s.selectRowRange)
 
   // Row DOM-element registry for programmatic scrolling.
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -608,30 +646,7 @@ export function SubtitleTable({
     return () => clearTimeout(timer)
   }, [scrollToRowId, setScrollToRowId])
 
-  const filtered = (() => {
-    switch (tableFilter) {
-      case 'all':
-        return entries.filter((e) => !e.isDeleted)
-      case 'ready':
-        // Output target = warnings allowed, errors (emptyText / deleted) dropped.
-        return entries.filter((e) => {
-          const w = warningsMap.get(e.id)
-          return w !== undefined && isOutputTarget(e, w)
-        })
-      case 'edited':
-        return entries.filter((e) => e.isEdited && !e.isDeleted)
-      case 'warnings':
-        return entries.filter((e) => {
-          if (e.isDeleted) return false
-          const w = warningsMap.get(e.id)
-          return w !== undefined && hasAnyWarning(w)
-        })
-      case 'deleted':
-        return entries.filter((e) => e.isDeleted)
-      default:
-        return entries.filter((e) => !e.isDeleted)
-    }
-  })()
+  const filtered = filterEntries(entries, tableFilter, warningsMap)
 
   const emptyKey =
     tableFilter === 'all'      ? 'empty.all'      :
@@ -640,11 +655,70 @@ export function SubtitleTable({
     tableFilter === 'warnings' ? 'empty.warnings' :
     'empty.deleted'
 
-  const headerCols = 'grid grid-cols-[36px_110px_64px_220px_1fr_90px_76px] border-b border-zinc-800 bg-zinc-900 sticky top-0 z-10'
+  const headerCols = cn(
+    'grid border-b border-zinc-800 bg-zinc-900 sticky top-0 z-10',
+    TABLE_GRID_COLS
+  )
+
+  // Visible-row order is the authoritative input for both Shift+click range
+  // selection and the header "select all" checkbox.  Memoised so callbacks
+  // closing over it don't see a fresh array every render.
+  const visibleIds = useMemo(() => filtered.map((e) => e.id), [filtered])
+
+  // Header checkbox state — three values:
+  //   - true            : every visible row is selected
+  //   - false           : no visible row is selected
+  //   - 'indeterminate' : some visible rows are selected
+  // Selection retention across filters means selectedRowIds can contain rows
+  // that aren't currently visible; the header only reflects the *visible*
+  // subset so clicking it produces a deterministic outcome for what the user
+  // can see.
+  const visibleSelectedCount = useMemo(() => {
+    let n = 0
+    for (const id of visibleIds) if (selectedRowIds.has(id)) n++
+    return n
+  }, [visibleIds, selectedRowIds])
+  const headerCheckState: boolean | 'indeterminate' =
+    visibleSelectedCount === 0
+      ? false
+      : visibleSelectedCount === visibleIds.length
+        ? true
+        : 'indeterminate'
+
+  function handleHeaderCheckboxClick() {
+    // Toggle semantics:
+    //   - any visible row selected → clear visible rows from selection
+    //     (rows hidden by the filter are intentionally preserved)
+    //   - no visible row selected  → add all visible rows to selection
+    if (visibleSelectedCount > 0) {
+      const next = new Set(selectedRowIds)
+      for (const id of visibleIds) next.delete(id)
+      setRowSelection(next)
+    } else {
+      const next = new Set(selectedRowIds)
+      for (const id of visibleIds) next.add(id)
+      setRowSelection(next)
+    }
+  }
+
+  function handleRowCheckboxClick(id: string, shiftKey: boolean) {
+    if (shiftKey) selectRowRange(id, visibleIds)
+    else toggleRowSelected(id)
+  }
 
   return (
     <div className="flex flex-col h-full">
       <div className={headerCols}>
+        <div
+          className="flex items-center justify-center py-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Checkbox
+            checked={headerCheckState}
+            onClick={(e) => { e.stopPropagation(); handleHeaderCheckboxClick() }}
+            aria-label={t('table.selectAllAria')}
+          />
+        </div>
         <div className="py-2 px-1 text-[11px] font-medium text-zinc-500 text-center">{t('table.colIndex')}</div>
         <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colTime')}</div>
         <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colSize')}</div>
@@ -686,6 +760,8 @@ export function SubtitleTable({
                   isStartExceedsDuration={entry.startSec > videoDurationSec}
                   isEndExceedsDuration={entry.endSec > videoDurationSec}
                   onAdjustTime={onAdjustTime}
+                  isSelected={selectedRowIds.has(entry.id)}
+                  onCheckboxClick={handleRowCheckboxClick}
                 />
               </motion.div>
             ))}

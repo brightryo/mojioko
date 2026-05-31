@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Play, Shield, Music, PanelBottom, FileVideo } from 'lucide-react'
+import { Play, Shield, Music, FileVideo, Heart, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -23,14 +22,11 @@ import {
   DialogDescription,
   DialogFooter
 } from '@/components/ui/dialog'
-import { extractFrameForPreview } from '@/services/video'
 import { formatDuration, formatEstimatedTime } from '@/lib/time'
 import { estimateOutputSizeMB, estimateRenderTimeSec } from '@/lib/format'
-import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font-metrics'
-import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
 import { computeEntryWarnings, isBurninTarget, type EntryWarnings } from '@/lib/entry-warnings'
 import type { BurninHandle } from '@/services/burnin'
-import type { SubtitleEntry, OutputContainer } from '../../shared/types'
+import type { OutputContainer } from '../../shared/types'
 
 interface Step3RouteProps {
   appVersion: string
@@ -44,18 +40,17 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
 
   const video = useProjectStore((s) => s.video)
   const entries = useProjectStore((s) => s.entries)
+  // burnin / subtitleBackground are still consumed at render time to feed
+  // startBurnin's burninOpts, but the editing UI moved to Step 2's
+  // VideoPreviewPanel.  Only the read-side hooks remain here.
   const burnin = useSettingsStore((s) => s.burnin)
-  const updateBurnin = useSettingsStore((s) => s.updateBurnin)
   const encoderSetting = useSettingsStore((s) => s.encoder)
   const audioMode = useSettingsStore((s) => s.audioMode)
   const setAudioMode = useSettingsStore((s) => s.setAudioMode)
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   const subtitleBackground = useSettingsStore((s) => s.subtitleBackground)
-  const setSubtitleBackground = useSettingsStore((s) => s.setSubtitleBackground)
   const outputContainer = useSettingsStore((s) => s.outputContainer)
   const setOutputContainer = useSettingsStore((s) => s.setOutputContainer)
-  const selectedPreviewEntryId = useUiStore((s) => s.selectedPreviewEntryId)
-  const setSelectedPreviewEntryId = useUiStore((s) => s.setSelectedPreviewEntryId)
   const setDonationDialogOpen = useUiStore((s) => s.setDonationDialogOpen)
 
   const [renderState, setRenderState] = useState<RenderState>('idle')
@@ -66,25 +61,7 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
   /** Path the user picked but that already exists — surfaced via the overwrite dialog. */
   const [overwriteCandidate, setOverwriteCandidate] = useState<string | null>(null)
   const [effectiveEncoder, setEffectiveEncoder] = useState<H264Encoder | null>(null)
-  const [previewImage, setPreviewImage] = useState<string | null>(null)
   const burninHandleRef = useRef<BurninHandle | null>(null)
-  const previewContainerRef = useRef<HTMLDivElement>(null)
-  const [previewDims, setPreviewDims] = useState({ w: 0, h: 0 })
-  // Left preview card height — measured via ResizeObserver and applied as
-  // maxHeight to the right SubtitleList card so the two cards visually match.
-  // CSS-only attempts (align-items:stretch + minmax(0,1fr)) proved unreliable
-  // across browser/Electron versions, so we fall back to JS measurement.
-  const leftCardRef = useRef<HTMLDivElement>(null)
-  const [leftCardHeight, setLeftCardHeight] = useState<number>(0)
-  // Load the subtitle font so that getLibassScale() returns the correct value
-  // (1000 / winHeight ≈ 0.6906 for NotoSansJP-SemiBold) before the overlay renders.
-  // In normal flow the font is already cached from Step 2; this covers direct navigation.
-  const [subtitleFont, setSubtitleFont] = useState<SubtitleFont | null>(getSubtitleFont)
-  useEffect(() => {
-    if (!subtitleFont) {
-      loadSubtitleFont().then(setSubtitleFont).catch(() => {})
-    }
-  }, [subtitleFont])
 
   useEffect(() => {
     detectEncoders().then((info) => {
@@ -120,50 +97,6 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
     const w = warningsMap.get(e.id)
     return w !== undefined && isBurninTarget(e, w)
   })
-  const selectedEntry = activeEntries.find((e) => e.id === selectedPreviewEntryId) ?? activeEntries[0] ?? null
-
-  useEffect(() => {
-    setSelectedPreviewEntryId(activeEntries[0]?.id ?? null)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!video) return
-    setPreviewImage(null)
-    let cancelled = false
-    const atSec = selectedEntry
-      ? (selectedEntry.startSec + selectedEntry.endSec) / 2
-      : video.durationSec * 0.25
-    extractFrameForPreview(video.path, atSec)
-      .then((result) => { if (!cancelled && result.ok) setPreviewImage(result.data) })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [video?.path, selectedEntry?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    const el = previewContainerRef.current
-    if (!el) return
-    const obs = new ResizeObserver(() => {
-      setPreviewDims({ w: el.clientWidth, h: el.clientHeight })
-    })
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
-
-  useEffect(() => {
-    const el = leftCardRef.current
-    if (!el) return
-    const obs = new ResizeObserver((obsEntries) => {
-      const entry = obsEntries[0]
-      // Prefer border-box so the right card matches the OUTER height of the
-      // left card (including its border).  Fall back to contentRect on older
-      // browsers that don't populate borderBoxSize.
-      const h = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height
-      setLeftCardHeight(h)
-    })
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
-
 
   const durationSec = video?.durationSec ?? 0
   const estTimeSec = estimateRenderTimeSec(durationSec, activeEntries.length)
@@ -278,10 +211,6 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
     setErrorMessage('')
   }
 
-  const alignLabel = `${burnin.horizontalPosition}-${burnin.verticalPosition}`
-  const isResult = renderState === 'success' || renderState === 'error'
-  const cardLabel = isResult ? t('result.label') : t('preview.label')
-
   const footerLeft = (
     <Button variant="ghost" size="md" onClick={() => navigate('/step2')}>
       {t('common:nav.back')}
@@ -300,10 +229,14 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
       {t('action.cancel')}
     </Button>
   ) : renderState === 'success' ? (
+    // Render-success cluster.  Order is intentional:
+    //   workflow actions → separator → meta (support) action.
+    // The support button sits LAST (rightmost) so the user encounters it
+    // after their work is done — never as the first thing in the visual
+    // scan, which would read as a paywall / push.  The 1px column uses
+    // --separator (CSS var) so a future light theme can dial the contrast
+    // independently of the main --border.
     <div className="flex items-center gap-2">
-      <Button variant="ghost" size="md" onClick={() => setDonationDialogOpen(true)}>
-        {t('action.donate')}
-      </Button>
       <Button variant="ghost" size="md" onClick={handleRenderAgain}>
         {t('action.renderAgain')}
       </Button>
@@ -312,6 +245,31 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
       </Button>
       <Button variant="secondary" size="md" onClick={() => shellShowInFolder(completedPath)}>
         {t('action.showInFolder')}
+      </Button>
+      <div
+        className="h-5 w-px mx-1 flex-shrink-0"
+        style={{ backgroundColor: 'hsl(var(--separator) / var(--separator-alpha))' }}
+        aria-hidden="true"
+      />
+      <Button
+        variant="ghost"
+        size="md"
+        onClick={() => setDonationDialogOpen(true)}
+        // Subtle outline accent — neither a solid fill (would read as a
+        // primary action and pressure the user) nor unmarked ghost (would
+        // disappear next to the other buttons).  Every colour reads from
+        // a CSS var so a future light theme can re-tune the contrast
+        // without touching component code:
+        //   - default border : --separator @ 0.70 alpha (quiet zinc-700)
+        //   - hover border   : --separator-strong (lifts to zinc-600)
+        //   - hover bg       : --border @ 0.60 (matches surrounding card)
+        // The Heart icon picks up --accent-soft as its only colour cue
+        // (outline-only Heart, never filled — a filled heart reads as
+        // "already liked" which is the wrong affordance for the action).
+        className="border border-[hsl(var(--separator)/0.7)] hover:border-[hsl(var(--separator-strong))] hover:bg-[hsl(var(--border)/0.6)]"
+      >
+        <Heart className="h-3.5 w-3.5 mr-1.5 text-[hsl(var(--accent-soft))]" />
+        {t('action.donate')}
       </Button>
     </div>
   ) : (
@@ -329,327 +287,76 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
       footerCenter={footerCenter}
       footerRight={footerRight}
     >
+      {/* ──────────────────────────────────────────────────────────────────
+          NOTE: success-state footer (Render again / Open file / Show in
+          folder / --separator / Support) lives in the AppShell footerRight
+          slot above.  Its layout, button order, --separator divider and
+          Donate-button contract are intentionally OUTSIDE the redesigned
+          content area below and MUST NOT be touched.  See commit fedffbf
+          for the full contract.
+          ────────────────────────────────────────────────────────────── */}
       <div className="space-y-4">
-        {/* Page header */}
-        <div>
-          <h1 className="text-[18px] font-semibold text-zinc-50">{t('title')}</h1>
-          <p className="mt-1 text-[13px] text-zinc-400">{t('subtitle')}</p>
-        </div>
-
-        {/* Row 1: Preview + Subtitle list */}
-        {/*
-          items-start so cards do NOT stretch — instead the right card's height
-          is explicitly capped at the left card's measured height via the
-          ResizeObserver above.  This decouples us from the CSS grid stretch
-          quirks that previously let the right card outgrow the left card.
-        */}
-        <div className="grid gap-4 items-start" style={{ gridTemplateColumns: '1.2fr 1fr' }}>
-          {/* Left: Preview card */}
-          <div
-            ref={leftCardRef}
-            className="rounded-xl border border-zinc-800 bg-[#141414] p-4 space-y-2"
-          >
-            <Label className="uppercase tracking-wider text-[10px]">{cardLabel}</Label>
-
-            {/* Preview / status area — dynamic aspect ratio for portrait + landscape */}
-            <div className="flex justify-center w-full">
-            <div
-              ref={previewContainerRef}
-              className="rounded-md bg-zinc-950 border border-zinc-800 relative overflow-hidden"
-              style={{
-                aspectRatio: video ? `${video.widthPx} / ${video.heightPx}` : '16 / 9',
-                maxHeight: '280px',
-                width: video
-                  ? `min(100%, ${Math.round(280 * video.widthPx / video.heightPx)}px)`
-                  : '100%',
-              } as React.CSSProperties}
-            >
-              {/* Idle: video frame + subtitle overlay */}
-              {renderState === 'idle' && (
-                <>
-                  {previewImage ? (
-                    <img
-                      src={previewImage}
-                      className="absolute inset-0 w-full h-full object-cover"
-                      alt=""
-                    />
-                  ) : (
-                    <div className="absolute inset-0 bg-zinc-950" />
-                  )}
-                  {selectedEntry && previewDims.w > 0 ? (
-                    <SubtitleOverlay
-                      entry={selectedEntry}
-                      burnin={burnin}
-                      videoWidthPx={video?.widthPx ?? 1920}
-                      containerWidthPx={previewDims.w}
-                      subtitleBackground={subtitleBackground}
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-[12px] text-zinc-600">{t('preview.empty')}</span>
-                    </div>
-                  )}
-
-                </>
-              )}
-
-              {/* Rendering: progress overlay */}
-              {renderState === 'rendering' && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950">
-                  <div className="w-3/4 space-y-2">
-                    <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                      <div
-                        className="h-full bg-green-500 transition-all duration-200 rounded-full"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                      <span>{t('progress.label')}</span>
-                      <span className="font-mono tabular-nums">{progress}%</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Success overlay — fully opaque */}
-              {renderState === 'success' && (
-                <div className="absolute inset-0 bg-[#141414] flex items-center justify-center p-4">
-                  <div className="rounded-md bg-green-500/10 border border-green-500/20 p-4 w-full space-y-1">
-                    <p className="text-[14px] font-medium text-green-400">{t('success.title')}</p>
-                    <p className="text-[12px] text-zinc-400 break-all selectable">{completedPath}</p>
-                    <p className="text-[12px] text-zinc-500">{t('success.fileSize', { size: String(completedSizeMB) })}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Error overlay — fully opaque */}
-              {renderState === 'error' && (
-                <div className="absolute inset-0 bg-[#141414] flex items-center justify-center p-4">
-                  <div className="rounded-md bg-red-500/10 border border-red-500/20 p-4 w-full space-y-1.5">
-                    <p className="text-[14px] font-medium text-red-400">{t('error.title')}</p>
-                    {errorMessage && (
-                      <p className="text-[11px] text-zinc-500 break-all font-mono selectable">{errorMessage.slice(-400)}</p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            </div>
-
-            {/* Idle-only: alignment note + disclaimer */}
-            {renderState === 'idle' && (
-              <div className="space-y-1">
-                <p className="text-[11px] text-zinc-500">
-                  {t('preview.alignmentSummary', {
-                    align: alignLabel,
-                    margin: burnin.verticalMarginPx
-                  })}
-                </p>
-                <p className="text-[11px] text-zinc-600">{t('preview.disclaimer')}</p>
-              </div>
-            )}
+        {/* Page header — only shown while configuring so the rendering /
+            result states have full visual focus. */}
+        {renderState === 'idle' && (
+          <div>
+            <h1 className="text-[18px] font-semibold text-foreground">{t('title')}</h1>
+            <p className="mt-1 text-[13px] text-muted-foreground">{t('subtitle')}</p>
           </div>
+        )}
 
-          {/* Right: Subtitle list — height capped at the left card's height. */}
-          <SubtitleList
-            entries={activeEntries}
-            selectedId={selectedPreviewEntryId}
-            onSelect={setSelectedPreviewEntryId}
-            maxHeight={leftCardHeight}
-          />
-        </div>
-
-        {/* Row 2: Summary + [Position + Background] + Audio */}
-        <div className="grid grid-cols-3 gap-4 items-start">
-          {/* Summary card */}
-          <div className="rounded-xl border border-zinc-800 bg-[#141414] p-4 space-y-3">
+        {/* IDLE — 2-column settings layout.
+            Left: Summary (read-only, confirmation). Right: settings stack.
+            Default CSS-grid `align-items: stretch` lets the left card
+            grow to match the (taller) right column's height, and the
+            Summary card forwards that height through to its row list
+            (flex-1 on each row) so the rows distribute evenly instead
+            of stacking at the top with empty space below.
+            No `lg:` breakpoint needed: at the 960px minimum window the
+            ratio still yields ~380 / ~530 px columns which both sides
+            fit into.  Outer AppShell scroll handles vertical overflow. */}
+        {renderState === 'idle' && (
+        <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
+          {/* Left: Summary — read-only confirmation panel.  Sits left of
+              the settings stack so the user's L→R scan reads "what am I
+              about to render" then "what controls am I tweaking".  Card
+              is a flex column so the row list inside can flex-1 against
+              the stretched grid-cell height. */}
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
             <Label className="uppercase tracking-wider text-[10px]">{t('summary.label')}</Label>
-            <div className="space-y-0 divide-y divide-zinc-800/50">
+            <div className="mt-3 flex-1 flex flex-col divide-y divide-border/50">
               <SummaryRow label={t('summary.resolution')} value={video ? `${video.widthPx}×${video.heightPx}` : '—'} />
               <SummaryRow label={t('summary.duration')} value={video ? formatDuration(durationSec) : '—'} />
               <SummaryRow label={t('summary.format')} value={video ? `${displayContainer} / h264` : '—'} />
               <SummaryRow label={t('summary.subtitles')} value={String(activeEntries.length)} />
-              <SummaryRow
-                label={t('summary.estimatedTime')}
-                value={video ? formatEstimatedTime(estTimeSec) : '—'}
-              />
-              <SummaryRow
-                label={t('summary.estimatedSize')}
-                value={video ? `${estSizeMB} MB` : '—'}
-              />
-              <SummaryRow
-                label={t('summary.encoder')}
-                value={effectiveEncoder ? `${ENCODER_LABELS[effectiveEncoder]} (${effectiveEncoder})` : '…'}
-              />
+              <SummaryRow label={t('summary.estimatedTime')} value={video ? formatEstimatedTime(estTimeSec) : '—'} />
+              <SummaryRow label={t('summary.estimatedSize')} value={video ? `${estSizeMB} MB` : '—'} />
+              <SummaryRow label={t('summary.encoder')} value={effectiveEncoder ? `${ENCODER_LABELS[effectiveEncoder]} (${effectiveEncoder})` : '…'} />
             </div>
           </div>
 
-          {/* Middle column: Subtitle position + Background stacked */}
+          {/* Right: settings stack.  Output format on top so the
+              file-extension choice is visible without scrolling. */}
           <div className="space-y-4">
-            {/* Subtitle position card */}
-            <div className={cn(
-              'rounded-xl border border-zinc-800 bg-[#141414] p-4 transition-opacity duration-200',
-              renderState !== 'idle' && 'opacity-50 pointer-events-none'
-            )}>
-              <Label className="uppercase tracking-wider text-[10px] mb-3 block">{t('subtitlePosition.title')}</Label>
-              <div className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3">
-                {/* Horizontal position */}
-                <span className="text-[12px] text-zinc-400 whitespace-nowrap">{t('subtitlePosition.horizontal')}</span>
-                <div className="flex rounded-md overflow-hidden border border-zinc-800">
-                  {(['left', 'center', 'right'] as const).map((pos) => (
-                    <button
-                      key={pos}
-                      type="button"
-                      onClick={() => updateBurnin({ horizontalPosition: pos })}
-                      className={cn(
-                        'flex-1 py-1.5 text-[11px] transition-colors duration-150',
-                        burnin.horizontalPosition === pos
-                          ? 'bg-green-500/15 text-green-400 font-medium'
-                          : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
-                      )}
-                    >
-                      {t(`subtitlePosition.${pos}`)}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Vertical position */}
-                <span className="text-[12px] text-zinc-400 whitespace-nowrap">{t('subtitlePosition.vertical')}</span>
-                <div className="flex rounded-md overflow-hidden border border-zinc-800">
-                  {(['top', 'bottom'] as const).map((pos) => (
-                    <button
-                      key={pos}
-                      type="button"
-                      onClick={() => updateBurnin({ verticalPosition: pos })}
-                      className={cn(
-                        'flex-1 py-1.5 text-[11px] transition-colors duration-150',
-                        burnin.verticalPosition === pos
-                          ? 'bg-green-500/15 text-green-400 font-medium'
-                          : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
-                      )}
-                    >
-                      {t(`subtitlePosition.${pos}`)}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Vertical margin */}
-                <span className="text-[12px] text-zinc-400 whitespace-nowrap">{t('subtitlePosition.margin')}</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={300}
-                  value={burnin.verticalMarginPx}
-                  onChange={(e) => updateBurnin({ verticalMarginPx: parseInt(e.target.value, 10) || 0 })}
-                  className="h-8 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-center text-[12px] text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                />
-              </div>
-            </div>
-
-            {/* Subtitle background card */}
-            <div className={cn(
-              'rounded-xl border border-zinc-800 bg-[#141414] p-4 transition-opacity duration-200',
-              renderState !== 'idle' && 'opacity-50 pointer-events-none'
-            )}>
-              {/* Header row: label + toggle */}
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-1.5">
-                  <PanelBottom className="h-4 w-4 text-zinc-500 flex-shrink-0" />
-                  <Label className="uppercase tracking-wider text-[10px]">{t('background.title')}</Label>
-                </div>
-                <Switch
-                  checked={subtitleBackground.enabled}
-                  onCheckedChange={(checked) =>
-                    setSubtitleBackground({ ...subtitleBackground, enabled: checked })
-                  }
-                />
-              </div>
-
-              {/* Outline-disabled notice — shown only while background is ON */}
-              {subtitleBackground.enabled && (
-                <p className="mb-3 text-xs text-amber-500">
-                  {t('background.outlineNote')}
-                </p>
-              )}
-
-              {/* Controls — dimmed when disabled */}
-              <div className={cn(
-                'grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3 transition-opacity duration-150',
-                !subtitleBackground.enabled && 'opacity-40 pointer-events-none'
-              )}>
-                {/* Background color */}
-                <span className="text-[12px] text-zinc-400 whitespace-nowrap">{t('background.color')}</span>
-                <div className="flex rounded-md overflow-hidden border border-zinc-800">
-                  {(['black', 'white'] as const).map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setSubtitleBackground({ ...subtitleBackground, color: c })}
-                      className={cn(
-                        'flex-1 py-1.5 text-[11px] transition-colors duration-150',
-                        subtitleBackground.color === c
-                          ? 'bg-green-500/15 text-green-400 font-medium'
-                          : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
-                      )}
-                    >
-                      {t(`background.${c}`)}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Opacity slider */}
-                <span className="text-[12px] text-zinc-400 whitespace-nowrap">{t('background.opacity')}</span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={10}
-                    value={subtitleBackground.opacityPercent}
-                    onChange={(e) =>
-                      setSubtitleBackground({
-                        ...subtitleBackground,
-                        opacityPercent: parseInt(e.target.value, 10)
-                      })
-                    }
-                    className={cn(
-                      'flex-1 h-1.5 appearance-none rounded-full cursor-pointer',
-                      'bg-zinc-800',
-                      '[&::-webkit-slider-thumb]:appearance-none',
-                      '[&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5',
-                      '[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-green-500',
-                      '[&::-webkit-slider-thumb]:cursor-pointer',
-                      '[&::-webkit-slider-thumb]:border-0'
-                    )}
-                  />
-                  <span className="text-[12px] text-zinc-400 font-mono tabular-nums w-8 text-right flex-shrink-0">
-                    {subtitleBackground.opacityPercent}%
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right column: Output format (above) + Audio mode (below).
-              Output format goes ABOVE audio mode so the choice that affects
-              file extension is visible without scrolling — SNS uploaders
-              should see "MP4" before they pick a destination. */}
-          <div className="space-y-4">
-            {/* Output format card */}
+            {/* Output format */}
             <OutputFormatCard
               videoPath={video?.path ?? null}
               outputContainer={outputContainer}
               setOutputContainer={setOutputContainer}
-              renderState={renderState}
             />
 
-            {/* Audio mode card */}
-            <div className={cn(
-              'rounded-xl border border-zinc-800 bg-[#141414] p-4 space-y-2 transition-opacity duration-200',
-              renderState !== 'idle' && 'opacity-50 pointer-events-none'
-            )}>
+            {/* Subtitle position / background settings moved to Step 2's
+                VideoPreviewPanel so the user can adjust them while
+                watching the same preview that visualises them.  Step 3
+                still reads burnin / subtitleBackground from the store
+                (see burninOpts below) — the values are unchanged, just
+                the editing UI relocated.  Step 3 layout is reduced
+                accordingly (next pass; see follow-up B2). */}
+
+            {/* Audio mode */}
+            <div className="rounded-xl border border-border bg-card p-4 space-y-2">
               <div className="flex items-center gap-1.5">
-                <Music className="h-4 w-4 text-zinc-500 flex-shrink-0" />
+                <Music className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <Label className="uppercase tracking-wider text-[10px]">{t('audio.label')}</Label>
               </div>
               <div className="flex flex-col gap-2">
@@ -657,26 +364,86 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
                   <button
                     key={mode}
                     type="button"
-                    disabled={renderState !== 'idle'}
                     onClick={() => setAudioMode(mode)}
                     className={cn(
                       'flex flex-col items-start rounded-md border px-3 py-2 text-left transition-colors duration-150',
                       audioMode === mode
-                        ? 'border-green-500/50 bg-green-500/5'
-                        : 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/20',
-                      'disabled:pointer-events-none'
+                        ? 'border-primary/50 bg-primary/5'
+                        : 'border-border hover:bg-accent/40'
                     )}
                   >
-                    <span className={cn('text-[13px] font-medium', audioMode === mode ? 'text-green-400' : 'text-zinc-200')}>
+                    <span className={cn('text-[13px] font-medium', audioMode === mode ? 'text-primary' : 'text-foreground')}>
                       {t(`audio.${mode}`)}
                     </span>
-                    <span className="text-[11px] text-zinc-500">{t(`audio.${mode}Desc`)}</span>
+                    <span className="text-[11px] text-muted-foreground">{t(`audio.${mode}Desc`)}</span>
                   </button>
                 ))}
               </div>
             </div>
           </div>
         </div>
+        )}
+
+        {/* RENDERING — centred progress card.  Settings are completely
+            hidden (no opacity fade) because they cannot be edited mid-run
+            and the operation should claim visual focus.  Cancel sits in
+            the AppShell footerRight slot. */}
+        {renderState === 'rendering' && (
+          <div className="flex items-center justify-center py-16">
+            <div className="rounded-xl border border-border bg-card px-8 py-10 w-full max-w-md space-y-5">
+              <div className="flex items-center justify-center">
+                <Loader2 className="h-8 w-8 text-primary animate-spin" />
+              </div>
+              <div className="space-y-3">
+                <div className="h-2 rounded-full bg-secondary overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-200 rounded-full"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[12px] text-muted-foreground">
+                  <span>{t('progress.label')}</span>
+                  <span className="font-mono tabular-nums">{progress}%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SUCCESS — centred completion card.  Footer (Render again / Open
+            file / Show in folder / --separator / Support) provides every
+            user action; this card is purely informational. */}
+        {renderState === 'success' && (
+          <div className="flex items-center justify-center py-16">
+            <div className="rounded-xl border border-primary/30 bg-primary/5 px-8 py-8 w-full max-w-xl space-y-3">
+              <div className="flex items-center gap-2 text-primary">
+                <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
+                <p className="text-[14px] font-medium">{t('success.title')}</p>
+              </div>
+              <p className="text-[12px] text-foreground break-all selectable font-mono">{completedPath}</p>
+              <p className="text-[12px] text-muted-foreground">{t('success.fileSize', { size: String(completedSizeMB) })}</p>
+            </div>
+          </div>
+        )}
+
+        {/* ERROR — centred error card.  Footer "Start render" button lets
+            the user retry from scratch (handleStartRender re-opens the
+            save dialog). */}
+        {renderState === 'error' && (
+          <div className="flex items-center justify-center py-16">
+            <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-8 py-8 w-full max-w-xl space-y-3">
+              <div className="flex items-center gap-2 text-destructive">
+                <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                <p className="text-[14px] font-medium">{t('error.title')}</p>
+              </div>
+              {errorMessage && (
+                <p className="text-[11px] text-muted-foreground break-all font-mono selectable">
+                  {errorMessage.slice(-400)}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
       </div>
 
@@ -733,12 +500,10 @@ function OutputFormatCard({
   videoPath,
   outputContainer,
   setOutputContainer,
-  renderState,
 }: {
   videoPath: string | null
   outputContainer: OutputContainer
   setOutputContainer: (v: OutputContainer) => void
-  renderState: RenderState
 }) {
   const { t } = useTranslation(['step3'])
 
@@ -749,12 +514,9 @@ function OutputFormatCard({
     : ''
 
   return (
-    <div className={cn(
-      'rounded-xl border border-zinc-800 bg-[#141414] p-4 space-y-2 transition-opacity duration-200',
-      renderState !== 'idle' && 'opacity-50 pointer-events-none'
-    )}>
+    <div className="rounded-xl border border-border bg-card p-4 space-y-2">
       <div className="flex items-center gap-1.5">
-        <FileVideo className="h-4 w-4 text-zinc-500 flex-shrink-0" />
+        <FileVideo className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         <Label className="uppercase tracking-wider text-[10px]">
           {inputExt
             ? t('outputFormat.labelWithInput', { ext: inputExt })
@@ -766,19 +528,17 @@ function OutputFormatCard({
           <button
             key={mode}
             type="button"
-            disabled={renderState !== 'idle'}
             onClick={() => setOutputContainer(mode)}
             className={cn(
               'flex flex-col items-start rounded-md border px-3 py-2 text-left transition-colors duration-150',
               outputContainer === mode
-                ? 'border-green-500/50 bg-green-500/5'
-                : 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/20',
-              'disabled:pointer-events-none'
+                ? 'border-primary/50 bg-primary/5'
+                : 'border-border hover:bg-accent/40'
             )}
           >
             <span className={cn(
               'text-[13px] font-medium',
-              outputContainer === mode ? 'text-green-400' : 'text-zinc-200'
+              outputContainer === mode ? 'text-primary' : 'text-foreground'
             )}>
               {mode === 'sameAsInput' && inputExt
                 ? t('outputFormat.sameAsInputWithExt', { ext: inputExt })
@@ -791,85 +551,19 @@ function OutputFormatCard({
   )
 }
 
-function SubtitleList({
-  entries,
-  selectedId,
-  onSelect,
-  maxHeight,
-}: {
-  entries: SubtitleEntry[]
-  selectedId: string | null
-  onSelect: (id: string) => void
-  /** Outer max-height in CSS pixels — measured from the left preview card. */
-  maxHeight: number
-}) {
-  const { t } = useTranslation(['step3'])
-
-  function formatTime(sec: number): string {
-    const m = Math.floor(sec / 60)
-    const s = Math.floor(sec % 60)
-    return `${m}:${String(s).padStart(2, '0')}`
-  }
-
-  return (
-    /*
-     * Card uses flex column with an explicit fixed `height` measured from the
-     * left card via ResizeObserver.  Switched from `maxHeight` to `height` so
-     * the right card matches the left card's height even when the entry list
-     * is short — short lists would otherwise leave the right card shrunken
-     * and visually unbalanced against the preview.  The inner list takes
-     * `flex-1 overflow-y-auto min-h-0`, so it fills the remaining space and
-     * scrolls when entries overflow.  `min-h-0` is required so the flex item
-     * can shrink below its content size.
-     */
-    <div
-      className="rounded-xl border border-zinc-800 bg-[#141414] p-4 flex flex-col overflow-hidden"
-      style={{ height: maxHeight > 0 ? `${maxHeight}px` : undefined }}
-    >
-      <Label className="uppercase tracking-wider text-[10px] mb-2 flex-shrink-0">{t('preview.list.title')}</Label>
-      {entries.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center py-8 min-h-0">
-          <p className="text-[12px] text-zinc-600">{t('preview.list.empty')}</p>
-        </div>
-      ) : (
-        <div className="flex-1 overflow-y-auto min-h-0 space-y-0.5">
-          {entries.map((entry, i) => (
-            <button
-              key={entry.id}
-              type="button"
-              onClick={() => onSelect(entry.id)}
-              className={cn(
-                'w-full text-left px-2 py-1.5 rounded-md transition-colors duration-150',
-                selectedId === entry.id
-                  ? 'bg-green-500/10 border border-green-500/30'
-                  : 'hover:bg-zinc-800/40 border border-transparent'
-              )}
-            >
-              <div className="flex items-baseline gap-2 min-w-0">
-                <span className="text-[11px] text-zinc-500 font-mono tabular-nums flex-shrink-0">{i + 1}</span>
-                <span className={cn(
-                  'text-[12px] truncate min-w-0',
-                  selectedId === entry.id ? 'text-zinc-50' : 'text-zinc-300'
-                )}>
-                  {entry.text.replace(/\\N/g, ' ')}
-                </span>
-              </div>
-              <p className="text-[10px] text-zinc-600 font-mono pl-5 tabular-nums mt-0.5">
-                {formatTime(entry.startSec)} → {formatTime(entry.endSec)}
-              </p>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function SummaryRow({ label, value }: { label: string; value: string }) {
+  // flex-1 makes each row claim an equal slice of the parent's height —
+  // the parent is a `flex-1 flex flex-col` inside a stretched grid cell,
+  // so the 7 rows distribute themselves across the cell's full height
+  // and the Summary card fills the same vertical space as the right
+  // column's Output format + Audio mode stack.  min-h-[28px] is the
+  // floor that keeps the layout compact when the parent has no extra
+  // height to share (e.g. a future surface that uses this component in
+  // a tighter container).
   return (
-    <div className="flex items-center justify-between py-2">
-      <span className="text-[12px] text-zinc-500">{label}</span>
-      <span className="text-[12px] text-zinc-100 font-mono tabular-nums">{value}</span>
+    <div className="flex flex-1 items-center justify-between py-2 min-h-[28px]">
+      <span className="text-[12px] text-muted-foreground">{label}</span>
+      <span className="text-[12px] text-foreground font-mono tabular-nums">{value}</span>
     </div>
   )
 }

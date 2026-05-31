@@ -41,6 +41,62 @@
     --input: 0 0% 3.9%;              /* zinc-950 — inputs use dark bg */
     --ring: 142.1 70.6% 45.3%;       /* green-500 focus ring */
 
+    /*
+     * Multi-row selection (bulk-edit) — distinct from the green focused-row
+     * border.  Defined as CSS vars so a future light theme can override them
+     * without touching component code.  Values:
+     *   --row-selected            : row body tint (HSL triplet for hsl()).
+     *   --row-selected-alpha      : row body tint opacity (0–1).
+     *   --row-selected-border     : left-edge marker stripe.
+     */
+    --row-selected: 217 91% 60%;          /* blue-500 */
+    --row-selected-alpha: 0.10;
+    --row-selected-border: 217 91% 60%;
+
+    /*
+     * Soft inline separator (thinner than --border).  Used to demarcate
+     * adjacent button clusters when their categories differ but neither
+     * is the primary action — e.g. Step 3's success-state footer where
+     * "Render again / Open file / Show in folder" (workflow) is split
+     * from "Support" (meta) by a 1px column.  Themed via CSS var so a
+     * future light theme can dial the contrast separately from --border.
+     *
+     * Also reused as the "quiet outline" colour for buttons that need
+     * to register as a distinct category without claiming primary
+     * status (Step 3's Support button).  --separator-strong is the
+     * paired hover-state value so the outline visibly lifts on
+     * pointer-in without jumping to a saturated accent.
+     */
+    --separator: 240 5% 30%;              /* dark mode: ~zinc-700 */
+    --separator-alpha: 0.6;
+    --separator-strong: 240 5% 40%;       /* dark mode: ~zinc-600 (hover) */
+
+    /*
+     * Single low-saturation warm accent shared by every "support /
+     * appreciate" surface — Step 3's Heart icon, the command palette's
+     * support entry, and any future donate touchpoint.  Defined here
+     * (not in tokens.ts) so a future light theme can swap it without a
+     * code change.  Rose-300-ish in dark; light mode will want a deeper
+     * rose-500-ish to keep contrast against a lighter background.
+     */
+    --accent-soft: 351 95% 81%;
+
+    /*
+     * Warning accent — distinct from --destructive (red, dangerous /
+     * irreversible) and --accent-soft (rose, support / appreciation).
+     * Used for advisory notes that are NOT errors: "this option
+     * disables that one", "value is unusual but not invalid", etc.
+     * Step 3's "outline disabled while background is on" note is the
+     * first consumer; the per-row "edited" amber tint in Step 2 is a
+     * candidate for migration in the future light-theme branch.
+     *
+     * Dark : amber-500 ≈ #f59e0b
+     * Light: amber-600-ish (deeper for contrast against light bg)
+     *        will be defined when the light theme block is added.
+     */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 9%;
+
     /* shadcn radius — matches our rounded-lg (8px) */
     --radius: 0.5rem;
   }

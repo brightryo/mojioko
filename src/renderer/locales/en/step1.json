@@ -38,7 +38,15 @@
     "helpTextColor": "Subtitle text color. White (#ffffff) is typical.",
     "helpOutlineColor": "Subtitle outline color. Black (#000000) improves readability.",
     "helpStroke": "Outline thickness in pixels.",
-    "helpFade": "Enable fade-in/fade-out effect on subtitles (300ms)."
+    "helpFade": "Enable fade-in/fade-out effect on subtitles (300ms).",
+    "previewLabel": "Preview",
+    "sampleText": "This is a sample subtitle so you can verify how the seed style will render in the burned-in output.",
+    "previewNote": "Approximate preview. Verify with the actual exported video."
+  },
+  "subtitleStyle": {
+    "openButton": "Subtitle style",
+    "dialogTitle": "Subtitle style",
+    "dialogDescription": "These seed values are burned into every row at transcription time. Tweak them here and verify with the live preview."
   },
   "whisperModel": {
     "label": "Whisper model",
@@ -59,6 +67,7 @@
     "notInstalledBadge": "Not downloaded",
     "noActiveBadge": "No model selected",
     "clickToChange": "Click to change",
+    "clickToSelect": "Click to select",
     "openFolder": "Open",
     "totalUsed": "Used",
     "diskFree": "Free",
@@ -114,6 +123,7 @@
   },
   "advanced": {
     "title": "Advanced settings",
+    "openButton": "Advanced",
     "textFormatting": "Text formatting",
     "autoLineBreak": "Auto line break",
     "autoLineBreakHelp": "Automatically inserts line breaks in text that exceeds the video width after transcription. Break positions are calculated based on font size and video resolution. Line breaks are removed when exporting text.",
