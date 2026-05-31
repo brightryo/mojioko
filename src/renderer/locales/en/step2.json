@@ -9,7 +9,8 @@
     "colText": "Text",
     "colState": "State",
     "colActions": "",
-    "fadeTooltip": "Fade"
+    "fadeTooltip": "Fade",
+    "selectAllAria": "Select all visible rows"
   },
   "tab": {
     "all": "All",
@@ -93,7 +94,8 @@
   },
   "footer": {
     "summary": "{{edited}} edits · {{warnings}} warnings · {{deleted}} deleted",
-    "warnings": "warnings"
+    "warnings": "warnings",
+    "selected": "{{count}} selected"
   },
   "toast": {
     "rowAdded": "Row added at position {{index}}",
@@ -103,7 +105,9 @@
     "exported": "Transcript exported",
     "exportedSrt": "SRT exported",
     "undo": "Undo: {{label}}",
-    "redo": "Redo: {{label}}"
+    "redo": "Redo: {{label}}",
+    "bulkApplied": "Applied to {{count}} rows ({{label}})",
+    "bulkAppliedUndo": "Undo"
   },
   "tooltip": {
     "undo": "Undo (Ctrl+Z)",
@@ -126,6 +130,25 @@
     "restoreRow": "Restore row",
     "resetRow": "Reset row",
     "addRow": "Add row"
+  },
+  "bulk": {
+    "regionLabel": "Bulk edit",
+    "countLabel": "{{count}} selected",
+    "countLabelWithHidden": "{{count}} selected ({{hidden}} hidden)",
+    "clearSelection": "Clear selection",
+    "size": "Size",
+    "placeholder": "value",
+    "textColor": "Text color",
+    "outlineColor": "Outline color",
+    "outlineWidth": "Outline width",
+    "fade": "Fade",
+    "history": {
+      "size": "Bulk size change ({{count}} rows)",
+      "textColor": "Bulk text color change ({{count}} rows)",
+      "outlineColor": "Bulk outline color change ({{count}} rows)",
+      "outlineWidth": "Bulk outline width change ({{count}} rows)",
+      "fade": "Bulk fade change ({{count}} rows)"
+    }
   },
   "videoPreview": {
     "play": "Play",
