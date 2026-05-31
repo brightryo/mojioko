@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Play, Shield, Music, PanelBottom, FileVideo } from 'lucide-react'
+import { Play, Shield, Music, PanelBottom, FileVideo, Heart } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { Button } from '@/components/ui/button'
@@ -300,10 +300,14 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
       {t('action.cancel')}
     </Button>
   ) : renderState === 'success' ? (
+    // Render-success cluster.  Order is intentional:
+    //   workflow actions → separator → meta (support) action.
+    // The support button sits LAST (rightmost) so the user encounters it
+    // after their work is done — never as the first thing in the visual
+    // scan, which would read as a paywall / push.  The 1px column uses
+    // --separator (CSS var) so a future light theme can dial the contrast
+    // independently of the main --border.
     <div className="flex items-center gap-2">
-      <Button variant="ghost" size="md" onClick={() => setDonationDialogOpen(true)}>
-        {t('action.donate')}
-      </Button>
       <Button variant="ghost" size="md" onClick={handleRenderAgain}>
         {t('action.renderAgain')}
       </Button>
@@ -312,6 +316,24 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
       </Button>
       <Button variant="secondary" size="md" onClick={() => shellShowInFolder(completedPath)}>
         {t('action.showInFolder')}
+      </Button>
+      <div
+        className="h-5 w-px mx-1 flex-shrink-0"
+        style={{ backgroundColor: 'hsl(var(--separator) / var(--separator-alpha))' }}
+        aria-hidden="true"
+      />
+      <Button
+        variant="ghost"
+        size="md"
+        onClick={() => setDonationDialogOpen(true)}
+        // Subtle outline accent — neither a solid fill (would read as a
+        // primary action and pressure the user) nor unmarked ghost (would
+        // disappear next to the other buttons).  The Heart icon picks up
+        // the only colour cue (rose-300) so the button body stays calm.
+        className="border border-zinc-700/70 hover:border-zinc-600 hover:bg-zinc-800/60"
+      >
+        <Heart className="h-3.5 w-3.5 mr-1.5 text-rose-300" />
+        {t('action.donate')}
       </Button>
     </div>
   ) : (
