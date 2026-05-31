@@ -11,11 +11,12 @@ import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { filterEntries } from '@/lib/subtitle-filter'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
-import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX } from '../../../shared/constants'
+import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 
 /**
  * 8-column grid template used by both the table header and every row:
@@ -397,37 +398,20 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.outlineColor')}</span>
           <ColorPicker value={entry.outlineColorHex} onChange={handleOutlineColorChange} disabled={entry.isDeleted} swatchOnly />
         </div>
-        <div className="grid grid-cols-[80px_1fr] items-center gap-2">
+        <div
+          className="grid grid-cols-[80px_1fr] items-center gap-2"
+          // stopPropagation so dragging the slider thumb does not also
+          // trigger the row-level click handler (which would re-focus the
+          // row and seek the video on every onChange frame).
+          onClick={(e) => e.stopPropagation()}
+        >
           <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.outlineWidth')}</span>
-          <div className={cn(
-            'flex rounded overflow-hidden border border-zinc-800',
-            entry.isDeleted && 'opacity-40 pointer-events-none'
-          )}>
-            {Array.from({ length: OUTLINE_THICKNESS_MAX_PX + 1 }, (_, i) => i).map((v) => {
-              const clamped = Math.min(OUTLINE_THICKNESS_MAX_PX, Math.max(0, entry.outlineThicknessPx))
-              return (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (v === clamped) return
-                    withHistory(t('history.editStroke'), { outlineThicknessPx: v })
-                  }}
-                  className={cn(
-                    // 11 values squeezed into the same cell width; tabular-nums keeps
-                    // "1" and "10" the same character width for a tidy row.
-                    'flex-1 py-1 text-[10px] tabular-nums transition-colors duration-150',
-                    clamped === v
-                      ? 'bg-green-500 text-green-950 font-bold'
-                      : 'bg-zinc-950 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'
-                  )}
-                >
-                  {v}
-                </button>
-              )
-            })}
-          </div>
+          <OutlineThicknessSlider
+            value={entry.outlineThicknessPx}
+            onCommit={(v) => withHistory(t('history.editStroke'), { outlineThicknessPx: v })}
+            disabled={entry.isDeleted}
+            ariaLabel={t('styleCell.outlineWidth')}
+          />
         </div>
         <div className="grid grid-cols-[80px_1fr] items-center gap-2">
           <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.fade')}</span>
