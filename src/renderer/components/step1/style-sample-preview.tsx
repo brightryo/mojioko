@@ -1,0 +1,170 @@
+import { useRef, useState, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Type } from 'lucide-react'
+import { Label } from '@/components/ui/label'
+import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
+import type {
+  TranscriptionDefaults,
+  VideoInfo,
+  SubtitleEntry,
+  BurninPosition
+} from '../../../shared/types'
+
+/**
+ * Bottom-centre is the standard subtitle convention.  Step 1 deliberately
+ * does NOT expose position controls (that responsibility belongs to Step 3),
+ * so the preview always renders at this fixed reference position.  The
+ * vertical margin matches Step 3's BURNIN_DEFAULTS so the seed look here
+ * lines up with the final burn position when the user later opens Step 3
+ * without changing anything.
+ */
+const PREVIEW_BURNIN: BurninPosition = {
+  horizontalPosition: 'center',
+  verticalPosition: 'bottom',
+  verticalMarginPx: 30
+}
+
+/** Fallback frame size when no video is loaded — drives the preview's aspect
+ *  ratio and feeds SubtitleOverlay's libass scale calc so the sample text
+ *  renders at roughly its eventual on-video size even before a video is
+ *  picked. */
+const FALLBACK_VIDEO_WIDTH = 1920
+const FALLBACK_VIDEO_HEIGHT = 1080
+
+interface StyleSamplePreviewProps {
+  defaults: TranscriptionDefaults
+  thumbnail: string | null
+  video: VideoInfo | null
+}
+
+/**
+ * Live "what each transcribed row will look like" preview for Step 1.
+ *
+ * Reuses SubtitleOverlay (the same component Step 2's video panel uses) so
+ * the preview is pixel-faithful to what ffmpeg + libass will actually
+ * render at burn-in time.  Seed values flow straight from the project
+ * store's `defaults` via props — any field change in the right-column
+ * controls re-renders this view on the next React tick with no additional
+ * plumbing.
+ *
+ * The component is intentionally generic over its parent: it takes only
+ * `defaults` + `thumbnail` + `video` and contains zero references to the
+ * surrounding form, so the same preview can later be embedded in other
+ * surfaces (e.g. a settings dialog) without modification.
+ */
+export function StyleSamplePreview({
+  defaults,
+  thumbnail,
+  video
+}: StyleSamplePreviewProps) {
+  const { t } = useTranslation('step1')
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [containerWidth, setContainerWidth] = useState(0)
+
+  // SubtitleOverlay scales font size by (containerWidth / videoWidth) so we
+  // need the rendered width of our preview frame.  Measured via
+  // ResizeObserver because the column width itself is fluid (lg→sm
+  // breakpoint, window resize).
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const obs = new ResizeObserver(() => {
+      setContainerWidth(el.clientWidth)
+    })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  // Long-form sample text — chosen so the user can verify line wrapping,
+  // font-size sanity and outline visibility at a glance.  A single short
+  // word ("Sample") would hide overflow/wrap problems that only show up
+  // with a realistic-length caption.
+  //
+  // The fallback string keeps the preview legible while this branch's
+  // commits land in their planned order: commit A introduces this
+  // component, commit C adds the proper localised key.  Once commit C is
+  // in, t() returns the localised value and the fallback is unused.
+  const sampleText = t(
+    'subtitleDefaults.sampleText',
+    'これはサンプル字幕です。書き出し後の見た目をここで確認できます。'
+  )
+
+  const sampleEntry: SubtitleEntry = useMemo(() => {
+    const base = {
+      startSec: 0,
+      endSec: 1,
+      text: sampleText,
+      fontSizePx: defaults.fontSizePx,
+      textColorHex: defaults.textColorHex,
+      outlineColorHex: defaults.outlineColorHex,
+      outlineThicknessPx: defaults.outlineThicknessPx,
+      fadeEnabled: defaults.fadeEnabled
+    }
+    return {
+      id: 'step1-sample',
+      ...base,
+      isDeleted: false,
+      isEdited: false,
+      original: { ...base }
+    }
+  }, [
+    sampleText,
+    defaults.fontSizePx,
+    defaults.textColorHex,
+    defaults.outlineColorHex,
+    defaults.outlineThicknessPx,
+    defaults.fadeEnabled
+  ])
+
+  const videoWidthPx = video?.widthPx ?? FALLBACK_VIDEO_WIDTH
+  const videoHeightPx = video?.heightPx ?? FALLBACK_VIDEO_HEIGHT
+  const aspectRatio = `${videoWidthPx} / ${videoHeightPx}`
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+      <div className="flex items-center gap-1.5">
+        <Type className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        <Label className="uppercase tracking-wider text-[10px]">
+          {t('subtitleDefaults.previewLabel', 'プレビュー')}
+        </Label>
+      </div>
+
+      <div className="flex justify-center w-full">
+        <div
+          ref={containerRef}
+          className="rounded-md bg-input border border-border relative overflow-hidden w-full"
+          style={{ aspectRatio }}
+        >
+          {thumbnail ? (
+            <img
+              src={thumbnail}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          ) : (
+            // No video yet — render a neutral dark surface so the seed
+            // style is still legible against a plausible burn-in
+            // background.  --background gives a near-black that mirrors
+            // the typical "dark video" case the burn-in is designed for.
+            <div className="absolute inset-0 bg-background" />
+          )}
+          {containerWidth > 0 && (
+            <SubtitleOverlay
+              entry={sampleEntry}
+              burnin={PREVIEW_BURNIN}
+              videoWidthPx={videoWidthPx}
+              containerWidthPx={containerWidth}
+            />
+          )}
+        </div>
+      </div>
+
+      <p className="text-[11px] text-muted-foreground">
+        {t(
+          'subtitleDefaults.previewNote',
+          '※ 近似表示です。書き出し後の動画で最終確認してください。'
+        )}
+      </p>
+    </div>
+  )
+}
