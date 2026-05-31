@@ -13,7 +13,6 @@ interface UiStore {
   isDonationDialogOpen: boolean
   tableFilter: TableFilter
   focusedRowId: string | null
-  selectedPreviewEntryId: string | null
   /** Session-only recent color history (not persisted to settings.json). */
   recentColors: string[]
   /**
@@ -65,7 +64,6 @@ interface UiStore {
   setDonationDialogOpen: (open: boolean) => void
   setTableFilter: (f: TableFilter) => void
   setFocusedRowId: (id: string | null) => void
-  setSelectedPreviewEntryId: (id: string | null) => void
   /** Prepend a color to the recent list, de-duplicating and capping at MAX_RECENT_COLORS. */
   addRecentColor: (hex: string) => void
   setVideoSeekRequest: (sec: number | null) => void
@@ -93,7 +91,6 @@ export const useUiStore = create<UiStore>((set) => ({
   isDonationDialogOpen: false,
   tableFilter: 'all',
   focusedRowId: null,
-  selectedPreviewEntryId: null,
   recentColors: [],
   videoSeekRequestSec: null,
   videoCurrentTimeSec: 0,
@@ -108,7 +105,6 @@ export const useUiStore = create<UiStore>((set) => ({
   setDonationDialogOpen: (open) => set({ isDonationDialogOpen: open }),
   setTableFilter: (f) => set({ tableFilter: f }),
   setFocusedRowId: (id) => set({ focusedRowId: id }),
-  setSelectedPreviewEntryId: (id) => set({ selectedPreviewEntryId: id }),
   addRecentColor: (hex) =>
     set((s) => {
       const upper = hex.toUpperCase()

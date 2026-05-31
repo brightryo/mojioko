@@ -1,19 +1,6 @@
 {
   "title": "Render video",
   "subtitle": "Burn subtitles into a new video using ffmpeg.",
-  "preview": {
-    "label": "Output preview",
-    "empty": "No subtitles",
-    "disclaimer": "Approximate preview. Verify with the actual exported video.",
-    "alignmentSummary": "{{align}} · {{margin}}px margin",
-    "list": {
-      "title": "Subtitle preview list",
-      "empty": "No subtitles"
-    }
-  },
-  "result": {
-    "label": "Result"
-  },
   "summary": {
     "label": "Output summary",
     "resolution": "Resolution",

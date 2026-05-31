@@ -1,19 +1,6 @@
 {
   "title": "動画書き出し",
   "subtitle": "字幕を焼き込んだ動画を書き出します。",
-  "preview": {
-    "label": "出力イメージ",
-    "empty": "字幕がありません",
-    "disclaimer": "※ 近似表示です。実際の出力は書き出し後の動画でご確認ください",
-    "alignmentSummary": "{{align}} · {{margin}}px",
-    "list": {
-      "title": "字幕プレビュー一覧",
-      "empty": "字幕がありません"
-    }
-  },
-  "result": {
-    "label": "書き出し結果"
-  },
   "summary": {
     "label": "出力情報",
     "resolution": "解像度",
