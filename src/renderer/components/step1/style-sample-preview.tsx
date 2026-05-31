@@ -31,6 +31,15 @@ const PREVIEW_BURNIN: BurninPosition = {
 const FALLBACK_VIDEO_WIDTH = 1920
 const FALLBACK_VIDEO_HEIGHT = 1080
 
+/** Cap on the preview frame's rendered height.  Without this the frame
+ *  fills the column width at its native aspect ratio, which on a 1280×820
+ *  default window pushes a ~273 px tall 16:9 frame and overflows the
+ *  vertical budget once paired with the Whisper card and the seed-style
+ *  card.  220 leaves the frame readable (~391 px wide at 16:9, still tall
+ *  enough to verify wrapping and outline visibility) while reclaiming
+ *  ~50 px of vertical space for the rest of Step 1. */
+const FRAME_MAX_HEIGHT_PX = 220
+
 interface StyleSamplePreviewProps {
   defaults: TranscriptionDefaults
   thumbnail: string | null
@@ -132,8 +141,17 @@ export function StyleSamplePreview({
       <div className="flex justify-center w-full">
         <div
           ref={containerRef}
-          className="rounded-md bg-input border border-border relative overflow-hidden w-full"
-          style={{ aspectRatio }}
+          className="rounded-md bg-input border border-border relative overflow-hidden"
+          style={{
+            aspectRatio,
+            maxHeight: `${FRAME_MAX_HEIGHT_PX}px`,
+            // Derive width from the capped height so the aspect ratio stays
+            // correct: at FRAME_MAX_HEIGHT_PX × (w/h), the frame is its
+            // natural max-tall size and `flex justify-center` on the parent
+            // keeps it horizontally centred when the column is wider.
+            width: `${Math.round(FRAME_MAX_HEIGHT_PX * (videoWidthPx / videoHeightPx))}px`,
+            maxWidth: '100%'
+          }}
         >
           {thumbnail ? (
             <img
