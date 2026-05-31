@@ -134,7 +134,6 @@
   "bulk": {
     "regionLabel": "一括編集",
     "countLabel": "{{count}}件選択中",
-    "countLabelWithHidden": "{{count}}件選択中 ({{hidden}}件は非表示)",
     "clearSelection": "選択を解除",
     "size": "サイズ",
     "placeholder": "値",

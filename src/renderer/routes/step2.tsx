@@ -198,14 +198,43 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     return map
   }, [entries, overflowMap, videoDurationSec])
 
-  // Currently-visible entries under the active filter — shared with
-  // BulkEditBar (hidden-count display, Ctrl+A target list) so both views
-  // agree on what "visible" means without re-implementing the filter.
+  // Currently-visible entries under the active filter — drives Ctrl+A's
+  // target list and the bulk-selection pruning effect below.
   const visibleEntries = useMemo(
     () => filterEntries(entries, tableFilter, warningsMap),
     [entries, tableFilter, warningsMap]
   )
   const visibleEntryIds = useMemo(() => visibleEntries.map((e) => e.id), [visibleEntries])
+
+  // Prune the bulk selection to the intersection with visible rows.
+  //
+  // Selection is INTENTIONALLY scoped to "what the user can currently
+  // see" so a follow-up bulk apply can never affect rows hidden behind a
+  // filter the user has since switched away from.  The hidden-selection
+  // count UI was retired alongside this rule because there can no
+  // longer be any hidden selection.
+  //
+  // Fires on:
+  //   - filter switch (tableFilter changes → visibleEntries recomputes)
+  //   - entry mutation that causes a selected row to leave the visible
+  //     set (e.g. fixing an empty-text warning row drops it from the
+  //     "Warnings" tab)
+  // Both reduce to the same dep — visibleEntryIds — so a single effect
+  // covers them.
+  useEffect(() => {
+    if (selectedRowIds.size === 0) return
+    const visible = new Set(visibleEntryIds)
+    let needsPrune = false
+    for (const id of selectedRowIds) {
+      if (!visible.has(id)) { needsPrune = true; break }
+    }
+    if (!needsPrune) return
+    const intersection = new Set<string>()
+    for (const id of selectedRowIds) {
+      if (visible.has(id)) intersection.add(id)
+    }
+    setRowSelection(intersection)
+  }, [visibleEntryIds, selectedRowIds, setRowSelection])
 
   const activeEntries = entries.filter((e) => !e.isDeleted)
   const allCount      = activeEntries.length
@@ -656,7 +685,6 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               className="flex-shrink-0"
             >
               <BulkEditBar
-                visibleIds={visibleEntryIds}
                 onApplied={(rowCount, label) => {
                   // Surface a one-click undo affordance.  Reads the freshest
                   // history op so even if state changed between render and

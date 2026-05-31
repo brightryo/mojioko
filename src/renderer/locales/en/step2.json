@@ -134,7 +134,6 @@
   "bulk": {
     "regionLabel": "Bulk edit",
     "countLabel": "{{count}} selected",
-    "countLabelWithHidden": "{{count}} selected ({{hidden}} hidden)",
     "clearSelection": "Clear selection",
     "size": "Size",
     "placeholder": "value",
