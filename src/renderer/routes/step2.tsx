@@ -514,7 +514,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     <span className="text-[12px] text-zinc-500">
       {selectedRowIds.size > 0 && (
         <>
-          <span className="text-zinc-300">
+          <span className="text-foreground">
             {t('footer.selected', { count: selectedRowIds.size })}
           </span>
           {' · '}

@@ -197,13 +197,13 @@ export function BulkEditBar({ visibleIds, onApplied }: BulkEditBarProps) {
     >
       {/* Left: count + clear */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <span className="text-[12px] font-medium text-zinc-200 tabular-nums">
+        <span className="text-[12px] font-medium text-foreground tabular-nums">
           {countLabel}
         </span>
         <button
           type="button"
           onClick={clearRowSelection}
-          className="flex items-center justify-center h-6 w-6 rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors duration-150"
+          className="flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors duration-150"
           aria-label={t('bulk.clearSelection')}
           title={t('bulk.clearSelection')}
         >
@@ -211,12 +211,16 @@ export function BulkEditBar({ visibleIds, onApplied }: BulkEditBarProps) {
         </button>
       </div>
 
-      <div className="h-5 w-px bg-zinc-700/60 flex-shrink-0" aria-hidden="true" />
+      <div
+        className="h-5 w-px flex-shrink-0"
+        style={{ backgroundColor: 'hsl(var(--separator) / var(--separator-alpha))' }}
+        aria-hidden="true"
+      />
 
       {/* Controls cluster */}
       <div className="flex items-center gap-5 flex-wrap min-w-0">
         {/* Font size */}
-        <label className="flex items-center gap-2 text-[12px] text-zinc-400">
+        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
           <span>{t('bulk.size')}</span>
           <input
             type="number"
@@ -232,16 +236,16 @@ export function BulkEditBar({ visibleIds, onApplied }: BulkEditBarProps) {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
             }}
             className={cn(
-              'w-16 h-7 rounded border bg-zinc-950 px-2 text-center text-[12px] text-zinc-100',
-              'focus:outline-none focus:ring-1 focus:ring-green-500/30',
-              'border-zinc-800 focus:border-zinc-700',
+              'w-16 h-7 rounded border bg-input px-2 text-center text-[12px] text-foreground',
+              'focus:outline-none focus:ring-1 focus:ring-ring/30',
+              'border-border',
               '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
             )}
           />
         </label>
 
         {/* Text color */}
-        <label className="flex items-center gap-2 text-[12px] text-zinc-400">
+        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
           <span>{t('bulk.textColor')}</span>
           <ColorPicker
             value={colorDraftText ?? '#FFFFFF'}
@@ -252,7 +256,7 @@ export function BulkEditBar({ visibleIds, onApplied }: BulkEditBarProps) {
         </label>
 
         {/* Outline color */}
-        <label className="flex items-center gap-2 text-[12px] text-zinc-400">
+        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
           <span>{t('bulk.outlineColor')}</span>
           <ColorPicker
             value={colorDraftOutline ?? '#000000'}
@@ -262,8 +266,11 @@ export function BulkEditBar({ visibleIds, onApplied }: BulkEditBarProps) {
           />
         </label>
 
-        {/* Outline thickness — slider commits on mouseup/keyup */}
-        <label className="flex items-center gap-2 text-[12px] text-zinc-400">
+        {/* Outline thickness — slider commits on mouseup/keyup.  Native
+            <input type="range"> uses the `accent-color` CSS property for
+            its thumb/track tint; routing it through --primary keeps the
+            slider on-brand without hardcoding green-500. */}
+        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
           <span>{t('bulk.outlineWidth')}</span>
           <input
             type="range"
@@ -275,16 +282,17 @@ export function BulkEditBar({ visibleIds, onApplied }: BulkEditBarProps) {
             onMouseUp={commitOutlineSlider}
             onKeyUp={commitOutlineSlider}
             onTouchEnd={commitOutlineSlider}
-            className="w-24 accent-green-500"
+            className="w-24"
+            style={{ accentColor: 'hsl(var(--primary))' }}
             aria-label={t('bulk.outlineWidth')}
           />
-          <span className="w-4 text-[11px] text-zinc-500 font-mono tabular-nums">
+          <span className="w-4 text-[11px] text-muted-foreground font-mono tabular-nums">
             {outlineSliderDraft}
           </span>
         </label>
 
         {/* Fade */}
-        <label className="flex items-center gap-2 text-[12px] text-zinc-400">
+        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
           <span>{t('bulk.fade')}</span>
           <Switch onCheckedChange={handleFadeChange} />
         </label>

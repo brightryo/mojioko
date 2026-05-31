@@ -19,17 +19,20 @@ const Checkbox = React.forwardRef<
   <CheckboxPrimitive.Root
     ref={ref}
     className={cn(
-      'peer h-4 w-4 shrink-0 rounded-[3px] border border-zinc-600 ring-offset-zinc-950',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30 focus-visible:ring-offset-2',
+      // --separator-strong is reused here for the unchecked border because
+      // --border (= --secondary, faint) is too quiet for a small interactive
+      // affordance; the var pairing matches the Step 3 Support button hover.
+      'peer h-4 w-4 shrink-0 rounded-[3px] border border-[hsl(var(--separator-strong))] ring-offset-background',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2',
       'disabled:cursor-not-allowed disabled:opacity-40',
-      'data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500',
-      'data-[state=indeterminate]:bg-green-500 data-[state=indeterminate]:border-green-500',
+      'data-[state=checked]:bg-primary data-[state=checked]:border-primary',
+      'data-[state=indeterminate]:bg-primary data-[state=indeterminate]:border-primary',
       'transition-colors duration-150',
       className
     )}
     {...props}
   >
-    <CheckboxPrimitive.Indicator className="flex items-center justify-center text-green-950">
+    <CheckboxPrimitive.Indicator className="flex items-center justify-center text-primary-foreground">
       {props.checked === 'indeterminate' ? (
         <Minus className="h-3 w-3" strokeWidth={3} />
       ) : (
