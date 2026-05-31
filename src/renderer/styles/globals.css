@@ -41,6 +41,18 @@
     --input: 0 0% 3.9%;              /* zinc-950 — inputs use dark bg */
     --ring: 142.1 70.6% 45.3%;       /* green-500 focus ring */
 
+    /*
+     * Multi-row selection (bulk-edit) — distinct from the green focused-row
+     * border.  Defined as CSS vars so a future light theme can override them
+     * without touching component code.  Values:
+     *   --row-selected            : row body tint (HSL triplet for hsl()).
+     *   --row-selected-alpha      : row body tint opacity (0–1).
+     *   --row-selected-border     : left-edge marker stripe.
+     */
+    --row-selected: 217 91% 60%;          /* blue-500 */
+    --row-selected-alpha: 0.10;
+    --row-selected-border: 217 91% 60%;
+
     /* shadcn radius — matches our rounded-lg (8px) */
     --radius: 0.5rem;
   }

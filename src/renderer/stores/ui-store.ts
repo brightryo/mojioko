@@ -43,6 +43,20 @@ interface UiStore {
    *     well inside the viewport.  Cleared to null after consumption.
    */
   scrollToRowId: string | null
+  /**
+   * Multi-row selection used by Step 2's bulk-edit bar.  Independent of
+   * `focusedRowId` (single row, drives the green left-edge marker and the
+   * video seek) — a row can be focused and selected, focused but not
+   * selected, or selected but not focused.  Retained across filter changes
+   * so the user can refine a selection by hopping between filters.
+   */
+  selectedRowIds: ReadonlySet<string>
+  /**
+   * Last row that was single-clicked via its checkbox.  Anchor for Shift+click
+   * range selection ("from anchor to clicked, inclusive").  Reset to null on
+   * clearRowSelection.
+   */
+  selectionAnchorId: string | null
 
   setCommandPaletteOpen: (open: boolean) => void
   setSettingsDialogOpen: (open: boolean) => void
@@ -57,6 +71,18 @@ interface UiStore {
   setVideoSeekRequest: (sec: number | null) => void
   setVideoCurrentTimeSec: (sec: number) => void
   setScrollToRowId: (id: string | null) => void
+  /** Replace the entire selection set (used by select-all / Ctrl+A). */
+  setRowSelection: (ids: ReadonlySet<string>) => void
+  /** Toggle a single row's selection; updates selectionAnchorId to `id`. */
+  toggleRowSelected: (id: string) => void
+  /**
+   * Select all rows between anchor and `id` (inclusive) in the visible-row
+   * order.  When no anchor exists, falls back to a single-row toggle.
+   * `visibleOrder` is the ordered list of currently displayed row ids — the
+   * store does not know about filters, so callers must supply it.
+   */
+  selectRowRange: (id: string, visibleOrder: readonly string[]) => void
+  clearRowSelection: () => void
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -72,6 +98,8 @@ export const useUiStore = create<UiStore>((set) => ({
   videoSeekRequestSec: null,
   videoCurrentTimeSec: 0,
   scrollToRowId: null,
+  selectedRowIds: new Set<string>(),
+  selectionAnchorId: null,
 
   setCommandPaletteOpen: (open) => set({ isCommandPaletteOpen: open }),
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
@@ -90,4 +118,49 @@ export const useUiStore = create<UiStore>((set) => ({
   setVideoSeekRequest: (sec) => set({ videoSeekRequestSec: sec }),
   setVideoCurrentTimeSec: (sec) => set({ videoCurrentTimeSec: sec }),
   setScrollToRowId: (id) => set({ scrollToRowId: id }),
+  setRowSelection: (ids) =>
+    set((s) => ({
+      selectedRowIds: ids,
+      // Preserve the anchor when ids are non-empty (select-all keeps the
+      // last anchored row meaningful for a subsequent Shift+click).  Clear
+      // it when the set is empty so no stale id can survive.
+      selectionAnchorId: ids.size > 0 ? s.selectionAnchorId : null
+    })),
+  toggleRowSelected: (id) =>
+    set((s) => {
+      const next = new Set(s.selectedRowIds)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return { selectedRowIds: next, selectionAnchorId: id }
+    }),
+  selectRowRange: (id, visibleOrder) =>
+    set((s) => {
+      const anchor = s.selectionAnchorId
+      // No anchor → treat as a plain toggle so the click still does something
+      // sensible.  Subsequent Shift+click now has an anchor to expand from.
+      if (anchor === null || anchor === id) {
+        const next = new Set(s.selectedRowIds)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return { selectedRowIds: next, selectionAnchorId: id }
+      }
+      const a = visibleOrder.indexOf(anchor)
+      const b = visibleOrder.indexOf(id)
+      if (a === -1 || b === -1) {
+        // Anchor is filtered out of the current view; fall back to toggling
+        // just the clicked row rather than producing an empty range.
+        const next = new Set(s.selectedRowIds)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return { selectedRowIds: next, selectionAnchorId: id }
+      }
+      const [lo, hi] = a <= b ? [a, b] : [b, a]
+      // Additive range: rows previously selected outside this range stay
+      // selected, matching Finder / VS Code multi-select semantics.
+      const next = new Set(s.selectedRowIds)
+      for (let i = lo; i <= hi; i++) next.add(visibleOrder[i])
+      return { selectedRowIds: next, selectionAnchorId: id }
+    }),
+  clearRowSelection: () =>
+    set({ selectedRowIds: new Set<string>(), selectionAnchorId: null }),
 }))
