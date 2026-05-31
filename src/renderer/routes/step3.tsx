@@ -328,11 +328,18 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
         onClick={() => setDonationDialogOpen(true)}
         // Subtle outline accent — neither a solid fill (would read as a
         // primary action and pressure the user) nor unmarked ghost (would
-        // disappear next to the other buttons).  The Heart icon picks up
-        // the only colour cue (rose-300) so the button body stays calm.
-        className="border border-zinc-700/70 hover:border-zinc-600 hover:bg-zinc-800/60"
+        // disappear next to the other buttons).  Every colour reads from
+        // a CSS var so a future light theme can re-tune the contrast
+        // without touching component code:
+        //   - default border : --separator @ 0.70 alpha (quiet zinc-700)
+        //   - hover border   : --separator-strong (lifts to zinc-600)
+        //   - hover bg       : --border @ 0.60 (matches surrounding card)
+        // The Heart icon picks up --accent-soft as its only colour cue
+        // (outline-only Heart, never filled — a filled heart reads as
+        // "already liked" which is the wrong affordance for the action).
+        className="border border-[hsl(var(--separator)/0.7)] hover:border-[hsl(var(--separator-strong))] hover:bg-[hsl(var(--border)/0.6)]"
       >
-        <Heart className="h-3.5 w-3.5 mr-1.5 text-rose-300" />
+        <Heart className="h-3.5 w-3.5 mr-1.5 text-[hsl(var(--accent-soft))]" />
         {t('action.donate')}
       </Button>
     </div>
