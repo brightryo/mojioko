@@ -60,6 +60,19 @@ const DESC_KEY: Record<string, string> = {
 interface WhisperModelManagerProps {
   onActiveModelChange?: (modelId: WhisperModelId | null) => void
   disabled?: boolean
+  /**
+   * Optional controlled-mode props.  When `isOpen` is provided the
+   * accordion stops managing its own open state and reflects the
+   * parent's value, calling `onOpenChange` whenever the user clicks
+   * the header.  Internal auto-open / auto-close transitions (e.g.,
+   * collapsing after a model is auto-activated) also route through
+   * `onOpenChange` so the parent stays in sync.  When `isOpen` is
+   * omitted, the component falls back to its own state — matches the
+   * prior uncontrolled behaviour for callers that don't need the
+   * exclusion-with-siblings pattern Step 1 uses.
+   */
+  isOpen?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 type DialogKind =
@@ -71,13 +84,28 @@ type DialogKind =
 // Component
 // ---------------------------------------------------------------------------
 
-export function WhisperModelManager({ onActiveModelChange, disabled }: WhisperModelManagerProps) {
+export function WhisperModelManager({
+  onActiveModelChange,
+  disabled,
+  isOpen: controlledIsOpen,
+  onOpenChange
+}: WhisperModelManagerProps) {
   const { t, i18n } = useTranslation('step1')
 
   const [state, setState] = useState<ModelsState | null>(null)
-  // Start closed so "open → immediately close" jitter never shows when a model is
-  // already active.  The effect below opens it when no active model is found.
-  const [isOpen, setIsOpen] = useState(false)
+  // Internal-mode open state.  Used as the source of truth only when the
+  // parent did not pass a controlled `isOpen` prop; otherwise this is a
+  // shadow value the controlled mode never reads.
+  const [internalIsOpen, setInternalIsOpen] = useState(false)
+  const isControlled = controlledIsOpen !== undefined
+  const isOpen = isControlled ? controlledIsOpen : internalIsOpen
+  // setIsOpen routes through onOpenChange in controlled mode so the
+  // parent receives every transition — including the internal auto-open /
+  // auto-close ones below (e.g. collapsing after a model is auto-activated).
+  function setIsOpen(next: boolean) {
+    if (!isControlled) setInternalIsOpen(next)
+    onOpenChange?.(next)
+  }
   const initializedRef = useRef(false)
   const [downloadingId, setDownloadingId] = useState<WhisperModelId | null>(null)
   const [downloadPercent, setDownloadPercent] = useState(0)
@@ -244,11 +272,11 @@ export function WhisperModelManager({ onActiveModelChange, disabled }: WhisperMo
         role="button"
         aria-expanded={isOpen}
         tabIndex={0}
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={() => setIsOpen(!isOpen)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
-            setIsOpen((prev) => !prev)
+            setIsOpen(!isOpen)
           }
         }}
         className="flex items-center gap-2 w-full cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"

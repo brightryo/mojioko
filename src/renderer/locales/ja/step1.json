@@ -43,6 +43,11 @@
     "sampleText": "これはサンプル字幕です。書き出し後の見た目をここで確認できます。",
     "previewNote": "※ 近似表示です。書き出し後の動画で最終確認してください。"
   },
+  "subtitleStyle": {
+    "openButton": "字幕スタイル",
+    "dialogTitle": "字幕スタイル設定",
+    "dialogDescription": "文字起こし時に各行の初期値として焼き込まれます。プレビューで確認しながら調整してください。"
+  },
   "whisperModel": {
     "label": "Whisperモデル",
     "tooltip": "動画の音声を文字に変換するエンジンです。モデルサイズが大きいほど精度が上がります。",

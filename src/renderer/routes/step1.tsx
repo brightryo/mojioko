@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Video, Mic, Type, ShieldCheck, Square, Loader2, Settings2 } from 'lucide-react'
+import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, Settings2, ChevronUp, ChevronDown } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -9,7 +10,6 @@ import { AppShell } from '@/components/app-shell/app-shell'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -18,12 +18,10 @@ import {
   DialogDescription,
   DialogFooter
 } from '@/components/ui/dialog'
-import { ColorPicker } from '@/components/color-picker/color-picker'
 import { HelpIcon } from '@/components/help-icon'
 import { WhisperModelManager } from '@/components/whisper-model-manager/whisper-model-manager'
-import { StyleSamplePreview } from '@/components/step1/style-sample-preview'
 import { TranscriptionAdvancedDialog } from '@/components/step1/transcription-advanced-dialog'
-import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
+import { SubtitleStyleDialog } from '@/components/step1/subtitle-style-dialog'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { probeVideo, extractThumbnail } from '@/services/video'
@@ -33,7 +31,6 @@ import type { TranscriptionRun } from '@/services/transcription'
 import { formatDuration } from '@/lib/time'
 import { formatBytes } from '@/lib/format'
 import type { SubtitleEntry as SubtitleEntryType, WhisperModelId } from '../../shared/types'
-import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../shared/constants'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 
@@ -61,32 +58,39 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const setEntries = useProjectStore((s) => s.setEntries)
   const selectedTrack = useProjectStore((s) => s.selectedTrackIndex)
   const setSelectedTrack = useProjectStore((s) => s.setSelectedTrackIndex)
+  // `defaults` is consumed at transcription time (to seed every row's style)
+  // and by the Subtitle Style dialog (which subscribes to the store
+  // directly).  `setDefaults` is therefore owned exclusively by the dialog —
+  // Step 1's first-view JSX no longer reads or writes seed style.
   const defaults = useProjectStore((s) => s.defaults)
-  const setDefaults = useProjectStore((s) => s.setDefaults)
   const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
   // transcriptionAdvanced is needed in handleStartTranscription to feed the
   // Whisper sidecar with the user's tweaked VAD / beam-size / language; the
-  // dialog now owns reads + writes for editing those fields, but step1
-  // still needs the value at run-time.
+  // dialog owns reads + writes for editing those fields, but step1 still
+  // needs the value at run-time.
   const transcriptionAdvanced = useSettingsStore((s) => s.transcriptionAdvanced)
-  // autoLineBreak is consumed in two places: the post-transcription
-  // line-break pass below, and the StyleSamplePreview's live wrap render
-  // (so the user can verify the wrap before paying the Whisper cost).
-  // The toggle UI itself lives in the Subtitle defaults card — autoLineBreak
-  // is a subtitle-formatting choice, not a Whisper engine parameter.
+  // autoLineBreak is read here for the post-transcription line-break pass.
+  // The toggle UI itself lives inside the Subtitle Style dialog so the
+  // dialog can subscribe to setAutoLineBreak directly.
   const autoLineBreak = useSettingsStore((s) => s.autoLineBreak)
-  const setAutoLineBreak = useSettingsStore((s) => s.setAutoLineBreak)
   const resetStep3Settings = useSettingsStore((s) => s.resetStep3Settings)
 
   const isLoading = videoLoadingState === 'loading'
 
   const [activeModelId, setActiveModelId] = useState<WhisperModelId | null>(null)
   const [isTranscribing, setIsTranscribing] = useState(false)
-  const [fontSizeOutOfRange, setFontSizeOutOfRange] = useState(false)
   const [transcribeProgress, setTranscribeProgress] = useState(0)
   const [thumbnail, setThumbnail] = useState<string | null>(null)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [advancedDialogOpen, setAdvancedDialogOpen] = useState(false)
+  const [subtitleStyleDialogOpen, setSubtitleStyleDialogOpen] = useState(false)
+  // Mutually-exclusive accordion section.  Exactly one of the two main
+  // panels (Whisper model picker / Input video) is expanded at any time,
+  // so the vertical budget stays predictable regardless of state.
+  // Default to 'inputVideo' so the user lands on "pick a video" without
+  // having to click anything; if no Whisper model is active they can
+  // toggle to 'whisper' via the header.
+  const [openSection, setOpenSection] = useState<'whisper' | 'inputVideo'>('inputVideo')
   const transcriptionRunRef = useRef<TranscriptionRun | null>(null)
 
   useHotkeys('enter', () => { if (canStart && !isTranscribing) handleStartTranscription() }, { enableOnFormTags: false })
@@ -288,29 +292,62 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     </div>
   )
 
+  // Footer right slot — split-button cluster on the idle path:
+  //   [ Start transcription | ▼ ]
+  // Left half is the primary action (kicks off Whisper exactly as before).
+  // Right half opens the Subtitle Style dialog so users have a one-click
+  // path to verify seed style at the moment of decision, without
+  // requiring a separate trigger elsewhere in the layout.  Two adjacent
+  // primary buttons share their background; the inner edges have their
+  // rounded corner removed and a dark hairline divider sits between them
+  // so the boundary is visually unambiguous.  During transcription the
+  // caret is hidden and the main button collapses to a plain rounded
+  // Cancel / Stop button — seed style is locked mid-run.
+  const showStyleCaret = !isTranscribing
   const footerRight = (
-    <Button
-      variant="primary"
-      size="md"
-      disabled={!isTranscribing && !canStart}
-      onClick={isTranscribing ? handleCancelClick : handleStartTranscription}
-    >
-      {isTranscribing ? (
-        transcribeProgress === 0 ? (
-          <>
-            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-            {t('action.transcribingWaiting')}
-          </>
+    <div className="inline-flex items-stretch">
+      <Button
+        variant="primary"
+        size="md"
+        disabled={!isTranscribing && !canStart}
+        onClick={isTranscribing ? handleCancelClick : handleStartTranscription}
+        className={cn(showStyleCaret && 'rounded-r-none')}
+      >
+        {isTranscribing ? (
+          transcribeProgress === 0 ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              {t('action.transcribingWaiting')}
+            </>
+          ) : (
+            <>
+              <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
+              {t('action.transcribing', { percent: transcribeProgress })}
+            </>
+          )
         ) : (
-          <>
-            <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
-            {t('action.transcribing', { percent: transcribeProgress })}
-          </>
-        )
-      ) : (
-        t('action.startTranscription')
+          t('action.startTranscription')
+        )}
+      </Button>
+      {showStyleCaret && (
+        <Button
+          variant="primary"
+          size="md"
+          onClick={() => setSubtitleStyleDialogOpen(true)}
+          aria-label={t('subtitleStyle.openButton')}
+          title={t('subtitleStyle.openButton')}
+          // Caret half — narrow (icon-only), shares primary background
+          // with the main button, no left-side rounding, and a
+          // primary-foreground hairline divider (10 % opacity) so the
+          // boundary reads clearly without introducing a fresh accent.
+          // Both colours route through --primary / --primary-foreground
+          // so a future light theme repaints the split button atomically.
+          className="rounded-l-none border-l border-[hsl(var(--primary-foreground)/0.2)] px-2"
+        >
+          <ChevronDown className="h-4 w-4" />
+        </Button>
       )}
-    </Button>
+    </div>
   )
 
   return (
@@ -327,18 +364,21 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           <p className="mt-1 text-[13px] text-muted-foreground">{t('guidance')}</p>
         </div>
 
-        {/* Whisper model + Advanced trigger.  Full-width card.  The
-            Advanced dialog opens via the trigger on the right edge so
-            the panel stays discoverable without claiming primary screen
-            space — the dialog content is identical to the former inline
-            accordion, just relocated. */}
+        {/* Whisper model + Advanced (engine) trigger.  Subtitle Style
+            does NOT live here — it is unrelated to the Whisper engine
+            and sits next to the Start button in the footer instead. */}
         <div className={cn(
           'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
           (isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
         )}>
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
-              <WhisperModelManager onActiveModelChange={setActiveModelId} disabled={isLoading || isTranscribing} />
+              <WhisperModelManager
+                onActiveModelChange={setActiveModelId}
+                disabled={isLoading || isTranscribing}
+                isOpen={openSection === 'whisper'}
+                onOpenChange={(open) => setOpenSection(open ? 'whisper' : 'inputVideo')}
+              />
             </div>
             <Button
               variant="ghost"
@@ -352,243 +392,205 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           </div>
         </div>
 
-        {/* 2-column body.  Left = "what to transcribe" (video + audio
-            tracks), right = "how it will look" (seed style + live
-            preview).  Below the lg breakpoint the grid collapses to a
-            single column and AppShell's outer scroll handles the
-            overflow — step 1 is settings-heavy and a small amount of
-            scrolling is preferable to cramming everything in. */}
-        <div className="grid gap-4 lg:grid-cols-2 items-start">
-          {/* ── Left column ──────────────────────────────────────────── */}
-          <div className="space-y-4">
-            {/* Input video — path + inline metadata when loaded.  The
-                old dedicated "thumbnail + info 2-col" card is gone: the
-                thumbnail now lives behind the live preview on the right,
-                and the four metadata fields collapse into this card. */}
-            <div className={cn(
-              'rounded-xl border border-border bg-card p-4 space-y-2 transition-opacity duration-200',
-              isTranscribing && 'opacity-50 pointer-events-none'
-            )}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Video className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <Label className="uppercase tracking-wider text-[10px]">{t('inputVideo.label')}</Label>
-                  <HelpIcon content={t('inputVideo.help')} />
-                </div>
-                <span className="text-[11px] text-muted-foreground/60">{t('inputVideo.hint')}</span>
-              </div>
-              {isLoading ? (
-                <div className="flex items-center gap-2.5 h-9 px-1">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
-                  <span className="text-[13px] text-muted-foreground">{t('inputVideo.loading')}</span>
-                </div>
+        {/* First-view body — only the must-touch cards remain visible
+            here: pick a video, pick which audio track to transcribe.
+            All seed-style controls + the live preview moved into the
+            Subtitle Style dialog so the route stays scroll-free at
+            1280×820 even on first launch with the Whisper accordion
+            collapsed.  The `space-y-4` siblings render top-to-bottom in
+            a single column. */}
+        {/* Input video — single encompassing card holding (a) the path
+            picker, (b) a small identification thumbnail + the video's
+            technical metadata side-by-side, and (c) the audio-track
+            selector below.  All "what to transcribe" decisions in one
+            visual unit so the first view has a single primary surface
+            plus the Whisper card above.
+
+            The thumbnail here is purely an identification frame (no
+            subtitle overlay) — the styled live preview belongs to the
+            Subtitle Style dialog. */}
+        <div className={cn(
+          'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
+          isTranscribing && 'opacity-50 pointer-events-none'
+        )}>
+          {/* Accordion header — clickable, toggles `openSection` to enforce
+              mutual exclusion with the Whisper card above.  Clicking the
+              header when this section is already open switches the
+              expanded panel to 'whisper'; clicking when collapsed
+              switches back here.  Either way exactly one panel is open. */}
+          <div
+            role="button"
+            aria-expanded={openSection === 'inputVideo'}
+            tabIndex={0}
+            onClick={() =>
+              setOpenSection(openSection === 'inputVideo' ? 'whisper' : 'inputVideo')
+            }
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                setOpenSection(openSection === 'inputVideo' ? 'whisper' : 'inputVideo')
+              }
+            }}
+            className="flex items-center justify-between cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
+          >
+            <div className="flex items-center gap-1.5">
+              <Video className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <Label className="uppercase tracking-wider text-[10px] cursor-pointer">
+                {t('inputVideo.label')}
+              </Label>
+              <span onClick={(e) => e.stopPropagation()}>
+                <HelpIcon content={t('inputVideo.help')} />
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-muted-foreground/60">{t('inputVideo.hint')}</span>
+              {openSection === 'inputVideo' ? (
+                <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
               ) : (
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-9 rounded-md border border-border bg-input px-3.5 flex items-center min-w-0">
-                    <span className={cn(
-                      'text-[13px] truncate',
-                      video ? 'text-foreground' : 'text-muted-foreground/60'
-                    )}>
-                      {video?.path ?? t('inputVideo.placeholder')}
-                    </span>
-                  </div>
-                  <Button variant="secondary" size="md" onClick={handleBrowse}>
-                    <FolderOpen className="h-4 w-4 mr-1.5" />
-                    {t('inputVideo.chooseVideo')}
-                  </Button>
-                </div>
+                <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
               )}
-              {video && (
-                <div className="divide-y divide-border/50 pt-1">
-                  <InfoRow label={t('inputVideo.infoResolution')} value={`${video.widthPx}×${video.heightPx}`} />
-                  <InfoRow label={t('inputVideo.infoDuration')} value={formatDuration(video.durationSec)} />
-                  <InfoRow label={t('inputVideo.infoFormat')} value={`${video.container.toUpperCase()} / ${video.videoCodec} / ${video.fps}fps`} />
-                  <InfoRow label={t('inputVideo.infoFileSize')} value={formatBytes(video.fileSizeBytes)} />
-                </div>
-              )}
-            </div>
-
-            {/* Audio tracks */}
-            <div className={cn(
-              'rounded-xl border border-border bg-card p-4 space-y-3 transition-opacity duration-200',
-              (!video || isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
-            )}>
-              <div className="flex items-center gap-1.5">
-                <Mic className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <Label className="uppercase tracking-wider text-[10px]">{t('audioTracks.label')}</Label>
-                <HelpIcon content={t('audioTracks.help')} />
-                {audioTracks.length > 0 && (
-                  <Badge variant="muted">{t('audioTracks.tracksCount', { count: audioTracks.length })}</Badge>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">{t('audioTracks.description')}</p>
-              <div className="grid grid-cols-2 gap-2">
-                {audioTracks.map((track) => (
-                  <button
-                    key={track.index}
-                    type="button"
-                    onClick={() => setSelectedTrack(track.index)}
-                    className={cn(
-                      'relative rounded-md border p-3 text-left transition-colors duration-150',
-                      selectedTrack === track.index
-                        ? 'border-primary/50 bg-primary/5'
-                        : 'border-border hover:bg-accent/40'
-                    )}
-                  >
-                    {selectedTrack === track.index && (
-                      <div className="absolute top-2 right-2">
-                        <Badge variant="success">{t('audioTracks.transcriptionTarget')}</Badge>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full flex-shrink-0 bg-primary" />
-                      <span className={cn(
-                        'text-[13px] font-medium',
-                        selectedTrack === track.index ? 'text-primary' : 'text-foreground'
-                      )}>
-                        {t('audioTracks.trackLabel', { index: track.index })}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground pl-4">
-                      {`${track.channels} · ${track.sampleRateHz / 1000}kHz · ${track.codec}`}
-                    </p>
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
 
-          {/* ── Right column ─────────────────────────────────────────── */}
-          <div className="space-y-4">
-            {/* Subtitle defaults — seed values for every row at
-                transcription time.  Any change here re-renders the live
-                preview below on the next tick, so the user can verify
-                "this is what gets burned in" before paying the Whisper
-                cost. */}
+          {/* Collapsible body — same animation pattern WhisperModelManager
+              uses, so the two cards' open / close transitions feel like
+              the same control. */}
+          <AnimatePresence initial={false}>
+            {openSection === 'inputVideo' && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-4 pt-3">
+          {/* Path + Browse */}
+          {isLoading ? (
+            <div className="flex items-center gap-2.5 h-9 px-1">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
+              <span className="text-[13px] text-muted-foreground">{t('inputVideo.loading')}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-9 rounded-md border border-border bg-input px-3.5 flex items-center min-w-0">
+                <span className={cn(
+                  'text-[13px] truncate',
+                  video ? 'text-foreground' : 'text-muted-foreground/60'
+                )}>
+                  {video?.path ?? t('inputVideo.placeholder')}
+                </span>
+              </div>
+              <Button variant="secondary" size="md" onClick={handleBrowse}>
+                <FolderOpen className="h-4 w-4 mr-1.5" />
+                {t('inputVideo.chooseVideo')}
+              </Button>
+            </div>
+          )}
 
-            {/* Card: Subtitle defaults */}
-            <div className={cn(
-              'rounded-xl border border-border bg-card p-4 space-y-3 transition-opacity duration-200',
-              (isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
-            )}>
-              <div className="flex items-center gap-1.5">
-                <Type className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <Label className="uppercase tracking-wider text-[10px]">{t('subtitleDefaults.label')}</Label>
-                <span className="text-[11px] text-muted-foreground/60">{t('subtitleDefaults.hint')}</span>
-              </div>
-              {/* Top row: size / textColor / outlineColor / fade.  The
-                  outline-thickness slider gets its own row below because
-                  its natural width (96 px slider + 24 px readout) does
-                  not fit comfortably alongside four other controls in a
-                  narrow right column once lg compresses. */}
-              <div className="grid grid-cols-4 gap-3">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1">
-                    <Label>{t('subtitleDefaults.size')}</Label>
-                    <HelpIcon content={t('subtitleDefaults.helpSize')} />
-                  </div>
-                  <input
-                    key={defaults.fontSizePx}
-                    type="number"
-                    min={FONT_SIZE_MIN_PX}
-                    max={FONT_SIZE_MAX_PX}
-                    defaultValue={defaults.fontSizePx}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10)
-                      setFontSizeOutOfRange(!isNaN(v) && (v < FONT_SIZE_MIN_PX || v > FONT_SIZE_MAX_PX))
-                    }}
-                    onBlur={(e) => {
-                      setFontSizeOutOfRange(false)
-                      const v = parseInt(e.target.value, 10)
-                      if (isNaN(v)) return
-                      setDefaults({ fontSizePx: Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, v)) })
-                    }}
-                    className={cn(
-                      'h-9 w-full rounded-md border bg-input px-2 text-center text-[13px] text-foreground focus:outline-none focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-                      fontSizeOutOfRange
-                        ? 'border-[hsl(var(--warning)/0.6)] focus:ring-[hsl(var(--warning)/0.3)]'
-                        : 'border-border focus:ring-ring/30'
-                    )}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1">
-                    <Label>{t('subtitleDefaults.textColor')}</Label>
-                    <HelpIcon content={t('subtitleDefaults.helpTextColor')} />
-                  </div>
-                  <ColorPicker value={defaults.textColorHex} onChange={(hex) => setDefaults({ textColorHex: hex })} />
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1">
-                    <Label>{t('subtitleDefaults.outlineColor')}</Label>
-                    <HelpIcon content={t('subtitleDefaults.helpOutlineColor')} />
-                  </div>
-                  <ColorPicker value={defaults.outlineColorHex} onChange={(hex) => setDefaults({ outlineColorHex: hex })} />
-                </div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1">
-                    <Label>{t('subtitleDefaults.fade')}</Label>
-                    <HelpIcon content={t('subtitleDefaults.helpFade')} />
-                  </div>
-                  <div className="flex items-center gap-2 h-9">
-                    <Switch checked={defaults.fadeEnabled} onCheckedChange={(v) => setDefaults({ fadeEnabled: v })} />
-                    <span className="text-[12px] text-muted-foreground">
-                      {defaults.fadeEnabled ? t('subtitleDefaults.fadeOn') : t('subtitleDefaults.fadeOff')}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              {/* Outline thickness — shared slider component (same one
-                  Step 2 uses for per-row + bulk-edit) so the look and
-                  commit semantics stay aligned across surfaces. */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1">
-                  <Label>{t('subtitleDefaults.stroke')}</Label>
-                  <HelpIcon content={t('subtitleDefaults.helpStroke')} />
-                </div>
-                <OutlineThicknessSlider
-                  value={defaults.outlineThicknessPx}
-                  onCommit={(v) => setDefaults({ outlineThicknessPx: v })}
-                  ariaLabel={t('subtitleDefaults.stroke')}
-                />
-              </div>
-              {/* Auto line break — subtitle-formatting decision, lives here
-                  rather than the Advanced (engine) dialog.  Toggling this
-                  immediately re-wraps the StyleSamplePreview below so the
-                  user can verify the choice before transcribing. */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-1">
-                  <Label>{t('advanced.autoLineBreak')}</Label>
-                  <HelpIcon content={t('advanced.autoLineBreakHelp')} />
-                </div>
-                <div className="flex items-center gap-2 h-9">
-                  <Switch
-                    checked={autoLineBreak}
-                    onCheckedChange={(v) => setAutoLineBreak(v)}
-                  />
-                  <span className="text-[12px] text-muted-foreground">
-                    {autoLineBreak ? t('advanced.enabled') : t('advanced.disabled')}
+          {/* Thumbnail + technical metadata side-by-side.  Fixed 16:9
+              thumbnail container so portrait videos crop to the same
+              identifying frame size; object-cover fills the box. */}
+          <div className="grid grid-cols-[160px_1fr] gap-4 items-center">
+            <div className="rounded-md border border-border bg-input aspect-video w-full overflow-hidden flex items-center justify-center">
+              {thumbnail ? (
+                <img src={thumbnail} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <Video className="h-6 w-6 text-muted-foreground/40" />
+              )}
+            </div>
+            <div className="divide-y divide-border/50">
+              <InfoRow
+                label={t('inputVideo.infoResolution')}
+                value={video ? `${video.widthPx}×${video.heightPx}` : '—'}
+              />
+              <InfoRow
+                label={t('inputVideo.infoDuration')}
+                value={video ? formatDuration(video.durationSec) : '—'}
+              />
+              <InfoRow
+                label={t('inputVideo.infoFormat')}
+                value={video ? `${video.container.toUpperCase()} / ${video.videoCodec} / ${video.fps}fps` : '—'}
+              />
+              <InfoRow
+                label={t('inputVideo.infoFileSize')}
+                value={video ? formatBytes(video.fileSizeBytes) : '—'}
+              />
+            </div>
+          </div>
+
+          {/* Audio tracks — absorbed into this card.  Internal divider
+              instead of a separate card so the picker reads as part of
+              "the video you've chosen" rather than a parallel concept.
+              Disabled until a video is loaded. */}
+          <div className={cn(
+            'border-t border-border/50 pt-3 space-y-3 transition-opacity duration-150',
+            !video && 'opacity-50 pointer-events-none'
+          )}>
+            <div className="flex items-center gap-1.5">
+              <Mic className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <Label className="uppercase tracking-wider text-[10px]">{t('audioTracks.label')}</Label>
+              <HelpIcon content={t('audioTracks.help')} />
+              {audioTracks.length > 0 && (
+                <Badge variant="muted">{t('audioTracks.tracksCount', { count: audioTracks.length })}</Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">{t('audioTracks.description')}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {audioTracks.map((track) => (
+                <button
+                  key={track.index}
+                  type="button"
+                  onClick={() => setSelectedTrack(track.index)}
+                  className={cn(
+                    // Compact layout — name and spec sit on a single line
+                    // with the indicator dot on the left so 6+ tracks fit
+                    // without the card sprawling.  The "transcription
+                    // target" badge moves inline at the right edge instead
+                    // of absolute-positioned, freeing the row's vertical
+                    // budget.
+                    'flex items-center gap-2 rounded-md border px-3 py-1.5 text-left transition-colors duration-150',
+                    selectedTrack === track.index
+                      ? 'border-primary/50 bg-primary/5'
+                      : 'border-border hover:bg-accent/40'
+                  )}
+                >
+                  <span className="h-2 w-2 rounded-full flex-shrink-0 bg-primary" />
+                  <span className={cn(
+                    'text-[13px] font-medium flex-shrink-0',
+                    selectedTrack === track.index ? 'text-primary' : 'text-foreground'
+                  )}>
+                    {t('audioTracks.trackLabel', { index: track.index })}
                   </span>
-                </div>
-              </div>
+                  <span className="text-[11px] text-muted-foreground truncate min-w-0">
+                    {`${track.channels} · ${track.sampleRateHz / 1000}kHz · ${track.codec}`}
+                  </span>
+                  {selectedTrack === track.index && (
+                    <Badge variant="success" className="ml-auto flex-shrink-0">
+                      {t('audioTracks.transcriptionTarget')}
+                    </Badge>
+                  )}
+                </button>
+              ))}
             </div>
-
-            {/* Live preview — recomputes on every defaults change.  See
-                feature/ui-redesign commit 199e3ce for the contract. */}
-            <StyleSamplePreview
-              defaults={defaults}
-              thumbnail={thumbnail}
-              video={video}
-              autoLineBreak={autoLineBreak}
-            />
           </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
       </div>
 
-      {/* Advanced transcription parameters live in their own dialog rather
-          than an inline accordion now — Step 1 stays compact and the
-          deep VAD / recognition knobs are one click away when needed. */}
+      {/* Dialogs.  Both are mounted unconditionally and gated on `open` —
+          Radix unmounts the content while closed so there is no idle
+          render cost.  Subtitle Style covers seed style + live preview;
+          Advanced covers Whisper engine knobs (VAD / Recognition). */}
+      <SubtitleStyleDialog
+        open={subtitleStyleDialogOpen}
+        onOpenChange={setSubtitleStyleDialogOpen}
+        thumbnail={thumbnail}
+      />
       <TranscriptionAdvancedDialog
         open={advancedDialogOpen}
         onOpenChange={setAdvancedDialogOpen}

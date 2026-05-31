@@ -43,6 +43,11 @@
     "sampleText": "This is a sample subtitle so you can verify how the seed style will render in the burned-in output.",
     "previewNote": "Approximate preview. Verify with the actual exported video."
   },
+  "subtitleStyle": {
+    "openButton": "Subtitle style",
+    "dialogTitle": "Subtitle style",
+    "dialogDescription": "These seed values are burned into every row at transcription time. Tweak them here and verify with the live preview."
+  },
   "whisperModel": {
     "label": "Whisper model",
     "tooltip": "The engine that converts audio to text. Larger models are more accurate but slower.",
