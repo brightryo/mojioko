@@ -81,6 +81,22 @@
      */
     --accent-soft: 351 95% 81%;
 
+    /*
+     * Warning accent — distinct from --destructive (red, dangerous /
+     * irreversible) and --accent-soft (rose, support / appreciation).
+     * Used for advisory notes that are NOT errors: "this option
+     * disables that one", "value is unusual but not invalid", etc.
+     * Step 3's "outline disabled while background is on" note is the
+     * first consumer; the per-row "edited" amber tint in Step 2 is a
+     * candidate for migration in the future light-theme branch.
+     *
+     * Dark : amber-500 ≈ #f59e0b
+     * Light: amber-600-ish (deeper for contrast against light bg)
+     *        will be defined when the light theme block is added.
+     */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 9%;
+
     /* shadcn radius — matches our rounded-lg (8px) */
     --radius: 0.5rem;
   }
