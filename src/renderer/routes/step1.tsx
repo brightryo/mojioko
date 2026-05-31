@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Video, Mic, Type, ShieldCheck, Square, Loader2, ChevronRight, ChevronDown, HelpCircle, RotateCcw } from 'lucide-react'
+import { FolderOpen, Video, Mic, Type, ShieldCheck, Square, Loader2, Settings2 } from 'lucide-react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Dialog,
   DialogContent,
@@ -19,16 +18,12 @@ import {
   DialogDescription,
   DialogFooter
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { HelpIcon } from '@/components/help-icon'
 import { WhisperModelManager } from '@/components/whisper-model-manager/whisper-model-manager'
+import { StyleSamplePreview } from '@/components/step1/style-sample-preview'
+import { TranscriptionAdvancedDialog } from '@/components/step1/transcription-advanced-dialog'
+import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { probeVideo, extractThumbnail } from '@/services/video'
@@ -38,58 +33,15 @@ import type { TranscriptionRun } from '@/services/transcription'
 import { formatDuration } from '@/lib/time'
 import { formatBytes } from '@/lib/format'
 import type { SubtitleEntry as SubtitleEntryType, WhisperModelId } from '../../shared/types'
-import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
+import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../shared/constants'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { getSubtitleFont, loadSubtitleFont } from '@/lib/font-metrics'
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between py-2">
-      <span className="text-[12px] text-zinc-500">{label}</span>
-      <span className="text-[12px] text-zinc-100 font-mono tabular-nums">{value}</span>
-    </div>
-  )
-}
-
-/**
- * Editable parameter row for the Advanced settings accordion.
- * - Label (amber when changed) + tooltip on the left (shrink-0, no truncation)
- * - Dashed leader fills the gap, visually connecting label → control
- * - Hover shows a subtle zinc-800/30 row highlight
- * - Max-width 520px keeps label–control distance compact
- */
-function AdvancedParamRow({
-  label, help, changed, children
-}: {
-  label: string; help: string; changed: boolean; children: React.ReactNode
-}) {
-  return (
-    <div className="flex items-center gap-2 rounded-md px-2 py-1.5 -mx-2 max-w-[520px] hover:bg-zinc-800/30 transition-colors duration-150">
-      {/* label + tooltip — shrink-0 so label never gets truncated */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className={cn(
-          'text-sm transition-colors duration-150',
-          changed ? 'text-amber-400' : 'text-zinc-400'
-        )}>
-          {label}
-        </span>
-        <Tooltip delayDuration={200}>
-          <TooltipTrigger asChild>
-            <span className="inline-flex cursor-help text-zinc-600 hover:text-zinc-400 transition-colors duration-150">
-              <HelpCircle className="h-3.5 w-3.5" />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[280px] bg-zinc-800 text-left">
-            {help}
-          </TooltipContent>
-        </Tooltip>
-      </div>
-      {/* Dashed leader: stretches to fill space, visually connects label to control */}
-      <div className="flex-1 border-t border-dashed border-zinc-700/50 min-w-[16px]" />
-      {/* control */}
-      <div className="shrink-0">
-        {children}
-      </div>
+    <div className="flex items-center justify-between py-1.5">
+      <span className="text-[12px] text-muted-foreground">{label}</span>
+      <span className="text-[12px] text-foreground font-mono tabular-nums">{value}</span>
     </div>
   )
 }
@@ -112,21 +64,16 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const defaults = useProjectStore((s) => s.defaults)
   const setDefaults = useProjectStore((s) => s.setDefaults)
   const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
+  // transcriptionAdvanced is needed in handleStartTranscription to feed the
+  // Whisper sidecar with the user's tweaked VAD / beam-size / language; the
+  // dialog now owns reads + writes for editing those fields, but step1
+  // still needs the value at run-time.
   const transcriptionAdvanced = useSettingsStore((s) => s.transcriptionAdvanced)
-  const setTranscriptionAdvanced = useSettingsStore((s) => s.setTranscriptionAdvanced)
-  const resetTranscriptionAdvanced = useSettingsStore((s) => s.resetTranscriptionAdvanced)
+  // Same rationale for autoLineBreak — read here so the post-transcription
+  // line-break pass can branch on the user's choice; the toggle UI lives in
+  // the dialog.
   const autoLineBreak = useSettingsStore((s) => s.autoLineBreak)
-  const setAutoLineBreak = useSettingsStore((s) => s.setAutoLineBreak)
   const resetStep3Settings = useSettingsStore((s) => s.resetStep3Settings)
-
-  const isAdvancedChanged =
-    !autoLineBreak ||   // default is true
-    transcriptionAdvanced.vadFilter !== TRANSCRIPTION_DEFAULTS.vadFilter ||
-    transcriptionAdvanced.vadThreshold !== TRANSCRIPTION_DEFAULTS.vadThreshold ||
-    transcriptionAdvanced.minSpeechDurationMs !== TRANSCRIPTION_DEFAULTS.minSpeechDurationMs ||
-    transcriptionAdvanced.minSilenceDurationMs !== TRANSCRIPTION_DEFAULTS.minSilenceDurationMs ||
-    transcriptionAdvanced.beamSize !== TRANSCRIPTION_DEFAULTS.beamSize ||
-    transcriptionAdvanced.language !== TRANSCRIPTION_DEFAULTS.language
 
   const isLoading = videoLoadingState === 'loading'
 
@@ -136,7 +83,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const [transcribeProgress, setTranscribeProgress] = useState(0)
   const [thumbnail, setThumbnail] = useState<string | null>(null)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
-  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [advancedDialogOpen, setAdvancedDialogOpen] = useState(false)
   const transcriptionRunRef = useRef<TranscriptionRun | null>(null)
 
   useHotkeys('enter', () => { if (canStart && !isTranscribing) handleStartTranscription() }, { enableOnFormTags: false })
@@ -360,476 +307,252 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
       <div className="space-y-4">
         {/* Page header */}
         <div>
-          <h1 className="text-[18px] font-semibold text-zinc-50">{t('title')}</h1>
-          <p className="mt-1 text-[13px] text-zinc-400">{t('guidance')}</p>
+          <h1 className="text-[18px] font-semibold text-foreground">{t('title')}</h1>
+          <p className="mt-1 text-[13px] text-muted-foreground">{t('guidance')}</p>
         </div>
 
-        {/* Card: Whisper model manager */}
+        {/* Whisper model + Advanced trigger.  Full-width card.  The
+            Advanced dialog opens via the trigger on the right edge so
+            the panel stays discoverable without claiming primary screen
+            space — the dialog content is identical to the former inline
+            accordion, just relocated. */}
         <div className={cn(
-          'rounded-xl border border-zinc-800 bg-[#141414] p-4 transition-opacity duration-200',
-          (isLoading || isTranscribing) && 'opacity-50'
+          'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
+          (isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
         )}>
-          <WhisperModelManager onActiveModelChange={setActiveModelId} disabled={isLoading || isTranscribing} />
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <WhisperModelManager onActiveModelChange={setActiveModelId} disabled={isLoading || isTranscribing} />
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAdvancedDialogOpen(true)}
+              className="flex-shrink-0"
+            >
+              <Settings2 className="h-4 w-4 mr-1.5" />
+              {t('advanced.openButton')}
+            </Button>
+          </div>
         </div>
 
-        {/* Card: Input video */}
-        <div className={cn(
-          'rounded-xl border border-zinc-800 bg-[#141414] p-4 space-y-2 transition-opacity duration-200',
-          isTranscribing && 'opacity-50 pointer-events-none'
-        )}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Video className="h-4 w-4 text-zinc-500 flex-shrink-0" />
-              <Label className="uppercase tracking-wider text-[10px]">{t('inputVideo.label')}</Label>
-              <HelpIcon content={t('inputVideo.help')} />
-            </div>
-            <span className="text-[11px] text-zinc-600">{t('inputVideo.hint')}</span>
-          </div>
-          {isLoading ? (
-            <div className="flex items-center gap-2.5 h-9 px-1">
-              <Loader2 className="h-4 w-4 animate-spin text-zinc-500 flex-shrink-0" />
-              <span className="text-[13px] text-zinc-400">{t('inputVideo.loading')}</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-9 rounded-md border border-zinc-800 bg-zinc-950 px-3.5 flex items-center min-w-0">
-                <span className={`text-[13px] truncate ${video ? 'text-zinc-100' : 'text-zinc-600'}`}>
-                  {video?.path ?? t('inputVideo.placeholder')}
-                </span>
-              </div>
-              <Button variant="secondary" size="md" onClick={handleBrowse}>
-                <FolderOpen className="h-4 w-4 mr-1.5" />
-                {t('inputVideo.chooseVideo')}
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Two-column: thumbnail + video info (only when video loaded) */}
-        {video && (
-          <div className="grid gap-4" style={{ gridTemplateColumns: '1.4fr 1fr' }}>
-            {/* Left: thumbnail card */}
-            <div className="rounded-xl border border-zinc-800 bg-[#141414] p-4">
-              <div
-                className="rounded-md bg-zinc-950 border border-zinc-800 aspect-video w-full overflow-hidden"
-                style={{ maxHeight: '240px' }}
-              >
-                {thumbnail ? (
-                  <img src={thumbnail} alt="preview" className="w-full h-full object-contain" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Video className="h-8 w-8 text-zinc-700" />
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* Right: video info card */}
-            <div className="rounded-xl border border-zinc-800 bg-[#141414] p-4 space-y-3">
-              <Label className="uppercase tracking-wider text-[10px]">{t('inputVideo.infoLabel')}</Label>
-              <div className="space-y-0 divide-y divide-zinc-800/50">
-                <InfoRow label={t('inputVideo.infoResolution')} value={`${video.widthPx}×${video.heightPx}`} />
-                <InfoRow label={t('inputVideo.infoDuration')} value={formatDuration(video.durationSec)} />
-                <InfoRow label={t('inputVideo.infoFormat')} value={`${video.container.toUpperCase()} / ${video.videoCodec} / ${video.fps}fps`} />
-                <InfoRow label={t('inputVideo.infoFileSize')} value={formatBytes(video.fileSizeBytes)} />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Card: Audio tracks */}
-        <div className={cn(
-          'rounded-xl border border-zinc-800 bg-[#141414] p-4 space-y-3 transition-opacity duration-200',
-          (!video || isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
-        )}>
-          <div className="flex items-center gap-1.5">
-            <Mic className="h-4 w-4 text-zinc-500 flex-shrink-0" />
-            <Label className="uppercase tracking-wider text-[10px]">{t('audioTracks.label')}</Label>
-            <HelpIcon content={t('audioTracks.help')} />
-            {audioTracks.length > 0 && (
-              <Badge variant="muted">{t('audioTracks.tracksCount', { count: audioTracks.length })}</Badge>
-            )}
-          </div>
-          <p className="text-xs text-zinc-400">{t('audioTracks.description')}</p>
-          <div className="grid grid-cols-2 gap-2">
-            {audioTracks.map((track) => (
-              <button
-                key={track.index}
-                type="button"
-                onClick={() => setSelectedTrack(track.index)}
-                className={cn(
-                  'relative rounded-md border p-3 text-left transition-colors duration-150',
-                  selectedTrack === track.index
-                    ? 'border-green-500/50 bg-green-500/5'
-                    : 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/20'
-                )}
-              >
-                {selectedTrack === track.index && (
-                  <div className="absolute top-2 right-2">
-                    <Badge variant="success">{t('audioTracks.transcriptionTarget')}</Badge>
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full flex-shrink-0 bg-green-500" />
-                  <span className={cn(
-                    'text-[13px] font-medium',
-                    selectedTrack === track.index ? 'text-green-400' : 'text-zinc-200'
-                  )}>
-                    {t('audioTracks.trackLabel', { index: track.index })}
-                  </span>
+        {/* 2-column body.  Left = "what to transcribe" (video + audio
+            tracks), right = "how it will look" (seed style + live
+            preview).  Below the lg breakpoint the grid collapses to a
+            single column and AppShell's outer scroll handles the
+            overflow — step 1 is settings-heavy and a small amount of
+            scrolling is preferable to cramming everything in. */}
+        <div className="grid gap-4 lg:grid-cols-2 items-start">
+          {/* ── Left column ──────────────────────────────────────────── */}
+          <div className="space-y-4">
+            {/* Input video — path + inline metadata when loaded.  The
+                old dedicated "thumbnail + info 2-col" card is gone: the
+                thumbnail now lives behind the live preview on the right,
+                and the four metadata fields collapse into this card. */}
+            <div className={cn(
+              'rounded-xl border border-border bg-card p-4 space-y-2 transition-opacity duration-200',
+              isTranscribing && 'opacity-50 pointer-events-none'
+            )}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Video className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <Label className="uppercase tracking-wider text-[10px]">{t('inputVideo.label')}</Label>
+                  <HelpIcon content={t('inputVideo.help')} />
                 </div>
-                <p className="mt-1 text-[11px] text-zinc-500 pl-4">
-                  {`${track.channels} · ${track.sampleRateHz / 1000}kHz · ${track.codec}`}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
+                <span className="text-[11px] text-muted-foreground/60">{t('inputVideo.hint')}</span>
+              </div>
+              {isLoading ? (
+                <div className="flex items-center gap-2.5 h-9 px-1">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
+                  <span className="text-[13px] text-muted-foreground">{t('inputVideo.loading')}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-9 rounded-md border border-border bg-input px-3.5 flex items-center min-w-0">
+                    <span className={cn(
+                      'text-[13px] truncate',
+                      video ? 'text-foreground' : 'text-muted-foreground/60'
+                    )}>
+                      {video?.path ?? t('inputVideo.placeholder')}
+                    </span>
+                  </div>
+                  <Button variant="secondary" size="md" onClick={handleBrowse}>
+                    <FolderOpen className="h-4 w-4 mr-1.5" />
+                    {t('inputVideo.chooseVideo')}
+                  </Button>
+                </div>
+              )}
+              {video && (
+                <div className="divide-y divide-border/50 pt-1">
+                  <InfoRow label={t('inputVideo.infoResolution')} value={`${video.widthPx}×${video.heightPx}`} />
+                  <InfoRow label={t('inputVideo.infoDuration')} value={formatDuration(video.durationSec)} />
+                  <InfoRow label={t('inputVideo.infoFormat')} value={`${video.container.toUpperCase()} / ${video.videoCodec} / ${video.fps}fps`} />
+                  <InfoRow label={t('inputVideo.infoFileSize')} value={formatBytes(video.fileSizeBytes)} />
+                </div>
+              )}
+            </div>
 
-        {/* Card: Subtitle defaults */}
-        <div className={cn(
-          'rounded-xl border border-zinc-800 bg-[#141414] p-4 space-y-3 transition-opacity duration-200',
-          (!video || isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
-        )}>
-          <div className="flex items-center gap-1.5">
-            <Type className="h-4 w-4 text-zinc-500 flex-shrink-0" />
-            <Label className="uppercase tracking-wider text-[10px]">{t('subtitleDefaults.label')}</Label>
-            <span className="text-[11px] text-zinc-600">{t('subtitleDefaults.hint')}</span>
-          </div>
-          <div className="grid grid-cols-5 gap-3">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1">
-                <Label>{t('subtitleDefaults.size')}</Label>
-                <HelpIcon content={t('subtitleDefaults.helpSize')} />
-              </div>
-              <input
-                key={defaults.fontSizePx}
-                type="number"
-                min={FONT_SIZE_MIN_PX}
-                max={FONT_SIZE_MAX_PX}
-                defaultValue={defaults.fontSizePx}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10)
-                  setFontSizeOutOfRange(!isNaN(v) && (v < FONT_SIZE_MIN_PX || v > FONT_SIZE_MAX_PX))
-                }}
-                onBlur={(e) => {
-                  setFontSizeOutOfRange(false)
-                  const v = parseInt(e.target.value, 10)
-                  if (isNaN(v)) return
-                  setDefaults({ fontSizePx: Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, v)) })
-                }}
-                className={cn(
-                  'h-9 w-full rounded-md border bg-zinc-950 px-2 text-center text-[13px] text-zinc-100 focus:outline-none focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-                  fontSizeOutOfRange
-                    ? 'border-amber-400/60 focus:ring-amber-400/30'
-                    : 'border-zinc-800 focus:ring-green-500/30'
+            {/* Audio tracks */}
+            <div className={cn(
+              'rounded-xl border border-border bg-card p-4 space-y-3 transition-opacity duration-200',
+              (!video || isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
+            )}>
+              <div className="flex items-center gap-1.5">
+                <Mic className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <Label className="uppercase tracking-wider text-[10px]">{t('audioTracks.label')}</Label>
+                <HelpIcon content={t('audioTracks.help')} />
+                {audioTracks.length > 0 && (
+                  <Badge variant="muted">{t('audioTracks.tracksCount', { count: audioTracks.length })}</Badge>
                 )}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1">
-                <Label>{t('subtitleDefaults.textColor')}</Label>
-                <HelpIcon content={t('subtitleDefaults.helpTextColor')} />
               </div>
-              <ColorPicker value={defaults.textColorHex} onChange={(hex) => setDefaults({ textColorHex: hex })} />
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1">
-                <Label>{t('subtitleDefaults.outlineColor')}</Label>
-                <HelpIcon content={t('subtitleDefaults.helpOutlineColor')} />
-              </div>
-              <ColorPicker value={defaults.outlineColorHex} onChange={(hex) => setDefaults({ outlineColorHex: hex })} />
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1">
-                <Label>{t('subtitleDefaults.stroke')}</Label>
-                <HelpIcon content={t('subtitleDefaults.helpStroke')} />
-              </div>
-              <div className="flex rounded-md overflow-hidden border border-zinc-800">
-                {Array.from({ length: OUTLINE_THICKNESS_MAX_PX + 1 }, (_, i) => i).map((v) => (
+              <p className="text-xs text-muted-foreground">{t('audioTracks.description')}</p>
+              <div className="grid grid-cols-2 gap-2">
+                {audioTracks.map((track) => (
                   <button
-                    key={v}
+                    key={track.index}
                     type="button"
-                    onClick={() => setDefaults({ outlineThicknessPx: v })}
+                    onClick={() => setSelectedTrack(track.index)}
                     className={cn(
-                      // 11 buttons in the same width as the previous 6 → shrink font/padding
-                      // so labels like "10" still fit comfortably in each cell.
-                      'flex-1 py-1.5 text-[12px] tabular-nums transition-colors duration-150',
-                      defaults.outlineThicknessPx === v
-                        ? 'bg-green-500 text-green-950 font-semibold'
-                        : 'bg-zinc-950 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                      'relative rounded-md border p-3 text-left transition-colors duration-150',
+                      selectedTrack === track.index
+                        ? 'border-primary/50 bg-primary/5'
+                        : 'border-border hover:bg-accent/40'
                     )}
                   >
-                    {v}
+                    {selectedTrack === track.index && (
+                      <div className="absolute top-2 right-2">
+                        <Badge variant="success">{t('audioTracks.transcriptionTarget')}</Badge>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full flex-shrink-0 bg-primary" />
+                      <span className={cn(
+                        'text-[13px] font-medium',
+                        selectedTrack === track.index ? 'text-primary' : 'text-foreground'
+                      )}>
+                        {t('audioTracks.trackLabel', { index: track.index })}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground pl-4">
+                      {`${track.channels} · ${track.sampleRateHz / 1000}kHz · ${track.codec}`}
+                    </p>
                   </button>
                 ))}
               </div>
             </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1">
-                <Label>{t('subtitleDefaults.fade')}</Label>
-                <HelpIcon content={t('subtitleDefaults.helpFade')} />
-              </div>
-              <div className="flex items-center gap-2 h-9">
-                <Switch checked={defaults.fadeEnabled} onCheckedChange={(v) => setDefaults({ fadeEnabled: v })} />
-                <span className="text-[12px] text-zinc-400">
-                  {defaults.fadeEnabled ? t('subtitleDefaults.fadeOn') : t('subtitleDefaults.fadeOff')}
-                </span>
-              </div>
-            </div>
           </div>
-        </div>
 
-        {/* Card: Advanced settings accordion */}
-        <div className={cn(
-          'rounded-xl border border-zinc-800 overflow-hidden transition-opacity duration-200',
-          (isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
-        )}>
-          {/* Accordion header */}
-          <button
-            type="button"
-            onClick={() => setAdvancedOpen((o) => !o)}
-            className="w-full flex items-center justify-between bg-zinc-800/50 hover:bg-zinc-800 px-4 py-3 transition-colors duration-150"
-          >
-            <span className="text-[13px] font-medium text-zinc-300">{t('advanced.title')}</span>
-            {advancedOpen
-              ? <ChevronDown className="h-4 w-4 text-zinc-500 flex-shrink-0" />
-              : <ChevronRight className="h-4 w-4 text-zinc-500 flex-shrink-0" />
-            }
-          </button>
+          {/* ── Right column ─────────────────────────────────────────── */}
+          <div className="space-y-4">
+            {/* Subtitle defaults — seed values for every row at
+                transcription time.  Any change here re-renders the live
+                preview below on the next tick, so the user can verify
+                "this is what gets burned in" before paying the Whisper
+                cost. */}
 
-          {/* Animated content area — CSS grid rows trick */}
-          <div className={cn(
-            'grid transition-all duration-200',
-            advancedOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
-          )}>
-            <div className="overflow-hidden">
-              <div className="bg-zinc-900/30 border-t border-zinc-800 px-4 pt-4 pb-5 space-y-5">
-
-                {/* Text formatting section */}
-                <div className="space-y-0.5">
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-300 mb-2">
-                    {t('advanced.textFormatting')}
-                  </p>
-                  <AdvancedParamRow
-                    label={t('advanced.autoLineBreak')}
-                    help={t('advanced.autoLineBreakHelp')}
-                    changed={!autoLineBreak}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={autoLineBreak}
-                        onCheckedChange={(v) => setAutoLineBreak(v)}
-                      />
-                      <span className={cn(
-                        'text-[12px] transition-colors duration-150',
-                        !autoLineBreak ? 'text-amber-400' : 'text-zinc-400'
-                      )}>
-                        {autoLineBreak ? t('advanced.enabled') : t('advanced.disabled')}
-                      </span>
-                    </div>
-                  </AdvancedParamRow>
+            {/* Card: Subtitle defaults */}
+            <div className={cn(
+              'rounded-xl border border-border bg-card p-4 space-y-3 transition-opacity duration-200',
+              (isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
+            )}>
+              <div className="flex items-center gap-1.5">
+                <Type className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <Label className="uppercase tracking-wider text-[10px]">{t('subtitleDefaults.label')}</Label>
+                <span className="text-[11px] text-muted-foreground/60">{t('subtitleDefaults.hint')}</span>
+              </div>
+              {/* Top row: size / textColor / outlineColor / fade.  The
+                  outline-thickness slider gets its own row below because
+                  its natural width (96 px slider + 24 px readout) does
+                  not fit comfortably alongside four other controls in a
+                  narrow right column once lg compresses. */}
+              <div className="grid grid-cols-4 gap-3">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1">
+                    <Label>{t('subtitleDefaults.size')}</Label>
+                    <HelpIcon content={t('subtitleDefaults.helpSize')} />
+                  </div>
+                  <input
+                    key={defaults.fontSizePx}
+                    type="number"
+                    min={FONT_SIZE_MIN_PX}
+                    max={FONT_SIZE_MAX_PX}
+                    defaultValue={defaults.fontSizePx}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10)
+                      setFontSizeOutOfRange(!isNaN(v) && (v < FONT_SIZE_MIN_PX || v > FONT_SIZE_MAX_PX))
+                    }}
+                    onBlur={(e) => {
+                      setFontSizeOutOfRange(false)
+                      const v = parseInt(e.target.value, 10)
+                      if (isNaN(v)) return
+                      setDefaults({ fontSizePx: Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, v)) })
+                    }}
+                    className={cn(
+                      'h-9 w-full rounded-md border bg-input px-2 text-center text-[13px] text-foreground focus:outline-none focus:ring-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
+                      fontSizeOutOfRange
+                        ? 'border-[hsl(var(--warning)/0.6)] focus:ring-[hsl(var(--warning)/0.3)]'
+                        : 'border-border focus:ring-ring/30'
+                    )}
+                  />
                 </div>
-
-                {/* VAD section */}
-                <div className="space-y-0.5">
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-300 mb-2">
-                    {t('advanced.vad')}
-                  </p>
-                  {/* vadFilter */}
-                  <AdvancedParamRow
-                    label={t('advanced.vadFilter')}
-                    help={t('advanced.vadFilterHelp')}
-                    changed={transcriptionAdvanced.vadFilter !== TRANSCRIPTION_DEFAULTS.vadFilter}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={transcriptionAdvanced.vadFilter}
-                        onCheckedChange={(v) => setTranscriptionAdvanced({ vadFilter: v })}
-                      />
-                      <span className={cn(
-                        'text-[12px] transition-colors duration-150',
-                        transcriptionAdvanced.vadFilter !== TRANSCRIPTION_DEFAULTS.vadFilter
-                          ? 'text-amber-400' : 'text-zinc-400'
-                      )}>
-                        {transcriptionAdvanced.vadFilter ? t('advanced.enabled') : t('advanced.disabled')}
-                      </span>
-                    </div>
-                  </AdvancedParamRow>
-                  {/* vadThreshold — only when vadFilter is on */}
-                  {transcriptionAdvanced.vadFilter && (
-                    <AdvancedParamRow
-                      label={t('advanced.vadThreshold')}
-                      help={t('advanced.vadThresholdHelp')}
-                      changed={transcriptionAdvanced.vadThreshold !== TRANSCRIPTION_DEFAULTS.vadThreshold}
-                    >
-                      <input
-                        key={transcriptionAdvanced.vadThreshold}
-                        type="number"
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        defaultValue={transcriptionAdvanced.vadThreshold}
-                        onBlur={(e) => {
-                          const v = parseFloat(e.target.value)
-                          if (isNaN(v)) return
-                          setTranscriptionAdvanced({ vadThreshold: Math.min(1, Math.max(0, Math.round(v * 100) / 100)) })
-                        }}
-                        className={cn(
-                          'w-20 h-7 rounded-md border bg-zinc-950 px-2 text-center text-[13px] focus:outline-none focus:ring-2 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-                          transcriptionAdvanced.vadThreshold !== TRANSCRIPTION_DEFAULTS.vadThreshold
-                            ? 'border-amber-400/60 text-amber-400 focus:ring-amber-400/30'
-                            : 'border-zinc-700 text-zinc-200 focus:ring-green-500/30'
-                        )}
-                      />
-                    </AdvancedParamRow>
-                  )}
-                  {/* minSpeechDurationMs */}
-                  <AdvancedParamRow
-                    label={t('advanced.minSpeechDuration')}
-                    help={t('advanced.minSpeechDurationHelp')}
-                    changed={transcriptionAdvanced.minSpeechDurationMs !== TRANSCRIPTION_DEFAULTS.minSpeechDurationMs}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        key={transcriptionAdvanced.minSpeechDurationMs}
-                        type="number"
-                        min={50}
-                        max={1000}
-                        step={50}
-                        defaultValue={transcriptionAdvanced.minSpeechDurationMs}
-                        onBlur={(e) => {
-                          const v = parseInt(e.target.value, 10)
-                          if (isNaN(v)) return
-                          setTranscriptionAdvanced({ minSpeechDurationMs: Math.min(1000, Math.max(50, v)) })
-                        }}
-                        className={cn(
-                          'w-20 h-7 rounded-md border bg-zinc-950 px-2 text-center text-[13px] focus:outline-none focus:ring-2 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-                          transcriptionAdvanced.minSpeechDurationMs !== TRANSCRIPTION_DEFAULTS.minSpeechDurationMs
-                            ? 'border-amber-400/60 text-amber-400 focus:ring-amber-400/30'
-                            : 'border-zinc-700 text-zinc-200 focus:ring-green-500/30'
-                        )}
-                      />
-                      <span className="text-[11px] text-zinc-600">ms</span>
-                    </div>
-                  </AdvancedParamRow>
-                  {/* minSilenceDurationMs */}
-                  <AdvancedParamRow
-                    label={t('advanced.minSilenceDuration')}
-                    help={t('advanced.minSilenceDurationHelp')}
-                    changed={transcriptionAdvanced.minSilenceDurationMs !== TRANSCRIPTION_DEFAULTS.minSilenceDurationMs}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        key={transcriptionAdvanced.minSilenceDurationMs}
-                        type="number"
-                        min={100}
-                        max={5000}
-                        step={100}
-                        defaultValue={transcriptionAdvanced.minSilenceDurationMs}
-                        onBlur={(e) => {
-                          const v = parseInt(e.target.value, 10)
-                          if (isNaN(v)) return
-                          setTranscriptionAdvanced({ minSilenceDurationMs: Math.min(5000, Math.max(100, v)) })
-                        }}
-                        className={cn(
-                          'w-20 h-7 rounded-md border bg-zinc-950 px-2 text-center text-[13px] focus:outline-none focus:ring-2 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-                          transcriptionAdvanced.minSilenceDurationMs !== TRANSCRIPTION_DEFAULTS.minSilenceDurationMs
-                            ? 'border-amber-400/60 text-amber-400 focus:ring-amber-400/30'
-                            : 'border-zinc-700 text-zinc-200 focus:ring-green-500/30'
-                        )}
-                      />
-                      <span className="text-[11px] text-zinc-600">ms</span>
-                    </div>
-                  </AdvancedParamRow>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1">
+                    <Label>{t('subtitleDefaults.textColor')}</Label>
+                    <HelpIcon content={t('subtitleDefaults.helpTextColor')} />
+                  </div>
+                  <ColorPicker value={defaults.textColorHex} onChange={(hex) => setDefaults({ textColorHex: hex })} />
                 </div>
-
-                {/* Recognition section */}
-                <div className="space-y-0.5">
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-300 mb-2">
-                    {t('advanced.recognition')}
-                  </p>
-                  {/* beamSize */}
-                  <AdvancedParamRow
-                    label={t('advanced.beamSize')}
-                    help={t('advanced.beamSizeHelp')}
-                    changed={transcriptionAdvanced.beamSize !== TRANSCRIPTION_DEFAULTS.beamSize}
-                  >
-                    <input
-                      key={transcriptionAdvanced.beamSize}
-                      type="number"
-                      min={1}
-                      max={20}
-                      step={1}
-                      defaultValue={transcriptionAdvanced.beamSize}
-                      onBlur={(e) => {
-                        const v = parseInt(e.target.value, 10)
-                        if (isNaN(v)) return
-                        setTranscriptionAdvanced({ beamSize: Math.min(20, Math.max(1, v)) })
-                      }}
-                      className={cn(
-                        'w-20 h-7 rounded-md border bg-zinc-950 px-2 text-center text-[13px] focus:outline-none focus:ring-2 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-                        transcriptionAdvanced.beamSize !== TRANSCRIPTION_DEFAULTS.beamSize
-                          ? 'border-amber-400/60 text-amber-400 focus:ring-amber-400/30'
-                          : 'border-zinc-700 text-zinc-200 focus:ring-green-500/30'
-                      )}
-                    />
-                  </AdvancedParamRow>
-                  {/* language */}
-                  <AdvancedParamRow
-                    label={t('advanced.language')}
-                    help={t('advanced.languageHelp')}
-                    changed={transcriptionAdvanced.language !== TRANSCRIPTION_DEFAULTS.language}
-                  >
-                    <Select
-                      value={transcriptionAdvanced.language}
-                      onValueChange={(v) => setTranscriptionAdvanced({ language: v })}
-                    >
-                      <SelectTrigger className={cn(
-                        'w-36 h-7 text-[13px] border bg-zinc-950',
-                        transcriptionAdvanced.language !== TRANSCRIPTION_DEFAULTS.language
-                          ? 'border-amber-400/60 text-amber-400'
-                          : 'border-zinc-700 text-zinc-200'
-                      )}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(['auto','ja','en','zh','ko','es','fr','de','pt','ru','ar'] as const).map((code) => (
-                          <SelectItem key={code} value={code}>
-                            {t(`advanced.lang_${code}`)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </AdvancedParamRow>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1">
+                    <Label>{t('subtitleDefaults.outlineColor')}</Label>
+                    <HelpIcon content={t('subtitleDefaults.helpOutlineColor')} />
+                  </div>
+                  <ColorPicker value={defaults.outlineColorHex} onChange={(hex) => setDefaults({ outlineColorHex: hex })} />
                 </div>
-
-                {/* Reset + note row */}
-                <div className="flex items-center justify-between pt-1">
-                  <p className="text-[11px] italic text-zinc-600">
-                    {t('advanced.futureNote')}
-                  </p>
-                  {isAdvancedChanged && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        resetTranscriptionAdvanced()
-                        setAutoLineBreak(true)
-                      }}
-                      className="h-7 text-[12px] text-zinc-500 hover:text-zinc-300 gap-1.5 flex-shrink-0"
-                    >
-                      <RotateCcw className="h-3 w-3" />
-                      {t('advanced.resetToDefaults')}
-                    </Button>
-                  )}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1">
+                    <Label>{t('subtitleDefaults.fade')}</Label>
+                    <HelpIcon content={t('subtitleDefaults.helpFade')} />
+                  </div>
+                  <div className="flex items-center gap-2 h-9">
+                    <Switch checked={defaults.fadeEnabled} onCheckedChange={(v) => setDefaults({ fadeEnabled: v })} />
+                    <span className="text-[12px] text-muted-foreground">
+                      {defaults.fadeEnabled ? t('subtitleDefaults.fadeOn') : t('subtitleDefaults.fadeOff')}
+                    </span>
+                  </div>
                 </div>
-
+              </div>
+              {/* Outline thickness — shared slider component (same one
+                  Step 2 uses for per-row + bulk-edit) so the look and
+                  commit semantics stay aligned across surfaces. */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1">
+                  <Label>{t('subtitleDefaults.stroke')}</Label>
+                  <HelpIcon content={t('subtitleDefaults.helpStroke')} />
+                </div>
+                <OutlineThicknessSlider
+                  value={defaults.outlineThicknessPx}
+                  onCommit={(v) => setDefaults({ outlineThicknessPx: v })}
+                  ariaLabel={t('subtitleDefaults.stroke')}
+                />
               </div>
             </div>
+
+            {/* Live preview — recomputes on every defaults change.  See
+                feature/ui-redesign commit 199e3ce for the contract. */}
+            <StyleSamplePreview defaults={defaults} thumbnail={thumbnail} video={video} />
           </div>
         </div>
 
       </div>
+
+      {/* Advanced transcription parameters live in their own dialog rather
+          than an inline accordion now — Step 1 stays compact and the
+          deep VAD / recognition knobs are one click away when needed. */}
+      <TranscriptionAdvancedDialog
+        open={advancedDialogOpen}
+        onOpenChange={setAdvancedDialogOpen}
+      />
 
       {/* Cancel transcription dialog */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
