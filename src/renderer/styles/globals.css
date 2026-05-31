@@ -60,9 +60,26 @@
      * "Render again / Open file / Show in folder" (workflow) is split
      * from "Support" (meta) by a 1px column.  Themed via CSS var so a
      * future light theme can dial the contrast separately from --border.
+     *
+     * Also reused as the "quiet outline" colour for buttons that need
+     * to register as a distinct category without claiming primary
+     * status (Step 3's Support button).  --separator-strong is the
+     * paired hover-state value so the outline visibly lifts on
+     * pointer-in without jumping to a saturated accent.
      */
     --separator: 240 5% 30%;              /* dark mode: ~zinc-700 */
     --separator-alpha: 0.6;
+    --separator-strong: 240 5% 40%;       /* dark mode: ~zinc-600 (hover) */
+
+    /*
+     * Single low-saturation warm accent shared by every "support /
+     * appreciate" surface — Step 3's Heart icon, the command palette's
+     * support entry, and any future donate touchpoint.  Defined here
+     * (not in tokens.ts) so a future light theme can swap it without a
+     * code change.  Rose-300-ish in dark; light mode will want a deeper
+     * rose-500-ish to keep contrast against a lighter background.
+     */
+    --accent-soft: 351 95% 81%;
 
     /* shadcn radius — matches our rounded-lg (8px) */
     --radius: 0.5rem;
