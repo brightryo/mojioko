@@ -29,6 +29,15 @@ interface UiStore {
    */
   videoCurrentTimeSec: number
   /**
+   * VideoPreviewPanel collapsed/expanded state.  Session-only — defaults
+   * to expanded on every fresh mount so the user always lands with the
+   * preview visible.  Collapsing it (e.g. to reclaim vertical space for
+   * the subtitle table at narrow window widths, or to clear room for a
+   * future timeline view) is remembered across navigations within the
+   * session only.
+   */
+  videoPreviewExpanded: boolean
+  /**
    * One-shot "scroll this row into view" request consumed by SubtitleTable.
    *
    * Distinct from `focusedRowId` because:
@@ -68,6 +77,7 @@ interface UiStore {
   addRecentColor: (hex: string) => void
   setVideoSeekRequest: (sec: number | null) => void
   setVideoCurrentTimeSec: (sec: number) => void
+  setVideoPreviewExpanded: (open: boolean) => void
   setScrollToRowId: (id: string | null) => void
   /** Replace the entire selection set (used by select-all / Ctrl+A). */
   setRowSelection: (ids: ReadonlySet<string>) => void
@@ -94,6 +104,7 @@ export const useUiStore = create<UiStore>((set) => ({
   recentColors: [],
   videoSeekRequestSec: null,
   videoCurrentTimeSec: 0,
+  videoPreviewExpanded: true,
   scrollToRowId: null,
   selectedRowIds: new Set<string>(),
   selectionAnchorId: null,
@@ -113,6 +124,7 @@ export const useUiStore = create<UiStore>((set) => ({
     }),
   setVideoSeekRequest: (sec) => set({ videoSeekRequestSec: sec }),
   setVideoCurrentTimeSec: (sec) => set({ videoCurrentTimeSec: sec }),
+  setVideoPreviewExpanded: (open) => set({ videoPreviewExpanded: open }),
   setScrollToRowId: (id) => set({ scrollToRowId: id }),
   setRowSelection: (ids) =>
     set((s) => ({

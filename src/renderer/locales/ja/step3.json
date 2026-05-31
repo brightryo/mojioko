@@ -59,25 +59,6 @@
     "renderComplete": "書き出し完了",
     "encoderFallback": "エンコーダー {{requested}} は使用できないため、{{actual}} にフォールバックします"
   },
-  "subtitlePosition": {
-    "title": "字幕の位置",
-    "horizontal": "水平位置",
-    "vertical": "垂直位置",
-    "margin": "縦マージン (px)",
-    "left": "左",
-    "center": "中央",
-    "right": "右",
-    "top": "上",
-    "bottom": "下"
-  },
-  "background": {
-    "title": "字幕の背景",
-    "color": "背景色",
-    "black": "黒",
-    "white": "白",
-    "opacity": "透過率",
-    "outlineNote": "※ 背景を有効にするとアウトライン表示は無効になります"
-  },
   "outputFormat": {
     "label": "出力形式",
     "labelWithInput": "出力形式 (入力動画: {{ext}})",
