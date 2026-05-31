@@ -53,6 +53,17 @@
     --row-selected-alpha: 0.10;
     --row-selected-border: 217 91% 60%;
 
+    /*
+     * Soft inline separator (thinner than --border).  Used to demarcate
+     * adjacent button clusters when their categories differ but neither
+     * is the primary action — e.g. Step 3's success-state footer where
+     * "Render again / Open file / Show in folder" (workflow) is split
+     * from "Support" (meta) by a 1px column.  Themed via CSS var so a
+     * future light theme can dial the contrast separately from --border.
+     */
+    --separator: 240 5% 30%;              /* dark mode: ~zinc-700 */
+    --separator-alpha: 0.6;
+
     /* shadcn radius — matches our rounded-lg (8px) */
     --radius: 0.5rem;
   }
