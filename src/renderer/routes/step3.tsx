@@ -307,17 +307,24 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
 
         {/* IDLE — 2-column settings layout.
             Left: Summary (read-only, confirmation). Right: settings stack.
+            Default CSS-grid `align-items: stretch` lets the left card
+            grow to match the (taller) right column's height, and the
+            Summary card forwards that height through to its row list
+            (flex-1 on each row) so the rows distribute evenly instead
+            of stacking at the top with empty space below.
             No `lg:` breakpoint needed: at the 960px minimum window the
-            ratio still yields ~380 / ~530 px columns which both sides fit
-            into.  Outer AppShell scroll handles vertical overflow. */}
+            ratio still yields ~380 / ~530 px columns which both sides
+            fit into.  Outer AppShell scroll handles vertical overflow. */}
         {renderState === 'idle' && (
-        <div className="grid gap-4 items-start" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
           {/* Left: Summary — read-only confirmation panel.  Sits left of
               the settings stack so the user's L→R scan reads "what am I
-              about to render" then "what controls am I tweaking". */}
-          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              about to render" then "what controls am I tweaking".  Card
+              is a flex column so the row list inside can flex-1 against
+              the stretched grid-cell height. */}
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
             <Label className="uppercase tracking-wider text-[10px]">{t('summary.label')}</Label>
-            <div className="space-y-0 divide-y divide-border/50">
+            <div className="mt-3 flex-1 flex flex-col divide-y divide-border/50">
               <SummaryRow label={t('summary.resolution')} value={video ? `${video.widthPx}×${video.heightPx}` : '—'} />
               <SummaryRow label={t('summary.duration')} value={video ? formatDuration(durationSec) : '—'} />
               <SummaryRow label={t('summary.format')} value={video ? `${displayContainer} / h264` : '—'} />
@@ -545,8 +552,16 @@ function OutputFormatCard({
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
+  // flex-1 makes each row claim an equal slice of the parent's height —
+  // the parent is a `flex-1 flex flex-col` inside a stretched grid cell,
+  // so the 7 rows distribute themselves across the cell's full height
+  // and the Summary card fills the same vertical space as the right
+  // column's Output format + Audio mode stack.  min-h-[28px] is the
+  // floor that keeps the layout compact when the parent has no extra
+  // height to share (e.g. a future surface that uses this component in
+  // a tighter container).
   return (
-    <div className="flex items-center justify-between py-2">
+    <div className="flex flex-1 items-center justify-between py-2 min-h-[28px]">
       <span className="text-[12px] text-muted-foreground">{label}</span>
       <span className="text-[12px] text-foreground font-mono tabular-nums">{value}</span>
     </div>
