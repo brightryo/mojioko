@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2026-06-01
+
+First minor release: UI redesign, bulk editing, and layout reorganization.
+
+### Added
+
+- Step 2: Multi-row selection with a checkbox column
+  - Ctrl+A selects all visible rows, Esc clears the selection
+- Step 2: Bulk edit bar — apply style changes (text color, outline color,
+  outline thickness, fade) to multiple selected rows in one operation
+  - The whole bulk operation collapses to a single undo entry
+- Step 2: Bulk auto line-wrap action — re-flow selected rows to fit the
+  video width using accurate glyph-width metrics
+- Step 1: Live subtitle style sample preview in the new
+  subtitle style dialog
+- Step 1: Advanced transcription settings (VAD threshold, beam size,
+  language, etc.) promoted to a dedicated dialog
+- Shared outline-thickness slider used consistently across Step 1
+  style dialog, Step 2 per-row, and Step 2 bulk edit
+
+### Changed
+
+- Major UI restructuring so each step's first view fits within
+  the 1280×820 default window:
+  - Step 1: Compact first view focused on video + audio tracks;
+    subtitle style settings moved to a modal triggered from the
+    Start button split-caret
+  - Step 2: Subtitle position and background controls moved here from
+    Step 3 and embedded in the video preview panel
+  - Step 3: Recast as a render-settings panel (live preview removed,
+    now provided on Step 2 instead)
+- Default window size: 1280×820 (content size); minimum 960×640
+- Auto line-wrap option moved from "Advanced" to the subtitle
+  style defaults, with live reflection in the preview
+- New UI code routed through shadcn theme tokens
+  (preparatory refactor for future light theme support)
+
+### Fixed
+
+- Command palette "Support the project" entry did not open the
+  donation dialog; now wired up correctly
+
+---
+
 ## [1.0.1] - 2026-05-30
 
 First patch release.
