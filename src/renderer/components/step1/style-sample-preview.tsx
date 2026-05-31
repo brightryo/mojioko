@@ -3,6 +3,12 @@ import { useTranslation } from 'react-i18next'
 import { Type } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
+import { applyAutoLineBreak } from '@/lib/auto-line-break'
+import {
+  getSubtitleFont,
+  loadSubtitleFont,
+  type SubtitleFont
+} from '@/lib/font-metrics'
 import type {
   TranscriptionDefaults,
   VideoInfo,
@@ -44,6 +50,13 @@ interface StyleSamplePreviewProps {
   defaults: TranscriptionDefaults
   thumbnail: string | null
   video: VideoInfo | null
+  /**
+   * When true, the sample text is passed through applyAutoLineBreak so the
+   * preview mirrors what every transcribed row will look like after Step 1's
+   * post-transcription line-break pass.  Passes through the same glyph-width
+   * pipeline (opentype.js + libassScale) used by the production code.
+   */
+  autoLineBreak: boolean
 }
 
 /**
@@ -64,7 +77,8 @@ interface StyleSamplePreviewProps {
 export function StyleSamplePreview({
   defaults,
   thumbnail,
-  video
+  video,
+  autoLineBreak
 }: StyleSamplePreviewProps) {
   const { t } = useTranslation('step1')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -84,25 +98,68 @@ export function StyleSamplePreview({
     return () => obs.disconnect()
   }, [])
 
+  // Subscribe to the subtitle font so applyAutoLineBreak below can use
+  // glyph-accurate widths once the font finishes loading.  Initial value
+  // pulls from the module cache: if the font is already loaded (Step 1
+  // preloaded it on mount, or a previous visit cached it), we get an
+  // immediate hit and avoid the brief char-class-fallback frame.
+  // Otherwise, the effect fires loadSubtitleFont() and re-renders this
+  // component when it resolves — the user sees the break position shift
+  // by a few pixels on the first ~50-150ms paint, which is the documented
+  // trade-off for not blocking the whole preview on font fetch.
+  const [font, setFont] = useState<SubtitleFont | null>(getSubtitleFont)
+  useEffect(() => {
+    if (font) return
+    let cancelled = false
+    loadSubtitleFont()
+      .then((loaded) => {
+        if (!cancelled) setFont(loaded)
+      })
+      .catch(() => {
+        // Load failed — applyAutoLineBreak will silently fall back to the
+        // character-class width estimate (which over-estimates wide-glyph
+        // widths by ~45 % vs libass, so the preview may break slightly
+        // earlier than the real burn-in).  This degrades gracefully
+        // rather than throwing.
+      })
+    return () => { cancelled = true }
+  }, [font])
+
   // Long-form sample text — chosen so the user can verify line wrapping,
   // font-size sanity and outline visibility at a glance.  A single short
   // word ("Sample") would hide overflow/wrap problems that only show up
   // with a realistic-length caption.
-  //
-  // The fallback string keeps the preview legible while this branch's
-  // commits land in their planned order: commit A introduces this
-  // component, commit C adds the proper localised key.  Once commit C is
-  // in, t() returns the localised value and the fallback is unused.
   const sampleText = t(
     'subtitleDefaults.sampleText',
     'これはサンプル字幕です。書き出し後の見た目をここで確認できます。'
   )
 
+  const videoWidthPx = video?.widthPx ?? FALLBACK_VIDEO_WIDTH
+  const videoHeightPx = video?.heightPx ?? FALLBACK_VIDEO_HEIGHT
+  const aspectRatio = `${videoWidthPx} / ${videoHeightPx}`
+
   const sampleEntry: SubtitleEntry = useMemo(() => {
+    // When the user has enabled auto line break, run the SAME function the
+    // production transcription pipeline uses (step1.tsx → applyAutoLineBreak)
+    // so the preview's wrap positions match what will be burned in once
+    // they hit Start.  If the font is not yet loaded, applyAutoLineBreak
+    // silently falls back to a character-class width estimate; the visible
+    // wrap may shift by a few pixels when the font finishes loading and
+    // the useEffect above re-renders us.
+    const wrappedText = autoLineBreak
+      ? applyAutoLineBreak(
+          sampleText,
+          defaults.fontSizePx,
+          defaults.outlineThicknessPx,
+          videoWidthPx,
+          font
+        )
+      : sampleText
+
     const base = {
       startSec: 0,
       endSec: 1,
-      text: sampleText,
+      text: wrappedText,
       fontSizePx: defaults.fontSizePx,
       textColorHex: defaults.textColorHex,
       outlineColorHex: defaults.outlineColorHex,
@@ -118,16 +175,15 @@ export function StyleSamplePreview({
     }
   }, [
     sampleText,
+    autoLineBreak,
+    font,
+    videoWidthPx,
     defaults.fontSizePx,
     defaults.textColorHex,
     defaults.outlineColorHex,
     defaults.outlineThicknessPx,
     defaults.fadeEnabled
   ])
-
-  const videoWidthPx = video?.widthPx ?? FALLBACK_VIDEO_WIDTH
-  const videoHeightPx = video?.heightPx ?? FALLBACK_VIDEO_HEIGHT
-  const aspectRatio = `${videoWidthPx} / ${videoHeightPx}`
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 space-y-2">
