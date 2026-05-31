@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Play, Shield, Music, PanelBottom, FileVideo, Heart, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
+import { Play, Shield, Music, FileVideo, Heart, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -41,14 +40,15 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
 
   const video = useProjectStore((s) => s.video)
   const entries = useProjectStore((s) => s.entries)
+  // burnin / subtitleBackground are still consumed at render time to feed
+  // startBurnin's burninOpts, but the editing UI moved to Step 2's
+  // VideoPreviewPanel.  Only the read-side hooks remain here.
   const burnin = useSettingsStore((s) => s.burnin)
-  const updateBurnin = useSettingsStore((s) => s.updateBurnin)
   const encoderSetting = useSettingsStore((s) => s.encoder)
   const audioMode = useSettingsStore((s) => s.audioMode)
   const setAudioMode = useSettingsStore((s) => s.setAudioMode)
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   const subtitleBackground = useSettingsStore((s) => s.subtitleBackground)
-  const setSubtitleBackground = useSettingsStore((s) => s.setSubtitleBackground)
   const outputContainer = useSettingsStore((s) => s.outputContainer)
   const setOutputContainer = useSettingsStore((s) => s.setOutputContainer)
   const setDonationDialogOpen = useUiStore((s) => s.setDonationDialogOpen)
@@ -338,124 +338,13 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
               setOutputContainer={setOutputContainer}
             />
 
-            {/* Subtitle position */}
-            <div className="rounded-xl border border-border bg-card p-4">
-              <Label className="uppercase tracking-wider text-[10px] mb-3 block">{t('subtitlePosition.title')}</Label>
-              <div className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3">
-                <span className="text-[12px] text-muted-foreground whitespace-nowrap">{t('subtitlePosition.horizontal')}</span>
-                <div className="flex rounded-md overflow-hidden border border-border">
-                  {(['left', 'center', 'right'] as const).map((pos) => (
-                    <button
-                      key={pos}
-                      type="button"
-                      onClick={() => updateBurnin({ horizontalPosition: pos })}
-                      className={cn(
-                        'flex-1 py-1.5 text-[11px] transition-colors duration-150',
-                        burnin.horizontalPosition === pos
-                          ? 'bg-primary/15 text-primary font-medium'
-                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                      )}
-                    >
-                      {t(`subtitlePosition.${pos}`)}
-                    </button>
-                  ))}
-                </div>
-
-                <span className="text-[12px] text-muted-foreground whitespace-nowrap">{t('subtitlePosition.vertical')}</span>
-                <div className="flex rounded-md overflow-hidden border border-border">
-                  {(['top', 'bottom'] as const).map((pos) => (
-                    <button
-                      key={pos}
-                      type="button"
-                      onClick={() => updateBurnin({ verticalPosition: pos })}
-                      className={cn(
-                        'flex-1 py-1.5 text-[11px] transition-colors duration-150',
-                        burnin.verticalPosition === pos
-                          ? 'bg-primary/15 text-primary font-medium'
-                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                      )}
-                    >
-                      {t(`subtitlePosition.${pos}`)}
-                    </button>
-                  ))}
-                </div>
-
-                <span className="text-[12px] text-muted-foreground whitespace-nowrap">{t('subtitlePosition.margin')}</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={300}
-                  value={burnin.verticalMarginPx}
-                  onChange={(e) => updateBurnin({ verticalMarginPx: parseInt(e.target.value, 10) || 0 })}
-                  className="h-8 w-full rounded-md border border-border bg-input px-3 text-center text-[12px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                />
-              </div>
-            </div>
-
-            {/* Subtitle background */}
-            <div className="rounded-xl border border-border bg-card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-1.5">
-                  <PanelBottom className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <Label className="uppercase tracking-wider text-[10px]">{t('background.title')}</Label>
-                </div>
-                <Switch
-                  checked={subtitleBackground.enabled}
-                  onCheckedChange={(checked) => setSubtitleBackground({ ...subtitleBackground, enabled: checked })}
-                />
-              </div>
-
-              {/* Advisory note: not an error, semantic via --warning. */}
-              {subtitleBackground.enabled && (
-                <p className="mb-3 text-xs text-[hsl(var(--warning))]">
-                  {t('background.outlineNote')}
-                </p>
-              )}
-
-              <div className={cn(
-                'grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3 transition-opacity duration-150',
-                !subtitleBackground.enabled && 'opacity-40 pointer-events-none'
-              )}>
-                <span className="text-[12px] text-muted-foreground whitespace-nowrap">{t('background.color')}</span>
-                <div className="flex rounded-md overflow-hidden border border-border">
-                  {(['black', 'white'] as const).map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setSubtitleBackground({ ...subtitleBackground, color: c })}
-                      className={cn(
-                        'flex-1 py-1.5 text-[11px] transition-colors duration-150',
-                        subtitleBackground.color === c
-                          ? 'bg-primary/15 text-primary font-medium'
-                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                      )}
-                    >
-                      {t(`background.${c}`)}
-                    </button>
-                  ))}
-                </div>
-
-                <span className="text-[12px] text-muted-foreground whitespace-nowrap">{t('background.opacity')}</span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={10}
-                    value={subtitleBackground.opacityPercent}
-                    onChange={(e) => setSubtitleBackground({
-                      ...subtitleBackground,
-                      opacityPercent: parseInt(e.target.value, 10)
-                    })}
-                    style={{ accentColor: 'hsl(var(--primary))' }}
-                    className="flex-1 h-1.5 cursor-pointer"
-                  />
-                  <span className="text-[12px] text-muted-foreground font-mono tabular-nums w-8 text-right flex-shrink-0">
-                    {subtitleBackground.opacityPercent}%
-                  </span>
-                </div>
-              </div>
-            </div>
+            {/* Subtitle position / background settings moved to Step 2's
+                VideoPreviewPanel so the user can adjust them while
+                watching the same preview that visualises them.  Step 3
+                still reads burnin / subtitleBackground from the store
+                (see burninOpts below) — the values are unchanged, just
+                the editing UI relocated.  Step 3 layout is reduced
+                accordingly (next pass; see follow-up B2). */}
 
             {/* Audio mode */}
             <div className="rounded-xl border border-border bg-card p-4 space-y-2">

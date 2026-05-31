@@ -157,5 +157,35 @@
   },
   "warning": {
     "exceedsDuration": "Exceeds video duration"
+  },
+  "subtitleLayout": {
+    "previewNote": "Approximate preview. Verify with the actual exported video.",
+    "layoutGroup": "Subtitle layout",
+    "backgroundGroup": "Subtitle background",
+    "horizontalShort": "Horizontal",
+    "verticalShort": "Vertical",
+    "bgToggleLabel": "Background",
+    "bgColorLabel": "Color",
+    "bgOpacityLabel": "Opacity"
+  },
+  "subtitlePosition": {
+    "title": "Subtitle position",
+    "horizontal": "Horizontal",
+    "vertical": "Vertical",
+    "margin": "Vertical margin (px)",
+    "marginShort": "Margin",
+    "left": "Left",
+    "center": "Center",
+    "right": "Right",
+    "top": "Top",
+    "bottom": "Bottom"
+  },
+  "background": {
+    "title": "Subtitle background",
+    "color": "Color",
+    "black": "Black",
+    "white": "White",
+    "opacity": "Opacity",
+    "outlineNote": "Note: Outline is disabled when background is enabled"
   }
 }

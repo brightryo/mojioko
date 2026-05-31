@@ -59,25 +59,6 @@
     "renderComplete": "Render complete",
     "encoderFallback": "Encoder {{requested}} is not available; falling back to {{actual}}"
   },
-  "subtitlePosition": {
-    "title": "Subtitle position",
-    "horizontal": "Horizontal",
-    "vertical": "Vertical",
-    "margin": "Vertical margin (px)",
-    "left": "Left",
-    "center": "Center",
-    "right": "Right",
-    "top": "Top",
-    "bottom": "Bottom"
-  },
-  "background": {
-    "title": "Subtitle background",
-    "color": "Color",
-    "black": "Black",
-    "white": "White",
-    "opacity": "Opacity",
-    "outlineNote": "Note: Outline is disabled when background is enabled"
-  },
   "outputFormat": {
     "label": "Output Format",
     "labelWithInput": "Output Format (Input: {{ext}})",
