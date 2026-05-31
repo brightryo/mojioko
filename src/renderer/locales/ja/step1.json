@@ -62,6 +62,7 @@
     "notInstalledBadge": "未ダウンロード",
     "noActiveBadge": "使用モデル未選択",
     "clickToChange": "クリックで変更",
+    "clickToSelect": "クリックして選択",
     "openFolder": "開く",
     "totalUsed": "使用容量",
     "diskFree": "空き",

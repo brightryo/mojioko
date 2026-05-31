@@ -97,15 +97,19 @@ export function WhisperModelManager({ onActiveModelChange, disabled }: WhisperMo
     refresh().catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // On first data load: open accordion only when there is no active model.
-  // Because isOpen starts false, the "active model" case never animates at all —
-  // the accordion was already closed so no jitter occurs.
-  // The "no active model" case smoothly animates open (200ms ease-out), which is
-  // correct UX — the user is prompted to download / select a model.
+  // On first data load we used to auto-expand when no active model was set.
+  // That guaranteed the user saw the model picker, but the expanded panel is
+  // ~298 px tall and pushed the Step 1 layout over the 1280×820 viewport
+  // budget — the entire route scrolled even on a fully maximised window.
+  //
+  // Now the accordion always starts collapsed.  The unselected state is
+  // still surfaced through the existing amber AlertTriangle badge (see
+  // `headerBadge` below, the `notInstalledBadge` / `noActiveBadge` branch)
+  // plus a "click to select" hint added next to the chevron, so the user
+  // can still tell at a glance that they need to pick a model.
   useEffect(() => {
     if (state && !initializedRef.current) {
       initializedRef.current = true
-      if (!state.activeModelId) setIsOpen(true)
     }
   }, [state])
 
@@ -263,10 +267,16 @@ export function WhisperModelManager({ onActiveModelChange, disabled }: WhisperMo
         {/* Status badge */}
         {headerBadge}
 
-        {/* "Click to change" hint — only when collapsed with active model */}
-        {!isOpen && hasActive && (
+        {/* Click-to-expand hint.  Shown in two flavours:
+              - hasActive  → "click to change"
+              - !hasActive → "click to select" (paired with the amber
+                             AlertTriangle badge above so the user has
+                             two reinforcing cues that an action is
+                             required, now that the accordion no longer
+                             auto-expands on first run). */}
+        {!isOpen && state && (
           <span className="text-[11px] text-zinc-500 flex-shrink-0 ml-1">
-            {t('model.clickToChange')}
+            {hasActive ? t('model.clickToChange') : t('model.clickToSelect')}
           </span>
         )}
 
