@@ -35,7 +35,7 @@ import { formatBytes } from '@/lib/format'
 import type { SubtitleEntry as SubtitleEntryType, WhisperModelId } from '../../shared/types'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../shared/constants'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
-import { getSubtitleFont, loadSubtitleFont } from '@/lib/font-metrics'
+import { loadSubtitleFont } from '@/lib/font-metrics'
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -69,10 +69,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // dialog now owns reads + writes for editing those fields, but step1
   // still needs the value at run-time.
   const transcriptionAdvanced = useSettingsStore((s) => s.transcriptionAdvanced)
-  // Same rationale for autoLineBreak — read here so the post-transcription
-  // line-break pass can branch on the user's choice; the toggle UI lives in
-  // the dialog.
+  // autoLineBreak is consumed in two places: the post-transcription
+  // line-break pass below, and the StyleSamplePreview's live wrap render
+  // (so the user can verify the wrap before paying the Whisper cost).
+  // The toggle UI itself lives in the Subtitle defaults card — autoLineBreak
+  // is a subtitle-formatting choice, not a Whisper engine parameter.
   const autoLineBreak = useSettingsStore((s) => s.autoLineBreak)
+  const setAutoLineBreak = useSettingsStore((s) => s.setAutoLineBreak)
   const resetStep3Settings = useSettingsStore((s) => s.resetStep3Settings)
 
   const isLoading = videoLoadingState === 'loading'
@@ -222,7 +225,20 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     // Apply \N line breaks to entries that exceed the video width.
     // Both `text` and `original.text` receive the same treatment so that
     // the "Reset row" button restores to the auto-broken version.
-    const font = getSubtitleFont()
+    //
+    // We await loadSubtitleFont() here (rather than reading the cache via
+    // getSubtitleFont()) so applyAutoLineBreak is guaranteed to use the
+    // glyph-accurate width pipeline.  Synchronous getSubtitleFont() can
+    // legitimately return null when Whisper finishes faster than the font
+    // fetch (small model + short clip + slow disk), and the fallback
+    // character-class estimate over-counts wide-glyph widths by ~45 %
+    // vs libass — so without the await, the burn-in line breaks would
+    // land ~8+ chars earlier than the preview promised.  loadSubtitleFont
+    // de-dupes via its module-level cache + in-flight promise, so this
+    // resolves immediately whenever the Step 1 mount preload (line ~93)
+    // has completed.  On load failure we fall through with null and
+    // accept the degraded fallback, matching prior behaviour.
+    const font = await loadSubtitleFont().catch(() => null)
     const finalEntries = autoLineBreak
       ? entries.map((entry) => {
           const brokenText = applyAutoLineBreak(
@@ -536,11 +552,35 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
                   ariaLabel={t('subtitleDefaults.stroke')}
                 />
               </div>
+              {/* Auto line break — subtitle-formatting decision, lives here
+                  rather than the Advanced (engine) dialog.  Toggling this
+                  immediately re-wraps the StyleSamplePreview below so the
+                  user can verify the choice before transcribing. */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1">
+                  <Label>{t('advanced.autoLineBreak')}</Label>
+                  <HelpIcon content={t('advanced.autoLineBreakHelp')} />
+                </div>
+                <div className="flex items-center gap-2 h-9">
+                  <Switch
+                    checked={autoLineBreak}
+                    onCheckedChange={(v) => setAutoLineBreak(v)}
+                  />
+                  <span className="text-[12px] text-muted-foreground">
+                    {autoLineBreak ? t('advanced.enabled') : t('advanced.disabled')}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Live preview — recomputes on every defaults change.  See
                 feature/ui-redesign commit 199e3ce for the contract. */}
-            <StyleSamplePreview defaults={defaults} thumbnail={thumbnail} video={video} />
+            <StyleSamplePreview
+              defaults={defaults}
+              thumbnail={thumbnail}
+              video={video}
+              autoLineBreak={autoLineBreak}
+            />
           </div>
         </div>
 

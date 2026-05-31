@@ -92,11 +92,13 @@ export function TranscriptionAdvancedDialog({
   const transcriptionAdvanced = useSettingsStore((s) => s.transcriptionAdvanced)
   const setTranscriptionAdvanced = useSettingsStore((s) => s.setTranscriptionAdvanced)
   const resetTranscriptionAdvanced = useSettingsStore((s) => s.resetTranscriptionAdvanced)
-  const autoLineBreak = useSettingsStore((s) => s.autoLineBreak)
-  const setAutoLineBreak = useSettingsStore((s) => s.setAutoLineBreak)
 
+  // autoLineBreak intentionally lives outside this dialog now — it is a
+  // subtitle-formatting choice (post-transcription output), not a Whisper
+  // engine parameter, so it sits in Step 1's "Subtitle defaults" card next
+  // to font size / colours / outline / fade.  The dialog reset below only
+  // touches engine fields.
   const isAdvancedChanged =
-    !autoLineBreak ||
     transcriptionAdvanced.vadFilter !== TRANSCRIPTION_DEFAULTS.vadFilter ||
     transcriptionAdvanced.vadThreshold !== TRANSCRIPTION_DEFAULTS.vadThreshold ||
     transcriptionAdvanced.minSpeechDurationMs !== TRANSCRIPTION_DEFAULTS.minSpeechDurationMs ||
@@ -124,33 +126,6 @@ export function TranscriptionAdvancedDialog({
         </DialogHeader>
 
         <div className="space-y-5 pt-1">
-          {/* ── Text formatting ─────────────────────────────────────────── */}
-          <div className="space-y-0.5">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-foreground mb-2">
-              {t('advanced.textFormatting')}
-            </p>
-            <AdvancedParamRow
-              label={t('advanced.autoLineBreak')}
-              help={t('advanced.autoLineBreakHelp')}
-              changed={!autoLineBreak}
-            >
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={autoLineBreak}
-                  onCheckedChange={(v) => setAutoLineBreak(v)}
-                />
-                <span
-                  className={cn(
-                    'text-[12px] transition-colors duration-150',
-                    !autoLineBreak ? 'text-[hsl(var(--warning))]' : 'text-muted-foreground'
-                  )}
-                >
-                  {autoLineBreak ? t('advanced.enabled') : t('advanced.disabled')}
-                </span>
-              </div>
-            </AdvancedParamRow>
-          </div>
-
           {/* ── VAD ─────────────────────────────────────────────────────── */}
           <div className="space-y-0.5">
             <p className="text-[10px] font-medium uppercase tracking-wider text-foreground mb-2">
@@ -333,8 +308,9 @@ export function TranscriptionAdvancedDialog({
                 variant="ghost"
                 size="sm"
                 onClick={() => {
+                  // Engine-only reset — autoLineBreak now lives in the
+                  // Subtitle defaults card and is reset there if needed.
                   resetTranscriptionAdvanced()
-                  setAutoLineBreak(true)
                 }}
                 className="h-7 text-[12px] text-muted-foreground hover:text-foreground gap-1.5 flex-shrink-0"
               >
