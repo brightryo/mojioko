@@ -8,27 +8,21 @@ import { getFontMeta, type FontId, type FontMeta } from '../../shared/fonts'
  * nothing for them — `document.fonts` already knows about them.
  *
  * Downloaded fonts live at `%APPDATA%/MOJIOKO/fonts/<id>/<file>.ttf` on disk.
- * The renderer cannot fetch via `file://` because of CSP / origin rules, so
- * they are reached through the custom `mojioko-font://` protocol registered
- * in `main/lib/font-protocol.ts`.  For each downloaded font we construct a
- * `FontFace` object from that URL and add it to `document.fonts` so that any
- * CSS rule referencing `font-family: '<cssFontFamily>'` resolves correctly.
+ * Bytes are fetched over IPC (`fontReadBytes`) and wrapped as a `FontFace`
+ * constructed from the resulting `ArrayBuffer`.  This deliberately avoids
+ * `fetch('mojioko-font://...')` because the renderer's strict CSP
+ * (`connect-src 'self'`) blocks custom protocols on the fetch path — and
+ * because Electron requires `registerSchemesAsPrivileged({ supportFetchAPI:
+ * true })` to enable that scheme for fetch, which we do not currently set.
  *
  * The map keys by FontId; once a font is loaded, subsequent calls return the
  * cached promise rather than refetching.  Forced reloads (e.g. after an
- * uninstall+reinstall) are handled by `evict(fontId)`.
+ * uninstall+reinstall) are handled by `evictFont(fontId)`.
  */
 
 type LoadEntry = { promise: Promise<FontFace | null>; face?: FontFace | null }
 
 const cache = new Map<FontId, LoadEntry>()
-
-function fontUrl(fontId: FontId): string {
-  // Cache buster appended in dev to force reload across HMR sessions; in prod
-  // the protocol handler always returns fresh bytes from disk so a bust is
-  // unnecessary but harmless.
-  return `mojioko-font://${fontId}/ttf`
-}
 
 async function loadOne(meta: FontMeta): Promise<FontFace | null> {
   if (meta.bundled) {
@@ -41,13 +35,15 @@ async function loadOne(meta: FontMeta): Promise<FontFace | null> {
     return null
   }
 
-  // Downloaded font — pull bytes via mojioko-font:// and wrap as a FontFace.
-  const resp = await fetch(fontUrl(meta.id))
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch font ${meta.id}: HTTP ${resp.status}`)
+  // Downloaded font — read bytes through the IPC bridge (CSP-friendly) and
+  // wrap as a FontFace.  ArrayBuffer-sourced FontFaces bypass CSP font-src
+  // entirely, so we only need connect-src 'self' for the IPC channel itself
+  // (which the renderer's preload contract already satisfies).
+  const r = await window.electronAPI.fontReadBytes(meta.id)
+  if (!r.ok) {
+    throw new Error(`fontReadBytes failed for ${meta.id}: ${r.error.message}`)
   }
-  const buf = await resp.arrayBuffer()
-  const face = new FontFace(meta.cssFontFamily, buf, {
+  const face = new FontFace(meta.cssFontFamily, r.data, {
     weight: String(meta.weight),
     style: 'normal'
   })

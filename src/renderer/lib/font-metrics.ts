@@ -47,7 +47,8 @@ async function fetchFontBytes(fontId: FontId): Promise<ArrayBuffer> {
   const meta = getFontMeta(fontId)
   // Bundled fonts: keep using the relative URL that worked in v1.1.0 so the
   // dev mode (Vite publicDir at `/fonts/...`) and packaged mode (asar's
-  // `out/renderer/fonts/...`) both resolve.  This must match the path in
+  // `out/renderer/fonts/...`) both resolve.  This path is 'self' to the
+  // renderer's CSP so the fetch is allowed.  Must match the URL in
   // fonts.css `@font-face` declarations.
   if (meta.bundled) {
     const relPath = meta.bundledRelativeDir ?? ''
@@ -56,10 +57,14 @@ async function fetchFontBytes(fontId: FontId): Promise<ArrayBuffer> {
     if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching ${url}`)
     return resp.arrayBuffer()
   }
-  // Downloaded fonts: the mojioko-font:// protocol serves them.
-  const resp = await fetch(`mojioko-font://${fontId}/ttf`)
-  if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching mojioko-font://${fontId}/ttf`)
-  return resp.arrayBuffer()
+  // Downloaded fonts: pull through the IPC bridge.  `fetch('mojioko-font://')`
+  // would be blocked by `connect-src 'self'` in the renderer CSP, and
+  // Electron also requires `registerSchemesAsPrivileged({ supportFetchAPI:
+  // true })` for fetch to reach custom protocols — neither of which we
+  // configure.  IPC bypasses both constraints cleanly.
+  const r = await window.electronAPI.fontReadBytes(fontId)
+  if (!r.ok) throw new Error(`fontReadBytes failed for ${fontId}: ${r.error.message}`)
+  return r.data
 }
 
 function entryFromBytes(buf: ArrayBuffer): FontEntry {

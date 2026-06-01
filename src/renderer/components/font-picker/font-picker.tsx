@@ -14,6 +14,7 @@ import {
 } from '@/services/font'
 import type { FontDownloadRun } from '@/services/font'
 import { ensureFontLoaded, evictFont } from '@/lib/font-registry'
+import { useUiStore } from '@/stores/ui-store'
 import { FONT_REGISTRY, type FontId, type FontsState, type FontInfo, type FontMeta, getFontMeta } from '../../../shared/fonts'
 
 interface FontPickerProps {
@@ -290,19 +291,14 @@ function FontRow({
                 </Button>
               )}
               {(status === 'installed' || meta.bundled) && (
-                <a
-                  href={meta.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
                   className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
                   title={t('fontPicker.action.viewLicense')}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    window.electronAPI?.shellOpenExternal(meta.sourceUrl).catch(() => {})
-                  }}
+                  onClick={() => useUiStore.getState().setFontLicensesDialogOpen(true)}
                 >
                   <FileText className="h-3.5 w-3.5" />
-                </a>
+                </button>
               )}
             </>
           )
