@@ -6,10 +6,75 @@ import { spawn } from 'child_process'
 import { getBinPath, getFontResolveDir } from '../lib/paths'
 import { generateAss } from './ass-generator'
 import { getBestEncoder, buildEncoderArgs } from './encoder-detector'
-import { getFontMeta, DEFAULT_FONT_ID, isFontId } from '../../shared/fonts'
+import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
 import type { BurninStartRequest, BurninEvent } from '../../shared/ipc-contracts'
 import { FfmpegError } from '../../shared/errors'
 import log from '../lib/logger'
+
+/**
+ * Collect every unique FontId referenced by this burn-in: the project
+ * default plus any per-row override.  Returns `[defaultFontId, ...overrides]`
+ * with duplicates removed.  Order is stable for log-readability — the
+ * project default is always first.
+ */
+function collectReferencedFontIds(
+  defaultFontId: FontId,
+  entries: BurninStartRequest['entries']
+): FontId[] {
+  const seen = new Set<FontId>([defaultFontId])
+  const ordered: FontId[] = [defaultFontId]
+  for (const e of entries) {
+    if (isFontId(e.fontId) && !seen.has(e.fontId)) {
+      seen.add(e.fontId)
+      ordered.push(e.fontId)
+    }
+  }
+  return ordered
+}
+
+/**
+ * Stage every referenced font's TTF into a single directory and return its
+ * path.  We copy (not symlink) because:
+ *
+ *  - Windows symlink creation requires either Developer Mode or the
+ *    `SeCreateSymbolicLinkPrivilege`, neither of which we can rely on for an
+ *    installer-delivered desktop app.
+ *  - The bundled font tree lives inside `app.asar.unpacked` / `resources/`
+ *    where we don't want to mutate.
+ *  - The copy cost is negligible (a few MB even for the largest CJK font).
+ *
+ * Throws `FfmpegError` when any referenced font lacks a TTF on disk — the
+ * renderer should already be enforcing this in REQ-021's UI, but a
+ * defensive backend check stops a bad request from spawning ffmpeg with a
+ * fontsdir that libass would silently fall through on.
+ *
+ * Caller is responsible for `fs.rm(tempDir, { recursive: true })` in a
+ * `finally` block, even on failure.
+ */
+async function stageFontsDir(fontIds: FontId[]): Promise<string> {
+  const tempDir = join(tmpdir(), `mojioko-fonts-${randomUUID()}`)
+  await fs.mkdir(tempDir, { recursive: true })
+
+  for (const id of fontIds) {
+    const meta: FontMeta = getFontMeta(id)
+    const srcDir = getFontResolveDir(meta)
+    const srcPath = join(srcDir, meta.fileName)
+    const dstPath = join(tempDir, meta.fileName)
+    try {
+      await fs.copyFile(srcPath, dstPath)
+    } catch (err) {
+      // Best effort cleanup before reporting — leaving a half-populated
+      // tempDir behind on the first failure path defeats the whole
+      // try/finally contract.
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
+      throw new FfmpegError(
+        `font asset missing for "${meta.displayName}" (${id}) — expected at ${srcPath}: ${String(err)}`
+      )
+    }
+  }
+
+  return tempDir
+}
 
 export type BurninEventCallback = (event: BurninEvent) => void
 
@@ -25,29 +90,31 @@ export async function startBurnin(
 ): Promise<void> {
   const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, fadeDurationSec, subtitleBackground, outputContainer, fontId } = request
 
-  // Resolve font choice.  Defensive: an unknown / missing fontId falls back
-  // to the bundled default so a stale renderer never blocks a burn-in.
+  // Resolve project default font.  Defensive: an unknown / missing fontId
+  // falls back to the bundled default so a stale renderer never blocks a
+  // burn-in.
   const resolvedFontId = (fontId && isFontId(fontId)) ? fontId : DEFAULT_FONT_ID
   const fontMeta = getFontMeta(resolvedFontId)
 
-  // Write ASS to temp file
+  // Collect every font referenced by this run (default + per-row overrides
+  // from REQ-021) and stage them into a single directory that libass will
+  // read on init.  Copy-based (not symlink) to dodge the Windows symlink
+  // privilege requirement.
+  const referencedFontIds = collectReferencedFontIds(resolvedFontId, entries)
+  const fontsDir = await stageFontsDir(referencedFontIds)
+  log.info(
+    `[ffmpeg-burnin] referenced fonts: ${referencedFontIds.length} — ${referencedFontIds.join(', ')}; staged at ${fontsDir}`
+  )
+
+  // Write ASS to temp file (project default goes into Style:, per-row
+  // overrides come through as \fn<family> inline tags — see ass-generator).
   const assContent = generateAss(entries, video, burnin, fadeDurationSec, subtitleBackground, fontMeta.assFontName)
   const assPath = join(tmpdir(), `mojioko-${randomUUID()}.ass`)
   await fs.writeFile(assPath, assContent, 'utf-8')
 
   const ffmpeg = getBinPath('ffmpeg')
-  // Multi-fontsdir strategy: a single burn-in always uses one selected font,
-  // so we point fontsdir at the *exact* directory containing that font's
-  // TTF — `resources/fonts/<bundledRelativeDir>/` for bundled fonts,
-  // `%APPDATA%/MOJIOKO/fonts/<font-id>/` for user-downloaded fonts.  This
-  // sidesteps the libass quirk that `fontsdir=` is a single directory
-  // (not colon-separated) and eliminates the chance of two same-name fonts
-  // colliding.  If a future feature wants per-row fonts, the plan is to
-  // assemble a temp directory at burn-in start with symlinks to every font
-  // referenced in the project and pass that combined directory instead.
-  const fontsDir = getFontResolveDir(fontMeta)
   const subtitlesFilter = `subtitles='${escapeAssPath(assPath)}':fontsdir='${escapeAssPath(fontsDir)}'`
-  log.info(`[ffmpeg-burnin] font: ${fontMeta.displayName} (${resolvedFontId}); fontsdir=${fontsDir}`)
+  log.info(`[ffmpeg-burnin] default font: ${fontMeta.displayName} (${resolvedFontId}); fontsdir=${fontsDir}`)
 
   const encoder = await getBestEncoder(encoderSetting ?? 'auto')
   const encoderArgs = buildEncoderArgs(encoder)
@@ -150,11 +217,19 @@ export async function startBurnin(
     })
 
     proc.on('close', async (code) => {
-      // Always remove the temp ASS file — it has no value outside this run.
+      // Always remove the temp ASS file + staged fontsdir — neither has any
+      // value outside this run.  Best-effort cleanup: a failure here must
+      // not bubble up because the user already sees ffmpeg's own status
+      // via the events emitted below.
       try {
         await fs.unlink(assPath)
       } catch {
         // ignore cleanup failure
+      }
+      try {
+        await fs.rm(fontsDir, { recursive: true, force: true })
+      } catch (cleanupErr) {
+        log.warn(`[ffmpeg-burnin] could not remove staged fontsdir ${fontsDir}: ${String(cleanupErr)}`)
       }
 
       // Decide what to do with the output file.
