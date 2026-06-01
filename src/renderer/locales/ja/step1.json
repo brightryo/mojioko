@@ -1,18 +1,19 @@
 {
   "title": "文字起こし",
-  "guidance": "Whisperモデルを選択し、動画ファイルを読み込んでから文字起こしを開始してください。",
+  "guidance": "Whisperモデルを選択し、入力ファイルを読み込んでから文字起こしを開始してください。",
   "inputVideo": {
-    "label": "入力動画",
-    "hint": ".mkv · .mp4",
-    "placeholder": "動画ファイルを選択してください…",
-    "chooseVideo": "動画を選ぶ",
-    "help": "文字起こしと字幕を焼き付ける元の動画ファイル",
-    "infoLabel": "動画情報",
+    "label": "入力ファイル",
+    "hint": ".mp4 · .mkv · .mp3 · .wav · .m4a · .aac · .flac · .ogg",
+    "placeholder": "ファイルを選択してください…",
+    "chooseVideo": "ファイルを選ぶ",
+    "help": "文字起こしする動画または音声ファイル。動画は字幕焼き込み出力、音声はテキスト/SRT出力に対応します。",
+    "infoLabel": "ファイル情報",
     "infoResolution": "解像度",
     "infoDuration": "長さ",
     "infoFormat": "フォーマット",
     "infoFileSize": "ファイルサイズ",
-    "loading": "動画を読み込んでいます…"
+    "loading": "ファイルを読み込んでいます…",
+    "audioOnlyBadge": "音声のみ"
   },
   "audioTracks": {
     "label": "音声トラック",
