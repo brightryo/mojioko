@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { Channels } from '../shared/ipc-channels'
 import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
+import type { FontsState, FontId } from '../shared/fonts'
 import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult } from '../shared/ipc-contracts'
 
 type OkResult<T> = { ok: true; data: T }
@@ -51,6 +52,22 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.transcriptionUninstallModel, modelId),
   transcriptionSetActiveModel: (modelId: WhisperModelId): Promise<IpcResult<ModelsState>> =>
     ipcRenderer.invoke(Channels.transcriptionSetActiveModel, modelId),
+
+  // Fonts
+  fontList: (): Promise<IpcResult<FontsState>> =>
+    ipcRenderer.invoke(Channels.fontList),
+  fontDownload: (fontId: FontId): Promise<IpcResult<{ channelId: string }>> =>
+    ipcRenderer.invoke(Channels.fontDownload, fontId),
+  fontDownloadCancel: (channelId: string): Promise<void> =>
+    ipcRenderer.invoke(`${Channels.fontDownload}:cancel`, channelId),
+  fontUninstall: (fontId: FontId): Promise<IpcResult<FontsState>> =>
+    ipcRenderer.invoke(Channels.fontUninstall, fontId),
+  fontSetActive: (fontId: FontId): Promise<IpcResult<FontsState>> =>
+    ipcRenderer.invoke(Channels.fontSetActive, fontId),
+  fontReadOfl: (fontId: FontId): Promise<IpcResult<string>> =>
+    ipcRenderer.invoke(Channels.fontReadOfl, fontId),
+  fontReadBytes: (fontId: FontId): Promise<IpcResult<ArrayBuffer>> =>
+    ipcRenderer.invoke(Channels.fontReadBytes, fontId),
 
   // Burnin
   burninStart: (opts: BurninStartRequest): Promise<IpcResult<{ channelId: string }>> =>

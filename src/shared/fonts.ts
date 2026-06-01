@@ -74,6 +74,13 @@ export interface FontMeta {
   sourceUrl: string
   /** License identifier (SPDX-style). */
   license: FontLicense
+  /**
+   * Subdirectory inside `resources/fonts/` containing the TTF.  Defined only
+   * for bundled fonts.  E.g. `'Noto_Sans_JP/static'` for the default Noto.
+   * Downloadable fonts always live at `%APPDATA%/MOJIOKO/fonts/<id>/` and
+   * leave this null.
+   */
+  bundledRelativeDir: string | null
 }
 
 function assetUrl(fileName: string): string {
@@ -103,7 +110,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     expectedSizeBytes: 0,
     copyright: 'Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name "Source". Noto Sans JP is licensed under the SIL Open Font License, Version 1.1.',
     sourceUrl: 'https://fonts.google.com/noto/specimen/Noto+Sans+JP',
-    license: 'SIL-OFL-1.1'
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: 'Noto_Sans_JP/static'
   },
   {
     id: 'dela-gothic-one',
@@ -118,7 +126,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     expectedSizeBytes: 5_469_244,
     copyright: 'Copyright 2020 The Dela Gothic Project Authors (https://github.com/syakuzen/DelaGothic)',
     sourceUrl: 'https://fonts.google.com/specimen/Dela+Gothic+One',
-    license: 'SIL-OFL-1.1'
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null
   },
   {
     id: 'reggae-one',
@@ -133,7 +142,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     expectedSizeBytes: 4_000_000,
     copyright: 'Copyright 2020 The Reggae Project Authors (https://github.com/fontworks-fonts/Reggae)',
     sourceUrl: 'https://fonts.google.com/specimen/Reggae+One',
-    license: 'SIL-OFL-1.1'
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null
   },
   {
     id: 'yusei-magic',
@@ -148,7 +158,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     expectedSizeBytes: 4_500_000,
     copyright: 'Copyright 2020 The Yusei Magic Project Authors (https://github.com/tanukifont/YuseiMagic)',
     sourceUrl: 'https://fonts.google.com/specimen/Yusei+Magic',
-    license: 'SIL-OFL-1.1'
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null
   },
   {
     id: 'mochiy-pop-one',
@@ -163,7 +174,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     expectedSizeBytes: 3_800_000,
     copyright: 'Copyright 2020 The Mochiy Pop Project Authors (https://github.com/fontdasu/Mochiy)',
     sourceUrl: 'https://fonts.google.com/specimen/Mochiy+Pop+One',
-    license: 'SIL-OFL-1.1'
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null
   },
   {
     id: 'hachi-maru-pop',
@@ -178,7 +190,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     expectedSizeBytes: 4_200_000,
     copyright: 'Copyright 2020 The Hachi Maru Pop Project Authors (https://github.com/noriokanisawa/HachiMaruPop)',
     sourceUrl: 'https://fonts.google.com/specimen/Hachi+Maru+Pop',
-    license: 'SIL-OFL-1.1'
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null
   },
   {
     id: 'potta-one',
@@ -193,7 +206,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     expectedSizeBytes: 3_600_000,
     copyright: 'Copyright 2020 The Potta Project Authors (https://github.com/go-mineral/Potta)',
     sourceUrl: 'https://fonts.google.com/specimen/Potta+One',
-    license: 'SIL-OFL-1.1'
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null
   },
   {
     id: 'dotgothic16',
@@ -208,7 +222,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     expectedSizeBytes: 2_400_000,
     copyright: 'Copyright 2020 The DotGothic16 Project Authors (https://github.com/fontworks-fonts/DotGothic16)',
     sourceUrl: 'https://fonts.google.com/specimen/DotGothic16',
-    license: 'SIL-OFL-1.1'
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null
   },
   {
     id: 'rampart-one',
@@ -223,7 +238,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     expectedSizeBytes: 4_800_000,
     copyright: 'Copyright 2020 The Rampart Project Authors (https://github.com/fontworks-fonts/Rampart)',
     sourceUrl: 'https://fonts.google.com/specimen/Rampart+One',
-    license: 'SIL-OFL-1.1'
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null
   }
 ] as const
 
