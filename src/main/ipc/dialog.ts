@@ -14,9 +14,15 @@ export function registerDialogHandlers(): void {
       // first-class.  Media filter lists everything; Video / Audio sub-filters
       // let the user narrow down.  ffprobe still has the final say (extension
       // is UX only — the mode decision happens by content inspection).
+      // REQ-030: extension lists must reflect what the backend can
+      // actually process.  The Video sub-filter previously included
+      // mov / avi as a vestige from an earlier list — those are NOT in
+      // ffprobe's read path expectations here so they were misleading
+      // users.  Aligned to REQ-028 §2-2's confirmed-safe set: video =
+      // mp4 / mkv, audio = mp3 / wav / m4a / aac / flac / ogg.
       filters: [
         { name: 'Media files', extensions: ['mp4', 'mkv', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'] },
-        { name: 'Video',       extensions: ['mp4', 'mkv', 'mov', 'avi'] },
+        { name: 'Video',       extensions: ['mp4', 'mkv'] },
         { name: 'Audio',       extensions: ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'] },
         { name: 'All files',   extensions: ['*'] }
       ],
