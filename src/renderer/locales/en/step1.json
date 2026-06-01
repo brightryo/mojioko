@@ -175,6 +175,10 @@
       "select": "Use this font",
       "viewLicense": "View license"
     },
+    "note": {
+      "missingRareKanji": "Rare kanji unsupported",
+      "missingRareKanjiHelp": "This font omits a small set of post-jōyō kanji (塡 剝 頰 and similar).  Subtitles containing those characters may fall back to another face mid-word."
+    },
     "toast": {
       "downloadComplete": "{{name}} downloaded",
       "downloadFailed": "Download failed: {{error}}",

@@ -175,6 +175,10 @@
       "select": "このフォントを使う",
       "viewLicense": "ライセンス"
     },
+    "note": {
+      "missingRareKanji": "稀な漢字非対応",
+      "missingRareKanjiHelp": "「塡 剝 頰」など常用漢字の一部が含まれていないため、これらの文字が含まれる字幕では別フォントで表示されることがあります。"
+    },
     "toast": {
       "downloadComplete": "{{name}} をダウンロードしました",
       "downloadFailed": "ダウンロードに失敗しました: {{error}}",
