@@ -42,7 +42,12 @@ export interface ColorPair {
 
 export const COLOR_PAIRS: readonly ColorPair[] = [
   { text: '#FFFF00', outline: '#001040' },
-  { text: '#FF4B00', outline: '#FFF8E0' },
+  // REQ-034 #2: pair 2 reworked to be red-on-orange with strong luminance
+  // contrast.  Earlier value (#FF4B00 × #FFF8E0) was orange-on-cream and
+  // didn't match the "red text, orange outline" intent.  L*(#E00000) ≈ 36,
+  // L*(#FFB000) ≈ 76 — ~40 L* gap gives the outline a clearly visible
+  // halo without losing the warm red identity.
+  { text: '#E00000', outline: '#FFB000' },
   { text: '#4DC4FF', outline: '#003060' },
   { text: '#AEEA00', outline: '#0A3D1E' },
   { text: '#FF80A0', outline: '#3A0A4A' }

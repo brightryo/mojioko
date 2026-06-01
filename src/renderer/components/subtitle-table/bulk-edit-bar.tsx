@@ -68,7 +68,9 @@ function pickFirstSelectedColor(
  * the convention established by withHistory() in subtitle-table.tsx.
  */
 export function BulkEditBar({ onApplied }: BulkEditBarProps) {
-  const { t } = useTranslation(['step2'])
+  // step1 included so the size input's `title` tooltip can reuse the
+  // `subtitleDefaults.sizeHint` string defined for STEP 1 (REQ-034 #3).
+  const { t } = useTranslation(['step2', 'step1'])
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
   const clearRowSelection = useUiStore((s) => s.clearRowSelection)
 
@@ -352,6 +354,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             min={FONT_SIZE_MIN_PX}
             max={FONT_SIZE_MAX_PX}
             placeholder={t('bulk.placeholder')}
+            // REQ-034 #3: tooltip surfaces the clamp range so a user
+            // typing 250 sees the cause when the input snaps back to
+            // 200 on blur.
+            title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
             onBlur={(e) => {
               if (e.target.value === '') return
               handleSizeCommit(e.target.value)
