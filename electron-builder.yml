@@ -35,6 +35,12 @@ extraResources:
     to: fonts
     filter:
       - "**/*.ttf"
+      # SIL OFL v1.1 license text shipped alongside each bundled font.
+      # OFL §3.2 requires the licence to be distributed with the Font
+      # Software — without this filter entry the licence files exist in
+      # the source tree but never reach the packaged installer.
+      - "**/OFL.txt"
+      - "**/LICENSE*"
   - from: python-sidecar
     to: python-sidecar
     filter:

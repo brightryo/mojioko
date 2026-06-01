@@ -62,7 +62,11 @@
     "intro": "MOJIOKO に同梱または配信される字幕フォントは、すべて SIL Open Font License v1.1 のもとで提供されています。ダウンロードしたフォントには OFL 全文が同梱されます。",
     "copyrightHeader": "著作権表記",
     "sourceLabel": "配布元",
-    "viewOnDisk": "OFL.txt を開く",
+    "viewOnDisk": "OFL.txt を表示",
     "openSource": "配布元ページを開く"
+  },
+  "thirdPartyLicenses": {
+    "title": "サードパーティライセンス",
+    "openFolder": "サードパーティライセンスのフォルダを開く"
   }
 }

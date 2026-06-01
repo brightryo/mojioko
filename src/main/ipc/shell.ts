@@ -1,10 +1,10 @@
-import { ipcMain, shell } from 'electron'
+import { app, ipcMain, shell } from 'electron'
 import { existsSync, mkdirSync, promises as fsp } from 'fs'
-import { resolve, relative, isAbsolute } from 'path'
+import { resolve, relative, isAbsolute, join } from 'path'
 import { homedir } from 'os'
 import { Channels } from '../../shared/ipc-channels'
 import { ALLOWED_EXTERNAL_URLS } from '../../shared/app-info'
-import { getModelsDir } from '../lib/paths'
+import { getModelsDir, getResourcesPath } from '../lib/paths'
 import log from '../lib/logger'
 
 /** Resolved home directory — computed once at module load time. */
@@ -52,6 +52,20 @@ export function registerShellHandlers(): void {
   ipcMain.handle(Channels.shellOpenModelsFolder, async (): Promise<void> => {
     const dir = getModelsDir()
     mkdirSync(dir, { recursive: true })
+    await shell.openPath(dir)
+  })
+
+  ipcMain.handle(Channels.shellOpenThirdPartyLicensesFolder, async (): Promise<void> => {
+    // Resolve to the same directory in dev and packaged builds.  In dev the
+    // licenses live at `<repo>/installer/licenses/`; packaged they ship via
+    // electron-builder's extraResources entry as `<resourcesPath>/licenses/`.
+    const dir = app.isPackaged
+      ? join(getResourcesPath(), 'licenses')
+      : join(app.getAppPath(), 'installer', 'licenses')
+    if (!existsSync(dir)) {
+      log.warn(`[shell] third-party licenses folder not found: ${dir}`)
+      return
+    }
     await shell.openPath(dir)
   })
 

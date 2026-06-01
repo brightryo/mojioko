@@ -32,6 +32,7 @@ export const Channels = {
   shellShowInFolder: 'shell:showInFolder',
   shellOpenExternal: 'shell:openExternal',
   shellOpenModelsFolder: 'shell:openModelsFolder',
+  shellOpenThirdPartyLicensesFolder: 'shell:openThirdPartyLicensesFolder',
   shellWriteTextFile: 'shell:writeTextFile',
   shellFileExists: 'shell:fileExists',
 

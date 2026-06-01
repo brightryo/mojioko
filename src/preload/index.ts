@@ -90,6 +90,8 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.shellOpenExternal, url),
   shellOpenModelsFolder: (): Promise<void> =>
     ipcRenderer.invoke(Channels.shellOpenModelsFolder),
+  shellOpenThirdPartyLicensesFolder: (): Promise<void> =>
+    ipcRenderer.invoke(Channels.shellOpenThirdPartyLicensesFolder),
   shellWriteTextFile: (filePath: string, content: string): Promise<void> =>
     ipcRenderer.invoke(Channels.shellWriteTextFile, filePath, content),
   shellFileExists: (filePath: string): Promise<boolean> =>

@@ -15,7 +15,7 @@ import {
   downloadFont,
   uninstallFont as removeFontDir
 } from '../services/font-downloader'
-import { getFontUserDir, getFontResolveDir } from '../lib/paths'
+import { getFontUserDir, getFontResolveDir, getBundledOflPath } from '../lib/paths'
 import { loadSettings, saveSettings } from '../services/settings-store'
 import log from '../lib/logger'
 
@@ -121,16 +121,29 @@ export function registerFontHandlers(): void {
     }
     try {
       const meta = getFontMeta(fontId)
-      // Bundled fonts: OFL not typically shipped alongside them.  Return the
-      // registry copyright string so the License panel still has something
-      // to display.
-      const userPath = join(getFontUserDir(fontId), 'OFL.txt')
-      if (!meta.bundled && existsSync(userPath)) {
-        const buf = await fs.readFile(userPath, 'utf-8')
-        return { ok: true, data: buf }
+      // Pick the OFL location based on whether the font is bundled or
+      // user-downloaded.  Both branches read the full SIL OFL v1.1 text
+      // from disk — bundled fonts ship one OFL.txt per family root via
+      // electron-builder's extraResources filter (added when this rule
+      // was tightened), and downloaded fonts have OFL.txt as a sibling
+      // of their TTF inside the per-id user dir.
+      const oflPath = meta.bundled
+        ? getBundledOflPath(meta)
+        : join(getFontUserDir(fontId), 'OFL.txt')
+      if (oflPath && existsSync(oflPath)) {
+        const buf = await fs.readFile(oflPath, 'utf-8')
+        // Prepend the registry copyright header so callers always see the
+        // attribution alongside the license body — OFL §3.2 mentions
+        // "above copyright notice and this license", and the canonical
+        // SIL OFL text alone has no per-font copyright line.
+        return { ok: true, data: `${meta.copyright}\n\n${buf}` }
       }
-      // Fallback: synthesised one-liner.  Renderer can still link out to the
-      // sourceUrl for the full license text.
+      // Fallback: the OFL.txt is missing on disk (corrupt install, or a
+      // font registry entry that hasn't shipped the OFL yet).  Return the
+      // registry copyright string so the License panel still surfaces
+      // attribution; the renderer can show a hint that the full text is
+      // unavailable.
+      log.warn(`[ipc/font] OFL.txt missing for ${fontId}; falling back to registry copyright`)
       return { ok: true, data: meta.copyright }
     } catch (err) {
       log.error('[ipc/font] readOfl error', err)
