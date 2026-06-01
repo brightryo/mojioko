@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Download, Trash2, Check, X, FileText } from 'lucide-react'
+import { Download, Trash2, X, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { HelpIcon } from '@/components/help-icon'
@@ -25,31 +25,32 @@ interface FontPickerProps {
   onChange?: () => void
   /**
    * Operation mode:
-   * - `'pick'` (default): the original DL + select hybrid used by
-   *   SubtitleStyleDialog.  Auto-selects a freshly downloaded font.
-   * - `'manage-only'`: hide the Select action and the active-font highlight.
-   *   Download / Cancel / Uninstall / View license still work.  Used by
-   *   the Settings dialog's font tab where selection happens via a
-   *   dedicated picker, and this list is purely "what's installed".
+   * - `'pick'` (default): clicking a row activates that font.  Used by the
+   *   Subtitle Style dialog.  Auto-selects a freshly downloaded font.
+   * - `'manage-only'`: rows are not clickable; selection is driven by the
+   *   surrounding Settings ▸ Fonts tab's Default Font dropdown.  The
+   *   left-edge dot still reflects the active selection so the user can
+   *   see at a glance which font is the current default while managing
+   *   inventory.
    */
   mode?: FontPickerMode
 }
 
 /**
- * Subtitle font picker — surfaces every font in the registry as a one-row
- * card with download / select / uninstall actions.  Mirrors the spirit of
- * WhisperModelManager but stays compact enough to drop into a column of
- * SubtitleStyleDialog without taking over the layout.
+ * Subtitle font picker.  Each row is a single click target: the indicator
+ * dot turns green when active, the row is clickable to select, and a
+ * single right-side action icon shows the download / uninstall affordance
+ * for the row's current state (REQ-019 #3b).
  *
  * Loading flow:
  *  1. On mount: listFonts() to get install state from main.
  *  2. For installed (or bundled) fonts, ensureFontLoaded() is fired so the
  *     row label can render in the font's own face.
- *  3. When the user clicks Download: downloadFont() streams progress events;
- *     on completion we refresh state + register the font with FontFace API.
- *  4. When the user clicks Uninstall: uninstallFont() then evictFont() so
- *     the renderer-side cache drops the now-deleted bytes.
- *  5. When the user clicks Select: setActiveFont() updates AppSettings and
+ *  3. Download: downloadFont() streams progress events; on completion we
+ *     refresh + register the font with FontFace API.
+ *  4. Uninstall: uninstallFont() then evictFont() so the renderer-side
+ *     cache drops the now-deleted bytes.
+ *  5. Select (pick mode only): setActiveFont() updates AppSettings and
  *     useSettingsStore.activeFontId; SubtitleOverlay + previews react.
  */
 export function FontPicker({ onChange, mode = 'pick' }: FontPickerProps) {
@@ -170,19 +171,21 @@ export function FontPicker({ onChange, mode = 'pick' }: FontPickerProps) {
         {FONT_REGISTRY.map((meta) => {
           const info: FontInfo | undefined = state?.fonts.find((f) => f.id === meta.id)
           const status = info?.status ?? (meta.bundled ? 'bundled' : 'not-installed')
-          // manage-only: never highlight a row as "active" since the user is
-          // here to manage the inventory, not to pick a default.  The Settings
-          // tab renders the active selection in its own dedicated picker.
-          const isActive = !isManageOnly && activeFontId === meta.id
+          // The indicator dot reflects the active selection in BOTH modes:
+          // in pick mode the user picks here, in manage-only mode the
+          // Settings ▸ Fonts default-font dropdown drives it.  Either way,
+          // the user sees which font is the current default.
+          const isActive = activeFontId === meta.id
           const isDownloading = downloadingId === meta.id
-          // Select action only available in 'pick' mode; manage-only suppresses
-          // it so this list reads as inventory management only.
-          const canSelect = !isManageOnly && (status === 'bundled' || status === 'installed') && activeFontId !== meta.id
+          // Row click activates the font in pick mode only.  Requires the
+          // font to be available (bundled or installed) and not already
+          // active.
+          const canSelect = !isManageOnly && (status === 'bundled' || status === 'installed') && !isActive
           // Uninstall the currently-active font is blocked in pick mode (the
           // FontPicker also drives selection there).  In manage-only mode we
           // allow it — the main-side ipc/font.ts already falls active back to
           // the default when the active font is removed.
-          const canUninstall = status === 'installed' && (isManageOnly || activeFontId !== meta.id)
+          const canUninstall = status === 'installed' && (isManageOnly || !isActive)
           return (
             <FontRow
               key={meta.id}
@@ -240,25 +243,48 @@ function FontRow({
     ? { fontFamily: `'${meta.cssFontFamily}'`, fontWeight: meta.weight }
     : {}
 
-  const showActions = !isDownloading
+  // Whole-row click → select.  Action buttons inside stopPropagation so
+  // they don't double-trigger.  Keyboard: Enter / Space mirror the click
+  // when the row is focusable (canSelect).
+  function handleRowClick() {
+    if (canSelect) onSelect()
+  }
+  function handleRowKey(e: React.KeyboardEvent) {
+    if (!canSelect) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onSelect()
+    }
+  }
 
   return (
     <div
+      role={canSelect ? 'button' : undefined}
+      tabIndex={canSelect ? 0 : undefined}
+      onClick={canSelect ? handleRowClick : undefined}
+      onKeyDown={canSelect ? handleRowKey : undefined}
+      aria-pressed={canSelect ? isActive : undefined}
       className={cn(
         'flex items-center justify-between gap-3 px-3 py-2 transition-colors',
-        isActive ? 'bg-accent/40' : 'hover:bg-accent/20'
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30 focus-visible:ring-inset',
+        isActive && 'bg-primary/10',
+        canSelect && !isActive && 'cursor-pointer hover:bg-accent/30',
+        !canSelect && !isActive && 'cursor-default'
       )}
     >
-      <div className="flex items-center gap-2 min-w-0 flex-1">
-        {isActive ? (
-          <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-        ) : (
-          <span className="h-4 w-4 shrink-0" aria-hidden="true" />
-        )}
+      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        {/* Single indicator: gray = inactive, green = active.  Replaces
+            the old checkmark + 「選択中」 badge double-up (REQ-019 #3b). */}
+        <span
+          className={cn(
+            'h-2.5 w-2.5 rounded-full shrink-0 transition-colors',
+            isActive ? 'bg-primary' : 'bg-zinc-600'
+          )}
+          aria-hidden="true"
+        />
         <span className="text-[14px] text-foreground truncate" style={labelStyle}>
           {meta.displayName}
         </span>
-        <StatusBadge status={status} isActive={isActive} />
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
@@ -277,89 +303,57 @@ function FontRow({
               size="icon"
               variant="ghost"
               className="h-7 w-7"
-              onClick={onCancelDownload}
+              onClick={(e) => { e.stopPropagation(); onCancelDownload() }}
               aria-label={t('fontPicker.action.cancel')}
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
         ) : (
-          showActions && (
-            <>
-              {status === 'not-installed' && !meta.bundled && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7 px-2"
-                  onClick={onDownload}
-                >
-                  <Download className="h-3.5 w-3.5 mr-1" />
-                  {t('fontPicker.action.download')}
-                </Button>
-              )}
-              {canSelect && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-[12px]"
-                  onClick={onSelect}
-                >
-                  {t('fontPicker.action.select')}
-                </Button>
-              )}
-              {canUninstall && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                  onClick={onUninstall}
-                  aria-label={t('fontPicker.action.uninstall')}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              )}
-              {(status === 'installed' || meta.bundled) && (
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
-                  title={t('fontPicker.action.viewLicense')}
-                  onClick={() => useUiStore.getState().setFontLicensesDialogOpen(true)}
-                >
-                  <FileText className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </>
-          )
+          <>
+            {/* DL / Trash swap based on install state.  Bundled fonts get
+                neither — the absence of both icons is the visual signal
+                that a row is read-only-bundled. */}
+            {status === 'not-installed' && !meta.bundled && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                onClick={(e) => { e.stopPropagation(); onDownload() }}
+                aria-label={t('fontPicker.action.download')}
+                title={t('fontPicker.action.download')}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            )}
+            {canUninstall && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                onClick={(e) => { e.stopPropagation(); onUninstall() }}
+                aria-label={t('fontPicker.action.uninstall')}
+                title={t('fontPicker.action.uninstall')}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {(status === 'installed' || meta.bundled) && (
+              <button
+                type="button"
+                className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
+                title={t('fontPicker.action.viewLicense')}
+                aria-label={t('fontPicker.action.viewLicense')}
+                onClick={(e) => { e.stopPropagation(); useUiStore.getState().setFontLicensesDialogOpen(true) }}
+              >
+                <FileText className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
   )
-}
-
-function StatusBadge({ status, isActive }: { status: FontRowProps['status']; isActive: boolean }) {
-  const { t } = useTranslation('step1')
-  if (isActive) {
-    return (
-      <span className="text-[10px] uppercase tracking-wide text-primary font-medium px-1.5 py-0.5 rounded bg-primary/10 border border-primary/30">
-        {t('fontPicker.status.active')}
-      </span>
-    )
-  }
-  if (status === 'bundled') {
-    return (
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground px-1.5 py-0.5 rounded bg-muted/40 border border-border">
-        {t('fontPicker.status.bundled')}
-      </span>
-    )
-  }
-  if (status === 'installed') {
-    return (
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground px-1.5 py-0.5 rounded bg-muted/30 border border-border">
-        {t('fontPicker.status.installed')}
-      </span>
-    )
-  }
-  return null
 }
 
 // Re-export getFontMeta for callers that want to read meta inline alongside
