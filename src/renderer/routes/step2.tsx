@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { TimeEditorDialog } from '@/components/time-editor-dialog/time-editor-dialog'
 import { useProjectStore } from '@/stores/project-store'
+import { useSettingsStore } from '@/stores/settings-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore, type TableFilter } from '@/stores/ui-store'
 import { cn } from '@/lib/utils'
@@ -123,13 +124,16 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const [editor, setEditor] = useState<EditorState>({ open: false })
   const [discardOpen, setDiscardOpen] = useState(false)
   const [skipDiscardWarning, setSkipDiscardWarning] = useState(false)
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
   const [subtitleFont, setSubtitleFont] = useState<SubtitleFont | null>(getSubtitleFont)
 
+  // Re-load the opentype.js Font whenever the active font selection changes.
+  // Clearing first ensures overflowMap recomputes with the new metrics rather
+  // than caching against the previous font's widths.
   useEffect(() => {
-    if (!subtitleFont) {
-      loadSubtitleFont().then(setSubtitleFont).catch(() => {})
-    }
-  }, [subtitleFont])
+    setSubtitleFont(null)
+    loadSubtitleFont().then(setSubtitleFont).catch(() => {})
+  }, [activeFontId])
 
   useHotkeys('ctrl+z', (e) => {
     e.preventDefault()
