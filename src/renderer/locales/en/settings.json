@@ -3,7 +3,8 @@
   "tabs": {
     "general": "General",
     "fonts": "Fonts",
-    "defaultStyle": "Default style"
+    "defaultStyle": "Default style",
+    "whisper": "Whisper"
   },
   "general": {
     "language": "Language",
@@ -20,6 +21,9 @@
   },
   "defaultStyle": {
     "hint": "These values are applied to new transcriptions. The subtitle style dialog reflects the same settings — editing here or there updates both."
+  },
+  "whisper": {
+    "hint": "Whisper engine parameters. The STEP 1 \"Advanced\" dialog edits the same fields — changes on either surface stay in sync."
   },
   "about": {
     "version": "Version",

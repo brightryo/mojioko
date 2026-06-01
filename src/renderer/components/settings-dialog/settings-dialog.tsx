@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Label } from '@/components/ui/label'
 import { FontPicker } from '@/components/font-picker/font-picker'
 import { DefaultStyleControls } from '@/components/default-style-controls/default-style-controls'
+import { WhisperAdvancedControls } from '@/components/whisper-advanced-controls/whisper-advanced-controls'
 import { setActiveFont, listFonts } from '@/services/font'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { FONT_REGISTRY, type FontId, type FontsState, getFontMeta } from '../../../shared/fonts'
@@ -44,6 +45,13 @@ export function SettingsDialog() {
   const updateTranscriptionDefaults = useSettingsStore((s) => s.updateTranscriptionDefaults)
   const autoLineBreak = useSettingsStore((s) => s.autoLineBreak)
   const setAutoLineBreak = useSettingsStore((s) => s.setAutoLineBreak)
+
+  // Whisper engine — same slice that the STEP 1 「詳細設定」 dialog edits
+  // (REQ-019 #1).  Both surfaces stay in sync because both subscribe to
+  // settingsStore.transcriptionAdvanced.
+  const transcriptionAdvanced = useSettingsStore((s) => s.transcriptionAdvanced)
+  const setTranscriptionAdvanced = useSettingsStore((s) => s.setTranscriptionAdvanced)
+  const resetTranscriptionAdvanced = useSettingsStore((s) => s.resetTranscriptionAdvanced)
 
   /**
    * Keep a draft string so the input can hold transient values while the user
@@ -150,6 +158,7 @@ export function SettingsDialog() {
             <TabsTrigger value="general">{t('tabs.general')}</TabsTrigger>
             <TabsTrigger value="fonts">{t('tabs.fonts')}</TabsTrigger>
             <TabsTrigger value="defaultStyle">{t('tabs.defaultStyle')}</TabsTrigger>
+            <TabsTrigger value="whisper">{t('tabs.whisper')}</TabsTrigger>
           </TabsList>
 
           {/* ─ General ────────────────────────────────────────────── */}
@@ -237,6 +246,16 @@ export function SettingsDialog() {
               autoLineBreak={autoLineBreak}
               onUpdateDefaults={updateTranscriptionDefaults}
               onSetAutoLineBreak={setAutoLineBreak}
+            />
+          </TabsContent>
+
+          {/* ─ Whisper engine ─────────────────────────────────────── */}
+          <TabsContent value="whisper" className="space-y-3 min-h-[490px]">
+            <p className="text-[11px] text-muted-foreground">{t('whisper.hint')}</p>
+            <WhisperAdvancedControls
+              transcriptionAdvanced={transcriptionAdvanced}
+              onUpdate={setTranscriptionAdvanced}
+              onReset={resetTranscriptionAdvanced}
             />
           </TabsContent>
         </Tabs>
