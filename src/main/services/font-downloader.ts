@@ -7,8 +7,7 @@ import {
   type FontStatus,
   type FontsState,
   type DownloadFontEvent,
-  getFontMeta,
-  FONTS_SHARED_OFL_URL
+  getFontMeta
 } from '../../shared/fonts'
 import { getFontUserDir, getFontResolveDir } from '../lib/paths'
 import log from '../lib/logger'
@@ -163,7 +162,13 @@ export async function downloadFont(
 
   const ttfPath = join(dir, meta.fileName)
   const oflPath = join(dir, 'OFL.txt')
-  const oflUrl = meta.oflUrl ?? FONTS_SHARED_OFL_URL
+  if (meta.oflUrl === null) {
+    // Defensive: every non-bundled registry entry should have an oflUrl
+    // (the per-font `<FontName>-OFL.txt` asset).  Throw rather than silently
+    // skip the OFL — running without the license breaks SIL OFL §2.
+    throw new Error(`Font ${fontId} has no oflUrl`)
+  }
+  const oflUrl = meta.oflUrl
 
   // Track files so the catch handler can clean up a partial install.
   const written: string[] = []

@@ -31,9 +31,17 @@ import { GITHUB_OWNER, GITHUB_REPO } from './app-info'
 /** Release tag that hosts every downloadable font asset. */
 export const FONTS_RELEASE_TAG = 'fonts-v1'
 
-/** Shared OFL.txt URL (one license file covers every OFL font in the release). */
-export const FONTS_SHARED_OFL_URL =
-  `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${FONTS_RELEASE_TAG}/OFL.txt`
+// Per-font OFL distribution: each font ships its own `<FontName>-OFL.txt`
+// alongside its TTF in the `fonts-v1` release.  This satisfies SIL OFL v1.1
+// §2 — "each copy contains the above copyright notice and this license" —
+// because the per-font OFL text starts with that specific font's copyright
+// header (the upstream form from `google/fonts/ofl/<name>/OFL.txt`).
+//
+// An earlier design shared a single `fonts-v1/OFL.txt` between all fonts and
+// relied on `meta.copyright` to supply the per-font header at render time.
+// That approach was rejected: the *distributed file itself* must carry the
+// notice for the licence to be conveyed with the binary, not merely surfaced
+// at runtime.  Removed `FONTS_SHARED_OFL_URL` for that reason.
 
 export type FontId =
   | 'noto-sans-jp-semibold'
@@ -64,7 +72,13 @@ export interface FontMeta {
   bundled: boolean
   /** Full URL to the .ttf asset.  Null only for bundled fonts. */
   downloadUrl: string | null
-  /** Per-font OFL.txt URL.  Falls back to the shared OFL when null. */
+  /**
+   * Per-font OFL.txt URL.  Non-null for every downloadable font — the asset
+   * lives at `fonts-v1/<FontName>-OFL.txt` and carries that font's own
+   * copyright header followed by the standard SIL OFL v1.1 body.  Null only
+   * for bundled fonts whose OFL is shipped via the installer rather than
+   * fetched on demand.
+   */
   oflUrl: string | null
   /** Best-effort Content-Length at release time; used for ±10 % size check. */
   expectedSizeBytes: number
@@ -122,7 +136,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('DelaGothicOne-Regular.ttf'),
-    oflUrl: FONTS_SHARED_OFL_URL,
+    oflUrl: assetUrl('DelaGothicOne-OFL.txt'),
     expectedSizeBytes: 5_469_244,
     copyright: 'Copyright 2020 The Dela Gothic Project Authors (https://github.com/syakuzen/DelaGothic)',
     sourceUrl: 'https://fonts.google.com/specimen/Dela+Gothic+One',
@@ -138,7 +152,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('ReggaeOne-Regular.ttf'),
-    oflUrl: FONTS_SHARED_OFL_URL,
+    oflUrl: assetUrl('ReggaeOne-OFL.txt'),
     expectedSizeBytes: 2_153_256,
     copyright: 'Copyright 2020 The Reggae Project Authors (https://github.com/fontworks-fonts/Reggae)',
     sourceUrl: 'https://fonts.google.com/specimen/Reggae+One',
@@ -154,7 +168,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('YuseiMagic-Regular.ttf'),
-    oflUrl: FONTS_SHARED_OFL_URL,
+    oflUrl: assetUrl('YuseiMagic-OFL.txt'),
     expectedSizeBytes: 3_134_968,
     copyright: 'Copyright 2020 The Yusei Magic Project Authors (https://github.com/tanukifont/YuseiMagic)',
     sourceUrl: 'https://fonts.google.com/specimen/Yusei+Magic',
@@ -170,7 +184,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('MochiyPopOne-Regular.ttf'),
-    oflUrl: FONTS_SHARED_OFL_URL,
+    oflUrl: assetUrl('MochiyPopOne-OFL.txt'),
     expectedSizeBytes: 5_163_948,
     copyright: 'Copyright 2020 The Mochiypop Project Authors (https://github.com/fontdasu/Mochiypop)',
     sourceUrl: 'https://fonts.google.com/specimen/Mochiy+Pop+One',
@@ -186,7 +200,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('HachiMaruPop-Regular.ttf'),
-    oflUrl: FONTS_SHARED_OFL_URL,
+    oflUrl: assetUrl('HachiMaruPop-OFL.txt'),
     expectedSizeBytes: 4_385_624,
     copyright: 'Copyright 2020 The Hachi Maru Pop Project Authors (https://github.com/noriokanisawa/HachiMaruPop)',
     sourceUrl: 'https://fonts.google.com/specimen/Hachi+Maru+Pop',
@@ -202,7 +216,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('PottaOne-Regular.ttf'),
-    oflUrl: FONTS_SHARED_OFL_URL,
+    oflUrl: assetUrl('PottaOne-OFL.txt'),
     expectedSizeBytes: 4_918_516,
     copyright: 'Copyright 2020 The Potta Project Authors (https://github.com/go108go/Potta)',
     sourceUrl: 'https://fonts.google.com/specimen/Potta+One',
@@ -218,7 +232,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('DotGothic16-Regular.ttf'),
-    oflUrl: FONTS_SHARED_OFL_URL,
+    oflUrl: assetUrl('DotGothic16-OFL.txt'),
     expectedSizeBytes: 2_069_236,
     copyright: 'Copyright 2020 The DotGothic16 Project Authors (https://github.com/fontworks-fonts/DotGothic16)',
     sourceUrl: 'https://fonts.google.com/specimen/DotGothic16',
@@ -234,7 +248,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('RampartOne-Regular.ttf'),
-    oflUrl: FONTS_SHARED_OFL_URL,
+    oflUrl: assetUrl('RampartOne-OFL.txt'),
     expectedSizeBytes: 3_722_352,
     copyright: 'Copyright 2020 The Rampart Project Authors (https://github.com/fontworks-fonts/Rampart)',
     sourceUrl: 'https://fonts.google.com/specimen/Rampart+One',
