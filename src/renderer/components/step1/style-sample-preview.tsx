@@ -202,7 +202,12 @@ export function StyleSamplePreview({
   ])
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+    // self-start: keep the card at its natural height instead of stretching
+    // to match the tall form column on the left of the dialog grid (default
+    // align-self for grid items is `stretch`).  Without this the card grows
+    // to ~500-600 px and the preview frame floats inside a sea of whitespace
+    // that visually reads as "縦長".
+    <div className="rounded-xl border border-border bg-card p-4 space-y-2 self-start">
       <div className="flex items-center gap-1.5">
         <Type className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         <Label className="uppercase tracking-wider text-[10px]">
