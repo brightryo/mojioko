@@ -9,11 +9,13 @@ import { registerBurninHandlers } from './ipc/burnin'
 import { registerSettingsHandlers } from './ipc/settings'
 import { registerDialogHandlers } from './ipc/dialog'
 import { registerShellHandlers } from './ipc/shell'
+import { registerFontHandlers } from './ipc/font'
 import { terminateSidecar } from './services/transcription-sidecar'
 import { execFileAsync } from './lib/child-process'
 import { detectAvailableEncoders, getBestEncoder } from './services/encoder-detector'
 import { buildMenu, rebuildMenu, setMenuLocked } from './menu'
 import { registerVideoProtocol } from './lib/video-protocol'
+import { registerFontProtocol } from './lib/font-protocol'
 import { getResourcesPath } from './lib/paths'
 import type { BuildInfo, EncoderDetectionResult } from '../shared/ipc-contracts'
 import log from './lib/logger'
@@ -132,6 +134,7 @@ function registerIpcHandlers(): void {
   registerSettingsHandlers()
   registerDialogHandlers()
   registerShellHandlers()
+  registerFontHandlers()
 }
 
 /**
@@ -179,6 +182,7 @@ app.whenReady().then(() => {
   log.info(`[main] starting ${APP_DISPLAY}`)
   void logStartupEnvironment()
   registerVideoProtocol()
+  registerFontProtocol()
   registerIpcHandlers()
   createWindow()
 

@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { APP_DATA_FOLDER } from '../../shared/app-info'
+import type { FontMeta } from '../../shared/fonts'
 
 const isDev = !app.isPackaged
 
@@ -14,8 +15,53 @@ export function getBinPath(...segments: string[]): string {
   return join(getResourcesPath(), 'bin', 'ffmpeg', name)
 }
 
+/**
+ * Legacy single-font directory — kept for callers that still pass the
+ * default Noto subdir to libass.  New code should resolve a font's
+ * directory via `getFontResolveDir(meta)` instead.
+ */
 export function getFontsDir(): string {
   return join(getResourcesPath(), 'fonts', 'Noto_Sans_JP', 'static')
+}
+
+/** Root of the bundled fonts tree, shipped via electron-builder extraResources. */
+export function getFontsBundledRoot(): string {
+  return join(getResourcesPath(), 'fonts')
+}
+
+/**
+ * Root of the user-downloaded font tree.  Each downloaded font lives at
+ * `<root>/<font-id>/<filename>.ttf` (plus an OFL.txt sibling).  Mirrors the
+ * Whisper model layout under `%APPDATA%/MOJIOKO/models/`.
+ */
+export function getFontsUserRoot(): string {
+  return join(getAppDataPath(), 'fonts')
+}
+
+/**
+ * Per-font directory inside the user root, regardless of whether the font is
+ * actually downloaded yet.  Safe to pass to mkdir + write.
+ */
+export function getFontUserDir(fontId: string): string {
+  return join(getFontsUserRoot(), fontId)
+}
+
+/**
+ * Resolve the absolute directory containing the TTF for `meta`.  Used as the
+ * `fontsdir=` argument to ffmpeg's `subtitles=` filter and as the source
+ * directory for opentype.js parsing on the main side.
+ *
+ * - bundled font  → `resources/fonts/<bundledRelativeDir>/` (must exist in the
+ *                   installer).
+ * - downloaded   → `%APPDATA%/MOJIOKO/fonts/<id>/` (may not exist until the
+ *                   user completes the download).
+ */
+export function getFontResolveDir(meta: FontMeta): string {
+  if (meta.bundled) {
+    const sub = meta.bundledRelativeDir ?? ''
+    return join(getFontsBundledRoot(), sub)
+  }
+  return getFontUserDir(meta.id)
 }
 
 export function getAppDataPath(): string {
