@@ -14,6 +14,7 @@ import { ColorPicker } from '@/components/color-picker/color-picker'
 import { HelpIcon } from '@/components/help-icon'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { StyleSamplePreview } from '@/components/step1/style-sample-preview'
+import { FontPicker } from '@/components/font-picker/font-picker'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
@@ -82,6 +83,13 @@ export function SubtitleStyleDialog({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
           {/* ── Form column ─────────────────────────────────────────── */}
           <div className="space-y-3">
+            {/* Font family — drives both the preview's @font-face and the
+                ASS Style fontname at burn-in time.  Lives at the top of the
+                form because it changes the visual identity more than the
+                other knobs.  Bundled Noto + 8 OFL fonts; non-bundled fonts
+                are downloaded on demand. */}
+            <FontPicker />
+
             {/* Font size */}
             <div className="space-y-1.5">
               <div className="flex items-center gap-1">
