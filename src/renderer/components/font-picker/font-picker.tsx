@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Download, Trash2, X, FileText } from 'lucide-react'
+import { Download, Trash2, X, FileText, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { HelpIcon } from '@/components/help-icon'
@@ -263,6 +263,19 @@ function FontRow({
         <span className="text-[14px] text-foreground truncate" style={labelStyle}>
           {meta.displayName}
         </span>
+        {/* Rare-kanji-missing note (REQ-022 step 5).  Only renders for
+            fonts flagged in the registry (Hachi Maru Pop / Potta One).
+            Compact amber pill + hover help so the warning is visible
+            without crowding the row. */}
+        {meta.lacksRareKanji && (
+          <span
+            className="inline-flex items-center gap-1 shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300/90 border border-amber-400/30 bg-amber-400/10"
+            title={t('fontPicker.note.missingRareKanjiHelp')}
+          >
+            <AlertCircle className="h-3 w-3" aria-hidden="true" />
+            {t('fontPicker.note.missingRareKanji')}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-1 shrink-0">

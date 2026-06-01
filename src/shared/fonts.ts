@@ -95,6 +95,15 @@ export interface FontMeta {
    * leave this null.
    */
   bundledRelativeDir: string | null
+  /**
+   * Display-only flag: the font's glyph table omits a handful of post-jōyō
+   * additions (塡 / 剝 / 頰 are the canonical examples) so subtitles
+   * containing those code points would fall back to libass' default face
+   * mid-word.  UI surfaces a small "稀な漢字が表示されない場合があります"
+   * note alongside the font name so the user can pick another face for
+   * scripts that need them.  REQ-022 step 5.
+   */
+  lacksRareKanji?: boolean
 }
 
 function assetUrl(fileName: string): string {
@@ -205,7 +214,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     copyright: 'Copyright 2020 The Hachi Maru Pop Project Authors (https://github.com/noriokanisawa/HachiMaruPop)',
     sourceUrl: 'https://fonts.google.com/specimen/Hachi+Maru+Pop',
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null
+    bundledRelativeDir: null,
+    lacksRareKanji: true
   },
   {
     id: 'potta-one',
@@ -221,7 +231,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     copyright: 'Copyright 2020 The Potta Project Authors (https://github.com/go108go/Potta)',
     sourceUrl: 'https://fonts.google.com/specimen/Potta+One',
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null
+    bundledRelativeDir: null,
+    lacksRareKanji: true
   },
   {
     id: 'dotgothic16',
