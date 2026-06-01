@@ -184,7 +184,14 @@
       "downloadFailed": "ダウンロードに失敗しました: {{error}}",
       "downloadUnavailable": "{{name}} はまだ配信されていません。時間を置いて再度お試しください。",
       "uninstalled": "{{name}} を削除しました",
+      "uninstalledFallback": "{{name}} が削除されたため、{{count}}行をデフォルトフォントに変更しました",
       "activated": "{{name}} を選択しました"
+    },
+    "uninstallConfirm": {
+      "title": "{{name}} を削除しますか？",
+      "body": "{{name}} は {{count}} 行で使用されています。削除すると、それらの行はデフォルトフォントに戻ります。",
+      "confirm": "削除する",
+      "cancel": "キャンセル"
     }
   }
 }

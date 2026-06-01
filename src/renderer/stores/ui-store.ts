@@ -66,6 +66,15 @@ interface UiStore {
    * clearRowSelection.
    */
   selectionAnchorId: string | null
+  /**
+   * Monotonic counter bumped whenever the on-disk font inventory changes
+   * (download completes, uninstall completes).  REQ-025 (iv).  Hooks like
+   * `useInstalledFontIds` watch this so a stale popover list updates when
+   * the user installs or removes a font in another part of the UI.
+   * Session-only — installed state is always re-read from the main side
+   * on launch.
+   */
+  fontInventoryVersion: number
 
   setCommandPaletteOpen: (open: boolean) => void
   setSettingsDialogOpen: (open: boolean) => void
@@ -93,6 +102,8 @@ interface UiStore {
    */
   selectRowRange: (id: string, visibleOrder: readonly string[]) => void
   clearRowSelection: () => void
+  /** Increment fontInventoryVersion — call after a font is installed / uninstalled. */
+  bumpFontInventoryVersion: () => void
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -111,6 +122,7 @@ export const useUiStore = create<UiStore>((set) => ({
   scrollToRowId: null,
   selectedRowIds: new Set<string>(),
   selectionAnchorId: null,
+  fontInventoryVersion: 0,
 
   setCommandPaletteOpen: (open) => set({ isCommandPaletteOpen: open }),
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
@@ -175,4 +187,6 @@ export const useUiStore = create<UiStore>((set) => ({
     }),
   clearRowSelection: () =>
     set({ selectedRowIds: new Set<string>(), selectionAnchorId: null }),
+  bumpFontInventoryVersion: () =>
+    set((s) => ({ fontInventoryVersion: s.fontInventoryVersion + 1 })),
 }))
