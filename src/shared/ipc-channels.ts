@@ -12,6 +12,13 @@ export const Channels = {
   transcriptionUninstallModel: 'transcription:uninstallModel',
   transcriptionSetActiveModel: 'transcription:setActiveModel',
 
+  fontList: 'font:list',
+  fontDownload: 'font:download',
+  fontUninstall: 'font:uninstall',
+  fontSetActive: 'font:setActive',
+  fontReadOfl: 'font:readOfl',
+  fontReadBytes: 'font:readBytes',
+
   burninStart: 'burnin:start',
   burninCancel: 'burnin:cancel',
 
