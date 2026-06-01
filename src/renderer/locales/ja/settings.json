@@ -1,11 +1,25 @@
 {
   "title": "設定",
+  "tabs": {
+    "general": "一般",
+    "fonts": "フォント",
+    "defaultStyle": "既定スタイル"
+  },
   "general": {
     "language": "言語",
     "languageJa": "日本語",
     "languageEn": "English",
     "fadeDuration": "フェード時間（秒）",
     "fadeDurationHint": "0.1〜0.5秒"
+  },
+  "fonts": {
+    "defaultFont": "字幕の既定フォント",
+    "defaultFontHint": "新規の文字起こしと、字幕スタイルダイアログの初期値に適用されます。",
+    "manageHeading": "フォント管理",
+    "manageHint": "必要なフォントをダウンロードします。各フォントには OFL ライセンスファイルも同梱されます。"
+  },
+  "defaultStyle": {
+    "hint": "新規の文字起こしに適用される値です。字幕スタイルダイアログと同じ設定を編集します（どちらで変更しても両方に反映）。"
   },
   "about": {
     "version": "バージョン",
