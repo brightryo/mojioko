@@ -77,6 +77,16 @@ export function SubtitleOverlay({
   const libassScale = getLibassScale()
   const scale      = containerWidthPx / videoWidthPx
   const fontSizePx = entry.fontSizePx        * libassScale * scale
+
+  // Diagnostic: log every render alongside the resolved font.  Lets us
+  // verify in DevTools that activeFontId propagates correctly into the
+  // step 2 SubtitleOverlay path (the v1.1.1 regression manifested as
+  // "step1 dialog shows Dela but step2 video preview shows fallback").
+  if (typeof window !== 'undefined') {
+    // Cheap to compute, only logged once per render so it does not flood.
+    // eslint-disable-next-line no-console
+    console.debug(`[subtitle-overlay] render — activeFontId=${activeFontId}, fontFamily=${fontMeta.cssFontFamily}, weight=${fontMeta.weight}`)
+  }
   const marginVPx  = burnin.verticalMarginPx * scale
   const marginHPx  = ASS_MARGIN_LR_PX        * scale
 

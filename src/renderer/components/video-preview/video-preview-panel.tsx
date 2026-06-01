@@ -10,6 +10,7 @@ import { shellShowInFolder } from '@/services/dialog'
 import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
 import { Switch } from '@/components/ui/switch'
 import { loadSubtitleFont } from '@/lib/font-metrics'
+import { ensureFontLoaded } from '@/lib/font-registry'
 import type { SubtitleEntry } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -178,10 +179,22 @@ export function VideoPreviewPanel() {
 
   // Load the subtitle font on mount and refresh whenever the active font
   // changes so the preview reflects the new metrics without requiring a
-  // remount.  The tick bump forces SubtitleOverlay to re-read libassScale
-  // after the cache is populated.
+  // remount.
+  //
+  // Awaiting BOTH paths is important:
+  //   - loadSubtitleFont() populates the opentype.js Font cache used for
+  //     overflow / line-break measurement.
+  //   - ensureFontLoaded() registers the FontFace with document.fonts so
+  //     CSS `font-family: '<cssFontFamily>'` actually renders in the
+  //     selected face.  Without an explicit await here, the tick bump
+  //     fires before the FontFace is in the document and SubtitleOverlay
+  //     re-renders into a fallback font (the v1.1.1 regression).
   useEffect(() => {
-    loadSubtitleFont().then(() => setFontTick((n) => n + 1)).catch(() => {})
+    Promise.all([
+      loadSubtitleFont(),
+      ensureFontLoaded(activeFontId)
+    ]).then(() => setFontTick((n) => n + 1))
+      .catch((err) => console.error('[video-preview] font load failed', err))
   }, [activeFontId])
 
   // Measure the video container so SubtitleOverlay can scale text/outline to the
