@@ -159,8 +159,8 @@
     "futureNote": "設定は自動的に保存されます。"
   },
   "fontPicker": {
-    "title": "字幕フォント",
-    "help": "字幕の焼き込みに使うフォントを選択します。標準同梱の Noto Sans JP 以外は必要に応じてダウンロードされ、%APPDATA%\\MOJIOKO\\fonts\\ 配下に保存されます。",
+    "title": "デフォルト字幕フォント",
+    "help": "プロジェクト全体のデフォルトフォントです。STEP 2 で行ごとに別フォントへ上書きできます。標準同梱の Noto Sans JP 以外は必要に応じてダウンロードされ、%APPDATA%\\MOJIOKO\\fonts\\ 配下に保存されます。",
     "status": {
       "bundled": "標準同梱",
       "installed": "ダウンロード済み",

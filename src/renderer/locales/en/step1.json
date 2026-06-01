@@ -159,8 +159,8 @@
     "futureNote": "Changes are saved automatically."
   },
   "fontPicker": {
-    "title": "Subtitle font",
-    "help": "Choose the font used by the burned-in subtitles. Fonts other than the bundled Noto are downloaded on demand and stored under %APPDATA%/MOJIOKO/fonts/.",
+    "title": "Default subtitle font",
+    "help": "Project-wide default font. Individual rows can be overridden to a different font in STEP 2. Fonts other than the bundled Noto are downloaded on demand and stored under %APPDATA%/MOJIOKO/fonts/.",
     "status": {
       "bundled": "Bundled",
       "installed": "Installed",
