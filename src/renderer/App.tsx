@@ -18,6 +18,7 @@ import { DonationDialog } from '@/components/donation-dialog/donation-dialog'
 import { FontLicensesDialog } from '@/components/font-licenses/font-licenses-dialog'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { registerCommands } from '@/lib/commands'
 import { loadSettings, saveSettings } from '@/services/settings'
@@ -72,7 +73,19 @@ function CommandRegistrar() {
       // Navigation
       { id: 'goToStep1', labelKey: 'navigation.goToStep1', group: 'navigation', run: () => navigate('/step1') },
       { id: 'goToStep2', labelKey: 'navigation.goToStep2', group: 'navigation', run: () => navigate('/step2') },
-      { id: 'goToStep3', labelKey: 'navigation.goToStep3', group: 'navigation', run: () => navigate('/step3') },
+      {
+        id: 'goToStep3',
+        labelKey: 'navigation.goToStep3',
+        group: 'navigation',
+        // REQ-028: STEP 3 (burn-in) is unreachable for audio-only inputs.
+        // Hide the command so the user does not get a navigation that
+        // lands on a step with nothing to do.
+        predicate: () => {
+          const v = useProjectStore.getState().video
+          return v === null || v.hasVideoStream
+        },
+        run: () => navigate('/step3')
+      },
       { id: 'filterAll',      labelKey: 'navigation.filterAll',      group: 'navigation', run: () => setTableFilter('all') },
       { id: 'filterReady',    labelKey: 'navigation.filterReady',    group: 'navigation', run: () => setTableFilter('ready') },
       { id: 'filterEdited',   labelKey: 'navigation.filterEdited',   group: 'navigation', run: () => setTableFilter('edited') },

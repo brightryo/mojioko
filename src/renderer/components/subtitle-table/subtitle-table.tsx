@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { RowFontSelector } from '@/components/subtitle-table/row-font-selector'
+import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import type { FontId } from '../../../shared/fonts'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
@@ -144,6 +145,10 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
   const { t } = useTranslation(['step2'])
   const updateEntry = useProjectStore((s) => s.updateEntry)
   const pushHistory = useHistoryStore((s) => s.push)
+  // REQ-028: in audio-only mode the size / style / font cells render
+  // empty so the 8-column grid stays in place (col widths unchanged)
+  // but the style controls are visually + functionally suppressed.
+  const isAudioOnly = useIsAudioOnly()
 
   const [editingText, setEditingText] = useState(false)
   const [sizeWarning, setSizeWarning] = useState(false)
@@ -390,30 +395,36 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         </button>
       </div>
 
-      {/* Size */}
+      {/* Size — empty in audio mode (REQ-028).  Column width stays
+          reserved by the empty div so the grid template doesn't shift. */}
       <div className="flex items-center py-3 px-1">
-        <input
-          type="number"
-          min={FONT_SIZE_MIN_PX}
-          max={FONT_SIZE_MAX_PX}
-          defaultValue={entry.fontSizePx}
-          key={entry.fontSizePx}
-          onChange={handleSizeChange}
-          onBlur={handleSizeBlur}
-          disabled={entry.isDeleted}
-          className={cn(
-            'w-full h-7 rounded border bg-zinc-950 px-1 text-center text-[12px] text-zinc-100',
-            'focus:outline-none focus:ring-1',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
-            '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-            sizeWarning
-              ? 'border-amber-400/60 focus:ring-amber-400/30'
-              : 'border-zinc-800 focus:border-zinc-700 focus:ring-green-500/30'
-          )}
-        />
+        {!isAudioOnly && (
+          <input
+            type="number"
+            min={FONT_SIZE_MIN_PX}
+            max={FONT_SIZE_MAX_PX}
+            defaultValue={entry.fontSizePx}
+            key={entry.fontSizePx}
+            onChange={handleSizeChange}
+            onBlur={handleSizeBlur}
+            disabled={entry.isDeleted}
+            className={cn(
+              'w-full h-7 rounded border bg-zinc-950 px-1 text-center text-[12px] text-zinc-100',
+              'focus:outline-none focus:ring-1',
+              'disabled:opacity-40 disabled:cursor-not-allowed',
+              '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
+              sizeWarning
+                ? 'border-amber-400/60 focus:ring-amber-400/30'
+                : 'border-zinc-800 focus:border-zinc-700 focus:ring-green-500/30'
+            )}
+          />
+        )}
       </div>
 
-      {/* Style */}
+      {/* Style — empty container in audio mode for the same reason. */}
+      {isAudioOnly ? (
+        <div className="py-3 px-1" />
+      ) : (
       <div className="flex flex-col gap-1 py-2 px-1">
         <div className="grid grid-cols-[80px_1fr] items-center gap-2">
           <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.textColor')}</span>
@@ -443,6 +454,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           <Switch checked={entry.fadeEnabled} onCheckedChange={handleFadeChange} disabled={entry.isDeleted} className="scale-75 origin-left" />
         </div>
       </div>
+      )}
 
       {/* Text column — REQ-022 step 1 stacks the per-row font selector
           above the editor so the user always sees "this row's font" in
@@ -455,11 +467,15 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           edge is at the full column width).  Wrapper padding removed
           so both children's outer edges sit at the same column x. */}
       <div className="flex flex-col gap-1 my-1 min-w-0">
-      <RowFontSelector
-        value={entry.fontId}
-        onChange={handleFontChange}
-        disabled={entry.isDeleted}
-      />
+      {/* Row font selector — hidden in audio mode (REQ-028): there is
+          no burn-in stage so per-row font choice has no consumer. */}
+      {!isAudioOnly && (
+        <RowFontSelector
+          value={entry.fontId}
+          onChange={handleFontChange}
+          disabled={entry.isDeleted}
+        />
+      )}
       <div
         className={cn(
           'flex items-start py-2 px-2 min-w-0 min-h-[36px] cursor-text rounded transition-all duration-150',
@@ -592,6 +608,11 @@ export function SubtitleTable({
   const entries = useProjectStore((s) => s.entries)
   const tableFilter = useUiStore((s) => s.tableFilter)
   const focusedRowId = useUiStore((s) => s.focusedRowId)
+  // REQ-028: blank out the "Size" / "Style" header labels when the
+  // input is audio-only so the dead columns don't advertise themselves.
+  // Column widths stay reserved (TABLE_GRID_COLS unchanged) — only the
+  // labels disappear.
+  const isAudioOnly = useIsAudioOnly()
   const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
   const scrollToRowId = useUiStore((s) => s.scrollToRowId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
@@ -762,8 +783,8 @@ export function SubtitleTable({
         </div>
         <div className="py-2 px-1 text-[11px] font-medium text-zinc-500 text-center">{t('table.colIndex')}</div>
         <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colTime')}</div>
-        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colSize')}</div>
-        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colStyle')}</div>
+        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{isAudioOnly ? '' : t('table.colSize')}</div>
+        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{isAudioOnly ? '' : t('table.colStyle')}</div>
         <div className="py-2 px-2 text-[11px] font-medium text-zinc-500">{t('table.colText')}</div>
         <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colState')}</div>
         <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colActions')}</div>
