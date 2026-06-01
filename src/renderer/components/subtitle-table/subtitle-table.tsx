@@ -448,15 +448,18 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           above the editor so the user always sees "this row's font" in
           context with the text it applies to.  The selector itself
           stops click propagation so picking a font does not re-focus the
-          row / seek the video. */}
+          row / seek the video.
+          REQ-023: the selector wrapper used to have `px-2` which made
+          the button 16 px narrower than the text editor below (the
+          text editor's px-2 is internal padding on the div whose outer
+          edge is at the full column width).  Wrapper padding removed
+          so both children's outer edges sit at the same column x. */}
       <div className="flex flex-col gap-1 my-1 min-w-0">
-      <div className="px-2">
-        <RowFontSelector
-          value={entry.fontId}
-          onChange={handleFontChange}
-          disabled={entry.isDeleted}
-        />
-      </div>
+      <RowFontSelector
+        value={entry.fontId}
+        onChange={handleFontChange}
+        disabled={entry.isDeleted}
+      />
       <div
         className={cn(
           'flex items-start py-2 px-2 min-w-0 min-h-[36px] cursor-text rounded transition-all duration-150',
