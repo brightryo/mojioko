@@ -1,4 +1,5 @@
 import type { WhisperModelId } from './burnin-defaults'
+import type { FontId } from './fonts'
 export type { WhisperModelId }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +158,13 @@ export interface AppSettings {
   /** Fade-in/out duration in seconds applied to \fad() in ASS output. Default 0.2. */
   fadeDurationSec: number
   activeModelId: WhisperModelId | null
+  /**
+   * Currently selected subtitle font ID.  Drives both the CSS preview family
+   * and the ASS `Style:` `Fontname` at burn-in time.  Optional because
+   * existing settings files predating font selection do not contain it;
+   * defaults to `'noto-sans-jp-semibold'` when absent.
+   */
+  activeFontId?: FontId
   lastInputDir: string | null
   lastOutputDir: string | null
 }
