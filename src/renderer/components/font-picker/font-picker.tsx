@@ -44,7 +44,9 @@ interface FontPickerProps {
  *  2. For installed (or bundled) fonts, ensureFontLoaded() is fired so the
  *     row label can render in the font's own face.
  *  3. Download: downloadFont() streams progress events; on completion we
- *     refresh + register the font with FontFace API + auto-select it.
+ *     refresh + register the font with FontFace API.  Active selection
+ *     does NOT change — the user must explicitly click the row to
+ *     activate the new font (REQ-026).
  *  4. Uninstall: uninstallFont() then evictFont() so the renderer-side
  *     cache drops the now-deleted bytes.
  *  5. Select: setActiveFont() updates AppSettings and useSettingsStore.
@@ -113,15 +115,15 @@ export function FontPicker({ onChange }: FontPickerProps) {
       // bulk pickers immediately include the new font in their popover
       // lists.  REQ-025 (iv).
       bumpFontInventoryVersion()
-      // Auto-select the freshly downloaded font so the user does not have
-      // to take a second action.  This matches the Subtitle Style dialog's
-      // long-standing behaviour and is now the single behaviour for every
-      // FontPicker call site (REQ-020).
-      const r = await setActiveFont(meta.id)
-      if (r.ok) {
-        setActiveFontInStore(meta.id)
-        onChange?.()
-      }
+      // REQ-026: do NOT auto-select the freshly downloaded font.  A
+      // download is "add to inventory"; selection is a separate, explicit
+      // user action.  The user perceived "row font changed" too because
+      // SubtitleOverlay + RowFontSelector resolve fontId-less rows
+      // through activeFontId — auto-flipping activeFontId visually
+      // repainted every default-following row in one go.  Keeping
+      // activeFontId untouched keeps preview + row dropdown + data
+      // aligned with what the user actually chose.
+      onChange?.()
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.includes('HTTP 404')) {
