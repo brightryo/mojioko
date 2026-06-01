@@ -17,10 +17,22 @@ import { ensureFontLoaded, evictFont } from '@/lib/font-registry'
 import { useUiStore } from '@/stores/ui-store'
 import { FONT_REGISTRY, type FontId, type FontsState, type FontInfo, type FontMeta, getFontMeta } from '../../../shared/fonts'
 
+export type FontPickerMode = 'pick' | 'manage-only'
+
 interface FontPickerProps {
   /** Optional callback fired when a font is downloaded or activated, so the
    *  parent can re-render the preview surfaces tied to the active font. */
   onChange?: () => void
+  /**
+   * Operation mode:
+   * - `'pick'` (default): the original DL + select hybrid used by
+   *   SubtitleStyleDialog.  Auto-selects a freshly downloaded font.
+   * - `'manage-only'`: hide the Select action and the active-font highlight.
+   *   Download / Cancel / Uninstall / View license still work.  Used by
+   *   the Settings dialog's font tab where selection happens via a
+   *   dedicated picker, and this list is purely "what's installed".
+   */
+  mode?: FontPickerMode
 }
 
 /**
@@ -40,10 +52,11 @@ interface FontPickerProps {
  *  5. When the user clicks Select: setActiveFont() updates AppSettings and
  *     useSettingsStore.activeFontId; SubtitleOverlay + previews react.
  */
-export function FontPicker({ onChange }: FontPickerProps) {
+export function FontPicker({ onChange, mode = 'pick' }: FontPickerProps) {
   const { t } = useTranslation('step1')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   const setActiveFontInStore = useSettingsStore((s) => s.setActiveFontId)
+  const isManageOnly = mode === 'manage-only'
 
   const [state, setState] = useState<FontsState | null>(null)
   const [downloadingId, setDownloadingId] = useState<FontId | null>(null)
@@ -86,10 +99,16 @@ export function FontPicker({ onChange }: FontPickerProps) {
       await refresh()
       await ensureFontLoaded(meta.id).catch(() => {})
       toast.success(t('fontPicker.toast.downloadComplete', { name: meta.displayName }))
-      // Auto-select the freshly downloaded font.
-      const r = await setActiveFont(meta.id)
-      if (r.ok) {
-        setActiveFontInStore(meta.id)
+      // Auto-select the freshly downloaded font.  Suppressed in manage-only
+      // mode so the Settings font tab does not jump the active selection
+      // out from under the user.
+      if (!isManageOnly) {
+        const r = await setActiveFont(meta.id)
+        if (r.ok) {
+          setActiveFontInStore(meta.id)
+          onChange?.()
+        }
+      } else {
         onChange?.()
       }
     } catch (err) {
@@ -151,10 +170,19 @@ export function FontPicker({ onChange }: FontPickerProps) {
         {FONT_REGISTRY.map((meta) => {
           const info: FontInfo | undefined = state?.fonts.find((f) => f.id === meta.id)
           const status = info?.status ?? (meta.bundled ? 'bundled' : 'not-installed')
-          const isActive = activeFontId === meta.id
+          // manage-only: never highlight a row as "active" since the user is
+          // here to manage the inventory, not to pick a default.  The Settings
+          // tab renders the active selection in its own dedicated picker.
+          const isActive = !isManageOnly && activeFontId === meta.id
           const isDownloading = downloadingId === meta.id
-          const canSelect = (status === 'bundled' || status === 'installed') && !isActive
-          const canUninstall = status === 'installed' && !isActive
+          // Select action only available in 'pick' mode; manage-only suppresses
+          // it so this list reads as inventory management only.
+          const canSelect = !isManageOnly && (status === 'bundled' || status === 'installed') && activeFontId !== meta.id
+          // Uninstall the currently-active font is blocked in pick mode (the
+          // FontPicker also drives selection there).  In manage-only mode we
+          // allow it — the main-side ipc/font.ts already falls active back to
+          // the default when the active font is removed.
+          const canUninstall = status === 'installed' && (isManageOnly || activeFontId !== meta.id)
           return (
             <FontRow
               key={meta.id}
