@@ -56,6 +56,7 @@ declare global {
       shellShowInFolder: (path: string) => Promise<void>
       shellOpenExternal: (url: string) => Promise<void>
       shellOpenModelsFolder: () => Promise<void>
+      shellOpenThirdPartyLicensesFolder: () => Promise<void>
       shellWriteTextFile: (filePath: string, content: string) => Promise<void>
       shellFileExists: (filePath: string) => Promise<boolean>
 

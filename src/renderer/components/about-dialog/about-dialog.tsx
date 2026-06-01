@@ -62,6 +62,21 @@ export function AboutDialog() {
             >
               {t('common:fontLicenses.title')} →
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                // Opens the bundled `<resourcesPath>/licenses/` directory in
+                // the OS file explorer so the user can read each component's
+                // licence text (electron-mit, react-mit, ffmpeg-lgpl,
+                // faster-whisper-mit, noto-sans-jp-ofl).  Satisfies the
+                // EULA §1.2 "THIRD_PARTY_LICENSES" pointer with a real
+                // surface the user can reach.
+                window.electronAPI?.shellOpenThirdPartyLicensesFolder().catch(() => {})
+              }}
+              className="text-[12px] text-primary hover:underline text-left"
+            >
+              {t('common:thirdPartyLicenses.openFolder')} →
+            </button>
           </div>
           {/* TODO: add a "Support this project" link row here.  The
               DonationDialog already exists (uiStore.setDonationDialogOpen)

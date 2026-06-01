@@ -64,5 +64,9 @@
     "sourceLabel": "Source",
     "viewOnDisk": "Show OFL.txt",
     "openSource": "Open source page"
+  },
+  "thirdPartyLicenses": {
+    "title": "Third-party licenses",
+    "openFolder": "Open third-party licenses folder"
   }
 }
