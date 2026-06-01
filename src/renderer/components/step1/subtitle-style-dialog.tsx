@@ -70,39 +70,43 @@ export function SubtitleStyleDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Form left / preview right.  Below lg the columns stack so the
-            dialog stays usable in narrow / portrait windows. */}
+        {/* "Visual" left, "Parameters" right.  Left column groups the
+            two visual-identity surfaces — what the subtitle will look
+            like (preview) and which font face renders it (FontPicker).
+            Right column holds the numerical / colour controls that
+            adjust that look.  Below lg the columns stack so the dialog
+            stays usable in narrow / portrait windows.  REQ-019 #3a. */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
-          {/* ── Form column ─────────────────────────────────────────── */}
+          {/* ── Visual column ───────────────────────────────────────── */}
           <div className="space-y-3">
+            <StyleSamplePreview
+              defaults={defaults}
+              thumbnail={thumbnail}
+              video={video}
+              autoLineBreak={autoLineBreak}
+            />
+
             {/* Font family — drives both the preview's @font-face and the
-                ASS Style fontname at burn-in time.  Lives at the top of the
-                form because it changes the visual identity more than the
-                other knobs.  Bundled Noto + 8 OFL fonts; non-bundled fonts
+                ASS Style fontname at burn-in time.  Sits under the preview
+                so the choice of face and its rendered result are visually
+                adjacent.  Bundled Noto + 8 OFL fonts; non-bundled fonts
                 are downloaded on demand. */}
             <FontPicker />
-
-            {/* Size / colors / outline / fade / auto line break — shared
-                with the Settings dialog's "Default style" tab via this
-                component, so both surfaces edit identical-looking controls. */}
-            <DefaultStyleControls
-              fontSizePx={defaults.fontSizePx}
-              textColorHex={defaults.textColorHex}
-              outlineColorHex={defaults.outlineColorHex}
-              outlineThicknessPx={defaults.outlineThicknessPx}
-              fadeEnabled={defaults.fadeEnabled}
-              autoLineBreak={autoLineBreak}
-              onUpdateDefaults={setDefaults}
-              onSetAutoLineBreak={setAutoLineBreak}
-            />
           </div>
 
-          {/* ── Preview column ──────────────────────────────────────── */}
-          <StyleSamplePreview
-            defaults={defaults}
-            thumbnail={thumbnail}
-            video={video}
+          {/* ── Parameters column ───────────────────────────────────── */}
+          {/* Size / colors / outline / fade / auto line break — shared
+              with the Settings dialog's "Default style" tab via this
+              component, so both surfaces edit identical-looking controls. */}
+          <DefaultStyleControls
+            fontSizePx={defaults.fontSizePx}
+            textColorHex={defaults.textColorHex}
+            outlineColorHex={defaults.outlineColorHex}
+            outlineThicknessPx={defaults.outlineThicknessPx}
+            fadeEnabled={defaults.fadeEnabled}
             autoLineBreak={autoLineBreak}
+            onUpdateDefaults={setDefaults}
+            onSetAutoLineBreak={setAutoLineBreak}
           />
         </div>
       </DialogContent>
