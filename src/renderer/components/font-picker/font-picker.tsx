@@ -17,47 +17,33 @@ import { ensureFontLoaded, evictFont } from '@/lib/font-registry'
 import { useUiStore } from '@/stores/ui-store'
 import { FONT_REGISTRY, type FontId, type FontsState, type FontInfo, type FontMeta, getFontMeta } from '../../../shared/fonts'
 
-export type FontPickerMode = 'pick' | 'manage-only'
-
 interface FontPickerProps {
   /** Optional callback fired when a font is downloaded or activated, so the
    *  parent can re-render the preview surfaces tied to the active font. */
   onChange?: () => void
-  /**
-   * Operation mode:
-   * - `'pick'` (default): clicking a row activates that font.  Used by the
-   *   Subtitle Style dialog.  Auto-selects a freshly downloaded font.
-   * - `'manage-only'`: rows are not clickable; selection is driven by the
-   *   surrounding Settings ▸ Fonts tab's Default Font dropdown.  The
-   *   left-edge dot still reflects the active selection so the user can
-   *   see at a glance which font is the current default while managing
-   *   inventory.
-   */
-  mode?: FontPickerMode
 }
 
 /**
- * Subtitle font picker.  Each row is a single click target: the indicator
- * dot turns green when active, the row is clickable to select, and a
- * single right-side action icon shows the download / uninstall affordance
- * for the row's current state (REQ-019 #3b).
+ * Subtitle font picker.  One list, one interaction: clicking a row makes
+ * that font the active default (dot turns green); the right-side icon
+ * (Download / Trash) handles inventory.  Used identically by the Subtitle
+ * Style dialog and the Settings ▸ Fonts tab (REQ-020 unified the two).
  *
  * Loading flow:
  *  1. On mount: listFonts() to get install state from main.
  *  2. For installed (or bundled) fonts, ensureFontLoaded() is fired so the
  *     row label can render in the font's own face.
  *  3. Download: downloadFont() streams progress events; on completion we
- *     refresh + register the font with FontFace API.
+ *     refresh + register the font with FontFace API + auto-select it.
  *  4. Uninstall: uninstallFont() then evictFont() so the renderer-side
  *     cache drops the now-deleted bytes.
- *  5. Select (pick mode only): setActiveFont() updates AppSettings and
- *     useSettingsStore.activeFontId; SubtitleOverlay + previews react.
+ *  5. Select: setActiveFont() updates AppSettings and useSettingsStore.
+ *     activeFontId; SubtitleOverlay + previews react.
  */
-export function FontPicker({ onChange, mode = 'pick' }: FontPickerProps) {
+export function FontPicker({ onChange }: FontPickerProps) {
   const { t } = useTranslation('step1')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   const setActiveFontInStore = useSettingsStore((s) => s.setActiveFontId)
-  const isManageOnly = mode === 'manage-only'
 
   const [state, setState] = useState<FontsState | null>(null)
   const [downloadingId, setDownloadingId] = useState<FontId | null>(null)
@@ -100,16 +86,13 @@ export function FontPicker({ onChange, mode = 'pick' }: FontPickerProps) {
       await refresh()
       await ensureFontLoaded(meta.id).catch(() => {})
       toast.success(t('fontPicker.toast.downloadComplete', { name: meta.displayName }))
-      // Auto-select the freshly downloaded font.  Suppressed in manage-only
-      // mode so the Settings font tab does not jump the active selection
-      // out from under the user.
-      if (!isManageOnly) {
-        const r = await setActiveFont(meta.id)
-        if (r.ok) {
-          setActiveFontInStore(meta.id)
-          onChange?.()
-        }
-      } else {
+      // Auto-select the freshly downloaded font so the user does not have
+      // to take a second action.  This matches the Subtitle Style dialog's
+      // long-standing behaviour and is now the single behaviour for every
+      // FontPicker call site (REQ-020).
+      const r = await setActiveFont(meta.id)
+      if (r.ok) {
+        setActiveFontInStore(meta.id)
         onChange?.()
       }
     } catch (err) {
@@ -171,21 +154,16 @@ export function FontPicker({ onChange, mode = 'pick' }: FontPickerProps) {
         {FONT_REGISTRY.map((meta) => {
           const info: FontInfo | undefined = state?.fonts.find((f) => f.id === meta.id)
           const status = info?.status ?? (meta.bundled ? 'bundled' : 'not-installed')
-          // The indicator dot reflects the active selection in BOTH modes:
-          // in pick mode the user picks here, in manage-only mode the
-          // Settings ▸ Fonts default-font dropdown drives it.  Either way,
-          // the user sees which font is the current default.
           const isActive = activeFontId === meta.id
           const isDownloading = downloadingId === meta.id
-          // Row click activates the font in pick mode only.  Requires the
-          // font to be available (bundled or installed) and not already
-          // active.
-          const canSelect = !isManageOnly && (status === 'bundled' || status === 'installed') && !isActive
-          // Uninstall the currently-active font is blocked in pick mode (the
-          // FontPicker also drives selection there).  In manage-only mode we
-          // allow it — the main-side ipc/font.ts already falls active back to
-          // the default when the active font is removed.
-          const canUninstall = status === 'installed' && (isManageOnly || !isActive)
+          // Row click activates the font when the font is available
+          // (bundled or installed) and not already active.
+          const canSelect = (status === 'bundled' || status === 'installed') && !isActive
+          // The currently-active font cannot be uninstalled — the picker
+          // is the only place to switch active, so allowing uninstall
+          // here would orphan the selection.  User must pick another font
+          // first.
+          const canUninstall = status === 'installed' && !isActive
           return (
             <FontRow
               key={meta.id}

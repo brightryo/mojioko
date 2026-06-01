@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import {
@@ -11,13 +10,9 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Label } from '@/components/ui/label'
 import { FontPicker } from '@/components/font-picker/font-picker'
 import { DefaultStyleControls } from '@/components/default-style-controls/default-style-controls'
 import { WhisperAdvancedControls } from '@/components/whisper-advanced-controls/whisper-advanced-controls'
-import { setActiveFont, listFonts } from '@/services/font'
-import { ensureFontLoaded } from '@/lib/font-registry'
-import { FONT_REGISTRY, type FontId, type FontsState, getFontMeta } from '../../../shared/fonts'
 
 /** Allowed fade duration range. */
 const FADE_DURATION_MIN = 0.1
@@ -34,10 +29,6 @@ export function SettingsDialog() {
   const setLanguage = useSettingsStore((s) => s.setLanguage)
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   const setFadeDurationSec = useSettingsStore((s) => s.setFadeDurationSec)
-
-  // Fonts
-  const activeFontId = useSettingsStore((s) => s.activeFontId)
-  const setActiveFontInStore = useSettingsStore((s) => s.setActiveFontId)
 
   // Default style — single source of truth lives on settingsStore.
   // SubtitleStyleDialog reads & writes the same slice via REQ-016 wiring.
@@ -95,36 +86,6 @@ export function SettingsDialog() {
   function handleLanguageChange(lang: string) {
     setLanguage(lang)
     void i18n.changeLanguage(lang)
-  }
-
-  // Default-font selector — installed-only list (bundled + actually
-  // downloaded).  Refreshed on dialog open and after FontPicker downloads
-  // complete so the dropdown stays in sync with the manage list.
-  const [fontsState, setFontsState] = useState<FontsState | null>(null)
-  const refreshFonts = useCallback(async () => {
-    const r = await listFonts()
-    if (r.ok) setFontsState(r.data)
-  }, [])
-  useEffect(() => {
-    if (isOpen) refreshFonts()
-  }, [isOpen, refreshFonts])
-
-  const installedFontIds = (fontsState?.fonts ?? FONT_REGISTRY.map((f) => ({
-    id: f.id,
-    status: f.bundled ? 'bundled' as const : 'not-installed' as const
-  })))
-    .filter((f) => f.status === 'bundled' || f.status === 'installed')
-    .map((f) => f.id as FontId)
-
-  async function handleDefaultFontChange(fontId: string) {
-    if (!installedFontIds.includes(fontId as FontId)) return
-    await ensureFontLoaded(fontId as FontId).catch(() => {})
-    const r = await setActiveFont(fontId as FontId)
-    if (r.ok) {
-      setActiveFontInStore(fontId as FontId)
-      const meta = getFontMeta(fontId as FontId)
-      toast.success(meta.displayName)
-    }
   }
 
   return (
@@ -202,36 +163,13 @@ export function SettingsDialog() {
           </TabsContent>
 
           {/* ─ Fonts ──────────────────────────────────────────────── */}
-          <TabsContent value="fonts" className="space-y-4 min-h-[490px]">
-            {/* Default font dropdown — installed-only.  Increasing the
-                inventory is done in the management list below. */}
-            <div className="space-y-1.5">
-              <Label>{t('fonts.defaultFont')}</Label>
-              <Select value={activeFontId} onValueChange={handleDefaultFontChange}>
-                <SelectTrigger className="h-9 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FONT_REGISTRY
-                    .filter((meta) => installedFontIds.includes(meta.id))
-                    .map((meta) => (
-                      <SelectItem key={meta.id} value={meta.id}>
-                        {meta.displayName}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-muted-foreground">{t('fonts.defaultFontHint')}</p>
-            </div>
-
-            {/* Font management — manage-only mode hides the Select action
-                and active-row highlight; this is purely inventory (DL /
-                Cancel / Uninstall / View license). */}
-            <div className="space-y-1.5">
-              <Label>{t('fonts.manageHeading')}</Label>
-              <p className="text-[11px] text-muted-foreground">{t('fonts.manageHint')}</p>
-              <FontPicker mode="manage-only" onChange={refreshFonts} />
-            </div>
+          {/* REQ-020: unified with the Subtitle Style dialog — row click
+              selects the default font, the dot indicator shows the active
+              choice, and DL / Trash icons handle inventory in the same
+              list.  No separate dropdown / management-only split. */}
+          <TabsContent value="fonts" className="space-y-1.5 min-h-[490px]">
+            <p className="text-[11px] text-muted-foreground">{t('fonts.hint')}</p>
+            <FontPicker />
           </TabsContent>
 
           {/* ─ Default style ──────────────────────────────────────── */}
