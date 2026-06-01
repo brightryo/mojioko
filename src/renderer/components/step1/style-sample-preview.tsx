@@ -38,14 +38,15 @@ const PREVIEW_BURNIN: BurninPosition = {
 const FALLBACK_VIDEO_WIDTH = 1920
 const FALLBACK_VIDEO_HEIGHT = 1080
 
-/** Cap on the preview frame's rendered height.  Without this the frame
- *  fills the column width at its native aspect ratio, which on a 1280×820
- *  default window pushes a ~273 px tall 16:9 frame and overflows the
- *  vertical budget once paired with the Whisper card and the seed-style
- *  card.  220 leaves the frame readable (~391 px wide at 16:9, still tall
- *  enough to verify wrapping and outline visibility) while reclaiming
- *  ~50 px of vertical space for the rest of Step 1. */
-const FRAME_MAX_HEIGHT_PX = 220
+/** Cap on the preview frame's rendered height.  Used both standalone in
+ *  Step 1's first view AND inside the subtitle style dialog — the dialog
+ *  pairs the preview with a tall column of form controls, so a 220 px tall
+ *  frame pushes the dialog past the user's vertical comfort budget on
+ *  1280×820.  160 still gives ~285 px at 16:9 — wide enough to verify
+ *  wrap position and outline visibility, while reclaiming ~60 px back to
+ *  the form column.  Smaller values trade detail for compactness, but at
+ *  this size the sample text is still legible at the default font size. */
+const FRAME_MAX_HEIGHT_PX = 160
 
 interface StyleSamplePreviewProps {
   defaults: TranscriptionDefaults
