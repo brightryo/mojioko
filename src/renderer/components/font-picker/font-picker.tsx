@@ -4,8 +4,17 @@ import { Download, Trash2, X, FileText, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { HelpIcon } from '@/components/help-icon'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useProjectStore } from '@/stores/project-store'
 import {
   listFonts,
   uninstallFont,
@@ -14,6 +23,7 @@ import {
 } from '@/services/font'
 import type { FontDownloadRun } from '@/services/font'
 import { ensureFontLoaded, evictFont } from '@/lib/font-registry'
+import { evictSubtitleFont } from '@/lib/font-metrics'
 import { useUiStore } from '@/stores/ui-store'
 import { FONT_REGISTRY, type FontId, type FontsState, type FontInfo, type FontMeta, getFontMeta } from '../../../shared/fonts'
 
@@ -44,10 +54,23 @@ export function FontPicker({ onChange }: FontPickerProps) {
   const { t } = useTranslation('step1')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   const setActiveFontInStore = useSettingsStore((s) => s.setActiveFontId)
+  const bumpFontInventoryVersion = useUiStore((s) => s.bumpFontInventoryVersion)
 
   const [state, setState] = useState<FontsState | null>(null)
   const [downloadingId, setDownloadingId] = useState<FontId | null>(null)
   const [downloadPercent, setDownloadPercent] = useState(0)
+  /**
+   * REQ-025 (ii): when the user clicks Uninstall on a font that is
+   * currently referenced by one or more rows (`entry.fontId === meta.id`),
+   * the actual removal is deferred and a confirmation dialog rendered.
+   * Null when no confirmation is pending; otherwise carries the target
+   * font + the count of affected rows so the dialog body can show
+   * "△行で使用されています".
+   */
+  const [pendingUninstall, setPendingUninstall] = useState<{
+    meta: FontMeta
+    affectedRowCount: number
+  } | null>(null)
   const downloadRunRef = useRef<FontDownloadRun | null>(null)
 
   const refresh = useCallback(async () => {
@@ -86,6 +109,10 @@ export function FontPicker({ onChange }: FontPickerProps) {
       await refresh()
       await ensureFontLoaded(meta.id).catch(() => {})
       toast.success(t('fontPicker.toast.downloadComplete', { name: meta.displayName }))
+      // Notify every other useInstalledFontIds subscriber so per-row /
+      // bulk pickers immediately include the new font in their popover
+      // lists.  REQ-025 (iv).
+      bumpFontInventoryVersion()
       // Auto-select the freshly downloaded font so the user does not have
       // to take a second action.  This matches the Subtitle Style dialog's
       // long-standing behaviour and is now the single behaviour for every
@@ -116,18 +143,94 @@ export function FontPicker({ onChange }: FontPickerProps) {
     setDownloadPercent(0)
   }
 
-  async function handleUninstall(meta: FontMeta) {
+  /**
+   * Click handler on the per-row Trash icon.  Counts active rows that
+   * reference `meta.id` via `entry.fontId`; if any exist, defers the
+   * actual removal to the confirmation dialog (REQ-025 (ii)).  Otherwise
+   * proceeds directly to performUninstall().
+   */
+  function handleUninstall(meta: FontMeta) {
     if (meta.bundled) return
-    const r = await uninstallFont(meta.id)
-    if (r.ok) {
-      evictFont(meta.id)
-      // The main side already falls back to default for active; mirror that
-      // in the local store so React reads stay consistent.
-      if (activeFontId === meta.id) setActiveFontInStore(r.data.activeFontId)
-      setState(r.data)
-      toast.success(t('fontPicker.toast.uninstalled', { name: meta.displayName }))
-      onChange?.()
+    const entries = useProjectStore.getState().entries
+    const affectedRowCount = entries.reduce(
+      (n, e) => n + (!e.isDeleted && e.fontId === meta.id ? 1 : 0),
+      0
+    )
+    if (affectedRowCount > 0) {
+      setPendingUninstall({ meta, affectedRowCount })
+      return
     }
+    void performUninstall(meta)
+  }
+
+  /**
+   * Actual uninstall flow — IPC + cache eviction + REQ-025 (i) row
+   * write-back.  Extracted from handleUninstall so the dialog confirm
+   * button can call it without re-running the affected-row count.
+   *
+   * Writes `entry.fontId` AND `entry.original.fontId` back to undefined
+   * for every row that referenced the removed font.  Both halves are
+   * needed: clearing only the live `fontId` leaves a stale reference
+   * inside `original.fontId` that Reset row would later restore (REQ-022
+   * step 7 lifts whatever is on original.fontId verbatim).
+   *
+   * History is intentionally not touched.  An automatic data-repair
+   * action triggered by the font disappearing from disk is not something
+   * the user should be able to "undo" — the font is gone either way.
+   */
+  async function performUninstall(meta: FontMeta) {
+    const r = await uninstallFont(meta.id)
+    if (!r.ok) return
+
+    evictFont(meta.id)
+    evictSubtitleFont(meta.id)
+
+    // The main side already falls back to default for active; mirror that
+    // in the local store so React reads stay consistent.
+    if (activeFontId === meta.id) setActiveFontInStore(r.data.activeFontId)
+    setState(r.data)
+    toast.success(t('fontPicker.toast.uninstalled', { name: meta.displayName }))
+
+    // REQ-025 (i): write back any rows still referencing the removed font.
+    // Reads entries through getState() rather than subscribing because we
+    // only need the snapshot at this instant; subsequent edits via React
+    // patches are no concern.
+    const proj = useProjectStore.getState()
+    let affected = 0
+    for (const e of proj.entries) {
+      if (e.fontId === meta.id || e.original.fontId === meta.id) {
+        proj.updateEntry(e.id, {
+          fontId: undefined,
+          original: { ...e.original, fontId: undefined }
+        })
+        affected++
+      }
+    }
+    if (affected > 0) {
+      toast.info(
+        t('fontPicker.toast.uninstalledFallback', {
+          name: meta.displayName,
+          count: affected
+        })
+      )
+    }
+
+    // Force every useInstalledFontIds subscriber to refetch so popovers
+    // open elsewhere stop offering the now-deleted font (REQ-025 (iv)).
+    bumpFontInventoryVersion()
+
+    onChange?.()
+  }
+
+  function cancelPendingUninstall() {
+    setPendingUninstall(null)
+  }
+
+  async function confirmPendingUninstall() {
+    if (!pendingUninstall) return
+    const { meta } = pendingUninstall
+    setPendingUninstall(null)
+    await performUninstall(meta)
   }
 
   async function handleSelect(meta: FontMeta) {
@@ -182,6 +285,42 @@ export function FontPicker({ onChange }: FontPickerProps) {
           )
         })}
       </div>
+
+      {/* REQ-025 (ii) confirm dialog — only renders while a uninstall
+          target is pending.  Same shape as step3.tsx's overwrite dialog
+          so the visual language stays consistent. */}
+      <Dialog
+        open={pendingUninstall !== null}
+        onOpenChange={(o) => { if (!o) cancelPendingUninstall() }}
+      >
+        <DialogContent className="max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>
+              {t('fontPicker.uninstallConfirm.title', {
+                name: pendingUninstall?.meta.displayName ?? ''
+              })}
+            </DialogTitle>
+            <DialogDescription className="whitespace-pre-line">
+              {t('fontPicker.uninstallConfirm.body', {
+                name: pendingUninstall?.meta.displayName ?? '',
+                count: pendingUninstall?.affectedRowCount ?? 0
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" size="md" onClick={cancelPendingUninstall}>
+              {t('fontPicker.uninstallConfirm.cancel')}
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              onClick={() => { void confirmPendingUninstall() }}
+            >
+              {t('fontPicker.uninstallConfirm.confirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

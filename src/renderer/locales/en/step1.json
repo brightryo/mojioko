@@ -184,7 +184,14 @@
       "downloadFailed": "Download failed: {{error}}",
       "downloadUnavailable": "{{name}} is not yet available — please try again later",
       "uninstalled": "{{name}} uninstalled",
+      "uninstalledFallback": "{{name}} was removed — {{count}} row(s) reverted to the default font",
       "activated": "Switched to {{name}}"
+    },
+    "uninstallConfirm": {
+      "title": "Remove {{name}}?",
+      "body": "{{name}} is used by {{count}} row(s). Removing it will revert those rows to the default font.",
+      "confirm": "Remove",
+      "cancel": "Cancel"
     }
   }
 }

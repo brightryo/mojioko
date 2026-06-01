@@ -1,19 +1,22 @@
 import { useState, useEffect } from 'react'
 import { listFonts } from '@/services/font'
+import { useUiStore } from '@/stores/ui-store'
 import type { FontId } from '../../shared/fonts'
 
 /**
- * Lightweight hook that returns the set of currently-installed (bundled
- * or downloaded) font IDs.  Fires one `listFonts()` IPC call on mount;
- * does NOT subscribe to subsequent download/uninstall events because the
- * per-row picker uses this only for the dropdown enumeration — if the
- * user opens Settings, installs a font, then opens the row picker again
- * the component re-mounts inside its popover and re-fetches.
+ * Returns the set of currently-installed (bundled or downloaded) font IDs.
+ * Refetches whenever `useUiStore.fontInventoryVersion` bumps so a popover
+ * list opened in one component picks up changes made elsewhere (e.g. the
+ * user removes a font from Settings while STEP 2 stays mounted).
  *
- * REQ-022 step 1 — supports the STEP 2 per-row font selector.
+ * REQ-022 step 1 / REQ-025 (iv).
  */
 export function useInstalledFontIds(): ReadonlySet<FontId> {
   const [ids, setIds] = useState<Set<FontId>>(() => new Set())
+  // Subscribe to the version so the useEffect re-runs on every bump.
+  // Reads at the slice level so unrelated UI store changes don't trigger
+  // a re-render here.
+  const version = useUiStore((s) => s.fontInventoryVersion)
   useEffect(() => {
     let cancelled = false
     listFonts().then((r) => {
@@ -25,6 +28,6 @@ export function useInstalledFontIds(): ReadonlySet<FontId> {
       setIds(next)
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [])
+  }, [version])
   return ids
 }
