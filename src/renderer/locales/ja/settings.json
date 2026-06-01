@@ -6,5 +6,12 @@
     "languageEn": "English",
     "fadeDuration": "フェード時間（秒）",
     "fadeDurationHint": "0.1〜0.5秒"
+  },
+  "about": {
+    "version": "バージョン",
+    "license": "ライセンス",
+    "licenseValue": "プロプライエタリ",
+    "available": "利用可能",
+    "notAvailable": "利用不可"
   }
 }

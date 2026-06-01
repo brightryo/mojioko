@@ -6,5 +6,12 @@
     "languageEn": "English",
     "fadeDuration": "Fade duration (seconds)",
     "fadeDurationHint": "0.1–0.5 sec"
+  },
+  "about": {
+    "version": "Version",
+    "license": "License",
+    "licenseValue": "Proprietary",
+    "available": "Available",
+    "notAvailable": "Not available"
   }
 }
