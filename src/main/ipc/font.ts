@@ -122,21 +122,16 @@ export function registerFontHandlers(): void {
     try {
       const meta = getFontMeta(fontId)
       // Pick the OFL location based on whether the font is bundled or
-      // user-downloaded.  Both branches read the full SIL OFL v1.1 text
-      // from disk — bundled fonts ship one OFL.txt per family root via
-      // electron-builder's extraResources filter (added when this rule
-      // was tightened), and downloaded fonts have OFL.txt as a sibling
-      // of their TTF inside the per-id user dir.
+      // user-downloaded.  Both branches return the file contents verbatim:
+      // each shipped OFL.txt already begins with that font's copyright
+      // header (the SIL OFL §2 "above copyright notice"), so we do NOT
+      // prepend `meta.copyright` here — that would duplicate the line.
       const oflPath = meta.bundled
         ? getBundledOflPath(meta)
         : join(getFontUserDir(fontId), 'OFL.txt')
       if (oflPath && existsSync(oflPath)) {
         const buf = await fs.readFile(oflPath, 'utf-8')
-        // Prepend the registry copyright header so callers always see the
-        // attribution alongside the license body — OFL §3.2 mentions
-        // "above copyright notice and this license", and the canonical
-        // SIL OFL text alone has no per-font copyright line.
-        return { ok: true, data: `${meta.copyright}\n\n${buf}` }
+        return { ok: true, data: buf }
       }
       // Fallback: the OFL.txt is missing on disk (corrupt install, or a
       // font registry entry that hasn't shipped the OFL yet).  Return the
