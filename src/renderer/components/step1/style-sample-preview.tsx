@@ -9,6 +9,7 @@ import {
   loadSubtitleFont,
   type SubtitleFont
 } from '@/lib/font-metrics'
+import { ensureFontLoaded } from '@/lib/font-registry'
 import { useSettingsStore } from '@/stores/settings-store'
 import type {
   TranscriptionDefaults,
@@ -111,23 +112,31 @@ export function StyleSamplePreview({
   // trade-off for not blocking the whole preview on font fetch.
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   const [font, setFont] = useState<SubtitleFont | null>(getSubtitleFont)
-  // Re-fetch the opentype.js Font whenever the active selection changes so
-  // applyAutoLineBreak measures with the right metrics.  Clearing first
-  // prevents the wrap position from briefly using the previous font's widths
-  // during the load transition.
+  // Re-fetch the opentype.js Font + register the FontFace whenever the
+  // active selection changes so:
+  //   - applyAutoLineBreak measures with the right metrics
+  //   - SubtitleOverlay below renders in the selected family on first paint
+  // Clearing first prevents the wrap position from briefly using the
+  // previous font's widths during the load transition.  Awaiting both
+  // load paths makes the re-render happen only after the FontFace is
+  // actually queryable via CSS.
   useEffect(() => {
     setFont(null)
     let cancelled = false
-    loadSubtitleFont()
-      .then((loaded) => {
+    Promise.all([
+      loadSubtitleFont(),
+      ensureFontLoaded(activeFontId)
+    ])
+      .then(([loaded]) => {
         if (!cancelled) setFont(loaded)
       })
-      .catch(() => {
+      .catch((err) => {
         // Load failed — applyAutoLineBreak will silently fall back to the
         // character-class width estimate (which over-estimates wide-glyph
         // widths by ~45 % vs libass, so the preview may break slightly
         // earlier than the real burn-in).  This degrades gracefully
         // rather than throwing.
+        console.error('[style-sample-preview] font load failed', err)
       })
     return () => { cancelled = true }
   }, [activeFontId])
