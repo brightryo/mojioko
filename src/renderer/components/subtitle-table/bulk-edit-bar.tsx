@@ -177,6 +177,19 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftOutline(hex)
   }
 
+  // REQ-033: pair click in the popover sets BOTH halves on every
+  // selected row via a single applyBulk patch + single history op.  Two
+  // updates squashed into one undo / redo step matches the user's mental
+  // model of "I picked a pair".
+  function handleColorPairCommit(textHex: string, outlineHex: string) {
+    applyBulk(
+      { textColorHex: textHex, outlineColorHex: outlineHex },
+      t('bulk.history.colorPair', { count: selectedRowIds.size })
+    )
+    setColorDraftText(textHex)
+    setColorDraftOutline(outlineHex)
+  }
+
   function handleOutlineWidthCommit(v: number) {
     // Mirror the colour-commit handlers: persist the just-applied value as
     // the swatch / slider position so the bar visually records "what was
@@ -366,6 +379,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             value={colorDraftText ?? '#FFFFFF'}
             onChange={setColorDraftText}
             onCommit={handleTextColorCommit}
+            onPairApply={handleColorPairCommit}
             swatchOnly
           />
         </label>
@@ -377,6 +391,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             value={colorDraftOutline ?? '#000000'}
             onChange={setColorDraftOutline}
             onCommit={handleOutlineColorCommit}
+            onPairApply={handleColorPairCommit}
             swatchOnly
           />
         </label>

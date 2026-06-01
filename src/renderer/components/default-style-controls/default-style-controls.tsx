@@ -112,6 +112,9 @@ export function DefaultStyleControls({
         <ColorPicker
           value={textColorHex}
           onChange={(hex) => onUpdateDefaults({ textColorHex: hex })}
+          onPairApply={(text, outline) =>
+            onUpdateDefaults({ textColorHex: text, outlineColorHex: outline })
+          }
         />
       </div>
 
@@ -124,6 +127,9 @@ export function DefaultStyleControls({
         <ColorPicker
           value={outlineColorHex}
           onChange={(hex) => onUpdateDefaults({ outlineColorHex: hex })}
+          onPairApply={(text, outline) =>
+            onUpdateDefaults({ textColorHex: text, outlineColorHex: outline })
+          }
         />
       </div>
 

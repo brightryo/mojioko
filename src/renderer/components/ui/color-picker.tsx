@@ -1,23 +1,11 @@
 import { useState } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { useTranslation } from 'react-i18next'
+import { X } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/stores/ui-store'
-
-/** Preset palette displayed at the top of the picker popover. */
-const PRESET_COLORS = [
-  '#FFFFFF', // white
-  '#000000', // black
-  '#EF4444', // red
-  '#EAB308', // yellow
-  '#06B6D4', // cyan
-  '#22C55E', // green
-  '#3B82F6', // blue
-  '#EC4899', // pink
-  '#F97316', // orange
-  '#A855F7', // purple
-]
+import { BASIC_COLORS, COLOR_PAIRS, CUD_COLORS, type ColorPair } from '@/lib/color-palette'
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
 
@@ -41,9 +29,31 @@ interface ColorPickerProps {
    * simply omits this prop and continues to rely on `onChange`.
    */
   onCommit?: (hex: string) => void
+  /**
+   * Optional pair-apply callback.  When provided, the popover renders
+   * the "Suggested pairs" group (REQ-033 §2) — clicking a pair calls
+   * this with BOTH halves so the calling surface can write the row's
+   * text colour and outline colour together.  Hidden when omitted; that
+   * lets a future caller use ColorPicker for a single isolated colour
+   * (e.g. some highlight) without surfacing a control that would only
+   * change half of nothing relevant.
+   *
+   * Every current call site (per-row, bulk-edit, default-style) holds
+   * both setters in its closure, so all three pass this callback —
+   * pair group is therefore visible everywhere in the current app.
+   */
+  onPairApply?: (textHex: string, outlineHex: string) => void
 }
 
-export function ColorPicker({ value, onChange, className, disabled, swatchOnly, onCommit }: ColorPickerProps) {
+export function ColorPicker({
+  value,
+  onChange,
+  className,
+  disabled,
+  swatchOnly,
+  onCommit,
+  onPairApply
+}: ColorPickerProps) {
   const { t } = useTranslation('common')
   const recentColors = useUiStore((s) => s.recentColors)
   const addRecentColor = useUiStore((s) => s.addRecentColor)
@@ -100,17 +110,24 @@ export function ColorPicker({ value, onChange, className, disabled, swatchOnly, 
     setOpen(next)
   }
 
-  // -------------------------------------------------------------------------
-  // Picker callbacks
-  // -------------------------------------------------------------------------
-
   function handlePickerChange(hex: string) {
-    // react-colorful fires with lowercase; normalise immediately
     applyColor(hex)
   }
 
   function handleSwatchClick(hex: string) {
     applyAndRecord(hex)
+  }
+
+  function handlePairClick(pair: ColorPair) {
+    if (!onPairApply) return
+    onPairApply(normalise(pair.text), normalise(pair.outline))
+    // Remember both colours in the recent list so subsequent single picks
+    // can hit them quickly.
+    addRecentColor(pair.text)
+    addRecentColor(pair.outline)
+    // Close the popover so the user sees the result immediately — pair
+    // clicks are a fully-committed action, not an exploratory pick.
+    handleOpenChange(false)
   }
 
   // -------------------------------------------------------------------------
@@ -131,7 +148,6 @@ export function ColorPicker({ value, onChange, className, disabled, swatchOnly, 
       onChange(upper)
       addRecentColor(upper)
     } else {
-      // Revert draft to current committed value
       setHexDraft(normalise(value))
     }
   }
@@ -144,23 +160,80 @@ export function ColorPicker({ value, onChange, className, disabled, swatchOnly, 
   }
 
   // -------------------------------------------------------------------------
-  // Popover content (shared between both trigger styles)
+  // Popover content
   // -------------------------------------------------------------------------
 
   const pickerContent = (
     <PopoverContent
-      className="w-[240px] p-3 space-y-3"
+      className="w-[280px] p-3 space-y-3"
       align="start"
       sideOffset={8}
       onInteractOutside={() => handleOpenChange(false)}
     >
-      {/* Presets */}
-      <div>
-        <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-          {t('colorPicker.presets')}
+      {/* Close X — explicit affordance.  Outside-click also closes the
+          popover via onInteractOutside, but REQ-033 asks for a visible
+          dismiss control. */}
+      <div className="flex items-start justify-between">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+          {t('colorPicker.basic')}
         </p>
-        <div className="flex flex-wrap gap-1.5">
-          {PRESET_COLORS.map((c) => (
+        <button
+          type="button"
+          onClick={() => handleOpenChange(false)}
+          className="-mt-0.5 -mr-1 flex h-5 w-5 items-center justify-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+          aria-label={t('colorPicker.close')}
+          title={t('colorPicker.close')}
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+
+      {/* Group 1: Basic colours (10) */}
+      <div className="grid grid-cols-10 gap-1.5">
+        {BASIC_COLORS.map((c) => (
+          <ColorSwatch
+            key={c}
+            color={c}
+            isSelected={normalise(value) === c}
+            onClick={() => handleSwatchClick(c)}
+          />
+        ))}
+      </div>
+
+      {/* Group 2: Recommended pairs (5).  Only rendered when the caller
+          owns both text + outline setters; otherwise omitted entirely so
+          users don't get a half-functional control. */}
+      {onPairApply && (
+        <div>
+          <div className="mb-1.5 flex items-baseline gap-2">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+              {t('colorPicker.pairs')}
+            </p>
+            <span className="text-[9px] text-zinc-600">{t('colorPicker.pairsHint')}</span>
+          </div>
+          <div className="grid grid-cols-5 gap-1.5">
+            {COLOR_PAIRS.map((p) => (
+              <PairSwatch
+                key={`${p.text}-${p.outline}`}
+                pair={p}
+                tooltip={t('colorPicker.pairTooltip', { text: p.text, outline: p.outline })}
+                onClick={() => handlePairClick(p)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Group 3: CUD palette (10) */}
+      <div>
+        <div className="mb-1.5 flex items-baseline gap-2">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            {t('colorPicker.cud')}
+          </p>
+          <span className="text-[9px] text-zinc-600">{t('colorPicker.cudHint')}</span>
+        </div>
+        <div className="grid grid-cols-10 gap-1.5">
+          {CUD_COLORS.map((c) => (
             <ColorSwatch
               key={c}
               color={c}
@@ -171,7 +244,7 @@ export function ColorPicker({ value, onChange, className, disabled, swatchOnly, 
         </div>
       </div>
 
-      {/* Recent colors */}
+      {/* Recent colors (capped to 5 by useUiStore.addRecentColor) */}
       {recentColors.length > 0 && (
         <div>
           <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
@@ -273,7 +346,7 @@ export function ColorPicker({ value, onChange, className, disabled, swatchOnly, 
 }
 
 // ---------------------------------------------------------------------------
-// ColorSwatch — small clickable color square used inside the picker popover
+// ColorSwatch — single colour swatch used in the basic / CUD / recent rows
 // ---------------------------------------------------------------------------
 
 interface ColorSwatchProps {
@@ -296,6 +369,53 @@ function ColorSwatch({ color, isSelected, onClick }: ColorSwatchProps) {
       )}
       style={{ backgroundColor: color }}
       aria-label={color}
+      title={color}
     />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// PairSwatch — two-colour preview tile shown in the "Suggested pairs" group.
+// Renders a small subtitle-style sample ("Aa" in text colour with outline
+// colour stroke) on top of a stacked text+outline swatch.  Single click
+// applies both halves.
+// ---------------------------------------------------------------------------
+
+interface PairSwatchProps {
+  pair: ColorPair
+  tooltip: string
+  onClick: () => void
+}
+
+function PairSwatch({ pair, tooltip, onClick }: PairSwatchProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={tooltip}
+      aria-label={tooltip}
+      className={cn(
+        'relative flex h-8 items-center justify-center rounded ring-1 ring-zinc-700/60',
+        'transition-transform duration-100 hover:scale-105 focus:outline-none',
+        'hover:ring-zinc-500'
+      )}
+      style={{ backgroundColor: '#404040' }}
+    >
+      {/* Subtitle-style preview text — text colour with outline-colour
+          stroke, exactly how the burn-in renders.  paint-order: stroke
+          fill mirrors SubtitleOverlay so the visible stroke is the
+          OUTSIDE half. */}
+      <span
+        className="text-[13px] font-bold leading-none"
+        style={{
+          color: pair.text,
+          WebkitTextStrokeWidth: '1.5px',
+          WebkitTextStrokeColor: pair.outline,
+          paintOrder: 'stroke fill'
+        }}
+      >
+        Aa
+      </span>
+    </button>
   )
 }
