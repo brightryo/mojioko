@@ -79,6 +79,16 @@ async function downloadFile(
   } finally {
     reader.releaseLock()
   }
+
+  // C-3 integrity check: bytes received vs Content-Length, ±10 % tolerance.
+  // Catches the truncated-download case where the server reported a length
+  // but the stream ended early (proxy hiccup, dropped connection mid-read).
+  // Models without Content-Length skip the check — HuggingFace always emits
+  // it for these files in practice.
+  if (contentLength > 0 && Math.abs(received - contentLength) > contentLength * 0.1) {
+    try { unlinkSync(destPath) } catch { /* ignore */ }
+    throw new Error(`Truncated download for ${url}: received ${received} / ${contentLength}`)
+  }
 }
 
 export async function downloadModel(
