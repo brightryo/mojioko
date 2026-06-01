@@ -1,8 +1,8 @@
 import type { SubtitleEntry, BurninPosition, SubtitleBackground } from '../../../shared/types'
 import { ASS_MARGIN_LR_PX } from '../../../shared/constants'
-import { getLibassScale } from '@/lib/font-metrics'
+import { getLibassScaleFor } from '@/lib/font-metrics'
 import { useSettingsStore } from '@/stores/settings-store'
-import { getFontMeta } from '../../../shared/fonts'
+import { getFontMeta, isFontId } from '../../../shared/fonts'
 
 /** Floor (in OUTPUT pixels, not on the scale factor) applied to the visible
  *  outline so the thinnest setting (= 1) remains discernible at small preview
@@ -73,20 +73,15 @@ export function SubtitleOverlay({
   subtitleBackground,
 }: SubtitleOverlayProps) {
   const activeFontId = useSettingsStore((s) => s.activeFontId)
-  const fontMeta = getFontMeta(activeFontId)
-  const libassScale = getLibassScale()
+  // Per-row font override (REQ-022 step 4): when the entry carries a
+  // fontId, render with that family + its own libassScale.  Otherwise
+  // fall back to the project default (activeFontId) so legacy rows and
+  // freshly-added blank rows match what burn-in would produce.
+  const resolvedFontId = isFontId(entry.fontId) ? entry.fontId : activeFontId
+  const fontMeta = getFontMeta(resolvedFontId)
+  const libassScale = getLibassScaleFor(resolvedFontId)
   const scale      = containerWidthPx / videoWidthPx
   const fontSizePx = entry.fontSizePx        * libassScale * scale
-
-  // Diagnostic: log every render alongside the resolved font.  Lets us
-  // verify in DevTools that activeFontId propagates correctly into the
-  // step 2 SubtitleOverlay path (the v1.1.1 regression manifested as
-  // "step1 dialog shows Dela but step2 video preview shows fallback").
-  if (typeof window !== 'undefined') {
-    // Cheap to compute, only logged once per render so it does not flood.
-    // eslint-disable-next-line no-console
-    console.debug(`[subtitle-overlay] render — activeFontId=${activeFontId}, fontFamily=${fontMeta.cssFontFamily}, weight=${fontMeta.weight}`)
-  }
   const marginVPx  = burnin.verticalMarginPx * scale
   const marginHPx  = ASS_MARGIN_LR_PX        * scale
 
