@@ -12,6 +12,16 @@
     "fadeTooltip": "Fade",
     "selectAllAria": "Select all visible rows"
   },
+  "rowFont": {
+    "defaultPrefix": "Default:",
+    "useDefault": "Use project default",
+    "tooltipDefault": "Project default font ({{name}}). Click to override",
+    "tooltipOverride": "This row uses {{name}}. Click to change"
+  },
+  "bulkRowFont": {
+    "label": "Font",
+    "useDefault": "Use project default"
+  },
   "tab": {
     "all": "All",
     "ready": "Ready",
@@ -126,6 +136,7 @@
     "editColor": "Change color",
     "editStroke": "Change stroke width",
     "editFade": "Change fade",
+    "editFont": "Change font",
     "deleteRow": "Delete row",
     "restoreRow": "Restore row",
     "resetRow": "Reset row",
@@ -150,6 +161,7 @@
       "outlineColor": "Bulk outline color change ({{count}} rows)",
       "outlineWidth": "Bulk outline width change ({{count}} rows)",
       "fade": "Bulk fade change ({{count}} rows)",
+      "font": "Bulk font change ({{count}} rows)",
       "autoLineBreak": "Bulk auto-wrap ({{count}} rows)"
     }
   },

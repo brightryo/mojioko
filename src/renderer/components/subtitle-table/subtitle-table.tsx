@@ -12,6 +12,8 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
+import { RowFontSelector } from '@/components/subtitle-table/row-font-selector'
+import type { FontId } from '../../../shared/fonts'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { filterEntries } from '@/lib/subtitle-filter'
@@ -222,6 +224,21 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     withHistory(t('history.editColor'), { textColorHex: hex })
   }
 
+  // Per-row fontId change (REQ-022 step 1).  `undefined` clears the
+  // override so the row falls back to the project default.  Snapshot via
+  // withHistory writes the entire prior entry, so undo restores the
+  // previous fontId (including back to undefined) and the entry.isEdited
+  // flag also lifts in tandem with the other style edits.
+  //
+  // Mirrors handleReset's explicit `fontId: original.fontId` trick: a
+  // patch object whose `fontId` property is `undefined` is required for
+  // the updateEntry merge to actually clear the key, since a missing
+  // property would leave the previous override in place.
+  function handleFontChange(next: FontId | undefined) {
+    if (next === entry.fontId) return
+    withHistory(t('history.editFont'), { fontId: next })
+  }
+
   function handleOutlineColorChange(hex: string) {
     withHistory(t('history.editColor'), { outlineColorHex: hex })
   }
@@ -427,10 +444,22 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         </div>
       </div>
 
-      {/* Text */}
+      {/* Text column — REQ-022 step 1 stacks the per-row font selector
+          above the editor so the user always sees "this row's font" in
+          context with the text it applies to.  The selector itself
+          stops click propagation so picking a font does not re-focus the
+          row / seek the video. */}
+      <div className="flex flex-col gap-1 my-1 min-w-0">
+      <div className="px-2">
+        <RowFontSelector
+          value={entry.fontId}
+          onChange={handleFontChange}
+          disabled={entry.isDeleted}
+        />
+      </div>
       <div
         className={cn(
-          'flex items-start my-1 py-2 px-2 min-w-0 min-h-[36px] cursor-text rounded transition-all duration-150',
+          'flex items-start py-2 px-2 min-w-0 min-h-[36px] cursor-text rounded transition-all duration-150',
           // Non-editing: always show a subtle inset border (no layout shift vs a real border)
           !editingText && 'shadow-[inset_0_0_0_1px_rgba(63,63,70,0.5)]',
           // Hover: brighten border + light bg
@@ -467,6 +496,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
             {entry.text.replace(/\\N/g, '\n')}
           </span>
         )}
+      </div>
       </div>
 
       {/* State — shows all applicable badges simultaneously */}
