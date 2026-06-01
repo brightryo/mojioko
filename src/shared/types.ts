@@ -17,6 +17,15 @@ export interface AudioTrack {
 
 export interface VideoInfo {
   path: string
+  /**
+   * REQ-027/028: `false` for audio-only inputs (mp3 / wav / m4a / aac /
+   * flac / ogg).  When false, `widthPx` / `heightPx` / `fps` / `videoCodec`
+   * are placeholders (0 / '') with no meaning — callers must check this
+   * flag before reading them.  Existing video flows that read these
+   * fields unconditionally continue to work for video inputs because
+   * those still set the flag to `true`.
+   */
+  hasVideoStream: boolean
   widthPx: number
   heightPx: number
   durationSec: number
