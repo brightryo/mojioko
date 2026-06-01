@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, Settings2, ChevronUp, ChevronDown } from 'lucide-react'
+import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, Settings2, ChevronUp, ChevronDown, AudioWaveform } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { toast } from 'sonner'
@@ -33,6 +33,7 @@ import { formatBytes } from '@/lib/format'
 import type { SubtitleEntry as SubtitleEntryType, WhisperModelId } from '../../shared/types'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
+import { useIsAudioOnly } from '@/hooks/use-input-mode'
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -52,6 +53,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const navigate = useNavigate()
 
   const video = useProjectStore((s) => s.video)
+  const isAudioOnly = useIsAudioOnly()
   const videoLoadingState = useProjectStore((s) => s.videoLoadingState)
   const setVideo = useProjectStore((s) => s.setVideo)
   const setVideoLoadingState = useProjectStore((s) => s.setVideoLoadingState)
@@ -329,7 +331,9 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // so the boundary is visually unambiguous.  During transcription the
   // caret is hidden and the main button collapses to a plain rounded
   // Cancel / Stop button — seed style is locked mid-run.
-  const showStyleCaret = !isTranscribing
+  // REQ-028: also hidden in audio-only mode — there is no burn-in step
+  // for audio, so the seed-style dialog has no consumer.
+  const showStyleCaret = !isTranscribing && !isAudioOnly
   const footerRight = (
     <div className="inline-flex items-stretch">
       <Button
@@ -514,29 +518,43 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             </div>
           )}
 
-          {/* Thumbnail + technical metadata side-by-side.  Fixed 16:9
-              thumbnail container so portrait videos crop to the same
-              identifying frame size; object-cover fills the box. */}
+          {/* Thumbnail + technical metadata side-by-side.
+              REQ-028: in audio-only mode (no video stream) the left box
+              shows an AudioWaveform icon instead of the video frame, and
+              the Resolution row drops out — those fields carry no
+              meaning for pure audio inputs.  Format row also collapses
+              from "MP4 / h264 / 30fps" to "MP3 / mp3" since fps /
+              videoCodec are placeholders. */}
           <div className="grid grid-cols-[160px_1fr] gap-4 items-center">
             <div className="rounded-md border border-border bg-input aspect-video w-full overflow-hidden flex items-center justify-center">
-              {thumbnail ? (
+              {isAudioOnly ? (
+                <AudioWaveform className="h-8 w-8 text-muted-foreground/60" />
+              ) : thumbnail ? (
                 <img src={thumbnail} alt="" className="w-full h-full object-cover" />
               ) : (
                 <Video className="h-6 w-6 text-muted-foreground/40" />
               )}
             </div>
             <div className="divide-y divide-border/50">
-              <InfoRow
-                label={t('inputVideo.infoResolution')}
-                value={video ? `${video.widthPx}×${video.heightPx}` : '—'}
-              />
+              {!isAudioOnly && (
+                <InfoRow
+                  label={t('inputVideo.infoResolution')}
+                  value={video ? `${video.widthPx}×${video.heightPx}` : '—'}
+                />
+              )}
               <InfoRow
                 label={t('inputVideo.infoDuration')}
                 value={video ? formatDuration(video.durationSec) : '—'}
               />
               <InfoRow
                 label={t('inputVideo.infoFormat')}
-                value={video ? `${video.container.toUpperCase()} / ${video.videoCodec} / ${video.fps}fps` : '—'}
+                value={
+                  !video
+                    ? '—'
+                    : isAudioOnly
+                      ? `${video.container.toUpperCase()} / ${video.audioTracks[0]?.codec ?? '—'}`
+                      : `${video.container.toUpperCase()} / ${video.videoCodec} / ${video.fps}fps`
+                }
               />
               <InfoRow
                 label={t('inputVideo.infoFileSize')}

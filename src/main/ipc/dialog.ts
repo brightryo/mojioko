@@ -8,11 +8,17 @@ export function registerDialogHandlers(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     const defaultPath = defaultDir ?? join(app.getPath('videos'))
     const result = await dialog.showOpenDialog(win ?? BrowserWindow.getFocusedWindow()!, {
-      title: 'Open Video',
+      title: 'Open Input File',
       defaultPath,
+      // REQ-028: audio inputs (mp3 / wav / m4a / aac / flac / ogg) are now
+      // first-class.  Media filter lists everything; Video / Audio sub-filters
+      // let the user narrow down.  ffprobe still has the final say (extension
+      // is UX only — the mode decision happens by content inspection).
       filters: [
-        { name: 'Video files', extensions: ['mkv', 'mp4', 'mov', 'avi'] },
-        { name: 'All files', extensions: ['*'] }
+        { name: 'Media files', extensions: ['mp4', 'mkv', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'] },
+        { name: 'Video',       extensions: ['mp4', 'mkv', 'mov', 'avi'] },
+        { name: 'Audio',       extensions: ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'] },
+        { name: 'All files',   extensions: ['*'] }
       ],
       properties: ['openFile']
     })
