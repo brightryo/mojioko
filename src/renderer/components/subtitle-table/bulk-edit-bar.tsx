@@ -1,19 +1,23 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, WrapText } from 'lucide-react'
+import { X, WrapText, ChevronDown, AlertCircle, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
+import { useSettingsStore } from '@/stores/settings-store'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
+import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
+import { FONT_REGISTRY, getFontMeta, type FontId } from '../../../shared/fonts'
 
 interface BulkEditBarProps {
   /**
@@ -188,6 +192,19 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     applyBulk(
       { fadeEnabled: checked },
       t('bulk.history.fade', { count: selectedRowIds.size })
+    )
+  }
+
+  // Bulk font change — `undefined` means "fall back to project default"
+  // on every selected row (clears any per-row override).  We pass the
+  // value through applyBulk so undo restores each row's *individual*
+  // prior fontId in one step, which is critical because the rows might
+  // have had heterogeneous overrides before the bulk apply.
+  // REQ-022 step 2.
+  function handleFontChange(next: FontId | undefined) {
+    applyBulk(
+      { fontId: next },
+      t('bulk.history.font', { count: selectedRowIds.size })
     )
   }
 
@@ -383,6 +400,15 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           <Switch onCheckedChange={handleFadeChange} />
         </label>
 
+        {/* Bulk font (REQ-022 step 2).  Same popover content as the
+            per-row picker (RowFontSelector) but with a static "フォント"
+            trigger label — selection here applies to every row in the
+            current bulk selection. */}
+        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+          <span>{t('bulkRowFont.label')}</span>
+          <BulkFontPicker onPick={handleFontChange} />
+        </label>
+
         {/* Separator + Auto-wrap action.  Visually distinct from the
             value-controls above: this one is a single-shot action that
             recomputes line breaks on the selected rows using each row's
@@ -406,5 +432,88 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </Button>
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Bulk font picker — Popover content mirrors RowFontSelector's, but the
+// trigger is a fixed "Font" pill with no row-specific state.  Kept inline
+// because pulling it into its own file would duplicate the use-installed-
+// fonts + font-registry filter logic without giving any new abstraction.
+// ---------------------------------------------------------------------------
+function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void }) {
+  const { t } = useTranslation(['step2', 'step1'])
+  const [open, setOpen] = useState(false)
+  const installed = useInstalledFontIds()
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
+  const selectable = FONT_REGISTRY.filter((m) => installed.has(m.id))
+
+  function pick(next: FontId | undefined) {
+    onPick(next)
+    setOpen(false)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            'inline-flex items-center justify-between gap-1.5',
+            'h-7 px-2 rounded border bg-input text-[12px] text-foreground',
+            'border-border hover:border-zinc-700',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
+          )}
+          aria-label={t('bulkRowFont.label')}
+        >
+          <span>{t('bulkRowFont.label')}</span>
+          <ChevronDown className="h-3 w-3 text-zinc-500" aria-hidden="true" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[260px] p-1">
+        <div className="flex flex-col">
+          <button
+            type="button"
+            onClick={() => pick(undefined)}
+            className="flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-left text-zinc-100 hover:bg-accent/40 cursor-pointer"
+          >
+            <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span className="flex-1 min-w-0">
+              <span className="block leading-tight">{t('bulkRowFont.useDefault')}</span>
+              <span className="block text-[10px] text-zinc-500 truncate">
+                {getFontMeta(activeFontId).displayName}
+              </span>
+            </span>
+          </button>
+
+          <div className="my-1 h-px bg-zinc-800" />
+
+          {selectable.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => pick(m.id)}
+              className="flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-left text-zinc-300 hover:bg-accent/40"
+            >
+              <span className="h-2 w-2 rounded-full bg-zinc-600 shrink-0" aria-hidden="true" />
+              <span
+                className="flex-1 min-w-0 truncate"
+                style={{ fontFamily: `'${m.cssFontFamily}'`, fontWeight: m.weight }}
+              >
+                {m.displayName}
+              </span>
+              {m.lacksRareKanji && (
+                <span
+                  className="inline-flex items-center shrink-0 text-amber-400/80"
+                  title={t('step1:fontPicker.note.missingRareKanjiHelp')}
+                >
+                  <AlertCircle className="h-3 w-3" aria-hidden="true" />
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
