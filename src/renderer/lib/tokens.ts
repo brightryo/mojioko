@@ -56,7 +56,12 @@ export const motion = {
 } as const
 
 export const typography = {
-  fontSans: "'Inter', 'Noto Sans JP', system-ui, sans-serif",
+  // Inter was previously listed as the preferred Latin face but the
+  // woff2 was never wired up (the @font-face was commented out in
+  // fonts.css) and the woff2 itself has now been removed from the repo
+  // to dodge an OFL distribution obligation for an unused font.  The
+  // bundled Noto Sans JP covers Latin glyphs adequately for the UI.
+  fontSans: "'Noto Sans JP', system-ui, sans-serif",
   fontMono: "'SF Mono', Monaco, Consolas, monospace"
 } as const
 

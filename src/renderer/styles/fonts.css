@@ -1,23 +1,4 @@
 /*
- * Inter — bundled Latin font.
- * NOTE: Inter woff2 files are not yet present in resources/fonts/Inter/.
- * The app falls back to system-ui until the fonts are added.
- * To add Inter: download from https://rsms.me/inter/ and place the
- * variable woff2 file at resources/fonts/Inter/Inter-Variable.woff2.
- * Then uncomment the @font-face block below.
- */
-
-/*
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  src: url('/fonts/Inter/Inter-Variable.woff2') format('woff2');
-}
-*/
-
-/*
  * Noto Sans JP — bundled Japanese font (static TTF builds).
  * Only three weights are loaded to minimise render overhead:
  *   400 Regular, 500 Medium, 600 SemiBold.
