@@ -1,122 +1,178 @@
 import { parse } from 'opentype.js'
 import type { Font } from 'opentype.js'
+import { DEFAULT_FONT_ID, getFontMeta, type FontId } from '../../shared/fonts'
+import { ensureFontLoaded } from './font-registry'
 
 export type SubtitleFont = Font
 
 /**
- * Font URL must be **relative** ('./fonts/...'), not absolute ('/fonts/...').
+ * libassScale fallback used until (and as a safety net when) the OS/2 table
+ * of the active font has been parsed.
  *
- * - Dev (Vite publicDir = `resources/`): both `./fonts/...` and `/fonts/...`
- *   resolve to `http://localhost:5174/fonts/...` and Vite serves the file.
- * - Packaged (renderer is loaded from `file:///.../app.asar/out/renderer/`):
- *   `/fonts/...` resolves to the FILE SYSTEM ROOT (`file:///fonts/...`), which
- *   does not exist → fetch fails → libassScale stays at the fallback → preview
- *   text size diverges from the burned-in output.  Vite copies publicDir into
- *   `out/renderer/fonts/...`, so the relative URL resolves correctly inside
- *   the asar.
- *
- * Vite auto-rewrites `url('/fonts/...')` in CSS to a relative path during the
- * build, which is why `@font-face` still works in packaged mode — but it does
- * NOT rewrite string literals in JS, so this fetch path has to be relative on
- * the source side.
- */
-const FONT_URL = './fonts/Noto_Sans_JP/static/NotoSansJP-SemiBold.ttf'
-
-/**
- * libassScale used until (and as a safety net when) the OS/2 table is parsed.
  * Value is `unitsPerEm / (usWinAscent + usWinDescent)` for NotoSansJP-SemiBold:
  *   1000 / (1160 + 288) = 1000 / 1448 ≈ 0.6906
- * With this constant as the initial value, the preview matches the libass
- * output proportions even on the very first frame and on the failure path.
+ *
+ * Every Google Fonts CJK family validated so far (Noto Sans JP, Dela Gothic
+ * One) shares the same OS/2 metrics and therefore the same scale.  We keep
+ * the per-font calculation in place anyway because the registry will
+ * eventually add fonts that diverge.
  */
 const FALLBACK_LIBASS_SCALE = 0.6906
 
-let fontCache: Font | null = null
-let loadPromise: Promise<Font> | null = null
+interface FontEntry {
+  font: Font
+  libassScale: number
+  unitsPerEm: number
+  winHeight: number
+}
+
+const fontCache = new Map<FontId, FontEntry>()
+const inFlight = new Map<FontId, Promise<Font>>()
 
 /**
- * libass scales glyphs relative to OS/2 winHeight (usWinAscent + usWinDescent)
- * rather than unitsPerEm.  This module-level variable is computed from the
- * loaded font's OS/2 table and applied in all width calculations so that
- * Step 2 overflow detection matches the physical pixel widths rendered by
- * libass + HarfBuzz in the output video.
+ * The "active" font ID is a module-level variable rather than a parameter
+ * to every API call, so legacy no-arg callers (`loadSubtitleFont()`, etc.)
+ * keep working without rippling a FontId through every measurement
+ * function.  The renderer should call `setActiveSubtitleFont(fontId)` from
+ * the settings-store hydration path and again whenever the user changes
+ * their selection.
  */
-let libassScale = FALLBACK_LIBASS_SCALE
+let activeFontId: FontId = DEFAULT_FONT_ID
 
-export async function loadSubtitleFont(): Promise<Font> {
-  if (fontCache) return fontCache
-  if (loadPromise) return loadPromise
-  loadPromise = fetch(FONT_URL)
-    .then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status} fetching ${FONT_URL}`)
-      return r.arrayBuffer()
-    })
-    .then((buf) => {
-      fontCache = parse(buf)
+// ---------------------------------------------------------------------------
+// Internal load primitives
+// ---------------------------------------------------------------------------
 
-      // Derive libass-compatible scale from the OS/2 table.
-      // libass uses winHeight = usWinAscent + usWinDescent as its EM divisor,
-      // making each rendered glyph narrower than a pure unitsPerEm calculation.
-      const os2 = fontCache.tables.os2
-      const usWinAscent: number = os2.usWinAscent
-      const usWinDescent: number = os2.usWinDescent
-      const winHeight = usWinAscent + usWinDescent
-      libassScale = fontCache.unitsPerEm / winHeight
+async function fetchFontBytes(fontId: FontId): Promise<ArrayBuffer> {
+  const meta = getFontMeta(fontId)
+  // Bundled fonts: keep using the relative URL that worked in v1.1.0 so the
+  // dev mode (Vite publicDir at `/fonts/...`) and packaged mode (asar's
+  // `out/renderer/fonts/...`) both resolve.  This must match the path in
+  // fonts.css `@font-face` declarations.
+  if (meta.bundled) {
+    const relPath = meta.bundledRelativeDir ?? ''
+    const url = `./fonts/${relPath}/${meta.fileName}`.replace(/\/+/g, '/')
+    const resp = await fetch(url)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching ${url}`)
+    return resp.arrayBuffer()
+  }
+  // Downloaded fonts: the mojioko-font:// protocol serves them.
+  const resp = await fetch(`mojioko-font://${fontId}/ttf`)
+  if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching mojioko-font://${fontId}/ttf`)
+  return resp.arrayBuffer()
+}
 
-      // Production-visible startup log so packaged installs can be diagnosed
-      // without a dev build.  One line per app launch.
+function entryFromBytes(buf: ArrayBuffer): FontEntry {
+  const font = parse(buf)
+  const os2 = font.tables.os2
+  const winHeight = (os2.usWinAscent ?? 0) + (os2.usWinDescent ?? 0)
+  const libassScale = winHeight > 0 ? font.unitsPerEm / winHeight : FALLBACK_LIBASS_SCALE
+  return { font, libassScale, unitsPerEm: font.unitsPerEm, winHeight }
+}
+
+/**
+ * Load a specific font.  Cached on success; concurrent calls dedupe via an
+ * in-flight promise map.  Failed loads are NOT cached so a later attempt can
+ * retry — e.g. after the user finishes downloading the font.
+ */
+export async function loadSubtitleFontFor(fontId: FontId): Promise<Font> {
+  const cached = fontCache.get(fontId)
+  if (cached) return cached.font
+  const pending = inFlight.get(fontId)
+  if (pending) return pending
+
+  const meta = getFontMeta(fontId)
+  // Ask the font-registry (CSS side) to load it in parallel so the
+  // @font-face is also ready by the time this promise resolves.  Best
+  // effort — failures here just mean the preview falls back to the system
+  // font; opentype.js parsing is independent.
+  void ensureFontLoaded(fontId).catch(() => undefined)
+
+  const promise = (async () => {
+    try {
+      const buf = await fetchFontBytes(fontId)
+      const entry = entryFromBytes(buf)
+      fontCache.set(fontId, entry)
+      // Production-visible log so a packaged install can be diagnosed without
+      // a dev build — one line per font load.
       console.info(
-        `[font-metrics] subtitle font loaded — libassScale=${libassScale.toFixed(4)} (unitsPerEm=${fontCache.unitsPerEm}, winHeight=${winHeight})`
+        `[font-metrics] loaded ${fontId} (${meta.displayName}) — libassScale=${entry.libassScale.toFixed(4)} (unitsPerEm=${entry.unitsPerEm}, winHeight=${entry.winHeight})`
       )
-
-      // Verbose calibration sample — dev only.
-      if (import.meta.env.DEV) {
-        const sampleGlyph = fontCache.charToGlyph('あ')
-        const rawWidthPx = ((sampleGlyph.advanceWidth ?? 0) / fontCache.unitsPerEm) * 100
-        const libassWidthPx = rawWidthPx * libassScale
-        console.debug('[font-metrics] OS/2 calibration:', {
-          unitsPerEm: fontCache.unitsPerEm,
-          usWinAscent,
-          usWinDescent,
-          winHeight,
-          libassScale: +libassScale.toFixed(4),
-          '「あ」 raw 100px': +rawWidthPx.toFixed(2) + 'px',
-          '「あ」 libass 100px': +libassWidthPx.toFixed(2) + 'px',
-          '25chars libass': +(libassWidthPx * 25).toFixed(1) + 'px',
-          'effectivePx (1920,bord3)': 1920 - 20 - 6,
-          'charsFit (1920,bord3)': +((1920 - 20 - 6) / libassWidthPx).toFixed(2),
-        })
-      }
-
-      return fontCache
-    })
-    .catch((err) => {
-      // Loud production log so a broken bundle is diagnosable from DevTools.
-      // libassScale already holds the NotoSansJP-SemiBold fallback (0.6906),
-      // so preview proportions remain correct on the failure path.
+      return entry.font
+    } catch (err) {
       console.error(
-        `[font-metrics] subtitle font load failed at ${FONT_URL} — using fallback libassScale=${FALLBACK_LIBASS_SCALE}`,
+        `[font-metrics] load failed for ${fontId} (${meta.displayName}) — using fallback libassScale=${FALLBACK_LIBASS_SCALE}`,
         err
       )
-      // Reset loadPromise so a later call can retry (e.g., after the network
-      // problem is resolved or a route change re-mounts the consumer).
-      loadPromise = null
+      inFlight.delete(fontId)
       throw err
-    })
-  return loadPromise
+    }
+  })()
+  inFlight.set(fontId, promise)
+  // Once settled (either way), clear the in-flight entry so retries can run.
+  promise.finally(() => { inFlight.delete(fontId) })
+  return promise
+}
+
+export function getSubtitleFontFor(fontId: FontId): Font | null {
+  return fontCache.get(fontId)?.font ?? null
+}
+
+export function getLibassScaleFor(fontId: FontId): number {
+  return fontCache.get(fontId)?.libassScale ?? FALLBACK_LIBASS_SCALE
+}
+
+/**
+ * Drop the cached font entry — call after uninstall so reading the same
+ * font ID later triggers a fresh load (which will fail until the user
+ * re-downloads).
+ */
+export function evictSubtitleFont(fontId: FontId): void {
+  fontCache.delete(fontId)
+}
+
+// ---------------------------------------------------------------------------
+// Active-font API (back-compat for existing callers)
+// ---------------------------------------------------------------------------
+
+/**
+ * Set the active font.  Triggers a load if not already cached.  Returns the
+ * loaded font, or null on failure (caller can fall through to fallback
+ * measurement constants).
+ */
+export async function setActiveSubtitleFont(fontId: FontId): Promise<Font | null> {
+  activeFontId = fontId
+  try {
+    return await loadSubtitleFontFor(fontId)
+  } catch {
+    return null
+  }
+}
+
+/** Return the active font's ID — useful for legacy paths that want to know. */
+export function getActiveFontId(): FontId {
+  return activeFontId
+}
+
+/**
+ * Backwards-compatible no-arg loader.  Targets the currently-active font.
+ * New code should prefer `loadSubtitleFontFor(fontId)`.
+ */
+export async function loadSubtitleFont(): Promise<Font> {
+  return loadSubtitleFontFor(activeFontId)
 }
 
 export function getSubtitleFont(): Font | null {
-  return fontCache
+  return getSubtitleFontFor(activeFontId)
 }
 
-/**
- * libass-compatible scale factor = unitsPerEm / (usWinAscent + usWinDescent).
- * Returns 1.0 if the font has not yet been loaded.
- */
 export function getLibassScale(): number {
-  return libassScale
+  return getLibassScaleFor(activeFontId)
 }
+
+// ---------------------------------------------------------------------------
+// Measurement helpers (unchanged signatures — callers already pass the Font)
+// ---------------------------------------------------------------------------
 
 /**
  * Raw advance width in pixels for one character (no GPOS kerning, no libassScale).
@@ -128,23 +184,21 @@ export function glyphAdvancePx(font: Font, char: string, fontSizePx: number): nu
 }
 
 /**
- * Kerning-aware, libass-compatible line width in pixels for a single line (no `\n`).
+ * Kerning-aware, libass-compatible line width in pixels for a single line.
  *
- * Applies `libassScale` (= unitsPerEm / winHeight) so the returned value matches
- * the physical pixel width as rendered by libass + HarfBuzz in the output video.
- *
- * GPOS kerning note: NotoSansJP-SemiBold returns kern = 0 for all CJK / kana
- * pairs (full-em fixed-width cells).  Only Latin pairs have non-zero adjustments.
- * For Japanese-only text the kerning contribution is < 0.2 % of total width; the
- * libassScale correction is the dominant term.
- *
- * @param font        Loaded SubtitleFont (opentype.js Font).
- * @param text        Single line of text — must not contain `\n`.
- * @param fontSizePx  Desired render size in CSS / ASS pixels.
- * @returns           Line width in pixels, libass-equivalent.
+ * The libassScale is looked up against the active font when called as
+ * `measureLineWidth(font, text, size)` with the active font — but because
+ * the function takes a Font argument that may belong to any font, we look
+ * the scale up via the cache by identity-matching the cached entries.
+ * In practice the active path covers >99 % of calls and the per-font
+ * variant matches by reverse lookup; a stale Font (font ID evicted while
+ * still referenced) gracefully falls back to FALLBACK_LIBASS_SCALE.
  */
 export function measureLineWidth(font: Font, text: string, fontSizePx: number): number {
-  // fontSizePx / unitsPerEm × libassScale = effective pixels per font unit in libass.
+  let libassScale = FALLBACK_LIBASS_SCALE
+  for (const entry of fontCache.values()) {
+    if (entry.font === font) { libassScale = entry.libassScale; break }
+  }
   const scale = (fontSizePx / font.unitsPerEm) * libassScale
   const glyphs = font.stringToGlyphs(text)
   let totalUnits = 0

@@ -20,6 +20,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { registerCommands } from '@/lib/commands'
 import { loadSettings, saveSettings } from '@/services/settings'
+import { setActiveSubtitleFont } from '@/lib/font-metrics'
 import { APP_VERSION } from '../shared/app-info'
 import type { AppSettings } from '../shared/types'
 import {
@@ -125,6 +126,20 @@ function AppInner() {
     }).catch(() => { /* IPC unavailable in dev outside Electron */ })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Mirror activeFontId into font-metrics so the no-arg legacy callers
+  // (loadSubtitleFont, getLibassScale, etc.) target the currently selected
+  // font without having to thread the FontId through every measurement path.
+  useEffect(() => {
+    // Apply once with the current store value (covers initial mount + persist
+    // hydration before the IPC settingsLoad returns).
+    setActiveSubtitleFont(useSettingsStore.getState().activeFontId).catch(() => {})
+    return useSettingsStore.subscribe((state, prevState) => {
+      if (state.activeFontId !== prevState.activeFontId) {
+        setActiveSubtitleFont(state.activeFontId).catch(() => {})
+      }
+    })
+  }, [])
+
   // Keep native Electron menu labels in sync with the current language
   useEffect(() => {
     window.electronAPI?.menuSetLanguage(i18n.language)
@@ -158,6 +173,7 @@ function AppInner() {
           defaultAudioTrackIndex: s.defaultAudioTrackIndex,
           fadeDurationSec: s.fadeDurationSec,
           activeModelId: null,
+          activeFontId: s.activeFontId,
           lastInputDir: null,
           lastOutputDir: null
         }
