@@ -4,6 +4,17 @@ import { cn } from '@/lib/utils'
 
 const Tabs = TabsPrimitive.Root
 
+/**
+ * Underline-style tab strip — the standard "this is a tab bar" pattern.
+ * A 1-px zinc-800 baseline under the whole list reads as a tab track even
+ * on the dialog's zinc-900 surface (the old rounded-chip style shared the
+ * dialog background, so non-selected tabs looked like plain text).
+ *
+ * Each TabsTrigger renders a 2-px transparent border-bottom that flips to
+ * the green accent on the active tab.  -mb-px overlaps the list baseline
+ * so the active underline reads as a solid bar instead of two stacked
+ * lines.  REQ-019 #2.
+ */
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
@@ -11,7 +22,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      'inline-flex h-9 items-center gap-1 rounded-lg bg-zinc-900 p-1',
+      'inline-flex items-center gap-1 border-b border-zinc-800 w-full',
       className
     )}
     {...props}
@@ -26,12 +37,13 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      'inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-[12px] font-medium',
-      'text-zinc-500 transition-all duration-150',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30',
+      'relative inline-flex items-center justify-center whitespace-nowrap',
+      'px-3 py-2 text-[13px] font-medium -mb-px',
+      'border-b-2 border-transparent transition-colors duration-150',
+      'text-zinc-400 hover:text-zinc-100 hover:border-zinc-700',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30 rounded-t-sm',
       'disabled:pointer-events-none disabled:opacity-40',
-      'data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-50',
-      'hover:text-zinc-300',
+      'data-[state=active]:text-zinc-50 data-[state=active]:border-green-500',
       className
     )}
     {...props}
