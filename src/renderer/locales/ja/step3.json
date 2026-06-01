@@ -57,7 +57,8 @@
   },
   "toast": {
     "renderComplete": "書き出し完了",
-    "encoderFallback": "エンコーダー {{requested}} は使用できないため、{{actual}} にフォールバックします"
+    "encoderFallback": "エンコーダー {{requested}} は使用できないため、{{actual}} にフォールバックします",
+    "missingFonts": "未ダウンロードのフォントが使用されています: {{names}}。設定 ▸ フォントタブからダウンロードしてください。"
   },
   "outputFormat": {
     "label": "出力形式",

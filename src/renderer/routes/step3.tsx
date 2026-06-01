@@ -14,6 +14,8 @@ import { startBurnin } from '@/services/burnin'
 import { detectEncoders, resolveEffectiveEncoder, ENCODER_LABELS } from '@/services/encoder'
 import type { H264Encoder } from '@/services/encoder'
 import { shellOpenPath, shellShowInFolder, saveFileDialog, fileExists } from '@/services/dialog'
+import { listFonts } from '@/services/font'
+import { getFontMeta, type FontId } from '../../shared/fonts'
 import {
   Dialog,
   DialogContent,
@@ -115,8 +117,47 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
     : ''
   const displayContainer = outputContainer === 'mp4' ? 'MP4' : inputExtUpper
 
+  /**
+   * Pre-burn-in check (REQ-022 step 6): every fontId referenced by a row
+   * that will actually be burned in (plus the project default) must
+   * exist on disk.  Without this check, the user would see the
+   * back-end's `FfmpegError: font asset missing` failure event after
+   * already picking an output path and waiting for ffmpeg to spawn — a
+   * worse UX than failing fast with a clear toast that points them to
+   * Settings ▸ Fonts.
+   *
+   * Returns null when everything is installed; otherwise an array of
+   * missing FontIds for the toast to enumerate.
+   */
+  async function findMissingFonts(): Promise<FontId[] | null> {
+    const referenced = new Set<FontId>()
+    referenced.add(activeFontId)
+    for (const e of activeEntries) {
+      if (e.fontId) referenced.add(e.fontId)
+    }
+    const r = await listFonts()
+    if (!r.ok) return null  // IPC failed — let the back-end raise its own error
+    const installed = new Set<FontId>()
+    for (const f of r.data.fonts) {
+      if (f.status === 'bundled' || f.status === 'installed') installed.add(f.id)
+    }
+    const missing = Array.from(referenced).filter((id) => !installed.has(id))
+    return missing.length === 0 ? null : missing
+  }
+
   async function handleStartRender() {
     if (!video) return
+
+    // Defensive check before opening the OS save dialog: catch missing
+    // fonts up-front so the user does not pick an output path only to
+    // see the back-end fail with "font asset missing".  Friendly toast
+    // lists every uninstalled fontId so they know which to download.
+    const missing = await findMissingFonts()
+    if (missing && missing.length > 0) {
+      const names = missing.map((id) => getFontMeta(id).displayName).join(', ')
+      toast.error(t('toast.missingFonts', { names }))
+      return
+    }
 
     const stem = video.path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') ?? 'output'
     const inputExt = video.path.split(/[\\/]/).pop()?.split('.').pop()?.toLowerCase() ?? 'mp4'
