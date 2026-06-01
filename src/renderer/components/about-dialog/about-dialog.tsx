@@ -51,8 +51,12 @@ export function AboutDialog() {
             <button
               type="button"
               onClick={() => {
+                // Close About first, then open Font Licenses on the next
+                // tick.  Doing both synchronously confuses Radix's focus
+                // restoration — the close handler steals focus before the
+                // new dialog mounts, and the user sees nothing happen.
                 setOpen(false)
-                useUiStore.getState().setFontLicensesDialogOpen(true)
+                setTimeout(() => useUiStore.getState().setFontLicensesDialogOpen(true), 100)
               }}
               className="text-[12px] text-primary hover:underline text-left pt-1"
             >
