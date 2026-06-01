@@ -157,5 +157,30 @@
     "lang_ru": "Russian",
     "lang_ar": "Arabic",
     "futureNote": "Changes are saved automatically."
+  },
+  "fontPicker": {
+    "title": "Subtitle font",
+    "help": "Choose the font used by the burned-in subtitles. Fonts other than the bundled Noto are downloaded on demand and stored under %APPDATA%/MOJIOKO/fonts/.",
+    "status": {
+      "bundled": "Bundled",
+      "installed": "Installed",
+      "notInstalled": "Not installed",
+      "downloading": "Downloading…",
+      "active": "Active"
+    },
+    "action": {
+      "download": "Download",
+      "cancel": "Cancel",
+      "uninstall": "Uninstall",
+      "select": "Use this font",
+      "viewLicense": "View license"
+    },
+    "toast": {
+      "downloadComplete": "{{name}} downloaded",
+      "downloadFailed": "Download failed: {{error}}",
+      "downloadUnavailable": "{{name}} is not yet available — please try again later",
+      "uninstalled": "{{name}} uninstalled",
+      "activated": "Switched to {{name}}"
+    }
   }
 }

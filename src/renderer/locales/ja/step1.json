@@ -157,5 +157,30 @@
     "lang_ru": "ロシア語",
     "lang_ar": "アラビア語",
     "futureNote": "設定は自動的に保存されます。"
+  },
+  "fontPicker": {
+    "title": "字幕フォント",
+    "help": "字幕の焼き込みに使うフォントを選択します。標準同梱の Noto Sans JP 以外は必要に応じてダウンロードされ、%APPDATA%\\MOJIOKO\\fonts\\ 配下に保存されます。",
+    "status": {
+      "bundled": "標準同梱",
+      "installed": "ダウンロード済み",
+      "notInstalled": "未ダウンロード",
+      "downloading": "ダウンロード中…",
+      "active": "選択中"
+    },
+    "action": {
+      "download": "ダウンロード",
+      "cancel": "キャンセル",
+      "uninstall": "削除",
+      "select": "このフォントを使う",
+      "viewLicense": "ライセンス"
+    },
+    "toast": {
+      "downloadComplete": "{{name}} をダウンロードしました",
+      "downloadFailed": "ダウンロードに失敗しました: {{error}}",
+      "downloadUnavailable": "{{name}} はまだ配信されていません。時間を置いて再度お試しください。",
+      "uninstalled": "{{name}} を削除しました",
+      "activated": "{{name}} を選択しました"
+    }
   }
 }
