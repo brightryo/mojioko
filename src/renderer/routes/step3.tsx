@@ -51,6 +51,7 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
   const subtitleBackground = useSettingsStore((s) => s.subtitleBackground)
   const outputContainer = useSettingsStore((s) => s.outputContainer)
   const setOutputContainer = useSettingsStore((s) => s.setOutputContainer)
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
   const setDonationDialogOpen = useUiStore((s) => s.setDonationDialogOpen)
 
   const [renderState, setRenderState] = useState<RenderState>('idle')
@@ -165,7 +166,8 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
       audioMode,
       fadeDurationSec,
       subtitleBackground,
-      outputContainer
+      outputContainer,
+      fontId: activeFontId
     }
 
     const run = await startBurnin(burninOpts, (evt) => {
