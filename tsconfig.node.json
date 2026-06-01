@@ -11,7 +11,8 @@
     "skipLibCheck": true,
     "outDir": "out/main",
     "rootDir": ".",
-    "types": ["node"]
+    "types": ["node"],
+    "resolveJsonModule": true
   },
   "include": [
     "electron.vite.config.ts",
