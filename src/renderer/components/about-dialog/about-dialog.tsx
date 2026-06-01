@@ -40,7 +40,7 @@ export function AboutDialog() {
             <p className="text-[12px] text-zinc-500">{t('settings:about.version')} {APP_VERSION}</p>
           </div>
           <div className="border-t border-zinc-800 pt-3 space-y-2">
-            <InfoRow label={t('settings:about.license')} value="MIT" />
+            <InfoRow label={t('settings:about.license')} value={t('settings:about.licenseValue')} />
             <InfoRow label="Electron" value={buildInfo?.electronVersion ?? '…'} />
             <InfoRow label="Node.js" value={buildInfo?.nodeVersion ?? '…'} />
             <InfoRow label="Chromium" value={buildInfo?.chromeVersion ?? '…'} />
