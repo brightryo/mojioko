@@ -177,6 +177,10 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         fontSizePx: e.fontSizePx,
         outlineThicknessPx: e.outlineThicknessPx,
         videoWidthPx,
+        // Per-row fontId (REQ-021): when set, computeOverflowSync looks
+        // up that font's own Font + libassScale instead of falling back
+        // to the active selection.  Undefined → row inherits active.
+        fontId: e.fontId
       }, subtitleFont)
       if (r.overflowStartIndex !== -1) map.set(e.id, r.overflowStartIndex)
     }

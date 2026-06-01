@@ -225,12 +225,17 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       const e = all.find((x) => x.id === id)
       if (!e || e.isDeleted) continue
       const stripped = e.text.replace(/\\N/g, '')
+      // Per-row fontId (REQ-021): bulk-applied breaks must respect each
+      // row's own font, otherwise rows whose fontId differs from the
+      // active selection would break at positions that don't match the
+      // burned-in result.
       const rewrapped = applyAutoLineBreak(
         stripped,
         e.fontSizePx,
         e.outlineThicknessPx,
         videoWidthPx,
-        font
+        font,
+        e.fontId
       )
       if (rewrapped !== e.text) {
         snapshots.set(id, { ...e })

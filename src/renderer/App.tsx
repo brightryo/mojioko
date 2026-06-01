@@ -21,7 +21,9 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { registerCommands } from '@/lib/commands'
 import { loadSettings, saveSettings } from '@/services/settings'
-import { setActiveSubtitleFont } from '@/lib/font-metrics'
+import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
+import { ensureFontLoaded } from '@/lib/font-registry'
+import { listFonts } from '@/services/font'
 import { APP_VERSION } from '../shared/app-info'
 import type { AppSettings } from '../shared/types'
 import {
@@ -139,6 +141,25 @@ function AppInner() {
         setActiveSubtitleFont(state.activeFontId).catch(() => {})
       }
     })
+  }, [])
+
+  // Pre-load every installed font on startup (REQ-021).  Once per-row font
+  // overrides ship, overflow-calculator / auto-line-break may be asked for
+  // measurements against a font that the user did not pick as the active
+  // default — without a cache hit those calls silently fall back to the
+  // character-class width estimate (over-counts wide glyphs by ~45 %).
+  // Best-effort: failures (e.g. a font was uninstalled mid-session) just
+  // mean that font's row degrades to the fallback when measured.
+  useEffect(() => {
+    listFonts().then((r) => {
+      if (!r.ok) return
+      for (const f of r.data.fonts) {
+        if (f.status === 'bundled' || f.status === 'installed') {
+          loadSubtitleFontFor(f.id).catch(() => {})
+          ensureFontLoaded(f.id).catch(() => {})
+        }
+      }
+    }).catch(() => {})
   }, [])
 
   // Keep native Electron menu labels in sync with the current language
