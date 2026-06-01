@@ -218,6 +218,12 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
     if (cancelled) return
 
+    // Capture the active font ID at transcription time so subsequent
+    // settings changes do not retroactively repaint already-transcribed rows.
+    // Per-row font overrides (REQ-021) write this same field; rows with
+    // `fontId === activeFontId` round-trip identically to legacy rows.
+    const runFontId = useSettingsStore.getState().activeFontId
+
     // Build SubtitleEntry array from collected segments
     const entries: SubtitleEntryType[] = segments.map((seg, i) => {
       const base = {
@@ -228,7 +234,8 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         textColorHex: runDefaults.textColorHex,
         outlineColorHex: runDefaults.outlineColorHex,
         outlineThicknessPx: runDefaults.outlineThicknessPx,
-        fadeEnabled: runDefaults.fadeEnabled
+        fadeEnabled: runDefaults.fadeEnabled,
+        fontId: runFontId
       }
       return {
         id: `t-${i}-${Date.now()}`,

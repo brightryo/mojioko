@@ -42,6 +42,14 @@ export interface SubtitleEntryOriginal {
   /** Integer, 0–5 px. */
   outlineThicknessPx: number
   fadeEnabled: boolean
+  /**
+   * Optional per-row font override.  When undefined, the row inherits the
+   * project default (`useSettingsStore.activeFontId`) — both for preview
+   * width measurement and for ASS `\fn` emission at burn-in time.  Stored
+   * here (rather than only on the live entry) so the "Reset row" button
+   * has a stable per-row reference point.  REQ-021.
+   */
+  fontId?: FontId
 }
 
 export interface SubtitleEntry extends SubtitleEntryOriginal {
