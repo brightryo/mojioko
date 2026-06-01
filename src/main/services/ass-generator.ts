@@ -1,6 +1,7 @@
 import log from '../lib/logger'
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground } from '../../shared/types'
 import { ASS_MARGIN_LR_PX, FADE_DURATION_SEC_DEFAULT } from '../../shared/constants'
+import { getFontMeta, isFontId } from '../../shared/fonts'
 
 type HorizontalPos = 'left' | 'center' | 'right'
 type VerticalPos = 'top' | 'bottom'
@@ -118,12 +119,22 @@ export function generateAss(
       const fadeDurationMs = Math.round(fadeDurationSec * 1000)
       const fadeTag = e.fadeEnabled ? `\\fad(${fadeDurationMs},${fadeDurationMs})` : ''
 
+      // Per-row font override (REQ-021).  Emit \fn<family> only when the
+      // row carries a fontId AND that font's ASS family name differs from
+      // the Style: default — emitting \fn redundantly for rows that match
+      // the default would just bloat the ASS file without changing the
+      // rendered result.  isFontId is defensive against stale entries
+      // (e.g. fontId from a settings file that referenced a removed font).
+      const rowAssFontName = isFontId(e.fontId) ? getFontMeta(e.fontId).assFontName : assFontName
+      const fontTag = rowAssFontName !== assFontName ? `\\fn${rowAssFontName}` : ''
+
       let styleTag: string
       if (bgEnabled && subtitleBackground) {
         // Box background mode: remove outline, add background colour + alpha
         const bgColor = subtitleBackground.color === 'white' ? '00FFFFFF' : '000000'
         const bgAlpha = opacityToAssAlpha(subtitleBackground.opacityPercent)
         styleTag = [
+          fontTag,
           `\\fs${e.fontSizePx}`,
           `\\c${hexToAss(e.textColorHex)}`,
           `\\bord0`,
@@ -136,6 +147,7 @@ export function generateAss(
           .join('')
       } else {
         styleTag = [
+          fontTag,
           `\\fs${e.fontSizePx}`,
           `\\c${hexToAss(e.textColorHex)}`,
           `\\3c${hexToAss(e.outlineColorHex)}`,
