@@ -69,7 +69,14 @@ export function generateAss(
   video: VideoInfo,
   burnin: BurninPosition,
   fadeDurationSec: number = FADE_DURATION_SEC_DEFAULT,
-  subtitleBackground?: SubtitleBackground
+  subtitleBackground?: SubtitleBackground,
+  /**
+   * ASS `Style:` `Fontname` value — exact family name as libass will look it
+   * up in the `fontsdir`.  Defaults to "Noto Sans JP SemiBold" so legacy
+   * callers that pre-date font selection continue to produce the v1.0/v1.1
+   * output unchanged.
+   */
+  assFontName: string = 'Noto Sans JP SemiBold'
 ): string {
   const alignment = getAlignment(burnin.horizontalPosition, burnin.verticalPosition)
   const marginV = burnin.verticalMarginPx
@@ -98,7 +105,7 @@ export function generateAss(
   const styles = [
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BorderStyle, Outline, Alignment, MarginL, MarginR, MarginV',
-    `Style: Default,Noto Sans JP SemiBold,100,&H00FFFFFF,&H00000000,${borderStyle},3,${alignment},${ASS_MARGIN_LR_PX},${ASS_MARGIN_LR_PX},${marginV}`,
+    `Style: Default,${assFontName},100,&H00FFFFFF,&H00000000,${borderStyle},3,${alignment},${ASS_MARGIN_LR_PX},${ASS_MARGIN_LR_PX},${marginV}`,
     ''
   ].join('\n')
 

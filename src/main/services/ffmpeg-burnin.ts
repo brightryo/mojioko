@@ -3,9 +3,10 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
-import { getBinPath, getFontsDir } from '../lib/paths'
+import { getBinPath, getFontResolveDir } from '../lib/paths'
 import { generateAss } from './ass-generator'
 import { getBestEncoder, buildEncoderArgs } from './encoder-detector'
+import { getFontMeta, DEFAULT_FONT_ID, isFontId } from '../../shared/fonts'
 import type { BurninStartRequest, BurninEvent } from '../../shared/ipc-contracts'
 import { FfmpegError } from '../../shared/errors'
 import log from '../lib/logger'
@@ -22,16 +23,31 @@ export async function startBurnin(
   onEvent: BurninEventCallback,
   signal: AbortSignal
 ): Promise<void> {
-  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, fadeDurationSec, subtitleBackground, outputContainer } = request
+  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, fadeDurationSec, subtitleBackground, outputContainer, fontId } = request
+
+  // Resolve font choice.  Defensive: an unknown / missing fontId falls back
+  // to the bundled default so a stale renderer never blocks a burn-in.
+  const resolvedFontId = (fontId && isFontId(fontId)) ? fontId : DEFAULT_FONT_ID
+  const fontMeta = getFontMeta(resolvedFontId)
 
   // Write ASS to temp file
-  const assContent = generateAss(entries, video, burnin, fadeDurationSec, subtitleBackground)
+  const assContent = generateAss(entries, video, burnin, fadeDurationSec, subtitleBackground, fontMeta.assFontName)
   const assPath = join(tmpdir(), `mojioko-${randomUUID()}.ass`)
   await fs.writeFile(assPath, assContent, 'utf-8')
 
   const ffmpeg = getBinPath('ffmpeg')
-  const fontsDir = getFontsDir()
+  // Multi-fontsdir strategy: a single burn-in always uses one selected font,
+  // so we point fontsdir at the *exact* directory containing that font's
+  // TTF — `resources/fonts/<bundledRelativeDir>/` for bundled fonts,
+  // `%APPDATA%/MOJIOKO/fonts/<font-id>/` for user-downloaded fonts.  This
+  // sidesteps the libass quirk that `fontsdir=` is a single directory
+  // (not colon-separated) and eliminates the chance of two same-name fonts
+  // colliding.  If a future feature wants per-row fonts, the plan is to
+  // assemble a temp directory at burn-in start with symlinks to every font
+  // referenced in the project and pass that combined directory instead.
+  const fontsDir = getFontResolveDir(fontMeta)
   const subtitlesFilter = `subtitles='${escapeAssPath(assPath)}':fontsdir='${escapeAssPath(fontsDir)}'`
+  log.info(`[ffmpeg-burnin] font: ${fontMeta.displayName} (${resolvedFontId}); fontsdir=${fontsDir}`)
 
   const encoder = await getBestEncoder(encoderSetting ?? 'auto')
   const encoderArgs = buildEncoderArgs(encoder)
