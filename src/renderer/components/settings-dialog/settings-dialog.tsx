@@ -121,11 +121,30 @@ export function SettingsDialog() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setOpen}>
-      <DialogContent className="max-w-[640px] max-h-[85vh] overflow-y-auto">
+      {/* onOpenAutoFocus prevented: Radix' default focus-on-open sends focus
+          into the active tabpanel (tabindex=0), and because the dialog is
+          typically opened via Ctrl+, / menu (keyboard activation),
+          :focus-visible matches → the panel renders with the green focus
+          ring as if the user had Tab-keyed in.  Preventing the auto-focus
+          keeps the highlighted element on whatever opened the dialog;
+          users can still Tab into the dialog normally for keyboard
+          navigation.
+          REQ-018 #1. */}
+      <DialogContent
+        className="max-w-[640px] max-h-[85vh] overflow-y-auto"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{t('title')}</DialogTitle>
         </DialogHeader>
 
+        {/* min-h applied to every TabsContent below pegs the panel height
+            to the tallest tab (フォント, measured ~483px) so switching tabs
+            does not change the dialog height.  Empty space appears at the
+            bottom of shorter tabs (一般 / 既定スタイル); this is the
+            explicit trade-off vs. a smaller fixed height + internal scroll,
+            chosen because the FontPicker's internal scroll (max-h-[300px])
+            already handles the long font list.  REQ-018 #2. */}
         <Tabs defaultValue="general" className="w-full">
           <TabsList>
             <TabsTrigger value="general">{t('tabs.general')}</TabsTrigger>
@@ -134,7 +153,7 @@ export function SettingsDialog() {
           </TabsList>
 
           {/* ─ General ────────────────────────────────────────────── */}
-          <TabsContent value="general">
+          <TabsContent value="general" className="min-h-[490px]">
             <div className="grid grid-cols-2 items-start gap-y-4 gap-x-6 pt-1">
               {/* Language */}
               <span className="whitespace-nowrap text-[13px] text-zinc-300 self-center leading-none mt-1">
@@ -174,7 +193,7 @@ export function SettingsDialog() {
           </TabsContent>
 
           {/* ─ Fonts ──────────────────────────────────────────────── */}
-          <TabsContent value="fonts" className="space-y-4">
+          <TabsContent value="fonts" className="space-y-4 min-h-[490px]">
             {/* Default font dropdown — installed-only.  Increasing the
                 inventory is done in the management list below. */}
             <div className="space-y-1.5">
@@ -207,7 +226,7 @@ export function SettingsDialog() {
           </TabsContent>
 
           {/* ─ Default style ──────────────────────────────────────── */}
-          <TabsContent value="defaultStyle" className="space-y-2">
+          <TabsContent value="defaultStyle" className="space-y-2 min-h-[490px]">
             <p className="text-[11px] text-muted-foreground">{t('defaultStyle.hint')}</p>
             <DefaultStyleControls
               fontSizePx={transcriptionDefaults.fontSizePx}
