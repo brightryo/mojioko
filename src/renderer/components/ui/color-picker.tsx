@@ -165,9 +165,20 @@ export function ColorPicker({
 
   const pickerContent = (
     <PopoverContent
-      className="w-[280px] p-3 space-y-3"
+      // REQ-035: 3-group palette + saturation/hue picker + recent row +
+      // hex input is ~530 px tall — exceeds Settings dialog's modest
+      // height when the trigger sits near the dialog's middle, causing
+      // top/bottom clipping.  Radix already flips side to avoid the
+      // viewport edge; we additionally cap max-height to the *available*
+      // vertical space exposed by Radix (`--radix-popover-content-
+      // available-height`) and let the body scroll inside the popover
+      // when content doesn't fit.  Generous PopoverContent positions
+      // (字幕スタイルダイアログ, STEP 2 行) still render without a
+      // scrollbar because available-height covers the full popover.
+      className="w-[280px] p-3 space-y-3 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
       align="start"
       sideOffset={8}
+      collisionPadding={12}
       onInteractOutside={() => handleOpenChange(false)}
     >
       {/* Close X — explicit affordance.  Outside-click also closes the
