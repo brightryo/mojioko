@@ -1,10 +1,36 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Play, Pause, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useUiStore } from '@/stores/ui-store'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
+import type { SubtitleEntry } from '../../../shared/types'
+
+/**
+ * Binary-search the sorted `entries` array for the entry active at
+ * `timeSec`.  Returns the entry's id, or null if none covers the
+ * timestamp.  Duplicates the function in video-preview-panel.tsx — the
+ * sort + search is small enough that extracting it to a shared module
+ * would add more import noise than it removes; both panels stay
+ * self-contained.
+ */
+function findActiveEntryId(entries: SubtitleEntry[], timeSec: number): string | null {
+  let lo = 0
+  let hi = entries.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1
+    const e = entries[mid]
+    if (timeSec < e.startSec) {
+      hi = mid - 1
+    } else if (timeSec > e.endSec) {
+      lo = mid + 1
+    } else {
+      return e.id
+    }
+  }
+  return null
+}
 
 /**
  * Convert a local file path to a `mojioko-media://` URL served by the
@@ -50,9 +76,11 @@ function formatTime(sec: number): string {
 export function AudioPreviewPanel() {
   const { t } = useTranslation(['step2'])
   const video = useProjectStore((s) => s.video)
+  const entries = useProjectStore((s) => s.entries)
   const videoSeekRequestSec = useUiStore((s) => s.videoSeekRequestSec)
   const setVideoSeekRequest = useUiStore((s) => s.setVideoSeekRequest)
   const setVideoCurrentTimeSec = useUiStore((s) => s.setVideoCurrentTimeSec)
+  const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
 
   const audioRef = useRef<HTMLAudioElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -62,6 +90,18 @@ export function AudioPreviewPanel() {
   // Ref so the timeupdate listener can read it synchronously while the
   // user is dragging the seek bar.
   const isSeeking = useRef(false)
+  // REQ-030 #2: tracks the last entry we wrote to focusedRowId so the
+  // timeupdate handler only writes on change (avoids store thrash at
+  // 60 timeupdates/sec while the same caption is on screen).
+  const activeEntryIdRef = useRef<string | null>(null)
+
+  // Sorted, non-deleted entries — required for the binary search in
+  // findActiveEntryId.  Memoised on entries so the sort runs once per
+  // entries mutation, not per timeupdate tick.
+  const sortedActiveEntries = useMemo(
+    () => entries.filter((e) => !e.isDeleted).sort((a, b) => a.startSec - b.startSec),
+    [entries]
+  )
 
   const mediaUrl = video ? pathToMediaUrl(video.path) : null
 
@@ -72,6 +112,7 @@ export function AudioPreviewPanel() {
     setDuration(0)
     setHasError(false)
     isSeeking.current = false
+    activeEntryIdRef.current = null
     setVideoCurrentTimeSec(0)
   }, [mediaUrl, setVideoCurrentTimeSec])
 
@@ -115,8 +156,29 @@ export function AudioPreviewPanel() {
   function handleTimeUpdate() {
     const el = audioRef.current
     if (!el || isSeeking.current) return
-    setCurrentTime(el.currentTime)
-    setVideoCurrentTimeSec(el.currentTime)
+    const time = el.currentTime
+    setCurrentTime(time)
+    setVideoCurrentTimeSec(time)
+
+    // REQ-030 #2: drive focusedRowId from playback the same way
+    // VideoPreviewPanel does, so the active subtitle row highlights in
+    // the table as the audio plays through it.  Skipped while a
+    // <textarea> is focused — that means the user is editing a
+    // subtitle cell and the focus would yank them out mid-keystroke.
+    // Only write on change (newId !== ref) to keep the store quiet
+    // during the many timeupdate events fired per second.  We also
+    // retain the previous focus across gap-time between subtitles
+    // (newId === null) to avoid flickering off then back on at every
+    // subtitle boundary — mirrors VideoPreviewPanel's contract.
+    const active = document.activeElement
+    const isEditingSubtitle = active?.tagName.toLowerCase() === 'textarea'
+    if (!isEditingSubtitle) {
+      const newId = findActiveEntryId(sortedActiveEntries, time)
+      if (newId !== null && newId !== activeEntryIdRef.current) {
+        activeEntryIdRef.current = newId
+        setFocusedRowId(newId)
+      }
+    }
   }
 
   function handleLoadedMetadata() {
@@ -222,7 +284,15 @@ export function AudioPreviewPanel() {
         onLoadedMetadata={handleLoadedMetadata}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
-        onEnded={() => { setIsPlaying(false); setCurrentTime(0); setVideoCurrentTimeSec(0) }}
+        onEnded={() => {
+          setIsPlaying(false)
+          setCurrentTime(0)
+          setVideoCurrentTimeSec(0)
+          // Clear the active-row tracker so the next play starts from a
+          // clean state (matches VideoPreviewPanel's onEnded behaviour).
+          activeEntryIdRef.current = null
+          setFocusedRowId(null)
+        }}
         onError={() => setHasError(true)}
         className="hidden"
       />

@@ -3,7 +3,7 @@
   "guidance": "Select a Whisper model, choose an input file, and start transcription.",
   "inputVideo": {
     "label": "Input file",
-    "hint": ".mp4 · .mkv · .mp3 · .wav · .m4a · .aac · .flac · .ogg",
+    "hint": "Video: .mp4 .mkv  /  Audio: .mp3 .wav .m4a .aac .flac .ogg",
     "placeholder": "Select a file…",
     "chooseVideo": "Choose file",
     "help": "Video or audio file to transcribe. Video supports burn-in output; audio supports text/SRT export only.",
