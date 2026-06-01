@@ -56,5 +56,13 @@
   "colorPicker": {
     "presets": "Presets",
     "recent": "Recent"
+  },
+  "fontLicenses": {
+    "title": "Font licenses",
+    "intro": "All subtitle fonts shipped or distributed by MOJIOKO are licensed under the SIL Open Font License v1.1.  Full license text accompanies each downloaded font.",
+    "copyrightHeader": "Copyright",
+    "sourceLabel": "Source",
+    "viewOnDisk": "Show OFL.txt",
+    "openSource": "Open source page"
   }
 }

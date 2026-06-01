@@ -48,6 +48,16 @@ export function AboutDialog() {
               label="Python 3.11"
               value={buildInfo === null ? '…' : buildInfo.pythonAvailable ? t('settings:about.available') : t('settings:about.notAvailable')}
             />
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                useUiStore.getState().setFontLicensesDialogOpen(true)
+              }}
+              className="text-[12px] text-primary hover:underline text-left pt-1"
+            >
+              {t('common:fontLicenses.title')} →
+            </button>
           </div>
           {/* TODO: add a "Support this project" link row here.  The
               DonationDialog already exists (uiStore.setDonationDialogOpen)

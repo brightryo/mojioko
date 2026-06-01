@@ -11,6 +11,7 @@ interface UiStore {
   isShortcutsDialogOpen: boolean
   isAboutDialogOpen: boolean
   isDonationDialogOpen: boolean
+  isFontLicensesDialogOpen: boolean
   tableFilter: TableFilter
   focusedRowId: string | null
   /** Session-only recent color history (not persisted to settings.json). */
@@ -71,6 +72,7 @@ interface UiStore {
   setShortcutsDialogOpen: (open: boolean) => void
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
+  setFontLicensesDialogOpen: (open: boolean) => void
   setTableFilter: (f: TableFilter) => void
   setFocusedRowId: (id: string | null) => void
   /** Prepend a color to the recent list, de-duplicating and capping at MAX_RECENT_COLORS. */
@@ -99,6 +101,7 @@ export const useUiStore = create<UiStore>((set) => ({
   isShortcutsDialogOpen: false,
   isAboutDialogOpen: false,
   isDonationDialogOpen: false,
+  isFontLicensesDialogOpen: false,
   tableFilter: 'all',
   focusedRowId: null,
   recentColors: [],
@@ -114,6 +117,7 @@ export const useUiStore = create<UiStore>((set) => ({
   setShortcutsDialogOpen: (open) => set({ isShortcutsDialogOpen: open }),
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
   setDonationDialogOpen: (open) => set({ isDonationDialogOpen: open }),
+  setFontLicensesDialogOpen: (open) => set({ isFontLicensesDialogOpen: open }),
   setTableFilter: (f) => set({ tableFilter: f }),
   setFocusedRowId: (id) => set({ focusedRowId: id }),
   addRecentColor: (hex) =>

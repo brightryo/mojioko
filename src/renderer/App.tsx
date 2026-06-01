@@ -15,6 +15,7 @@ import { ShortcutsDialog } from '@/components/shortcuts-dialog/shortcuts-dialog'
 import { AboutDialog } from '@/components/about-dialog/about-dialog'
 import { SettingsDialog } from '@/components/settings-dialog/settings-dialog'
 import { DonationDialog } from '@/components/donation-dialog/donation-dialog'
+import { FontLicensesDialog } from '@/components/font-licenses/font-licenses-dialog'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -234,6 +235,7 @@ function AppInner() {
       <AboutDialog />
       <SettingsDialog />
       <DonationDialog />
+      <FontLicensesDialog />
 
       <Toaster
         position="bottom-center"
