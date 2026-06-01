@@ -9,6 +9,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.1] - 2026-06-02
+
+Second minor-line release: per-row font selection, audio file input, expanded
+colour palette, and settings dialog organisation.
+
+### Added
+
+#### Font customization
+- 9-font registry: Noto Sans JP SemiBold (bundled) plus 8 downloadable
+  Google Fonts (Dela Gothic One, Reggae One, Yusei Magic, Mochiy Pop One,
+  Hachi Maru Pop, Potta One, DotGothic16, Rampart One)
+- Font picker with one-list "select + manage" UI shared between the
+  Subtitle Style dialog and the Settings ▸ Fonts tab
+  - Click a row to set the project default; download / uninstall icons
+    on each row
+  - License (SIL OFL v1.1) viewable per-font with the upstream-verbatim
+    OFL.txt
+- Per-row font override in the STEP 2 subtitle table
+  - Compact font selector above each row's text editor
+  - Bulk-edit-bar gets a matching font picker for multi-row apply
+  - Per-row font flows through to ASS `\fn<family>` and a staged fontsdir
+    at burn-in time, so a single output video can mix multiple fonts
+- Rare-kanji-coverage warning on Hachi Maru Pop / Potta One (those two
+  fonts omit a small set of post-jōyō kanji such as 塡 剝 頰)
+- Pre-burn-in font validation: missing fonts surface a toast before the
+  save dialog opens instead of letting the back-end fail
+- Uninstalling a font that's referenced by any row triggers a
+  confirmation dialog; on confirm, affected rows' `fontId` is auto-cleared
+  and a notice toast surfaces the change
+
+#### Audio file input
+- Six audio formats supported in addition to the existing video formats:
+  MP3, WAV, M4A, AAC (raw ADTS), FLAC, OGG (Vorbis)
+- Content-based mode detection via ffprobe — extension spoofing
+  (e.g. `.mp4` rename of an audio file) is ignored; the actual stream
+  layout decides
+- Audio mode UI in STEP 1: audio-wave icon in place of the video
+  thumbnail, resolution row hidden, format row collapsed
+- Audio mode UI in STEP 2: AudioPreviewPanel (centred play/pause + seek
+  bar + time readout) replaces VideoPreviewPanel; size / style / font
+  cells in each row are hidden; bulk-edit-bar hidden; "Continue to render"
+  hidden; text/SRT export becomes the single output path
+- Audio playback drives row focus the same way video does (the table
+  highlight follows the playhead)
+
+#### Colour palette
+- 30 colours unified across every picker (per-row, bulk-edit, settings,
+  subtitle style dialog) in three labelled groups:
+  - Basic (10 singles)
+  - Suggested pairs (5 text × outline combinations — single click sets
+    both halves; rendered as a subtitle-style "Aa" preview tile)
+  - Colour-blind friendly (10 CUD-recommended singles)
+- Close (×) button on the popover; popover height adapts to the host
+  dialog (uses Radix's `--radix-popover-content-available-height`) so
+  it never clips when opened inside the Settings dialog
+
+#### Settings dialog organisation
+- Re-tabbed into 4 panes: General / Fonts / Default style / Whisper
+- Underline-style tab strip (the previous chip-style ran on the same
+  background colour as the dialog, making non-selected tabs read as
+  plain text)
+- Font management lives in the Fonts tab; default seed-style and Whisper
+  engine params each get their own tab and share a single store slice
+  with the STEP 1 surfaces
+
+### Fixed
+
+- **Whisper model download integrity check (C-3)** — downloaded model
+  files are now SHA-verified before being marked installed
+- **APP_VERSION dynamic** — window title, About dialog, and startup log
+  now read the version from `package.json` at build time (no parallel
+  edit needed when bumping)
+- **OFL compliance** — every font (including the bundled Noto) ships its
+  own per-font OFL.txt taken verbatim from `google/fonts/ofl/<name>/
+  OFL.txt`.  Earlier per-font OFL editing / synthesis paths were
+  removed in favour of upstream-verbatim distribution
+- **Settings dialog** — opening the dialog no longer surfaces a green
+  focus ring on the active tabpanel (only keyboard-navigation focus
+  shows it now); tab height stable across all four tabs so switching
+  doesn't jitter
+- Wording neutralised across audio-aware paths (audio inputs no longer
+  see "Video loaded" / "Failed to load video" / similar — replaced with
+  "File loaded" / "Failed to load file" etc.)
+- Numerous smaller UI polish: per-row font selector width matches the
+  text editor below, font picker rows simplified to a single indicator
+  dot, "Download" auto-select removed (download no longer changes the
+  active selection), font size limits surfaced via tooltip + inline
+  hint (the previous silent 200-px clamp is now visible)
+
+---
+
 ## [1.1.0] - 2026-06-01
 
 First minor release: UI redesign, bulk editing, and layout reorganization.

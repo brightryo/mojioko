@@ -10,12 +10,15 @@ All processing runs locally on your PC—no data leaves your device.
 ## Features
 
 - **Local processing** — All transcription and rendering happens on your PC. No cloud, no telemetry.
-- **Multi-format support** — Import MKV, MP4, MOV (iPhone videos), and AVI.
+- **Multi-format support** — Import MKV, MP4 for video, and MP3 / WAV / M4A / AAC / FLAC / OGG for audio.
+- **Audio file input** — Transcribe audio files directly with text/SRT export (no burn-in step).
+- **Custom subtitle fonts** — 9 fonts ship in-app (Noto Sans JP plus 8 Google Fonts) with per-row font override.
 - **Vertical video support** — Generate subtitles for TikTok, YouTube Shorts, and Instagram Reels.
 - **MP4 export** — Direct export to MP4 with `+faststart` for optimized SNS uploads.
 - **Multilingual transcription** — Powered by OpenAI Whisper, supports 11 languages.
 - **Hardware-accelerated encoding** — Auto-detects NVIDIA, AMD, Intel GPU encoders, with software fallback.
 - **Subtitle editor** — Inline text editing, time adjustment, undo/redo, multi-format export (TXT/SRT).
+- **Colour palette** — 30 curated colours including a colour-blind-friendly (CUD) set.
 - **DaVinci Resolve compatible** — SRT output works directly with DaVinci Resolve and other video editors.
 
 ## System Requirements
