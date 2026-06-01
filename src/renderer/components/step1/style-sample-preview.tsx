@@ -9,6 +9,7 @@ import {
   loadSubtitleFont,
   type SubtitleFont
 } from '@/lib/font-metrics'
+import { useSettingsStore } from '@/stores/settings-store'
 import type {
   TranscriptionDefaults,
   VideoInfo,
@@ -107,9 +108,14 @@ export function StyleSamplePreview({
   // component when it resolves — the user sees the break position shift
   // by a few pixels on the first ~50-150ms paint, which is the documented
   // trade-off for not blocking the whole preview on font fetch.
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
   const [font, setFont] = useState<SubtitleFont | null>(getSubtitleFont)
+  // Re-fetch the opentype.js Font whenever the active selection changes so
+  // applyAutoLineBreak measures with the right metrics.  Clearing first
+  // prevents the wrap position from briefly using the previous font's widths
+  // during the load transition.
   useEffect(() => {
-    if (font) return
+    setFont(null)
     let cancelled = false
     loadSubtitleFont()
       .then((loaded) => {
@@ -123,7 +129,7 @@ export function StyleSamplePreview({
         // rather than throwing.
       })
     return () => { cancelled = true }
-  }, [font])
+  }, [activeFontId])
 
   // Long-form sample text — chosen so the user can verify line wrapping,
   // font-size sanity and outline visibility at a glance.  A single short

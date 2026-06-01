@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
 import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
 import { Switch } from '@/components/ui/switch'
-import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font-metrics'
+import { loadSubtitleFont } from '@/lib/font-metrics'
 import type { SubtitleEntry } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -120,6 +120,7 @@ export function VideoPreviewPanel() {
   const updateBurnin       = useSettingsStore((s) => s.updateBurnin)
   const subtitleBackground = useSettingsStore((s) => s.subtitleBackground)
   const setSubtitleBackground = useSettingsStore((s) => s.setSubtitleBackground)
+  const activeFontId       = useSettingsStore((s) => s.activeFontId)
 
   const videoSeekRequestSec    = useUiStore((s) => s.videoSeekRequestSec)
   const setVideoSeekRequest    = useUiStore((s) => s.setVideoSeekRequest)
@@ -138,9 +139,11 @@ export function VideoPreviewPanel() {
   // Measured rendered width of the video container — fed to SubtitleOverlay so
   // font/outline sizes scale correctly with the actual on-screen video.
   const [videoContainerWidth, setVideoContainerWidth] = useState(0)
-  // Ensure the subtitle font is loaded so SubtitleOverlay uses the libass scale
-  // (≈0.6906) instead of falling back to 1.0.
-  const [subtitleFont, setSubtitleFont] = useState<SubtitleFont | null>(getSubtitleFont)
+  // Ensure the subtitle font is loaded so SubtitleOverlay uses the libass
+  // scale (~0.6906 for the active font) instead of the pre-load fallback.
+  // A tick state forces a re-render once the load resolves so getLibassScale()
+  // reads the freshly cached value.
+  const [, setFontTick] = useState(0)
   // Ref (not state) so the timeupdate handler can read it synchronously.
   const isSeeking = useRef(false)
   // Track last active entry id so we only write to the store on change.
@@ -173,12 +176,13 @@ export function VideoPreviewPanel() {
       : null
   }, [isPlaying, currentTime, focusedRowId, sortedActiveEntries])
 
-  // Load the subtitle font on mount if not already cached (covers direct entry to Step 2).
+  // Load the subtitle font on mount and refresh whenever the active font
+  // changes so the preview reflects the new metrics without requiring a
+  // remount.  The tick bump forces SubtitleOverlay to re-read libassScale
+  // after the cache is populated.
   useEffect(() => {
-    if (!subtitleFont) {
-      loadSubtitleFont().then(setSubtitleFont).catch(() => {})
-    }
-  }, [subtitleFont])
+    loadSubtitleFont().then(() => setFontTick((n) => n + 1)).catch(() => {})
+  }, [activeFontId])
 
   // Measure the video container so SubtitleOverlay can scale text/outline to the
   // actual rendered size (the <video> has w-auto, so width depends on aspect ratio).
