@@ -170,8 +170,19 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
 
   const videoWidthPx = video?.widthPx ?? 1920
 
+  // REQ-029 #3: in audio-only mode, every warning that derives from
+  // burn-in physics is meaningless and is suppressed:
+  //   - `overflow` (text width > video width) → return an empty map so
+  //     no row gets the red-text "はみ出し" treatment and no entry
+  //     contributes to the warnings tab count.
+  //   - `overDuration` (start/end > video duration) → pass Infinity for
+  //     videoDurationSec so the comparison `t > duration` is always
+  //     false.  This also suppresses the per-row TimeInput red border
+  //     (isStartExceedsDuration / isEndExceedsDuration in the table).
+  // Video mode keeps the original checks intact.
   const overflowMap = useMemo(() => {
     const map = new Map<string, number>()
+    if (isAudioOnly) return map
     for (const e of entries) {
       if (e.isDeleted) continue
       const r = computeOverflowSync({
@@ -188,9 +199,9 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
       if (r.overflowStartIndex !== -1) map.set(e.id, r.overflowStartIndex)
     }
     return map
-  }, [entries, videoWidthPx, subtitleFont])
+  }, [entries, videoWidthPx, subtitleFont, isAudioOnly])
 
-  const videoDurationSec = video?.durationSec ?? Infinity
+  const videoDurationSec = isAudioOnly ? Infinity : (video?.durationSec ?? Infinity)
 
   /**
    * Per-entry warning flags — single source of truth for the Ready/Warnings

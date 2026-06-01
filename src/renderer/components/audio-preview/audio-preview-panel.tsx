@@ -168,28 +168,35 @@ export function AudioPreviewPanel() {
       {/* Body — centred play / pause + seek bar.  Same outer height as
           VideoPreviewPanel's left column (180 px video frame) so the
           STEP 2 layout below this panel does not shift when toggling
-          between video and audio inputs. */}
+          between video and audio inputs.
+          REQ-029 #1+#2: button stepped down from h-14 → h-10 (control
+          weight matches the surrounding text-tabular UI better), and
+          the time readout is lifted above the seek bar in its own row
+          so the bar gets the full panel width. */}
       <div className="flex items-center justify-center px-4 pb-4 pt-2" style={{ minHeight: 180 }}>
         {hasError ? (
           <span className="text-xs text-muted-foreground">{t('videoPreview.error')}</span>
         ) : (
-          <div className="flex flex-col items-center gap-4 w-full max-w-md">
+          <div className="flex flex-col items-center gap-3 w-full max-w-md">
             <button
               type="button"
               onClick={togglePlay}
               aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
               className={cn(
                 'flex items-center justify-center rounded-full transition-colors duration-150',
-                'h-14 w-14 bg-primary text-primary-foreground hover:bg-primary/90',
+                'h-10 w-10 bg-primary text-primary-foreground hover:bg-primary/90',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
               )}
             >
               {isPlaying
-                ? <Pause className="h-7 w-7" />
-                : <Play className="h-7 w-7 ml-0.5" />}
+                ? <Pause className="h-5 w-5" />
+                : <Play className="h-5 w-5 ml-0.5" />}
             </button>
 
-            <div className="w-full flex items-center gap-3">
+            <div className="w-full flex flex-col gap-1">
+              <span className="text-[11px] tabular-nums text-muted-foreground text-center">
+                {formatTime(currentTime)} / {formatTime(duration)}
+              </span>
               <input
                 type="range"
                 min={0}
@@ -199,12 +206,9 @@ export function AudioPreviewPanel() {
                 onChange={handleSeekChange}
                 onPointerDown={() => { isSeeking.current = true }}
                 onPointerUp={() => { isSeeking.current = false }}
-                className="flex-1 accent-primary"
+                className="w-full accent-primary"
                 aria-label={t('videoPreview.play')}
               />
-              <span className="text-[11px] tabular-nums text-muted-foreground w-24 text-right">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
             </div>
           </div>
         )}
