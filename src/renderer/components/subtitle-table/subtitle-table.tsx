@@ -258,6 +258,14 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     // it like a time-affecting patch so the row re-sorts and the user sees
     // it land where the original times sit chronologically.
     const affectsTime = original.startSec !== entry.startSec || original.endSec !== entry.endSec
+    // Explicitly include fontId in the patch — when the original had no
+    // override (`fontId === undefined`), `{...original}` would not produce
+    // a `fontId` key, and updateEntry's `{...e, ...patch}` merge would
+    // leave the current override in place.  Adding it explicitly forces
+    // the key onto the patch with the value `undefined`, so the merge
+    // clears the override and the row falls back to the project default.
+    // REQ-022 step 7.
+    const resetPatch = { ...original, fontId: original.fontId, isEdited: false, isDeleted: false }
     pushHistory({
       label: t('history.resetRow'),
       undo: () => {
@@ -265,11 +273,11 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         if (affectsTime) useProjectStore.getState().sortByStartSec()
       },
       redo: () => {
-        updateEntry(entry.id, { ...original, isEdited: false, isDeleted: false })
+        updateEntry(entry.id, resetPatch)
         if (affectsTime) useProjectStore.getState().sortByStartSec()
       }
     })
-    updateEntry(entry.id, { ...original, isEdited: false, isDeleted: false })
+    updateEntry(entry.id, resetPatch)
     if (affectsTime) commitTimeEdit(entry.id)
   }
 
