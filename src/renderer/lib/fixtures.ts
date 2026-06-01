@@ -3,6 +3,7 @@ import { BURNIN_DEFAULTS } from '../../shared/burnin-defaults'
 
 export const sampleVideoInfo: VideoInfo = {
   path: 'C:\\Users\\user\\Videos\\stream_2024-01-15.mkv',
+  hasVideoStream: true,
   widthPx: 1920,
   heightPx: 1080,
   durationSec: 872,
