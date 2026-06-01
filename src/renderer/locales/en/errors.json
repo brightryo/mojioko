@@ -1,5 +1,5 @@
 {
-  "INVALID_VIDEO": "Invalid video file",
+  "INVALID_VIDEO": "Invalid file: no audio or video stream found",
   "FFMPEG_ERROR": "An ffmpeg error occurred",
   "TRANSCRIPTION_ERROR": "Transcription failed",
   "WHISPER_MODEL_NOT_FOUND": "Whisper model not found",

@@ -168,7 +168,7 @@
   "videoPreview": {
     "play": "再生",
     "pause": "一時停止",
-    "error": "動画の読み込みに失敗しました",
+    "error": "ファイルの読み込みに失敗しました",
     "showInFolder": "フォルダで表示"
   },
   "warning": {
