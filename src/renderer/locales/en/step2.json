@@ -168,7 +168,7 @@
   "videoPreview": {
     "play": "Play",
     "pause": "Pause",
-    "error": "Failed to load video",
+    "error": "Failed to load file",
     "showInFolder": "Show in Folder"
   },
   "warning": {

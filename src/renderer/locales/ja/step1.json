@@ -22,8 +22,8 @@
     "absent": "なし",
     "transcriptionTarget": "文字起こし対象",
     "defaultTrackMissing": "デフォルトのトラック{{index}}が見つかりません。トラック{{fallback}}を選択しました。",
-    "help": "OBS等で別トラックに録音した場合に複数表示されます。普通の動画はトラック1のみです。",
-    "description": "動画に含まれる音声トラックの一覧です。文字起こしする音声を選んでください。"
+    "help": "OBS等で別トラックに録音した場合に複数表示されます。普通のファイルはトラック1のみです。",
+    "description": "ファイルに含まれる音声トラックの一覧です。文字起こしする音声を選んでください。"
   },
   "subtitleDefaults": {
     "label": "字幕デフォルト設定",
@@ -51,8 +51,8 @@
   },
   "whisperModel": {
     "label": "Whisperモデル",
-    "tooltip": "動画の音声を文字に変換するエンジンです。モデルサイズが大きいほど精度が上がります。",
-    "descriptionLong": "Whisperは、動画の音声を文字に変換するエンジンです。OpenAIが開発したオープンソースのライブラリで、無料で利用できます。すべての処理はあなたのPCの中だけで行われ、データが外部に送信されることはありません。",
+    "tooltip": "音声を文字に変換するエンジンです。モデルサイズが大きいほど精度が上がります。",
+    "descriptionLong": "Whisperは、音声を文字に変換するエンジンです。OpenAIが開発したオープンソースのライブラリで、無料で利用できます。すべての処理はあなたのPCの中だけで行われ、データが外部に送信されることはありません。",
     "descSmall": "高速・省メモリ。精度はやや低め。",
     "descMedium": "速度と精度のバランスが取れたモデル。",
     "descLargeV3": "最高精度。動作には高いスペックが必要。"
@@ -110,8 +110,8 @@
     "cancelDeny": "続ける"
   },
   "toast": {
-    "videoLoaded": "動画を読み込みました",
-    "probeError": "動画の解析に失敗しました: {{error}}",
+    "videoLoaded": "ファイルを読み込みました",
+    "probeError": "ファイルの解析に失敗しました: {{error}}",
     "transcriptionComplete": "文字起こし完了 · {{count}}行",
     "modelDownloadFailed": "ダウンロードに失敗しました: {{error}}",
     "modelNotInstalled": "モデル {{model}} が未ダウンロードです",
@@ -119,7 +119,7 @@
     "transcriptionCancelled": "文字起こしをキャンセルしました"
   },
   "error": {
-    "probeVideo": "動画の解析に失敗しました",
+    "probeVideo": "ファイルの解析に失敗しました",
     "transcriptionFailed": "文字起こしに失敗しました: {{reason}}"
   },
   "advanced": {
