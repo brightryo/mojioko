@@ -36,6 +36,7 @@
     "fadeOn": "On",
     "fadeOff": "Off",
     "helpSize": "Subtitle font size in pixels. Adjust to match your video resolution.",
+    "sizeHint": "{{min}}–{{max}} px (out-of-range values are clamped)",
     "helpTextColor": "Subtitle text color. White (#ffffff) is typical.",
     "helpOutlineColor": "Subtitle outline color. Black (#000000) improves readability.",
     "helpStroke": "Outline thickness in pixels.",

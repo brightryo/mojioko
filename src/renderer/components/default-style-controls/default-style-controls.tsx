@@ -78,6 +78,7 @@ export function DefaultStyleControls({
           min={FONT_SIZE_MIN_PX}
           max={FONT_SIZE_MAX_PX}
           defaultValue={fontSizePx}
+          title={t('subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
           onChange={(e) => {
             const v = parseInt(e.target.value, 10)
             setFontSizeOutOfRange(
@@ -101,6 +102,18 @@ export function DefaultStyleControls({
               : 'border-border focus:ring-ring/30'
           )}
         />
+        {/* REQ-034 #3: surface the clamp range so "enter 250 → silently
+            becomes 200" stops being mysterious.  Amber tint while the
+            in-flight value is out of range echoes the input border so
+            the relationship is unambiguous. */}
+        <p
+          className={cn(
+            'text-[11px] transition-colors',
+            fontSizeOutOfRange ? 'text-[hsl(var(--warning))]' : 'text-muted-foreground'
+          )}
+        >
+          {t('subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
+        </p>
       </div>
 
       {/* Text color */}

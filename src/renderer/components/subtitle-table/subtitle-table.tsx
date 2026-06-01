@@ -142,7 +142,10 @@ interface SubtitleRowProps {
 function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFocus, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick }: SubtitleRowProps) {
   const isOverflow = overflowStartIndex !== -1
   const isStartOverlap = warnings.overlap
-  const { t } = useTranslation(['step2'])
+  // step1 namespace included so the size input's `title` tooltip can
+  // reuse the `subtitleDefaults.sizeHint` string defined for STEP 1's
+  // Subtitle Style dialog (REQ-034 #3).
+  const { t } = useTranslation(['step2', 'step1'])
   const updateEntry = useProjectStore((s) => s.updateEntry)
   const pushHistory = useHistoryStore((s) => s.push)
   // REQ-028: in audio-only mode the size / style / font cells render
@@ -408,6 +411,9 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
             onChange={handleSizeChange}
             onBlur={handleSizeBlur}
             disabled={entry.isDeleted}
+            // REQ-034 #3: 64 px column has no room for an inline hint
+            // line, so surface the clamp range as a hover tooltip.
+            title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
             className={cn(
               'w-full h-7 rounded border bg-zinc-950 px-1 text-center text-[12px] text-zinc-100',
               'focus:outline-none focus:ring-1',

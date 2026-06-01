@@ -36,6 +36,7 @@
     "fadeOn": "オン",
     "fadeOff": "オフ",
     "helpSize": "字幕の文字サイズ（ピクセル）。動画の解像度に合わせて調整してください。",
+    "sizeHint": "{{min}}〜{{max}} px (範囲外は自動的にクランプ)",
     "helpTextColor": "字幕の文字色。白（#ffffff）が一般的です。",
     "helpOutlineColor": "字幕の縁取り色。黒（#000000）が視認性に優れています。",
     "helpStroke": "縁取りの太さ（ピクセル）。",
