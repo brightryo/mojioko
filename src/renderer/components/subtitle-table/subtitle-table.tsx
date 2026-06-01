@@ -428,11 +428,27 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
       <div className="flex flex-col gap-1 py-2 px-1">
         <div className="grid grid-cols-[80px_1fr] items-center gap-2">
           <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.textColor')}</span>
-          <ColorPicker value={entry.textColorHex} onChange={handleTextColorChange} disabled={entry.isDeleted} swatchOnly />
+          <ColorPicker
+            value={entry.textColorHex}
+            onChange={handleTextColorChange}
+            onPairApply={(text, outline) =>
+              withHistory(t('history.editColor'), { textColorHex: text, outlineColorHex: outline })
+            }
+            disabled={entry.isDeleted}
+            swatchOnly
+          />
         </div>
         <div className="grid grid-cols-[80px_1fr] items-center gap-2">
           <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.outlineColor')}</span>
-          <ColorPicker value={entry.outlineColorHex} onChange={handleOutlineColorChange} disabled={entry.isDeleted} swatchOnly />
+          <ColorPicker
+            value={entry.outlineColorHex}
+            onChange={handleOutlineColorChange}
+            onPairApply={(text, outline) =>
+              withHistory(t('history.editColor'), { textColorHex: text, outlineColorHex: outline })
+            }
+            disabled={entry.isDeleted}
+            swatchOnly
+          />
         </div>
         <div
           className="grid grid-cols-[80px_1fr] items-center gap-2"

@@ -55,7 +55,14 @@
   },
   "colorPicker": {
     "presets": "Presets",
-    "recent": "Recent"
+    "recent": "Recent",
+    "basic": "Basic colours",
+    "pairs": "Suggested pairs",
+    "pairsHint": "Sets text + outline colour together",
+    "cud": "Colour-blind friendly",
+    "cudHint": "Color Universal Design recommended palette",
+    "close": "Close",
+    "pairTooltip": "Text {{text}} × Outline {{outline}}"
   },
   "fontLicenses": {
     "title": "Font licenses",

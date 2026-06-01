@@ -159,6 +159,7 @@
       "size": "サイズを一括変更 ({{count}}行)",
       "textColor": "文字色を一括変更 ({{count}}行)",
       "outlineColor": "アウトライン色を一括変更 ({{count}}行)",
+      "colorPair": "色ペアを一括変更 ({{count}}行)",
       "outlineWidth": "アウトライン幅を一括変更 ({{count}}行)",
       "fade": "フェードを一括変更 ({{count}}行)",
       "font": "フォントを一括変更 ({{count}}行)",

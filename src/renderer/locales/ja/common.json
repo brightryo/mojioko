@@ -55,7 +55,14 @@
   },
   "colorPicker": {
     "presets": "プリセット",
-    "recent": "最近使った色"
+    "recent": "最近使った色",
+    "basic": "基本色",
+    "pairs": "おすすめの組み合わせ",
+    "pairsHint": "文字色とアウトライン色を同時にセット",
+    "cud": "色弱向け",
+    "cudHint": "Color Universal Design 推奨配色",
+    "close": "閉じる",
+    "pairTooltip": "文字色 {{text}} × アウトライン {{outline}}"
   },
   "fontLicenses": {
     "title": "フォントライセンス",

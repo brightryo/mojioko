@@ -159,6 +159,7 @@
       "size": "Bulk size change ({{count}} rows)",
       "textColor": "Bulk text color change ({{count}} rows)",
       "outlineColor": "Bulk outline color change ({{count}} rows)",
+      "colorPair": "Bulk colour pair change ({{count}} rows)",
       "outlineWidth": "Bulk outline width change ({{count}} rows)",
       "fade": "Bulk fade change ({{count}} rows)",
       "font": "Bulk font change ({{count}} rows)",
