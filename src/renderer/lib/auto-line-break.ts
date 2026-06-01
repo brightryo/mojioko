@@ -1,6 +1,12 @@
 import { ASS_MARGIN_LR_PX } from './tokens'
-import { getSubtitleFont, getLibassScale } from './font-metrics'
+import {
+  getSubtitleFont,
+  getLibassScale,
+  getSubtitleFontFor,
+  getLibassScaleFor
+} from './font-metrics'
 import type { SubtitleFont } from './font-metrics'
+import type { FontId } from '../../shared/fonts'
 
 /**
  * Insert ASS \N line breaks into `text` wherever a line would exceed the
@@ -18,6 +24,11 @@ import type { SubtitleFont } from './font-metrics'
  * @param outlineThicknessPx Subtitle outline thickness in pixels (0–OUTLINE_THICKNESS_MAX_PX).
  * @param videoWidthPx       Source video width in pixels.
  * @param font               Optional pre-loaded SubtitleFont; uses module cache if omitted.
+ *                           Ignored when `fontId` is supplied.
+ * @param fontId             Per-row font override (REQ-021).  When set, the
+ *                           per-font cache is consulted for both the Font
+ *                           reference and the libassScale, matching what
+ *                           libass will actually render for that row.
  * @returns                  Text with \N inserted at overflow boundaries.
  */
 export function applyAutoLineBreak(
@@ -25,9 +36,13 @@ export function applyAutoLineBreak(
   fontSizePx: number,
   outlineThicknessPx: number,
   videoWidthPx: number,
-  font?: SubtitleFont | null
+  font?: SubtitleFont | null,
+  fontId?: FontId
 ): string {
-  const f = font !== undefined ? font : getSubtitleFont()
+  const f = fontId !== undefined
+    ? getSubtitleFontFor(fontId)
+    : (font !== undefined ? font : getSubtitleFont())
+  const libassScale = fontId !== undefined ? getLibassScaleFor(fontId) : getLibassScale()
   const effectivePx = videoWidthPx - 2 * ASS_MARGIN_LR_PX - 2 * outlineThicknessPx
   if (effectivePx <= 0) return text
 
@@ -35,7 +50,7 @@ export function applyAutoLineBreak(
   // then rejoin — preserves intentional manual breaks already in the text.
   return text
     .split('\\N')
-    .map((seg) => breakSegment(seg, fontSizePx, effectivePx, f))
+    .map((seg) => breakSegment(seg, fontSizePx, effectivePx, f, libassScale))
     .join('\\N')
 }
 
@@ -51,16 +66,17 @@ function breakSegment(
   seg: string,
   fontSizePx: number,
   effectivePx: number,
-  font: SubtitleFont | null
+  font: SubtitleFont | null,
+  libassScale: number
 ): string {
   if (!seg) return seg
 
-  const breakPos = findBreakIndex(seg, fontSizePx, effectivePx, font)
+  const breakPos = findBreakIndex(seg, fontSizePx, effectivePx, font, libassScale)
   if (breakPos === -1) return seg  // entire segment fits
 
   const left  = seg.slice(0, breakPos)
   const right = seg.slice(breakPos)
-  return left + '\\N' + breakSegment(right, fontSizePx, effectivePx, font)
+  return left + '\\N' + breakSegment(right, fontSizePx, effectivePx, font, libassScale)
 }
 
 /**
@@ -78,10 +94,11 @@ function findBreakIndex(
   seg: string,
   fontSizePx: number,
   effectivePx: number,
-  font: SubtitleFont | null
+  font: SubtitleFont | null,
+  libassScale: number
 ): number {
   if (font) {
-    const scale      = (fontSizePx / font.unitsPerEm) * getLibassScale()
+    const scale      = (fontSizePx / font.unitsPerEm) * libassScale
     const glyphs     = font.stringToGlyphs(seg)
     const codePoints = [...seg]
     let cumulative   = 0

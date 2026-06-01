@@ -265,12 +265,18 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     const font = await loadSubtitleFont().catch(() => null)
     const finalEntries = autoLineBreak
       ? entries.map((entry) => {
+          // Per-row fontId (REQ-021): every transcribed row gets the
+          // captured `runFontId`, so the break positions are measured
+          // against that font's glyph metrics — important once the user
+          // assigns mixed fonts to rows later, harmless when every row
+          // uses the same font.
           const brokenText = applyAutoLineBreak(
             entry.text,
             entry.fontSizePx,
             entry.outlineThicknessPx,
             video.widthPx,
-            font
+            font,
+            entry.fontId
           )
           return {
             ...entry,
