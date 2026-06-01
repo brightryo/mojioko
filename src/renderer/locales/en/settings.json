@@ -1,11 +1,25 @@
 {
   "title": "Settings",
+  "tabs": {
+    "general": "General",
+    "fonts": "Fonts",
+    "defaultStyle": "Default style"
+  },
   "general": {
     "language": "Language",
     "languageJa": "Japanese",
     "languageEn": "English",
     "fadeDuration": "Fade duration (seconds)",
     "fadeDurationHint": "0.1–0.5 sec"
+  },
+  "fonts": {
+    "defaultFont": "Default subtitle font",
+    "defaultFontHint": "Applied to new transcriptions and as the initial value in the subtitle style dialog.",
+    "manageHeading": "Font management",
+    "manageHint": "Download additional fonts on demand. Each font also ships its own OFL license file."
+  },
+  "defaultStyle": {
+    "hint": "These values are applied to new transcriptions. The subtitle style dialog reflects the same settings — editing here or there updates both."
   },
   "about": {
     "version": "Version",

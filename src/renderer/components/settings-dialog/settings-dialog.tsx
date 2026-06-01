@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import {
@@ -9,6 +10,13 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Label } from '@/components/ui/label'
+import { FontPicker } from '@/components/font-picker/font-picker'
+import { DefaultStyleControls } from '@/components/default-style-controls/default-style-controls'
+import { setActiveFont, listFonts } from '@/services/font'
+import { ensureFontLoaded } from '@/lib/font-registry'
+import { FONT_REGISTRY, type FontId, type FontsState, getFontMeta } from '../../../shared/fonts'
 
 /** Allowed fade duration range. */
 const FADE_DURATION_MIN = 0.1
@@ -19,10 +27,23 @@ export function SettingsDialog() {
   const { t, i18n } = useTranslation('settings')
   const isOpen = useUiStore((s) => s.isSettingsDialogOpen)
   const setOpen = useUiStore((s) => s.setSettingsDialogOpen)
+
+  // General
   const language = useSettingsStore((s) => s.language)
   const setLanguage = useSettingsStore((s) => s.setLanguage)
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   const setFadeDurationSec = useSettingsStore((s) => s.setFadeDurationSec)
+
+  // Fonts
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
+  const setActiveFontInStore = useSettingsStore((s) => s.setActiveFontId)
+
+  // Default style — single source of truth lives on settingsStore.
+  // SubtitleStyleDialog reads & writes the same slice via REQ-016 wiring.
+  const transcriptionDefaults = useSettingsStore((s) => s.transcriptionDefaults)
+  const updateTranscriptionDefaults = useSettingsStore((s) => s.updateTranscriptionDefaults)
+  const autoLineBreak = useSettingsStore((s) => s.autoLineBreak)
+  const setAutoLineBreak = useSettingsStore((s) => s.setAutoLineBreak)
 
   /**
    * Keep a draft string so the input can hold transient values while the user
@@ -68,49 +89,138 @@ export function SettingsDialog() {
     void i18n.changeLanguage(lang)
   }
 
+  // Default-font selector — installed-only list (bundled + actually
+  // downloaded).  Refreshed on dialog open and after FontPicker downloads
+  // complete so the dropdown stays in sync with the manage list.
+  const [fontsState, setFontsState] = useState<FontsState | null>(null)
+  const refreshFonts = useCallback(async () => {
+    const r = await listFonts()
+    if (r.ok) setFontsState(r.data)
+  }, [])
+  useEffect(() => {
+    if (isOpen) refreshFonts()
+  }, [isOpen, refreshFonts])
+
+  const installedFontIds = (fontsState?.fonts ?? FONT_REGISTRY.map((f) => ({
+    id: f.id,
+    status: f.bundled ? 'bundled' as const : 'not-installed' as const
+  })))
+    .filter((f) => f.status === 'bundled' || f.status === 'installed')
+    .map((f) => f.id as FontId)
+
+  async function handleDefaultFontChange(fontId: string) {
+    if (!installedFontIds.includes(fontId as FontId)) return
+    await ensureFontLoaded(fontId as FontId).catch(() => {})
+    const r = await setActiveFont(fontId as FontId)
+    if (r.ok) {
+      setActiveFontInStore(fontId as FontId)
+      const meta = getFontMeta(fontId as FontId)
+      toast.success(meta.displayName)
+    }
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={setOpen}>
-      <DialogContent className="w-[480px] max-w-[480px]">
+      <DialogContent className="max-w-[640px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t('title')}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 items-start gap-y-4 gap-x-6 pt-1">
-          {/* Language */}
-          <span className="whitespace-nowrap text-[13px] text-zinc-300 self-center leading-none mt-1">
-            {t('general.language')}
-          </span>
-          <div className="flex items-center">
-            <Select value={language} onValueChange={handleLanguageChange}>
-              <SelectTrigger className="h-9 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ja">{t('general.languageJa')}</SelectItem>
-                <SelectItem value="en">{t('general.languageEn')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <Tabs defaultValue="general" className="w-full">
+          <TabsList>
+            <TabsTrigger value="general">{t('tabs.general')}</TabsTrigger>
+            <TabsTrigger value="fonts">{t('tabs.fonts')}</TabsTrigger>
+            <TabsTrigger value="defaultStyle">{t('tabs.defaultStyle')}</TabsTrigger>
+          </TabsList>
 
-          {/* Fade duration */}
-          <span className="whitespace-nowrap text-[13px] text-zinc-300 self-start leading-none mt-2.5">
-            {t('general.fadeDuration')}
-          </span>
-          <div className="space-y-1">
-            <input
-              type="number"
-              min={FADE_DURATION_MIN}
-              max={FADE_DURATION_MAX}
-              step={FADE_DURATION_STEP}
-              value={fadeDraft}
-              onChange={handleFadeDraftChange}
-              onBlur={handleFadeBlur}
-              onKeyDown={handleFadeKeyDown}
-              className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-center text-[13px] text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+          {/* ─ General ────────────────────────────────────────────── */}
+          <TabsContent value="general">
+            <div className="grid grid-cols-2 items-start gap-y-4 gap-x-6 pt-1">
+              {/* Language */}
+              <span className="whitespace-nowrap text-[13px] text-zinc-300 self-center leading-none mt-1">
+                {t('general.language')}
+              </span>
+              <div className="flex items-center">
+                <Select value={language} onValueChange={handleLanguageChange}>
+                  <SelectTrigger className="h-9 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ja">{t('general.languageJa')}</SelectItem>
+                    <SelectItem value="en">{t('general.languageEn')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Fade duration */}
+              <span className="whitespace-nowrap text-[13px] text-zinc-300 self-start leading-none mt-2.5">
+                {t('general.fadeDuration')}
+              </span>
+              <div className="space-y-1">
+                <input
+                  type="number"
+                  min={FADE_DURATION_MIN}
+                  max={FADE_DURATION_MAX}
+                  step={FADE_DURATION_STEP}
+                  value={fadeDraft}
+                  onChange={handleFadeDraftChange}
+                  onBlur={handleFadeBlur}
+                  onKeyDown={handleFadeKeyDown}
+                  className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-center text-[13px] text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <p className="text-[11px] text-zinc-500">{t('general.fadeDurationHint')}</p>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ─ Fonts ──────────────────────────────────────────────── */}
+          <TabsContent value="fonts" className="space-y-4">
+            {/* Default font dropdown — installed-only.  Increasing the
+                inventory is done in the management list below. */}
+            <div className="space-y-1.5">
+              <Label>{t('fonts.defaultFont')}</Label>
+              <Select value={activeFontId} onValueChange={handleDefaultFontChange}>
+                <SelectTrigger className="h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FONT_REGISTRY
+                    .filter((meta) => installedFontIds.includes(meta.id))
+                    .map((meta) => (
+                      <SelectItem key={meta.id} value={meta.id}>
+                        {meta.displayName}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">{t('fonts.defaultFontHint')}</p>
+            </div>
+
+            {/* Font management — manage-only mode hides the Select action
+                and active-row highlight; this is purely inventory (DL /
+                Cancel / Uninstall / View license). */}
+            <div className="space-y-1.5">
+              <Label>{t('fonts.manageHeading')}</Label>
+              <p className="text-[11px] text-muted-foreground">{t('fonts.manageHint')}</p>
+              <FontPicker mode="manage-only" onChange={refreshFonts} />
+            </div>
+          </TabsContent>
+
+          {/* ─ Default style ──────────────────────────────────────── */}
+          <TabsContent value="defaultStyle" className="space-y-2">
+            <p className="text-[11px] text-muted-foreground">{t('defaultStyle.hint')}</p>
+            <DefaultStyleControls
+              fontSizePx={transcriptionDefaults.fontSizePx}
+              textColorHex={transcriptionDefaults.textColorHex}
+              outlineColorHex={transcriptionDefaults.outlineColorHex}
+              outlineThicknessPx={transcriptionDefaults.outlineThicknessPx}
+              fadeEnabled={transcriptionDefaults.fadeEnabled}
+              autoLineBreak={autoLineBreak}
+              onUpdateDefaults={updateTranscriptionDefaults}
+              onSetAutoLineBreak={setAutoLineBreak}
             />
-            <p className="text-[11px] text-zinc-500">{t('general.fadeDurationHint')}</p>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   )
