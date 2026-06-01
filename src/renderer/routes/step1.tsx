@@ -58,11 +58,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const setEntries = useProjectStore((s) => s.setEntries)
   const selectedTrack = useProjectStore((s) => s.selectedTrackIndex)
   const setSelectedTrack = useProjectStore((s) => s.setSelectedTrackIndex)
-  // `defaults` is consumed at transcription time (to seed every row's style)
-  // and by the Subtitle Style dialog (which subscribes to the store
-  // directly).  `setDefaults` is therefore owned exclusively by the dialog —
-  // Step 1's first-view JSX no longer reads or writes seed style.
-  const defaults = useProjectStore((s) => s.defaults)
+  // REQ-016: the source of truth for the seed-style fields is now
+  // settingsStore.transcriptionDefaults; the Subtitle Style dialog edits
+  // that slice directly.  handleStartTranscription snapshots settings →
+  // projectStore.defaults below so step 2+ still see a frozen-at-start
+  // copy regardless of subsequent settings edits.
+  const setProjectDefaults = useProjectStore((s) => s.setDefaults)
+  const transcriptionDefaults = useSettingsStore((s) => s.transcriptionDefaults)
   const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
   // transcriptionAdvanced is needed in handleStartTranscription to feed the
   // Whisper sidecar with the user's tweaked VAD / beam-size / language; the
@@ -154,6 +156,17 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
   async function handleStartTranscription() {
     if (!video || !activeModelId) return
+
+    // Snapshot the persistent defaults (settingsStore) into the project
+    // store at the moment of transcribe-start.  Step 2 onward reads
+    // projectStore.defaults to seed entries / preview / burn-in, so this
+    // freezes "what the user wants for this run" without further coupling
+    // to live settings edits.
+    setProjectDefaults(transcriptionDefaults)
+    // Reuse the just-snapshotted values directly so the segment-mapping
+    // loop below doesn't need to wait for projectStore to re-render.
+    const runDefaults = transcriptionDefaults
+
     setIsTranscribing(true)
     setTranscribeProgress(0)
     window.electronAPI.menuSetTranscribing(true)
@@ -166,11 +179,11 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         trackIndex: selectedTrack,
         modelId: activeModelId,
         defaults: {
-          fontSizePx: defaults.fontSizePx,
-          textColorHex: defaults.textColorHex,
-          outlineColorHex: defaults.outlineColorHex,
-          outlineThicknessPx: defaults.outlineThicknessPx,
-          fadeEnabled: defaults.fadeEnabled
+          fontSizePx: runDefaults.fontSizePx,
+          textColorHex: runDefaults.textColorHex,
+          outlineColorHex: runDefaults.outlineColorHex,
+          outlineThicknessPx: runDefaults.outlineThicknessPx,
+          fadeEnabled: runDefaults.fadeEnabled
         },
         advanced: transcriptionAdvanced
       },
@@ -211,11 +224,11 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         startSec: seg.startSec,
         endSec: seg.endSec,
         text: seg.text,
-        fontSizePx: defaults.fontSizePx,
-        textColorHex: defaults.textColorHex,
-        outlineColorHex: defaults.outlineColorHex,
-        outlineThicknessPx: defaults.outlineThicknessPx,
-        fadeEnabled: defaults.fadeEnabled
+        fontSizePx: runDefaults.fontSizePx,
+        textColorHex: runDefaults.textColorHex,
+        outlineColorHex: runDefaults.outlineColorHex,
+        outlineThicknessPx: runDefaults.outlineThicknessPx,
+        fadeEnabled: runDefaults.fadeEnabled
       }
       return {
         id: `t-${i}-${Date.now()}`,

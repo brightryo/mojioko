@@ -51,8 +51,12 @@ export function SubtitleStyleDialog({
   const { t } = useTranslation(['step1'])
 
   const video = useProjectStore((s) => s.video)
-  const defaults = useProjectStore((s) => s.defaults)
-  const setDefaults = useProjectStore((s) => s.setDefaults)
+  // Single source of truth (REQ-016): the dialog reads & writes
+  // settingsStore.transcriptionDefaults.  projectStore.defaults is a
+  // transcribe-start snapshot, written once by step1.tsx in
+  // handleStartTranscription and never touched here.
+  const defaults = useSettingsStore((s) => s.transcriptionDefaults)
+  const setDefaults = useSettingsStore((s) => s.updateTranscriptionDefaults)
   const autoLineBreak = useSettingsStore((s) => s.autoLineBreak)
   const setAutoLineBreak = useSettingsStore((s) => s.setAutoLineBreak)
 
