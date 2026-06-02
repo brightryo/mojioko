@@ -128,6 +128,7 @@
     "redo": "Redo (Ctrl+Y)"
   },
   "styleCell": {
+    "size": "Size",
     "textColor": "Text color",
     "outlineColor": "Outline color",
     "outlineWidth": "Outline width",
@@ -241,7 +242,8 @@
       "adjustTime": "Adjust time…",
       "delete": "Delete",
       "restore": "Restore",
-      "commitHint": "Ctrl+Enter to commit · Esc to cancel"
+      "commitHint": "Ctrl+Enter to commit · Esc to cancel",
+      "styleLabel": "Style"
     }
   }
 }
