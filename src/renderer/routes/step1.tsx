@@ -537,12 +537,19 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             <div
               className="rounded-md border border-border bg-input overflow-hidden flex items-center justify-center flex-shrink-0"
               style={(() => {
-                // 240×180 envelope — for 16:9 sources the limiting factor
-                // is width (240×135), for 9:16 it's height (101×180).
+                // REQ-045 #1: envelope bumped from 240×180 → 280×240 so
+                // vertical sources stretch closer to the InfoRow stack's
+                // own height while horizontal stays inside the card.
+                // Behaviour by ratio:
+                //   - 16:9 → 280×157 (width-bound; ~33 % bigger than the
+                //            previous 240×135)
+                //   - 9:16 → 135×240 (height-bound; ~78 % bigger area
+                //            than the previous 101×180)
+                //   - 1:1  → 240×240
                 // Audio-only and pre-load both fall back to 16:9 so the
-                // empty/waveform state stays the size users are used to.
-                const MAX_W = 240
-                const MAX_H = 180
+                // empty/waveform state stays at 280×157.
+                const MAX_W = 280
+                const MAX_H = 240
                 const ratio =
                   (!isAudioOnly && video && video.widthPx > 0 && video.heightPx > 0)
                     ? video.widthPx / video.heightPx
