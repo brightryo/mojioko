@@ -524,13 +524,39 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
               the Resolution row drops out — those fields carry no
               meaning for pure audio inputs.  Format row also collapses
               from "MP4 / h264 / 30fps" to "MP3 / mp3" since fps /
-              videoCodec are placeholders. */}
-          <div className="grid grid-cols-[160px_1fr] gap-4 items-center">
-            <div className="rounded-md border border-border bg-input aspect-video w-full overflow-hidden flex items-center justify-center">
+              videoCodec are placeholders.
+              REQ-044 #1: the box used to be aspect-video (16:9 fixed) +
+              object-cover, which centre-cropped vertical (9:16) sources
+              to a horizontal band, making them look like horizontal
+              videos in the thumbnail.  Now the box follows the video's
+              own aspect ratio (clamped to a 240×180 envelope so neither
+              orientation dominates the card layout), and the <img> uses
+              object-contain so any sub-pixel mismatch produces letter-
+              boxing rather than crop. */}
+          <div className="grid grid-cols-[auto_1fr] gap-4 items-center">
+            <div
+              className="rounded-md border border-border bg-input overflow-hidden flex items-center justify-center flex-shrink-0"
+              style={(() => {
+                // 240×180 envelope — for 16:9 sources the limiting factor
+                // is width (240×135), for 9:16 it's height (101×180).
+                // Audio-only and pre-load both fall back to 16:9 so the
+                // empty/waveform state stays the size users are used to.
+                const MAX_W = 240
+                const MAX_H = 180
+                const ratio =
+                  (!isAudioOnly && video && video.widthPx > 0 && video.heightPx > 0)
+                    ? video.widthPx / video.heightPx
+                    : 16 / 9
+                const widthBound = MAX_H * ratio > MAX_W
+                return widthBound
+                  ? { width: `${MAX_W}px`, height: `${MAX_W / ratio}px` }
+                  : { width: `${MAX_H * ratio}px`, height: `${MAX_H}px` }
+              })()}
+            >
               {isAudioOnly ? (
                 <AudioWaveform className="h-8 w-8 text-muted-foreground/60" />
               ) : thumbnail ? (
-                <img src={thumbnail} alt="" className="w-full h-full object-cover" />
+                <img src={thumbnail} alt="" className="w-full h-full object-contain" />
               ) : (
                 <Video className="h-6 w-6 text-muted-foreground/40" />
               )}
