@@ -56,9 +56,14 @@ export const COLOR_PAIRS: readonly ColorPair[] = [
   { text: '#4DC4FF', outline: '#003060' },
   { text: '#AEEA00', outline: '#0A3D1E' },
   { text: '#FF80A0', outline: '#3A0A4A' },
-  { text: '#FFFFFF', outline: '#8B0000' }, // pair 6 (仮): 白×濃赤
-  { text: '#000000', outline: '#FFE000' }, // pair 7 (仮): 黒×黄
-  { text: '#00E5E5', outline: '#000000' }, // pair 8 (仮): シアン×黒
+  // REQ-041 #3: pairs 6-8 rebalanced.  Previous provisional values
+  // (white×darkRed / black×yellow / cyan×black) overlapped with pairs
+  // 1-5 (red, yellow, cyan-ish) and produced clumped hue coverage.
+  // New values add three missing hues (orange / cyan-teal / purple)
+  // with dark-on-text or light-on-text contrast pairings.
+  { text: '#FF7A00', outline: '#3A1A00' }, // pair 6 ★: 鮮やかオレンジ×濃茶
+  { text: '#00E0D0', outline: '#00303A' }, // pair 7 ★: シアン×濃青緑
+  { text: '#B060FF', outline: '#FFFFFF' }, // pair 8 ★: 明るい紫×白
   { text: '#FFFFFF', outline: '#000000' }, // pair 9 ★確定: 白×黒
   { text: '#000000', outline: '#FFFFFF' }  // pair 10 ★確定: 黒×白
 ]
