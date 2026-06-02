@@ -20,10 +20,12 @@ async function maybeSeedFromUrl(): Promise<void> {
   const [
     { useProjectStore },
     { useUiStore },
+    { useHistoryStore },
     { sampleVideoInfo, sampleEntries }
   ] = await Promise.all([
     import('./stores/project-store'),
     import('./stores/ui-store'),
+    import('./stores/history-store'),
     import('./lib/fixtures')
   ])
   useProjectStore.setState({
@@ -31,13 +33,15 @@ async function maybeSeedFromUrl(): Promise<void> {
     videoLoadingState: 'loaded',
     entries: sampleEntries
   })
-  // Expose stores for follow-up smoke manipulation (playhead, view mode, etc.).
-  // Only attached when seed=demo is explicitly requested — never present
-  // when the shipped main process loads the renderer.
+  // Expose stores for follow-up smoke manipulation (playhead, view mode,
+  // direct undo/redo, etc.).  Only attached when seed=demo is explicitly
+  // requested — never present when the shipped main process loads the
+  // renderer.
   Object.assign(window, {
     __mojioko_test: {
       project: useProjectStore,
-      ui: useUiStore
+      ui: useUiStore,
+      history: useHistoryStore
     }
   })
 }

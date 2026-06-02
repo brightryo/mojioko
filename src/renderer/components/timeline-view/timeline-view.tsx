@@ -144,6 +144,15 @@ function Block({
   })
   const displayText = entry.text.replace(/\\N/g, ' ').trim()
 
+  // Click-vs-drag bookkeeping for the body button (Phase 4).  Pointerdown
+  // records the origin; pointermove flips `moved` once the cursor crosses
+  // the 3 px threshold; click swallows the open-popover action if `moved`
+  // was set so a real drag never pops the inspector mid-motion.  Refs
+  // (not state) so writes do not retrigger renders during the drag.
+  const bodyDownXRef = useRef<number | null>(null)
+  const bodyMovedRef = useRef(false)
+  const BODY_DRAG_THRESHOLD_PX = 3
+
   function handleEdgePointerDown(kind: 'resize-start' | 'resize-end') {
     return (e: React.PointerEvent<HTMLDivElement>) => {
       // Only react to primary mouse button / touch contact.
@@ -154,8 +163,35 @@ function Block({
     }
   }
 
+  function handleBodyPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    if (e.button !== 0 || entry.isDeleted) return
+    bodyDownXRef.current = e.clientX
+    bodyMovedRef.current = false
+    // Kick off the 'move' drag eagerly — TimelineView's handler defers any
+    // entry mutation until the pointer crosses the threshold (see the
+    // dxPx check in applyDragPatch's 'move' branch).  Doing it on
+    // pointerdown rather than after a debounce avoids a perceptible
+    // "stickiness" at drag start.
+    onStartDrag('move', entry, e.clientX)
+  }
+
+  function handleBodyPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    const down = bodyDownXRef.current
+    if (down === null) return
+    if (Math.abs(e.clientX - down) > BODY_DRAG_THRESHOLD_PX) {
+      bodyMovedRef.current = true
+    }
+  }
+
   function handleBodyClick(e: React.MouseEvent<HTMLButtonElement>) {
     e.stopPropagation()
+    bodyDownXRef.current = null
+    if (bodyMovedRef.current) {
+      // A drag happened — swallow the click so the inspector doesn't
+      // pop open on top of the freshly-moved block.
+      bodyMovedRef.current = false
+      return
+    }
     onSelect(entry.id, entry.startSec)
   }
 
@@ -204,6 +240,8 @@ function Block({
           <button
             type="button"
             aria-label={ariaLabel}
+            onPointerDown={handleBodyPointerDown}
+            onPointerMove={handleBodyPointerMove}
             onClick={handleBodyClick}
             title={displayText}
             className={cn(
@@ -215,7 +253,8 @@ function Block({
               entry.isEdited && !entry.isDeleted && 'bg-amber-400/15 border-amber-400/40 hover:bg-amber-400/25',
               isOverflow && !entry.isDeleted && 'bg-red-500/15 border-red-500/40 hover:bg-red-500/25',
               isFocused && 'ring-2 ring-green-500 border-green-500 bg-green-500/15 text-zinc-50',
-              entry.isDeleted && 'opacity-40 line-through'
+              entry.isDeleted && 'opacity-40 line-through',
+              !entry.isDeleted && 'cursor-grab active:cursor-grabbing'
             )}
           >
             <span className="truncate">{displayText || '·'}</span>
@@ -393,8 +432,6 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
 
   const handleStartDrag = useCallback(
     (kind: DragKind, entry: SubtitleEntry, clientX: number) => {
-      // Phase 3 only handles edge resize.  'move' is reserved for Phase 4.
-      if (kind === 'move') return
       activeDragRef.current = {
         kind,
         entryId: entry.id,
@@ -403,7 +440,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       }
       setDraggingId(entry.id)
       // Close any open inspector so the popover doesn't visually follow the
-      // block during a resize.
+      // block during a resize or move.
       setOpenInspectorId((cur) => (cur === entry.id ? null : cur))
     },
     []
@@ -427,8 +464,19 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         const floor = snap.startSec + MIN_BLOCK_SEC
         const newEnd = Math.max(floor, Math.min(maxEnd, snap.endSec + dxSec))
         patch = { endSec: newEnd, isEdited: true }
+      } else if (d.kind === 'move') {
+        // Suppress micro-movements below the click/drag threshold so a
+        // real click (which fires pointerdown → pointerup with no
+        // measurable motion) does not nudge the entry by sub-pixel
+        // jitter.  Once the user has crossed the threshold even once,
+        // every subsequent pointermove is an honest drag.
+        if (Math.abs(dxPx) < 3) return
+        const duration = snap.endSec - snap.startSec
+        const maxStart = Math.max(0, maxEnd - duration)
+        const newStart = Math.min(maxStart, Math.max(0, snap.startSec + dxSec))
+        const newEnd = newStart + duration
+        patch = { startSec: newStart, endSec: newEnd, isEdited: true }
       }
-      // 'move' is Phase 4 — handled in a follow-up commit.
       if (patch === null) return
       useProjectStore.getState().updateEntry(d.entryId, patch)
     }
