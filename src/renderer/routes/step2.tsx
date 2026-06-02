@@ -29,6 +29,8 @@ import { NEW_ROW_DURATION_SEC, ENABLE_VIDEO_PREVIEW } from '../../shared/constan
 import { VideoPreviewPanel } from '@/components/video-preview/video-preview-panel'
 import { AudioPreviewPanel } from '@/components/audio-preview/audio-preview-panel'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
+import { EditorViewSwitcher } from '@/components/editor-view-switcher/editor-view-switcher'
+import { TimelineView } from '@/components/timeline-view/timeline-view'
 
 /**
  * State driving the shared TimeEditorDialog.
@@ -116,6 +118,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const redo = useHistoryStore((s) => s.redo)
   const tableFilter = useUiStore((s) => s.tableFilter)
   const setTableFilter = useUiStore((s) => s.setTableFilter)
+  const editorViewMode = useUiStore((s) => s.editorViewMode)
   const focusedRowId = useUiStore((s) => s.focusedRowId)
   const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
@@ -644,24 +647,31 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
             shift between modes. */}
         {ENABLE_VIDEO_PREVIEW && (isAudioOnly ? <AudioPreviewPanel /> : <VideoPreviewPanel />)}
 
-        {/* Filter tabs + Add Row button */}
+        {/* View switcher + Filter tabs + Undo/Redo + Add Row.  View switcher
+            is left-anchored next to the filter tabs (REQ-052 Phase 1) so the
+            two pill-group controls visually pair as siblings.  Filter tabs
+            stay visible in both views — they apply the same filterEntries
+            rules to the timeline so a "Ready" tab hides warning blocks too. */}
         <div className="flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-1 bg-zinc-900 rounded-lg p-1">
-            {FILTERS.map(({ key, count }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setTableFilter(key)}
-                className={cn(
-                  'h-7 px-3 rounded-md text-[12px] font-medium transition-colors duration-150',
-                  tableFilter === key
-                    ? 'bg-zinc-800 text-zinc-50'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                )}
-              >
-                {t(`tab.${key}`)} · <span className="tabular-nums">{count}</span>
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <EditorViewSwitcher />
+            <div className="flex items-center gap-1 bg-zinc-900 rounded-lg p-1">
+              {FILTERS.map(({ key, count }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setTableFilter(key)}
+                  className={cn(
+                    'h-7 px-3 rounded-md text-[12px] font-medium transition-colors duration-150',
+                    tableFilter === key
+                      ? 'bg-zinc-800 text-zinc-50'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  )}
+                >
+                  {t(`tab.${key}`)} · <span className="tabular-nums">{count}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Undo / Redo + Add Row — right side of the filter row */}
@@ -718,7 +728,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
             auto-line-break).  Selection itself stays available — we
             just don't surface the bar. */}
         <AnimatePresence initial={false}>
-          {selectedRowIds.size > 0 && !isAudioOnly && (
+          {editorViewMode === 'list' && selectedRowIds.size > 0 && !isAudioOnly && (
             <motion.div
               key="bulk-edit-bar"
               initial={{ opacity: 0, height: 0 }}
@@ -748,14 +758,24 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
           )}
         </AnimatePresence>
 
-        {/* Table — fills remaining height */}
+        {/* Table or Timeline — fills remaining height.  Same `entries` are
+            edited from either view (1-data-2-views, REQ-052).  Phase 1
+            timeline is read-only: clicks focus a row + seek the video, but
+            edit affordances land in Phases 2–5.  See dev-docs/specs/timeline.md. */}
         <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">
-          <SubtitleTable
-            overflowMap={overflowMap}
-            warningsMap={warningsMap}
-            videoDurationSec={videoDurationSec}
-            onAdjustTime={openEditTimeDialog}
-          />
+          {editorViewMode === 'list' ? (
+            <SubtitleTable
+              overflowMap={overflowMap}
+              warningsMap={warningsMap}
+              videoDurationSec={videoDurationSec}
+              onAdjustTime={openEditTimeDialog}
+            />
+          ) : (
+            <TimelineView
+              warningsMap={warningsMap}
+              videoDurationSec={videoDurationSec}
+            />
+          )}
         </div>
       </div>
 

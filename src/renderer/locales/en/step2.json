@@ -209,5 +209,30 @@
     "white": "White",
     "opacity": "Opacity",
     "outlineNote": "Note: Outline is disabled when background is enabled"
+  },
+  "viewMode": {
+    "list": "List",
+    "timeline": "Timeline",
+    "ariaLabel": "Editor view mode"
+  },
+  "timeline": {
+    "emptyAll": "No subtitle entries.",
+    "emptyFiltered": "No entries match the current filter.",
+    "trackLabel": "T{{index}}",
+    "deletedTrackLabel": "Deleted",
+    "toolbar": {
+      "zoomOut": "Zoom out",
+      "zoomIn": "Zoom in",
+      "zoomLevel": "{{pps}} px/s",
+      "trackCount": "{{count}} tracks",
+      "snap": "Snap",
+      "snapHelp": "Snap to nearby edges (lands in Phase 5)"
+    },
+    "block": {
+      "ariaLabel": "Subtitle block T{{track}} row {{index}}"
+    },
+    "playhead": {
+      "ariaLabel": "Playhead"
+    }
   }
 }
