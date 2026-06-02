@@ -456,15 +456,34 @@ export function VideoPreviewPanel() {
                   while horizontal sources continue to size to the
                   full videoW (e.g. 320 for 16:9 @ 180h). */}
               {(() => {
-                // Same height target as the video element (h-[180px]).
-                // Falls back to 16:9 before metadata loads so the box
-                // doesn't collapse during the brief no-dimensions window.
-                const TARGET_H = 180
+                // REQ-045 #1: 2-axis envelope replaces the previous
+                // height-only TARGET_H=180.  Vertical sources now use
+                // the available height for a much larger preview while
+                // horizontal stays inside the panel's right column's
+                // own width budget.  Behaviour by ratio:
+                //   - 16:9 → 360×202 (width-bound; +25 % bigger than
+                //            the previous 320×180, still well within
+                //            the panel)
+                //   - 9:16 → 158×280 (height-bound; +143 % area vs the
+                //            previous 101×180 — the main visual win)
+                //   - 1:1  → 280×280
+                // The grid track minimum (180px) is unchanged so the
+                // disclaimer below still has a readable wrap width even
+                // for the narrowest vertical sources.  When the
+                // container width is below the 180px floor (e.g. 158
+                // for 9:16) the videoContainer is horizontally centred
+                // inside the track via mx-auto (REQ-045 #2) — without
+                // this the video would sit flush-left and look
+                // mis-aligned against the disclaimer text below it.
+                const MAX_W = 360
+                const MAX_H = 280
                 const ratio =
                   video.widthPx > 0 && video.heightPx > 0
                     ? video.widthPx / video.heightPx
                     : 16 / 9
-                const videoW = Math.round(TARGET_H * ratio)
+                const widthBound = MAX_H * ratio > MAX_W
+                const videoW = Math.round(widthBound ? MAX_W : MAX_H * ratio)
+                const videoH = Math.round(widthBound ? MAX_W / ratio : MAX_H)
                 return (
                   <div
                     className="grid gap-4"
@@ -482,8 +501,8 @@ export function VideoPreviewPanel() {
                     <div className="flex flex-col">
                       <div
                         ref={videoContainerRef}
-                        className="relative flex items-center justify-center overflow-hidden rounded bg-input"
-                        style={{ width: `${videoW}px`, height: `${TARGET_H}px` }}
+                        className="relative mx-auto flex items-center justify-center overflow-hidden rounded bg-input"
+                        style={{ width: `${videoW}px`, height: `${videoH}px` }}
                       >
                         {hasError ? (
                           <span className="px-6 text-xs text-muted-foreground">{t('videoPreview.error')}</span>
