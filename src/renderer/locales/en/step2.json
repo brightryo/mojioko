@@ -67,7 +67,11 @@
     "continueToRender": "Continue to render",
     "resetRow": "Reset this row",
     "deleteRow": "Delete this row",
-    "restoreRow": "Restore this row"
+    "restoreRow": "Restore this row",
+    "autoLineBreakRow": "Auto wrap",
+    "autoLineBreakRowHelp": "Re-wrap this row's line breaks",
+    "sizeStepUp": "Size +{{step}}px (max {{max}})",
+    "sizeStepDown": "Size −{{step}}px (min {{min}})"
   },
   "dialog": {
     "timeEditor": {
@@ -140,7 +144,8 @@
     "deleteRow": "Delete row",
     "restoreRow": "Restore row",
     "resetRow": "Reset row",
-    "addRow": "Add row"
+    "addRow": "Add row",
+    "autoLineBreak": "Auto wrap"
   },
   "bulk": {
     "regionLabel": "Bulk edit",

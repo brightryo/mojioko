@@ -67,7 +67,11 @@
     "continueToRender": "書き出しへ",
     "resetRow": "この行をリセット",
     "deleteRow": "この行を削除",
-    "restoreRow": "この行を復元"
+    "restoreRow": "この行を復元",
+    "autoLineBreakRow": "自動改行",
+    "autoLineBreakRowHelp": "この行のみ改行を引き直します",
+    "sizeStepUp": "サイズを +{{step}}px (最大 {{max}})",
+    "sizeStepDown": "サイズを -{{step}}px (最小 {{min}})"
   },
   "dialog": {
     "timeEditor": {
@@ -140,7 +144,8 @@
     "deleteRow": "行を削除",
     "restoreRow": "行を復元",
     "resetRow": "行をリセット",
-    "addRow": "行を追加"
+    "addRow": "行を追加",
+    "autoLineBreak": "自動改行"
   },
   "bulk": {
     "regionLabel": "一括編集",
