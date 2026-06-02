@@ -442,52 +442,81 @@ export function VideoPreviewPanel() {
             className="overflow-hidden"
           >
             <div className="px-3 pb-2 space-y-1 border-t border-border/50 pt-2">
-              <div className="grid gap-4" style={{ gridTemplateColumns: 'auto 1fr' }}>
-
-                {/* ── Left: video + subtitle overlay + disclaimer ─────
-                    The "approximate preview" disclaimer used to sit
-                    below the entire grid; moved here directly under the
-                    video frame so the warning attaches to what it
-                    describes and the left column visually fills toward
-                    the bottom (the right column's stacked controls
-                    pulled it taller). */}
-                <div className="flex flex-col">
+              {/* REQ-044 #2: pin the left grid track to the video's
+                  actual rendered width so the videoContainer never
+                  grows wider than the <video> inside.  Before this
+                  fix the `auto` track let the disclaimer's max-content
+                  push the container to ~350px while a vertical
+                  1080×1920 source only renders 101px wide, with the
+                  side-effect that SubtitleOverlay read the container
+                  width (350) as the video width and over-scaled +
+                  mispositioned the subtitle.  `minmax(180px, videoW)`
+                  ensures the disclaimer below still has a readable
+                  wrap width (≥180) even for narrow vertical sources,
+                  while horizontal sources continue to size to the
+                  full videoW (e.g. 320 for 16:9 @ 180h). */}
+              {(() => {
+                // Same height target as the video element (h-[180px]).
+                // Falls back to 16:9 before metadata loads so the box
+                // doesn't collapse during the brief no-dimensions window.
+                const TARGET_H = 180
+                const ratio =
+                  video.widthPx > 0 && video.heightPx > 0
+                    ? video.widthPx / video.heightPx
+                    : 16 / 9
+                const videoW = Math.round(TARGET_H * ratio)
+                return (
                   <div
-                    ref={videoContainerRef}
-                    className="relative flex items-center justify-center overflow-hidden rounded bg-input h-[180px]"
+                    className="grid gap-4"
+                    style={{
+                      gridTemplateColumns: `minmax(180px, ${videoW}px) 1fr`
+                    }}
                   >
-                    {hasError ? (
-                      <span className="px-6 text-xs text-muted-foreground">{t('videoPreview.error')}</span>
-                    ) : (
-                      <>
-                        <video
-                          ref={videoRef}
-                          src={videoUrl}
-                          preload="metadata"
-                          className="h-[180px] w-auto object-contain"
-                          onTimeUpdate={handleTimeUpdate}
-                          onLoadedMetadata={handleLoadedMetadata}
-                          onPlay={handlePlay}
-                          onPause={handlePause}
-                          onEnded={handleEnded}
-                          onError={handleError}
-                        />
-                        {overlayEntry && videoContainerWidth > 0 && (
-                          <SubtitleOverlay
-                            entry={overlayEntry}
-                            burnin={burnin}
-                            videoWidthPx={video.widthPx}
-                            containerWidthPx={videoContainerWidth}
-                            subtitleBackground={subtitleBackground}
-                          />
+
+                    {/* ── Left: video + subtitle overlay + disclaimer ─────
+                        The "approximate preview" disclaimer sits directly
+                        under the video frame so the warning attaches to
+                        what it describes; column track's minmax floor
+                        keeps the disclaimer readable for vertical videos
+                        even though the video itself is narrower. */}
+                    <div className="flex flex-col">
+                      <div
+                        ref={videoContainerRef}
+                        className="relative flex items-center justify-center overflow-hidden rounded bg-input"
+                        style={{ width: `${videoW}px`, height: `${TARGET_H}px` }}
+                      >
+                        {hasError ? (
+                          <span className="px-6 text-xs text-muted-foreground">{t('videoPreview.error')}</span>
+                        ) : (
+                          <>
+                            <video
+                              ref={videoRef}
+                              src={videoUrl}
+                              preload="metadata"
+                              className="h-full w-auto object-contain"
+                              onTimeUpdate={handleTimeUpdate}
+                              onLoadedMetadata={handleLoadedMetadata}
+                              onPlay={handlePlay}
+                              onPause={handlePause}
+                              onEnded={handleEnded}
+                              onError={handleError}
+                            />
+                            {overlayEntry && videoContainerWidth > 0 && (
+                              <SubtitleOverlay
+                                entry={overlayEntry}
+                                burnin={burnin}
+                                videoWidthPx={video.widthPx}
+                                containerWidthPx={videoContainerWidth}
+                                subtitleBackground={subtitleBackground}
+                              />
+                            )}
+                          </>
                         )}
-                      </>
-                    )}
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t('subtitleLayout.previewNote')}
-                  </p>
-                </div>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {t('subtitleLayout.previewNote')}
+                      </p>
+                    </div>
 
                 {/* ── Right: 2-row layout (settings / player) ──────────
                     The middle "filename + folder" row moved up into the
@@ -665,7 +694,9 @@ export function VideoPreviewPanel() {
 
                 </div>
 
-              </div>
+                  </div>
+                )
+              })()}
             </div>
           </motion.div>
         )}
