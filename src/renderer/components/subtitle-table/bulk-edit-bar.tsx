@@ -53,6 +53,20 @@ function pickFirstSelectedColor(
 }
 
 /**
+ * Same seeding pattern as pickFirstSelectedColor but for the font size.
+ * Returns '' for an empty selection so the input renders its placeholder
+ * naturally on first mount when nothing is selected.
+ */
+function pickFirstSelectedSize(selectedIds: ReadonlySet<string>): string {
+  if (selectedIds.size === 0) return ''
+  const entries = useProjectStore.getState().entries
+  for (const e of entries) {
+    if (selectedIds.has(e.id)) return String(e.fontSizePx)
+  }
+  return ''
+}
+
+/**
  * Bulk-edit bar for Step 2.
  *
  * Renders above the subtitle table when any rows are selected.  Each
@@ -101,7 +115,18 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // left it (same pattern as colorDraftText/Outline above).
   const [outlineSliderDraft, setOutlineSliderDraft] = useState<number>(0)
 
-  // Re-seed colour drafts when the selection itself changes.  Reads
+  // REQ-047 #1: same persist-then-re-seed pattern as the colour drafts.
+  // Previously the size input was uncontrolled and cleared on blur
+  // (`e.target.value = ''`), which made it look like the apply had
+  // been lost even though the toast confirmed N rows changed.  Now
+  // the value stays visible after commit and only re-seeds when the
+  // selection itself changes — matching the colour swatches' "shows
+  // what was last applied to the current selection" affordance.
+  const [sizeDraft, setSizeDraft] = useState<string>(() =>
+    pickFirstSelectedSize(selectedRowIds)
+  )
+
+  // Re-seed every draft when the selection itself changes.  Reads
   // `entries` via getState() so the effect only fires on selection
   // change — not on every entry mutation (which would otherwise reset
   // the user's in-progress pick whenever a row's text was edited).
@@ -109,6 +134,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftText(pickFirstSelectedColor(selectedRowIds, 'text'))
     setColorDraftOutline(pickFirstSelectedColor(selectedRowIds, 'outline'))
     setOutlineSliderDraft(0)
+    setSizeDraft(pickFirstSelectedSize(selectedRowIds))
   }, [selectedRowIds])
 
   // ---------------------------------------------------------------------
@@ -157,6 +183,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       { fontSizePx: clamped },
       t('bulk.history.size', { count: selectedRowIds.size })
     )
+    // REQ-047 #1: persist the just-applied (clamped) value as the
+    // visible draft so the input doesn't blank out.  Surfaces "what
+    // was applied", and if the typed value was out of range the user
+    // sees the clamped result it landed on.
+    setSizeDraft(String(clamped))
   }
 
   function handleTextColorCommit(hex: string) {
@@ -345,7 +376,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
 
       {/* Controls cluster */}
       <div className="flex items-center gap-5 flex-wrap min-w-0">
-        {/* Font size */}
+        {/* Font size — REQ-047 #1: controlled input that seeds from the
+            first selected row and persists the user's applied value
+            after blur.  onFocus selects the existing content so re-
+            typing replaces in one keystroke (vs. clicking + manually
+            highlighting before typing). */}
         <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
           <span>{t('bulk.size')}</span>
           <input
@@ -353,6 +388,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             min={FONT_SIZE_MIN_PX}
             max={FONT_SIZE_MAX_PX}
             placeholder={t('bulk.placeholder')}
+            value={sizeDraft}
+            onChange={(e) => setSizeDraft(e.target.value)}
+            onFocus={(e) => e.target.select()}
             // REQ-034 #3: tooltip surfaces the clamp range so a user
             // typing 700 sees the cause when the input snaps back to
             // 600 on blur (cap raised from 200 to 600 in REQ-041).
@@ -360,7 +398,6 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             onBlur={(e) => {
               if (e.target.value === '') return
               handleSizeCommit(e.target.value)
-              e.target.value = ''
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
