@@ -774,6 +774,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
             <TimelineView
               warningsMap={warningsMap}
               videoDurationSec={videoDurationSec}
+              onAdjustTime={openEditTimeDialog}
             />
           )}
         </div>

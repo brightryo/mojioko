@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, useCallback } from 'react'
+import { useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ZoomIn, ZoomOut, Magnet, GanttChartSquare } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
@@ -16,6 +16,8 @@ import {
   formatRulerLabel
 } from '@/lib/timeline-layout'
 import type { EntryWarnings } from '@/lib/entry-warnings'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { TimelineBlockInspector } from './timeline-block-inspector'
 
 // ---------------------------------------------------------------------------
 // Layout constants (pixels)
@@ -81,33 +83,38 @@ function Ruler({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
 }
 
 interface BlockProps {
-  entryId: string
-  text: string
+  entry: import('../../../shared/types').SubtitleEntry
+  warnings: EntryWarnings | null
   leftPx: number
   widthPx: number
+  /** Absolute top in pixels (already includes track offset). */
+  topPx: number
   trackIndex: number
   isFocused: boolean
-  isEdited: boolean
   isOverflow: boolean
-  isDeleted: boolean
-  onSelect: (id: string, startSec: number) => void
-  startSec: number
   displayIndex: number
+  /** Whether this block's inspector Popover is currently open. */
+  isInspectorOpen: boolean
+  /** Click handler — focus the row + seek the video + open the inspector. */
+  onSelect: (id: string, startSec: number) => void
+  onInspectorOpenChange: (open: boolean) => void
+  onAdjustTime: (entryId: string) => void
 }
 
 function Block({
-  entryId,
-  text,
+  entry,
+  warnings,
   leftPx,
   widthPx,
+  topPx,
   trackIndex,
   isFocused,
-  isEdited,
   isOverflow,
-  isDeleted,
+  displayIndex,
+  isInspectorOpen,
   onSelect,
-  startSec,
-  displayIndex
+  onInspectorOpenChange,
+  onAdjustTime
 }: BlockProps) {
   const { t } = useTranslation(['step2'])
   // Visual aria-label uses the 1-based display index from the parent (table-
@@ -118,42 +125,58 @@ function Block({
   })
 
   // Display text — strip ASS \N line breaks; line-clamp keeps it on one row.
-  const displayText = text.replace(/\\N/g, ' ').trim()
+  const displayText = entry.text.replace(/\\N/g, ' ').trim()
 
   return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      onClick={(e) => {
-        e.stopPropagation()
-        onSelect(entryId, startSec)
-      }}
-      title={displayText}
-      className={cn(
-        'absolute flex items-center px-2 rounded-md text-left text-[12px] leading-none',
-        'transition-colors duration-150 truncate select-none overflow-hidden',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40',
-        // Base palette — light zinc with a small inset shadow so adjacent
-        // blocks read as separate units even when they touch.
-        'bg-zinc-700/70 text-zinc-100 border border-zinc-600/70',
-        'hover:bg-zinc-700 hover:border-zinc-500',
-        // State tints — keep them additive (focus wins for border, semantic
-        // tints add bg overlays).  Mirrors subtitle-table row palette.
-        isEdited && !isDeleted && 'bg-amber-400/15 border-amber-400/40 hover:bg-amber-400/25',
-        isOverflow && !isDeleted && 'bg-red-500/15 border-red-500/40 hover:bg-red-500/25',
-        isFocused && 'ring-2 ring-green-500 border-green-500 bg-green-500/15 text-zinc-50',
-        isDeleted && 'opacity-40 line-through'
-      )}
-      style={{
-        left: `${leftPx}px`,
-        // Floor width to 2 px so 0-duration entries are still clickable.
-        width: `${Math.max(2, widthPx)}px`,
-        height: `${BLOCK_HEIGHT_PX}px`,
-        top: `${BLOCK_VERTICAL_PAD_PX}px`
-      }}
-    >
-      <span className="truncate">{displayText || '·'}</span>
-    </button>
+    <Popover open={isInspectorOpen} onOpenChange={onInspectorOpenChange}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={ariaLabel}
+          onClick={(e) => {
+            e.stopPropagation()
+            onSelect(entry.id, entry.startSec)
+          }}
+          title={displayText}
+          className={cn(
+            'absolute flex items-center px-2 rounded-md text-left text-[12px] leading-none',
+            'transition-colors duration-150 truncate select-none overflow-hidden',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40',
+            // Base palette — light zinc with a small inset shadow so adjacent
+            // blocks read as separate units even when they touch.
+            'bg-zinc-700/70 text-zinc-100 border border-zinc-600/70',
+            'hover:bg-zinc-700 hover:border-zinc-500',
+            // State tints — keep them additive (focus wins for border, semantic
+            // tints add bg overlays).  Mirrors subtitle-table row palette.
+            entry.isEdited && !entry.isDeleted && 'bg-amber-400/15 border-amber-400/40 hover:bg-amber-400/25',
+            isOverflow && !entry.isDeleted && 'bg-red-500/15 border-red-500/40 hover:bg-red-500/25',
+            isFocused && 'ring-2 ring-green-500 border-green-500 bg-green-500/15 text-zinc-50',
+            entry.isDeleted && 'opacity-40 line-through'
+          )}
+          style={{
+            left: `${leftPx}px`,
+            // Floor width to 2 px so 0-duration entries are still clickable.
+            width: `${Math.max(2, widthPx)}px`,
+            height: `${BLOCK_HEIGHT_PX}px`,
+            top: `${topPx}px`
+          }}
+        >
+          <span className="truncate">{displayText || '·'}</span>
+        </button>
+      </PopoverTrigger>
+      {/* `side="top"` by default; Radix collision detection flips to bottom
+          near the viewport top edge.  align="start" keeps the popover's left
+          edge near the block's left edge — feels rooted to the timestamp
+          rather than floating in the middle. */}
+      <PopoverContent side="top" align="start" sideOffset={8} className="p-3">
+        <TimelineBlockInspector
+          entry={entry}
+          warnings={warnings}
+          onAdjustTime={onAdjustTime}
+          onClose={() => onInspectorOpenChange(false)}
+        />
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -166,27 +189,36 @@ interface TimelineViewProps {
   warningsMap: ReadonlyMap<string, EntryWarnings>
   /** Video duration (seconds); `Infinity` when no video or in audio-only mode. */
   videoDurationSec: number
+  /**
+   * Open the shared TimeEditorDialog in edit mode for the given entry.
+   * Same signature as SubtitleTable's `onAdjustTime` so step2.tsx can pass
+   * a single `openEditTimeDialog` reference to either view.
+   */
+  onAdjustTime: (entryId: string) => void
 }
 
 /**
- * STEP 2 timeline view (Phase 1: read-only).
+ * STEP 2 timeline view.
  *
  * Renders the same `useProjectStore.entries` the subtitle-table consumes,
- * but as horizontal blocks on multiple tracks.  No edit affordances yet:
+ * but as horizontal blocks on multiple tracks.
  *
  *  - Clicking a block focuses the row in the shared `focusedRowId` store
  *    slice (so the subtitle-table view shows the same selection on switch
- *    back) AND seeks the video preview to the block's startSec.
+ *    back), seeks the video preview to the block's startSec, AND opens an
+ *    inspector Popover anchored to the block (Phase 2) so the user can
+ *    read / edit the entry's text, see warnings, jump into the existing
+ *    TimeEditorDialog, or delete-restore the row.
  *  - Clicking the ruler / empty timeline area seeks the video.
  *  - The current `videoCurrentTimeSec` is drawn as a vertical red
  *    playhead; that store slice is updated by the existing
  *    VideoPreviewPanel on every `timeupdate`.
  *  - Filter tabs continue to drive what's visible (`filterEntries`).
  *
- * Edit interactions (popover inspector, edge drag, body drag, snap) land
- * in Phases 2–5.  See `dev-docs/specs/timeline.md`.
+ * Drag-to-edit interactions land in Phases 3–4, snap in Phase 5.  See
+ * `dev-docs/specs/timeline.md`.
  */
-export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProps) {
+export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: TimelineViewProps) {
   const { t } = useTranslation(['step2'])
   const entries = useProjectStore((s) => s.entries)
   const tableFilter = useUiStore((s) => s.tableFilter)
@@ -243,6 +275,24 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   const widthPx    = totalSec * pixelsPerSec
   const tracksHeightPx = trackCount * TRACK_HEIGHT_PX
 
+  // Inspector open-id — single-popover invariant.  Lives as local state
+  // rather than in ui-store because no other component needs to know
+  // which block has its inspector open (and persisting it across navigations
+  // would surface a stale popover when returning to STEP 2).
+  const [openInspectorId, setOpenInspectorId] = useState<string | null>(null)
+
+  // Filter changes can hide the currently-open block; close the inspector
+  // in that case so a stale popover never lingers off-screen.
+  const visibleIds = useMemo(
+    () => new Set(visibleEntries.map((e) => e.id)),
+    [visibleEntries]
+  )
+  useEffect(() => {
+    if (openInspectorId && !visibleIds.has(openInspectorId)) {
+      setOpenInspectorId(null)
+    }
+  }, [openInspectorId, visibleIds])
+
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
@@ -250,7 +300,15 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   const handleSelectBlock = useCallback((id: string, startSec: number) => {
     setFocusedRowId(id)
     setVideoSeekRequest(startSec)
+    setOpenInspectorId(id)
   }, [setFocusedRowId, setVideoSeekRequest])
+
+  const handleInspectorOpenChange = useCallback((id: string, open: boolean) => {
+    // Guard the close path so a stale event (e.g. another block opened in
+    // the meantime) does not unintentionally clobber the current owner.
+    if (open) setOpenInspectorId(id)
+    else setOpenInspectorId((prev) => (prev === id ? null : prev))
+  }, [])
 
   const handleSeek = useCallback((sec: number) => {
     setVideoSeekRequest(sec)
@@ -457,39 +515,42 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 })()}
 
                 {/* Blocks */}
+                {/* Blocks rendered directly inside the tracks container
+                    (no per-block wrapper).  The previous wrapper had
+                    `left:0 right:0` which made every entry's invisible
+                    wrapper span the entire track width — multiple entries
+                    on the same track ended up stacked in DOM order with
+                    the latest one intercepting all clicks on the track.
+                    Each Block is now absolutely positioned with its own
+                    explicit left/top/width so only the visible block
+                    rectangle catches pointer events. */}
                 {layout.placements.map(({ entry, trackIndex }) => {
                   const leftPx  = entry.startSec * pixelsPerSec
                   const widthBl = (entry.endSec - entry.startSec) * pixelsPerSec
-                  const w       = warningsMap.get(entry.id)
+                  const topPx   = trackIndex * TRACK_HEIGHT_PX + BLOCK_VERTICAL_PAD_PX
+                  const w       = warningsMap.get(entry.id) ?? null
                   // Overflow tint suppressed in audio-only mode (matches the
                   // table — `overflowMap` is empty there).
                   const isOverflow = !isAudioOnly && (w?.overflow ?? false)
                   return (
-                    <div
+                    <Block
                       key={entry.id}
-                      className="absolute"
-                      style={{
-                        top: `${trackIndex * TRACK_HEIGHT_PX}px`,
-                        left: 0,
-                        right: 0,
-                        height: `${TRACK_HEIGHT_PX}px`
-                      }}
-                    >
-                      <Block
-                        entryId={entry.id}
-                        text={entry.text}
-                        leftPx={leftPx}
-                        widthPx={widthBl}
-                        trackIndex={trackIndex}
-                        isFocused={focusedRowId === entry.id}
-                        isEdited={entry.isEdited}
-                        isOverflow={isOverflow}
-                        isDeleted={entry.isDeleted}
-                        onSelect={handleSelectBlock}
-                        startSec={entry.startSec}
-                        displayIndex={indexOfEntry.get(entry.id) ?? 0}
-                      />
-                    </div>
+                      entry={entry}
+                      warnings={w}
+                      leftPx={leftPx}
+                      widthPx={widthBl}
+                      topPx={topPx}
+                      trackIndex={trackIndex}
+                      isFocused={focusedRowId === entry.id}
+                      isOverflow={isOverflow}
+                      displayIndex={indexOfEntry.get(entry.id) ?? 0}
+                      isInspectorOpen={openInspectorId === entry.id}
+                      onSelect={handleSelectBlock}
+                      onInspectorOpenChange={(open) =>
+                        handleInspectorOpenChange(entry.id, open)
+                      }
+                      onAdjustTime={onAdjustTime}
+                    />
                   )
                 })}
               </div>
