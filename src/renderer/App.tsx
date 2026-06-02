@@ -290,12 +290,23 @@ function AppInner() {
 }
 
 export default function App() {
+  // Smoke-only override: when launched with `?seed=demo&start=stepN` the
+  // router boots on that step instead of Step 1.  Lets a Playwright
+  // screenshot smoke jump straight into STEP 2's timeline view (where the
+  // fixtures seeded by main.tsx are visible) without driving the breadcrumb.
+  // No effect on the shipped app — main never appends these params.
+  const initialPath = (() => {
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('seed') !== 'demo') return '/step1'
+    const start = p.get('start')
+    return start === 'step2' || start === 'step3' ? `/${start}` : '/step1'
+  })()
   return (
     <TooltipProvider delayDuration={300}>
       <MemoryRouter
         // Splash screen disabled — start directly on /step1.
         // Original: initialEntries={['/splash']}
-        initialEntries={['/step1']}
+        initialEntries={[initialPath]}
         initialIndex={0}
         future={{
           v7_startTransition: true,
