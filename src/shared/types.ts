@@ -44,7 +44,7 @@ export interface SubtitleEntryOriginal {
   startSec: number
   endSec: number
   text: string
-  /** Integer, 30–200 px. */
+  /** Integer, 30–600 px. */
   fontSizePx: number
   textColorHex: string
   outlineColorHex: string
@@ -81,7 +81,7 @@ export type RowState = 'normal' | 'edited' | 'overflow' | 'deleted'
 // ---------------------------------------------------------------------------
 
 export interface TranscriptionDefaults {
-  /** Integer, 30–200 px. */
+  /** Integer, 30–600 px. */
   fontSizePx: number
   textColorHex: string
   outlineColorHex: string

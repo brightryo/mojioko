@@ -46,8 +46,22 @@ export const SETTINGS_DEBOUNCE_MS = 500
 
 /** Minimum subtitle font size in pixels (inclusive). */
 export const FONT_SIZE_MIN_PX = 30
-/** Maximum subtitle font size in pixels (inclusive). */
-export const FONT_SIZE_MAX_PX = 200
+/**
+ * Maximum subtitle font size in pixels (inclusive).
+ *
+ * REQ-040 confirmed the previous 200 ceiling was a convenience UI clamp,
+ * not a technical limit — ASS `\fs`, libass, opentype.js measurement, and
+ * the CSS preview all scale linearly with fontSizePx without any
+ * upper-bound dependency.  REQ-041 raises the ceiling to 600 to cover:
+ *   - 1080p meme captions up to ~55 % of frame height
+ *   - 4K editing where 200 px reads as small (≈9 %); 600 px is ~28 %
+ *   - vertical short formats where ~30 % of frame width is a common big
+ *     caption size
+ *
+ * Values higher than 600 (e.g. 1000) tend to occupy the entire frame and
+ * are easy to hit accidentally via a typo, so the cap stops here.
+ */
+export const FONT_SIZE_MAX_PX = 600
 /** Maximum outline thickness in pixels (inclusive, integer). Range is 0–OUTLINE_THICKNESS_MAX_PX. */
 export const OUTLINE_THICKNESS_MAX_PX = 10
 
