@@ -658,12 +658,13 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
       </div>
 
       {/* Actions — REQ-039 #2 adds the per-row auto-line-break button
-          stacked below the delete/reset icon row.  Whole cluster fades
-          in on row hover (same opacity-0 → group-hover affordance as
-          before); the auto-line-break button is suppressed in audio
-          mode because there's no burn-in stage that would consume the
-          rewrapped text. */}
-      <div className="flex flex-col gap-1 py-3 px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          stacked below the delete/reset icon row.  REQ-041 #2 removes
+          the hover-only opacity gate: actions are now always visible
+          so the user does not have to hunt the mouse over each row to
+          see / target them.  The auto-line-break button is still
+          suppressed in audio mode because there's no burn-in stage
+          that would consume the rewrapped text. */}
+      <div className="flex flex-col gap-1 py-3 px-1">
         <div className="flex items-center justify-center gap-1">
           <button
             type="button"
