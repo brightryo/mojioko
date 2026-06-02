@@ -209,5 +209,30 @@
     "white": "白",
     "opacity": "透過率",
     "outlineNote": "※ 背景を有効にするとアウトライン表示は無効になります"
+  },
+  "viewMode": {
+    "list": "一覧",
+    "timeline": "タイムライン",
+    "ariaLabel": "編集ビュー切替"
+  },
+  "timeline": {
+    "emptyAll": "字幕がありません",
+    "emptyFiltered": "現在のフィルターに該当する字幕がありません",
+    "trackLabel": "T{{index}}",
+    "deletedTrackLabel": "削除済み",
+    "toolbar": {
+      "zoomOut": "縮小",
+      "zoomIn": "拡大",
+      "zoomLevel": "{{pps}} px/秒",
+      "trackCount": "{{count}} トラック",
+      "snap": "吸着",
+      "snapHelp": "近接する境界に吸着（Phase 5 で実装予定）"
+    },
+    "block": {
+      "ariaLabel": "字幕ブロック T{{track}} / 行 {{index}}"
+    },
+    "playhead": {
+      "ariaLabel": "再生ヘッド"
+    }
   }
 }
