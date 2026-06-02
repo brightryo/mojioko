@@ -128,6 +128,7 @@
     "redo": "やり直す (Ctrl+Y)"
   },
   "styleCell": {
+    "size": "サイズ",
     "textColor": "文字色",
     "outlineColor": "アウトライン色",
     "outlineWidth": "アウトライン幅",
@@ -241,7 +242,8 @@
       "adjustTime": "時間を調整...",
       "delete": "削除",
       "restore": "復元",
-      "commitHint": "Ctrl+Enter で確定 · Esc で取消"
+      "commitHint": "Ctrl+Enter で確定 · Esc で取消",
+      "styleLabel": "スタイル"
     }
   }
 }
