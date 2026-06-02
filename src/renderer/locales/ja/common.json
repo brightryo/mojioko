@@ -31,7 +31,7 @@
     "quit": "終了",
     "settings": "設定",
     "about": "このアプリについて",
-    "obsGuide": "入力動画の音声トラック設定方法 (OBS)",
+    "obsGuide": "入力ファイルの音声トラック設定方法 (OBS)",
     "donations": "プロジェクトを支援する (寄付)",
     "openDownloadPage": "ダウンロードページを開く",
     "keyboardShortcuts": "キーボードショートカット"
@@ -55,6 +55,25 @@
   },
   "colorPicker": {
     "presets": "プリセット",
-    "recent": "最近使った色"
+    "recent": "最近使った色",
+    "basic": "基本色",
+    "pairs": "おすすめの組み合わせ",
+    "pairsHint": "文字色とアウトライン色を同時にセット",
+    "cud": "色弱向け",
+    "cudHint": "Color Universal Design 推奨配色",
+    "close": "閉じる",
+    "pairTooltip": "文字色 {{text}} × アウトライン {{outline}}"
+  },
+  "fontLicenses": {
+    "title": "フォントライセンス",
+    "intro": "MOJIOKO に同梱または配信される字幕フォントは、すべて SIL Open Font License v1.1 のもとで提供されています。ダウンロードしたフォントには OFL 全文が同梱されます。",
+    "copyrightHeader": "著作権表記",
+    "sourceLabel": "配布元",
+    "viewOnDisk": "OFL.txt を表示",
+    "openSource": "配布元ページを開く"
+  },
+  "thirdPartyLicenses": {
+    "title": "サードパーティライセンス",
+    "openFolder": "サードパーティライセンスのフォルダを開く"
   }
 }

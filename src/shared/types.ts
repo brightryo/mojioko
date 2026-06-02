@@ -1,4 +1,5 @@
 import type { WhisperModelId } from './burnin-defaults'
+import type { FontId } from './fonts'
 export type { WhisperModelId }
 
 // ---------------------------------------------------------------------------
@@ -16,6 +17,15 @@ export interface AudioTrack {
 
 export interface VideoInfo {
   path: string
+  /**
+   * REQ-027/028: `false` for audio-only inputs (mp3 / wav / m4a / aac /
+   * flac / ogg).  When false, `widthPx` / `heightPx` / `fps` / `videoCodec`
+   * are placeholders (0 / '') with no meaning — callers must check this
+   * flag before reading them.  Existing video flows that read these
+   * fields unconditionally continue to work for video inputs because
+   * those still set the flag to `true`.
+   */
+  hasVideoStream: boolean
   widthPx: number
   heightPx: number
   durationSec: number
@@ -34,13 +44,21 @@ export interface SubtitleEntryOriginal {
   startSec: number
   endSec: number
   text: string
-  /** Integer, 30–200 px. */
+  /** Integer, 30–600 px. */
   fontSizePx: number
   textColorHex: string
   outlineColorHex: string
   /** Integer, 0–5 px. */
   outlineThicknessPx: number
   fadeEnabled: boolean
+  /**
+   * Optional per-row font override.  When undefined, the row inherits the
+   * project default (`useSettingsStore.activeFontId`) — both for preview
+   * width measurement and for ASS `\fn` emission at burn-in time.  Stored
+   * here (rather than only on the live entry) so the "Reset row" button
+   * has a stable per-row reference point.  REQ-021.
+   */
+  fontId?: FontId
 }
 
 export interface SubtitleEntry extends SubtitleEntryOriginal {
@@ -63,7 +81,7 @@ export type RowState = 'normal' | 'edited' | 'overflow' | 'deleted'
 // ---------------------------------------------------------------------------
 
 export interface TranscriptionDefaults {
-  /** Integer, 30–200 px. */
+  /** Integer, 30–600 px. */
   fontSizePx: number
   textColorHex: string
   outlineColorHex: string
@@ -157,6 +175,13 @@ export interface AppSettings {
   /** Fade-in/out duration in seconds applied to \fad() in ASS output. Default 0.2. */
   fadeDurationSec: number
   activeModelId: WhisperModelId | null
+  /**
+   * Currently selected subtitle font ID.  Drives both the CSS preview family
+   * and the ASS `Style:` `Fontname` at burn-in time.  Optional because
+   * existing settings files predating font selection do not contain it;
+   * defaults to `'noto-sans-jp-semibold'` when absent.
+   */
+  activeFontId?: FontId
   lastInputDir: string | null
   lastOutputDir: string | null
 }

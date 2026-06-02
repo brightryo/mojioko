@@ -1,6 +1,8 @@
 import type { SubtitleEntry, BurninPosition, SubtitleBackground } from '../../../shared/types'
 import { ASS_MARGIN_LR_PX } from '../../../shared/constants'
-import { getLibassScale } from '@/lib/font-metrics'
+import { getLibassScaleFor } from '@/lib/font-metrics'
+import { useSettingsStore } from '@/stores/settings-store'
+import { getFontMeta, isFontId } from '../../../shared/fonts'
 
 /** Floor (in OUTPUT pixels, not on the scale factor) applied to the visible
  *  outline so the thinnest setting (= 1) remains discernible at small preview
@@ -70,7 +72,14 @@ export function SubtitleOverlay({
   containerWidthPx,
   subtitleBackground,
 }: SubtitleOverlayProps) {
-  const libassScale = getLibassScale()
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
+  // Per-row font override (REQ-022 step 4): when the entry carries a
+  // fontId, render with that family + its own libassScale.  Otherwise
+  // fall back to the project default (activeFontId) so legacy rows and
+  // freshly-added blank rows match what burn-in would produce.
+  const resolvedFontId = isFontId(entry.fontId) ? entry.fontId : activeFontId
+  const fontMeta = getFontMeta(resolvedFontId)
+  const libassScale = getLibassScaleFor(resolvedFontId)
   const scale      = containerWidthPx / videoWidthPx
   const fontSizePx = entry.fontSizePx        * libassScale * scale
   const marginVPx  = burnin.verticalMarginPx * scale
@@ -115,8 +124,8 @@ export function SubtitleOverlay({
       style={{
         ...vStyle,
         ...hStyle,
-        fontFamily: "'Noto Sans JP'",
-        fontWeight: 600,
+        fontFamily: `'${fontMeta.cssFontFamily}'`,
+        fontWeight: fontMeta.weight,
         fontSize:   `${fontSizePx}px`,
         color:      entry.textColorHex,
         WebkitTextStrokeWidth: showOutline ? `${strokeWidthPx}px` : undefined,

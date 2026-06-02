@@ -6,7 +6,10 @@ export type WhisperModelId = 'small' | 'medium' | 'large-v3' | string
 /** Default subtitle styling applied to every transcribed entry. User-overridable via Settings. */
 export const BURNIN_DEFAULTS = {
   fontSizePx: 100,
-  textColorHex: '#ffffff',
+  // Uppercase hex to match the ColorPicker palette's normalisation (REQ-033)
+  // so the default colours light up as "selected" in the swatch grid on
+  // first launch.  Functionally identical to the previous lowercase values.
+  textColorHex: '#FFFFFF',
   outlineColorHex: '#000000',
   outlineThicknessPx: 3,
   fadeEnabled: true,

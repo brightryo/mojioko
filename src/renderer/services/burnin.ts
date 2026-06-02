@@ -1,5 +1,6 @@
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground, IpcResult, EncoderSetting, AudioMode, OutputContainer } from '../../shared/types'
 import type { BurninEvent } from '../../shared/ipc-contracts'
+import type { FontId } from '../../shared/fonts'
 
 export interface BurninOptions {
   inputPath: string
@@ -12,6 +13,8 @@ export interface BurninOptions {
   fadeDurationSec: number
   subtitleBackground: SubtitleBackground
   outputContainer: OutputContainer
+  /** Currently selected subtitle font.  Forwarded to libass via the ASS Style. */
+  fontId: FontId
 }
 
 export interface BurninHandle {
@@ -32,7 +35,8 @@ export async function startBurnin(
     audioMode: opts.audioMode,
     fadeDurationSec: opts.fadeDurationSec,
     subtitleBackground: opts.subtitleBackground,
-    outputContainer: opts.outputContainer
+    outputContainer: opts.outputContainer,
+    fontId: opts.fontId
   })
 
   if (!result.ok) {

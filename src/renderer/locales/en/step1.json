@@ -1,18 +1,19 @@
 {
   "title": "Transcribe",
-  "guidance": "Select a Whisper model, choose a video file, and start transcription.",
+  "guidance": "Select a Whisper model, choose an input file, and start transcription.",
   "inputVideo": {
-    "label": "Input video",
-    "hint": ".mkv · .mp4",
-    "placeholder": "Select a video file…",
-    "chooseVideo": "Choose video",
-    "help": "The source video file to transcribe and burn subtitles into",
-    "infoLabel": "Video info",
+    "label": "Input file",
+    "hint": "Video: .mp4 .mkv  /  Audio: .mp3 .wav .m4a .aac .flac .ogg",
+    "placeholder": "Select a file…",
+    "chooseVideo": "Choose file",
+    "help": "Video or audio file to transcribe. Video supports burn-in output; audio supports text/SRT export only.",
+    "infoLabel": "File info",
     "infoResolution": "Resolution",
     "infoDuration": "Duration",
     "infoFormat": "Format",
     "infoFileSize": "File size",
-    "loading": "Loading video…"
+    "loading": "Loading file…",
+    "audioOnlyBadge": "Audio only"
   },
   "audioTracks": {
     "label": "Audio tracks",
@@ -21,8 +22,8 @@
     "absent": "—",
     "transcriptionTarget": "Transcription target",
     "defaultTrackMissing": "Default track {{index}} not found; using track {{fallback}} instead.",
-    "help": "Multiple tracks appear when recorded separately (e.g. OBS). Most videos have only Track 1.",
-    "description": "Audio tracks found in the video. Select the one to transcribe."
+    "help": "Multiple tracks appear when recorded separately (e.g. OBS). Most files have only Track 1.",
+    "description": "Audio tracks found in the file. Select the one to transcribe."
   },
   "subtitleDefaults": {
     "label": "Subtitle defaults",
@@ -35,6 +36,7 @@
     "fadeOn": "On",
     "fadeOff": "Off",
     "helpSize": "Subtitle font size in pixels. Adjust to match your video resolution.",
+    "sizeHint": "{{min}}–{{max}} px (out-of-range values are clamped)",
     "helpTextColor": "Subtitle text color. White (#ffffff) is typical.",
     "helpOutlineColor": "Subtitle outline color. Black (#000000) improves readability.",
     "helpStroke": "Outline thickness in pixels.",
@@ -51,7 +53,7 @@
   "whisperModel": {
     "label": "Whisper model",
     "tooltip": "The engine that converts audio to text. Larger models are more accurate but slower.",
-    "descriptionLong": "Whisper is an engine that converts video audio into text. It's an open-source library developed by OpenAI and is free to use. All processing happens entirely on your PC; no data is sent externally.",
+    "descriptionLong": "Whisper is an engine that converts audio into text. It's an open-source library developed by OpenAI and is free to use. All processing happens entirely on your PC; no data is sent externally.",
     "descSmall": "Fast and lightweight. Lower accuracy.",
     "descMedium": "Balanced speed and accuracy.",
     "descLargeV3": "Highest accuracy. Requires more resources."
@@ -109,8 +111,8 @@
     "cancelDeny": "Keep going"
   },
   "toast": {
-    "videoLoaded": "Video loaded",
-    "probeError": "Failed to read video: {{error}}",
+    "videoLoaded": "File loaded",
+    "probeError": "Failed to read file: {{error}}",
     "transcriptionComplete": "Transcription complete · {{count}} lines",
     "modelDownloadFailed": "Download failed: {{error}}",
     "modelNotInstalled": "Model {{model}} is not installed",
@@ -118,7 +120,7 @@
     "transcriptionCancelled": "Transcription cancelled"
   },
   "error": {
-    "probeVideo": "Failed to probe video",
+    "probeVideo": "Failed to probe file",
     "transcriptionFailed": "Transcription failed: {{reason}}"
   },
   "advanced": {
@@ -157,5 +159,41 @@
     "lang_ru": "Russian",
     "lang_ar": "Arabic",
     "futureNote": "Changes are saved automatically."
+  },
+  "fontPicker": {
+    "title": "Default subtitle font",
+    "help": "Project-wide default font. Individual rows can be overridden to a different font in STEP 2. Fonts other than the bundled Noto are downloaded on demand and stored under %APPDATA%/MOJIOKO/fonts/.",
+    "status": {
+      "bundled": "Bundled",
+      "installed": "Installed",
+      "notInstalled": "Not installed",
+      "downloading": "Downloading…",
+      "active": "Active"
+    },
+    "action": {
+      "download": "Download",
+      "cancel": "Cancel",
+      "uninstall": "Uninstall",
+      "select": "Use this font",
+      "viewLicense": "View license"
+    },
+    "note": {
+      "missingRareKanji": "Rare kanji unsupported",
+      "missingRareKanjiHelp": "This font omits a small set of post-jōyō kanji (塡 剝 頰 and similar).  Subtitles containing those characters may fall back to another face mid-word."
+    },
+    "toast": {
+      "downloadComplete": "{{name}} downloaded",
+      "downloadFailed": "Download failed: {{error}}",
+      "downloadUnavailable": "{{name}} is not yet available — please try again later",
+      "uninstalled": "{{name}} uninstalled",
+      "uninstalledFallback": "{{name}} was removed — {{count}} row(s) reverted to the default font",
+      "activated": "Switched to {{name}}"
+    },
+    "uninstallConfirm": {
+      "title": "Remove {{name}}?",
+      "body": "{{name}} is used by {{count}} row(s). Removing it will revert those rows to the default font.",
+      "confirm": "Remove",
+      "cancel": "Cancel"
+    }
   }
 }

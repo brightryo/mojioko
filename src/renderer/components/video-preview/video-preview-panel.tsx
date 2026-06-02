@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
 import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
 import { Switch } from '@/components/ui/switch'
-import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font-metrics'
+import { loadSubtitleFont } from '@/lib/font-metrics'
+import { ensureFontLoaded } from '@/lib/font-registry'
 import type { SubtitleEntry } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -120,6 +121,7 @@ export function VideoPreviewPanel() {
   const updateBurnin       = useSettingsStore((s) => s.updateBurnin)
   const subtitleBackground = useSettingsStore((s) => s.subtitleBackground)
   const setSubtitleBackground = useSettingsStore((s) => s.setSubtitleBackground)
+  const activeFontId       = useSettingsStore((s) => s.activeFontId)
 
   const videoSeekRequestSec    = useUiStore((s) => s.videoSeekRequestSec)
   const setVideoSeekRequest    = useUiStore((s) => s.setVideoSeekRequest)
@@ -138,9 +140,11 @@ export function VideoPreviewPanel() {
   // Measured rendered width of the video container — fed to SubtitleOverlay so
   // font/outline sizes scale correctly with the actual on-screen video.
   const [videoContainerWidth, setVideoContainerWidth] = useState(0)
-  // Ensure the subtitle font is loaded so SubtitleOverlay uses the libass scale
-  // (≈0.6906) instead of falling back to 1.0.
-  const [subtitleFont, setSubtitleFont] = useState<SubtitleFont | null>(getSubtitleFont)
+  // Ensure the subtitle font is loaded so SubtitleOverlay uses the libass
+  // scale (~0.6906 for the active font) instead of the pre-load fallback.
+  // A tick state forces a re-render once the load resolves so getLibassScale()
+  // reads the freshly cached value.
+  const [, setFontTick] = useState(0)
   // Ref (not state) so the timeupdate handler can read it synchronously.
   const isSeeking = useRef(false)
   // Track last active entry id so we only write to the store on change.
@@ -173,12 +177,25 @@ export function VideoPreviewPanel() {
       : null
   }, [isPlaying, currentTime, focusedRowId, sortedActiveEntries])
 
-  // Load the subtitle font on mount if not already cached (covers direct entry to Step 2).
+  // Load the subtitle font on mount and refresh whenever the active font
+  // changes so the preview reflects the new metrics without requiring a
+  // remount.
+  //
+  // Awaiting BOTH paths is important:
+  //   - loadSubtitleFont() populates the opentype.js Font cache used for
+  //     overflow / line-break measurement.
+  //   - ensureFontLoaded() registers the FontFace with document.fonts so
+  //     CSS `font-family: '<cssFontFamily>'` actually renders in the
+  //     selected face.  Without an explicit await here, the tick bump
+  //     fires before the FontFace is in the document and SubtitleOverlay
+  //     re-renders into a fallback font (the v1.1.1 regression).
   useEffect(() => {
-    if (!subtitleFont) {
-      loadSubtitleFont().then(setSubtitleFont).catch(() => {})
-    }
-  }, [subtitleFont])
+    Promise.all([
+      loadSubtitleFont(),
+      ensureFontLoaded(activeFontId)
+    ]).then(() => setFontTick((n) => n + 1))
+      .catch((err) => console.error('[video-preview] font load failed', err))
+  }, [activeFontId])
 
   // Measure the video container so SubtitleOverlay can scale text/outline to the
   // actual rendered size (the <video> has w-auto, so width depends on aspect ratio).
@@ -425,52 +442,100 @@ export function VideoPreviewPanel() {
             className="overflow-hidden"
           >
             <div className="px-3 pb-2 space-y-1 border-t border-border/50 pt-2">
-              <div className="grid gap-4" style={{ gridTemplateColumns: 'auto 1fr' }}>
-
-                {/* ── Left: video + subtitle overlay + disclaimer ─────
-                    The "approximate preview" disclaimer used to sit
-                    below the entire grid; moved here directly under the
-                    video frame so the warning attaches to what it
-                    describes and the left column visually fills toward
-                    the bottom (the right column's stacked controls
-                    pulled it taller). */}
-                <div className="flex flex-col">
+              {/* REQ-044 #2: pin the left grid track to the video's
+                  actual rendered width so the videoContainer never
+                  grows wider than the <video> inside.  Before this
+                  fix the `auto` track let the disclaimer's max-content
+                  push the container to ~350px while a vertical
+                  1080×1920 source only renders 101px wide, with the
+                  side-effect that SubtitleOverlay read the container
+                  width (350) as the video width and over-scaled +
+                  mispositioned the subtitle.  `minmax(180px, videoW)`
+                  ensures the disclaimer below still has a readable
+                  wrap width (≥180) even for narrow vertical sources,
+                  while horizontal sources continue to size to the
+                  full videoW (e.g. 320 for 16:9 @ 180h). */}
+              {(() => {
+                // REQ-045 #1: 2-axis envelope replaces the previous
+                // height-only TARGET_H=180.  Vertical sources now use
+                // the available height for a much larger preview while
+                // horizontal stays inside the panel's right column's
+                // own width budget.  Behaviour by ratio:
+                //   - 16:9 → 360×202 (width-bound; +25 % bigger than
+                //            the previous 320×180, still well within
+                //            the panel)
+                //   - 9:16 → 158×280 (height-bound; +143 % area vs the
+                //            previous 101×180 — the main visual win)
+                //   - 1:1  → 280×280
+                // The grid track minimum (180px) is unchanged so the
+                // disclaimer below still has a readable wrap width even
+                // for the narrowest vertical sources.  When the
+                // container width is below the 180px floor (e.g. 158
+                // for 9:16) the videoContainer is horizontally centred
+                // inside the track via mx-auto (REQ-045 #2) — without
+                // this the video would sit flush-left and look
+                // mis-aligned against the disclaimer text below it.
+                const MAX_W = 360
+                const MAX_H = 280
+                const ratio =
+                  video.widthPx > 0 && video.heightPx > 0
+                    ? video.widthPx / video.heightPx
+                    : 16 / 9
+                const widthBound = MAX_H * ratio > MAX_W
+                const videoW = Math.round(widthBound ? MAX_W : MAX_H * ratio)
+                const videoH = Math.round(widthBound ? MAX_W / ratio : MAX_H)
+                return (
                   <div
-                    ref={videoContainerRef}
-                    className="relative flex items-center justify-center overflow-hidden rounded bg-input h-[180px]"
+                    className="grid gap-4"
+                    style={{
+                      gridTemplateColumns: `minmax(180px, ${videoW}px) 1fr`
+                    }}
                   >
-                    {hasError ? (
-                      <span className="px-6 text-xs text-muted-foreground">{t('videoPreview.error')}</span>
-                    ) : (
-                      <>
-                        <video
-                          ref={videoRef}
-                          src={videoUrl}
-                          preload="metadata"
-                          className="h-[180px] w-auto object-contain"
-                          onTimeUpdate={handleTimeUpdate}
-                          onLoadedMetadata={handleLoadedMetadata}
-                          onPlay={handlePlay}
-                          onPause={handlePause}
-                          onEnded={handleEnded}
-                          onError={handleError}
-                        />
-                        {overlayEntry && videoContainerWidth > 0 && (
-                          <SubtitleOverlay
-                            entry={overlayEntry}
-                            burnin={burnin}
-                            videoWidthPx={video.widthPx}
-                            containerWidthPx={videoContainerWidth}
-                            subtitleBackground={subtitleBackground}
-                          />
+
+                    {/* ── Left: video + subtitle overlay + disclaimer ─────
+                        The "approximate preview" disclaimer sits directly
+                        under the video frame so the warning attaches to
+                        what it describes; column track's minmax floor
+                        keeps the disclaimer readable for vertical videos
+                        even though the video itself is narrower. */}
+                    <div className="flex flex-col">
+                      <div
+                        ref={videoContainerRef}
+                        className="relative mx-auto flex items-center justify-center overflow-hidden rounded bg-input"
+                        style={{ width: `${videoW}px`, height: `${videoH}px` }}
+                      >
+                        {hasError ? (
+                          <span className="px-6 text-xs text-muted-foreground">{t('videoPreview.error')}</span>
+                        ) : (
+                          <>
+                            <video
+                              ref={videoRef}
+                              src={videoUrl}
+                              preload="metadata"
+                              className="h-full w-auto object-contain"
+                              onTimeUpdate={handleTimeUpdate}
+                              onLoadedMetadata={handleLoadedMetadata}
+                              onPlay={handlePlay}
+                              onPause={handlePause}
+                              onEnded={handleEnded}
+                              onError={handleError}
+                            />
+                            {overlayEntry && videoContainerWidth > 0 && (
+                              <SubtitleOverlay
+                                entry={overlayEntry}
+                                burnin={burnin}
+                                videoWidthPx={video.widthPx}
+                                containerWidthPx={videoContainerWidth}
+                                subtitleBackground={subtitleBackground}
+                              />
+                            )}
+                          </>
                         )}
-                      </>
-                    )}
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t('subtitleLayout.previewNote')}
-                  </p>
-                </div>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {t('subtitleLayout.previewNote')}
+                      </p>
+                    </div>
 
                 {/* ── Right: 2-row layout (settings / player) ──────────
                     The middle "filename + folder" row moved up into the
@@ -648,7 +713,9 @@ export function VideoPreviewPanel() {
 
                 </div>
 
-              </div>
+                  </div>
+                )
+              })()}
             </div>
           </motion.div>
         )}

@@ -1,5 +1,5 @@
 {
-  "INVALID_VIDEO": "無効な動画ファイルです",
+  "INVALID_VIDEO": "音声/映像ストリームが見つからない無効なファイルです",
   "FFMPEG_ERROR": "ffmpegエラーが発生しました",
   "TRANSCRIPTION_ERROR": "文字起こしに失敗しました",
   "WHISPER_MODEL_NOT_FOUND": "Whisperモデルが見つかりません",

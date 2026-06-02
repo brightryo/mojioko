@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { RotateCcw, Trash2, Undo2, FileText, Clock } from 'lucide-react'
+import { Eraser, Trash2, Undo2, FileText, Clock, ChevronUp, ChevronDown, WrapText } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -12,11 +13,19 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
+import { RowFontSelector } from '@/components/subtitle-table/row-font-selector'
+import { useIsAudioOnly } from '@/hooks/use-input-mode'
+import type { FontId } from '../../../shared/fonts'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { filterEntries } from '@/lib/subtitle-filter'
+import { applyAutoLineBreak } from '@/lib/auto-line-break'
+import { loadSubtitleFont } from '@/lib/font-metrics'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
+
+/** Step amount for the per-row size ↑/↓ buttons (REQ-039 #4). */
+const SIZE_STEP_PX = 10
 
 /**
  * 8-column grid template used by both the table header and every row:
@@ -139,9 +148,16 @@ interface SubtitleRowProps {
 function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFocus, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick }: SubtitleRowProps) {
   const isOverflow = overflowStartIndex !== -1
   const isStartOverlap = warnings.overlap
-  const { t } = useTranslation(['step2'])
+  // step1 namespace included so the size input's `title` tooltip can
+  // reuse the `subtitleDefaults.sizeHint` string defined for STEP 1's
+  // Subtitle Style dialog (REQ-034 #3).
+  const { t } = useTranslation(['step2', 'step1'])
   const updateEntry = useProjectStore((s) => s.updateEntry)
   const pushHistory = useHistoryStore((s) => s.push)
+  // REQ-028: in audio-only mode the size / style / font cells render
+  // empty so the 8-column grid stays in place (col widths unchanged)
+  // but the style controls are visually + functionally suppressed.
+  const isAudioOnly = useIsAudioOnly()
 
   const [editingText, setEditingText] = useState(false)
   const [sizeWarning, setSizeWarning] = useState(false)
@@ -218,8 +234,37 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     withHistory(t('history.editSize'), { fontSizePx: clamped })
   }
 
+  // REQ-039 #4: ±SIZE_STEP_PX bump buttons.  Clamp to the same
+  // [FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX] range used by the typed-input
+  // blur handler so all three entry paths (typing, ↑, ↓) commit values
+  // inside the documented bounds.  Bumps that would land on the current
+  // value (already at limit) early-return so undo history stays clean.
+  function handleSizeBump(delta: number) {
+    const next = Math.min(
+      FONT_SIZE_MAX_PX,
+      Math.max(FONT_SIZE_MIN_PX, entry.fontSizePx + delta)
+    )
+    if (next === entry.fontSizePx) return
+    withHistory(t('history.editSize'), { fontSizePx: next })
+  }
+
   function handleTextColorChange(hex: string) {
     withHistory(t('history.editColor'), { textColorHex: hex })
+  }
+
+  // Per-row fontId change (REQ-022 step 1).  `undefined` clears the
+  // override so the row falls back to the project default.  Snapshot via
+  // withHistory writes the entire prior entry, so undo restores the
+  // previous fontId (including back to undefined) and the entry.isEdited
+  // flag also lifts in tandem with the other style edits.
+  //
+  // Mirrors handleReset's explicit `fontId: original.fontId` trick: a
+  // patch object whose `fontId` property is `undefined` is required for
+  // the updateEntry merge to actually clear the key, since a missing
+  // property would leave the previous override in place.
+  function handleFontChange(next: FontId | undefined) {
+    if (next === entry.fontId) return
+    withHistory(t('history.editFont'), { fontId: next })
   }
 
   function handleOutlineColorChange(hex: string) {
@@ -250,6 +295,33 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     }
   }
 
+  // REQ-039 #2: per-row auto line break.  Same logic as
+  // BulkEditBar.handleAutoLineBreakApply but scoped to this single row —
+  // strips existing \N, rewraps with the row's current size / outline /
+  // font, and surfaces "no change" as an info toast.  Awaits
+  // loadSubtitleFont() so the glyph-accurate path is used (font is in
+  // module cache after Step 2 mount; this is effectively synchronous in
+  // practice).
+  async function handleAutoLineBreakRow() {
+    if (entry.isDeleted) return
+    const font = await loadSubtitleFont().catch(() => null)
+    const videoWidthPx = useProjectStore.getState().video?.widthPx ?? 1920
+    const stripped = entry.text.replace(/\\N/g, '')
+    const rewrapped = applyAutoLineBreak(
+      stripped,
+      entry.fontSizePx,
+      entry.outlineThicknessPx,
+      videoWidthPx,
+      font,
+      entry.fontId
+    )
+    if (rewrapped === entry.text) {
+      toast.info(t('bulk.autoLineBreakNoChange'))
+      return
+    }
+    withHistory(t('history.autoLineBreak'), { text: rewrapped })
+  }
+
   function handleReset() {
     const { original } = entry
     const snapshot = { ...entry }
@@ -258,6 +330,14 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     // it like a time-affecting patch so the row re-sorts and the user sees
     // it land where the original times sit chronologically.
     const affectsTime = original.startSec !== entry.startSec || original.endSec !== entry.endSec
+    // Explicitly include fontId in the patch — when the original had no
+    // override (`fontId === undefined`), `{...original}` would not produce
+    // a `fontId` key, and updateEntry's `{...e, ...patch}` merge would
+    // leave the current override in place.  Adding it explicitly forces
+    // the key onto the patch with the value `undefined`, so the merge
+    // clears the override and the row falls back to the project default.
+    // REQ-022 step 7.
+    const resetPatch = { ...original, fontId: original.fontId, isEdited: false, isDeleted: false }
     pushHistory({
       label: t('history.resetRow'),
       undo: () => {
@@ -265,11 +345,11 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         if (affectsTime) useProjectStore.getState().sortByStartSec()
       },
       redo: () => {
-        updateEntry(entry.id, { ...original, isEdited: false, isDeleted: false })
+        updateEntry(entry.id, resetPatch)
         if (affectsTime) useProjectStore.getState().sortByStartSec()
       }
     })
-    updateEntry(entry.id, { ...original, isEdited: false, isDeleted: false })
+    updateEntry(entry.id, resetPatch)
     if (affectsTime) commitTimeEdit(entry.id)
   }
 
@@ -365,38 +445,101 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         </button>
       </div>
 
-      {/* Size */}
+      {/* Size — empty in audio mode (REQ-028).  Column width stays
+          reserved by the empty div so the grid template doesn't shift.
+          REQ-039 #4: ↑ / ↓ buttons stacked above and below the input
+          step the value by SIZE_STEP_PX (10) within FONT_SIZE_MIN_PX /
+          FONT_SIZE_MAX_PX.  Up = larger size, placed above; Down =
+          smaller, placed below — matches the visual metaphor of "above
+          = bigger". */}
       <div className="flex items-center py-3 px-1">
-        <input
-          type="number"
-          min={FONT_SIZE_MIN_PX}
-          max={FONT_SIZE_MAX_PX}
-          defaultValue={entry.fontSizePx}
-          key={entry.fontSizePx}
-          onChange={handleSizeChange}
-          onBlur={handleSizeBlur}
-          disabled={entry.isDeleted}
-          className={cn(
-            'w-full h-7 rounded border bg-zinc-950 px-1 text-center text-[12px] text-zinc-100',
-            'focus:outline-none focus:ring-1',
-            'disabled:opacity-40 disabled:cursor-not-allowed',
-            '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-            sizeWarning
-              ? 'border-amber-400/60 focus:ring-amber-400/30'
-              : 'border-zinc-800 focus:border-zinc-700 focus:ring-green-500/30'
-          )}
-        />
+        {!isAudioOnly && (
+          <div
+            className="flex w-full flex-col items-stretch gap-0.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleSizeBump(+SIZE_STEP_PX) }}
+              disabled={entry.isDeleted || entry.fontSizePx >= FONT_SIZE_MAX_PX}
+              title={t('action.sizeStepUp', { step: SIZE_STEP_PX, max: FONT_SIZE_MAX_PX })}
+              aria-label={t('action.sizeStepUp', { step: SIZE_STEP_PX, max: FONT_SIZE_MAX_PX })}
+              className={cn(
+                'flex h-4 items-center justify-center rounded text-zinc-500',
+                'hover:bg-zinc-800 hover:text-zinc-200 transition-colors duration-100',
+                'disabled:opacity-30 disabled:pointer-events-none'
+              )}
+            >
+              <ChevronUp className="h-3 w-3" />
+            </button>
+            <input
+              type="number"
+              min={FONT_SIZE_MIN_PX}
+              max={FONT_SIZE_MAX_PX}
+              defaultValue={entry.fontSizePx}
+              key={entry.fontSizePx}
+              onChange={handleSizeChange}
+              onBlur={handleSizeBlur}
+              disabled={entry.isDeleted}
+              // REQ-034 #3: 64 px column has no room for an inline hint
+              // line, so surface the clamp range as a hover tooltip.
+              title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
+              className={cn(
+                'w-full h-7 rounded border bg-zinc-950 px-1 text-center text-[12px] text-zinc-100',
+                'focus:outline-none focus:ring-1',
+                'disabled:opacity-40 disabled:cursor-not-allowed',
+                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
+                sizeWarning
+                  ? 'border-amber-400/60 focus:ring-amber-400/30'
+                  : 'border-zinc-800 focus:border-zinc-700 focus:ring-green-500/30'
+              )}
+            />
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleSizeBump(-SIZE_STEP_PX) }}
+              disabled={entry.isDeleted || entry.fontSizePx <= FONT_SIZE_MIN_PX}
+              title={t('action.sizeStepDown', { step: SIZE_STEP_PX, min: FONT_SIZE_MIN_PX })}
+              aria-label={t('action.sizeStepDown', { step: SIZE_STEP_PX, min: FONT_SIZE_MIN_PX })}
+              className={cn(
+                'flex h-4 items-center justify-center rounded text-zinc-500',
+                'hover:bg-zinc-800 hover:text-zinc-200 transition-colors duration-100',
+                'disabled:opacity-30 disabled:pointer-events-none'
+              )}
+            >
+              <ChevronDown className="h-3 w-3" />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Style */}
+      {/* Style — empty container in audio mode for the same reason. */}
+      {isAudioOnly ? (
+        <div className="py-3 px-1" />
+      ) : (
       <div className="flex flex-col gap-1 py-2 px-1">
         <div className="grid grid-cols-[80px_1fr] items-center gap-2">
           <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.textColor')}</span>
-          <ColorPicker value={entry.textColorHex} onChange={handleTextColorChange} disabled={entry.isDeleted} swatchOnly />
+          <ColorPicker
+            value={entry.textColorHex}
+            onChange={handleTextColorChange}
+            onPairApply={(text, outline) =>
+              withHistory(t('history.editColor'), { textColorHex: text, outlineColorHex: outline })
+            }
+            disabled={entry.isDeleted}
+            swatchOnly
+          />
         </div>
         <div className="grid grid-cols-[80px_1fr] items-center gap-2">
           <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.outlineColor')}</span>
-          <ColorPicker value={entry.outlineColorHex} onChange={handleOutlineColorChange} disabled={entry.isDeleted} swatchOnly />
+          <ColorPicker
+            value={entry.outlineColorHex}
+            onChange={handleOutlineColorChange}
+            onPairApply={(text, outline) =>
+              withHistory(t('history.editColor'), { textColorHex: text, outlineColorHex: outline })
+            }
+            disabled={entry.isDeleted}
+            swatchOnly
+          />
         </div>
         <div
           className="grid grid-cols-[80px_1fr] items-center gap-2"
@@ -418,11 +561,31 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           <Switch checked={entry.fadeEnabled} onCheckedChange={handleFadeChange} disabled={entry.isDeleted} className="scale-75 origin-left" />
         </div>
       </div>
+      )}
 
-      {/* Text */}
+      {/* Text column — REQ-022 step 1 stacks the per-row font selector
+          above the editor so the user always sees "this row's font" in
+          context with the text it applies to.  The selector itself
+          stops click propagation so picking a font does not re-focus the
+          row / seek the video.
+          REQ-023: the selector wrapper used to have `px-2` which made
+          the button 16 px narrower than the text editor below (the
+          text editor's px-2 is internal padding on the div whose outer
+          edge is at the full column width).  Wrapper padding removed
+          so both children's outer edges sit at the same column x. */}
+      <div className="flex flex-col gap-1 my-1 min-w-0">
+      {/* Row font selector — hidden in audio mode (REQ-028): there is
+          no burn-in stage so per-row font choice has no consumer. */}
+      {!isAudioOnly && (
+        <RowFontSelector
+          value={entry.fontId}
+          onChange={handleFontChange}
+          disabled={entry.isDeleted}
+        />
+      )}
       <div
         className={cn(
-          'flex items-start my-1 py-2 px-2 min-w-0 min-h-[36px] cursor-text rounded transition-all duration-150',
+          'flex items-start py-2 px-2 min-w-0 min-h-[36px] cursor-text rounded transition-all duration-150',
           // Non-editing: always show a subtle inset border (no layout shift vs a real border)
           !editingText && 'shadow-[inset_0_0_0_1px_rgba(63,63,70,0.5)]',
           // Hover: brighten border + light bg
@@ -460,6 +623,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           </span>
         )}
       </div>
+      </div>
 
       {/* State — shows all applicable badges simultaneously */}
       <div className="flex flex-wrap items-center gap-1 py-3 px-1">
@@ -493,33 +657,65 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         )}
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-1 py-3 px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-        <button
-          type="button"
-          title={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
-          onClick={(e) => { e.stopPropagation(); handleDelete() }}
-          className={cn(
-            'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
-            'hover:bg-zinc-800 hover:text-zinc-200',
-            entry.isDeleted && 'text-green-500 hover:text-green-400'
-          )}
-        >
-          {entry.isDeleted ? <Undo2 className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
-        </button>
-        <button
-          type="button"
-          title={t('action.resetRow')}
-          onClick={(e) => { e.stopPropagation(); handleReset() }}
-          disabled={!entry.isEdited && !entry.isDeleted}
-          className={cn(
-            'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
-            'hover:bg-zinc-800 hover:text-zinc-200',
-            'disabled:opacity-30 disabled:pointer-events-none'
-          )}
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-        </button>
+      {/* Actions — REQ-039 #2 adds the per-row auto-line-break button
+          stacked below the delete/reset icon row.  REQ-041 #2 removes
+          the hover-only opacity gate: actions are now always visible
+          so the user does not have to hunt the mouse over each row to
+          see / target them.  The auto-line-break button is still
+          suppressed in audio mode because there's no burn-in stage
+          that would consume the rewrapped text. */}
+      <div className="flex flex-col gap-1 py-3 px-1">
+        <div className="flex items-center justify-center gap-1">
+          <button
+            type="button"
+            title={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
+            onClick={(e) => { e.stopPropagation(); handleDelete() }}
+            className={cn(
+              'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
+              'hover:bg-zinc-800 hover:text-zinc-200',
+              entry.isDeleted && 'text-green-500 hover:text-green-400'
+            )}
+          >
+            {entry.isDeleted ? <Undo2 className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            type="button"
+            title={t('action.resetRow')}
+            onClick={(e) => { e.stopPropagation(); handleReset() }}
+            disabled={!entry.isEdited && !entry.isDeleted}
+            className={cn(
+              'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
+              'hover:bg-zinc-800 hover:text-zinc-200',
+              'disabled:opacity-30 disabled:pointer-events-none'
+            )}
+          >
+            {/* REQ-047 #2: Eraser instead of the RotateCcw used by the
+                top-right Undo button — visually distinct so the row's
+                "wipe my edits, restore the original transcription"
+                action can't be mistaken for the global "undo last
+                history op" action.  RotateCcw stays as the canonical
+                undo glyph in step2.tsx. */}
+            <Eraser className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        {!isAudioOnly && (
+          <button
+            type="button"
+            title={t('action.autoLineBreakRowHelp')}
+            aria-label={t('action.autoLineBreakRowHelp')}
+            onClick={(e) => { e.stopPropagation(); handleAutoLineBreakRow() }}
+            disabled={entry.isDeleted}
+            className={cn(
+              'flex items-center justify-center gap-0.5',
+              'h-5 px-1 rounded text-[10px] text-zinc-500',
+              'hover:bg-zinc-800 hover:text-zinc-200 transition-colors duration-100',
+              'disabled:opacity-30 disabled:pointer-events-none'
+            )}
+          >
+            <WrapText className="h-3 w-3" />
+            {t('action.autoLineBreakRow')}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -551,6 +747,11 @@ export function SubtitleTable({
   const entries = useProjectStore((s) => s.entries)
   const tableFilter = useUiStore((s) => s.tableFilter)
   const focusedRowId = useUiStore((s) => s.focusedRowId)
+  // REQ-028: blank out the "Size" / "Style" header labels when the
+  // input is audio-only so the dead columns don't advertise themselves.
+  // Column widths stay reserved (TABLE_GRID_COLS unchanged) — only the
+  // labels disappear.
+  const isAudioOnly = useIsAudioOnly()
   const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
   const scrollToRowId = useUiStore((s) => s.scrollToRowId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
@@ -721,8 +922,8 @@ export function SubtitleTable({
         </div>
         <div className="py-2 px-1 text-[11px] font-medium text-zinc-500 text-center">{t('table.colIndex')}</div>
         <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colTime')}</div>
-        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colSize')}</div>
-        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colStyle')}</div>
+        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{isAudioOnly ? '' : t('table.colSize')}</div>
+        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{isAudioOnly ? '' : t('table.colStyle')}</div>
         <div className="py-2 px-2 text-[11px] font-medium text-zinc-500">{t('table.colText')}</div>
         <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colState')}</div>
         <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colActions')}</div>

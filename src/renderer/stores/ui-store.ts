@@ -11,6 +11,7 @@ interface UiStore {
   isShortcutsDialogOpen: boolean
   isAboutDialogOpen: boolean
   isDonationDialogOpen: boolean
+  isFontLicensesDialogOpen: boolean
   tableFilter: TableFilter
   focusedRowId: string | null
   /** Session-only recent color history (not persisted to settings.json). */
@@ -65,12 +66,22 @@ interface UiStore {
    * clearRowSelection.
    */
   selectionAnchorId: string | null
+  /**
+   * Monotonic counter bumped whenever the on-disk font inventory changes
+   * (download completes, uninstall completes).  REQ-025 (iv).  Hooks like
+   * `useInstalledFontIds` watch this so a stale popover list updates when
+   * the user installs or removes a font in another part of the UI.
+   * Session-only — installed state is always re-read from the main side
+   * on launch.
+   */
+  fontInventoryVersion: number
 
   setCommandPaletteOpen: (open: boolean) => void
   setSettingsDialogOpen: (open: boolean) => void
   setShortcutsDialogOpen: (open: boolean) => void
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
+  setFontLicensesDialogOpen: (open: boolean) => void
   setTableFilter: (f: TableFilter) => void
   setFocusedRowId: (id: string | null) => void
   /** Prepend a color to the recent list, de-duplicating and capping at MAX_RECENT_COLORS. */
@@ -91,6 +102,8 @@ interface UiStore {
    */
   selectRowRange: (id: string, visibleOrder: readonly string[]) => void
   clearRowSelection: () => void
+  /** Increment fontInventoryVersion — call after a font is installed / uninstalled. */
+  bumpFontInventoryVersion: () => void
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -99,6 +112,7 @@ export const useUiStore = create<UiStore>((set) => ({
   isShortcutsDialogOpen: false,
   isAboutDialogOpen: false,
   isDonationDialogOpen: false,
+  isFontLicensesDialogOpen: false,
   tableFilter: 'all',
   focusedRowId: null,
   recentColors: [],
@@ -108,12 +122,14 @@ export const useUiStore = create<UiStore>((set) => ({
   scrollToRowId: null,
   selectedRowIds: new Set<string>(),
   selectionAnchorId: null,
+  fontInventoryVersion: 0,
 
   setCommandPaletteOpen: (open) => set({ isCommandPaletteOpen: open }),
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
   setShortcutsDialogOpen: (open) => set({ isShortcutsDialogOpen: open }),
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
   setDonationDialogOpen: (open) => set({ isDonationDialogOpen: open }),
+  setFontLicensesDialogOpen: (open) => set({ isFontLicensesDialogOpen: open }),
   setTableFilter: (f) => set({ tableFilter: f }),
   setFocusedRowId: (id) => set({ focusedRowId: id }),
   addRecentColor: (hex) =>
@@ -171,4 +187,6 @@ export const useUiStore = create<UiStore>((set) => ({
     }),
   clearRowSelection: () =>
     set({ selectedRowIds: new Set<string>(), selectionAnchorId: null }),
+  bumpFontInventoryVersion: () =>
+    set((s) => ({ fontInventoryVersion: s.fontInventoryVersion + 1 })),
 }))

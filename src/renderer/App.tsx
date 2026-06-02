@@ -15,11 +15,16 @@ import { ShortcutsDialog } from '@/components/shortcuts-dialog/shortcuts-dialog'
 import { AboutDialog } from '@/components/about-dialog/about-dialog'
 import { SettingsDialog } from '@/components/settings-dialog/settings-dialog'
 import { DonationDialog } from '@/components/donation-dialog/donation-dialog'
+import { FontLicensesDialog } from '@/components/font-licenses/font-licenses-dialog'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { registerCommands } from '@/lib/commands'
 import { loadSettings, saveSettings } from '@/services/settings'
+import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
+import { ensureFontLoaded } from '@/lib/font-registry'
+import { listFonts } from '@/services/font'
 import { APP_VERSION } from '../shared/app-info'
 import type { AppSettings } from '../shared/types'
 import {
@@ -68,7 +73,19 @@ function CommandRegistrar() {
       // Navigation
       { id: 'goToStep1', labelKey: 'navigation.goToStep1', group: 'navigation', run: () => navigate('/step1') },
       { id: 'goToStep2', labelKey: 'navigation.goToStep2', group: 'navigation', run: () => navigate('/step2') },
-      { id: 'goToStep3', labelKey: 'navigation.goToStep3', group: 'navigation', run: () => navigate('/step3') },
+      {
+        id: 'goToStep3',
+        labelKey: 'navigation.goToStep3',
+        group: 'navigation',
+        // REQ-028: STEP 3 (burn-in) is unreachable for audio-only inputs.
+        // Hide the command so the user does not get a navigation that
+        // lands on a step with nothing to do.
+        predicate: () => {
+          const v = useProjectStore.getState().video
+          return v === null || v.hasVideoStream
+        },
+        run: () => navigate('/step3')
+      },
       { id: 'filterAll',      labelKey: 'navigation.filterAll',      group: 'navigation', run: () => setTableFilter('all') },
       { id: 'filterReady',    labelKey: 'navigation.filterReady',    group: 'navigation', run: () => setTableFilter('ready') },
       { id: 'filterEdited',   labelKey: 'navigation.filterEdited',   group: 'navigation', run: () => setTableFilter('edited') },
@@ -125,6 +142,39 @@ function AppInner() {
     }).catch(() => { /* IPC unavailable in dev outside Electron */ })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Mirror activeFontId into font-metrics so the no-arg legacy callers
+  // (loadSubtitleFont, getLibassScale, etc.) target the currently selected
+  // font without having to thread the FontId through every measurement path.
+  useEffect(() => {
+    // Apply once with the current store value (covers initial mount + persist
+    // hydration before the IPC settingsLoad returns).
+    setActiveSubtitleFont(useSettingsStore.getState().activeFontId).catch(() => {})
+    return useSettingsStore.subscribe((state, prevState) => {
+      if (state.activeFontId !== prevState.activeFontId) {
+        setActiveSubtitleFont(state.activeFontId).catch(() => {})
+      }
+    })
+  }, [])
+
+  // Pre-load every installed font on startup (REQ-021).  Once per-row font
+  // overrides ship, overflow-calculator / auto-line-break may be asked for
+  // measurements against a font that the user did not pick as the active
+  // default — without a cache hit those calls silently fall back to the
+  // character-class width estimate (over-counts wide glyphs by ~45 %).
+  // Best-effort: failures (e.g. a font was uninstalled mid-session) just
+  // mean that font's row degrades to the fallback when measured.
+  useEffect(() => {
+    listFonts().then((r) => {
+      if (!r.ok) return
+      for (const f of r.data.fonts) {
+        if (f.status === 'bundled' || f.status === 'installed') {
+          loadSubtitleFontFor(f.id).catch(() => {})
+          ensureFontLoaded(f.id).catch(() => {})
+        }
+      }
+    }).catch(() => {})
+  }, [])
+
   // Keep native Electron menu labels in sync with the current language
   useEffect(() => {
     window.electronAPI?.menuSetLanguage(i18n.language)
@@ -158,6 +208,7 @@ function AppInner() {
           defaultAudioTrackIndex: s.defaultAudioTrackIndex,
           fadeDurationSec: s.fadeDurationSec,
           activeModelId: null,
+          activeFontId: s.activeFontId,
           lastInputDir: null,
           lastOutputDir: null
         }
@@ -218,6 +269,7 @@ function AppInner() {
       <AboutDialog />
       <SettingsDialog />
       <DonationDialog />
+      <FontLicensesDialog />
 
       <Toaster
         position="bottom-center"

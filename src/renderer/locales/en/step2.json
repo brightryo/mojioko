@@ -12,6 +12,16 @@
     "fadeTooltip": "Fade",
     "selectAllAria": "Select all visible rows"
   },
+  "rowFont": {
+    "defaultPrefix": "Default:",
+    "useDefault": "Use project default",
+    "tooltipDefault": "Project default font ({{name}}). Click to override",
+    "tooltipOverride": "This row uses {{name}}. Click to change"
+  },
+  "bulkRowFont": {
+    "label": "Font",
+    "useDefault": "Use project default"
+  },
   "tab": {
     "all": "All",
     "ready": "Ready",
@@ -57,7 +67,11 @@
     "continueToRender": "Continue to render",
     "resetRow": "Reset this row",
     "deleteRow": "Delete this row",
-    "restoreRow": "Restore this row"
+    "restoreRow": "Restore this row",
+    "autoLineBreakRow": "Auto wrap",
+    "autoLineBreakRowHelp": "Re-wrap this row's line breaks",
+    "sizeStepUp": "Size +{{step}}px (max {{max}})",
+    "sizeStepDown": "Size −{{step}}px (min {{min}})"
   },
   "dialog": {
     "timeEditor": {
@@ -126,10 +140,12 @@
     "editColor": "Change color",
     "editStroke": "Change stroke width",
     "editFade": "Change fade",
+    "editFont": "Change font",
     "deleteRow": "Delete row",
     "restoreRow": "Restore row",
     "resetRow": "Reset row",
-    "addRow": "Add row"
+    "addRow": "Add row",
+    "autoLineBreak": "Auto wrap"
   },
   "bulk": {
     "regionLabel": "Bulk edit",
@@ -148,15 +164,17 @@
       "size": "Bulk size change ({{count}} rows)",
       "textColor": "Bulk text color change ({{count}} rows)",
       "outlineColor": "Bulk outline color change ({{count}} rows)",
+      "colorPair": "Bulk colour pair change ({{count}} rows)",
       "outlineWidth": "Bulk outline width change ({{count}} rows)",
       "fade": "Bulk fade change ({{count}} rows)",
+      "font": "Bulk font change ({{count}} rows)",
       "autoLineBreak": "Bulk auto-wrap ({{count}} rows)"
     }
   },
   "videoPreview": {
     "play": "Play",
     "pause": "Pause",
-    "error": "Failed to load video",
+    "error": "Failed to load file",
     "showInFolder": "Show in Folder"
   },
   "warning": {

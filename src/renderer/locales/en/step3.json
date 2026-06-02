@@ -57,7 +57,8 @@
   },
   "toast": {
     "renderComplete": "Render complete",
-    "encoderFallback": "Encoder {{requested}} is not available; falling back to {{actual}}"
+    "encoderFallback": "Encoder {{requested}} is not available; falling back to {{actual}}",
+    "missingFonts": "Some rows use fonts that are not downloaded: {{names}}. Open Settings ▸ Fonts to download them."
   },
   "outputFormat": {
     "label": "Output Format",

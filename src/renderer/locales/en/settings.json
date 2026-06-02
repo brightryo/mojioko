@@ -1,11 +1,26 @@
 {
   "title": "Settings",
+  "tabs": {
+    "general": "General",
+    "fonts": "Fonts",
+    "defaultStyle": "Default style",
+    "whisper": "Whisper"
+  },
   "general": {
     "language": "Language",
     "languageJa": "Japanese",
     "languageEn": "English",
     "fadeDuration": "Fade duration (seconds)",
     "fadeDurationHint": "0.1–0.5 sec"
+  },
+  "fonts": {
+    "hint": "Click a row to set the default font. Download (⬇) or remove (🗑) fonts from the same list — same behaviour as the Subtitle Style dialog."
+  },
+  "defaultStyle": {
+    "hint": "These values are applied to new transcriptions. The subtitle style dialog reflects the same settings — editing here or there updates both."
+  },
+  "whisper": {
+    "hint": "Whisper engine parameters. The STEP 1 \"Advanced\" dialog edits the same fields — changes on either surface stay in sync."
   },
   "about": {
     "version": "Version",

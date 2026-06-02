@@ -9,6 +9,8 @@ import {
   loadSubtitleFont,
   type SubtitleFont
 } from '@/lib/font-metrics'
+import { ensureFontLoaded } from '@/lib/font-registry'
+import { useSettingsStore } from '@/stores/settings-store'
 import type {
   TranscriptionDefaults,
   VideoInfo,
@@ -37,14 +39,15 @@ const PREVIEW_BURNIN: BurninPosition = {
 const FALLBACK_VIDEO_WIDTH = 1920
 const FALLBACK_VIDEO_HEIGHT = 1080
 
-/** Cap on the preview frame's rendered height.  Without this the frame
- *  fills the column width at its native aspect ratio, which on a 1280×820
- *  default window pushes a ~273 px tall 16:9 frame and overflows the
- *  vertical budget once paired with the Whisper card and the seed-style
- *  card.  220 leaves the frame readable (~391 px wide at 16:9, still tall
- *  enough to verify wrapping and outline visibility) while reclaiming
- *  ~50 px of vertical space for the rest of Step 1. */
-const FRAME_MAX_HEIGHT_PX = 220
+/** Cap on the preview frame's rendered height.  Used both standalone in
+ *  Step 1's first view AND inside the subtitle style dialog — the dialog
+ *  pairs the preview with a tall column of form controls, so a 220 px tall
+ *  frame pushes the dialog past the user's vertical comfort budget on
+ *  1280×820.  160 still gives ~285 px at 16:9 — wide enough to verify
+ *  wrap position and outline visibility, while reclaiming ~60 px back to
+ *  the form column.  Smaller values trade detail for compactness, but at
+ *  this size the sample text is still legible at the default font size. */
+const FRAME_MAX_HEIGHT_PX = 160
 
 interface StyleSamplePreviewProps {
   defaults: TranscriptionDefaults
@@ -107,23 +110,36 @@ export function StyleSamplePreview({
   // component when it resolves — the user sees the break position shift
   // by a few pixels on the first ~50-150ms paint, which is the documented
   // trade-off for not blocking the whole preview on font fetch.
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
   const [font, setFont] = useState<SubtitleFont | null>(getSubtitleFont)
+  // Re-fetch the opentype.js Font + register the FontFace whenever the
+  // active selection changes so:
+  //   - applyAutoLineBreak measures with the right metrics
+  //   - SubtitleOverlay below renders in the selected family on first paint
+  // Clearing first prevents the wrap position from briefly using the
+  // previous font's widths during the load transition.  Awaiting both
+  // load paths makes the re-render happen only after the FontFace is
+  // actually queryable via CSS.
   useEffect(() => {
-    if (font) return
+    setFont(null)
     let cancelled = false
-    loadSubtitleFont()
-      .then((loaded) => {
+    Promise.all([
+      loadSubtitleFont(),
+      ensureFontLoaded(activeFontId)
+    ])
+      .then(([loaded]) => {
         if (!cancelled) setFont(loaded)
       })
-      .catch(() => {
+      .catch((err) => {
         // Load failed — applyAutoLineBreak will silently fall back to the
         // character-class width estimate (which over-estimates wide-glyph
         // widths by ~45 % vs libass, so the preview may break slightly
         // earlier than the real burn-in).  This degrades gracefully
         // rather than throwing.
+        console.error('[style-sample-preview] font load failed', err)
       })
     return () => { cancelled = true }
-  }, [font])
+  }, [activeFontId])
 
   // Long-form sample text — chosen so the user can verify line wrapping,
   // font-size sanity and outline visibility at a glance.  A single short
@@ -186,7 +202,12 @@ export function StyleSamplePreview({
   ])
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+    // self-start: keep the card at its natural height instead of stretching
+    // to match the tall form column on the left of the dialog grid (default
+    // align-self for grid items is `stretch`).  Without this the card grows
+    // to ~500-600 px and the preview frame floats inside a sea of whitespace
+    // that visually reads as "縦長".
+    <div className="rounded-xl border border-border bg-card p-4 space-y-2 self-start">
       <div className="flex items-center gap-1.5">
         <Type className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         <Label className="uppercase tracking-wider text-[10px]">
