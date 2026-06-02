@@ -4,7 +4,6 @@ import { X, WrapText, ChevronDown, AlertCircle, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
-import { Button } from '@/components/ui/button'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { useProjectStore } from '@/stores/project-store'
@@ -441,16 +440,29 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           style={{ backgroundColor: 'hsl(var(--separator) / var(--separator-alpha))' }}
           aria-hidden="true"
         />
-        <Button
-          variant="secondary"
-          size="sm"
+        {/* REQ-039 #3: auto-wrap button restyled to match the
+            BulkFontPicker pill that sits immediately to its left in the
+            same bar (h-7, bg-input, border-border).  The previous
+            variant="secondary" rendered a white-on-dark slab that read
+            as a primary action and visually clashed with every other
+            control in the bar.  Token-based (bg-input / text-foreground
+            / border-border) so the same colour scheme follows the theme
+            if it changes. */}
+        <button
+          type="button"
           onClick={handleAutoLineBreakApply}
           title={t('bulk.autoLineBreakHelp')}
           aria-label={t('bulk.autoLineBreakHelp')}
+          className={cn(
+            'inline-flex items-center justify-center gap-1.5',
+            'h-7 px-2 rounded border bg-input text-[12px] text-foreground',
+            'border-border hover:border-zinc-700 transition-colors duration-150',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
+          )}
         >
-          <WrapText className="h-3.5 w-3.5 mr-1.5" />
+          <WrapText className="h-3.5 w-3.5" />
           {t('bulk.autoLineBreak')}
-        </Button>
+        </button>
       </div>
     </div>
   )
