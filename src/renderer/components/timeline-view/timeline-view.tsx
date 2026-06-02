@@ -17,6 +17,12 @@ import {
   chooseRulerStepSec,
   formatRulerLabel
 } from '@/lib/timeline-layout'
+import {
+  buildSnapTargets,
+  snapInterval,
+  SNAP_DISTANCE_PX,
+  type SnapResult
+} from '@/lib/timeline-snap'
 import type { EntryWarnings } from '@/lib/entry-warnings'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TimelineBlockInspector } from './timeline-block-inspector'
@@ -422,13 +428,33 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   const activeDragRef = useRef<ActiveDrag | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
 
-  // Stable mirrors of the live pixelsPerSec and videoDurationSec so the
-  // (window-attached, mount-once) pointer listeners read up-to-date values
-  // without re-attaching whenever the zoom changes mid-drag.
-  const liveContextRef = useRef({ pixelsPerSec, videoDurationSec })
-  useEffect(() => {
-    liveContextRef.current = { pixelsPerSec, videoDurationSec }
+  // Stable mirrors of the live values that the (mount-once) pointer
+  // listeners need to read without re-attaching whenever React state
+  // changes mid-drag.  Includes everything the snap computation depends
+  // on so a zoom or playhead change between pointerdown and pointerup
+  // is reflected in the next pointermove tick.
+  const liveContextRef = useRef({
+    pixelsPerSec,
+    videoDurationSec,
+    snapEnabled,
+    videoCurrentTimeSec,
+    entries
   })
+  useEffect(() => {
+    liveContextRef.current = {
+      pixelsPerSec,
+      videoDurationSec,
+      snapEnabled,
+      videoCurrentTimeSec,
+      entries
+    }
+  })
+
+  // Snap guide: x-pixel position (in timeline content coordinates, i.e.
+  // post-gutter) of the active snap target, or null when no snap is
+  // currently anchoring the drag.  Cleared on drag release.
+  const [snapGuidePx, setSnapGuidePx] = useState<number | null>(null)
+  const [snapGuideKind, setSnapGuideKind] = useState<SnapResult['kind'] | null>(null)
 
   const handleStartDrag = useCallback(
     (kind: DragKind, entry: SubtitleEntry, clientX: number) => {
@@ -450,34 +476,85 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   // the active drag through the ref so they don't need re-attachment.
   useEffect(() => {
     function applyDragPatch(d: ActiveDrag, e: PointerEvent): void {
-      const { pixelsPerSec: pps, videoDurationSec: dur } = liveContextRef.current
+      const {
+        pixelsPerSec: pps,
+        videoDurationSec: dur,
+        snapEnabled,
+        videoCurrentTimeSec: playhead,
+        entries: liveEntries
+      } = liveContextRef.current
       const dxPx = e.clientX - d.originClientX
       const dxSec = dxPx / pps
       const snap = d.snapshot
       const maxEnd = isFinite(dur) && dur > 0 ? dur : Number.MAX_VALUE
-      let patch: Partial<SubtitleEntry> | null = null
+      let rawStart = snap.startSec
+      let rawEnd   = snap.endSec
       if (d.kind === 'resize-start') {
         const ceiling = snap.endSec - MIN_BLOCK_SEC
-        const newStart = Math.min(ceiling, Math.max(0, snap.startSec + dxSec))
-        patch = { startSec: newStart, isEdited: true }
+        rawStart = Math.min(ceiling, Math.max(0, snap.startSec + dxSec))
       } else if (d.kind === 'resize-end') {
         const floor = snap.startSec + MIN_BLOCK_SEC
-        const newEnd = Math.max(floor, Math.min(maxEnd, snap.endSec + dxSec))
-        patch = { endSec: newEnd, isEdited: true }
+        rawEnd = Math.max(floor, Math.min(maxEnd, snap.endSec + dxSec))
       } else if (d.kind === 'move') {
-        // Suppress micro-movements below the click/drag threshold so a
-        // real click (which fires pointerdown → pointerup with no
-        // measurable motion) does not nudge the entry by sub-pixel
-        // jitter.  Once the user has crossed the threshold even once,
-        // every subsequent pointermove is an honest drag.
         if (Math.abs(dxPx) < 3) return
         const duration = snap.endSec - snap.startSec
         const maxStart = Math.max(0, maxEnd - duration)
-        const newStart = Math.min(maxStart, Math.max(0, snap.startSec + dxSec))
-        const newEnd = newStart + duration
-        patch = { startSec: newStart, endSec: newEnd, isEdited: true }
+        rawStart = Math.min(maxStart, Math.max(0, snap.startSec + dxSec))
+        rawEnd = rawStart + duration
       }
-      if (patch === null) return
+
+      // Snap pass — bypassed when the user holds Alt (Sketch / Figma
+      // convention for "temporarily disable snap") or when snap is
+      // turned off in the toolbar.
+      let finalStart = rawStart
+      let finalEnd   = rawEnd
+      let guide: SnapResult | null = null
+      if (snapEnabled && !e.altKey) {
+        const totalForGrid = isFinite(dur) && dur > 0
+          ? dur
+          : Math.max(
+              10,
+              liveEntries.reduce((m, x) => (x.endSec > m ? x.endSec : m), 0) * 1.2
+            )
+        const targets = buildSnapTargets(
+          liveEntries,
+          d.entryId,
+          playhead,
+          totalForGrid,
+          chooseRulerStepSec(pps)
+        )
+        const snapped = snapInterval(
+          rawStart,
+          rawEnd,
+          d.kind,
+          targets,
+          pps,
+          SNAP_DISTANCE_PX
+        )
+        // Re-clamp after snap so a snapped edge that would put start > end
+        // or exceed video duration is corrected.  Snap targets are vetted
+        // for proximity not legality.
+        finalStart = Math.max(0, Math.min(maxEnd - MIN_BLOCK_SEC, snapped.startSec))
+        finalEnd   = Math.max(finalStart + MIN_BLOCK_SEC, Math.min(maxEnd, snapped.endSec))
+        guide = snapped.guide
+      }
+
+      // Visual snap guide — a 1 px vertical line in timeline-content
+      // coordinates.  Cleared if no snap.
+      setSnapGuidePx(guide ? guide.timeSec * pps : null)
+      setSnapGuideKind(guide ? guide.kind : null)
+
+      // Build the minimal patch — different kinds touch different fields
+      // to keep history pushes meaningful (a resize-end shouldn't claim
+      // it touched startSec).
+      let patch: Partial<SubtitleEntry>
+      if (d.kind === 'resize-start') {
+        patch = { startSec: finalStart, isEdited: true }
+      } else if (d.kind === 'resize-end') {
+        patch = { endSec: finalEnd, isEdited: true }
+      } else {
+        patch = { startSec: finalStart, endSec: finalEnd, isEdited: true }
+      }
       useProjectStore.getState().updateEntry(d.entryId, patch)
     }
 
@@ -515,6 +592,8 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       }
       activeDragRef.current = null
       setDraggingId(null)
+      setSnapGuidePx(null)
+      setSnapGuideKind(null)
     }
 
     window.addEventListener('pointermove', onMove)
@@ -795,6 +874,34 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                   )
                 })}
               </div>
+
+              {/* Snap guide — rendered BEFORE the playhead so the red
+                  playhead always wins z-order when both happen to land
+                  on the same column (snap-to-playhead case).  Colour
+                  varies by snap kind so the user can read what they
+                  snapped to:
+                    playhead → red (matches the playhead colour)
+                    edge     → green-400 (subtle accent)
+                    grid     → zinc-400 (muted, since the grid is itself
+                               a faint reference)
+              */}
+              {snapGuidePx !== null && (
+                <div
+                  aria-hidden
+                  className="absolute top-0 pointer-events-none"
+                  style={{
+                    left: `${snapGuidePx}px`,
+                    width: '1px',
+                    height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
+                    background:
+                      snapGuideKind === 'playhead'
+                        ? 'rgba(239, 68, 68, 0.7)'
+                        : snapGuideKind === 'edge'
+                          ? 'rgba(74, 222, 128, 0.9)'   // green-400
+                          : 'rgba(161, 161, 170, 0.7)'  // zinc-400
+                  }}
+                />
+              )}
 
               {/* Playhead — vertical red line spanning ruler + tracks.
                   Rendered last so it draws over blocks. */}
