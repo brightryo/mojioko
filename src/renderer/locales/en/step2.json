@@ -233,6 +233,13 @@
     },
     "playhead": {
       "ariaLabel": "Playhead"
+    },
+    "inspector": {
+      "textLabel": "Text",
+      "adjustTime": "Adjust time…",
+      "delete": "Delete",
+      "restore": "Restore",
+      "commitHint": "Ctrl+Enter to commit · Esc to cancel"
     }
   }
 }
