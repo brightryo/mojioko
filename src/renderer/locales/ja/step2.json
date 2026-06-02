@@ -229,7 +229,9 @@
       "snapHelp": "近接する境界に吸着（Phase 5 で実装予定）"
     },
     "block": {
-      "ariaLabel": "字幕ブロック T{{track}} / 行 {{index}}"
+      "ariaLabel": "字幕ブロック T{{track}} / 行 {{index}}",
+      "resizeStart": "開始時間をドラッグで調整",
+      "resizeEnd": "終了時間をドラッグで調整"
     },
     "playhead": {
       "ariaLabel": "再生ヘッド"
