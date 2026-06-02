@@ -63,11 +63,14 @@ function normalizeContainer(formatName: string): string {
 
 function parseProbeOutput(data: FfprobeOutput, filePath: string): VideoInfo {
   const videoStream = data.streams.find((s) => s.codec_type === 'video')
-  if (!videoStream) {
-    throw new InvalidVideoError('No video stream found in file', { filePath })
+  const audioStreams = data.streams.filter((s) => s.codec_type === 'audio')
+
+  // Only reject inputs that have NEITHER video nor audio.  REQ-028:
+  // audio-only files (no video stream) are now first-class inputs.
+  if (!videoStream && audioStreams.length === 0) {
+    throw new InvalidVideoError('No audio or video stream found in file', { filePath })
   }
 
-  const audioStreams = data.streams.filter((s) => s.codec_type === 'audio')
   const audioTracks: AudioTrack[] = audioStreams.map((s, i) => ({
     index: i + 1,
     channels: s.channels === 1 ? 'mono' : s.channels === 2 ? 'stereo' : `${s.channels ?? 0}ch`,
@@ -76,17 +79,24 @@ function parseProbeOutput(data: FfprobeOutput, filePath: string): VideoInfo {
     language: s.tags?.language
   }))
 
-  const fps = parseFps(videoStream.r_frame_rate ?? videoStream.avg_frame_rate)
+  const fps = videoStream
+    ? parseFps(videoStream.r_frame_rate ?? videoStream.avg_frame_rate)
+    : 0
   const durationSec = parseFloat(data.format.duration)
 
   return {
     path: filePath,
-    widthPx: videoStream.width ?? 1920,
-    heightPx: videoStream.height ?? 1080,
+    hasVideoStream: videoStream !== undefined,
+    // When no video stream is present, width/height/codec carry no
+    // meaning.  Existing video-mode callers always check via
+    // hasVideoStream (or via the route gate `useIsAudioOnly`); audio
+    // mode reads these fields nowhere.
+    widthPx: videoStream?.width ?? 0,
+    heightPx: videoStream?.height ?? 0,
     durationSec: isNaN(durationSec) ? 0 : durationSec,
     fps,
     container: normalizeContainer(data.format.format_name),
-    videoCodec: videoStream.codec_name,
+    videoCodec: videoStream?.codec_name ?? '',
     audioTracks,
     fileSizeBytes: 0
   }

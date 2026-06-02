@@ -12,6 +12,16 @@
     "fadeTooltip": "フェード",
     "selectAllAria": "表示中のすべての行を選択"
   },
+  "rowFont": {
+    "defaultPrefix": "デフォルト:",
+    "useDefault": "デフォルトに合わせる",
+    "tooltipDefault": "デフォルトのフォント ({{name}})。クリックで変更",
+    "tooltipOverride": "この行のみ {{name}} で表示中。クリックで変更"
+  },
+  "bulkRowFont": {
+    "label": "フォント",
+    "useDefault": "デフォルトに戻す"
+  },
   "tab": {
     "all": "すべて",
     "ready": "出力対象",
@@ -57,7 +67,11 @@
     "continueToRender": "書き出しへ",
     "resetRow": "この行をリセット",
     "deleteRow": "この行を削除",
-    "restoreRow": "この行を復元"
+    "restoreRow": "この行を復元",
+    "autoLineBreakRow": "自動改行",
+    "autoLineBreakRowHelp": "この行のみ改行を引き直します",
+    "sizeStepUp": "サイズを +{{step}}px (最大 {{max}})",
+    "sizeStepDown": "サイズを -{{step}}px (最小 {{min}})"
   },
   "dialog": {
     "timeEditor": {
@@ -126,10 +140,12 @@
     "editColor": "色を変更",
     "editStroke": "アウトライン太さを変更",
     "editFade": "フェードを変更",
+    "editFont": "フォントを変更",
     "deleteRow": "行を削除",
     "restoreRow": "行を復元",
     "resetRow": "行をリセット",
-    "addRow": "行を追加"
+    "addRow": "行を追加",
+    "autoLineBreak": "自動改行"
   },
   "bulk": {
     "regionLabel": "一括編集",
@@ -148,15 +164,17 @@
       "size": "サイズを一括変更 ({{count}}行)",
       "textColor": "文字色を一括変更 ({{count}}行)",
       "outlineColor": "アウトライン色を一括変更 ({{count}}行)",
+      "colorPair": "色ペアを一括変更 ({{count}}行)",
       "outlineWidth": "アウトライン幅を一括変更 ({{count}}行)",
       "fade": "フェードを一括変更 ({{count}}行)",
+      "font": "フォントを一括変更 ({{count}}行)",
       "autoLineBreak": "自動改行を一括適用 ({{count}}行)"
     }
   },
   "videoPreview": {
     "play": "再生",
     "pause": "一時停止",
-    "error": "動画の読み込みに失敗しました",
+    "error": "ファイルの読み込みに失敗しました",
     "showInFolder": "フォルダで表示"
   },
   "warning": {

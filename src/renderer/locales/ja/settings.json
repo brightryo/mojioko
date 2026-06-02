@@ -1,11 +1,26 @@
 {
   "title": "設定",
+  "tabs": {
+    "general": "一般",
+    "fonts": "フォント",
+    "defaultStyle": "既定スタイル",
+    "whisper": "Whisper設定"
+  },
   "general": {
     "language": "言語",
     "languageJa": "日本語",
     "languageEn": "English",
     "fadeDuration": "フェード時間（秒）",
     "fadeDurationHint": "0.1〜0.5秒"
+  },
+  "fonts": {
+    "hint": "行をクリックして既定フォントを選択します。必要に応じてダウンロード（⬇）／削除（🗑）も行えます。字幕スタイルダイアログと同じ挙動です。"
+  },
+  "defaultStyle": {
+    "hint": "新規の文字起こしに適用される値です。字幕スタイルダイアログと同じ設定を編集します（どちらで変更しても両方に反映）。"
+  },
+  "whisper": {
+    "hint": "Whisperエンジンの動作設定です。STEP 1 の「詳細設定」ボタンと同じ項目を編集します（どちらで変更しても両方に反映）。"
   },
   "about": {
     "version": "バージョン",

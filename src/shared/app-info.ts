@@ -1,5 +1,14 @@
+import packageJson from '../../package.json'
+
 export const APP_NAME = 'MOJIOKO'
-export const APP_VERSION = '1.0.1'
+/**
+ * Single source of truth: derived from package.json at build time.  Both
+ * Vite (renderer) and electron-vite (main) inline the JSON statically so
+ * the constant is just a string literal in the emitted bundles — no
+ * runtime fs.read.  Bumping package.json automatically updates the window
+ * title, About dialog, and startup log line without a parallel edit here.
+ */
+export const APP_VERSION = packageJson.version
 
 /** Human-readable display string shown in title bar and About dialog. */
 export const APP_DISPLAY = `${APP_NAME} ${APP_VERSION}`

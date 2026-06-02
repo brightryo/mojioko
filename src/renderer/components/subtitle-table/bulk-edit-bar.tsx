@@ -1,19 +1,22 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, WrapText } from 'lucide-react'
+import { X, WrapText, ChevronDown, AlertCircle, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
-import { Button } from '@/components/ui/button'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
+import { useSettingsStore } from '@/stores/settings-store'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
+import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
+import { FONT_REGISTRY, getFontMeta, type FontId } from '../../../shared/fonts'
 
 interface BulkEditBarProps {
   /**
@@ -50,6 +53,20 @@ function pickFirstSelectedColor(
 }
 
 /**
+ * Same seeding pattern as pickFirstSelectedColor but for the font size.
+ * Returns '' for an empty selection so the input renders its placeholder
+ * naturally on first mount when nothing is selected.
+ */
+function pickFirstSelectedSize(selectedIds: ReadonlySet<string>): string {
+  if (selectedIds.size === 0) return ''
+  const entries = useProjectStore.getState().entries
+  for (const e of entries) {
+    if (selectedIds.has(e.id)) return String(e.fontSizePx)
+  }
+  return ''
+}
+
+/**
  * Bulk-edit bar for Step 2.
  *
  * Renders above the subtitle table when any rows are selected.  Each
@@ -64,7 +81,9 @@ function pickFirstSelectedColor(
  * the convention established by withHistory() in subtitle-table.tsx.
  */
 export function BulkEditBar({ onApplied }: BulkEditBarProps) {
-  const { t } = useTranslation(['step2'])
+  // step1 included so the size input's `title` tooltip can reuse the
+  // `subtitleDefaults.sizeHint` string defined for STEP 1 (REQ-034 #3).
+  const { t } = useTranslation(['step2', 'step1'])
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
   const clearRowSelection = useUiStore((s) => s.clearRowSelection)
 
@@ -96,7 +115,18 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // left it (same pattern as colorDraftText/Outline above).
   const [outlineSliderDraft, setOutlineSliderDraft] = useState<number>(0)
 
-  // Re-seed colour drafts when the selection itself changes.  Reads
+  // REQ-047 #1: same persist-then-re-seed pattern as the colour drafts.
+  // Previously the size input was uncontrolled and cleared on blur
+  // (`e.target.value = ''`), which made it look like the apply had
+  // been lost even though the toast confirmed N rows changed.  Now
+  // the value stays visible after commit and only re-seeds when the
+  // selection itself changes — matching the colour swatches' "shows
+  // what was last applied to the current selection" affordance.
+  const [sizeDraft, setSizeDraft] = useState<string>(() =>
+    pickFirstSelectedSize(selectedRowIds)
+  )
+
+  // Re-seed every draft when the selection itself changes.  Reads
   // `entries` via getState() so the effect only fires on selection
   // change — not on every entry mutation (which would otherwise reset
   // the user's in-progress pick whenever a row's text was edited).
@@ -104,6 +134,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftText(pickFirstSelectedColor(selectedRowIds, 'text'))
     setColorDraftOutline(pickFirstSelectedColor(selectedRowIds, 'outline'))
     setOutlineSliderDraft(0)
+    setSizeDraft(pickFirstSelectedSize(selectedRowIds))
   }, [selectedRowIds])
 
   // ---------------------------------------------------------------------
@@ -152,6 +183,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       { fontSizePx: clamped },
       t('bulk.history.size', { count: selectedRowIds.size })
     )
+    // REQ-047 #1: persist the just-applied (clamped) value as the
+    // visible draft so the input doesn't blank out.  Surfaces "what
+    // was applied", and if the typed value was out of range the user
+    // sees the clamped result it landed on.
+    setSizeDraft(String(clamped))
   }
 
   function handleTextColorCommit(hex: string) {
@@ -173,6 +209,19 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftOutline(hex)
   }
 
+  // REQ-033: pair click in the popover sets BOTH halves on every
+  // selected row via a single applyBulk patch + single history op.  Two
+  // updates squashed into one undo / redo step matches the user's mental
+  // model of "I picked a pair".
+  function handleColorPairCommit(textHex: string, outlineHex: string) {
+    applyBulk(
+      { textColorHex: textHex, outlineColorHex: outlineHex },
+      t('bulk.history.colorPair', { count: selectedRowIds.size })
+    )
+    setColorDraftText(textHex)
+    setColorDraftOutline(outlineHex)
+  }
+
   function handleOutlineWidthCommit(v: number) {
     // Mirror the colour-commit handlers: persist the just-applied value as
     // the swatch / slider position so the bar visually records "what was
@@ -188,6 +237,19 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     applyBulk(
       { fadeEnabled: checked },
       t('bulk.history.fade', { count: selectedRowIds.size })
+    )
+  }
+
+  // Bulk font change — `undefined` means "fall back to project default"
+  // on every selected row (clears any per-row override).  We pass the
+  // value through applyBulk so undo restores each row's *individual*
+  // prior fontId in one step, which is critical because the rows might
+  // have had heterogeneous overrides before the bulk apply.
+  // REQ-022 step 2.
+  function handleFontChange(next: FontId | undefined) {
+    applyBulk(
+      { fontId: next },
+      t('bulk.history.font', { count: selectedRowIds.size })
     )
   }
 
@@ -225,12 +287,17 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       const e = all.find((x) => x.id === id)
       if (!e || e.isDeleted) continue
       const stripped = e.text.replace(/\\N/g, '')
+      // Per-row fontId (REQ-021): bulk-applied breaks must respect each
+      // row's own font, otherwise rows whose fontId differs from the
+      // active selection would break at positions that don't match the
+      // burned-in result.
       const rewrapped = applyAutoLineBreak(
         stripped,
         e.fontSizePx,
         e.outlineThicknessPx,
         videoWidthPx,
-        font
+        font,
+        e.fontId
       )
       if (rewrapped !== e.text) {
         snapshots.set(id, { ...e })
@@ -309,7 +376,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
 
       {/* Controls cluster */}
       <div className="flex items-center gap-5 flex-wrap min-w-0">
-        {/* Font size */}
+        {/* Font size — REQ-047 #1: controlled input that seeds from the
+            first selected row and persists the user's applied value
+            after blur.  onFocus selects the existing content so re-
+            typing replaces in one keystroke (vs. clicking + manually
+            highlighting before typing). */}
         <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
           <span>{t('bulk.size')}</span>
           <input
@@ -317,10 +388,16 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             min={FONT_SIZE_MIN_PX}
             max={FONT_SIZE_MAX_PX}
             placeholder={t('bulk.placeholder')}
+            value={sizeDraft}
+            onChange={(e) => setSizeDraft(e.target.value)}
+            onFocus={(e) => e.target.select()}
+            // REQ-034 #3: tooltip surfaces the clamp range so a user
+            // typing 700 sees the cause when the input snaps back to
+            // 600 on blur (cap raised from 200 to 600 in REQ-041).
+            title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
             onBlur={(e) => {
               if (e.target.value === '') return
               handleSizeCommit(e.target.value)
-              e.target.value = ''
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
@@ -344,6 +421,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             value={colorDraftText ?? '#FFFFFF'}
             onChange={setColorDraftText}
             onCommit={handleTextColorCommit}
+            onPairApply={handleColorPairCommit}
             swatchOnly
           />
         </label>
@@ -355,6 +433,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             value={colorDraftOutline ?? '#000000'}
             onChange={setColorDraftOutline}
             onCommit={handleOutlineColorCommit}
+            onPairApply={handleColorPairCommit}
             swatchOnly
           />
         </label>
@@ -378,6 +457,15 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           <Switch onCheckedChange={handleFadeChange} />
         </label>
 
+        {/* Bulk font (REQ-022 step 2).  Same popover content as the
+            per-row picker (RowFontSelector) but with a static "フォント"
+            trigger label — selection here applies to every row in the
+            current bulk selection. */}
+        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+          <span>{t('bulkRowFont.label')}</span>
+          <BulkFontPicker onPick={handleFontChange} />
+        </label>
+
         {/* Separator + Auto-wrap action.  Visually distinct from the
             value-controls above: this one is a single-shot action that
             recomputes line breaks on the selected rows using each row's
@@ -389,17 +477,113 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           style={{ backgroundColor: 'hsl(var(--separator) / var(--separator-alpha))' }}
           aria-hidden="true"
         />
-        <Button
-          variant="secondary"
-          size="sm"
+        {/* REQ-039 #3: auto-wrap button restyled to match the
+            BulkFontPicker pill that sits immediately to its left in the
+            same bar (h-7, bg-input, border-border).  The previous
+            variant="secondary" rendered a white-on-dark slab that read
+            as a primary action and visually clashed with every other
+            control in the bar.  Token-based (bg-input / text-foreground
+            / border-border) so the same colour scheme follows the theme
+            if it changes. */}
+        <button
+          type="button"
           onClick={handleAutoLineBreakApply}
           title={t('bulk.autoLineBreakHelp')}
           aria-label={t('bulk.autoLineBreakHelp')}
+          className={cn(
+            'inline-flex items-center justify-center gap-1.5',
+            'h-7 px-2 rounded border bg-input text-[12px] text-foreground',
+            'border-border hover:border-zinc-700 transition-colors duration-150',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
+          )}
         >
-          <WrapText className="h-3.5 w-3.5 mr-1.5" />
+          <WrapText className="h-3.5 w-3.5" />
           {t('bulk.autoLineBreak')}
-        </Button>
+        </button>
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Bulk font picker — Popover content mirrors RowFontSelector's, but the
+// trigger is a fixed "Font" pill with no row-specific state.  Kept inline
+// because pulling it into its own file would duplicate the use-installed-
+// fonts + font-registry filter logic without giving any new abstraction.
+// ---------------------------------------------------------------------------
+function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void }) {
+  const { t } = useTranslation(['step2', 'step1'])
+  const [open, setOpen] = useState(false)
+  const installed = useInstalledFontIds()
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
+  const selectable = FONT_REGISTRY.filter((m) => installed.has(m.id))
+
+  function pick(next: FontId | undefined) {
+    onPick(next)
+    setOpen(false)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            'inline-flex items-center justify-between gap-1.5',
+            'h-7 px-2 rounded border bg-input text-[12px] text-foreground',
+            'border-border hover:border-zinc-700',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
+          )}
+          aria-label={t('bulkRowFont.label')}
+        >
+          <span>{t('bulkRowFont.label')}</span>
+          <ChevronDown className="h-3 w-3 text-zinc-500" aria-hidden="true" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[260px] p-1">
+        <div className="flex flex-col">
+          <button
+            type="button"
+            onClick={() => pick(undefined)}
+            className="flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-left text-zinc-100 hover:bg-accent/40 cursor-pointer"
+          >
+            <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span className="flex-1 min-w-0">
+              <span className="block leading-tight">{t('bulkRowFont.useDefault')}</span>
+              <span className="block text-[10px] text-zinc-500 truncate">
+                {getFontMeta(activeFontId).displayName}
+              </span>
+            </span>
+          </button>
+
+          <div className="my-1 h-px bg-zinc-800" />
+
+          {selectable.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => pick(m.id)}
+              className="flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-left text-zinc-300 hover:bg-accent/40"
+            >
+              <span className="h-2 w-2 rounded-full bg-zinc-600 shrink-0" aria-hidden="true" />
+              <span
+                className="flex-1 min-w-0 truncate"
+                style={{ fontFamily: `'${m.cssFontFamily}'`, fontWeight: m.weight }}
+              >
+                {m.displayName}
+              </span>
+              {m.lacksRareKanji && (
+                <span
+                  className="inline-flex items-center shrink-0 text-amber-400/80"
+                  title={t('step1:fontPicker.note.missingRareKanjiHelp')}
+                >
+                  <AlertCircle className="h-3 w-3" aria-hidden="true" />
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }

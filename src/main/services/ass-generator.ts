@@ -1,6 +1,7 @@
 import log from '../lib/logger'
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground } from '../../shared/types'
 import { ASS_MARGIN_LR_PX, FADE_DURATION_SEC_DEFAULT } from '../../shared/constants'
+import { getFontMeta, isFontId } from '../../shared/fonts'
 
 type HorizontalPos = 'left' | 'center' | 'right'
 type VerticalPos = 'top' | 'bottom'
@@ -69,7 +70,14 @@ export function generateAss(
   video: VideoInfo,
   burnin: BurninPosition,
   fadeDurationSec: number = FADE_DURATION_SEC_DEFAULT,
-  subtitleBackground?: SubtitleBackground
+  subtitleBackground?: SubtitleBackground,
+  /**
+   * ASS `Style:` `Fontname` value — exact family name as libass will look it
+   * up in the `fontsdir`.  Defaults to "Noto Sans JP SemiBold" so legacy
+   * callers that pre-date font selection continue to produce the v1.0/v1.1
+   * output unchanged.
+   */
+  assFontName: string = 'Noto Sans JP SemiBold'
 ): string {
   const alignment = getAlignment(burnin.horizontalPosition, burnin.verticalPosition)
   const marginV = burnin.verticalMarginPx
@@ -98,7 +106,7 @@ export function generateAss(
   const styles = [
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BorderStyle, Outline, Alignment, MarginL, MarginR, MarginV',
-    `Style: Default,Noto Sans JP SemiBold,100,&H00FFFFFF,&H00000000,${borderStyle},3,${alignment},${ASS_MARGIN_LR_PX},${ASS_MARGIN_LR_PX},${marginV}`,
+    `Style: Default,${assFontName},100,&H00FFFFFF,&H00000000,${borderStyle},3,${alignment},${ASS_MARGIN_LR_PX},${ASS_MARGIN_LR_PX},${marginV}`,
     ''
   ].join('\n')
 
@@ -111,12 +119,22 @@ export function generateAss(
       const fadeDurationMs = Math.round(fadeDurationSec * 1000)
       const fadeTag = e.fadeEnabled ? `\\fad(${fadeDurationMs},${fadeDurationMs})` : ''
 
+      // Per-row font override (REQ-021).  Emit \fn<family> only when the
+      // row carries a fontId AND that font's ASS family name differs from
+      // the Style: default — emitting \fn redundantly for rows that match
+      // the default would just bloat the ASS file without changing the
+      // rendered result.  isFontId is defensive against stale entries
+      // (e.g. fontId from a settings file that referenced a removed font).
+      const rowAssFontName = isFontId(e.fontId) ? getFontMeta(e.fontId).assFontName : assFontName
+      const fontTag = rowAssFontName !== assFontName ? `\\fn${rowAssFontName}` : ''
+
       let styleTag: string
       if (bgEnabled && subtitleBackground) {
         // Box background mode: remove outline, add background colour + alpha
         const bgColor = subtitleBackground.color === 'white' ? '00FFFFFF' : '000000'
         const bgAlpha = opacityToAssAlpha(subtitleBackground.opacityPercent)
         styleTag = [
+          fontTag,
           `\\fs${e.fontSizePx}`,
           `\\c${hexToAss(e.textColorHex)}`,
           `\\bord0`,
@@ -129,6 +147,7 @@ export function generateAss(
           .join('')
       } else {
         styleTag = [
+          fontTag,
           `\\fs${e.fontSizePx}`,
           `\\c${hexToAss(e.textColorHex)}`,
           `\\3c${hexToAss(e.outlineColorHex)}`,

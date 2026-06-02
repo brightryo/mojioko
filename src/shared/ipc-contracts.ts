@@ -1,4 +1,5 @@
 import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams } from './types'
+import type { FontId } from './fonts'
 export type { ModelsState }
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,13 @@ export interface BurninStartRequest {
    * `'sameAsInput'`, container is inferred from `outputPath`'s extension.
    */
   outputContainer: OutputContainer
+  /**
+   * Currently selected subtitle font ID.  Drives the ASS Style `Fontname`
+   * and the `fontsdir=` argument passed to libass.  Optional so callers
+   * predating font selection keep working; defaults to the bundled Noto
+   * font when omitted at the main-side handler.
+   */
+  fontId?: FontId
 }
 
 export interface EncoderDetectionResult {

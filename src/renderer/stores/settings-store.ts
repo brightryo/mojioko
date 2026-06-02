@@ -4,6 +4,7 @@ import type { TranscriptionDefaults, TranscriptionAdvancedParams, BurninPosition
 import { BURNIN_DEFAULTS } from '../../shared/burnin-defaults'
 import { DEFAULT_LANGUAGE } from '../../shared/app-info'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
+import { DEFAULT_FONT_ID, isFontId, type FontId } from '../../shared/fonts'
 
 interface SettingsStore {
   language: string
@@ -22,6 +23,12 @@ interface SettingsStore {
    * Instagram Reels all require MP4).  Session-only — not persisted.
    */
   outputContainer: OutputContainer
+  /**
+   * Currently active subtitle font.  Drives both the CSS @font-face used by
+   * SubtitleOverlay/Step 2 previews and the ASS `Style:` `Fontname` at
+   * burn-in time.  Persisted alongside other system-wide settings.
+   */
+  activeFontId: FontId
 
   setLanguage: (lang: string) => void
   updateTranscriptionDefaults: (patch: Partial<TranscriptionDefaults>) => void
@@ -35,6 +42,7 @@ interface SettingsStore {
   setFadeDurationSec: (v: number) => void
   setSubtitleBackground: (v: SubtitleBackground) => void
   setOutputContainer: (v: OutputContainer) => void
+  setActiveFontId: (id: FontId) => void
 
   /**
    * Reset Step 3-only UI state (`burnin`, `subtitleBackground`, `audioMode`)
@@ -46,7 +54,7 @@ interface SettingsStore {
   resetStep3Settings: () => void
 
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'burnin' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'subtitleBackground'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'burnin' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'subtitleBackground' | 'activeFontId'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -74,6 +82,7 @@ export const useSettingsStore = create<SettingsStore>()(
       fadeDurationSec: BURNIN_DEFAULTS.fadeDurationSec,
       subtitleBackground: { ...BURNIN_DEFAULTS.subtitleBackground },
       outputContainer: 'mp4',
+      activeFontId: DEFAULT_FONT_ID,
 
       setLanguage: (lang) => set({ language: lang }),
       updateTranscriptionDefaults: (patch) =>
@@ -91,6 +100,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setFadeDurationSec: (v) => set({ fadeDurationSec: v }),
       setSubtitleBackground: (v) => set({ subtitleBackground: v }),
       setOutputContainer: (v) => set({ outputContainer: v }),
+      setActiveFontId: (id) => set({ activeFontId: id }),
 
       resetStep3Settings: () =>
         set({
@@ -131,7 +141,8 @@ export const useSettingsStore = create<SettingsStore>()(
           // Persisted system-wide settings.
           encoder: s.encoder ?? 'auto',
           defaultAudioTrackIndex: s.defaultAudioTrackIndex,
-          fadeDurationSec: s.fadeDurationSec ?? BURNIN_DEFAULTS.fadeDurationSec
+          fadeDurationSec: s.fadeDurationSec ?? BURNIN_DEFAULTS.fadeDurationSec,
+          activeFontId: isFontId(s.activeFontId) ? s.activeFontId : DEFAULT_FONT_ID
         })
       }
     }),
@@ -147,7 +158,8 @@ export const useSettingsStore = create<SettingsStore>()(
         autoLineBreak: state.autoLineBreak,
         encoder: state.encoder,
         defaultAudioTrackIndex: state.defaultAudioTrackIndex,
-        fadeDurationSec: state.fadeDurationSec
+        fadeDurationSec: state.fadeDurationSec,
+        activeFontId: state.activeFontId
       })
     }
   )

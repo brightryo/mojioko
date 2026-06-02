@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { TimeEditorDialog } from '@/components/time-editor-dialog/time-editor-dialog'
 import { useProjectStore } from '@/stores/project-store'
+import { useSettingsStore } from '@/stores/settings-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore, type TableFilter } from '@/stores/ui-store'
 import { cn } from '@/lib/utils'
@@ -26,6 +27,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { SubtitleEntry } from '../../shared/types'
 import { NEW_ROW_DURATION_SEC, ENABLE_VIDEO_PREVIEW } from '../../shared/constants'
 import { VideoPreviewPanel } from '@/components/video-preview/video-preview-panel'
+import { AudioPreviewPanel } from '@/components/audio-preview/audio-preview-panel'
+import { useIsAudioOnly } from '@/hooks/use-input-mode'
 
 /**
  * State driving the shared TimeEditorDialog.
@@ -105,6 +108,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const updateEntry = useProjectStore((s) => s.updateEntry)
   const defaults = useProjectStore((s) => s.defaults)
   const video = useProjectStore((s) => s.video)
+  const isAudioOnly = useIsAudioOnly()
   const pushHistory = useHistoryStore((s) => s.push)
   const canUndo = useHistoryStore((s) => s.canUndo)
   const canRedo = useHistoryStore((s) => s.canRedo)
@@ -123,13 +127,16 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const [editor, setEditor] = useState<EditorState>({ open: false })
   const [discardOpen, setDiscardOpen] = useState(false)
   const [skipDiscardWarning, setSkipDiscardWarning] = useState(false)
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
   const [subtitleFont, setSubtitleFont] = useState<SubtitleFont | null>(getSubtitleFont)
 
+  // Re-load the opentype.js Font whenever the active font selection changes.
+  // Clearing first ensures overflowMap recomputes with the new metrics rather
+  // than caching against the previous font's widths.
   useEffect(() => {
-    if (!subtitleFont) {
-      loadSubtitleFont().then(setSubtitleFont).catch(() => {})
-    }
-  }, [subtitleFont])
+    setSubtitleFont(null)
+    loadSubtitleFont().then(setSubtitleFont).catch(() => {})
+  }, [activeFontId])
 
   useHotkeys('ctrl+z', (e) => {
     e.preventDefault()
@@ -163,8 +170,19 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
 
   const videoWidthPx = video?.widthPx ?? 1920
 
+  // REQ-029 #3: in audio-only mode, every warning that derives from
+  // burn-in physics is meaningless and is suppressed:
+  //   - `overflow` (text width > video width) → return an empty map so
+  //     no row gets the red-text "はみ出し" treatment and no entry
+  //     contributes to the warnings tab count.
+  //   - `overDuration` (start/end > video duration) → pass Infinity for
+  //     videoDurationSec so the comparison `t > duration` is always
+  //     false.  This also suppresses the per-row TimeInput red border
+  //     (isStartExceedsDuration / isEndExceedsDuration in the table).
+  // Video mode keeps the original checks intact.
   const overflowMap = useMemo(() => {
     const map = new Map<string, number>()
+    if (isAudioOnly) return map
     for (const e of entries) {
       if (e.isDeleted) continue
       const r = computeOverflowSync({
@@ -173,13 +191,17 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         fontSizePx: e.fontSizePx,
         outlineThicknessPx: e.outlineThicknessPx,
         videoWidthPx,
+        // Per-row fontId (REQ-021): when set, computeOverflowSync looks
+        // up that font's own Font + libassScale instead of falling back
+        // to the active selection.  Undefined → row inherits active.
+        fontId: e.fontId
       }, subtitleFont)
       if (r.overflowStartIndex !== -1) map.set(e.id, r.overflowStartIndex)
     }
     return map
-  }, [entries, videoWidthPx, subtitleFont])
+  }, [entries, videoWidthPx, subtitleFont, isAudioOnly])
 
-  const videoDurationSec = video?.durationSec ?? Infinity
+  const videoDurationSec = isAudioOnly ? Infinity : (video?.durationSec ?? Infinity)
 
   /**
    * Per-entry warning flags — single source of truth for the Ready/Warnings
@@ -557,15 +579,39 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     </span>
   )
 
+  // REQ-028: export DropdownMenu moved from the page header to the
+  // footer, and "Continue to render" hidden in audio mode (no burn-in
+  // path).  Audio mode → export is the only footer-right action and
+  // ends up right-aligned naturally because nothing else flanks it.
   const footerRight = (
-    <Button
-      variant="primary"
-      size="md"
-      disabled={!canContinue}
-      onClick={() => navigate('/step3')}
-    >
-      {t('action.continueToRender')}
-    </Button>
+    <div className="flex items-center gap-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="md">
+            {t('action.export')}
+            <ChevronDown className="h-3.5 w-3.5 ml-1.5 opacity-60" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={handleExportText}>
+            {t('action.exportText')}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleExportSrt}>
+            {t('action.exportSrt')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {!isAudioOnly && (
+        <Button
+          variant="primary"
+          size="md"
+          disabled={!canContinue}
+          onClick={() => navigate('/step3')}
+        >
+          {t('action.continueToRender')}
+        </Button>
+      )}
+    </div>
   )
 
   return (
@@ -579,31 +625,24 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     >
       <div className="flex flex-col h-full gap-3">
         {/* Page header */}
+        {/* Page header — REQ-028 moved the export DropdownMenu from
+            here into the footer so the text/SRT export action sits
+            alongside the "Continue to render" CTA.  Keeps the export
+            within thumb's reach in both video and audio modes; in
+            audio mode there is no Continue button so Export becomes
+            the single primary action. */}
         <div className="flex items-start justify-between flex-shrink-0">
           <div>
             <h1 className="text-[18px] font-semibold text-zinc-50">{t('title')}</h1>
             <p className="mt-0.5 text-[13px] text-zinc-400">{t('subtitle')}</p>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="md">
-                {t('action.export')}
-                <ChevronDown className="h-3.5 w-3.5 ml-1.5 opacity-60" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleExportText}>
-                {t('action.exportText')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportSrt}>
-                {t('action.exportSrt')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
 
-        {/* D-1: Video preview panel — remove this block (or set ENABLE_VIDEO_PREVIEW=false) to revert */}
-        {ENABLE_VIDEO_PREVIEW && <VideoPreviewPanel />}
+        {/* Preview panel — swaps to a minimal audio player when the
+            input is audio-only (REQ-028).  Same outer card shape +
+            ~180px body so the page layout below this slot does not
+            shift between modes. */}
+        {ENABLE_VIDEO_PREVIEW && (isAudioOnly ? <AudioPreviewPanel /> : <VideoPreviewPanel />)}
 
         {/* Filter tabs + Add Row button */}
         <div className="flex items-center justify-between flex-shrink-0">
@@ -672,9 +711,14 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
 
         {/* Bulk-edit bar — slides in above the table when rows are selected.
             AnimatePresence keeps the slide-out animation when the user
-            clears the selection so the table doesn't visually jump. */}
+            clears the selection so the table doesn't visually jump.
+            REQ-028: hidden entirely in audio-only mode because every
+            control on the bar drives a style field that has no effect
+            on text/SRT export (size, colours, outline, fade, font,
+            auto-line-break).  Selection itself stays available — we
+            just don't surface the bar. */}
         <AnimatePresence initial={false}>
-          {selectedRowIds.size > 0 && (
+          {selectedRowIds.size > 0 && !isAudioOnly && (
             <motion.div
               key="bulk-edit-bar"
               initial={{ opacity: 0, height: 0 }}

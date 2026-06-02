@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, Settings2, ChevronUp, ChevronDown } from 'lucide-react'
+import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, Settings2, ChevronUp, ChevronDown, AudioWaveform } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { toast } from 'sonner'
@@ -33,6 +33,7 @@ import { formatBytes } from '@/lib/format'
 import type { SubtitleEntry as SubtitleEntryType, WhisperModelId } from '../../shared/types'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
+import { useIsAudioOnly } from '@/hooks/use-input-mode'
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -52,17 +53,20 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const navigate = useNavigate()
 
   const video = useProjectStore((s) => s.video)
+  const isAudioOnly = useIsAudioOnly()
   const videoLoadingState = useProjectStore((s) => s.videoLoadingState)
   const setVideo = useProjectStore((s) => s.setVideo)
   const setVideoLoadingState = useProjectStore((s) => s.setVideoLoadingState)
   const setEntries = useProjectStore((s) => s.setEntries)
   const selectedTrack = useProjectStore((s) => s.selectedTrackIndex)
   const setSelectedTrack = useProjectStore((s) => s.setSelectedTrackIndex)
-  // `defaults` is consumed at transcription time (to seed every row's style)
-  // and by the Subtitle Style dialog (which subscribes to the store
-  // directly).  `setDefaults` is therefore owned exclusively by the dialog —
-  // Step 1's first-view JSX no longer reads or writes seed style.
-  const defaults = useProjectStore((s) => s.defaults)
+  // REQ-016: the source of truth for the seed-style fields is now
+  // settingsStore.transcriptionDefaults; the Subtitle Style dialog edits
+  // that slice directly.  handleStartTranscription snapshots settings →
+  // projectStore.defaults below so step 2+ still see a frozen-at-start
+  // copy regardless of subsequent settings edits.
+  const setProjectDefaults = useProjectStore((s) => s.setDefaults)
+  const transcriptionDefaults = useSettingsStore((s) => s.transcriptionDefaults)
   const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
   // transcriptionAdvanced is needed in handleStartTranscription to feed the
   // Whisper sidecar with the user's tweaked VAD / beam-size / language; the
@@ -154,6 +158,17 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
   async function handleStartTranscription() {
     if (!video || !activeModelId) return
+
+    // Snapshot the persistent defaults (settingsStore) into the project
+    // store at the moment of transcribe-start.  Step 2 onward reads
+    // projectStore.defaults to seed entries / preview / burn-in, so this
+    // freezes "what the user wants for this run" without further coupling
+    // to live settings edits.
+    setProjectDefaults(transcriptionDefaults)
+    // Reuse the just-snapshotted values directly so the segment-mapping
+    // loop below doesn't need to wait for projectStore to re-render.
+    const runDefaults = transcriptionDefaults
+
     setIsTranscribing(true)
     setTranscribeProgress(0)
     window.electronAPI.menuSetTranscribing(true)
@@ -166,11 +181,11 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         trackIndex: selectedTrack,
         modelId: activeModelId,
         defaults: {
-          fontSizePx: defaults.fontSizePx,
-          textColorHex: defaults.textColorHex,
-          outlineColorHex: defaults.outlineColorHex,
-          outlineThicknessPx: defaults.outlineThicknessPx,
-          fadeEnabled: defaults.fadeEnabled
+          fontSizePx: runDefaults.fontSizePx,
+          textColorHex: runDefaults.textColorHex,
+          outlineColorHex: runDefaults.outlineColorHex,
+          outlineThicknessPx: runDefaults.outlineThicknessPx,
+          fadeEnabled: runDefaults.fadeEnabled
         },
         advanced: transcriptionAdvanced
       },
@@ -205,17 +220,24 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
     if (cancelled) return
 
+    // Capture the active font ID at transcription time so subsequent
+    // settings changes do not retroactively repaint already-transcribed rows.
+    // Per-row font overrides (REQ-021) write this same field; rows with
+    // `fontId === activeFontId` round-trip identically to legacy rows.
+    const runFontId = useSettingsStore.getState().activeFontId
+
     // Build SubtitleEntry array from collected segments
     const entries: SubtitleEntryType[] = segments.map((seg, i) => {
       const base = {
         startSec: seg.startSec,
         endSec: seg.endSec,
         text: seg.text,
-        fontSizePx: defaults.fontSizePx,
-        textColorHex: defaults.textColorHex,
-        outlineColorHex: defaults.outlineColorHex,
-        outlineThicknessPx: defaults.outlineThicknessPx,
-        fadeEnabled: defaults.fadeEnabled
+        fontSizePx: runDefaults.fontSizePx,
+        textColorHex: runDefaults.textColorHex,
+        outlineColorHex: runDefaults.outlineColorHex,
+        outlineThicknessPx: runDefaults.outlineThicknessPx,
+        fadeEnabled: runDefaults.fadeEnabled,
+        fontId: runFontId
       }
       return {
         id: `t-${i}-${Date.now()}`,
@@ -245,12 +267,18 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     const font = await loadSubtitleFont().catch(() => null)
     const finalEntries = autoLineBreak
       ? entries.map((entry) => {
+          // Per-row fontId (REQ-021): every transcribed row gets the
+          // captured `runFontId`, so the break positions are measured
+          // against that font's glyph metrics — important once the user
+          // assigns mixed fonts to rows later, harmless when every row
+          // uses the same font.
           const brokenText = applyAutoLineBreak(
             entry.text,
             entry.fontSizePx,
             entry.outlineThicknessPx,
             video.widthPx,
-            font
+            font,
+            entry.fontId
           )
           return {
             ...entry,
@@ -303,7 +331,9 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // so the boundary is visually unambiguous.  During transcription the
   // caret is hidden and the main button collapses to a plain rounded
   // Cancel / Stop button — seed style is locked mid-run.
-  const showStyleCaret = !isTranscribing
+  // REQ-028: also hidden in audio-only mode — there is no burn-in step
+  // for audio, so the seed-style dialog has no consumer.
+  const showStyleCaret = !isTranscribing && !isAudioOnly
   const footerRight = (
     <div className="inline-flex items-stretch">
       <Button
@@ -488,29 +518,76 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             </div>
           )}
 
-          {/* Thumbnail + technical metadata side-by-side.  Fixed 16:9
-              thumbnail container so portrait videos crop to the same
-              identifying frame size; object-cover fills the box. */}
-          <div className="grid grid-cols-[160px_1fr] gap-4 items-center">
-            <div className="rounded-md border border-border bg-input aspect-video w-full overflow-hidden flex items-center justify-center">
-              {thumbnail ? (
-                <img src={thumbnail} alt="" className="w-full h-full object-cover" />
+          {/* Thumbnail + technical metadata side-by-side.
+              REQ-028: in audio-only mode (no video stream) the left box
+              shows an AudioWaveform icon instead of the video frame, and
+              the Resolution row drops out — those fields carry no
+              meaning for pure audio inputs.  Format row also collapses
+              from "MP4 / h264 / 30fps" to "MP3 / mp3" since fps /
+              videoCodec are placeholders.
+              REQ-044 #1: the box used to be aspect-video (16:9 fixed) +
+              object-cover, which centre-cropped vertical (9:16) sources
+              to a horizontal band, making them look like horizontal
+              videos in the thumbnail.  Now the box follows the video's
+              own aspect ratio (clamped to a 240×180 envelope so neither
+              orientation dominates the card layout), and the <img> uses
+              object-contain so any sub-pixel mismatch produces letter-
+              boxing rather than crop. */}
+          <div className="grid grid-cols-[auto_1fr] gap-4 items-center">
+            <div
+              className="rounded-md border border-border bg-input overflow-hidden flex items-center justify-center flex-shrink-0"
+              style={(() => {
+                // REQ-045 #1: envelope bumped from 240×180 → 280×240 so
+                // vertical sources stretch closer to the InfoRow stack's
+                // own height while horizontal stays inside the card.
+                // Behaviour by ratio:
+                //   - 16:9 → 280×157 (width-bound; ~33 % bigger than the
+                //            previous 240×135)
+                //   - 9:16 → 135×240 (height-bound; ~78 % bigger area
+                //            than the previous 101×180)
+                //   - 1:1  → 240×240
+                // Audio-only and pre-load both fall back to 16:9 so the
+                // empty/waveform state stays at 280×157.
+                const MAX_W = 280
+                const MAX_H = 240
+                const ratio =
+                  (!isAudioOnly && video && video.widthPx > 0 && video.heightPx > 0)
+                    ? video.widthPx / video.heightPx
+                    : 16 / 9
+                const widthBound = MAX_H * ratio > MAX_W
+                return widthBound
+                  ? { width: `${MAX_W}px`, height: `${MAX_W / ratio}px` }
+                  : { width: `${MAX_H * ratio}px`, height: `${MAX_H}px` }
+              })()}
+            >
+              {isAudioOnly ? (
+                <AudioWaveform className="h-8 w-8 text-muted-foreground/60" />
+              ) : thumbnail ? (
+                <img src={thumbnail} alt="" className="w-full h-full object-contain" />
               ) : (
                 <Video className="h-6 w-6 text-muted-foreground/40" />
               )}
             </div>
             <div className="divide-y divide-border/50">
-              <InfoRow
-                label={t('inputVideo.infoResolution')}
-                value={video ? `${video.widthPx}×${video.heightPx}` : '—'}
-              />
+              {!isAudioOnly && (
+                <InfoRow
+                  label={t('inputVideo.infoResolution')}
+                  value={video ? `${video.widthPx}×${video.heightPx}` : '—'}
+                />
+              )}
               <InfoRow
                 label={t('inputVideo.infoDuration')}
                 value={video ? formatDuration(video.durationSec) : '—'}
               />
               <InfoRow
                 label={t('inputVideo.infoFormat')}
-                value={video ? `${video.container.toUpperCase()} / ${video.videoCodec} / ${video.fps}fps` : '—'}
+                value={
+                  !video
+                    ? '—'
+                    : isAudioOnly
+                      ? `${video.container.toUpperCase()} / ${video.audioTracks[0]?.codec ?? '—'}`
+                      : `${video.container.toUpperCase()} / ${video.videoCodec} / ${video.fps}fps`
+                }
               />
               <InfoRow
                 label={t('inputVideo.infoFileSize')}

@@ -1,18 +1,19 @@
 {
   "title": "文字起こし",
-  "guidance": "Whisperモデルを選択し、動画ファイルを読み込んでから文字起こしを開始してください。",
+  "guidance": "Whisperモデルを選択し、入力ファイルを読み込んでから文字起こしを開始してください。",
   "inputVideo": {
-    "label": "入力動画",
-    "hint": ".mkv · .mp4",
-    "placeholder": "動画ファイルを選択してください…",
-    "chooseVideo": "動画を選ぶ",
-    "help": "文字起こしと字幕を焼き付ける元の動画ファイル",
-    "infoLabel": "動画情報",
+    "label": "入力ファイル",
+    "hint": "動画: .mp4 .mkv  /  音声: .mp3 .wav .m4a .aac .flac .ogg",
+    "placeholder": "ファイルを選択してください…",
+    "chooseVideo": "ファイルを選ぶ",
+    "help": "文字起こしする動画または音声ファイル。動画は字幕焼き込み出力、音声はテキスト/SRT出力に対応します。",
+    "infoLabel": "ファイル情報",
     "infoResolution": "解像度",
     "infoDuration": "長さ",
     "infoFormat": "フォーマット",
     "infoFileSize": "ファイルサイズ",
-    "loading": "動画を読み込んでいます…"
+    "loading": "ファイルを読み込んでいます…",
+    "audioOnlyBadge": "音声のみ"
   },
   "audioTracks": {
     "label": "音声トラック",
@@ -21,8 +22,8 @@
     "absent": "なし",
     "transcriptionTarget": "文字起こし対象",
     "defaultTrackMissing": "デフォルトのトラック{{index}}が見つかりません。トラック{{fallback}}を選択しました。",
-    "help": "OBS等で別トラックに録音した場合に複数表示されます。普通の動画はトラック1のみです。",
-    "description": "動画に含まれる音声トラックの一覧です。文字起こしする音声を選んでください。"
+    "help": "OBS等で別トラックに録音した場合に複数表示されます。普通のファイルはトラック1のみです。",
+    "description": "ファイルに含まれる音声トラックの一覧です。文字起こしする音声を選んでください。"
   },
   "subtitleDefaults": {
     "label": "字幕デフォルト設定",
@@ -35,6 +36,7 @@
     "fadeOn": "オン",
     "fadeOff": "オフ",
     "helpSize": "字幕の文字サイズ（ピクセル）。動画の解像度に合わせて調整してください。",
+    "sizeHint": "{{min}}〜{{max}} px (範囲外は自動的にクランプ)",
     "helpTextColor": "字幕の文字色。白（#ffffff）が一般的です。",
     "helpOutlineColor": "字幕の縁取り色。黒（#000000）が視認性に優れています。",
     "helpStroke": "縁取りの太さ（ピクセル）。",
@@ -50,8 +52,8 @@
   },
   "whisperModel": {
     "label": "Whisperモデル",
-    "tooltip": "動画の音声を文字に変換するエンジンです。モデルサイズが大きいほど精度が上がります。",
-    "descriptionLong": "Whisperは、動画の音声を文字に変換するエンジンです。OpenAIが開発したオープンソースのライブラリで、無料で利用できます。すべての処理はあなたのPCの中だけで行われ、データが外部に送信されることはありません。",
+    "tooltip": "音声を文字に変換するエンジンです。モデルサイズが大きいほど精度が上がります。",
+    "descriptionLong": "Whisperは、音声を文字に変換するエンジンです。OpenAIが開発したオープンソースのライブラリで、無料で利用できます。すべての処理はあなたのPCの中だけで行われ、データが外部に送信されることはありません。",
     "descSmall": "高速・省メモリ。精度はやや低め。",
     "descMedium": "速度と精度のバランスが取れたモデル。",
     "descLargeV3": "最高精度。動作には高いスペックが必要。"
@@ -109,8 +111,8 @@
     "cancelDeny": "続ける"
   },
   "toast": {
-    "videoLoaded": "動画を読み込みました",
-    "probeError": "動画の解析に失敗しました: {{error}}",
+    "videoLoaded": "ファイルを読み込みました",
+    "probeError": "ファイルの解析に失敗しました: {{error}}",
     "transcriptionComplete": "文字起こし完了 · {{count}}行",
     "modelDownloadFailed": "ダウンロードに失敗しました: {{error}}",
     "modelNotInstalled": "モデル {{model}} が未ダウンロードです",
@@ -118,7 +120,7 @@
     "transcriptionCancelled": "文字起こしをキャンセルしました"
   },
   "error": {
-    "probeVideo": "動画の解析に失敗しました",
+    "probeVideo": "ファイルの解析に失敗しました",
     "transcriptionFailed": "文字起こしに失敗しました: {{reason}}"
   },
   "advanced": {
@@ -157,5 +159,41 @@
     "lang_ru": "ロシア語",
     "lang_ar": "アラビア語",
     "futureNote": "設定は自動的に保存されます。"
+  },
+  "fontPicker": {
+    "title": "デフォルト字幕フォント",
+    "help": "プロジェクト全体のデフォルトフォントです。STEP 2 で行ごとに別フォントへ上書きできます。標準同梱の Noto Sans JP 以外は必要に応じてダウンロードされ、%APPDATA%\\MOJIOKO\\fonts\\ 配下に保存されます。",
+    "status": {
+      "bundled": "標準同梱",
+      "installed": "ダウンロード済み",
+      "notInstalled": "未ダウンロード",
+      "downloading": "ダウンロード中…",
+      "active": "選択中"
+    },
+    "action": {
+      "download": "ダウンロード",
+      "cancel": "キャンセル",
+      "uninstall": "削除",
+      "select": "このフォントを使う",
+      "viewLicense": "ライセンス"
+    },
+    "note": {
+      "missingRareKanji": "稀な漢字非対応",
+      "missingRareKanjiHelp": "「塡 剝 頰」など常用漢字の一部が含まれていないため、これらの文字が含まれる字幕では別フォントで表示されることがあります。"
+    },
+    "toast": {
+      "downloadComplete": "{{name}} をダウンロードしました",
+      "downloadFailed": "ダウンロードに失敗しました: {{error}}",
+      "downloadUnavailable": "{{name}} はまだ配信されていません。時間を置いて再度お試しください。",
+      "uninstalled": "{{name}} を削除しました",
+      "uninstalledFallback": "{{name}} が削除されたため、{{count}}行をデフォルトフォントに変更しました",
+      "activated": "{{name}} を選択しました"
+    },
+    "uninstallConfirm": {
+      "title": "{{name}} を削除しますか？",
+      "body": "{{name}} は {{count}} 行で使用されています。削除すると、それらの行はデフォルトフォントに戻ります。",
+      "confirm": "削除する",
+      "cancel": "キャンセル"
+    }
   }
 }

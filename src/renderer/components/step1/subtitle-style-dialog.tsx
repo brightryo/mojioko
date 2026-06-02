@@ -1,6 +1,4 @@
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -8,15 +6,11 @@ import {
   DialogTitle,
   DialogDescription
 } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { ColorPicker } from '@/components/color-picker/color-picker'
-import { HelpIcon } from '@/components/help-icon'
-import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { StyleSamplePreview } from '@/components/step1/style-sample-preview'
+import { FontPicker } from '@/components/font-picker/font-picker'
+import { DefaultStyleControls } from '@/components/default-style-controls/default-style-controls'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
-import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 
 interface SubtitleStyleDialogProps {
   open: boolean
@@ -57,15 +51,14 @@ export function SubtitleStyleDialog({
   const { t } = useTranslation(['step1'])
 
   const video = useProjectStore((s) => s.video)
-  const defaults = useProjectStore((s) => s.defaults)
-  const setDefaults = useProjectStore((s) => s.setDefaults)
+  // Single source of truth (REQ-016): the dialog reads & writes
+  // settingsStore.transcriptionDefaults.  projectStore.defaults is a
+  // transcribe-start snapshot, written once by step1.tsx in
+  // handleStartTranscription and never touched here.
+  const defaults = useSettingsStore((s) => s.transcriptionDefaults)
+  const setDefaults = useSettingsStore((s) => s.updateTranscriptionDefaults)
   const autoLineBreak = useSettingsStore((s) => s.autoLineBreak)
   const setAutoLineBreak = useSettingsStore((s) => s.setAutoLineBreak)
-
-  // Tracks whether the size input currently holds an out-of-range value so
-  // the field can flash --warning during typing.  Resets on blur after the
-  // value is clamped and committed.
-  const [fontSizeOutOfRange, setFontSizeOutOfRange] = useState(false)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -77,133 +70,43 @@ export function SubtitleStyleDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Form left / preview right.  Below lg the columns stack so the
-            dialog stays usable in narrow / portrait windows. */}
+        {/* "Visual" left, "Parameters" right.  Left column groups the
+            two visual-identity surfaces — what the subtitle will look
+            like (preview) and which font face renders it (FontPicker).
+            Right column holds the numerical / colour controls that
+            adjust that look.  Below lg the columns stack so the dialog
+            stays usable in narrow / portrait windows.  REQ-019 #3a. */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
-          {/* ── Form column ─────────────────────────────────────────── */}
+          {/* ── Visual column ───────────────────────────────────────── */}
           <div className="space-y-3">
-            {/* Font size */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1">
-                <Label>{t('subtitleDefaults.size')}</Label>
-                <HelpIcon content={t('subtitleDefaults.helpSize')} />
-              </div>
-              <input
-                key={defaults.fontSizePx}
-                type="number"
-                min={FONT_SIZE_MIN_PX}
-                max={FONT_SIZE_MAX_PX}
-                defaultValue={defaults.fontSizePx}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10)
-                  setFontSizeOutOfRange(
-                    !isNaN(v) && (v < FONT_SIZE_MIN_PX || v > FONT_SIZE_MAX_PX)
-                  )
-                }}
-                onBlur={(e) => {
-                  setFontSizeOutOfRange(false)
-                  const v = parseInt(e.target.value, 10)
-                  if (isNaN(v)) return
-                  setDefaults({
-                    fontSizePx: Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, v))
-                  })
-                }}
-                className={cn(
-                  'h-9 w-32 rounded-md border bg-input px-2 text-center text-[13px] text-foreground',
-                  'focus:outline-none focus:ring-2',
-                  '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-                  fontSizeOutOfRange
-                    ? 'border-[hsl(var(--warning)/0.6)] focus:ring-[hsl(var(--warning)/0.3)]'
-                    : 'border-border focus:ring-ring/30'
-                )}
-              />
-            </div>
+            <StyleSamplePreview
+              defaults={defaults}
+              thumbnail={thumbnail}
+              video={video}
+              autoLineBreak={autoLineBreak}
+            />
 
-            {/* Text color */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1">
-                <Label>{t('subtitleDefaults.textColor')}</Label>
-                <HelpIcon content={t('subtitleDefaults.helpTextColor')} />
-              </div>
-              <ColorPicker
-                value={defaults.textColorHex}
-                onChange={(hex) => setDefaults({ textColorHex: hex })}
-              />
-            </div>
-
-            {/* Outline color */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1">
-                <Label>{t('subtitleDefaults.outlineColor')}</Label>
-                <HelpIcon content={t('subtitleDefaults.helpOutlineColor')} />
-              </div>
-              <ColorPicker
-                value={defaults.outlineColorHex}
-                onChange={(hex) => setDefaults({ outlineColorHex: hex })}
-              />
-            </div>
-
-            {/* Outline thickness — shared slider component (same as Step 2
-                per-row + bulk-edit, so the look and commit semantics stay
-                aligned across surfaces). */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1">
-                <Label>{t('subtitleDefaults.stroke')}</Label>
-                <HelpIcon content={t('subtitleDefaults.helpStroke')} />
-              </div>
-              <OutlineThicknessSlider
-                value={defaults.outlineThicknessPx}
-                onCommit={(v) => setDefaults({ outlineThicknessPx: v })}
-                ariaLabel={t('subtitleDefaults.stroke')}
-              />
-            </div>
-
-            {/* Fade */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1">
-                <Label>{t('subtitleDefaults.fade')}</Label>
-                <HelpIcon content={t('subtitleDefaults.helpFade')} />
-              </div>
-              <div className="flex items-center gap-2 h-9">
-                <Switch
-                  checked={defaults.fadeEnabled}
-                  onCheckedChange={(v) => setDefaults({ fadeEnabled: v })}
-                />
-                <span className="text-[12px] text-muted-foreground">
-                  {defaults.fadeEnabled
-                    ? t('subtitleDefaults.fadeOn')
-                    : t('subtitleDefaults.fadeOff')}
-                </span>
-              </div>
-            </div>
-
-            {/* Auto line break — subtitle-formatting decision (post-
-                transcription), so it lives here rather than in the engine
-                Advanced dialog.  Toggling immediately re-wraps the preview
-                on the right. */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1">
-                <Label>{t('advanced.autoLineBreak')}</Label>
-                <HelpIcon content={t('advanced.autoLineBreakHelp')} />
-              </div>
-              <div className="flex items-center gap-2 h-9">
-                <Switch
-                  checked={autoLineBreak}
-                  onCheckedChange={(v) => setAutoLineBreak(v)}
-                />
-                <span className="text-[12px] text-muted-foreground">
-                  {autoLineBreak ? t('advanced.enabled') : t('advanced.disabled')}
-                </span>
-              </div>
-            </div>
+            {/* Font family — drives both the preview's @font-face and the
+                ASS Style fontname at burn-in time.  Sits under the preview
+                so the choice of face and its rendered result are visually
+                adjacent.  Bundled Noto + 8 OFL fonts; non-bundled fonts
+                are downloaded on demand. */}
+            <FontPicker />
           </div>
 
-          {/* ── Preview column ──────────────────────────────────────── */}
-          <StyleSamplePreview
-            defaults={defaults}
-            thumbnail={thumbnail}
-            video={video}
+          {/* ── Parameters column ───────────────────────────────────── */}
+          {/* Size / colors / outline / fade / auto line break — shared
+              with the Settings dialog's "Default style" tab via this
+              component, so both surfaces edit identical-looking controls. */}
+          <DefaultStyleControls
+            fontSizePx={defaults.fontSizePx}
+            textColorHex={defaults.textColorHex}
+            outlineColorHex={defaults.outlineColorHex}
+            outlineThicknessPx={defaults.outlineThicknessPx}
+            fadeEnabled={defaults.fadeEnabled}
             autoLineBreak={autoLineBreak}
+            onUpdateDefaults={setDefaults}
+            onSetAutoLineBreak={setAutoLineBreak}
           />
         </div>
       </DialogContent>

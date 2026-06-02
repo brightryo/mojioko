@@ -1,5 +1,12 @@
 import { ASS_MARGIN_LR_PX } from './tokens'
-import { getSubtitleFont, getLibassScale, type SubtitleFont } from './font-metrics'
+import {
+  getSubtitleFont,
+  getLibassScale,
+  getSubtitleFontFor,
+  getLibassScaleFor,
+  type SubtitleFont
+} from './font-metrics'
+import type { FontId } from '../../shared/fonts'
 
 export interface OverflowResult {
   /** -1 if entire text fits; otherwise the code-unit index where overflow begins. */
@@ -27,6 +34,12 @@ export interface OverflowArgs {
   fontSizePx: number
   outlineThicknessPx: number
   videoWidthPx: number
+  /**
+   * Per-row font override (REQ-021).  When defined, the row is measured
+   * against this font's glyph advances and libassScale.  When omitted, the
+   * module-level active-font cache is used — matching the legacy behaviour.
+   */
+  fontId?: FontId
 }
 
 /**
@@ -51,9 +64,11 @@ export interface OverflowArgs {
  *
  * @param fontArg Pass the loaded SubtitleFont to enable accurate glyph metrics.
  *   Omit (or pass undefined) to fall back to the module-level cache.
+ *   When `args.fontId` is set, `fontArg` is ignored and the per-font cache is
+ *   consulted instead.
  */
 export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont | null): OverflowResult {
-  const { text, fontSizePx, outlineThicknessPx, videoWidthPx } = args
+  const { text, fontSizePx, outlineThicknessPx, videoWidthPx, fontId } = args
   const usable = videoWidthPx - 2 * ASS_MARGIN_LR_PX
   // No correction factor needed here: measureLineWidth() / the glyph loop
   // already applies libassScale so character widths directly correspond to
@@ -64,7 +79,16 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
     return { overflowStartIndex: 0, measuredPx: 0, effectivePx }
   }
 
-  const font = fontArg !== undefined ? fontArg : getSubtitleFont()
+  // Per-row font path (REQ-021): when an explicit fontId is supplied, look
+  // up that font's cached Font + libassScale.  This is the only way to get
+  // the correct scale for a row whose fontId differs from the active
+  // selection — the legacy `getLibassScale()` returns the ACTIVE font's
+  // scale regardless of which Font was passed in, which silently mismeasures
+  // mixed-font projects.
+  const font = fontId !== undefined
+    ? getSubtitleFontFor(fontId)
+    : (fontArg !== undefined ? fontArg : getSubtitleFont())
+  const libassScale = fontId !== undefined ? getLibassScaleFor(fontId) : getLibassScale()
   // Normalise ASS hard-line-break `\N` to real newlines before splitting so
   // that auto-broken text is measured line-by-line instead of as one long run.
   // overflowStartIndex is an index into normalizedText — subtitle-table.tsx
@@ -80,7 +104,7 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
       // Libass-compatible path.
       // scale = fontSizePx / unitsPerEm × libassScale
       //       = effective pixels per font unit in libass rendering.
-      const scale = (fontSizePx / font.unitsPerEm) * getLibassScale()
+      const scale = (fontSizePx / font.unitsPerEm) * libassScale
       const glyphs = font.stringToGlyphs(line)
       // [...line] iterates by Unicode code point; .length is the code-unit
       // count (1 for BMP, 2 for supplementary), matching string slice offsets.
