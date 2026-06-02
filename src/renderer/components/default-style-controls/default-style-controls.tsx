@@ -102,10 +102,11 @@ export function DefaultStyleControls({
               : 'border-border focus:ring-ring/30'
           )}
         />
-        {/* REQ-034 #3: surface the clamp range so "enter 250 → silently
-            becomes 200" stops being mysterious.  Amber tint while the
-            in-flight value is out of range echoes the input border so
-            the relationship is unambiguous. */}
+        {/* REQ-034 #3: surface the clamp range so "enter 700 → silently
+            becomes 600" stops being mysterious (cap raised from 200 to
+            600 in REQ-041).  Amber tint while the in-flight value is
+            out of range echoes the input border so the relationship is
+            unambiguous. */}
         <p
           className={cn(
             'text-[11px] transition-colors',
