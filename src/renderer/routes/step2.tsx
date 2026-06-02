@@ -155,6 +155,17 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   }, { enableOnFormTags: false })
   useHotkeys('ctrl+shift+z', (e) => { e.preventDefault(); redo() }, { enableOnFormTags: false })
   useHotkeys('ctrl+n', (e) => { e.preventDefault(); openAddRowDialog() }, { enableOnFormTags: false })
+  // Ctrl+Shift+L / Ctrl+Shift+T — toggle between list and timeline editor
+  // views.  Phase 6 (REQ-056): keep the two shortcuts mirror-symmetric so
+  // the user doesn't have to remember which one means "go to the other".
+  useHotkeys('ctrl+shift+l', (e) => {
+    e.preventDefault()
+    useUiStore.getState().setEditorViewMode('list')
+  }, { enableOnFormTags: false })
+  useHotkeys('ctrl+shift+t', (e) => {
+    e.preventDefault()
+    useUiStore.getState().setEditorViewMode('timeline')
+  }, { enableOnFormTags: false })
   // Ctrl+A — select every row currently visible under the active filter.
   // Intentionally additive: rows hidden by the filter that were already
   // selected stay selected, matching how the table-header checkbox behaves.
