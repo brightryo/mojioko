@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { RotateCcw, Trash2, Undo2, FileText, Clock, ChevronUp, ChevronDown, WrapText } from 'lucide-react'
+import { Eraser, Trash2, Undo2, FileText, Clock, ChevronUp, ChevronDown, WrapText } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -689,7 +689,13 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
               'disabled:opacity-30 disabled:pointer-events-none'
             )}
           >
-            <RotateCcw className="h-3.5 w-3.5" />
+            {/* REQ-047 #2: Eraser instead of the RotateCcw used by the
+                top-right Undo button — visually distinct so the row's
+                "wipe my edits, restore the original transcription"
+                action can't be mistaken for the global "undo last
+                history op" action.  RotateCcw stays as the canonical
+                undo glyph in step2.tsx. */}
+            <Eraser className="h-3.5 w-3.5" />
           </button>
         </div>
         {!isAudioOnly && (
