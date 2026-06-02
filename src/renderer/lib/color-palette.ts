@@ -40,6 +40,11 @@ export interface ColorPair {
   outline: string
 }
 
+// REQ-039 #1: expanded from 5 to 10 pairs.  Pairs 1-5 unchanged; pairs 6-10
+// added below.  Pairs 6-8 are provisional values pending owner finalisation;
+// pairs 9-10 (white×black / black×white) are confirmed.  Layout in the
+// ColorPicker popover stays compact at grid-cols-5 (5 columns × 2 rows)
+// to avoid breaking REQ-035's "fits in Settings dialog" constraint.
 export const COLOR_PAIRS: readonly ColorPair[] = [
   { text: '#FFFF00', outline: '#001040' },
   // REQ-034 #2: pair 2 reworked to be red-on-orange with strong luminance
@@ -50,7 +55,12 @@ export const COLOR_PAIRS: readonly ColorPair[] = [
   { text: '#E00000', outline: '#FFB000' },
   { text: '#4DC4FF', outline: '#003060' },
   { text: '#AEEA00', outline: '#0A3D1E' },
-  { text: '#FF80A0', outline: '#3A0A4A' }
+  { text: '#FF80A0', outline: '#3A0A4A' },
+  { text: '#FFFFFF', outline: '#8B0000' }, // pair 6 (仮): 白×濃赤
+  { text: '#000000', outline: '#FFE000' }, // pair 7 (仮): 黒×黄
+  { text: '#00E5E5', outline: '#000000' }, // pair 8 (仮): シアン×黒
+  { text: '#FFFFFF', outline: '#000000' }, // pair 9 ★確定: 白×黒
+  { text: '#000000', outline: '#FFFFFF' }  // pair 10 ★確定: 黒×白
 ]
 
 /**
