@@ -229,7 +229,9 @@
       "snapHelp": "Snap to nearby edges (lands in Phase 5)"
     },
     "block": {
-      "ariaLabel": "Subtitle block T{{track}} row {{index}}"
+      "ariaLabel": "Subtitle block T{{track}} row {{index}}",
+      "resizeStart": "Drag to adjust start time",
+      "resizeEnd": "Drag to adjust end time"
     },
     "playhead": {
       "ariaLabel": "Playhead"

@@ -2,6 +2,7 @@ import { useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ZoomIn, ZoomOut, Magnet, GanttChartSquare } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
+import { useHistoryStore } from '@/stores/history-store'
 import {
   useUiStore,
   TIMELINE_PPS_MIN,
@@ -10,6 +11,7 @@ import {
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { cn } from '@/lib/utils'
 import { filterEntries } from '@/lib/subtitle-filter'
+import { commitTimeEdit } from '@/lib/commit-time-edit'
 import {
   layoutEntries,
   chooseRulerStepSec,
@@ -18,6 +20,7 @@ import {
 import type { EntryWarnings } from '@/lib/entry-warnings'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TimelineBlockInspector } from './timeline-block-inspector'
+import type { SubtitleEntry } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
 // Layout constants (pixels)
@@ -29,6 +32,16 @@ const BLOCK_HEIGHT_PX        = 32
 const BLOCK_VERTICAL_PAD_PX  = (TRACK_HEIGHT_PX - BLOCK_HEIGHT_PX) / 2
 const TRACK_GUTTER_LEFT_PX   = 56   // left gutter for track labels (T0, T1, …)
 const ZOOM_STEP_PX           = 10
+/** Width of each resize handle (left/right edge of a block) in CSS pixels. */
+const RESIZE_HANDLE_PX       = 6
+/**
+ * Minimum block duration in seconds — protects against drags that would
+ * collapse start ≥ end and produce a 0-duration row.  Matches the precision
+ * of `TIME_EPS_SEC` in timeline-layout.ts and is small enough that a real
+ * subtitle (which needs to be on screen long enough to be read) is never
+ * accidentally clamped to this floor by a normal drag.
+ */
+const MIN_BLOCK_SEC          = 0.05
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -82,8 +95,10 @@ function Ruler({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
   )
 }
 
+type DragKind = 'resize-start' | 'resize-end' | 'move'
+
 interface BlockProps {
-  entry: import('../../../shared/types').SubtitleEntry
+  entry: SubtitleEntry
   warnings: EntryWarnings | null
   leftPx: number
   widthPx: number
@@ -95,10 +110,14 @@ interface BlockProps {
   displayIndex: number
   /** Whether this block's inspector Popover is currently open. */
   isInspectorOpen: boolean
+  /** True while a drag is in progress for this block — suppresses popover open. */
+  isDragging: boolean
   /** Click handler — focus the row + seek the video + open the inspector. */
   onSelect: (id: string, startSec: number) => void
   onInspectorOpenChange: (open: boolean) => void
   onAdjustTime: (entryId: string) => void
+  /** Start a drag (resize or move) — TimelineView attaches window listeners. */
+  onStartDrag: (kind: DragKind, entry: SubtitleEntry, clientX: number) => void
 }
 
 function Block({
@@ -112,62 +131,112 @@ function Block({
   isOverflow,
   displayIndex,
   isInspectorOpen,
+  isDragging,
   onSelect,
   onInspectorOpenChange,
-  onAdjustTime
+  onAdjustTime,
+  onStartDrag
 }: BlockProps) {
   const { t } = useTranslation(['step2'])
-  // Visual aria-label uses the 1-based display index from the parent (table-
-  // order N) plus track index for accessibility.
   const ariaLabel = t('timeline.block.ariaLabel', {
     track: trackIndex,
     index: displayIndex
   })
-
-  // Display text — strip ASS \N line breaks; line-clamp keeps it on one row.
   const displayText = entry.text.replace(/\\N/g, ' ').trim()
 
+  function handleEdgePointerDown(kind: 'resize-start' | 'resize-end') {
+    return (e: React.PointerEvent<HTMLDivElement>) => {
+      // Only react to primary mouse button / touch contact.
+      if (e.button !== 0) return
+      e.stopPropagation()
+      e.preventDefault()
+      onStartDrag(kind, entry, e.clientX)
+    }
+  }
+
+  function handleBodyClick(e: React.MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation()
+    onSelect(entry.id, entry.startSec)
+  }
+
   return (
-    <Popover open={isInspectorOpen} onOpenChange={onInspectorOpenChange}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label={ariaLabel}
-          onClick={(e) => {
-            e.stopPropagation()
-            onSelect(entry.id, entry.startSec)
-          }}
-          title={displayText}
-          className={cn(
-            'absolute flex items-center px-2 rounded-md text-left text-[12px] leading-none',
-            'transition-colors duration-150 truncate select-none overflow-hidden',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40',
-            // Base palette — light zinc with a small inset shadow so adjacent
-            // blocks read as separate units even when they touch.
-            'bg-zinc-700/70 text-zinc-100 border border-zinc-600/70',
-            'hover:bg-zinc-700 hover:border-zinc-500',
-            // State tints — keep them additive (focus wins for border, semantic
-            // tints add bg overlays).  Mirrors subtitle-table row palette.
-            entry.isEdited && !entry.isDeleted && 'bg-amber-400/15 border-amber-400/40 hover:bg-amber-400/25',
-            isOverflow && !entry.isDeleted && 'bg-red-500/15 border-red-500/40 hover:bg-red-500/25',
-            isFocused && 'ring-2 ring-green-500 border-green-500 bg-green-500/15 text-zinc-50',
-            entry.isDeleted && 'opacity-40 line-through'
-          )}
-          style={{
-            left: `${leftPx}px`,
-            // Floor width to 2 px so 0-duration entries are still clickable.
-            width: `${Math.max(2, widthPx)}px`,
-            height: `${BLOCK_HEIGHT_PX}px`,
-            top: `${topPx}px`
-          }}
-        >
-          <span className="truncate">{displayText || '·'}</span>
-        </button>
-      </PopoverTrigger>
-      {/* `side="top"` by default; Radix collision detection flips to bottom
-          near the viewport top edge.  align="start" keeps the popover's left
-          edge near the block's left edge — feels rooted to the timestamp
-          rather than floating in the middle. */}
+    <Popover
+      open={isInspectorOpen && !isDragging}
+      onOpenChange={(open) => {
+        // Radix tries to open the popover on pointerdown by default — when a
+        // drag is in progress we want to suppress that.
+        if (isDragging && open) return
+        onInspectorOpenChange(open)
+      }}
+    >
+      {/* Outer wrapper sized to the block — left handle / body button /
+          right handle live inside.  Sized exactly to the block so multiple
+          wrappers on the same track never overlap and steal each other's
+          pointer events (the Phase 1 latent bug we fixed in Phase 2). */}
+      <div
+        className="absolute"
+        style={{
+          left: `${leftPx}px`,
+          top: `${topPx}px`,
+          width: `${Math.max(2, widthPx)}px`,
+          height: `${BLOCK_HEIGHT_PX}px`
+        }}
+      >
+        {/* Left edge handle.  z-index lifts it above the body so its 6 px
+            hit area wins over the button when the cursor sits on the edge.
+            Hidden for deleted rows — editing a deleted row's time is a
+            no-op (matches subtitle-table's disabled time inputs). */}
+        {!entry.isDeleted && widthPx > RESIZE_HANDLE_PX * 2 && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t('timeline.block.resizeStart')}
+            onPointerDown={handleEdgePointerDown('resize-start')}
+            className={cn(
+              'absolute top-0 bottom-0 left-0 z-10 cursor-ew-resize',
+              'hover:bg-green-500/40 transition-colors duration-100'
+            )}
+            style={{ width: `${RESIZE_HANDLE_PX}px` }}
+          />
+        )}
+
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={ariaLabel}
+            onClick={handleBodyClick}
+            title={displayText}
+            className={cn(
+              'absolute inset-0 flex items-center px-2 rounded-md text-left text-[12px] leading-none',
+              'transition-colors duration-150 truncate select-none overflow-hidden',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40',
+              'bg-zinc-700/70 text-zinc-100 border border-zinc-600/70',
+              'hover:bg-zinc-700 hover:border-zinc-500',
+              entry.isEdited && !entry.isDeleted && 'bg-amber-400/15 border-amber-400/40 hover:bg-amber-400/25',
+              isOverflow && !entry.isDeleted && 'bg-red-500/15 border-red-500/40 hover:bg-red-500/25',
+              isFocused && 'ring-2 ring-green-500 border-green-500 bg-green-500/15 text-zinc-50',
+              entry.isDeleted && 'opacity-40 line-through'
+            )}
+          >
+            <span className="truncate">{displayText || '·'}</span>
+          </button>
+        </PopoverTrigger>
+
+        {!entry.isDeleted && widthPx > RESIZE_HANDLE_PX * 2 && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t('timeline.block.resizeEnd')}
+            onPointerDown={handleEdgePointerDown('resize-end')}
+            className={cn(
+              'absolute top-0 bottom-0 right-0 z-10 cursor-ew-resize',
+              'hover:bg-green-500/40 transition-colors duration-100'
+            )}
+            style={{ width: `${RESIZE_HANDLE_PX}px` }}
+          />
+        )}
+      </div>
+
       <PopoverContent side="top" align="start" sideOffset={8} className="p-3">
         <TimelineBlockInspector
           entry={entry}
@@ -292,6 +361,128 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       setOpenInspectorId(null)
     }
   }, [openInspectorId, visibleIds])
+
+  // -------------------------------------------------------------------------
+  // Drag state (Phase 3 onwards)
+  //
+  // The active drag is held in a ref so the window-level pointermove /
+  // pointerup listeners can read the latest values without re-attaching on
+  // every render.  A parallel React state (`draggingId`) only exists so the
+  // Block component can re-render with the "dragging" flag set (used to
+  // suppress popover open during a drag).
+  // -------------------------------------------------------------------------
+
+  interface ActiveDrag {
+    kind: DragKind
+    entryId: string
+    snapshot: SubtitleEntry
+    /** Pointer clientX at drag-start — drag delta is computed from this. */
+    originClientX: number
+  }
+
+  const activeDragRef = useRef<ActiveDrag | null>(null)
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+
+  // Stable mirrors of the live pixelsPerSec and videoDurationSec so the
+  // (window-attached, mount-once) pointer listeners read up-to-date values
+  // without re-attaching whenever the zoom changes mid-drag.
+  const liveContextRef = useRef({ pixelsPerSec, videoDurationSec })
+  useEffect(() => {
+    liveContextRef.current = { pixelsPerSec, videoDurationSec }
+  })
+
+  const handleStartDrag = useCallback(
+    (kind: DragKind, entry: SubtitleEntry, clientX: number) => {
+      // Phase 3 only handles edge resize.  'move' is reserved for Phase 4.
+      if (kind === 'move') return
+      activeDragRef.current = {
+        kind,
+        entryId: entry.id,
+        snapshot: { ...entry, original: { ...entry.original } },
+        originClientX: clientX
+      }
+      setDraggingId(entry.id)
+      // Close any open inspector so the popover doesn't visually follow the
+      // block during a resize.
+      setOpenInspectorId((cur) => (cur === entry.id ? null : cur))
+    },
+    []
+  )
+
+  // Window pointermove / pointerup listeners — attached once on mount, read
+  // the active drag through the ref so they don't need re-attachment.
+  useEffect(() => {
+    function applyDragPatch(d: ActiveDrag, e: PointerEvent): void {
+      const { pixelsPerSec: pps, videoDurationSec: dur } = liveContextRef.current
+      const dxPx = e.clientX - d.originClientX
+      const dxSec = dxPx / pps
+      const snap = d.snapshot
+      const maxEnd = isFinite(dur) && dur > 0 ? dur : Number.MAX_VALUE
+      let patch: Partial<SubtitleEntry> | null = null
+      if (d.kind === 'resize-start') {
+        const ceiling = snap.endSec - MIN_BLOCK_SEC
+        const newStart = Math.min(ceiling, Math.max(0, snap.startSec + dxSec))
+        patch = { startSec: newStart, isEdited: true }
+      } else if (d.kind === 'resize-end') {
+        const floor = snap.startSec + MIN_BLOCK_SEC
+        const newEnd = Math.max(floor, Math.min(maxEnd, snap.endSec + dxSec))
+        patch = { endSec: newEnd, isEdited: true }
+      }
+      // 'move' is Phase 4 — handled in a follow-up commit.
+      if (patch === null) return
+      useProjectStore.getState().updateEntry(d.entryId, patch)
+    }
+
+    function onMove(e: PointerEvent) {
+      const d = activeDragRef.current
+      if (!d) return
+      applyDragPatch(d, e)
+    }
+    function onUp() {
+      const d = activeDragRef.current
+      if (!d) return
+      // Read the final entry state from the store; if nothing changed,
+      // skip the history push and the commitTimeEdit re-sort.
+      const cur = useProjectStore
+        .getState()
+        .entries.find((x) => x.id === d.entryId)
+      const movedTime =
+        cur !== undefined &&
+        (cur.startSec !== d.snapshot.startSec || cur.endSec !== d.snapshot.endSec)
+      if (cur && movedTime) {
+        const before = d.snapshot
+        const after = { ...cur }
+        useHistoryStore.getState().push({
+          label: timelineHistoryLabelRef.current,
+          undo: () => {
+            useProjectStore.getState().updateEntry(before.id, before)
+            commitTimeEdit(before.id)
+          },
+          redo: () => {
+            useProjectStore.getState().updateEntry(before.id, after)
+            commitTimeEdit(before.id)
+          }
+        })
+        commitTimeEdit(d.entryId)
+      }
+      activeDragRef.current = null
+      setDraggingId(null)
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [])
+
+  // History label for time edits via drag — captured in a ref so the mount-
+  // once pointer listeners always read a translated string.
+  const timelineHistoryLabelRef = useRef('')
+  useEffect(() => {
+    timelineHistoryLabelRef.current = t('history.editTime')
+  })
 
   // -------------------------------------------------------------------------
   // Handlers
@@ -545,11 +736,13 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                       isOverflow={isOverflow}
                       displayIndex={indexOfEntry.get(entry.id) ?? 0}
                       isInspectorOpen={openInspectorId === entry.id}
+                      isDragging={draggingId === entry.id}
                       onSelect={handleSelectBlock}
                       onInspectorOpenChange={(open) =>
                         handleInspectorOpenChange(entry.id, open)
                       }
                       onAdjustTime={onAdjustTime}
+                      onStartDrag={handleStartDrag}
                     />
                   )
                 })}
