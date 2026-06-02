@@ -344,6 +344,8 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   const setPixelsPerSec = useUiStore((s) => s.setTimelinePixelsPerSec)
   const snapEnabled = useUiStore((s) => s.timelineSnapEnabled)
   const setSnapEnabled = useUiStore((s) => s.setTimelineSnapEnabled)
+  const scrollToRowId = useUiStore((s) => s.scrollToRowId)
+  const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
   const isAudioOnly = useIsAudioOnly()
 
   // Apply the same filter the table uses so a "Ready" tab hides warning
@@ -662,6 +664,71 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     }
   }, [videoCurrentTimeSec, pixelsPerSec])
 
+  // Consume scrollToRowId from ui-store — set by the subtitle-table when
+  // a row is added or its time is adjusted.  In timeline view we honour
+  // the same signal by horizontally scrolling so the entry's block lands
+  // near the centre of the viewport; coming back to /step2 with a
+  // pending scrollToRowId now keeps both views in sync.
+  useEffect(() => {
+    if (!scrollToRowId) return
+    const targetId = scrollToRowId
+    const entry = useProjectStore.getState().entries.find((e) => e.id === targetId)
+    if (!entry) {
+      setScrollToRowId(null)
+      return
+    }
+    const el = scrollRef.current
+    if (!el) return
+    // Defer a tick so the layout reflects any just-changed pps / entries.
+    const timer = setTimeout(() => {
+      const blockX = entry.startSec * pixelsPerSec + TRACK_GUTTER_LEFT_PX
+      el.scrollLeft = Math.max(0, blockX - el.clientWidth / 2)
+      setScrollToRowId(null)
+    }, 80)
+    return () => clearTimeout(timer)
+  }, [scrollToRowId, pixelsPerSec, setScrollToRowId])
+
+  // Ctrl+wheel zoom around the mouse position.  React's onWheel is passive
+  // by default so it cannot preventDefault; attach the listener manually
+  // on the scroll container with `{ passive: false }` so we can suppress
+  // the default ctrl+wheel "browser page zoom" behaviour as well as the
+  // overflow-scroll the container would otherwise do.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    function onWheel(e: WheelEvent) {
+      if (!e.ctrlKey || !el) return
+      e.preventDefault()
+      const rect = el.getBoundingClientRect()
+      const mouseClientX = e.clientX - rect.left
+      // Convert pointer position to a fixed timeline-content x, then to a
+      // time in seconds at the CURRENT zoom — that anchor stays under the
+      // cursor across the zoom.
+      const mouseContentX = mouseClientX + el.scrollLeft
+      const currentPps = liveContextRef.current.pixelsPerSec
+      const timeAtMouse = (mouseContentX - TRACK_GUTTER_LEFT_PX) / currentPps
+      // Geometric zoom factor — feels more natural than linear because the
+      // px/sec scale spans more than a decade.  10 % per wheel tick.
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
+      const nextPps = Math.min(
+        TIMELINE_PPS_MAX,
+        Math.max(TIMELINE_PPS_MIN, currentPps * factor)
+      )
+      if (nextPps === currentPps) return
+      setPixelsPerSec(nextPps)
+      // Adjust scrollLeft after the next paint so the same time still sits
+      // under the cursor.  rAF (not setTimeout) so the visual frame is the
+      // post-zoom one and the user sees no flicker.
+      requestAnimationFrame(() => {
+        if (!el) return
+        const newContentX = timeAtMouse * nextPps + TRACK_GUTTER_LEFT_PX
+        el.scrollLeft = newContentX - mouseClientX
+      })
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [setPixelsPerSec])
+
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
@@ -773,8 +840,13 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                   className="flex items-center justify-center border-b border-zinc-800/50"
                   style={{ height: `${TRACK_HEIGHT_PX}px` }}
                 >
+                  {/* 1-based labels: video-editing tools conventionally
+                      count tracks from 1 (Final Cut, Premiere, Resolve).
+                      The 0-based aria-label in Block stays 0-based for
+                      consistency with the placement.trackIndex value the
+                      smoke scripts query. */}
                   <span className="text-[10px] font-mono text-zinc-500 select-none">
-                    {t('timeline.trackLabel', { index: i })}
+                    {t('timeline.trackLabel', { index: i + 1 })}
                   </span>
                 </div>
               ))}
