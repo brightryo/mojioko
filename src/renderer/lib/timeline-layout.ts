@@ -1,6 +1,12 @@
 import type { SubtitleEntry } from '../../shared/types'
 
-/** Minimum temporal gap (seconds) to treat two intervals as non-overlapping. */
+/**
+ * Floating-point tolerance (seconds) when comparing one block's end to the
+ * next block's start.  Whisper output frequently has `A.endSec === B.startSec`
+ * (contiguous segments); we treat exact contact — and contact within this
+ * tolerance — as non-overlapping so the two blocks share a track.  A genuine
+ * overlap of more than this tolerance still forces a new track.
+ */
 const TIME_EPS_SEC = 1e-3
 
 /**
@@ -57,7 +63,7 @@ export function layoutEntries(
   for (const e of sorted) {
     let assigned = -1
     for (let i = 0; i < trackEndSec.length; i++) {
-      if (trackEndSec[i] <= e.startSec - TIME_EPS_SEC) {
+      if (trackEndSec[i] <= e.startSec + TIME_EPS_SEC) {
         assigned = i
         break
       }
