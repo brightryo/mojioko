@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Eraser, Trash2, Undo2, FileText, Clock, ChevronUp, ChevronDown, WrapText } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -19,8 +18,7 @@ import type { FontId } from '../../../shared/fonts'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { filterEntries } from '@/lib/subtitle-filter'
-import { applyAutoLineBreak } from '@/lib/auto-line-break'
-import { loadSubtitleFont } from '@/lib/font-metrics'
+import { autoLineBreakRow as runAutoLineBreakRow, resetRow as runResetRow, toggleDeleteRow as runToggleDeleteRow } from '@/lib/entry-row-actions'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 
@@ -275,82 +273,27 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     withHistory(t('history.editFade'), { fadeEnabled: checked })
   }
 
+  // Row-level Delete / Reset / AutoLineBreak go through the shared
+  // `entry-row-actions` lib so the timeline-block inspector drives the
+  // exact same history shape, sort behaviour, and side effects.  Labels
+  // are resolved here at the call site because the lib is intentionally
+  // i18n-free (see entry-row-actions.ts docstring).
   function handleDelete() {
-    if (entry.isDeleted) {
-      const snapshot = { ...entry }
-      pushHistory({
-        label: t('history.restoreRow'),
-        undo: () => updateEntry(entry.id, snapshot),
-        redo: () => updateEntry(entry.id, { ...snapshot, isDeleted: false })
-      })
-      updateEntry(entry.id, { isDeleted: false })
-    } else {
-      const snapshot = { ...entry }
-      pushHistory({
-        label: t('history.deleteRow'),
-        undo: () => updateEntry(entry.id, snapshot),
-        redo: () => updateEntry(entry.id, { ...snapshot, isDeleted: true })
-      })
-      updateEntry(entry.id, { isDeleted: true })
-    }
+    runToggleDeleteRow(entry, {
+      delete: t('history.deleteRow'),
+      restore: t('history.restoreRow')
+    })
   }
 
-  // REQ-039 #2: per-row auto line break.  Same logic as
-  // BulkEditBar.handleAutoLineBreakApply but scoped to this single row —
-  // strips existing \N, rewraps with the row's current size / outline /
-  // font, and surfaces "no change" as an info toast.  Awaits
-  // loadSubtitleFont() so the glyph-accurate path is used (font is in
-  // module cache after Step 2 mount; this is effectively synchronous in
-  // practice).
   async function handleAutoLineBreakRow() {
-    if (entry.isDeleted) return
-    const font = await loadSubtitleFont().catch(() => null)
-    const videoWidthPx = useProjectStore.getState().video?.widthPx ?? 1920
-    const stripped = entry.text.replace(/\\N/g, '')
-    const rewrapped = applyAutoLineBreak(
-      stripped,
-      entry.fontSizePx,
-      entry.outlineThicknessPx,
-      videoWidthPx,
-      font,
-      entry.fontId
-    )
-    if (rewrapped === entry.text) {
-      toast.info(t('bulk.autoLineBreakNoChange'))
-      return
-    }
-    withHistory(t('history.autoLineBreak'), { text: rewrapped })
+    await runAutoLineBreakRow(entry, {
+      history: t('history.autoLineBreak'),
+      noChangeToast: t('bulk.autoLineBreakNoChange')
+    })
   }
 
   function handleReset() {
-    const { original } = entry
-    const snapshot = { ...entry }
-    // Reset can restore a startSec/endSec that differs from the row's
-    // currently-sorted position (e.g. user edited time then reset).  Treat
-    // it like a time-affecting patch so the row re-sorts and the user sees
-    // it land where the original times sit chronologically.
-    const affectsTime = original.startSec !== entry.startSec || original.endSec !== entry.endSec
-    // Explicitly include fontId in the patch — when the original had no
-    // override (`fontId === undefined`), `{...original}` would not produce
-    // a `fontId` key, and updateEntry's `{...e, ...patch}` merge would
-    // leave the current override in place.  Adding it explicitly forces
-    // the key onto the patch with the value `undefined`, so the merge
-    // clears the override and the row falls back to the project default.
-    // REQ-022 step 7.
-    const resetPatch = { ...original, fontId: original.fontId, isEdited: false, isDeleted: false }
-    pushHistory({
-      label: t('history.resetRow'),
-      undo: () => {
-        updateEntry(entry.id, snapshot)
-        if (affectsTime) useProjectStore.getState().sortByStartSec()
-      },
-      redo: () => {
-        updateEntry(entry.id, resetPatch)
-        if (affectsTime) useProjectStore.getState().sortByStartSec()
-      }
-    })
-    updateEntry(entry.id, resetPatch)
-    if (affectsTime) commitTimeEdit(entry.id)
+    runResetRow(entry, { reset: t('history.resetRow') })
   }
 
   // Multi-row selection takes visual priority over warning tints (amber /

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Clock, Trash2, Undo2 } from 'lucide-react'
+import { Clock, Trash2, Undo2, Eraser, WrapText, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -11,51 +11,47 @@ import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thic
 import { RowFontSelector } from '@/components/subtitle-table/row-font-selector'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
+import {
+  autoLineBreakRow as runAutoLineBreakRow,
+  resetRow as runResetRow,
+  toggleDeleteRow as runToggleDeleteRow
+} from '@/lib/entry-row-actions'
+import { formatTimecode } from '@/lib/time'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 import type { FontId } from '../../../shared/fonts'
 import type { SubtitleEntry } from '../../../shared/types'
-
-/**
- * Format seconds as `HH:MM:SS.cc` — the same shape used by the existing
- * TimeInput in the table.  Local because the project's `time.ts` formatter
- * targets a slightly different format and threading both through one
- * helper would invite drift.
- */
-function formatTimecode(sec: number): string {
-  const s = Math.max(0, sec)
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const ss = Math.floor(s % 60)
-  const cc = Math.floor((s - Math.floor(s)) * 100)
-  return [h, m, ss].map((v) => String(v).padStart(2, '0')).join(':') + '.' + String(cc).padStart(2, '0')
-}
 
 interface TimelineBlockInspectorProps {
   entry: SubtitleEntry
   warnings: EntryWarnings | null
   /** Open the shared TimeEditorDialog (step2 owns it; we just forward the id). */
   onAdjustTime: (entryId: string) => void
-  /** Close request from inside the inspector (e.g. after Adjust time click). */
+  /** Close request from inside the inspector (e.g. after Adjust time click, X click). */
   onClose: () => void
 }
 
 /**
- * Popover body shown when a timeline block is clicked.  Lets the user
- * read the entry's text + timing and edit the text inline; cosmetic /
- * style edits stay in the subtitle-table for now (Phase 2 scope).
+ * Popover body shown when a timeline block is clicked.  The layout
+ * (REQ-061 #3) is, top → bottom:
  *
- * Text-commit rules mirror subtitle-table.CellEditor exactly so the user
- * gets identical keyboard behaviour across the two views:
+ *   1. Action icons (auto-line-break / delete-toggle / reset) on the
+ *      left, X-close on the right.  All three actions reuse the shared
+ *      `entry-row-actions` lib so the inspector and the subtitle-table
+ *      drive identical history shapes and side effects.
+ *   2. Status badges — `state.edited` plus every active warning, from
+ *      the same source-of-truth `warningsMap` the table reads.
+ *   3. Style controls (size / textColour / outlineColour / outlineWidth /
+ *      fade) — hidden in audio-only mode.
+ *   4. Per-row font (RowFontSelector) — same component the table cell uses.
+ *   5. Text editor — Ctrl+Enter / Esc / blur commit semantics preserved
+ *      from earlier phases; `\n` ↔ `\N` round-trip retained.
+ *   6. Time row — start / end / duration display plus "Adjust time" CTA
+ *      that opens the shared TimeEditorDialog.
  *
- *   - `Ctrl+Enter` commits.
- *   - `Esc` cancels.
- *   - Blur commits.
- *   - Real newlines in the textarea round-trip through ASS `\N` markers
- *     on save / display.
- *
- * History: the text-edit op pushes a single inverse-action pair via
- * useHistoryStore — same shape SubtitleRow.handleTextCommit uses — so
- * `Ctrl+Z` in either view undoes either edit transparently.
+ * The inspector NEVER auto-focuses the textarea (REQ-061 #2(a)): opening
+ * a block highlights it but does not enter edit mode.  The parent
+ * PopoverContent passes `onOpenAutoFocus={preventDefault}` so Radix
+ * itself does not focus the first child either.
  */
 export function TimelineBlockInspector({
   entry,
@@ -75,16 +71,6 @@ export function TimelineBlockInspector({
   const [draft, setDraft] = useState(initialDraft)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [sizeOutOfRange, setSizeOutOfRange] = useState(false)
-
-  // When the inspector mounts for a new entry (the parent re-renders this
-  // component for each id), focus the textarea + select-all so users can
-  // overwrite without an extra Ctrl+A.
-  useEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.focus()
-    el.select()
-  }, [entry.id])
 
   function commitText(next: string) {
     // Round-trip newlines back to ASS \N
@@ -172,17 +158,31 @@ export function TimelineBlockInspector({
     commitText(draft)
   }
 
-  function handleDeleteToggle() {
-    const snapshot = { ...entry }
-    const patch = { isDeleted: !entry.isDeleted }
-    pushHistory({
-      label: entry.isDeleted
-        ? t('history.restoreRow')
-        : t('history.deleteRow'),
-      undo: () => updateEntry(entry.id, snapshot),
-      redo: () => updateEntry(entry.id, { ...snapshot, ...patch })
+  // -------------------------------------------------------------------------
+  // Top-bar action handlers — REQ-061 #3.  All three reuse the shared
+  // `entry-row-actions` lib so the inspector and subtitle-table commit
+  // identical history ops.
+  // -------------------------------------------------------------------------
+
+  async function handleAutoLineBreak() {
+    // Commit any pending text edit first so the rewrap starts from the
+    // committed value rather than a stale draft.
+    commitText(draft)
+    await runAutoLineBreakRow(entry, {
+      history: t('history.autoLineBreak'),
+      noChangeToast: t('bulk.autoLineBreakNoChange')
     })
-    updateEntry(entry.id, patch)
+  }
+
+  function handleDeleteToggle() {
+    runToggleDeleteRow(entry, {
+      delete: t('history.deleteRow'),
+      restore: t('history.restoreRow')
+    })
+  }
+
+  function handleReset() {
+    runResetRow(entry, { reset: t('history.resetRow') })
   }
 
   function handleAdjustTime() {
@@ -194,76 +194,110 @@ export function TimelineBlockInspector({
   }
 
   const durationSec = Math.max(0, entry.endSec - entry.startSec)
+  const canReset = entry.isEdited || entry.isDeleted
+
+  // Aggregate "any warning visible" so §2 (badge row) only renders when
+  // there's actually something to show.  Empty-text is included because
+  // the table's badge row shows it; matching behaviour keeps both views
+  // consistent for users alternating between them.
+  const hasAnyBadge =
+    entry.isEdited ||
+    (warnings != null &&
+      (warnings.timeInvalid ||
+        warnings.overlap ||
+        warnings.overDuration ||
+        warnings.overflow ||
+        warnings.emptyText ||
+        warnings.invalidSize))
 
   return (
-    <div className="flex flex-col gap-2 w-[320px] text-zinc-100 max-h-[70vh] overflow-y-auto pr-1">
-      {/* Time row — read-only display + Adjust-time CTA */}
+    <div className="flex flex-col gap-3 w-[320px] text-zinc-100 max-h-[70vh] overflow-y-auto pr-1">
+      {/* § 1 — Action icons + close.  Auto-line-break is suppressed in
+          audio-only mode (no burn-in pipeline consumes the rewrap). */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-baseline gap-1 text-[11px] font-mono tabular-nums text-zinc-400">
-          <span>{formatTimecode(entry.startSec)}</span>
-          <span className="text-zinc-600">→</span>
-          <span>{formatTimecode(entry.endSec)}</span>
-          <span className="ml-1 text-zinc-500">
-            ({durationSec.toFixed(2)}s)
-          </span>
+        <div className="flex items-center gap-1">
+          {!isAudioOnly && (
+            <button
+              type="button"
+              title={t('action.autoLineBreakRowHelp')}
+              aria-label={t('action.autoLineBreakRowHelp')}
+              onClick={handleAutoLineBreak}
+              disabled={entry.isDeleted}
+              className={cn(
+                'flex items-center justify-center h-7 w-7 rounded',
+                'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+                'transition-colors duration-150',
+                'disabled:opacity-30 disabled:pointer-events-none'
+              )}
+            >
+              <WrapText className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            title={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
+            aria-label={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
+            onClick={handleDeleteToggle}
+            className={cn(
+              'flex items-center justify-center h-7 w-7 rounded',
+              'transition-colors duration-150 hover:bg-zinc-800',
+              entry.isDeleted
+                ? 'text-green-400 hover:text-green-300'
+                : 'text-zinc-400 hover:text-zinc-100'
+            )}
+          >
+            {entry.isDeleted ? <Undo2 className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            type="button"
+            title={t('action.resetRow')}
+            aria-label={t('action.resetRow')}
+            onClick={handleReset}
+            disabled={!canReset}
+            className={cn(
+              'flex items-center justify-center h-7 w-7 rounded',
+              'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+              'transition-colors duration-150',
+              'disabled:opacity-30 disabled:pointer-events-none'
+            )}
+          >
+            <Eraser className="h-3.5 w-3.5" />
+          </button>
         </div>
         <button
           type="button"
-          onClick={handleAdjustTime}
+          title={t('common:button.close')}
+          aria-label={t('common:button.close')}
+          onClick={onClose}
           className={cn(
-            'flex items-center gap-1 h-6 px-2 rounded text-[11px] text-zinc-400',
-            'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
+            'flex items-center justify-center h-7 w-7 rounded',
+            'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+            'transition-colors duration-150'
           )}
         >
-          <Clock className="h-3 w-3" />
-          {t('timeline.inspector.adjustTime')}
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      {/* Warning badges — same source-of-truth as the table */}
-      {warnings && (
+      {/* § 2 — Status badges.  `state.edited` first, then warnings in the
+          same order the table uses (matches user expectations across
+          views). */}
+      {hasAnyBadge && (
         <div className="flex flex-wrap gap-1">
-          {warnings.timeInvalid  && <Badge variant="danger">{t('badge.timeInvalid')}</Badge>}
-          {warnings.overlap      && <Badge variant="warning">{t('badge.overlap')}</Badge>}
-          {warnings.overDuration && <Badge variant="warning">{t('badge.overDuration')}</Badge>}
-          {warnings.overflow     && <Badge variant="warning">{t('badge.overflow')}</Badge>}
-          {warnings.emptyText    && <Badge variant="warning">{t('badge.emptyText')}</Badge>}
-          {warnings.invalidSize  && <Badge variant="warning">{t('badge.invalidSize')}</Badge>}
+          {entry.isEdited && !entry.isDeleted && (
+            <Badge variant="default">{t('state.edited')}</Badge>
+          )}
+          {warnings?.timeInvalid  && <Badge variant="danger">{t('badge.timeInvalid')}</Badge>}
+          {warnings?.overlap      && <Badge variant="warning">{t('badge.overlap')}</Badge>}
+          {warnings?.overDuration && <Badge variant="warning">{t('badge.overDuration')}</Badge>}
+          {warnings?.overflow     && <Badge variant="warning">{t('badge.overflow')}</Badge>}
+          {warnings?.emptyText    && <Badge variant="warning">{t('badge.emptyText')}</Badge>}
+          {warnings?.invalidSize  && <Badge variant="warning">{t('badge.invalidSize')}</Badge>}
         </div>
       )}
 
-      {/* Text editor */}
-      <div>
-        <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
-          {t('timeline.inspector.textLabel')}
-        </label>
-        <textarea
-          ref={textareaRef}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={handleBlur}
-          rows={3}
-          disabled={entry.isDeleted}
-          spellCheck={false}
-          className={cn(
-            'w-full rounded-md bg-zinc-950 border border-zinc-700 px-2 py-1.5',
-            'text-[13px] text-zinc-50 leading-snug resize-none',
-            'focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/30',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-        />
-        <p className="mt-1 text-[10px] text-zinc-500 select-none">
-          {t('timeline.inspector.commitHint')}
-        </p>
-      </div>
-
-      {/* Style section — reuses the same shadcn primitives the subtitle-
-          table per-row cells and BulkEditBar drive against the same
-          fields (size / colours / outline / fade / font), so editing
-          either surface stays visually + behaviourally consistent.
-          Hidden in audio-only mode (REQ-028 / REQ-055 — style edits
-          don't reach text/SRT export). */}
+      {/* § 3 — Style.  Hidden in audio-only mode (REQ-028) because none
+          of these fields reach text/SRT export. */}
       {!isAudioOnly && (
         <div className="space-y-2 border-t border-zinc-800 pt-2">
           <p className="text-[10px] uppercase tracking-wider text-zinc-500 select-none">
@@ -346,35 +380,72 @@ export function TimelineBlockInspector({
               className="scale-75 origin-right"
             />
           </div>
-
-          {/* Font — per-row override, shared RowFontSelector. */}
-          <div className="space-y-1">
-            <label className="text-[11px] text-zinc-400 block">{t('bulkRowFont.label')}</label>
-            <RowFontSelector
-              value={entry.fontId}
-              onChange={handleFontChange}
-              disabled={entry.isDeleted}
-            />
-          </div>
         </div>
       )}
 
-      {/* Footer — delete / restore action */}
-      <div className="flex items-center justify-end pt-1 border-t border-zinc-800">
+      {/* § 4 — Font.  Per-row override via the shared RowFontSelector. */}
+      {!isAudioOnly && (
+        <div className="space-y-1 border-t border-zinc-800 pt-2">
+          <label className="text-[11px] text-zinc-400 block">{t('bulkRowFont.label')}</label>
+          <RowFontSelector
+            value={entry.fontId}
+            onChange={handleFontChange}
+            disabled={entry.isDeleted}
+          />
+        </div>
+      )}
+
+      {/* § 5 — Text editor.  Ctrl+Enter / Esc / blur commit semantics
+          retained from earlier phases.  No auto-focus on mount — see
+          PopoverContent's `onOpenAutoFocus={preventDefault}` upstream. */}
+      <div className="border-t border-zinc-800 pt-2">
+        <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
+          {t('timeline.inspector.textLabel')}
+        </label>
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
+          rows={3}
+          disabled={entry.isDeleted}
+          spellCheck={false}
+          className={cn(
+            'w-full rounded-md bg-zinc-950 border border-zinc-700 px-2 py-1.5',
+            'text-[13px] text-zinc-50 leading-snug resize-none',
+            'focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/30',
+            'disabled:opacity-50 disabled:cursor-not-allowed'
+          )}
+        />
+        <p className="mt-1 text-[10px] text-zinc-500 select-none">
+          {t('timeline.inspector.commitHint')}
+        </p>
+      </div>
+
+      {/* § 6 — Time row.  Read-only display + adjust-time CTA at the
+          bottom of the inspector to match the visual hierarchy "act
+          first → see status → tweak content → finally time" agreed for
+          REQ-061. */}
+      <div className="flex items-center justify-between gap-2 border-t border-zinc-800 pt-2">
+        <div className="flex items-baseline gap-1 text-[11px] font-mono tabular-nums text-zinc-400">
+          <span>{formatTimecode(entry.startSec)}</span>
+          <span className="text-zinc-600">→</span>
+          <span>{formatTimecode(entry.endSec)}</span>
+          <span className="ml-1 text-zinc-500">
+            ({durationSec.toFixed(2)}s)
+          </span>
+        </div>
         <button
           type="button"
-          onClick={handleDeleteToggle}
+          onClick={handleAdjustTime}
           className={cn(
-            'flex items-center gap-1 h-6 px-2 rounded text-[11px] transition-colors duration-150',
-            entry.isDeleted
-              ? 'text-green-400 hover:bg-zinc-800 hover:text-green-300'
-              : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
+            'flex items-center gap-1 h-6 px-2 rounded text-[11px] text-zinc-400',
+            'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
           )}
         >
-          {entry.isDeleted ? <Undo2 className="h-3 w-3" /> : <Trash2 className="h-3 w-3" />}
-          {entry.isDeleted
-            ? t('timeline.inspector.restore')
-            : t('timeline.inspector.delete')}
+          <Clock className="h-3 w-3" />
+          {t('timeline.inspector.adjustTime')}
         </button>
       </div>
     </div>
