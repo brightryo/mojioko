@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { roundToCs } from '@/lib/entry-edits'
+import { formatTimecode } from '@/lib/time'
 import {
   layoutEntries,
   chooseRulerStepSec,
@@ -34,13 +35,34 @@ import type { SubtitleEntry } from '../../../shared/types'
 // ---------------------------------------------------------------------------
 
 const RULER_HEIGHT_PX        = 28
-const TRACK_HEIGHT_PX        = 44
-const BLOCK_HEIGHT_PX        = 32
+/**
+ * Block + track heights — doubled vs the original 32/44 px so each block
+ * has room for a two-row layout (timecodes on top, text on bottom).  The
+ * pad value is intentionally a derived constant so the block always sits
+ * centred inside its track row.  REQ-061.
+ */
+const TRACK_HEIGHT_PX        = 88
+const BLOCK_HEIGHT_PX        = 64
 const BLOCK_VERTICAL_PAD_PX  = (TRACK_HEIGHT_PX - BLOCK_HEIGHT_PX) / 2
 const TRACK_GUTTER_LEFT_PX   = 56   // left gutter for track labels (T0, T1, …)
 const ZOOM_STEP_PX           = 10
 /** Width of each resize handle (left/right edge of a block) in CSS pixels. */
 const RESIZE_HANDLE_PX       = 6
+/**
+ * Minimum block width (px) at which the top "timecode row" is rendered.
+ * Below this the row is hidden entirely — showing only one end of the
+ * time range, OR showing both ends touching, would be worse than showing
+ * none (the user can't tell which end they're looking at).  REQ-061.
+ *
+ * Budget derivation (text-[10px] monospace tabular, empirically ~6.5 px
+ * per char rather than the textbook 6 px):
+ *   - "00:00:06.92" = 11 chars × ~6.5 px ≈ 72 px per timecode
+ *   - 2 × timecode + ≥ 4-char visible gap (24 px) + px-2 padding both
+ *     sides (16 px)
+ *   - 72 + 72 + 24 + 16 ≈ 184 → rounded up to 200 px for comfortable
+ *     headroom against subpixel rendering differences
+ */
+const TIME_ROW_MIN_BLOCK_WIDTH_PX = 200
 /**
  * Minimum block duration in seconds — protects against drags that would
  * collapse start ≥ end and produce a 0-duration row.  Matches the precision
@@ -252,8 +274,8 @@ function Block({
             onClick={handleBodyClick}
             title={displayText}
             className={cn(
-              'absolute inset-0 flex items-center px-2 rounded-md text-left text-[12px] leading-none',
-              'transition-colors duration-150 truncate select-none overflow-hidden',
+              'absolute inset-0 flex flex-col justify-center gap-0.5 px-2 py-1 rounded-md text-left',
+              'transition-colors duration-150 select-none overflow-hidden',
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40',
               'bg-zinc-700/70 text-zinc-100 border border-zinc-600/70',
               'hover:bg-zinc-700 hover:border-zinc-500',
@@ -264,7 +286,23 @@ function Block({
               !entry.isDeleted && 'cursor-grab active:cursor-grabbing'
             )}
           >
-            <span className="truncate">{displayText || '·'}</span>
+            {/* Row 1 — timecodes.  Rendered only when the block is wide
+                enough to show BOTH ends with at least a 2-char gap
+                between them.  Showing only one end would be ambiguous
+                (the user can't tell whether it's start or end), so we
+                go all-or-nothing.  REQ-061. */}
+            {widthPx >= TIME_ROW_MIN_BLOCK_WIDTH_PX && (
+              <div className="flex w-full items-baseline justify-between text-[10px] font-mono tabular-nums text-zinc-300/80 leading-none">
+                <span>{formatTimecode(entry.startSec)}</span>
+                <span>{formatTimecode(entry.endSec)}</span>
+              </div>
+            )}
+            {/* Row 2 — text (truncated, single line for now to keep the
+                block compact).  Placeholder `·` keeps the block visually
+                anchored when text is empty. */}
+            <span className="block truncate text-[12px] leading-tight">
+              {displayText || '·'}
+            </span>
           </button>
         </PopoverTrigger>
 
@@ -283,7 +321,25 @@ function Block({
         )}
       </div>
 
-      <PopoverContent side="top" align="start" sideOffset={8} className="p-3">
+      <PopoverContent
+        side="top"
+        align="start"
+        sideOffset={8}
+        className="p-3"
+        // REQ-061 #2(a): suppress Radix's default "focus first focusable
+        // child" so the textarea inside the inspector is NOT auto-focused
+        // / selected on open.  Click-to-edit is now the explicit gesture
+        // — opening a block highlights but does not enter edit mode,
+        // matching the list view's row-click behaviour.
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        // REQ-061 #2(b): the inspector lives in a Radix Portal at the
+        // DOM level, but React's synthetic events still bubble up the
+        // React tree — clicks inside the popover would reach the
+        // tracks' `onClick={handleTracksBackgroundClick}` and trigger a
+        // spurious video seek.  Swallow both pointerdown and click here.
+        onPointerDownCapture={(e) => e.stopPropagation()}
+        onClickCapture={(e) => e.stopPropagation()}
+      >
         <TimelineBlockInspector
           entry={entry}
           warnings={warnings}
