@@ -12,6 +12,7 @@ import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { cn } from '@/lib/utils'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
+import { roundToCs } from '@/lib/entry-edits'
 import {
   layoutEntries,
   chooseRulerStepSec,
@@ -540,6 +541,16 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         finalEnd   = Math.max(finalStart + MIN_BLOCK_SEC, Math.min(maxEnd, snapped.endSec))
         guide = snapped.guide
       }
+
+      // Round to centisecond precision before writing — `dxPx / pps` and the
+      // subsequent additions produce float drift (e.g. 13.0700001s for a
+      // round-trip drag back to 13.07s), which leaves the row visibly
+      // unchanged in the cs-formatted TimeInput but flagged as edited
+      // forever because the stored float ≠ original.  REQ-059.  This makes
+      // drag output match the TimeEditorDialog's `roundCs` confirm path and
+      // the cs-aligned values produced by the inline TimeInput.
+      finalStart = roundToCs(finalStart)
+      finalEnd   = roundToCs(finalEnd)
 
       // Visual snap guide — a 1 px vertical line in timeline-content
       // coordinates.  Cleared if no snap.
