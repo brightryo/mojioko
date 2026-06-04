@@ -332,13 +332,18 @@ function Block({
         // — opening a block highlights but does not enter edit mode,
         // matching the list view's row-click behaviour.
         onOpenAutoFocus={(e) => e.preventDefault()}
-        // REQ-061 #2(b): the inspector lives in a Radix Portal at the
-        // DOM level, but React's synthetic events still bubble up the
-        // React tree — clicks inside the popover would reach the
-        // tracks' `onClick={handleTracksBackgroundClick}` and trigger a
-        // spurious video seek.  Swallow both pointerdown and click here.
-        onPointerDownCapture={(e) => e.stopPropagation()}
-        onClickCapture={(e) => e.stopPropagation()}
+        // REQ-061 #2(b) / REQ-062: the inspector lives in a Radix
+        // Portal at the DOM level, but React's synthetic events still
+        // bubble up the React tree — clicks inside the popover would
+        // reach the tracks' `onClick={handleTracksBackgroundClick}` and
+        // trigger a spurious video seek.  Stop the event in **bubble**
+        // phase (not capture) so the target's own handlers — X-close,
+        // Reset, Delete, AutoLineBreak, ColorPicker, sliders, etc. —
+        // fire first; we only suppress further upward propagation
+        // toward the tracks div.  Capture-phase stops killed every
+        // button inside the inspector silently (REQ-062 #1 / #2).
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         <TimelineBlockInspector
           entry={entry}
