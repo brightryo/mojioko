@@ -266,8 +266,8 @@ export function TimelineBlockInspector({
         </div>
         <button
           type="button"
-          title={t('common:button.close')}
-          aria-label={t('common:button.close')}
+          title={t('common:action.close')}
+          aria-label={t('common:action.close')}
           onClick={onClose}
           className={cn(
             'flex items-center justify-center h-7 w-7 rounded',
