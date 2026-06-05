@@ -40,7 +40,11 @@ export function Breadcrumb({ currentStep, appVersion }: BreadcrumbProps) {
             icon (build/icon.ico) is the canonical brand mark. */}
         <div className="flex items-center gap-2 mr-5 flex-shrink-0">
           <span className="text-[12px] font-semibold text-zinc-300 select-none">{APP_NAME}</span>
-          <span className="text-[11px] text-zinc-600 select-none tabular-nums">{appVersion}</span>
+          {/* REQ-067 phase B: was text-zinc-600 (disabled tier, ~2.5:1
+              contrast — spec violation for permanently-visible chrome).
+              Lifted to text-zinc-400 (secondary tier ~7.8:1, AAA pass) —
+              the version is meta info, not a disabled element. */}
+          <span className="text-[11px] text-zinc-400 select-none tabular-nums">{appVersion}</span>
         </div>
 
         <div className="h-4 w-px bg-zinc-800 mr-5 flex-shrink-0" aria-hidden="true" />

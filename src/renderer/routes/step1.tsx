@@ -306,14 +306,17 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const audioTracks = video?.audioTracks ?? []
 
   const footerCenter = (
+    /* REQ-067 phase B: status colors lifted from text-zinc-500 to
+       text-zinc-300 so the model-status and privacy line stay legible
+       in the chrome.  Matches the same treatment in step2 / step3. */
     <div className="flex items-center gap-4">
-      <span className="text-[12px] text-zinc-500">
+      <span className="text-[12px] text-zinc-300">
         {activeModelId
           ? t('footer.modelStatus', { model: activeModelId })
           : t('footer.modelNotDownloaded', { model: '—' })}
       </span>
       <span className="w-px h-3 bg-zinc-700 flex-shrink-0" />
-      <span className="flex items-center gap-1.5 text-[12px] text-zinc-500">
+      <span className="flex items-center gap-1.5 text-[12px] text-zinc-300">
         <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
         {t('footer.privacyNote')}
       </span>

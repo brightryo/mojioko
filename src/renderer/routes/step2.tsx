@@ -576,7 +576,11 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   )
 
   const footerCenter = (
-    <span className="text-[12px] text-zinc-500">
+    /* REQ-067 phase B: zinc-500 → zinc-300 so the per-step counts
+       (edited / warnings / deleted) stay readable at a glance.  The
+       inner "selected" span keeps its `text-foreground` accent so the
+       active-selection callout still wins visual priority. */
+    <span className="text-[12px] text-zinc-300">
       {selectedRowIds.size > 0 && (
         <>
           <span className="text-foreground">

@@ -37,7 +37,10 @@ export function AboutDialog() {
               window icon (build/icon.ico) is the canonical brand mark. */}
           <div>
             <p className="text-[14px] font-semibold text-zinc-50">{APP_NAME}</p>
-            <p className="text-[12px] text-zinc-500">{t('settings:about.version')} {APP_VERSION}</p>
+            {/* REQ-067 phase B: was text-zinc-500 (hint tier).  Version is
+                meta info that the user reads when filing bug reports — lift
+                to text-zinc-400 (secondary tier, AAA pass). */}
+            <p className="text-[12px] text-zinc-400">{t('settings:about.version')} {APP_VERSION}</p>
           </div>
           <div className="border-t border-zinc-800 pt-3 space-y-2">
             <InfoRow label={t('settings:about.license')} value={t('settings:about.licenseValue')} />
