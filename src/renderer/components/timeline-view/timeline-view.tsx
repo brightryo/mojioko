@@ -54,15 +54,16 @@ const RESIZE_HANDLE_PX       = 6
  * time range, OR showing both ends touching, would be worse than showing
  * none (the user can't tell which end they're looking at).  REQ-061.
  *
- * Budget derivation (text-micro = 10px monospace tabular, empirically ~6.5 px
- * per char rather than the textbook 6 px):
- *   - "00:00:06.92" = 11 chars × ~6.5 px ≈ 72 px per timecode
- *   - 2 × timecode + ≥ 4-char visible gap (24 px) + px-2 padding both
- *     sides (16 px)
- *   - 72 + 72 + 24 + 16 ≈ 184 → rounded up to 200 px for comfortable
- *     headroom against subpixel rendering differences
+ * REQ-071 Phase 3.6: in-block timecodes lifted text-micro (10 px) → text-caption
+ * (12 px) so the digits are actually readable.  Budget recomputed:
+ *   - "00:00:06.92" = 11 chars × ~7.5 px (12-px mono tabular) ≈ 83 px each
+ *   - 2 × 83 + ≥ 4-char visible gap (28 px at 12 px) + px-2 padding (16 px)
+ *   - 83 + 83 + 28 + 16 ≈ 210 → rounded up to 220 px for subpixel headroom
+ * The block-text row beneath (text-body-sm 13/leading-tight) sits on the
+ * same 64-px BLOCK_HEIGHT_PX without change: caption 12 + body-sm 13 ×
+ * leading-tight ≈ 12 + 16 = 28 px content, well inside 64.
  */
-const TIME_ROW_MIN_BLOCK_WIDTH_PX = 200
+const TIME_ROW_MIN_BLOCK_WIDTH_PX = 220
 /**
  * Minimum block duration in seconds — protects against drags that would
  * collapse start ≥ end and produce a 0-duration row.  Matches the precision
@@ -149,7 +150,13 @@ function Ruler({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
         style={{ left: `${xPx}px` }}
       >
         <div className="h-full w-px bg-zinc-700/60" />
-        <span className="absolute top-1 left-1 text-micro font-mono tabular-nums text-zinc-500 select-none">
+        {/* REQ-071 Phase 3.6: ruler labels lifted text-micro (10) ->
+            text-caption (12) so the tick numbers (0:00, 0:02, ...) are
+            actually readable.  chooseRulerStepSec keeps a ~100-px gap
+            between ticks; a 12-px "0:00.0" label is ~45 px wide, so labels
+            still don't collide at the densest sub-second zoom levels.  No
+            change to chooseRulerStepSec was needed. */}
+        <span className="absolute top-1 left-1 text-caption font-mono tabular-nums text-zinc-500 select-none">
           {formatRulerLabel(sec, stepSec)}
         </span>
       </div>
@@ -339,7 +346,7 @@ function Block({
                 (the user can't tell whether it's start or end), so we
                 go all-or-nothing.  REQ-061. */}
             {widthPx >= TIME_ROW_MIN_BLOCK_WIDTH_PX && (
-              <div className="flex w-full items-baseline justify-between text-micro font-mono tabular-nums text-zinc-300/80 leading-none">
+              <div className="flex w-full items-baseline justify-between text-caption font-mono tabular-nums text-zinc-300/80 leading-none">
                 <span>{formatTimecode(entry.startSec)}</span>
                 <span>{formatTimecode(entry.endSec)}</span>
               </div>
@@ -996,7 +1003,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                       The 0-based aria-label in Block stays 0-based for
                       consistency with the placement.trackIndex value the
                       smoke scripts query. */}
-                  <span className="text-micro font-mono text-zinc-500 select-none">
+                  <span className="text-caption font-mono text-zinc-500 select-none">
                     {t('timeline.trackLabel', { index: i + 1 })}
                   </span>
                 </div>
