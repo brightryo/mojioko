@@ -254,7 +254,10 @@ export function WhisperModelManager({
         <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
         <span className="font-mono">{activeModel?.displayName}</span>
       </span>
-      <span className="flex items-center gap-0.5 text-caption font-medium px-2 py-0.5 rounded-full bg-green-500 text-green-950 whitespace-nowrap">
+      {/* REQ-071 Phase 3.7-A: text-green-950 -> text-zinc-950 — same hue
+          collision Phase 3.6 fixed on the primary button variant.  Even
+          this small pill suffered from green-on-green readability. */}
+      <span className="flex items-center gap-0.5 text-caption font-medium px-2 py-0.5 rounded-full bg-green-500 text-zinc-950 whitespace-nowrap">
         {t('model.active')}
       </span>
     </div>
@@ -575,7 +578,9 @@ function ModelCard({
           <span
             className={cn(
               'flex-shrink-0 flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
-              isActive ? 'bg-green-500 text-green-950' : 'bg-blue-500/15 text-blue-400'
+              // REQ-071 Phase 3.7-A: green-950 -> zinc-950 on the green
+              // active branch — same hue-collision fix.
+              isActive ? 'bg-green-500 text-zinc-950' : 'bg-blue-500/15 text-blue-400'
             )}
           >
             <Check className="h-2.5 w-2.5" />
