@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { bumpRenderCount } from '@/lib/perf-counter'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Plus, RotateCcw, RotateCw, ChevronDown } from 'lucide-react'
@@ -102,6 +103,7 @@ interface Step2RouteProps {
 
 
 export default function Step2Route({ appVersion }: Step2RouteProps) {
+  bumpRenderCount('Step2Route')
   const { t } = useTranslation(['step2', 'common'])
   const navigate = useNavigate()
 
@@ -359,8 +361,22 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     })
   }
 
-  /** Open the dialog in `edit` mode for the given existing entry. */
-  function openEditTimeDialog(entryId: string) {
+  /**
+   * Open the dialog in `edit` mode for the given existing entry.
+   *
+   * REQ-071 Phase 3.9: wrapped in useCallback so the function reference is
+   * stable across re-renders driven by unrelated state (specifically the
+   * `videoCurrentTimeSec` subscription this route holds for the dialog's
+   * "current playhead" snap button).  Step 2 re-renders on every playhead
+   * tick during playback; without useCallback, every tick produced a fresh
+   * `openEditTimeDialog` reference, which propagated into `TimelineView`'s
+   * `onAdjustTime` prop, then into every `Block` as `onAdjustTime`, which
+   * defeated `React.memo(Block)`'s shallow prop compare and re-reconciled
+   * all 12 blocks per tick.  Caching with `[entries]` keeps the reference
+   * steady through the playback case (where entries don't change), so
+   * Block's memo successfully skips the unchanged work.
+   */
+  const openEditTimeDialog = useCallback((entryId: string) => {
     const fullIdx = entries.findIndex((e) => e.id === entryId)
     if (fullIdx === -1) return
     const entry = entries[fullIdx]
@@ -401,7 +417,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
       nextEntryStartSec: nextStart,
       nextEntryEndSec: nextEnd
     })
-  }
+  }, [entries])
 
   function closeEditor() {
     setEditor({ open: false })
