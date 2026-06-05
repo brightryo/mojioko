@@ -79,7 +79,10 @@ const MIN_BLOCK_SEC          = 0.05
 interface RulerProps {
   pixelsPerSec: number
   totalSec: number
-  /** Click on ruler → seek video to that time. */
+  /**
+   * Seek the video to `sec`.  Called once per pointerdown (instant
+   * jump) AND continuously during a ruler-scrub drag.  REQ-063 #2.
+   */
   onSeek: (sec: number) => void
 }
 
@@ -87,11 +90,51 @@ function Ruler({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
   const stepSec = chooseRulerStepSec(pixelsPerSec)
   const tickCount = Math.ceil(totalSec / stepSec) + 1
   const widthPx = totalSec * pixelsPerSec
+  const rulerRef = useRef<HTMLDivElement>(null)
 
-  function handleClick(e: React.MouseEvent<HTMLDivElement>) {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const xPx = e.clientX - rect.left
-    onSeek(Math.max(0, xPx / pixelsPerSec))
+  // Scrub state: when a pointer is held down on the ruler, every
+  // pointermove fires onSeek so the video preview tracks the cursor in
+  // real time.  REQ-063 #2.  Plain refs (not state) because we don't
+  // need re-renders while dragging — the playhead position is driven by
+  // the shared `videoCurrentTimeSec` store slice that VideoPreviewPanel
+  // updates as the video element seeks.
+  const isScrubbingRef = useRef(false)
+
+  function xToSec(clientX: number): number {
+    const el = rulerRef.current
+    if (!el) return 0
+    const rect = el.getBoundingClientRect()
+    const xPx = clientX - rect.left
+    const sec = xPx / pixelsPerSec
+    // Clamp to the ruler's visible range — outside the timeline is not a
+    // meaningful seek target and the video element would clamp anyway.
+    return Math.max(0, Math.min(totalSec, sec))
+  }
+
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return
+    e.preventDefault()
+    isScrubbingRef.current = true
+    // Capture so the up event still reaches us if the cursor leaves the
+    // ruler mid-drag (matches the convention in Block.handleEdgePointerDown).
+    e.currentTarget.setPointerCapture(e.pointerId)
+    onSeek(xToSec(e.clientX))
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!isScrubbingRef.current) return
+    onSeek(xToSec(e.clientX))
+  }
+
+  function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!isScrubbingRef.current) return
+    isScrubbingRef.current = false
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      // Capture may already be released if the element re-mounted —
+      // safe to ignore.
+    }
   }
 
   const ticks = []
@@ -115,8 +158,12 @@ function Ruler({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
 
   return (
     <div
-      onClick={handleClick}
-      className="relative cursor-pointer bg-zinc-900 border-b border-zinc-800"
+      ref={rulerRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      className="relative cursor-ew-resize bg-zinc-900 border-b border-zinc-800 touch-none select-none"
       style={{ width: `${widthPx}px`, height: `${RULER_HEIGHT_PX}px` }}
     >
       {ticks}
@@ -828,6 +875,25 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
           >
             <ZoomOut className="h-3.5 w-3.5" />
           </button>
+          {/* Continuous zoom slider — REQ-063 #3.  Native <input
+              type=range> instead of the commit-only OutlineThicknessSlider
+              because zoom needs LIVE updates so the user sees the timeline
+              re-scale while they drag.  accentColor routes the thumb through
+              --primary like every other slider in the app.  Reads pixelsPerSec
+              from the store (Ctrl+wheel zoom updates the same slice) so
+              wheel-driven zoom drives the slider position automatically. */}
+          <input
+            type="range"
+            min={TIMELINE_PPS_MIN}
+            max={TIMELINE_PPS_MAX}
+            step={1}
+            value={pixelsPerSec}
+            onChange={(e) => setPixelsPerSec(Number(e.target.value))}
+            title={t('timeline.toolbar.zoomSlider')}
+            aria-label={t('timeline.toolbar.zoomSlider')}
+            className="w-32"
+            style={{ accentColor: 'hsl(var(--primary))' }}
+          />
           <span className="font-mono tabular-nums text-[11px] text-zinc-500 select-none w-[64px] text-center">
             {t('timeline.toolbar.zoomLevel', { pps: pixelsPerSec })}
           </span>

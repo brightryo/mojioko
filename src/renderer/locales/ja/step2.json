@@ -224,6 +224,7 @@
     "toolbar": {
       "zoomOut": "縮小",
       "zoomIn": "拡大",
+      "zoomSlider": "ズーム倍率",
       "zoomLevel": "{{pps}} px/秒",
       "trackCount": "{{count}} トラック",
       "snap": "吸着",

@@ -224,6 +224,7 @@
     "toolbar": {
       "zoomOut": "Zoom out",
       "zoomIn": "Zoom in",
+      "zoomSlider": "Zoom level",
       "zoomLevel": "{{pps}} px/s",
       "trackCount": "{{count}} tracks",
       "snap": "Snap",

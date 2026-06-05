@@ -89,11 +89,13 @@ interface UiStore {
    */
   fontInventoryVersion: number
   /**
-   * STEP 2 lower-area view selection.  Session-only — defaults to `'list'`
-   * on every fresh mount so the user lands on the familiar table; switching
-   * to `'timeline'` is remembered across navigations within the session.
-   * Both views read/write the same `useProjectStore.entries`; this flag
-   * only controls which component renders.  See `dev-docs/specs/timeline.md`.
+   * STEP 2 lower-area view selection.  Session-only — defaults to
+   * `'timeline'` on every fresh mount (REQ-063) so the user lands on the
+   * timeline editor immediately after transcription; the list view is
+   * still one click away via `<EditorViewSwitcher>` and the choice
+   * persists for the rest of the session.  Both views read/write the
+   * same `useProjectStore.entries`; this flag only controls which
+   * component renders.  See `dev-docs/specs/timeline.md`.
    */
   editorViewMode: EditorViewMode
   /**
@@ -158,7 +160,7 @@ export const useUiStore = create<UiStore>((set) => ({
   selectedRowIds: new Set<string>(),
   selectionAnchorId: null,
   fontInventoryVersion: 0,
-  editorViewMode: 'list',
+  editorViewMode: 'timeline',
   timelinePixelsPerSec: TIMELINE_PPS_DEFAULT,
   timelineSnapEnabled: true,
 
