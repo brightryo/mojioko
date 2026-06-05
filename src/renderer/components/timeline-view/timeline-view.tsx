@@ -913,8 +913,13 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               first, then the readout that reflects the result".
               REQ-069 #1: text-[11px] → text-body-sm (body-sm tier) so the
               "px/秒" readout reads at the same scale as other status text;
-              w-[64px] → w-[72px] to absorb the slightly wider 13-px digits. */}
-          <span className="font-mono tabular-nums text-body-sm text-zinc-500 select-none w-[72px] text-center">
+              w-[64px] → w-[72px] to absorb the slightly wider 13-px digits.
+              Phase 3.5: bumped 13 → body (15) so the readout — which IS the
+              value the user reads off the toolbar — stops sitting one tier
+              below the body text on the rest of the screen.  w-[72px] →
+              w-[84px] for the wider 15-px tabular digits ("130 px/秒" was
+              previously ~70px, now ~80px). */}
+          <span className="font-mono tabular-nums text-body text-zinc-500 select-none w-[84px] text-center">
             {t('timeline.toolbar.zoomLevel', { pps: pixelsPerSec })}
           </span>
         </div>

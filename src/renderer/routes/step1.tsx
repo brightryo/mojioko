@@ -36,13 +36,17 @@ import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 
 function InfoRow({ label, value }: { label: string; value: string }) {
-  // REQ-072: label uses `callout` (13/semibold) — item-name role in a narrow
-  // row.  Value stays `body-sm` regular mono.  Same size for vertical
-  // alignment; weight + color differentiate label from value.
+  // REQ-071 Phase 3.5: value bumped to `body` (15) so it physically reads as
+  // the primary info on the row.  Label stays `callout` (13/semibold + muted)
+  // as the supporting category marker.  Hierarchy now is:
+  //   - size : value (15) > label (13)
+  //   - color: value (foreground) > label (muted)
+  //   - weight: label (semibold) carries category emphasis without
+  //             out-shouting the value
   return (
     <div className="flex items-center justify-between py-1.5">
       <span className="text-callout font-semibold text-muted-foreground">{label}</span>
-      <span className="text-body-sm text-foreground font-mono tabular-nums">{value}</span>
+      <span className="text-body text-foreground font-mono tabular-nums">{value}</span>
     </div>
   )
 }

@@ -321,7 +321,11 @@ export function TimelineBlockInspector({
                 max: FONT_SIZE_MAX_PX
               })}
               className={cn(
-                'w-20 h-7 rounded border bg-zinc-950 px-1.5 text-center text-body-sm text-zinc-100',
+                // Phase 3.5: size input bumped to `body` (15) so the numeric
+                // value reads at the same scale as the screen's body content
+                // instead of sitting one tier below the field label
+                // (callout 13/600).
+                'w-20 h-7 rounded border bg-zinc-950 px-1.5 text-center text-body text-zinc-100',
                 'focus:outline-none focus:ring-1',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
@@ -426,8 +430,16 @@ export function TimelineBlockInspector({
       {/* § 6 — Time row.  Read-only display + adjust-time CTA at the
           bottom of the inspector to match the visual hierarchy "act
           first → see status → tweak content → finally time" agreed for
-          REQ-061. */}
-      <div className="flex items-center justify-between gap-2 border-t border-zinc-800 pt-2">
+          REQ-061.
+          Phase 3.5: the timecode row was lifted 11 → body-sm (13) in
+          Phase 3 and stopped fitting on a single line beside the
+          adjust-time chip inside the 320-px popover (the JP label
+          「時間を調整」 wraps to「時間/を調」at 13-px mono + chip width).
+          Split into two stacked rows: timecodes top, chip bottom-right.
+          flex-col + self-end keeps the chip aligned to the popover's
+          right edge so the affordance still feels "next to" the
+          time it modifies. */}
+      <div className="flex flex-col gap-1.5 border-t border-zinc-800 pt-2">
         <div className="flex items-baseline gap-1 text-body-sm font-mono tabular-nums text-zinc-400">
           <span>{formatTimecode(entry.startSec)}</span>
           <span className="text-zinc-600">→</span>
@@ -440,7 +452,7 @@ export function TimelineBlockInspector({
           type="button"
           onClick={handleAdjustTime}
           className={cn(
-            'flex items-center gap-1 h-6 px-2 rounded text-caption text-zinc-400',
+            'self-end flex items-center gap-1 h-6 px-2 rounded text-caption text-zinc-400',
             'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
           )}
         >

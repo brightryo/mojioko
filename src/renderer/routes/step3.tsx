@@ -606,13 +606,16 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   // height to share (e.g. a future surface that uses this component in
   // a tighter container).
   //
-  // REQ-072: label uses `callout` (13/semibold) — item-name role in a
-  // narrow row.  Value stays body-sm regular mono.  Weight differentiates
-  // label from value at matching size.
+  // REQ-071 Phase 3.5: value bumped to `body` (15) so the summary's numbers
+  // (1920×1080, 0:23, 23 MB, etc.) read as primary information — they are
+  // the user's confirmation before render.  Label stays `callout`
+  // (13/semibold + muted) as a category marker that does not out-shout the
+  // value.  Mixed-size flex row uses items-center to keep the rows
+  // vertically tidy.
   return (
     <div className="flex flex-1 items-center justify-between py-2 min-h-[28px]">
       <span className="text-callout font-semibold text-muted-foreground">{label}</span>
-      <span className="text-body-sm text-foreground font-mono tabular-nums">{value}</span>
+      <span className="text-body text-foreground font-mono tabular-nums">{value}</span>
     </div>
   )
 }
