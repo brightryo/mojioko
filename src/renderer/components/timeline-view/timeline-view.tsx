@@ -910,25 +910,30 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
           </button>
           {/* REQ-068: zoom level label moved to the END of the cluster
               ([−][slider][+][label]).  Reading order matches "control inputs
-              first, then the readout that reflects the result". */}
-          <span className="font-mono tabular-nums text-[11px] text-zinc-500 select-none w-[64px] text-center">
+              first, then the readout that reflects the result".
+              REQ-069 #1: text-[11px] → text-[13px] (body-sm tier) so the
+              "px/秒" readout reads at the same scale as other status text;
+              w-[64px] → w-[72px] to absorb the slightly wider 13-px digits. */}
+          <span className="font-mono tabular-nums text-[13px] text-zinc-500 select-none w-[72px] text-center">
             {t('timeline.toolbar.zoomLevel', { pps: pixelsPerSec })}
           </span>
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-[11px] text-zinc-500 flex items-center gap-1.5 select-none">
-            <GanttChartSquare className="h-3 w-3" />
-            {t('timeline.toolbar.trackCount', { count: trackCount })}
-          </span>
+          {/* REQ-069 #2: 「Nトラック」 readout removed.  The count is a
+              by-product of the greedy lane-assignment algorithm with no
+              meaningful action for the user — keeping it on permanent
+              chrome was noise.  Snap toggle stays (functional control). */}
           {/* Snap toggle — disabled-looking in Phase 1 (algorithm lands in Phase 5)
-              but the flag is wired so behaviour change won't need a new UI later. */}
+              but the flag is wired so behaviour change won't need a new UI later.
+              REQ-069 #1: text-[11px] → text-[13px] to match the rest of the
+              upgraded toolbar typography. */}
           <button
             type="button"
             onClick={() => setSnapEnabled(!snapEnabled)}
             title={t('timeline.toolbar.snapHelp')}
             className={cn(
-              'flex h-7 items-center gap-1.5 px-2 rounded-md text-[11px] font-medium',
+              'flex h-7 items-center gap-1.5 px-2 rounded-md text-[13px] font-medium',
               'transition-colors duration-150',
               snapEnabled
                 ? 'bg-zinc-800 text-zinc-200'
