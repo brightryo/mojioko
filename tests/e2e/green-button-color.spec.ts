@@ -30,6 +30,14 @@ test('footer primary CTA renders zinc-950 on green-500', async () => {
   })
 
   const window = await electronApp.firstWindow()
+  window.on('console', (msg) => console.log('[renderer console]', msg.type(), msg.text()))
+  window.on('pageerror', (err) => console.log('[renderer pageerror]', err.message))
+  // The main process loads from http://localhost:5173 when !app.isPackaged
+  // (i.e. running via `node out/main/index.js` under Playwright).  No
+  // Vite dev server is running for these specs, so the initial load
+  // fails — navigate manually to the built renderer.
+  const indexFile = path.resolve(__dirname, '../../out/renderer/index.html')
+  await window.goto('file:///' + indexFile.replace(/\\/g, '/'))
   await window.waitForSelector('button')
 
   const result = await window.evaluate(() => {

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, useCallback, useState } from 'react'
+import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ZoomIn, ZoomOut, Magnet, GanttChartSquare } from 'lucide-react'
 import { useProjectStore } from '@/stores/project-store'
@@ -28,6 +28,7 @@ import {
 import type { EntryWarnings } from '@/lib/entry-warnings'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TimelineBlockInspector } from './timeline-block-inspector'
+import { bumpRenderCount } from '@/lib/perf-counter'
 import type { SubtitleEntry } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -87,7 +88,8 @@ interface RulerProps {
   onSeek: (sec: number) => void
 }
 
-function Ruler({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
+function RulerImpl({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
+  bumpRenderCount('Ruler')
   const stepSec = chooseRulerStepSec(pixelsPerSec)
   const tickCount = Math.ceil(totalSec / stepSec) + 1
   const widthPx = totalSec * pixelsPerSec
@@ -178,6 +180,13 @@ function Ruler({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
   )
 }
 
+/**
+ * React.memo'd Ruler — same reasoning as `Block`: the parent re-renders on
+ * every playhead tick, but Ruler's props (pixelsPerSec, totalSec, onSeek)
+ * are stable as long as zoom and duration are stable.  REQ-071 Phase 3.9.
+ */
+const Ruler = memo(RulerImpl)
+
 type DragKind = 'resize-start' | 'resize-end' | 'move'
 
 interface BlockProps {
@@ -197,13 +206,17 @@ interface BlockProps {
   isDragging: boolean
   /** Click handler — focus the row + seek the video + open the inspector. */
   onSelect: (id: string, startSec: number) => void
-  onInspectorOpenChange: (open: boolean) => void
+  /** Note the (id, open) signature — Block calls back with its own id so the
+   *  parent does not need to bake a fresh closure per Block per render.  A
+   *  closure-per-Block defeats React.memo's shallow prop compare and brings
+   *  the playhead-tick stutter back. */
+  onInspectorOpenChange: (id: string, open: boolean) => void
   onAdjustTime: (entryId: string) => void
   /** Start a drag (resize or move) — TimelineView attaches window listeners. */
   onStartDrag: (kind: DragKind, entry: SubtitleEntry, clientX: number) => void
 }
 
-function Block({
+function BlockImpl({
   entry,
   warnings,
   leftPx,
@@ -220,6 +233,7 @@ function Block({
   onAdjustTime,
   onStartDrag
 }: BlockProps) {
+  bumpRenderCount('Block')
   const { t } = useTranslation(['step2'])
   const ariaLabel = t('timeline.block.ariaLabel', {
     track: trackIndex,
@@ -285,7 +299,7 @@ function Block({
         // Radix tries to open the popover on pointerdown by default — when a
         // drag is in progress we want to suppress that.
         if (isDragging && open) return
-        onInspectorOpenChange(open)
+        onInspectorOpenChange(entry.id, open)
       }}
     >
       {/* Outer wrapper sized to the block — left handle / body button /
@@ -403,12 +417,22 @@ function Block({
           entry={entry}
           warnings={warnings}
           onAdjustTime={onAdjustTime}
-          onClose={() => onInspectorOpenChange(false)}
+          onClose={() => onInspectorOpenChange(entry.id, false)}
         />
       </PopoverContent>
     </Popover>
   )
 }
+
+/**
+ * React.memo'd export of Block — the parent TimelineView re-renders on
+ * every videoCurrentTimeSec tick (playback) and every timelinePixelsPerSec
+ * tick (zoom drag); without memoization React reconciles all N blocks on
+ * each of those renders even when block props haven't changed.  The
+ * playhead case in particular has zero block-prop deltas, so memo cuts
+ * those Block renders to zero.  REQ-071 Phase 3.9.
+ */
+const Block = memo(BlockImpl)
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -449,6 +473,7 @@ interface TimelineViewProps {
  * `dev-docs/specs/timeline.md`.
  */
 export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: TimelineViewProps) {
+  bumpRenderCount('TimelineView')
   const { t } = useTranslation(['step2'])
   const entries = useProjectStore((s) => s.entries)
   const tableFilter = useUiStore((s) => s.tableFilter)
@@ -749,6 +774,11 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     setOpenInspectorId(id)
   }, [setFocusedRowId, setVideoSeekRequest])
 
+  // REQ-071 Phase 3.9: signature is (id, open) so the parent can pass a
+  // SINGLE stable callback to every Block (rather than baking a
+  // `(open) => handleInspectorOpenChange(entry.id, open)` closure per row
+  // per render — that defeated React.memo's prop compare and brought back
+  // the all-blocks-re-render-on-playhead-tick stutter).
   const handleInspectorOpenChange = useCallback((id: string, open: boolean) => {
     // Guard the close path so a stale event (e.g. another block opened in
     // the meantime) does not unintentionally clobber the current owner.
@@ -1095,9 +1125,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                       isInspectorOpen={openInspectorId === entry.id}
                       isDragging={draggingId === entry.id}
                       onSelect={handleSelectBlock}
-                      onInspectorOpenChange={(open) =>
-                        handleInspectorOpenChange(entry.id, open)
-                      }
+                      onInspectorOpenChange={handleInspectorOpenChange}
                       onAdjustTime={onAdjustTime}
                       onStartDrag={handleStartDrag}
                     />
