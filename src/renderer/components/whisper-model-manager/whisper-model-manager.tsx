@@ -250,7 +250,7 @@ export function WhisperModelManager({
   // Header status badge (always visible regardless of open/closed)
   const headerBadge = !state ? null : hasActive ? (
     <div className="flex items-center gap-1.5 flex-shrink-0">
-      <span className="flex items-center gap-1 text-[13px] text-zinc-300">
+      <span className="flex items-center gap-1 text-body-sm text-zinc-300">
         <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
         <span className="font-mono">{activeModel?.displayName}</span>
       </span>
@@ -282,7 +282,7 @@ export function WhisperModelManager({
         className="flex items-center gap-2 w-full cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
       >
         <Sparkles className="h-4 w-4 text-zinc-400 flex-shrink-0" />
-        <span className="text-[14px] font-medium text-zinc-300 uppercase tracking-wider">
+        <span className="text-body font-medium text-zinc-300 uppercase tracking-wider">
           {t('whisperModel.label')}
         </span>
         {/* Stop propagation so tooltip interaction doesn't toggle accordion */}
@@ -328,7 +328,7 @@ export function WhisperModelManager({
           >
             <div className="space-y-3 pt-3">
               {/* Long description */}
-              <p className="text-[13px] text-zinc-500 leading-relaxed">
+              <p className="text-body-sm text-zinc-500 leading-relaxed">
                 {t('whisperModel.descriptionLong')}
               </p>
 
@@ -354,7 +354,7 @@ export function WhisperModelManager({
 
               {/* Bottom status bar */}
               <div className="rounded-lg border border-zinc-800 px-4 py-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-5 text-[13px]">
+                <div className="flex items-center gap-5 text-body-sm">
                   <span className="flex items-center gap-1.5 text-zinc-400">
                     <Database className="h-3.5 w-3.5 flex-shrink-0" />
                     {t('model.totalUsed')}: {state ? formatBytes(state.totalUsedBytes) : '—'}
@@ -512,7 +512,7 @@ function InstallInfoRow({
   mono?: boolean
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 text-[13px]">
+    <div className="flex items-start justify-between gap-3 text-body-sm">
       <span className="text-zinc-500 flex-shrink-0">{label}</span>
       <span
         className={cn('text-zinc-300 text-right min-w-0 break-all', mono && 'font-mono text-[11px]')}
@@ -564,7 +564,7 @@ function ModelCard({
       {/* Top: name + status badge */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[14px] font-semibold text-zinc-100 leading-tight">
+          <p className="text-body font-semibold text-zinc-100 leading-tight">
             {model.displayName}
           </p>
           <p className={cn('text-[11px] mt-0.5', isActive ? 'text-green-600' : 'text-zinc-600')}>

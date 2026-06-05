@@ -126,7 +126,7 @@ export function SettingsDialog() {
           <TabsContent value="general" className="min-h-[490px]">
             <div className="grid grid-cols-2 items-start gap-y-4 gap-x-6 pt-1">
               {/* Language */}
-              <span className="whitespace-nowrap text-[14px] text-zinc-300 self-center leading-none mt-1">
+              <span className="whitespace-nowrap text-body text-zinc-300 self-center leading-none mt-1">
                 {t('general.language')}
               </span>
               <div className="flex items-center">
@@ -142,7 +142,7 @@ export function SettingsDialog() {
               </div>
 
               {/* Fade duration */}
-              <span className="whitespace-nowrap text-[14px] text-zinc-300 self-start leading-none mt-2.5">
+              <span className="whitespace-nowrap text-body text-zinc-300 self-start leading-none mt-2.5">
                 {t('general.fadeDuration')}
               </span>
               <div className="space-y-1">
@@ -155,7 +155,7 @@ export function SettingsDialog() {
                   onChange={handleFadeDraftChange}
                   onBlur={handleFadeBlur}
                   onKeyDown={handleFadeKeyDown}
-                  className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-center text-[14px] text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                  className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-center text-body text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <p className="text-[11px] text-zinc-500">{t('general.fadeDurationHint')}</p>
               </div>

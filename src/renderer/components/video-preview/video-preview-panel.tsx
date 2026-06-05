@@ -405,7 +405,7 @@ export function VideoPreviewPanel() {
             remaining horizontal space so the filename sits in the middle
             of the header regardless of how wide the panel is. */}
         <div className="flex-1 flex items-center justify-center gap-1.5 min-w-0 px-2">
-          <span className="min-w-0 truncate text-[13px] text-foreground/80" title={video.path}>
+          <span className="min-w-0 truncate text-body-sm text-foreground/80" title={video.path}>
             {filename}
           </span>
           <button
@@ -505,7 +505,7 @@ export function VideoPreviewPanel() {
                         style={{ width: `${videoW}px`, height: `${videoH}px` }}
                       >
                         {hasError ? (
-                          <span className="px-6 text-xs text-muted-foreground">{t('videoPreview.error')}</span>
+                          <span className="px-6 text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
                         ) : (
                           <>
                             <video
@@ -532,7 +532,7 @@ export function VideoPreviewPanel() {
                           </>
                         )}
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
+                      <p className="mt-1 text-body-sm text-muted-foreground">
                         {t('subtitleLayout.previewNote')}
                       </p>
                     </div>
@@ -562,7 +562,7 @@ export function VideoPreviewPanel() {
                       <p className="text-[10px] font-medium uppercase tracking-wider text-foreground/70 mb-1.5">
                         {t('subtitleLayout.layoutGroup')}
                       </p>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-body-sm text-muted-foreground">
                         <div className="flex items-center gap-1.5">
                           <span>{t('subtitleLayout.horizontalShort')}</span>
                           <Segmented
@@ -591,7 +591,7 @@ export function VideoPreviewPanel() {
                             max={300}
                             value={burnin.verticalMarginPx}
                             onChange={(e) => updateBurnin({ verticalMarginPx: parseInt(e.target.value, 10) || 0 })}
-                            className="h-7 w-14 rounded border border-border bg-input px-1.5 text-center text-[13px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring/30 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                            className="h-7 w-14 rounded border border-border bg-input px-1.5 text-center text-body-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring/30 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </div>
                       </div>
@@ -602,7 +602,7 @@ export function VideoPreviewPanel() {
                       <p className="text-[10px] font-medium uppercase tracking-wider text-foreground/70 mb-1.5">
                         {t('subtitleLayout.backgroundGroup')}
                       </p>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-body-sm text-muted-foreground">
                         {/* Toggle — label-less because the group title
                             ("文字背景") already names the switch. */}
                         <Switch
@@ -706,7 +706,7 @@ export function VideoPreviewPanel() {
                       }}
                       className="flex-1 h-1.5 cursor-pointer disabled:cursor-default disabled:opacity-40"
                     />
-                    <span className="flex-shrink-0 select-none font-mono tabular-nums text-xs text-muted-foreground">
+                    <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-muted-foreground">
                       {formatTime(currentTime)}&nbsp;/&nbsp;{formatTime(duration)}
                     </span>
                   </div>

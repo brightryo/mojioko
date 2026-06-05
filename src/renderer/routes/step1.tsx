@@ -38,8 +38,8 @@ import { useIsAudioOnly } from '@/hooks/use-input-mode'
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between py-1.5">
-      <span className="text-[13px] text-muted-foreground">{label}</span>
-      <span className="text-[13px] text-foreground font-mono tabular-nums">{value}</span>
+      <span className="text-body-sm text-muted-foreground">{label}</span>
+      <span className="text-body-sm text-foreground font-mono tabular-nums">{value}</span>
     </div>
   )
 }
@@ -310,13 +310,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
        text-zinc-300 so the model-status and privacy line stay legible
        in the chrome.  Matches the same treatment in step2 / step3. */
     <div className="flex items-center gap-4">
-      <span className="text-[13px] text-zinc-300">
+      <span className="text-body-sm text-zinc-300">
         {activeModelId
           ? t('footer.modelStatus', { model: activeModelId })
           : t('footer.modelNotDownloaded', { model: '—' })}
       </span>
       <span className="w-px h-3 bg-zinc-700 flex-shrink-0" />
-      <span className="flex items-center gap-1.5 text-[13px] text-zinc-300">
+      <span className="flex items-center gap-1.5 text-body-sm text-zinc-300">
         <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
         {t('footer.privacyNote')}
       </span>
@@ -393,8 +393,8 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
       <div className="space-y-4">
         {/* Page header */}
         <div>
-          <h1 className="text-[18px] font-semibold text-foreground">{t('title')}</h1>
-          <p className="mt-1 text-[14px] text-muted-foreground">{t('guidance')}</p>
+          <h1 className="text-heading font-semibold text-foreground">{t('title')}</h1>
+          <p className="mt-1 text-body text-muted-foreground">{t('guidance')}</p>
         </div>
 
         {/* Whisper model + Advanced (engine) trigger.  Subtitle Style
@@ -502,13 +502,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           {isLoading ? (
             <div className="flex items-center gap-2.5 h-9 px-1">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
-              <span className="text-[14px] text-muted-foreground">{t('inputVideo.loading')}</span>
+              <span className="text-body text-muted-foreground">{t('inputVideo.loading')}</span>
             </div>
           ) : (
             <div className="flex items-center gap-2">
               <div className="flex-1 h-9 rounded-md border border-border bg-input px-3.5 flex items-center min-w-0">
                 <span className={cn(
-                  'text-[14px] truncate',
+                  'text-body truncate',
                   video ? 'text-foreground' : 'text-muted-foreground/60'
                 )}>
                   {video?.path ?? t('inputVideo.placeholder')}
@@ -615,7 +615,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
                 <Badge variant="muted">{t('audioTracks.tracksCount', { count: audioTracks.length })}</Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">{t('audioTracks.description')}</p>
+            <p className="text-body-sm text-muted-foreground">{t('audioTracks.description')}</p>
             <div className="grid grid-cols-2 gap-2">
               {audioTracks.map((track) => (
                 <button
@@ -637,7 +637,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
                 >
                   <span className="h-2 w-2 rounded-full flex-shrink-0 bg-primary" />
                   <span className={cn(
-                    'text-[14px] font-medium flex-shrink-0',
+                    'text-body font-medium flex-shrink-0',
                     selectedTrack === track.index ? 'text-primary' : 'text-foreground'
                   )}>
                     {t('audioTracks.trackLabel', { index: track.index })}

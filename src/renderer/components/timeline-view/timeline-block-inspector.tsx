@@ -321,7 +321,7 @@ export function TimelineBlockInspector({
                 max: FONT_SIZE_MAX_PX
               })}
               className={cn(
-                'w-20 h-7 rounded border bg-zinc-950 px-1.5 text-center text-[13px] text-zinc-100',
+                'w-20 h-7 rounded border bg-zinc-950 px-1.5 text-center text-body-sm text-zinc-100',
                 'focus:outline-none focus:ring-1',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
@@ -413,7 +413,7 @@ export function TimelineBlockInspector({
           spellCheck={false}
           className={cn(
             'w-full rounded-md bg-zinc-950 border border-zinc-700 px-2 py-1.5',
-            'text-[14px] text-zinc-50 leading-snug resize-none',
+            'text-body text-zinc-50 leading-snug resize-none',
             'focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/30',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}

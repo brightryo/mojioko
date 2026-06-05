@@ -103,7 +103,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
             onClick={() => pick(undefined)}
             disabled={!isOverriding}
             className={cn(
-              'flex items-center gap-2 px-2 py-1.5 rounded text-[13px] transition-colors text-left',
+              'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
               isOverriding
                 ? 'hover:bg-accent/40 text-zinc-100 cursor-pointer'
                 : 'text-zinc-500 cursor-default'
@@ -128,7 +128,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
                 type="button"
                 onClick={() => pick(m.id === activeFontId ? undefined : m.id)}
                 className={cn(
-                  'flex items-center gap-2 px-2 py-1.5 rounded text-[13px] transition-colors text-left',
+                  'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
                   'hover:bg-accent/40',
                   isCurrent ? 'text-zinc-50' : 'text-zinc-300'
                 )}

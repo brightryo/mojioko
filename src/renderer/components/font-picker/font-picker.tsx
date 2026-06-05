@@ -252,7 +252,7 @@ export function FontPicker({ onChange }: FontPickerProps) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-1">
-        <span className="text-sm font-medium text-foreground">{t('fontPicker.title')}</span>
+        <span className="text-body font-medium text-foreground">{t('fontPicker.title')}</span>
         <HelpIcon content={t('fontPicker.help')} />
       </div>
       <div className="rounded-md border border-border bg-card divide-y divide-border max-h-[300px] overflow-y-auto">
@@ -401,7 +401,7 @@ function FontRow({
           )}
           aria-hidden="true"
         />
-        <span className="text-[14px] text-foreground truncate" style={labelStyle}>
+        <span className="text-body text-foreground truncate" style={labelStyle}>
           {meta.displayName}
         </span>
         {/* Rare-kanji-missing note (REQ-022 step 5).  Only renders for

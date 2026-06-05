@@ -347,7 +347,7 @@ function Block({
             {/* Row 2 — text (truncated, single line for now to keep the
                 block compact).  Placeholder `·` keeps the block visually
                 anchored when text is empty. */}
-            <span className="block truncate text-[13px] leading-tight">
+            <span className="block truncate text-body-sm leading-tight">
               {displayText || '·'}
             </span>
           </button>
@@ -911,10 +911,10 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
           {/* REQ-068: zoom level label moved to the END of the cluster
               ([−][slider][+][label]).  Reading order matches "control inputs
               first, then the readout that reflects the result".
-              REQ-069 #1: text-[11px] → text-[13px] (body-sm tier) so the
+              REQ-069 #1: text-[11px] → text-body-sm (body-sm tier) so the
               "px/秒" readout reads at the same scale as other status text;
               w-[64px] → w-[72px] to absorb the slightly wider 13-px digits. */}
-          <span className="font-mono tabular-nums text-[13px] text-zinc-500 select-none w-[72px] text-center">
+          <span className="font-mono tabular-nums text-body-sm text-zinc-500 select-none w-[72px] text-center">
             {t('timeline.toolbar.zoomLevel', { pps: pixelsPerSec })}
           </span>
         </div>
@@ -926,14 +926,14 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               chrome was noise.  Snap toggle stays (functional control). */}
           {/* Snap toggle — disabled-looking in Phase 1 (algorithm lands in Phase 5)
               but the flag is wired so behaviour change won't need a new UI later.
-              REQ-069 #1: text-[11px] → text-[13px] to match the rest of the
+              REQ-069 #1: text-[11px] → text-body-sm to match the rest of the
               upgraded toolbar typography. */}
           <button
             type="button"
             onClick={() => setSnapEnabled(!snapEnabled)}
             title={t('timeline.toolbar.snapHelp')}
             className={cn(
-              'flex h-7 items-center gap-1.5 px-2 rounded-md text-[13px] font-medium',
+              'flex h-7 items-center gap-1.5 px-2 rounded-md text-body-sm font-medium',
               'transition-colors duration-150',
               snapEnabled
                 ? 'bg-zinc-800 text-zinc-200'
@@ -955,7 +955,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         {!hasAnyVisible ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-zinc-500">
             <GanttChartSquare className="h-8 w-8 text-zinc-700" />
-            <p className="text-[14px] font-medium">
+            <p className="text-body font-medium">
               {tableFilter === 'all'
                 ? t('timeline.emptyAll')
                 : t('timeline.emptyFiltered')}

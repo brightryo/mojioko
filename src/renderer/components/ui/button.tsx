@@ -24,11 +24,11 @@ const buttonVariants = cva(
         link: 'bg-transparent text-zinc-400 hover:text-zinc-100 underline-offset-4 hover:underline'
       },
       size: {
-        sm: 'h-7 px-3 py-1.5 text-xs',
-        md: 'h-9 px-4 py-2.5 text-[14px]',
-        lg: 'h-11 px-5 py-3 text-sm',
+        sm: 'h-7 px-3 py-1.5 text-body-sm',
+        md: 'h-9 px-4 py-2.5 text-body',
+        lg: 'h-11 px-5 py-3 text-body',
         /** Square icon button. */
-        icon: 'h-8 w-8 p-0 text-[14px]'
+        icon: 'h-8 w-8 p-0 text-body'
       }
     },
     defaultVariants: {
