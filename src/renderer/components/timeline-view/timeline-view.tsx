@@ -347,7 +347,7 @@ function Block({
             {/* Row 2 — text (truncated, single line for now to keep the
                 block compact).  Placeholder `·` keeps the block visually
                 anchored when text is empty. */}
-            <span className="block truncate text-[12px] leading-tight">
+            <span className="block truncate text-[13px] leading-tight">
               {displayText || '·'}
             </span>
           </button>
@@ -894,9 +894,6 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
             className="w-32"
             style={{ accentColor: 'hsl(var(--primary))' }}
           />
-          <span className="font-mono tabular-nums text-[11px] text-zinc-500 select-none w-[64px] text-center">
-            {t('timeline.toolbar.zoomLevel', { pps: pixelsPerSec })}
-          </span>
           <button
             type="button"
             onClick={handleZoomIn}
@@ -911,6 +908,12 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
           >
             <ZoomIn className="h-3.5 w-3.5" />
           </button>
+          {/* REQ-068: zoom level label moved to the END of the cluster
+              ([−][slider][+][label]).  Reading order matches "control inputs
+              first, then the readout that reflects the result". */}
+          <span className="font-mono tabular-nums text-[11px] text-zinc-500 select-none w-[64px] text-center">
+            {t('timeline.toolbar.zoomLevel', { pps: pixelsPerSec })}
+          </span>
         </div>
 
         <div className="flex items-center gap-3">
@@ -947,7 +950,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         {!hasAnyVisible ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-zinc-500">
             <GanttChartSquare className="h-8 w-8 text-zinc-700" />
-            <p className="text-[13px] font-medium">
+            <p className="text-[14px] font-medium">
               {tableFilter === 'all'
                 ? t('timeline.emptyAll')
                 : t('timeline.emptyFiltered')}

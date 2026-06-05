@@ -580,7 +580,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
        (edited / warnings / deleted) stay readable at a glance.  The
        inner "selected" span keeps its `text-foreground` accent so the
        active-selection callout still wins visual priority. */
-    <span className="text-[12px] text-zinc-300">
+    <span className="text-[13px] text-zinc-300">
       {selectedRowIds.size > 0 && (
         <>
           <span className="text-foreground">
@@ -652,7 +652,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         <div className="flex items-start justify-between flex-shrink-0">
           <div>
             <h1 className="text-[18px] font-semibold text-zinc-50">{t('title')}</h1>
-            <p className="mt-0.5 text-[13px] text-zinc-400">{t('subtitle')}</p>
+            <p className="mt-0.5 text-[14px] text-zinc-400">{t('subtitle')}</p>
           </div>
         </div>
 
@@ -677,7 +677,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
                   type="button"
                   onClick={() => setTableFilter(key)}
                   className={cn(
-                    'h-7 px-3 rounded-md text-[12px] font-medium transition-colors duration-150',
+                    'h-7 px-3 rounded-md text-[13px] font-medium transition-colors duration-150',
                     tableFilter === key
                       ? 'bg-zinc-800 text-zinc-50'
                       : 'text-zinc-500 hover:text-zinc-300'
@@ -831,7 +831,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               onChange={(e) => setSkipDiscardWarning(e.target.checked)}
               className="h-3.5 w-3.5 rounded border-zinc-600 accent-green-500"
             />
-            <label htmlFor="skip-discard" className="text-[12px] text-zinc-400 cursor-pointer">
+            <label htmlFor="skip-discard" className="text-[13px] text-zinc-400 cursor-pointer">
               {t('common:dialog.dontAskAgain')}
             </label>
           </div>

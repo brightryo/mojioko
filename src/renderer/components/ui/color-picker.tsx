@@ -294,7 +294,7 @@ export function ColorPicker({
         placeholder="#FFFFFF"
         className={cn(
           'h-8 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-center',
-          'font-mono text-[12px] text-zinc-100',
+          'font-mono text-[13px] text-zinc-100',
           'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30'
         )}
       />
@@ -348,7 +348,7 @@ export function ColorPicker({
             className="h-5 w-5 flex-shrink-0 rounded border border-zinc-700"
             style={{ backgroundColor: value }}
           />
-          <span className="font-mono text-[12px] text-zinc-300">{normalise(value)}</span>
+          <span className="font-mono text-[13px] text-zinc-300">{normalise(value)}</span>
         </button>
       </PopoverTrigger>
       {pickerContent}
@@ -417,7 +417,7 @@ function PairSwatch({ pair, tooltip, onClick }: PairSwatchProps) {
           fill mirrors SubtitleOverlay so the visible stroke is the
           OUTSIDE half. */}
       <span
-        className="text-[13px] font-bold leading-none"
+        className="text-[14px] font-bold leading-none"
         style={{
           color: pair.text,
           WebkitTextStrokeWidth: '1.5px',
