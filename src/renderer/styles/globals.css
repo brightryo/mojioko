@@ -16,9 +16,18 @@
     --card-foreground: 0 0% 98%;
     --popover-foreground: 0 0% 98%;
 
-    /* Primary action: green-500 */
+    /* Primary action: green-500.
+       REQ-071 Phase 3.7: --primary-foreground shifted green-950 (dark
+       forest green, hue collides with bg-primary green) -> zinc-950
+       (near-black neutral, hue independent of bg).  Same reasoning as
+       Phase 3.6's button.tsx primary variant fix: the dark-green hue
+       washed into the green background even at AA contrast, so the
+       checkmark icon (checkbox.tsx) and the round Play button
+       (audio-preview-panel.tsx) read as muddy green-on-green.  zinc-950
+       gives AAA contrast and reads as a real black mark on the green
+       surface. */
     --primary: 142.1 70.6% 45.3%;
-    --primary-foreground: 144.3 80.1% 10%; /* green-950 */
+    --primary-foreground: 240 5.9% 4%; /* zinc-950 */
 
     /* Secondary: zinc-800 */
     --secondary: 240 3.7% 15.9%;
