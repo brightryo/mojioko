@@ -41,7 +41,7 @@ export function EditorViewSwitcher() {
           type="button"
           onClick={() => setMode(key)}
           className={cn(
-            'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-[13px] font-medium',
+            'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
             'transition-colors duration-150',
             mode === key
               ? 'bg-zinc-800 text-zinc-50'

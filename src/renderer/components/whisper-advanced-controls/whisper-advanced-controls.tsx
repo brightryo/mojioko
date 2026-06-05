@@ -30,7 +30,7 @@ function AdvancedParamRow({
       <div className="flex items-center gap-1.5 shrink-0">
         <span
           className={cn(
-            'text-sm transition-colors duration-150',
+            'text-body transition-colors duration-150',
             changed ? 'text-[hsl(var(--warning))]' : 'text-muted-foreground'
           )}
         >
@@ -92,7 +92,7 @@ export function WhisperAdvancedControls({
 
   function numberInputClass(modified: boolean): string {
     return cn(
-      'w-20 h-7 rounded-md border bg-input px-2 text-center text-[14px]',
+      'w-20 h-7 rounded-md border bg-input px-2 text-center text-body',
       'focus:outline-none focus:ring-2 tabular-nums',
       '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
       modified
@@ -120,7 +120,7 @@ export function WhisperAdvancedControls({
             />
             <span
               className={cn(
-                'text-[13px] transition-colors duration-150',
+                'text-body-sm transition-colors duration-150',
                 transcriptionAdvanced.vadFilter !== TRANSCRIPTION_DEFAULTS.vadFilter
                   ? 'text-[hsl(var(--warning))]'
                   : 'text-muted-foreground'
@@ -254,7 +254,7 @@ export function WhisperAdvancedControls({
           >
             <SelectTrigger
               className={cn(
-                'w-36 h-7 text-[14px] border bg-input',
+                'w-36 h-7 text-body border bg-input',
                 transcriptionAdvanced.language !== TRANSCRIPTION_DEFAULTS.language
                   ? 'border-[hsl(var(--warning)/0.6)] text-[hsl(var(--warning))]'
                   : 'border-border text-foreground'
@@ -285,7 +285,7 @@ export function WhisperAdvancedControls({
             variant="ghost"
             size="sm"
             onClick={onReset}
-            className="h-7 text-[13px] text-muted-foreground hover:text-foreground gap-1.5 flex-shrink-0"
+            className="h-7 text-body-sm text-muted-foreground hover:text-foreground gap-1.5 flex-shrink-0"
           >
             <RotateCcw className="h-3 w-3" />
             {t('advanced.resetToDefaults')}

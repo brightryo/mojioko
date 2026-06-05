@@ -17,7 +17,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      'flex cursor-default select-none items-center rounded-md px-2 py-1.5 text-[14px] text-zinc-100 outline-none',
+      'flex cursor-default select-none items-center rounded-md px-2 py-1.5 text-body text-zinc-100 outline-none',
       'focus:bg-zinc-800 data-[state=open]:bg-zinc-800',
       inset && 'pl-8',
       className
@@ -80,7 +80,7 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center rounded-md px-2 py-1.5 text-[14px] text-zinc-100 outline-none',
+      'relative flex cursor-default select-none items-center rounded-md px-2 py-1.5 text-body text-zinc-100 outline-none',
       'transition-colors duration-100',
       'focus:bg-zinc-800 focus:text-zinc-50',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
@@ -99,7 +99,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-[14px] text-zinc-100 outline-none',
+      'relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-body text-zinc-100 outline-none',
       'transition-colors duration-100',
       'focus:bg-zinc-800 focus:text-zinc-50',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
@@ -125,7 +125,7 @@ const DropdownMenuRadioItem = React.forwardRef<
   <DropdownMenuPrimitive.RadioItem
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-[14px] text-zinc-100 outline-none',
+      'relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-body text-zinc-100 outline-none',
       'transition-colors duration-100',
       'focus:bg-zinc-800 focus:text-zinc-50',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-40',

@@ -34,7 +34,7 @@ export function FontLicensesDialog() {
       <DialogContent className="max-w-[600px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t('fontLicenses.title')}</DialogTitle>
-          <DialogDescription className="text-[13px] text-muted-foreground">
+          <DialogDescription className="text-body-sm text-muted-foreground">
             {t('fontLicenses.intro')}
           </DialogDescription>
         </DialogHeader>
@@ -71,7 +71,7 @@ function FontLicenseEntry({ meta }: { meta: FontMeta }) {
     <div className="rounded-md border border-border bg-card px-3 py-2 space-y-1.5">
       <div className="flex items-center justify-between gap-3">
         <span
-          className="text-[14px] font-medium text-foreground truncate"
+          className="text-body font-medium text-foreground truncate"
           style={{ fontFamily: `'${meta.cssFontFamily}'`, fontWeight: meta.weight }}
         >
           {meta.displayName}

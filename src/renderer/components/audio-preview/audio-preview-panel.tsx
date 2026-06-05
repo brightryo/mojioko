@@ -210,7 +210,7 @@ export function AudioPreviewPanel() {
           {t('videoPreview.play')}
         </span>
         <div className="flex-1 flex items-center justify-center gap-1.5 min-w-0 px-2">
-          <span className="min-w-0 truncate text-[13px] text-foreground/80" title={video.path}>
+          <span className="min-w-0 truncate text-body-sm text-foreground/80" title={video.path}>
             {filename}
           </span>
           <button
@@ -237,7 +237,7 @@ export function AudioPreviewPanel() {
           so the bar gets the full panel width. */}
       <div className="flex items-center justify-center px-4 pb-4 pt-2" style={{ minHeight: 180 }}>
         {hasError ? (
-          <span className="text-xs text-muted-foreground">{t('videoPreview.error')}</span>
+          <span className="text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
         ) : (
           <div className="flex flex-col items-center gap-3 w-full max-w-md">
             <button

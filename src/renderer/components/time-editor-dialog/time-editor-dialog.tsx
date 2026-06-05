@@ -97,7 +97,7 @@ function StepperButton({ label, onStep, ariaLabel }: StepperButtonProps) {
       onTouchCancel={stop}
       className={cn(
         'inline-flex items-center justify-center',
-        'h-9 px-2.5 rounded-md text-[13px] font-mono tabular-nums select-none',
+        'h-9 px-2.5 rounded-md text-body-sm font-mono tabular-nums select-none',
         'bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-50',
         'active:bg-zinc-600 transition-colors duration-100',
         'border border-zinc-800'
@@ -135,7 +135,7 @@ function SnapButton({ icon, label, trailingLabel, onClick }: SnapButtonProps) {
       <span className="flex h-3.5 w-3.5 items-center justify-center flex-shrink-0 text-zinc-400">
         {icon}
       </span>
-      <span className="text-[13px] text-zinc-200">{label}</span>
+      <span className="text-body-sm text-zinc-200">{label}</span>
       <span className="ml-auto text-[11px] font-mono tabular-nums text-zinc-400">
         {trailingLabel}
       </span>
@@ -183,7 +183,7 @@ function TimeField({ labelKey, valueSec, onDelta, playheadSec, onSetSec, snapIte
 
   return (
     <div className="space-y-2">
-      <div className="text-[13px] font-medium text-zinc-300">
+      <div className="text-body-sm font-medium text-zinc-300">
         {t(labelKey)}
       </div>
 
@@ -200,7 +200,7 @@ function TimeField({ labelKey, valueSec, onDelta, playheadSec, onSetSec, snapIte
           <TimeInput
             value={roundCs(valueSec)}
             onChange={(sec) => onSetSec(roundCs(sec))}
-            className="h-9 w-[140px] text-[15px]"
+            className="h-9 w-[140px] text-body"
           />
         </div>
         <div className="flex items-center gap-1">
