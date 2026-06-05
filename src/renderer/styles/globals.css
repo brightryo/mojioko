@@ -24,9 +24,15 @@
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
 
-    /* Muted: zinc-800 bg, zinc-500 fg */
+    /* Muted: zinc-800 bg, zinc-400 fg.  REQ-067 phase A: foreground lifted
+       from zinc-500 (#71717a, contrast 4.04:1 against the app background —
+       WCAG AA body fail) to zinc-400 (#a1a1aa, contrast 7.83:1 — AAA body
+       pass).  All `text-muted-foreground` consumers (DialogDescription,
+       ColorPicker hint, font-licenses body, audio-preview error, etc.) read
+       this single variable and inherit the improved readability without
+       requiring per-site edits. */
     --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 3.9% 46.1%;  /* zinc-500 */
+    --muted-foreground: 240 5.0% 64.9%;  /* zinc-400 */
 
     /* Accent: same as secondary for shadcn compat */
     --accent: 240 3.7% 15.9%;

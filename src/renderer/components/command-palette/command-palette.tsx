@@ -39,7 +39,10 @@ export function CommandPalette() {
             />
           </div>
           <Command.List className="max-h-[360px] overflow-y-auto py-2">
-            <Command.Empty className="py-8 text-center text-[13px] text-zinc-500">
+            {/* REQ-067 phase B: was text-zinc-500.  Empty-state notice is
+                an informational status, not a hint — lift to text-zinc-300
+                so it reads at the same level as the items it replaces. */}
+            <Command.Empty className="py-8 text-center text-[13px] text-zinc-300">
               {t('group.navigation')}
             </Command.Empty>
             {grouped.map(({ group, label, items }) => (
