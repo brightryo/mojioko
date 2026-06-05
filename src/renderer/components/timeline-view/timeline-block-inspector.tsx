@@ -448,11 +448,15 @@ export function TimelineBlockInspector({
             ({durationSec.toFixed(2)}s)
           </span>
         </div>
+        {/* Phase 3.7-C: button moved self-end -> self-start (left-aligned)
+            per owner directive; trailing ellipsis removed from the locale
+            string because the dialog opens immediately without further
+            confirmation, so the "…" promised more steps than there are. */}
         <button
           type="button"
           onClick={handleAdjustTime}
           className={cn(
-            'self-end flex items-center gap-1 h-6 px-2 rounded text-caption text-zinc-400',
+            'self-start flex items-center gap-1 h-6 px-2 rounded text-caption text-zinc-400',
             'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
           )}
         >
