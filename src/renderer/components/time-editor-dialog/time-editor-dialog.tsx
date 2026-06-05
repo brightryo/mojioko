@@ -97,7 +97,11 @@ function StepperButton({ label, onStep, ariaLabel }: StepperButtonProps) {
       onTouchCancel={stop}
       className={cn(
         'inline-flex items-center justify-center',
-        'h-9 px-2.5 rounded-md text-body-sm font-mono tabular-nums select-none',
+        // REQ-071 Phase 3.7-B: stepper labels ('-1s', '-0.1s' etc.) lifted
+        // text-body-sm (13) -> text-body (15) so the ±delta digits are at the
+        // same scale as the TimeInput field they drive.  h-9 (36 px) with
+        // body line-h 22 still leaves 14 px of vertical breathing room.
+        'h-9 px-2.5 rounded-md text-body font-mono tabular-nums select-none',
         'bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-50',
         'active:bg-zinc-600 transition-colors duration-100',
         'border border-zinc-800'
@@ -136,7 +140,11 @@ function SnapButton({ icon, label, trailingLabel, onClick }: SnapButtonProps) {
         {icon}
       </span>
       <span className="text-body-sm text-zinc-200">{label}</span>
-      <span className="ml-auto text-caption font-mono tabular-nums text-zinc-400">
+      {/* REQ-071 Phase 3.7-B: trailing timecode lifted text-caption (12) ->
+          text-body-sm (13) — these are time *values* the user reads to
+          decide whether to snap, not chrome.  Same micro-to-readable
+          stance the timeline ruler took in Phase 3.6. */}
+      <span className="ml-auto text-body-sm font-mono tabular-nums text-zinc-400">
         {trailingLabel}
       </span>
     </button>
@@ -183,7 +191,11 @@ function TimeField({ labelKey, valueSec, onDelta, playheadSec, onSetSec, snapIte
 
   return (
     <div className="space-y-2">
-      <div className="text-body-sm font-medium text-zinc-300">
+      {/* REQ-071 Phase 3.7-B: section label ('開始時間' / '終了時間') is the
+          structural divider between the two TimeFields inside the dialog —
+          promote from body-sm/medium to body/semibold so it reads as a
+          real section heading, not a sub-row label. */}
+      <div className="text-body font-semibold text-zinc-300">
         {t(labelKey)}
       </div>
 
