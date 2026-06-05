@@ -517,7 +517,18 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
                   {video?.path ?? t('inputVideo.placeholder')}
                 </span>
               </div>
-              <Button variant="secondary" size="md" onClick={handleBrowse}>
+              {/* REQ-072 Q4: secondary's `bg-zinc-50` white slab dominated the
+                  STEP 1 input row visually — same pattern bulk-edit-bar already
+                  flagged (see comment there).  Pending the full Button variant
+                  redesign (REQ-073), this single site is overridden to a tonal
+                  (bg-zinc-800) treatment so Browse reads as a secondary action
+                  in the dark theme without claiming primary emphasis. */}
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={handleBrowse}
+                className="bg-zinc-800 text-zinc-100 hover:bg-zinc-700 active:bg-zinc-600"
+              >
                 <FolderOpen className="h-4 w-4 mr-1.5" />
                 {t('inputVideo.chooseVideo')}
               </Button>
