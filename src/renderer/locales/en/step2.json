@@ -226,7 +226,6 @@
       "zoomIn": "Zoom in",
       "zoomSlider": "Zoom level",
       "zoomLevel": "{{pps}} px/s",
-      "trackCount": "{{count}} tracks",
       "snap": "Snap",
       "snapHelp": "Snap to nearby edges (lands in Phase 5)"
     },

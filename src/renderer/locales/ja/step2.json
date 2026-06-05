@@ -226,7 +226,6 @@
       "zoomIn": "拡大",
       "zoomSlider": "ズーム倍率",
       "zoomLevel": "{{pps}} px/秒",
-      "trackCount": "{{count}} トラック",
       "snap": "吸着",
       "snapHelp": "近接する境界に吸着（Phase 5 で実装予定）"
     },
