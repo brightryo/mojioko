@@ -206,7 +206,7 @@ export function AudioPreviewPanel() {
           collapsing it gains nothing). */}
       <div className="flex items-center gap-2 px-3 py-2">
         <Play className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground flex-shrink-0">
+        <span className="text-label font-medium uppercase tracking-wider text-muted-foreground flex-shrink-0">
           {t('videoPreview.play')}
         </span>
         <div className="flex-1 flex items-center justify-center gap-1.5 min-w-0 px-2">
@@ -256,7 +256,7 @@ export function AudioPreviewPanel() {
             </button>
 
             <div className="w-full flex flex-col gap-1">
-              <span className="text-[11px] tabular-nums text-muted-foreground text-center">
+              <span className="text-caption tabular-nums text-muted-foreground text-center">
                 {formatTime(currentTime)} / {formatTime(duration)}
               </span>
               <input

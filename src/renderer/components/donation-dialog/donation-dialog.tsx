@@ -31,7 +31,7 @@ function DonationCard({ title, subtitle, cta, url }: DonationCardProps) {
         {/* REQ-067 phase B: was text-zinc-500.  Subtitle is a description
             line under each donation channel — body-adjacent, not a hint —
             lifted to text-zinc-400 (AAA pass). */}
-        <p className="mt-0.5 text-[11px] text-zinc-400">{subtitle}</p>
+        <p className="mt-0.5 text-body-sm text-zinc-400">{subtitle}</p>
       </div>
       <Button
         variant="ghost"

@@ -80,7 +80,7 @@ function FontLicenseEntry({ meta }: { meta: FontMeta }) {
           <button
             type="button"
             onClick={loadOfl}
-            className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            className="text-caption text-muted-foreground hover:text-foreground transition-colors"
           >
             {oflLoaded ? '−' : '+'} {t('fontLicenses.viewOnDisk')}
           </button>
@@ -88,7 +88,7 @@ function FontLicenseEntry({ meta }: { meta: FontMeta }) {
             href={meta.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-1 text-caption text-muted-foreground hover:text-foreground transition-colors"
             onClick={(e) => {
               e.preventDefault()
               window.electronAPI?.shellOpenExternal(meta.sourceUrl).catch(() => {})
@@ -99,12 +99,12 @@ function FontLicenseEntry({ meta }: { meta: FontMeta }) {
           </a>
         </div>
       </div>
-      <div className="text-[11px] text-muted-foreground">
+      <div className="text-body-sm text-muted-foreground">
         <span className="font-medium text-foreground/80">{t('fontLicenses.copyrightHeader')}:</span>{' '}
         {meta.copyright}
       </div>
       {oflLoaded && oflText && (
-        <pre className="mt-2 max-h-[200px] overflow-y-auto text-[10px] font-mono text-muted-foreground/80 bg-muted/30 rounded p-2 whitespace-pre-wrap">
+        <pre className="mt-2 max-h-[200px] overflow-y-auto text-caption font-mono text-muted-foreground/80 bg-muted/30 rounded p-2 whitespace-pre-wrap">
           {oflText}
         </pre>
       )}

@@ -185,7 +185,7 @@ export function ColorPicker({
           popover via onInteractOutside, but REQ-033 asks for a visible
           dismiss control. */}
       <div className="flex items-start justify-between">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+        <p className="text-label font-medium uppercase tracking-wider text-zinc-500">
           {t('colorPicker.basic')}
         </p>
         <button
@@ -217,10 +217,10 @@ export function ColorPicker({
       {onPairApply && (
         <div>
           <div className="mb-1.5 flex items-baseline gap-2">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-label font-medium uppercase tracking-wider text-zinc-500">
               {t('colorPicker.pairs')}
             </p>
-            <span className="text-[9px] text-zinc-600">{t('colorPicker.pairsHint')}</span>
+            <span className="text-caption text-zinc-600">{t('colorPicker.pairsHint')}</span>
           </div>
           <div className="grid grid-cols-5 gap-1.5">
             {COLOR_PAIRS.map((p) => (
@@ -238,10 +238,10 @@ export function ColorPicker({
       {/* Group 3: CUD palette (10) */}
       <div>
         <div className="mb-1.5 flex items-baseline gap-2">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+          <p className="text-label font-medium uppercase tracking-wider text-zinc-500">
             {t('colorPicker.cud')}
           </p>
-          <span className="text-[9px] text-zinc-600">{t('colorPicker.cudHint')}</span>
+          <span className="text-caption text-zinc-600">{t('colorPicker.cudHint')}</span>
         </div>
         <div className="grid grid-cols-10 gap-1.5">
           {CUD_COLORS.map((c) => (
@@ -258,7 +258,7 @@ export function ColorPicker({
       {/* Recent colors (capped to 5 by useUiStore.addRecentColor) */}
       {recentColors.length > 0 && (
         <div>
-          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+          <p className="mb-1.5 text-label font-medium uppercase tracking-wider text-zinc-500">
             {t('colorPicker.recent')}
           </p>
           <div className="flex gap-1.5">

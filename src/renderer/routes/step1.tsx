@@ -36,9 +36,12 @@ import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 
 function InfoRow({ label, value }: { label: string; value: string }) {
+  // REQ-072: label uses `callout` (13/semibold) — item-name role in a narrow
+  // row.  Value stays `body-sm` regular mono.  Same size for vertical
+  // alignment; weight + color differentiate label from value.
   return (
     <div className="flex items-center justify-between py-1.5">
-      <span className="text-body-sm text-muted-foreground">{label}</span>
+      <span className="text-callout font-semibold text-muted-foreground">{label}</span>
       <span className="text-body-sm text-foreground font-mono tabular-nums">{value}</span>
     </div>
   )
@@ -468,7 +471,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           >
             <div className="flex items-center gap-1.5">
               <Video className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <Label className="uppercase tracking-wider text-[10px] cursor-pointer">
+              <Label className="cursor-pointer">
                 {t('inputVideo.label')}
               </Label>
               <span onClick={(e) => e.stopPropagation()}>
@@ -476,7 +479,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted-foreground/60">{t('inputVideo.hint')}</span>
+              <span className="text-body-sm text-muted-foreground/60">{t('inputVideo.hint')}</span>
               {openSection === 'inputVideo' ? (
                 <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
               ) : (
@@ -609,7 +612,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           )}>
             <div className="flex items-center gap-1.5">
               <Mic className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <Label className="uppercase tracking-wider text-[10px]">{t('audioTracks.label')}</Label>
+              <Label>{t('audioTracks.label')}</Label>
               <HelpIcon content={t('audioTracks.help')} />
               {audioTracks.length > 0 && (
                 <Badge variant="muted">{t('audioTracks.tracksCount', { count: audioTracks.length })}</Badge>
@@ -642,7 +645,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
                   )}>
                     {t('audioTracks.trackLabel', { index: track.index })}
                   </span>
-                  <span className="text-[11px] text-muted-foreground truncate min-w-0">
+                  <span className="text-body-sm text-muted-foreground truncate min-w-0">
                     {`${track.channels} · ${track.sampleRateHz / 1000}kHz · ${track.codec}`}
                   </span>
                   {selectedTrack === track.index && (

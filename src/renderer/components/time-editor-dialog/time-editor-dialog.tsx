@@ -136,7 +136,7 @@ function SnapButton({ icon, label, trailingLabel, onClick }: SnapButtonProps) {
         {icon}
       </span>
       <span className="text-body-sm text-zinc-200">{label}</span>
-      <span className="ml-auto text-[11px] font-mono tabular-nums text-zinc-400">
+      <span className="ml-auto text-caption font-mono tabular-nums text-zinc-400">
         {trailingLabel}
       </span>
     </button>

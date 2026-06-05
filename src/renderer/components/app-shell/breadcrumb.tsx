@@ -44,7 +44,7 @@ export function Breadcrumb({ currentStep, appVersion }: BreadcrumbProps) {
               contrast — spec violation for permanently-visible chrome).
               Lifted to text-zinc-400 (secondary tier ~7.8:1, AAA pass) —
               the version is meta info, not a disabled element. */}
-          <span className="text-[11px] text-zinc-400 select-none tabular-nums">{appVersion}</span>
+          <span className="text-caption text-zinc-400 select-none tabular-nums">{appVersion}</span>
         </div>
 
         <div className="h-4 w-px bg-zinc-800 mr-5 flex-shrink-0" aria-hidden="true" />

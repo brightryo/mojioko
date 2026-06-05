@@ -28,7 +28,7 @@ export function CommandPalette() {
     <Dialog open={isOpen} onOpenChange={setOpen}>
       <DialogContent className="p-0 max-w-[560px] overflow-hidden" hideClose>
         <Command
-          className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-zinc-500"
+          className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-label [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-zinc-500"
           shouldFilter
         >
           <div className="flex items-center border-b border-zinc-800 px-3">
@@ -59,7 +59,7 @@ export function CommandPalette() {
                       <span>{t(cmd.labelKey)}</span>
                     </div>
                     {cmd.shortcut && (
-                      <kbd className="ml-4 font-mono text-[11px] text-zinc-500 bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5">
+                      <kbd className="ml-4 font-mono text-caption text-zinc-500 bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5">
                         {cmd.shortcut}
                       </kbd>
                     )}

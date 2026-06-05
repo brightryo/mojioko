@@ -380,7 +380,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           disabled={entry.isDeleted}
           className={cn(
             'mt-0.5 flex items-center justify-center gap-1 self-center',
-            'h-5 px-1.5 rounded text-[10px] text-zinc-500',
+            'h-5 px-1.5 rounded text-micro text-zinc-500',
             'hover:bg-zinc-800 hover:text-zinc-200 transition-colors duration-100',
             'disabled:opacity-30 disabled:pointer-events-none'
           )}
@@ -463,7 +463,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
       ) : (
       <div className="flex flex-col gap-1 py-2 px-1">
         <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-          <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.textColor')}</span>
+          <span className="text-micro text-zinc-500 truncate">{t('styleCell.textColor')}</span>
           <ColorPicker
             value={entry.textColorHex}
             onChange={handleTextColorChange}
@@ -475,7 +475,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           />
         </div>
         <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-          <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.outlineColor')}</span>
+          <span className="text-micro text-zinc-500 truncate">{t('styleCell.outlineColor')}</span>
           <ColorPicker
             value={entry.outlineColorHex}
             onChange={handleOutlineColorChange}
@@ -493,7 +493,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           // row and seek the video on every onChange frame).
           onClick={(e) => e.stopPropagation()}
         >
-          <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.outlineWidth')}</span>
+          <span className="text-micro text-zinc-500 truncate">{t('styleCell.outlineWidth')}</span>
           <OutlineThicknessSlider
             value={entry.outlineThicknessPx}
             onCommit={(v) => withHistory(t('history.editStroke'), { outlineThicknessPx: v })}
@@ -502,7 +502,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           />
         </div>
         <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-          <span className="text-[10px] text-zinc-500 truncate">{t('styleCell.fade')}</span>
+          <span className="text-micro text-zinc-500 truncate">{t('styleCell.fade')}</span>
           <Switch checked={entry.fadeEnabled} onCheckedChange={handleFadeChange} disabled={entry.isDeleted} className="scale-75 origin-left" />
         </div>
       </div>
@@ -652,7 +652,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
             disabled={entry.isDeleted}
             className={cn(
               'flex items-center justify-center gap-0.5',
-              'h-5 px-1 rounded text-[10px] text-zinc-500',
+              'h-5 px-1 rounded text-micro text-zinc-500',
               'hover:bg-zinc-800 hover:text-zinc-200 transition-colors duration-100',
               'disabled:opacity-30 disabled:pointer-events-none'
             )}
@@ -865,13 +865,21 @@ export function SubtitleTable({
             aria-label={t('table.selectAllAria')}
           />
         </div>
-        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500 text-center">{t('table.colIndex')}</div>
-        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colTime')}</div>
-        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{isAudioOnly ? '' : t('table.colSize')}</div>
-        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{isAudioOnly ? '' : t('table.colStyle')}</div>
-        <div className="py-2 px-2 text-[11px] font-medium text-zinc-500">{t('table.colText')}</div>
-        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colState')}</div>
-        <div className="py-2 px-1 text-[11px] font-medium text-zinc-500">{t('table.colActions')}</div>
+        {/* REQ-072 Phase 3c: column headers shifted from 11/medium uppercase
+            (chrome label tier) to 13/semibold non-uppercase (callout / item
+            name tier).  Apple HIG, VSCode, Notion, Linear all use
+            sentence-case for table headers — uppercase + tracking-wider
+            made these read as decorative chrome rather than as item names
+            that pair with the cell values below.  Color also lifted from
+            zinc-500 to zinc-300 so the headers carry the item-name weight
+            of a real label. */}
+        <div className="py-2 px-1 text-callout font-semibold text-zinc-300 text-center">{t('table.colIndex')}</div>
+        <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{t('table.colTime')}</div>
+        <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{isAudioOnly ? '' : t('table.colSize')}</div>
+        <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{isAudioOnly ? '' : t('table.colStyle')}</div>
+        <div className="py-2 px-2 text-callout font-semibold text-zinc-300">{t('table.colText')}</div>
+        <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{t('table.colState')}</div>
+        <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{t('table.colActions')}</div>
       </div>
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" onScroll={handleScroll}>
         {filtered.length === 0 ? (

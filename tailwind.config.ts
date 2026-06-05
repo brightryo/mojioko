@@ -57,33 +57,55 @@ const config: Config = {
         DEFAULT: '150ms'
       },
       fontSize: {
-        // REQ-071 Phase 1: role-based scale (single source of truth).
-        // Values per RES-20260601-071-design §1.2 (option B).  Migration of
-        // arbitrary `text-[Npx]` call-sites happens in Phase 2 (body), Phase 3
-        // (caption / label / micro), Phase 5 (legacy cleanup).
-        //   micro       — timeline-only constrained surfaces (ruler ticks,
-        //                 block in-time, track labels, StyleCell mini-labels)
-        //   label       — uppercase tracking-wider section labels
-        //   caption     — hints, tooltips, kbd, badges, table headers
-        //   body-sm     — compact rows, time-cell values (REQ-068 value)
-        //   body        — default body text (REQ-071 lift 14 → 15)
-        //   subheading  — card section titles (currently not used; available)
-        //   heading     — screen H1 (REQ-071 lift 18 → 20, matches spec)
-        //   display     — About / Splash headline (spec value)
+        // REQ-072 role-based type scale (Material Design 3 + Apple HIG
+        // adaptation for desktop).  10 styles across 5 role groups.
+        // Hierarchy comes from size AND weight AND color — Apple-style
+        // "same size, different weight" pairs (headline/body, callout/body-sm)
+        // let us add hierarchy without inflating the size scale.
+        //
+        // ┌─────────────┬──────┬────────┬──────────────────────────────────┐
+        // │ Token       │ Size │ Weight │ Role                             │
+        // ├─────────────┼──────┼────────┼──────────────────────────────────┤
+        // │ display     │ 24   │ 600    │ About / Splash hero              │
+        // │ heading     │ 20   │ 600    │ Screen H1                        │
+        // │ title       │ 16   │ 600    │ Dialog title                     │
+        // │ headline    │ 15   │ 600    │ Card / accordion section title   │
+        // │ body        │ 15   │ 400    │ Default body                     │
+        // │ callout     │ 13   │ 600    │ Item name in narrow / dense      │
+        // │ body-sm     │ 13   │ 400    │ Compact body, values, hints,     │
+        // │             │      │        │ descriptions, advisories         │
+        // │ label       │ 12   │ 500    │ Uppercase chrome category label  │
+        // │             │      │        │ (INPUT VIDEO, SUMMARY, etc.)     │
+        // │ caption     │ 12   │ 400    │ Tooltip, kbd, badge, footnote    │
+        // │ micro       │ 10   │ 400    │ Timeline only (ruler / in-block  │
+        // │             │      │        │ timecode / track gutter /        │
+        // │             │      │        │ StyleCell 80px-column labels)    │
+        // └─────────────┴──────┴────────┴──────────────────────────────────┘
+        //
+        // Weight is set at call-site via font-{normal,medium,semibold}
+        // because Tailwind's fontSize tuple does not carry weight.  The
+        // table above is the canonical pairing — DESIGN_SYSTEM.md §1.3
+        // is the prose authority.
         micro:        ['10px', { lineHeight: '14px' }],
         label:        ['12px', { lineHeight: '16px' }],
         caption:      ['12px', { lineHeight: '16px' }],
         'body-sm':    ['13px', { lineHeight: '18px' }],
+        callout:      ['13px', { lineHeight: '18px' }],
         body:         ['15px', { lineHeight: '22px' }],
-        subheading:   ['16px', { lineHeight: '24px' }],
+        headline:     ['15px', { lineHeight: '22px' }],
+        title:        ['16px', { lineHeight: '24px' }],
         heading:      ['20px', { lineHeight: '28px' }],
         display:      ['24px', { lineHeight: '32px' }],
 
-        // Legacy — retained during the REQ-071 migration so call-sites that
-        // still use `text-2xs` (none today, but reserved in case a future
-        // shadcn import lands one) keep compiling.  Slated for removal at
-        // the end of Phase 5 once the full sweep is done.
-        '2xs': ['11px', { lineHeight: '16px' }]
+        // Legacy — retained for the migration window.  `subheading` was
+        // the original REQ-071 name for 16px before REQ-072 renamed it to
+        // `title` (Material 3 terminology).  Kept as an alias until
+        // Phase 5 in case any in-flight branches reference it.
+        subheading:   ['16px', { lineHeight: '24px' }],
+
+        // Legacy 11px — never used after REQ-072 sweep; slated for
+        // removal in Phase 5.
+        '2xs':        ['11px', { lineHeight: '16px' }]
       }
     }
   },

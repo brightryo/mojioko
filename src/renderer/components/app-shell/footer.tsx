@@ -19,7 +19,7 @@ export function Footer({ left, center, right }: FooterProps) {
           (edit/warning/deleted counts on Step 2, model status on Step 1,
           privacy notes on Step 3); lifted to text-zinc-300 (body-adjacent
           tier ~13:1, AAA pass) so the chrome stays legible at a glance. */}
-      <div className="flex items-center text-[11px] text-zinc-300">{center}</div>
+      <div className="flex items-center text-body-sm text-zinc-300">{center}</div>
       <div className="flex items-center">{right}</div>
     </footer>
   )
