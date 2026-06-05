@@ -157,7 +157,7 @@ export function SettingsDialog() {
                   onKeyDown={handleFadeKeyDown}
                   className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-center text-body text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                 />
-                <p className="text-[11px] text-zinc-500">{t('general.fadeDurationHint')}</p>
+                <p className="text-body-sm text-zinc-500">{t('general.fadeDurationHint')}</p>
               </div>
             </div>
           </TabsContent>
@@ -168,13 +168,13 @@ export function SettingsDialog() {
               choice, and DL / Trash icons handle inventory in the same
               list.  No separate dropdown / management-only split. */}
           <TabsContent value="fonts" className="space-y-1.5 min-h-[490px]">
-            <p className="text-[11px] text-muted-foreground">{t('fonts.hint')}</p>
+            <p className="text-body-sm text-muted-foreground">{t('fonts.hint')}</p>
             <FontPicker />
           </TabsContent>
 
           {/* ─ Default style ──────────────────────────────────────── */}
           <TabsContent value="defaultStyle" className="space-y-2 min-h-[490px]">
-            <p className="text-[11px] text-muted-foreground">{t('defaultStyle.hint')}</p>
+            <p className="text-body-sm text-muted-foreground">{t('defaultStyle.hint')}</p>
             <DefaultStyleControls
               fontSizePx={transcriptionDefaults.fontSizePx}
               textColorHex={transcriptionDefaults.textColorHex}
@@ -189,7 +189,7 @@ export function SettingsDialog() {
 
           {/* ─ Whisper engine ─────────────────────────────────────── */}
           <TabsContent value="whisper" className="space-y-3 min-h-[490px]">
-            <p className="text-[11px] text-muted-foreground">{t('whisper.hint')}</p>
+            <p className="text-body-sm text-muted-foreground">{t('whisper.hint')}</p>
             <WhisperAdvancedControls
               transcriptionAdvanced={transcriptionAdvanced}
               onUpdate={setTranscriptionAdvanced}

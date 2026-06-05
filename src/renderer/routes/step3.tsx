@@ -368,7 +368,7 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
               is a flex column so the row list inside can flex-1 against
               the stretched grid-cell height. */}
           <div className="rounded-xl border border-border bg-card p-4 flex flex-col">
-            <Label className="uppercase tracking-wider text-[10px]">{t('summary.label')}</Label>
+            <Label>{t('summary.label')}</Label>
             <div className="mt-3 flex-1 flex flex-col divide-y divide-border/50">
               <SummaryRow label={t('summary.resolution')} value={video ? `${video.widthPx}×${video.heightPx}` : '—'} />
               <SummaryRow label={t('summary.duration')} value={video ? formatDuration(durationSec) : '—'} />
@@ -402,7 +402,7 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
             <div className="rounded-xl border border-border bg-card p-4 space-y-2">
               <div className="flex items-center gap-1.5">
                 <Music className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <Label className="uppercase tracking-wider text-[10px]">{t('audio.label')}</Label>
+                <Label>{t('audio.label')}</Label>
               </div>
               <div className="flex flex-col gap-2">
                 {(['simple', 'preserve'] as const).map((mode) => (
@@ -420,7 +420,7 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
                     <span className={cn('text-body font-medium', audioMode === mode ? 'text-primary' : 'text-foreground')}>
                       {t(`audio.${mode}`)}
                     </span>
-                    <span className="text-[11px] text-muted-foreground">{t(`audio.${mode}Desc`)}</span>
+                    <span className="text-body-sm text-muted-foreground">{t(`audio.${mode}Desc`)}</span>
                   </button>
                 ))}
               </div>
@@ -463,7 +463,7 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
             <div className="rounded-xl border border-primary/30 bg-primary/5 px-8 py-8 w-full max-w-xl space-y-3">
               <div className="flex items-center gap-2 text-primary">
                 <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
-                <p className="text-body font-medium">{t('success.title')}</p>
+                <p className="text-headline font-semibold">{t('success.title')}</p>
               </div>
               <p className="text-body-sm text-foreground break-all selectable font-mono">{completedPath}</p>
               <p className="text-body-sm text-muted-foreground">{t('success.fileSize', { size: String(completedSizeMB) })}</p>
@@ -479,10 +479,10 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
             <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-8 py-8 w-full max-w-xl space-y-3">
               <div className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                <p className="text-body font-medium">{t('error.title')}</p>
+                <p className="text-headline font-semibold">{t('error.title')}</p>
               </div>
               {errorMessage && (
-                <p className="text-[11px] text-muted-foreground break-all font-mono selectable">
+                <p className="text-body-sm text-muted-foreground break-all font-mono selectable">
                   {errorMessage.slice(-400)}
                 </p>
               )}
@@ -562,7 +562,7 @@ function OutputFormatCard({
     <div className="rounded-xl border border-border bg-card p-4 space-y-2">
       <div className="flex items-center gap-1.5">
         <FileVideo className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-        <Label className="uppercase tracking-wider text-[10px]">
+        <Label>
           {inputExt
             ? t('outputFormat.labelWithInput', { ext: inputExt })
             : t('outputFormat.label')}
@@ -605,9 +605,13 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   // floor that keeps the layout compact when the parent has no extra
   // height to share (e.g. a future surface that uses this component in
   // a tighter container).
+  //
+  // REQ-072: label uses `callout` (13/semibold) — item-name role in a
+  // narrow row.  Value stays body-sm regular mono.  Weight differentiates
+  // label from value at matching size.
   return (
     <div className="flex flex-1 items-center justify-between py-2 min-h-[28px]">
-      <span className="text-body-sm text-muted-foreground">{label}</span>
+      <span className="text-callout font-semibold text-muted-foreground">{label}</span>
       <span className="text-body-sm text-foreground font-mono tabular-nums">{value}</span>
     </div>
   )

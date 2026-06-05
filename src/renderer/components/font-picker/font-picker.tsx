@@ -410,7 +410,7 @@ function FontRow({
             without crowding the row. */}
         {meta.lacksRareKanji && (
           <span
-            className="inline-flex items-center gap-1 shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300/90 border border-amber-400/30 bg-amber-400/10"
+            className="inline-flex items-center gap-1 shrink-0 rounded px-1.5 py-0.5 text-caption uppercase tracking-wide text-amber-300/90 border border-amber-400/30 bg-amber-400/10"
             title={t('fontPicker.note.missingRareKanjiHelp')}
           >
             <AlertCircle className="h-3 w-3" aria-hidden="true" />
@@ -428,7 +428,7 @@ function FontRow({
                 style={{ width: `${Math.min(100, downloadPercent)}%` }}
               />
             </div>
-            <span className="text-[11px] text-muted-foreground tabular-nums w-9 text-right">
+            <span className="text-caption text-muted-foreground tabular-nums w-9 text-right">
               {downloadPercent}%
             </span>
             <Button

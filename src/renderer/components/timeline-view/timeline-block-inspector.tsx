@@ -300,13 +300,13 @@ export function TimelineBlockInspector({
           of these fields reach text/SRT export. */}
       {!isAudioOnly && (
         <div className="space-y-2 border-t border-zinc-800 pt-2">
-          <p className="text-[10px] uppercase tracking-wider text-zinc-500 select-none">
+          <p className="text-label text-zinc-500 select-none">
             {t('timeline.inspector.styleLabel')}
           </p>
 
           {/* Size */}
           <div className="flex items-center justify-between gap-2">
-            <label className="text-[11px] text-zinc-400">{t('styleCell.size')}</label>
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.size')}</label>
             <input
               type="number"
               min={FONT_SIZE_MIN_PX}
@@ -334,7 +334,7 @@ export function TimelineBlockInspector({
 
           {/* Text colour */}
           <div className="flex items-center justify-between gap-2">
-            <label className="text-[11px] text-zinc-400">{t('styleCell.textColor')}</label>
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.textColor')}</label>
             <ColorPicker
               value={entry.textColorHex}
               onChange={handleTextColorChange}
@@ -346,7 +346,7 @@ export function TimelineBlockInspector({
 
           {/* Outline colour */}
           <div className="flex items-center justify-between gap-2">
-            <label className="text-[11px] text-zinc-400">{t('styleCell.outlineColor')}</label>
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.outlineColor')}</label>
             <ColorPicker
               value={entry.outlineColorHex}
               onChange={handleOutlineColorChange}
@@ -359,7 +359,7 @@ export function TimelineBlockInspector({
           {/* Outline width — shared slider component (same as subtitle-table
               per-row + bulk-edit-bar). */}
           <div className="flex items-center justify-between gap-2">
-            <label className="text-[11px] text-zinc-400">{t('styleCell.outlineWidth')}</label>
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.outlineWidth')}</label>
             <div className="w-[160px]" onClick={(e) => e.stopPropagation()}>
               <OutlineThicknessSlider
                 value={entry.outlineThicknessPx}
@@ -372,7 +372,7 @@ export function TimelineBlockInspector({
 
           {/* Fade */}
           <div className="flex items-center justify-between gap-2">
-            <label className="text-[11px] text-zinc-400">{t('styleCell.fade')}</label>
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.fade')}</label>
             <Switch
               checked={entry.fadeEnabled}
               onCheckedChange={handleFadeChange}
@@ -386,7 +386,7 @@ export function TimelineBlockInspector({
       {/* § 4 — Font.  Per-row override via the shared RowFontSelector. */}
       {!isAudioOnly && (
         <div className="space-y-1 border-t border-zinc-800 pt-2">
-          <label className="text-[11px] text-zinc-400 block">{t('bulkRowFont.label')}</label>
+          <label className="text-callout font-semibold text-zinc-300 block">{t('bulkRowFont.label')}</label>
           <RowFontSelector
             value={entry.fontId}
             onChange={handleFontChange}
@@ -399,7 +399,7 @@ export function TimelineBlockInspector({
           retained from earlier phases.  No auto-focus on mount — see
           PopoverContent's `onOpenAutoFocus={preventDefault}` upstream. */}
       <div className="border-t border-zinc-800 pt-2">
-        <label className="block text-[10px] uppercase tracking-wider text-zinc-500 mb-1">
+        <label className="block text-label text-zinc-500 mb-1">
           {t('timeline.inspector.textLabel')}
         </label>
         <textarea
@@ -418,7 +418,7 @@ export function TimelineBlockInspector({
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         />
-        <p className="mt-1 text-[10px] text-zinc-500 select-none">
+        <p className="mt-1 text-caption text-zinc-500 select-none">
           {t('timeline.inspector.commitHint')}
         </p>
       </div>
@@ -428,7 +428,7 @@ export function TimelineBlockInspector({
           first → see status → tweak content → finally time" agreed for
           REQ-061. */}
       <div className="flex items-center justify-between gap-2 border-t border-zinc-800 pt-2">
-        <div className="flex items-baseline gap-1 text-[11px] font-mono tabular-nums text-zinc-400">
+        <div className="flex items-baseline gap-1 text-body-sm font-mono tabular-nums text-zinc-400">
           <span>{formatTimecode(entry.startSec)}</span>
           <span className="text-zinc-600">→</span>
           <span>{formatTimecode(entry.endSec)}</span>
@@ -440,7 +440,7 @@ export function TimelineBlockInspector({
           type="button"
           onClick={handleAdjustTime}
           className={cn(
-            'flex items-center gap-1 h-6 px-2 rounded text-[11px] text-zinc-400',
+            'flex items-center gap-1 h-6 px-2 rounded text-caption text-zinc-400',
             'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
           )}
         >

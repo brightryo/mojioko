@@ -54,7 +54,7 @@ const RESIZE_HANDLE_PX       = 6
  * time range, OR showing both ends touching, would be worse than showing
  * none (the user can't tell which end they're looking at).  REQ-061.
  *
- * Budget derivation (text-[10px] monospace tabular, empirically ~6.5 px
+ * Budget derivation (text-micro = 10px monospace tabular, empirically ~6.5 px
  * per char rather than the textbook 6 px):
  *   - "00:00:06.92" = 11 chars × ~6.5 px ≈ 72 px per timecode
  *   - 2 × timecode + ≥ 4-char visible gap (24 px) + px-2 padding both
@@ -149,7 +149,7 @@ function Ruler({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
         style={{ left: `${xPx}px` }}
       >
         <div className="h-full w-px bg-zinc-700/60" />
-        <span className="absolute top-1 left-1 text-[10px] font-mono tabular-nums text-zinc-500 select-none">
+        <span className="absolute top-1 left-1 text-micro font-mono tabular-nums text-zinc-500 select-none">
           {formatRulerLabel(sec, stepSec)}
         </span>
       </div>
@@ -339,7 +339,7 @@ function Block({
                 (the user can't tell whether it's start or end), so we
                 go all-or-nothing.  REQ-061. */}
             {widthPx >= TIME_ROW_MIN_BLOCK_WIDTH_PX && (
-              <div className="flex w-full items-baseline justify-between text-[10px] font-mono tabular-nums text-zinc-300/80 leading-none">
+              <div className="flex w-full items-baseline justify-between text-micro font-mono tabular-nums text-zinc-300/80 leading-none">
                 <span>{formatTimecode(entry.startSec)}</span>
                 <span>{formatTimecode(entry.endSec)}</span>
               </div>
@@ -991,7 +991,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                       The 0-based aria-label in Block stays 0-based for
                       consistency with the placement.trackIndex value the
                       smoke scripts query. */}
-                  <span className="text-[10px] font-mono text-zinc-500 select-none">
+                  <span className="text-micro font-mono text-zinc-500 select-none">
                     {t('timeline.trackLabel', { index: i + 1 })}
                   </span>
                 </div>

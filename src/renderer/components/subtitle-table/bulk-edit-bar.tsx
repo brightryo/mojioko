@@ -381,7 +381,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             after blur.  onFocus selects the existing content so re-
             typing replaces in one keystroke (vs. clicking + manually
             highlighting before typing). */}
-        <label className="flex items-center gap-2 text-body-sm text-muted-foreground">
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.size')}</span>
           <input
             type="number"
@@ -415,7 +415,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             fallback to white is now only the empty-selection safety net
             (BulkEditBar does not render while empty); during normal use
             this branch never runs. */}
-        <label className="flex items-center gap-2 text-body-sm text-muted-foreground">
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.textColor')}</span>
           <ColorPicker
             value={colorDraftText ?? '#FFFFFF'}
@@ -427,7 +427,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </label>
 
         {/* Outline color — same seeding contract as text color above. */}
-        <label className="flex items-center gap-2 text-body-sm text-muted-foreground">
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.outlineColor')}</span>
           <ColorPicker
             value={colorDraftOutline ?? '#000000'}
@@ -442,7 +442,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             OutlineThicknessSlider.  Commit semantics, accent-color
             sourcing, readout width and disabled handling all live in
             that component so the two surfaces cannot drift. */}
-        <label className="flex items-center gap-2 text-body-sm text-muted-foreground">
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.outlineWidth')}</span>
           <OutlineThicknessSlider
             value={outlineSliderDraft}
@@ -452,7 +452,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </label>
 
         {/* Fade */}
-        <label className="flex items-center gap-2 text-body-sm text-muted-foreground">
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.fade')}</span>
           <Switch onCheckedChange={handleFadeChange} />
         </label>
@@ -461,7 +461,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             per-row picker (RowFontSelector) but with a static "フォント"
             trigger label — selection here applies to every row in the
             current bulk selection. */}
-        <label className="flex items-center gap-2 text-body-sm text-muted-foreground">
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulkRowFont.label')}</span>
           <BulkFontPicker onPick={handleFontChange} />
         </label>
@@ -550,7 +550,7 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
             <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="flex-1 min-w-0">
               <span className="block leading-tight">{t('bulkRowFont.useDefault')}</span>
-              <span className="block text-[10px] text-zinc-500 truncate">
+              <span className="block text-caption text-zinc-500 truncate">
                 {getFontMeta(activeFontId).displayName}
               </span>
             </span>

@@ -37,12 +37,12 @@ export function ShortcutsDialog() {
         <div className="space-y-5">
           {grouped.map(({ scope, label, items }) => (
             <div key={scope}>
-              <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500 mb-2">{label}</p>
+              <p className="text-label font-medium uppercase tracking-wider text-zinc-500 mb-2">{label}</p>
               <div className="rounded-lg border border-zinc-800 divide-y divide-zinc-800">
                 {items.map((s) => (
                   <div key={s.id} className="flex items-center justify-between px-3 py-2">
                     <span className="text-body text-zinc-300">{t(`commands:${s.descriptionKey}`)}</span>
-                    <kbd className="font-mono text-[11px] text-zinc-400 bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 flex-shrink-0">
+                    <kbd className="font-mono text-caption text-zinc-400 bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 flex-shrink-0">
                       {s.display}
                     </kbd>
                   </div>

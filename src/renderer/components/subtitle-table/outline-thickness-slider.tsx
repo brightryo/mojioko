@@ -97,7 +97,7 @@ export function OutlineThicknessSlider({
         style={{ accentColor: 'hsl(var(--primary))' }}
         aria-label={ariaLabel}
       />
-      <span className="w-6 text-[11px] text-muted-foreground font-mono tabular-nums">
+      <span className="w-6 text-caption text-muted-foreground font-mono tabular-nums">
         {draft}
       </span>
     </div>

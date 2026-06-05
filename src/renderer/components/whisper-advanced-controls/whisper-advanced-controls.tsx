@@ -105,7 +105,7 @@ export function WhisperAdvancedControls({
     <div className="space-y-5">
       {/* ── VAD ─────────────────────────────────────────────────────── */}
       <div className="space-y-0.5">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-foreground mb-2">
+        <p className="text-label font-medium uppercase tracking-wider text-foreground mb-2">
           {t('advanced.vad')}
         </p>
         <AdvancedParamRow
@@ -182,7 +182,7 @@ export function WhisperAdvancedControls({
                 transcriptionAdvanced.minSpeechDurationMs !== TRANSCRIPTION_DEFAULTS.minSpeechDurationMs
               )}
             />
-            <span className="text-[11px] text-muted-foreground/60">ms</span>
+            <span className="text-caption text-muted-foreground/60">ms</span>
           </div>
         </AdvancedParamRow>
 
@@ -210,14 +210,14 @@ export function WhisperAdvancedControls({
                 transcriptionAdvanced.minSilenceDurationMs !== TRANSCRIPTION_DEFAULTS.minSilenceDurationMs
               )}
             />
-            <span className="text-[11px] text-muted-foreground/60">ms</span>
+            <span className="text-caption text-muted-foreground/60">ms</span>
           </div>
         </AdvancedParamRow>
       </div>
 
       {/* ── Recognition ─────────────────────────────────────────────── */}
       <div className="space-y-0.5">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-foreground mb-2">
+        <p className="text-label font-medium uppercase tracking-wider text-foreground mb-2">
           {t('advanced.recognition')}
         </p>
         <AdvancedParamRow
@@ -277,7 +277,7 @@ export function WhisperAdvancedControls({
 
       {/* ── Reset + note ────────────────────────────────────────────── */}
       <div className="flex items-center justify-between pt-1">
-        <p className="text-[11px] italic text-muted-foreground/60">
+        <p className="text-body-sm italic text-muted-foreground/60">
           {t('advanced.futureNote')}
         </p>
         {isAdvancedChanged && (

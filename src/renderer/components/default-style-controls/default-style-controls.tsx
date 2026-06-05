@@ -109,7 +109,7 @@ export function DefaultStyleControls({
             unambiguous. */}
         <p
           className={cn(
-            'text-[11px] transition-colors',
+            'text-body-sm transition-colors',
             fontSizeOutOfRange ? 'text-[hsl(var(--warning))]' : 'text-muted-foreground'
           )}
         >
