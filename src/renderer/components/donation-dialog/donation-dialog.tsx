@@ -27,7 +27,7 @@ function DonationCard({ title, subtitle, cta, url }: DonationCardProps) {
   return (
     <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 gap-4">
       <div className="min-w-0">
-        <p className="text-[13px] font-medium text-zinc-100">{title}</p>
+        <p className="text-[14px] font-medium text-zinc-100">{title}</p>
         {/* REQ-067 phase B: was text-zinc-500.  Subtitle is a description
             line under each donation channel — body-adjacent, not a hint —
             lifted to text-zinc-400 (AAA pass). */}
@@ -56,7 +56,7 @@ export function DonationDialog() {
       <DialogContent className="w-[520px] max-w-[520px]">
         <DialogHeader>
           <DialogTitle>{t('title')}</DialogTitle>
-          <DialogDescription className="text-[13px] text-zinc-400">
+          <DialogDescription className="text-[14px] text-zinc-400">
             {t('description')}
           </DialogDescription>
         </DialogHeader>

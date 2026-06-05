@@ -263,7 +263,7 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
   const footerCenter = (
     /* REQ-067 phase B: zinc-500 → zinc-300, same rationale as Step 1/2
        footers — privacy note is permanent chrome, not a hint. */
-    <span className="flex items-center gap-1.5 text-[12px] text-zinc-300">
+    <span className="flex items-center gap-1.5 text-[13px] text-zinc-300">
       <Shield className="h-3.5 w-3.5" />
       {t('footer.privacyNote')}
     </span>
@@ -346,7 +346,7 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
         {renderState === 'idle' && (
           <div>
             <h1 className="text-[18px] font-semibold text-foreground">{t('title')}</h1>
-            <p className="mt-1 text-[13px] text-muted-foreground">{t('subtitle')}</p>
+            <p className="mt-1 text-[14px] text-muted-foreground">{t('subtitle')}</p>
           </div>
         )}
 
@@ -417,7 +417,7 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
                         : 'border-border hover:bg-accent/40'
                     )}
                   >
-                    <span className={cn('text-[13px] font-medium', audioMode === mode ? 'text-primary' : 'text-foreground')}>
+                    <span className={cn('text-[14px] font-medium', audioMode === mode ? 'text-primary' : 'text-foreground')}>
                       {t(`audio.${mode}`)}
                     </span>
                     <span className="text-[11px] text-muted-foreground">{t(`audio.${mode}Desc`)}</span>
@@ -446,7 +446,7 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <div className="flex items-center justify-between text-[12px] text-muted-foreground">
+                <div className="flex items-center justify-between text-[13px] text-muted-foreground">
                   <span>{t('progress.label')}</span>
                   <span className="font-mono tabular-nums">{progress}%</span>
                 </div>
@@ -465,8 +465,8 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
                 <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
                 <p className="text-[14px] font-medium">{t('success.title')}</p>
               </div>
-              <p className="text-[12px] text-foreground break-all selectable font-mono">{completedPath}</p>
-              <p className="text-[12px] text-muted-foreground">{t('success.fileSize', { size: String(completedSizeMB) })}</p>
+              <p className="text-[13px] text-foreground break-all selectable font-mono">{completedPath}</p>
+              <p className="text-[13px] text-muted-foreground">{t('success.fileSize', { size: String(completedSizeMB) })}</p>
             </div>
           </div>
         )}
@@ -582,7 +582,7 @@ function OutputFormatCard({
             )}
           >
             <span className={cn(
-              'text-[13px] font-medium',
+              'text-[14px] font-medium',
               outputContainer === mode ? 'text-primary' : 'text-foreground'
             )}>
               {mode === 'sameAsInput' && inputExt
@@ -607,8 +607,8 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   // a tighter container).
   return (
     <div className="flex flex-1 items-center justify-between py-2 min-h-[28px]">
-      <span className="text-[12px] text-muted-foreground">{label}</span>
-      <span className="text-[12px] text-foreground font-mono tabular-nums">{value}</span>
+      <span className="text-[13px] text-muted-foreground">{label}</span>
+      <span className="text-[13px] text-foreground font-mono tabular-nums">{value}</span>
     </div>
   )
 }

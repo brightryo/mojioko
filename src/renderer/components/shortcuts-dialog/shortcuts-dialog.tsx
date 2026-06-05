@@ -41,7 +41,7 @@ export function ShortcutsDialog() {
               <div className="rounded-lg border border-zinc-800 divide-y divide-zinc-800">
                 {items.map((s) => (
                   <div key={s.id} className="flex items-center justify-between px-3 py-2">
-                    <span className="text-[13px] text-zinc-300">{t(`commands:${s.descriptionKey}`)}</span>
+                    <span className="text-[14px] text-zinc-300">{t(`commands:${s.descriptionKey}`)}</span>
                     <kbd className="font-mono text-[11px] text-zinc-400 bg-zinc-900 border border-zinc-700 rounded px-1.5 py-0.5 flex-shrink-0">
                       {s.display}
                     </kbd>

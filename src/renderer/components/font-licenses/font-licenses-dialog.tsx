@@ -34,7 +34,7 @@ export function FontLicensesDialog() {
       <DialogContent className="max-w-[600px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t('fontLicenses.title')}</DialogTitle>
-          <DialogDescription className="text-[12px] text-muted-foreground">
+          <DialogDescription className="text-[13px] text-muted-foreground">
             {t('fontLicenses.intro')}
           </DialogDescription>
         </DialogHeader>

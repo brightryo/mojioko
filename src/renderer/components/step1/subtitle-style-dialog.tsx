@@ -65,7 +65,7 @@ export function SubtitleStyleDialog({
       <DialogContent className="max-w-[900px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t('subtitleStyle.dialogTitle')}</DialogTitle>
-          <DialogDescription className="text-[12px] text-muted-foreground">
+          <DialogDescription className="text-[13px] text-muted-foreground">
             {t('subtitleStyle.dialogDescription')}
           </DialogDescription>
         </DialogHeader>

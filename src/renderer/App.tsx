@@ -278,10 +278,10 @@ function AppInner() {
           classNames: {
             toast:
               'bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-50 shadow-2xl shadow-black/40',
-            title: 'text-[13px] font-medium text-zinc-50',
-            description: 'text-[12px] text-zinc-400',
-            actionButton: 'bg-zinc-700 text-zinc-50 text-[12px] rounded-md px-2 py-1',
-            cancelButton: 'bg-zinc-800 text-zinc-400 text-[12px] rounded-md px-2 py-1'
+            title: 'text-[14px] font-medium text-zinc-50',
+            description: 'text-[13px] text-zinc-400',
+            actionButton: 'bg-zinc-700 text-zinc-50 text-[13px] rounded-md px-2 py-1',
+            cancelButton: 'bg-zinc-800 text-zinc-400 text-[13px] rounded-md px-2 py-1'
           }
         }}
       />

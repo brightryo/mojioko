@@ -42,7 +42,7 @@ export function CommandPalette() {
             {/* REQ-067 phase B: was text-zinc-500.  Empty-state notice is
                 an informational status, not a hint — lift to text-zinc-300
                 so it reads at the same level as the items it replaces. */}
-            <Command.Empty className="py-8 text-center text-[13px] text-zinc-300">
+            <Command.Empty className="py-8 text-center text-[14px] text-zinc-300">
               {t('group.navigation')}
             </Command.Empty>
             {grouped.map(({ group, label, items }) => (
@@ -52,7 +52,7 @@ export function CommandPalette() {
                     key={cmd.id}
                     value={`${label} ${t(cmd.labelKey)}`}
                     onSelect={() => handleSelect(cmd)}
-                    className="flex cursor-default items-center justify-between rounded-md mx-1 px-3 py-2 text-[13px] text-zinc-300 aria-selected:bg-zinc-800 aria-selected:text-zinc-50 transition-colors duration-100"
+                    className="flex cursor-default items-center justify-between rounded-md mx-1 px-3 py-2 text-[14px] text-zinc-300 aria-selected:bg-zinc-800 aria-selected:text-zinc-50 transition-colors duration-100"
                   >
                     <div className="flex items-center gap-2">
                       {cmd.icon && <cmd.icon className="h-4 w-4 text-zinc-500 flex-shrink-0" />}

@@ -36,7 +36,9 @@ const SIZE_STEP_PX = 10
  *   7. badges              (90px)
  *   8. row actions         (76px)
  */
-const TABLE_GRID_COLS = 'grid-cols-[32px_36px_110px_64px_220px_1fr_90px_76px]'
+// REQ-068 Phase C: time column 110 → 130 to fit the widened TimeInput
+// (w-[110px]) needed after bumping all time text to 13 px (was 12).
+const TABLE_GRID_COLS = 'grid-cols-[32px_36px_130px_64px_220px_1fr_90px_76px]'
 
 /** Fallback when warningsMap is missing an entry (deleted rows; race with stale memo). */
 const NO_WARNINGS: EntryWarnings = {
@@ -91,7 +93,7 @@ function CellEditor({ value, onCommit, onCancel, multiline }: CellEditorProps) {
   }
 
   const sharedClass = cn(
-    'w-full bg-zinc-800 rounded px-2 py-1 text-[13px] text-zinc-50 resize-none',
+    'w-full bg-zinc-800 rounded px-2 py-1 text-[14px] text-zinc-50 resize-none',
     'focus:outline-none'
   )
 
@@ -349,7 +351,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
       </div>
 
       {/* # */}
-      <div className="flex items-center justify-center py-3 text-[12px] text-zinc-500 font-mono tabular-nums">
+      <div className="flex items-center justify-center py-3 text-[13px] text-zinc-500 font-mono tabular-nums">
         {displayIndex}
       </div>
 
@@ -362,7 +364,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           warning={isStartOverlap || isStartExceedsDuration}
           title={isStartExceedsDuration ? t('warning.exceedsDuration') : undefined}
         />
-        <div className="w-[90px] text-[12px] text-zinc-600 text-center leading-none select-none">|</div>
+        <div className="w-[90px] text-[13px] text-zinc-600 text-center leading-none select-none">|</div>
         <TimeInput
           value={entry.endSec}
           onChange={handleEndChange}
@@ -428,7 +430,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
               // line, so surface the clamp range as a hover tooltip.
               title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
               className={cn(
-                'w-full h-7 rounded border bg-zinc-950 px-1 text-center text-[12px] text-zinc-100',
+                'w-full h-7 rounded border bg-zinc-950 px-1 text-center text-[13px] text-zinc-100',
                 'focus:outline-none focus:ring-1',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
@@ -552,16 +554,16 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
             multiline
           />
         ) : entry.isDeleted ? (
-          <span className="text-[13px] leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-zinc-500 cursor-text select-text">
+          <span className="text-[14px] leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-zinc-500 cursor-text select-text">
             {entry.text.replace(/\\N/g, '\n')}
           </span>
         ) : isOverflow ? (
-          <span className="text-[13px] leading-relaxed break-words whitespace-pre-wrap line-clamp-3 cursor-text select-text">
+          <span className="text-[14px] leading-relaxed break-words whitespace-pre-wrap line-clamp-3 cursor-text select-text">
             <span className="text-zinc-100">{entry.text.replace(/\\N/g, '\n').slice(0, overflowStartIndex)}</span>
             <span className="text-red-500">{entry.text.replace(/\\N/g, '\n').slice(overflowStartIndex)}</span>
           </span>
         ) : (
-          <span className="text-[13px] leading-relaxed break-words whitespace-pre-wrap line-clamp-3 text-zinc-100 cursor-text select-text">
+          <span className="text-[14px] leading-relaxed break-words whitespace-pre-wrap line-clamp-3 text-zinc-100 cursor-text select-text">
             {entry.text.replace(/\\N/g, '\n')}
           </span>
         )}
@@ -879,7 +881,7 @@ export function SubtitleTable({
             className="flex flex-col items-center justify-center gap-3 py-16"
           >
             <FileText className="h-8 w-8 text-zinc-700" />
-            <p className="text-[13px] font-medium text-zinc-400">{t(emptyKey)}</p>
+            <p className="text-[14px] font-medium text-zinc-400">{t(emptyKey)}</p>
           </motion.div>
         ) : (
           <AnimatePresence initial={false}>

@@ -210,7 +210,7 @@ export function AudioPreviewPanel() {
           {t('videoPreview.play')}
         </span>
         <div className="flex-1 flex items-center justify-center gap-1.5 min-w-0 px-2">
-          <span className="min-w-0 truncate text-[12px] text-foreground/80" title={video.path}>
+          <span className="min-w-0 truncate text-[13px] text-foreground/80" title={video.path}>
             {filename}
           </span>
           <button

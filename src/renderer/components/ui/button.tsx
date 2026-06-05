@@ -25,10 +25,10 @@ const buttonVariants = cva(
       },
       size: {
         sm: 'h-7 px-3 py-1.5 text-xs',
-        md: 'h-9 px-4 py-2.5 text-[13px]',
+        md: 'h-9 px-4 py-2.5 text-[14px]',
         lg: 'h-11 px-5 py-3 text-sm',
         /** Square icon button. */
-        icon: 'h-8 w-8 p-0 text-[13px]'
+        icon: 'h-8 w-8 p-0 text-[14px]'
       }
     },
     defaultVariants: {

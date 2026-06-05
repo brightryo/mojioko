@@ -354,7 +354,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     >
       {/* Left: count + clear */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <span className="text-[12px] font-medium text-foreground tabular-nums">
+        <span className="text-[13px] font-medium text-foreground tabular-nums">
           {countLabel}
         </span>
         <button
@@ -381,7 +381,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             after blur.  onFocus selects the existing content so re-
             typing replaces in one keystroke (vs. clicking + manually
             highlighting before typing). */}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
           <span>{t('bulk.size')}</span>
           <input
             type="number"
@@ -403,7 +403,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
             }}
             className={cn(
-              'w-16 h-7 rounded border bg-input px-2 text-center text-[12px] text-foreground',
+              'w-16 h-7 rounded border bg-input px-2 text-center text-[13px] text-foreground',
               'focus:outline-none focus:ring-1 focus:ring-ring/30',
               'border-border',
               '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
@@ -415,7 +415,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             fallback to white is now only the empty-selection safety net
             (BulkEditBar does not render while empty); during normal use
             this branch never runs. */}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
           <span>{t('bulk.textColor')}</span>
           <ColorPicker
             value={colorDraftText ?? '#FFFFFF'}
@@ -427,7 +427,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </label>
 
         {/* Outline color — same seeding contract as text color above. */}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
           <span>{t('bulk.outlineColor')}</span>
           <ColorPicker
             value={colorDraftOutline ?? '#000000'}
@@ -442,7 +442,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             OutlineThicknessSlider.  Commit semantics, accent-color
             sourcing, readout width and disabled handling all live in
             that component so the two surfaces cannot drift. */}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
           <span>{t('bulk.outlineWidth')}</span>
           <OutlineThicknessSlider
             value={outlineSliderDraft}
@@ -452,7 +452,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </label>
 
         {/* Fade */}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
           <span>{t('bulk.fade')}</span>
           <Switch onCheckedChange={handleFadeChange} />
         </label>
@@ -461,7 +461,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             per-row picker (RowFontSelector) but with a static "フォント"
             trigger label — selection here applies to every row in the
             current bulk selection. */}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
           <span>{t('bulkRowFont.label')}</span>
           <BulkFontPicker onPick={handleFontChange} />
         </label>
@@ -492,7 +492,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           aria-label={t('bulk.autoLineBreakHelp')}
           className={cn(
             'inline-flex items-center justify-center gap-1.5',
-            'h-7 px-2 rounded border bg-input text-[12px] text-foreground',
+            'h-7 px-2 rounded border bg-input text-[13px] text-foreground',
             'border-border hover:border-zinc-700 transition-colors duration-150',
             'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
           )}
@@ -530,7 +530,7 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
           type="button"
           className={cn(
             'inline-flex items-center justify-between gap-1.5',
-            'h-7 px-2 rounded border bg-input text-[12px] text-foreground',
+            'h-7 px-2 rounded border bg-input text-[13px] text-foreground',
             'border-border hover:border-zinc-700',
             'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
           )}
@@ -545,7 +545,7 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
           <button
             type="button"
             onClick={() => pick(undefined)}
-            className="flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-left text-zinc-100 hover:bg-accent/40 cursor-pointer"
+            className="flex items-center gap-2 px-2 py-1.5 rounded text-[13px] text-left text-zinc-100 hover:bg-accent/40 cursor-pointer"
           >
             <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="flex-1 min-w-0">
@@ -563,7 +563,7 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
               key={m.id}
               type="button"
               onClick={() => pick(m.id)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-left text-zinc-300 hover:bg-accent/40"
+              className="flex items-center gap-2 px-2 py-1.5 rounded text-[13px] text-left text-zinc-300 hover:bg-accent/40"
             >
               <span className="h-2 w-2 rounded-full bg-zinc-600 shrink-0" aria-hidden="true" />
               <span

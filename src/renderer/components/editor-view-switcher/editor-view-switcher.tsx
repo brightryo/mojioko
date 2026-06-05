@@ -19,9 +19,12 @@ export function EditorViewSwitcher() {
   const mode = useUiStore((s) => s.editorViewMode)
   const setMode = useUiStore((s) => s.setEditorViewMode)
 
+  // REQ-068: timeline first because it is now the default view (REQ-063).
+  // Putting the default leftmost matches the user's mental "primary →
+  // secondary" reading order so the active segment sits where they look first.
   const OPTIONS: { key: EditorViewMode; label: string; Icon: typeof List }[] = [
-    { key: 'list',     label: t('viewMode.list'),     Icon: List },
-    { key: 'timeline', label: t('viewMode.timeline'), Icon: GanttChartSquare }
+    { key: 'timeline', label: t('viewMode.timeline'), Icon: GanttChartSquare },
+    { key: 'list',     label: t('viewMode.list'),     Icon: List }
   ]
 
   return (
@@ -38,7 +41,7 @@ export function EditorViewSwitcher() {
           type="button"
           onClick={() => setMode(key)}
           className={cn(
-            'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium',
+            'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-[13px] font-medium',
             'transition-colors duration-150',
             mode === key
               ? 'bg-zinc-800 text-zinc-50'
