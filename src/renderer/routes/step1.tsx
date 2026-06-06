@@ -304,9 +304,26 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     // an explicit clear — `setEntries(finalEntries)` immediately below
     // overwrites the entry array with brand-new entries seeded from
     // `runDefaults`, so the old entries' fontSize / colour / fade /
-    // fontId edits cannot survive.  Done AFTER the post-cancel return
-    // above (line ~227) so that cancelling a transcription does NOT
-    // wipe the user's prior session.
+    // fontId edits cannot survive.
+    //
+    // Placement note (REQ-092 audit): the 4 resets sit AFTER the
+    // post-cancel `if (cancelled) return` above (line ~227), but
+    // crucially NOT because we are protecting a recoverable
+    // "cancelled-transcription preserves prior session" path — no
+    // such path exists.  From Step 1, the breadcrumb
+    // (`breadcrumb.tsx:64-66`, `isCompleted = step < currentStep`)
+    // disables the Step 2 button because `step1.tsx`'s
+    // `currentStep={1}` makes Step 2 isFuture, and Step 1 has no
+    // other forward navigate beyond the `navigate('/step2')` at
+    // line ~317 below.  So a cancelled run leaves projectStore
+    // stale on Step 1, but the user can ONLY reach Step 2 by
+    // re-running transcription — which re-enters this same block
+    // and wipes the stale state.  The "after cancel-check"
+    // placement is kept for code locality: these 4 resets and
+    // `setEntries` form one logical "commit transcription
+    // success" block, and keeping them together makes the
+    // invariant "fresh transcription ⇒ fresh editing state"
+    // locally obvious.
     useProjectStore.getState().setCuts([])
     useUiStore.getState().clearPendingCut()
     useHistoryStore.getState().clear()
