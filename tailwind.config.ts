@@ -95,17 +95,7 @@ const config: Config = {
         headline:     ['15px', { lineHeight: '22px' }],
         title:        ['16px', { lineHeight: '24px' }],
         heading:      ['20px', { lineHeight: '28px' }],
-        display:      ['24px', { lineHeight: '32px' }],
-
-        // Legacy — retained for the migration window.  `subheading` was
-        // the original REQ-071 name for 16px before REQ-072 renamed it to
-        // `title` (Material 3 terminology).  Kept as an alias until
-        // Phase 5 in case any in-flight branches reference it.
-        subheading:   ['16px', { lineHeight: '24px' }],
-
-        // Legacy 11px — never used after REQ-072 sweep; slated for
-        // removal in Phase 5.
-        '2xs':        ['11px', { lineHeight: '16px' }]
+        display:      ['24px', { lineHeight: '32px' }]
       }
     }
   },
