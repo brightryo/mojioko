@@ -25,6 +25,11 @@ import {
   SNAP_DISTANCE_PX,
   type SnapResult
 } from '@/lib/timeline-snap'
+import {
+  editedDuration,
+  editedToOrig,
+  origToEdited
+} from '../../../shared/cuts'
 import type { EntryWarnings } from '@/lib/entry-warnings'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TimelineBlockInspector } from './timeline-block-inspector'
@@ -476,6 +481,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   bumpRenderCount('TimelineView')
   const { t } = useTranslation(['step2'])
   const entries = useProjectStore((s) => s.entries)
+  const cuts = useProjectStore((s) => s.cuts)
   const tableFilter = useUiStore((s) => s.tableFilter)
   const focusedRowId = useUiStore((s) => s.focusedRowId)
   const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
@@ -529,8 +535,39 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
 
   const totalSec   = layout.totalSec
   const trackCount = Math.max(1, layout.trackCount)
-  const widthPx    = totalSec * pixelsPerSec
+  // REQ-074 1c: ruler / playhead / blocks now live on the EDITED axis.
+  // `editedTotalSec` is the visible timeline length after ripple cuts
+  // (= originalDuration - Σ cut lengths).  When cuts is empty this equals
+  // `totalSec` exactly, so the legacy non-trim behaviour is byte-identical.
+  const editedTotalSec = useMemo(
+    () => editedDuration(totalSec, cuts),
+    [totalSec, cuts]
+  )
+  const widthPx    = editedTotalSec * pixelsPerSec
   const tracksHeightPx = trackCount * TRACK_HEIGHT_PX
+
+  /**
+   * Pre-computed Edited-axis position for each placed entry.
+   * Computed ONCE per [layout.placements, cuts, pixelsPerSec] change, so a
+   * playhead tick (which only updates `videoCurrentTimeSec`) does not
+   * recompute origToEdited per Block — protects the REQ-071 Phase 3.9
+   * `Block` re-render budget.
+   *
+   * When cuts is empty, origToEdited(t, []) === t, so the map collapses to
+   * the legacy `entry.startSec * pixelsPerSec` values exactly.
+   */
+  const editedBlockPositions = useMemo(() => {
+    const map = new Map<string, { leftPx: number; widthPx: number }>()
+    for (const { entry } of layout.placements) {
+      const leftEdited = origToEdited(entry.startSec, cuts)
+      const rightEdited = origToEdited(entry.endSec, cuts)
+      map.set(entry.id, {
+        leftPx: leftEdited * pixelsPerSec,
+        widthPx: (rightEdited - leftEdited) * pixelsPerSec,
+      })
+    }
+    return map
+  }, [layout.placements, cuts, pixelsPerSec])
 
   // Inspector open-id — single-popover invariant.  Lives as local state
   // rather than in ui-store because no other component needs to know
@@ -786,9 +823,19 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     else setOpenInspectorId((prev) => (prev === id ? null : prev))
   }, [])
 
-  const handleSeek = useCallback((sec: number) => {
-    setVideoSeekRequest(sec)
-  }, [setVideoSeekRequest])
+  /**
+   * REQ-074 1c: Ruler scrub + tracks background click + any other "user
+   * clicked at time T on the timeline" event delivers an EDITED-axis time.
+   * `<video>.currentTime` (and therefore `videoSeekRequestSec`) is the
+   * ORIGINAL axis, so translate via `editedToOrig` before forwarding.
+   *
+   * Boundary convention (post-cut side) comes from `editedToOrig` itself
+   * — a click landing exactly on a cut-collapse point seeks to the start
+   * of the next kept segment, matching NLE behaviour.
+   */
+  const handleSeek = useCallback((editedSec: number) => {
+    setVideoSeekRequest(editedToOrig(editedSec, cuts))
+  }, [setVideoSeekRequest, cuts])
 
   function handleTracksBackgroundClick(e: React.MouseEvent<HTMLDivElement>) {
     // Only react to clicks on the empty track background; the blocks themselves
@@ -811,14 +858,18 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const playheadXPx = videoCurrentTimeSec * pixelsPerSec + TRACK_GUTTER_LEFT_PX
+    // Playhead lives on the EDITED axis here (videoCurrentTimeSec is the
+    // <video>.currentTime = Original; translate to Edited for the visual
+    // position).  Empty cuts → identity.
+    const playheadEditedSec = origToEdited(videoCurrentTimeSec, cuts)
+    const playheadXPx = playheadEditedSec * pixelsPerSec + TRACK_GUTTER_LEFT_PX
     const visibleLeft  = el.scrollLeft
     const visibleRight = visibleLeft + el.clientWidth
     if (playheadXPx < visibleLeft || playheadXPx > visibleRight - 24) {
       const target = playheadXPx - el.clientWidth / 3
       el.scrollLeft = Math.max(0, target)
     }
-  }, [videoCurrentTimeSec, pixelsPerSec])
+  }, [videoCurrentTimeSec, pixelsPerSec, cuts])
 
   // Consume scrollToRowId from ui-store — set by the subtitle-table when
   // a row is added or its time is adjusted.  In timeline view we honour
@@ -837,12 +888,14 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     if (!el) return
     // Defer a tick so the layout reflects any just-changed pps / entries.
     const timer = setTimeout(() => {
-      const blockX = entry.startSec * pixelsPerSec + TRACK_GUTTER_LEFT_PX
+      // Block's Edited-axis position — entry.startSec is Original.
+      const blockEditedStartSec = origToEdited(entry.startSec, cuts)
+      const blockX = blockEditedStartSec * pixelsPerSec + TRACK_GUTTER_LEFT_PX
       el.scrollLeft = Math.max(0, blockX - el.clientWidth / 2)
       setScrollToRowId(null)
     }, 80)
     return () => clearTimeout(timer)
-  }, [scrollToRowId, pixelsPerSec, setScrollToRowId])
+  }, [scrollToRowId, pixelsPerSec, setScrollToRowId, cuts])
 
   // Ctrl+wheel zoom around the mouse position.  React's onWheel is passive
   // by default so it cannot preventDefault; attach the listener manually
@@ -889,7 +942,9 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   // Render
   // -------------------------------------------------------------------------
 
-  const playheadXPx = videoCurrentTimeSec * pixelsPerSec
+  // Playhead in Edited pixels (origin-snapped via origToEdited; identity
+  // when cuts is empty).
+  const playheadXPx = origToEdited(videoCurrentTimeSec, cuts) * pixelsPerSec
 
   const hasAnyVisible = visibleEntries.length > 0
 
@@ -1050,7 +1105,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
             >
               <Ruler
                 pixelsPerSec={pixelsPerSec}
-                totalSec={totalSec}
+                totalSec={editedTotalSec}
                 onSeek={handleSeek}
               />
 
@@ -1076,11 +1131,11 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                 ))}
 
                 {/* Major-tick vertical gridlines that extend through tracks
-                    for visual continuity with the ruler. */}
+                    for visual continuity with the ruler.  Edited axis. */}
                 {(() => {
                   const stepSec = chooseRulerStepSec(pixelsPerSec)
                   const lines = []
-                  for (let s = stepSec; s < totalSec; s += stepSec) {
+                  for (let s = stepSec; s < editedTotalSec; s += stepSec) {
                     lines.push(
                       <div
                         key={s}
@@ -1103,8 +1158,12 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                     explicit left/top/width so only the visible block
                     rectangle catches pointer events. */}
                 {layout.placements.map(({ entry, trackIndex }) => {
-                  const leftPx  = entry.startSec * pixelsPerSec
-                  const widthBl = (entry.endSec - entry.startSec) * pixelsPerSec
+                  // REQ-074 1c: read pre-computed Edited-axis position
+                  // (origToEdited * pps).  Empty cuts → identical to the
+                  // legacy `entry.startSec * pixelsPerSec` calculation.
+                  const pos = editedBlockPositions.get(entry.id)
+                  const leftPx  = pos?.leftPx ?? entry.startSec * pixelsPerSec
+                  const widthBl = pos?.widthPx ?? (entry.endSec - entry.startSec) * pixelsPerSec
                   const topPx   = trackIndex * TRACK_HEIGHT_PX + BLOCK_VERTICAL_PAD_PX
                   const w       = warningsMap.get(entry.id) ?? null
                   // Overflow tint suppressed in audio-only mode (matches the
