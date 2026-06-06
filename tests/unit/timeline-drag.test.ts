@@ -138,12 +138,49 @@ describe('computeDragPatch — move drag end-to-end', () => {
     expect(patch!.guideKind).toBeNull()
   })
 
-  it('movement below 3 px → no patch (matches Block body click-vs-drag threshold)', () => {
+  it('movement below 3 px → isNoop=true (matches Block body click-vs-drag threshold)', () => {
+    // REQ-100 changed the noop signal from `null` to a flag so the
+    // snap guide can still be derived from the cursor position even
+    // while the entry write is skipped.  Previously this returned
+    // null and applyDragPatch returned early without touching
+    // snapGuidePx, which left the guide frozen at a stale value
+    // during cursor oscillations around the drag origin.
     const patch = computeDragPatch(baseInput({
       kind: 'move',
       dxPx: 2,
     }))
-    expect(patch).toBeNull()
+    expect(patch.isNoop).toBe(true)
+  })
+
+  it('REQ-100: noop still computes a snap guide so the UI stays in sync', () => {
+    // dxPx=2 (sub-3-px noop) BUT the cursor is over a snap target.
+    // The block patch should be flagged isNoop=true (so the caller
+    // skips updateEntry), but the snap-guide fields MUST still
+    // surface the target — otherwise the visual guide freezes at
+    // whatever value the last non-noop event left it at, producing
+    // the "guide appears or disappears at random during move" report.
+    const patch = computeDragPatch(baseInput({
+      snapshot: { startSec: 5, endSec: 10 },
+      kind: 'move',
+      dxPx: 2,                       // below noop threshold
+      liveEntries: [entry('a', 5, 10), entry('b', 5.04, 8)], // B.startSec is at rawStart 5.04
+      draggingEntryId: 'a',
+    }))
+    expect(patch.isNoop).toBe(true)
+    // rawStart = 5 + 2/50 = 5.04; B.startSec = 5.04 → distPx 0 → snap.
+    expect(patch.guideKind).toBe('edge')
+    expect(patch.guideTimeSec).toBe(5.04)
+  })
+
+  it('REQ-100: noop with snap disabled still returns a non-null result (no guide)', () => {
+    const patch = computeDragPatch(baseInput({
+      kind: 'move',
+      dxPx: 1,
+      snapEnabled: false,
+    }))
+    expect(patch.isNoop).toBe(true)
+    expect(patch.guideKind).toBeNull()
+    expect(patch.guideTimeSec).toBeNull()
   })
 })
 
