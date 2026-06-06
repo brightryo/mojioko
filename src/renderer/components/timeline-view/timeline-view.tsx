@@ -1232,25 +1232,31 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
             <span className="text-label font-medium uppercase tracking-wider text-zinc-500 select-none">
               {t('timeline.trim.toolbarLabel')}
             </span>
+            {/* REQ-080 #2 — 始点 / 終点 / カット: always look like
+                buttons (base bg + border).  No "−" placeholder when
+                unset — the time chip simply doesn't render until the
+                point is captured.  Set state amber-tints the background
+                AND the border so the "pressed" affordance reads at a
+                glance. */}
             <button
               type="button"
               onClick={handleSetIn}
               title={t('timeline.trim.setInTooltip')}
               aria-pressed={pendingCutInSec !== null}
               className={cn(
-                'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
-                'transition-colors duration-150',
+                'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
+                'border transition-colors duration-150',
                 pendingCutInSec !== null
-                  ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
-                  : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+                  : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
               )}
             >
               <span>{t('timeline.trim.setIn')}</span>
-              <span className="font-mono tabular-nums text-caption text-zinc-500">
-                {pendingCutInSec !== null
-                  ? formatTimecode(pendingCutInSec)
-                  : t('timeline.trim.noPoint')}
-              </span>
+              {pendingCutInSec !== null && (
+                <span className="font-mono tabular-nums text-caption text-amber-300/80">
+                  {formatTimecode(pendingCutInSec)}
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -1258,19 +1264,19 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               title={t('timeline.trim.setOutTooltip')}
               aria-pressed={pendingCutOutSec !== null}
               className={cn(
-                'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
-                'transition-colors duration-150',
+                'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
+                'border transition-colors duration-150',
                 pendingCutOutSec !== null
-                  ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
-                  : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+                  : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
               )}
             >
               <span>{t('timeline.trim.setOut')}</span>
-              <span className="font-mono tabular-nums text-caption text-zinc-500">
-                {pendingCutOutSec !== null
-                  ? formatTimecode(pendingCutOutSec)
-                  : t('timeline.trim.noPoint')}
-              </span>
+              {pendingCutOutSec !== null && (
+                <span className="font-mono tabular-nums text-caption text-amber-300/80">
+                  {formatTimecode(pendingCutOutSec)}
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -1282,10 +1288,14 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               }
               title={t('timeline.trim.confirmCutTooltip')}
               className={cn(
-                'flex h-7 items-center px-2.5 rounded-md text-body-sm font-medium',
-                'transition-colors duration-150',
-                'bg-green-500 text-zinc-950 hover:bg-green-400',
-                'disabled:bg-zinc-800 disabled:text-zinc-500 disabled:hover:bg-zinc-800 disabled:cursor-not-allowed'
+                'flex h-7 items-center px-3 rounded-md text-body-sm font-semibold',
+                'border transition-colors duration-150',
+                // 3.8 invariant: green-button text MUST be zinc-950
+                // (rgb(9,9,11)) on green-500 (rgb(34,197,94)).  Verified
+                // by green-button-color.spec.ts; the styling here keeps
+                // that pairing across every state.
+                'bg-green-500 text-zinc-950 border-green-400 hover:bg-green-400',
+                'disabled:bg-zinc-800 disabled:text-zinc-500 disabled:border-zinc-700 disabled:hover:bg-zinc-800 disabled:cursor-not-allowed'
               )}
             >
               {t('timeline.trim.confirmCut')}
