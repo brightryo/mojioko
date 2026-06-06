@@ -238,9 +238,11 @@
       "ariaLabel": "Playhead"
     },
     "inspector": {
+      "textLabel": "Text",
       "adjustTime": "Adjust time",
       "delete": "Delete",
-      "restore": "Restore"
+      "restore": "Restore",
+      "styleLabel": "Style"
     },
     "nav": {
       "first": "Jump to start",
