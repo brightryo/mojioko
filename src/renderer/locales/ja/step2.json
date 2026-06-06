@@ -238,11 +238,9 @@
       "ariaLabel": "再生ヘッド"
     },
     "inspector": {
-      "textLabel": "テキスト",
       "adjustTime": "時間を調整",
       "delete": "削除",
-      "restore": "復元",
-      "styleLabel": "スタイル"
+      "restore": "復元"
     },
     "nav": {
       "first": "先頭へ",

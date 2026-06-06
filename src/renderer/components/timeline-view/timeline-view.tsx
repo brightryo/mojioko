@@ -1041,26 +1041,42 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     return () => clearTimeout(timer)
   }, [scrollToRowId, pixelsPerSec, setScrollToRowId, cuts])
 
-  // REQ-083 #2: Ctrl+wheel zoom (modifier + mouse gesture) removed.
-  // The previous implementation here intercepted Ctrl+wheel to drive
-  // pixelsPerSec; per the "no keyboard shortcuts except Space" policy
-  // (REQ-082 / REQ-083) zoom changes go through the toolbar's [−] /
-  // slider / [+] only.
+  // Wheel handling on the timeline scroll container:
+  //   - Ctrl+wheel    → preventDefault.  Suppresses Chromium's built-in
+  //                     page-zoom (REQ-083 #2) without doing anything else.
+  //   - plain wheel   → REQ-084 #3.  Route deltaY explicitly to scrollTop
+  //                     so multi-track timelines scroll vertically with
+  //                     the wheel.  Without this override Chromium's
+  //                     scroll-chaining fallback can route deltaY to
+  //                     scrollLeft (= horizontal scroll) when the
+  //                     container is wider than tall, which is the
+  //                     timeline's default geometry — the user wanted
+  //                     wheel = vertical even then.  Horizontal scroll
+  //                     stays on the bottom scrollbar (and trackpad
+  //                     deltaX is left alone).
   //
-  // The listener is KEPT — but only to `preventDefault()` on Ctrl+wheel
-  // so Chromium's built-in "Ctrl+wheel = page zoom" does not fire and
-  // shrink/grow the entire app UI by accident.  Normal (no-Ctrl) wheel
-  // events early-return without touching default behaviour, so the
-  // overflow-x horizontal scroll on the scroll container continues to
-  // work natively — verified against the same code path that used to
-  // run before REQ-083.
+  // `passive: false` is required so `preventDefault()` actually fires;
+  // React's onWheel prop attaches with `passive: true` which silently
+  // ignores the cancel.
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     function onWheel(e: WheelEvent) {
-      if (!e.ctrlKey) return  // ← non-Ctrl wheel: let the browser scroll natively
-      e.preventDefault()       // ← Ctrl+wheel: swallow Chromium's page-zoom default
-      // No zoom action — toolbar controls own that now.
+      if (!el) return
+      if (e.ctrlKey) {
+        e.preventDefault()
+        return
+      }
+      // Plain wheel with a vertical component → force vertical scroll.
+      // Skip when there is no vertical overflow (single-track timelines
+      // fit in the viewport, in which case there's nothing to scroll
+      // and the browser default is fine).
+      if (e.deltaY !== 0 && el.scrollHeight > el.clientHeight) {
+        el.scrollTop += e.deltaY
+        e.preventDefault()
+      }
+      // deltaX (trackpad horizontal swipe) → leave to browser default
+      // so horizontal trackpad scrolling continues to work.
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)

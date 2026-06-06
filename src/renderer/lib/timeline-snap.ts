@@ -178,5 +178,22 @@ export function snapInterval(
   return { startSec: rawStartSec, endSec: rawEndSec, guide: null }
 }
 
-/** Snap target distance window in CSS pixels — spec §7.1. */
-export const SNAP_DISTANCE_PX = 6
+/**
+ * Snap target distance window in CSS pixels.
+ *
+ * REQ-084 #1: bumped from the original 6 px (spec §7.1) to 12 px after
+ * the owner reported snap "完全に機能していない".  Investigation found
+ * the snap algorithm itself was sound — verified by the 12 unit tests
+ * in `tests/unit/timeline-snap.test.ts` — but at the default 50 px/sec
+ * zoom the 6 px threshold gave a snap window of only 0.12 sec, which is
+ * below typical mouse drag precision.  The user perceived this as "no
+ * snap" because the cursor essentially never landed inside the window
+ * unless they aimed extremely deliberately.
+ *
+ * 12 px = 0.24 sec window at default zoom — matches the Premiere /
+ * Resolve magnetic-snap convention (~10–12 px) and makes snap usable
+ * without feeling sticky.  At maximum zoom (400 px/sec) the window
+ * shrinks to 0.03 sec, which is the right behaviour: when zoomed in,
+ * the user expects finer control.
+ */
+export const SNAP_DISTANCE_PX = 12
