@@ -1177,13 +1177,16 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+          {/* REQ-078 #2 — toolbar even-spacing.  Lifted the playhead-nav
+              cluster, the trim cluster, and the snap toggle out of their
+              former wrapping <div className="flex gap-3">; with
+              `justify-between` on the toolbar itself, the four top-level
+              children (zoom on the left, nav, trim, snap) now distribute
+              evenly across the row — zoom hugs the left edge, snap hugs
+              the right, and nav + trim sit at evenly spaced points in
+              between.  Nothing else moved. */}
           {/* REQ-077 #4 — playhead navigation cluster.
-              [先頭へ] [前境界へ] [次境界へ] [末尾へ]
-              Placed immediately to the LEFT of the trim toolbar so it
-              reads "jog controls → trim controls" left to right.  Each
-              button is h-7 w-7 to match the zoom-out/-in icon buttons
-              on the toolbar's other end. */}
+              [先頭へ] [前境界へ] [次境界へ] [末尾へ] */}
           <div className="flex items-center gap-0.5">
             <button
               type="button"
@@ -1336,7 +1339,6 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
             <Magnet className="h-3 w-3" />
             {t('timeline.toolbar.snap')}
           </button>
-        </div>
       </div>
 
       {/* Scroll container */}
