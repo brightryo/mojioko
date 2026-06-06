@@ -41,7 +41,7 @@
   },
   "dialog": {
     "discardChanges": "変更を破棄しますか？",
-    "discardChangesDesc": "編集済みの行がありますが、このまま戻りますか？",
+    "discardChangesDesc": "編集済みの字幕がありますが、このまま戻りますか？",
     "dontAskAgain": "今後このセッションでは確認しない"
   },
   "error": {

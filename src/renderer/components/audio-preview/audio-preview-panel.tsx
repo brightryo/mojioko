@@ -261,7 +261,7 @@ export function AudioPreviewPanel() {
               className={cn(
                 'flex items-center justify-center rounded-full transition-colors duration-150',
                 'h-10 w-10 bg-primary text-primary-foreground hover:bg-primary/90',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
+                'focus:outline-none focus-visible:outline-none'
               )}
             >
               {isPlaying

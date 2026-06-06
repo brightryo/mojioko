@@ -385,7 +385,7 @@ function FontRow({
       aria-pressed={canSelect ? isActive : undefined}
       className={cn(
         'flex items-center justify-between gap-3 px-3 py-2 transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30 focus-visible:ring-inset',
+        'focus:outline-none focus-visible:outline-none',
         isActive && 'bg-primary/10',
         canSelect && !isActive && 'cursor-pointer hover:bg-accent/30',
         !canSelect && !isActive && 'cursor-default'

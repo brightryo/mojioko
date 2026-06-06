@@ -494,7 +494,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             'inline-flex items-center justify-center gap-1.5',
             'h-7 px-2 rounded border bg-input text-body-sm text-foreground',
             'border-border hover:border-zinc-700 transition-colors duration-150',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
+            'focus:outline-none focus-visible:outline-none'
           )}
         >
           <WrapText className="h-3.5 w-3.5" />
@@ -532,7 +532,7 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
             'inline-flex items-center justify-between gap-1.5',
             'h-7 px-2 rounded border bg-input text-body-sm text-foreground',
             'border-border hover:border-zinc-700',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
+            'focus:outline-none focus-visible:outline-none'
           )}
           aria-label={t('bulkRowFont.label')}
         >

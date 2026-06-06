@@ -48,7 +48,7 @@
   "subtitleStyle": {
     "openButton": "Subtitle style",
     "dialogTitle": "Subtitle style",
-    "dialogDescription": "These seed values are burned into every row at transcription time. Tweak them here and verify with the live preview."
+    "dialogDescription": "These seed values are burned into every subtitle at transcription time. Tweak them here and verify with the live preview."
   },
   "whisperModel": {
     "label": "Whisper model",
@@ -186,12 +186,12 @@
       "downloadFailed": "Download failed: {{error}}",
       "downloadUnavailable": "{{name}} is not yet available — please try again later",
       "uninstalled": "{{name}} uninstalled",
-      "uninstalledFallback": "{{name}} was removed — {{count}} row(s) reverted to the default font",
+      "uninstalledFallback": "{{name}} was removed — {{count}} subtitle(s) reverted to the default font",
       "activated": "Switched to {{name}}"
     },
     "uninstallConfirm": {
       "title": "Remove {{name}}?",
-      "body": "{{name}} is used by {{count}} row(s). Removing it will revert those rows to the default font.",
+      "body": "{{name}} is used by {{count}} subtitle(s). Removing it will revert them to the default font.",
       "confirm": "Remove",
       "cancel": "Cancel"
     }

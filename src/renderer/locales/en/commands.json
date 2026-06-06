@@ -23,9 +23,9 @@
     "exportText": "Export transcript text…"
   },
   "edit": {
-    "addRow": "Add row at end",
-    "deleteRow": "Delete focused row",
-    "resetRow": "Reset focused row",
+    "addRow": "Add at end",
+    "deleteRow": "Delete focused",
+    "resetRow": "Reset focused",
     "undo": "Undo",
     "redo": "Redo"
   },

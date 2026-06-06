@@ -3,8 +3,13 @@ import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
+// REQ-081 #2: no focus ring on buttons.  Owner decision — keyboard
+// navigation lands silently on the button without the green halo the
+// previous focus-visible:ring-2 produced.  Inputs keep their focus
+// indication (see ui/input.tsx + time-input.tsx); only button-like
+// elements drop the ring.
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-40',
+  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium transition-colors duration-150 focus:outline-none focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40',
   {
     variants: {
       variant: {

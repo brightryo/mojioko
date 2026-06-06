@@ -23,9 +23,9 @@
     "exportText": "テキストを書き出す…"
   },
   "edit": {
-    "addRow": "行を末尾に追加",
-    "deleteRow": "選択行を削除",
-    "resetRow": "選択行をリセット",
+    "addRow": "末尾に追加",
+    "deleteRow": "選択を削除",
+    "resetRow": "選択をリセット",
     "undo": "元に戻す",
     "redo": "やり直し"
   },

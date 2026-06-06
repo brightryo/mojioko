@@ -27,7 +27,7 @@
   },
   "subtitleDefaults": {
     "label": "字幕デフォルト設定",
-    "hint": "すべての行の初期値として適用されます",
+    "hint": "すべての字幕の初期値として適用されます",
     "size": "サイズ",
     "textColor": "文字色",
     "outlineColor": "縁取り色",
@@ -48,7 +48,7 @@
   "subtitleStyle": {
     "openButton": "字幕スタイル",
     "dialogTitle": "字幕スタイル設定",
-    "dialogDescription": "文字起こし時に各行の初期値として焼き込まれます。プレビューで確認しながら調整してください。"
+    "dialogDescription": "文字起こし時に各字幕の初期値として焼き込まれます。プレビューで確認しながら調整してください。"
   },
   "whisperModel": {
     "label": "Whisperモデル",
@@ -113,7 +113,7 @@
   "toast": {
     "videoLoaded": "ファイルを読み込みました",
     "probeError": "ファイルの解析に失敗しました: {{error}}",
-    "transcriptionComplete": "文字起こし完了 · {{count}}行",
+    "transcriptionComplete": "文字起こし完了 · {{count}}件",
     "modelDownloadFailed": "ダウンロードに失敗しました: {{error}}",
     "modelNotInstalled": "モデル {{model}} が未ダウンロードです",
     "transcriptionError": "文字起こしに失敗しました: {{error}}",
@@ -162,7 +162,7 @@
   },
   "fontPicker": {
     "title": "デフォルト字幕フォント",
-    "help": "プロジェクト全体のデフォルトフォントです。STEP 2 で行ごとに別フォントへ上書きできます。標準同梱の Noto Sans JP 以外は必要に応じてダウンロードされ、%APPDATA%\\MOJIOKO\\fonts\\ 配下に保存されます。",
+    "help": "プロジェクト全体のデフォルトフォントです。STEP 2 で字幕ごとに別フォントへ上書きできます。標準同梱の Noto Sans JP 以外は必要に応じてダウンロードされ、%APPDATA%\\MOJIOKO\\fonts\\ 配下に保存されます。",
     "status": {
       "bundled": "標準同梱",
       "installed": "ダウンロード済み",
@@ -186,12 +186,12 @@
       "downloadFailed": "ダウンロードに失敗しました: {{error}}",
       "downloadUnavailable": "{{name}} はまだ配信されていません。時間を置いて再度お試しください。",
       "uninstalled": "{{name}} を削除しました",
-      "uninstalledFallback": "{{name}} が削除されたため、{{count}}行をデフォルトフォントに変更しました",
+      "uninstalledFallback": "{{name}} が削除されたため、{{count}}件をデフォルトフォントに変更しました",
       "activated": "{{name}} を選択しました"
     },
     "uninstallConfirm": {
       "title": "{{name}} を削除しますか？",
-      "body": "{{name}} は {{count}} 行で使用されています。削除すると、それらの行はデフォルトフォントに戻ります。",
+      "body": "{{name}} は {{count}} 件で使用されています。削除すると、それらはデフォルトフォントに戻ります。",
       "confirm": "削除する",
       "cancel": "キャンセル"
     }

@@ -721,7 +721,7 @@ export function VideoPreviewPanel() {
                             'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
                             'bg-secondary text-foreground transition-all duration-150',
                             'hover:bg-accent active:scale-95',
-                            'focus:outline-none focus:ring-2 focus:ring-ring/30',
+                            'focus:outline-none focus-visible:outline-none',
                             'disabled:cursor-not-allowed disabled:opacity-40'
                           )}
                           aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}

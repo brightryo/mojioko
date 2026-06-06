@@ -139,10 +139,10 @@ test('TimeEditorDialog (add mode) confirm renders zinc-950 on green-500', async 
   const { app, window } = await launchAt('?seed=demo&start=step2')
   await window.waitForFunction(() => Boolean((window as unknown as { __mojioko_test?: unknown }).__mojioko_test))
 
-  // The "行を追加" / "Add row" button is rendered with `variant="ghost"`
-  // and is the only one carrying the Plus icon next to its label.  Click
-  // it to drive the dialog open.
-  await window.locator('button:has-text("行を追加")').first().click()
+  // The "追加" / "Add" button is rendered with `variant="ghost"` and is
+  // the only one carrying the Plus icon next to its label.  Click it to
+  // drive the dialog open.  (REQ-081 #3 dropped the "行/row" prefix.)
+  await window.locator('button:has-text("追加")').first().click()
   await window.waitForSelector('[role="dialog"]')
   await window.waitForTimeout(100) // let the dialog complete its open transition
 

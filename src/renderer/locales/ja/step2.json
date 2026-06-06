@@ -10,13 +10,13 @@
     "colState": "状態",
     "colActions": "",
     "fadeTooltip": "フェード",
-    "selectAllAria": "表示中のすべての行を選択"
+    "selectAllAria": "表示中のすべてを選択"
   },
   "rowFont": {
     "defaultPrefix": "デフォルト:",
     "useDefault": "デフォルトに合わせる",
     "tooltipDefault": "デフォルトのフォント ({{name}})。クリックで変更",
-    "tooltipOverride": "この行のみ {{name}} で表示中。クリックで変更"
+    "tooltipOverride": "この字幕のみ {{name}} で表示中。クリックで変更"
   },
   "bulkRowFont": {
     "label": "フォント",
@@ -51,44 +51,44 @@
   },
   "empty": {
     "all": "字幕がありません",
-    "ready": "警告のある行はありません",
-    "edited": "編集済みの行はありません",
-    "warnings": "警告のある行はありません",
-    "overflow": "はみ出しの行はありません",
-    "deleted": "削除済みの行はありません"
+    "ready": "警告のある字幕はありません",
+    "edited": "編集済みの字幕はありません",
+    "warnings": "警告のある字幕はありません",
+    "overflow": "はみ出しの字幕はありません",
+    "deleted": "削除済みの字幕はありません"
   },
   "action": {
-    "addRow": "行を追加",
-    "addRowAt": "{{index}}行目に追加",
+    "addRow": "追加",
+    "addRowAt": "{{index}}番目に追加",
     "adjustTime": "時間調整",
     "export": "テキスト出力",
     "exportText": "テキスト出力",
     "exportSrt": "SRT形式で出力",
     "continueToRender": "書き出しへ",
-    "resetRow": "この行をリセット",
-    "deleteRow": "この行を削除",
-    "restoreRow": "この行を復元",
+    "resetRow": "リセット",
+    "deleteRow": "削除",
+    "restoreRow": "復元",
     "autoLineBreakRow": "自動改行",
-    "autoLineBreakRowHelp": "この行のみ改行を引き直します",
+    "autoLineBreakRowHelp": "改行を引き直します",
     "sizeStepUp": "サイズを +{{step}}px (最大 {{max}})",
     "sizeStepDown": "サイズを -{{step}}px (最小 {{min}})"
   },
   "dialog": {
     "timeEditor": {
       "title": {
-        "add": "行を追加",
+        "add": "追加",
         "edit": "時間を調整"
       },
       "startTime": "開始時間",
       "endTime": "終了時間",
       "setFromPlayhead": "再生ヘッド位置をセット",
       "currentPlayhead": "現在",
-      "setFromPrevStart": "前の行の開始時間をセット",
-      "setFromPrevEnd": "前の行の終了時間をセット",
-      "setFromNextStart": "次の行の開始時間をセット",
-      "setFromNextEnd": "次の行の終了時間をセット",
-      "setFromSelectedStart": "選択行の開始時間をセット",
-      "setFromSelectedEnd": "選択行の終了時間をセット",
+      "setFromPrevStart": "前の開始時間をセット",
+      "setFromPrevEnd": "前の終了時間をセット",
+      "setFromNextStart": "次の開始時間をセット",
+      "setFromNextEnd": "次の終了時間をセット",
+      "setFromSelectedStart": "選択の開始時間をセット",
+      "setFromSelectedEnd": "選択の終了時間をセット",
       "add": "追加",
       "apply": "適用",
       "cancel": "キャンセル"
@@ -96,12 +96,12 @@
   },
   "addRowPopover": {
     "label": "挿入位置",
-    "hint": "行番号を入力"
+    "hint": "番号を入力"
   },
   "addRowDialog": {
     "startTime": "開始時間",
     "endTime": "終了時間",
-    "insertAfter": "行 {{n}} の後に挿入",
+    "insertAfter": "{{n}} 番目の後に挿入",
     "appendEnd": "最後に追加",
     "errorTimeOrder": "終了時間は開始時間より後にしてください",
     "errorOverlap": "既存の字幕と重複しています"
@@ -112,15 +112,15 @@
     "selected": "{{count}}件選択中"
   },
   "toast": {
-    "rowAdded": "{{index}}行目に追加しました",
-    "rowDeleted": "行を削除しました",
-    "rowRestored": "行を復元しました",
-    "rowReset": "行をリセットしました",
+    "rowAdded": "{{index}}番目に追加しました",
+    "rowDeleted": "削除しました",
+    "rowRestored": "復元しました",
+    "rowReset": "リセットしました",
     "exported": "テキストを書き出しました",
     "exportedSrt": "SRTを書き出しました",
     "undo": "元に戻す: {{label}}",
     "redo": "やり直し: {{label}}",
-    "bulkApplied": "{{count}}行に適用しました ({{label}})",
+    "bulkApplied": "{{count}}件に適用しました ({{label}})",
     "bulkAppliedUndo": "元に戻す"
   },
   "tooltip": {
@@ -142,10 +142,10 @@
     "editStroke": "アウトライン太さを変更",
     "editFade": "フェードを変更",
     "editFont": "フォントを変更",
-    "deleteRow": "行を削除",
-    "restoreRow": "行を復元",
-    "resetRow": "行をリセット",
-    "addRow": "行を追加",
+    "deleteRow": "削除",
+    "restoreRow": "復元",
+    "resetRow": "リセット",
+    "addRow": "追加",
     "autoLineBreak": "自動改行"
   },
   "bulk": {
@@ -159,17 +159,17 @@
     "outlineWidth": "アウトライン幅",
     "fade": "フェード",
     "autoLineBreak": "自動改行",
-    "autoLineBreakHelp": "選択行の改行を引き直します（既存の手動改行はリセット）",
-    "autoLineBreakNoChange": "変更が必要な行はありませんでした",
+    "autoLineBreakHelp": "選択した字幕の改行を引き直します（既存の手動改行はリセット）",
+    "autoLineBreakNoChange": "変更が必要な字幕はありませんでした",
     "history": {
-      "size": "サイズを一括変更 ({{count}}行)",
-      "textColor": "文字色を一括変更 ({{count}}行)",
-      "outlineColor": "アウトライン色を一括変更 ({{count}}行)",
-      "colorPair": "色ペアを一括変更 ({{count}}行)",
-      "outlineWidth": "アウトライン幅を一括変更 ({{count}}行)",
-      "fade": "フェードを一括変更 ({{count}}行)",
-      "font": "フォントを一括変更 ({{count}}行)",
-      "autoLineBreak": "自動改行を一括適用 ({{count}}行)"
+      "size": "サイズを一括変更 ({{count}}件)",
+      "textColor": "文字色を一括変更 ({{count}}件)",
+      "outlineColor": "アウトライン色を一括変更 ({{count}}件)",
+      "colorPair": "色ペアを一括変更 ({{count}}件)",
+      "outlineWidth": "アウトライン幅を一括変更 ({{count}}件)",
+      "fade": "フェードを一括変更 ({{count}}件)",
+      "font": "フォントを一括変更 ({{count}}件)",
+      "autoLineBreak": "自動改行を一括適用 ({{count}}件)"
     }
   },
   "videoPreview": {
@@ -227,10 +227,10 @@
       "zoomSlider": "ズーム倍率",
       "zoomLevel": "{{pps}} px/秒",
       "snap": "吸着",
-      "snapHelp": "近接する境界に吸着（Phase 5 で実装予定）"
+      "snapHelp": "再生ヘッダ・隣接ブロックの端・ルーラーの目盛に吸着（Alt で一時無効）"
     },
     "block": {
-      "ariaLabel": "字幕ブロック T{{track}} / 行 {{index}}",
+      "ariaLabel": "字幕ブロック T{{track}} / 番号 {{index}}",
       "resizeStart": "開始時間をドラッグで調整",
       "resizeEnd": "終了時間をドラッグで調整"
     },

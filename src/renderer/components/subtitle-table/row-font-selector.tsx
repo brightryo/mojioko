@@ -64,7 +64,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
             'inline-flex items-center justify-between gap-1.5 w-full',
             'h-6 px-2 rounded-md border text-caption text-left transition-colors duration-150',
             'border-zinc-800 bg-zinc-950 hover:border-zinc-700',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30',
+            'focus:outline-none focus-visible:outline-none',
             'disabled:opacity-40 disabled:cursor-not-allowed',
             isOverriding ? 'text-zinc-100' : 'text-zinc-400'
           )}

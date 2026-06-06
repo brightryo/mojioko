@@ -316,7 +316,7 @@ export function ColorPicker({
               'h-6 w-6 flex-shrink-0 rounded border border-zinc-700',
               'transition-all duration-150',
               'hover:border-zinc-500 hover:scale-110',
-              'focus:outline-none focus:ring-2 focus:ring-green-500/30',
+              'focus:outline-none focus-visible:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-40',
               className
             )}
@@ -338,7 +338,7 @@ export function ColorPicker({
           className={cn(
             'flex h-9 w-full items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2.5',
             'transition-colors duration-150 hover:border-zinc-700',
-            'focus:outline-none focus:ring-2 focus:ring-green-500/30',
+            'focus:outline-none focus-visible:outline-none',
             'disabled:cursor-not-allowed disabled:opacity-40',
             className
           )}

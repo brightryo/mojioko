@@ -16,7 +16,7 @@
     "defaultPrefix": "Default:",
     "useDefault": "Use project default",
     "tooltipDefault": "Project default font ({{name}}). Click to override",
-    "tooltipOverride": "This row uses {{name}}. Click to change"
+    "tooltipOverride": "This subtitle uses {{name}}. Click to change"
   },
   "bulkRowFont": {
     "label": "Font",
@@ -58,37 +58,37 @@
     "deleted": "No deleted entries."
   },
   "action": {
-    "addRow": "Add row",
+    "addRow": "Add",
     "addRowAt": "Add at position {{index}}",
     "adjustTime": "Adjust time",
     "export": "Export text",
     "exportText": "Export as text",
     "exportSrt": "Export as SRT",
     "continueToRender": "Continue to render",
-    "resetRow": "Reset this row",
-    "deleteRow": "Delete this row",
-    "restoreRow": "Restore this row",
+    "resetRow": "Reset",
+    "deleteRow": "Delete",
+    "restoreRow": "Restore",
     "autoLineBreakRow": "Auto wrap",
-    "autoLineBreakRowHelp": "Re-wrap this row's line breaks",
+    "autoLineBreakRowHelp": "Re-wrap line breaks",
     "sizeStepUp": "Size +{{step}}px (max {{max}})",
     "sizeStepDown": "Size −{{step}}px (min {{min}})"
   },
   "dialog": {
     "timeEditor": {
       "title": {
-        "add": "Add Row",
+        "add": "Add",
         "edit": "Adjust Time"
       },
       "startTime": "Start time",
       "endTime": "End time",
       "setFromPlayhead": "Set from playhead",
       "currentPlayhead": "current",
-      "setFromPrevStart": "Set from previous row start",
-      "setFromPrevEnd": "Set from previous row end",
-      "setFromNextStart": "Set from next row start",
-      "setFromNextEnd": "Set from next row end",
-      "setFromSelectedStart": "Set from selected row start",
-      "setFromSelectedEnd": "Set from selected row end",
+      "setFromPrevStart": "Set from previous start",
+      "setFromPrevEnd": "Set from previous end",
+      "setFromNextStart": "Set from next start",
+      "setFromNextEnd": "Set from next end",
+      "setFromSelectedStart": "Set from selected start",
+      "setFromSelectedEnd": "Set from selected end",
       "add": "Add",
       "apply": "Apply",
       "cancel": "Cancel"
@@ -96,12 +96,12 @@
   },
   "addRowPopover": {
     "label": "Insert position",
-    "hint": "Enter row number"
+    "hint": "Enter position number"
   },
   "addRowDialog": {
     "startTime": "Start time",
     "endTime": "End time",
-    "insertAfter": "Insert after row {{n}}",
+    "insertAfter": "Insert after position {{n}}",
     "appendEnd": "Append to end",
     "errorTimeOrder": "End time must be after start time",
     "errorOverlap": "Overlaps with an existing subtitle"
@@ -112,10 +112,10 @@
     "selected": "{{count}} selected"
   },
   "toast": {
-    "rowAdded": "Row added at position {{index}}",
-    "rowDeleted": "Row deleted",
-    "rowRestored": "Row restored",
-    "rowReset": "Row reset",
+    "rowAdded": "Added at position {{index}}",
+    "rowDeleted": "Deleted",
+    "rowRestored": "Restored",
+    "rowReset": "Reset",
     "exported": "Transcript exported",
     "exportedSrt": "SRT exported",
     "undo": "Undo: {{label}}",
@@ -142,10 +142,10 @@
     "editStroke": "Change stroke width",
     "editFade": "Change fade",
     "editFont": "Change font",
-    "deleteRow": "Delete row",
-    "restoreRow": "Restore row",
-    "resetRow": "Reset row",
-    "addRow": "Add row",
+    "deleteRow": "Delete",
+    "restoreRow": "Restore",
+    "resetRow": "Reset",
+    "addRow": "Add",
     "autoLineBreak": "Auto wrap"
   },
   "bulk": {
@@ -227,10 +227,10 @@
       "zoomSlider": "Zoom level",
       "zoomLevel": "{{pps}} px/s",
       "snap": "Snap",
-      "snapHelp": "Snap to nearby edges (lands in Phase 5)"
+      "snapHelp": "Snap to playhead, neighbouring block edges, and ruler ticks (hold Alt to bypass)"
     },
     "block": {
-      "ariaLabel": "Subtitle block T{{track}} row {{index}}",
+      "ariaLabel": "Subtitle block T{{track}} #{{index}}",
       "resizeStart": "Drag to adjust start time",
       "resizeEnd": "Drag to adjust end time"
     },
