@@ -10,6 +10,25 @@ import type { SubtitleEntry } from '../../shared/types'
 const TIME_EPS_SEC = 1e-3
 
 /**
+ * REQ-088 #2: minimum amount of track-time each block is treated as
+ * occupying when assigning tracks.  Block elements render with a CSS
+ * minimum width of 2 px so very-short blocks remain clickable; that
+ * minimum extends the block's visual right edge past its actual endSec.
+ * Without reserving the same minimum in the layout, an adjacent block
+ * that starts at (or shortly after) endSec sits on the same track and
+ * its left edge overlaps the previous block's rendered right edge by
+ * 1–2 px — the user reads that as "blocks duplicated on one row."
+ *
+ * Reserving 0.05 s of track-time (= 2.5 px at the default 50 px/s zoom,
+ * 5 px at 100 px/s) gives any visually-adjacent block enough clearance
+ * to either (a) sit on a fresh track or (b) start past the rendered
+ * right edge of the short block.  Matches MIN_SUBTITLE_DURATION_SEC in
+ * shared/cuts.ts — both are "the smallest meaningful duration we treat
+ * as a real subtitle."
+ */
+export const LAYOUT_MIN_BLOCK_SEC = 0.05
+
+/**
  * Stable tiebreaker for entries that share `startSec`.  Sorting by id keeps
  * the greedy track assignment deterministic across renders so a tiny edit
  * to one row does not reshuffle the lane stacking of unrelated rows.
@@ -46,21 +65,35 @@ export interface TimelineLayout {
  * Deleted rows are passed through to the caller; the caller decides whether
  * to filter them out before invoking.  This keeps the function pure and
  * lets the "Deleted" filter still produce a visual layout.
+ *
+ * `minBlockSec` (REQ-088 #2) lets the caller reserve a minimum amount of
+ * track-time per block so very-short blocks (Whisper sometimes emits
+ * 0.02-s segments) don't sit beside another block on the same track and
+ * visually overlap at min-render-width.  Default is 0 = legacy
+ * boundary-only behaviour (unit tests rely on this).
  */
 export function layoutEntries(
   entries: readonly SubtitleEntry[],
-  fallbackDurationSec: number
+  fallbackDurationSec: number,
+  minBlockSec: number = 0,
 ): TimelineLayout {
   if (entries.length === 0) {
     return { placements: [], trackCount: 0, totalSec: Math.max(1, fallbackDurationSec) }
   }
 
   const sorted = [...entries].sort(compareForLayout)
-  // trackEndSec[i] = endSec of the most recent block placed on track i.
+  // trackEndSec[i] = effective endSec of the most recent block placed on
+  // track i, where "effective" means max(actualEnd, start + minBlockSec).
+  // Reserving `minBlockSec` past actualEnd is what stops the rendered
+  // min-width of a 0.02-s block from overlapping the next block on the
+  // same track (REQ-088 #2).
   const trackEndSec: number[] = []
   const trackOf = new Map<string, number>()
 
   for (const e of sorted) {
+    const effectiveEnd = e.endSec > e.startSec + minBlockSec
+      ? e.endSec
+      : e.startSec + minBlockSec
     let assigned = -1
     for (let i = 0; i < trackEndSec.length; i++) {
       if (trackEndSec[i] <= e.startSec + TIME_EPS_SEC) {
@@ -70,9 +103,9 @@ export function layoutEntries(
     }
     if (assigned === -1) {
       assigned = trackEndSec.length
-      trackEndSec.push(e.endSec)
+      trackEndSec.push(effectiveEnd)
     } else {
-      trackEndSec[assigned] = e.endSec
+      trackEndSec[assigned] = effectiveEnd
     }
     trackOf.set(e.id, assigned)
   }
