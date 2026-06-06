@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import type { VideoInfo, SubtitleEntry, TranscriptionDefaults } from '../../shared/types'
+import type { Cut } from '../../shared/cuts'
+import { sanitizeCuts } from '../../shared/cuts'
 import { sampleDefaults } from '@/lib/fixtures'
 import { isEditedFromOriginal } from '@/lib/entry-edits'
 
@@ -11,6 +13,14 @@ interface ProjectStore {
   selectedTrackIndex: number
   entries: SubtitleEntry[]
   defaults: TranscriptionDefaults
+  /**
+   * Trim/cut list — original-axis intervals that the user wants removed
+   * from the final video.  Maintained sorted by startSec and non-overlapping
+   * via `sanitizeCuts` (every mutation runs through it).  Empty by default.
+   * Lives here, not on SubtitleEntry, so the entry type stays untouched and
+   * cuts can be added/removed without rewriting subtitles (§1.2 / §3.3).
+   */
+  cuts: Cut[]
 
   setVideo: (v: VideoInfo | null) => void
   setVideoLoadingState: (s: VideoLoadingState) => void
@@ -29,17 +39,26 @@ interface ProjectStore {
    */
   sortByStartSec: () => void
   setDefaults: (d: Partial<TranscriptionDefaults>) => void
+  /** Replace the entire cut list.  Sanitised before storage. */
+  setCuts: (cuts: Cut[]) => void
+  /** Append a cut.  Sanitisation collapses overlaps with existing cuts. */
+  addCut: (cut: Cut) => void
+  /** Remove a cut by id.  No-op when the id is unknown. */
+  removeCut: (id: string) => void
+  /** Patch a cut's start/end (id unchanged).  Sanitised after patch. */
+  updateCut: (id: string, patch: Partial<Pick<Cut, 'startSec' | 'endSec'>>) => void
   reset: () => void
 }
 
 const initialDefaults: TranscriptionDefaults = { ...sampleDefaults }
 
-export const useProjectStore = create<ProjectStore>((set) => ({
+export const useProjectStore = create<ProjectStore>((set, get) => ({
   video: null,
   videoLoadingState: 'idle',
   selectedTrackIndex: 2,
   entries: [],
   defaults: { ...initialDefaults },
+  cuts: [],
 
   setVideo: (v) => set({ video: v }),
   setVideoLoadingState: (s) => set({ videoLoadingState: s }),
@@ -79,12 +98,28 @@ export const useProjectStore = create<ProjectStore>((set) => ({
     })),
   setDefaults: (d) =>
     set((s) => ({ defaults: { ...s.defaults, ...d } })),
+  setCuts: (cuts) =>
+    set({ cuts: sanitizeCuts(cuts, get().video?.durationSec) }),
+  addCut: (cut) =>
+    set((s) => ({
+      cuts: sanitizeCuts([...s.cuts, cut], s.video?.durationSec)
+    })),
+  removeCut: (id) =>
+    set((s) => ({ cuts: s.cuts.filter((c) => c.id !== id) })),
+  updateCut: (id, patch) =>
+    set((s) => ({
+      cuts: sanitizeCuts(
+        s.cuts.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+        s.video?.durationSec
+      )
+    })),
   reset: () =>
     set({
       video: null,
       videoLoadingState: 'idle',
       selectedTrackIndex: 2,
       entries: [],
-      defaults: { ...initialDefaults }
+      defaults: { ...initialDefaults },
+      cuts: []
     })
 }))
