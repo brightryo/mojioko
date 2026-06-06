@@ -28,7 +28,8 @@ import { computeDragPatch } from '@/lib/timeline-drag'
 import {
   editedDuration,
   editedToOrig,
-  origToEdited
+  origToEdited,
+  type CutList
 } from '../../../shared/cuts'
 import {
   buildBoundarySet,
@@ -445,6 +446,62 @@ function BlockImpl({
 const Block = memo(BlockImpl)
 
 // ---------------------------------------------------------------------------
+// Playhead — independent memo'd sub-component (REQ-094 case B)
+// ---------------------------------------------------------------------------
+
+interface PlayheadProps {
+  /** Cuts list — needed to translate Original → Edited axis. */
+  cuts: CutList
+  /** Current zoom (px / sec). */
+  pixelsPerSec: number
+  /** Combined height of ruler + tracks, in pixels. */
+  totalHeightPx: number
+}
+
+/**
+ * REQ-094 case B — the playhead is the ONE piece of timeline JSX whose
+ * position genuinely has to update every video tick.  Splitting it into
+ * its own memo'd component that subscribes to `videoCurrentTimeSec`
+ * directly lets TimelineView stop subscribing entirely.  The render
+ * volume shifts from "TimelineView + every memo + every Block prop
+ * recompare" per tick to "this tiny sub-tree" per tick.
+ *
+ * The wrapping `memo` guards against `cuts` / `pixelsPerSec` /
+ * `totalHeightPx` props churning identity on unrelated re-renders;
+ * the body subscribes to the playhead slice so only playhead-driven
+ * updates land in this component.
+ */
+function PlayheadImpl({ cuts, pixelsPerSec, totalHeightPx }: PlayheadProps) {
+  bumpRenderCount('Playhead')
+  const videoCurrentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
+  if (videoCurrentTimeSec < 0) return null
+  const leftPx = origToEdited(videoCurrentTimeSec, cuts) * pixelsPerSec
+  return (
+    <div
+      aria-hidden
+      className="absolute top-0 pointer-events-none"
+      style={{
+        left: `${leftPx}px`,
+        width: '1px',
+        height: `${totalHeightPx}px`,
+        background: 'rgb(239, 68, 68)' // red-500
+      }}
+    >
+      {/* Top arrow head */}
+      <div
+        className="absolute -top-px -left-1.5 h-0 w-0"
+        style={{
+          borderLeft: '6px solid transparent',
+          borderRight: '6px solid transparent',
+          borderTop: '6px solid rgb(239, 68, 68)'
+        }}
+      />
+    </div>
+  )
+}
+const Playhead = memo(PlayheadImpl)
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -498,7 +555,13 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   const focusedRowId = useUiStore((s) => s.focusedRowId)
   const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
   const setVideoSeekRequest = useUiStore((s) => s.setVideoSeekRequest)
-  const videoCurrentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
+  // REQ-094 case B: TimelineView no longer subscribes to
+  // `videoCurrentTimeSec`.  The playhead lives in its own memo'd
+  // sub-component (<Playhead>, defined above), which subscribes
+  // internally and re-renders only itself per tick.  TimelineView's
+  // remaining playhead-aware code reads `getState().videoCurrentTimeSec`
+  // at the moment it is needed (drag, trim In/Out, auto-scroll), which
+  // sidesteps subscription entirely.
   const pixelsPerSec = useUiStore((s) => s.timelinePixelsPerSec)
   const setPixelsPerSec = useUiStore((s) => s.setTimelinePixelsPerSec)
   const snapEnabled = useUiStore((s) => s.timelineSnapEnabled)
@@ -623,13 +686,15 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   // Stable mirrors of the live values that the (mount-once) pointer
   // listeners need to read without re-attaching whenever React state
   // changes mid-drag.  Includes everything the snap computation depends
-  // on so a zoom or playhead change between pointerdown and pointerup
-  // is reflected in the next pointermove tick.
+  // on so a zoom change between pointerdown and pointerup is reflected
+  // in the next pointermove tick.  REQ-094 case B: `videoCurrentTimeSec`
+  // is read from `useUiStore.getState()` at applyDragPatch call time
+  // (below) instead of being mirrored here, so TimelineView no longer
+  // re-runs the `liveContextRef` updater effect on every playhead tick.
   const liveContextRef = useRef({
     pixelsPerSec,
     videoDurationSec,
     snapEnabled,
-    videoCurrentTimeSec,
     entries
   })
   useEffect(() => {
@@ -637,7 +702,6 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       pixelsPerSec,
       videoDurationSec,
       snapEnabled,
-      videoCurrentTimeSec,
       entries
     }
   })
@@ -672,9 +736,11 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         pixelsPerSec: pps,
         videoDurationSec: dur,
         snapEnabled,
-        videoCurrentTimeSec: playhead,
         entries: liveEntries
       } = liveContextRef.current
+      // REQ-094 case B: read playhead fresh at drag-tick time so that
+      // TimelineView does not need to subscribe to videoCurrentTimeSec.
+      const playhead = useUiStore.getState().videoCurrentTimeSec
       const dxPx = e.clientX - d.originClientX
 
       // REQ-085 #1: the previous inline snap / clamp / round pipeline was
@@ -866,6 +932,49 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     setPixelsPerSec(pixelsPerSec + ZOOM_STEP_PX)
   }
 
+  // REQ-094 case E: zoom slider RAF throttle.  Native <input
+  // type="range"> dispatches one `input` event per pointermove
+  // sample, which on a high-precision pointer can exceed the
+  // display refresh rate.  Each event committed straight to the
+  // store would trigger a TimelineView + Ruler + 11×Block render
+  // (the existing perf-counter Scenario A measurement); coalescing
+  // multiple events that arrive within the same frame into one
+  // setPixelsPerSec call caps the render volume at the frame rate.
+  //
+  // Buttons + programmatic store writes are unaffected because
+  // they bypass the slider handler.  The slider remains a
+  // CONTROLLED input (`value={pixelsPerSec}`) so the thumb still
+  // tracks the committed value — but commits happen at most once
+  // per rAF, so the thumb advances in frame-aligned steps instead
+  // of one step per input event.
+  const sliderRafIdRef = useRef<number | null>(null)
+  const sliderPendingValueRef = useRef<number | null>(null)
+  function handleSliderChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const next = Number(e.target.value)
+    sliderPendingValueRef.current = next
+    bumpRenderCount('PpsSliderInput')
+    if (sliderRafIdRef.current !== null) return
+    sliderRafIdRef.current = requestAnimationFrame(() => {
+      sliderRafIdRef.current = null
+      const v = sliderPendingValueRef.current
+      sliderPendingValueRef.current = null
+      if (v !== null) {
+        bumpRenderCount('PpsSliderCommit')
+        setPixelsPerSec(v)
+      }
+    })
+  }
+  // Cancel any pending rAF on unmount to avoid a stray commit firing
+  // against a torn-down React tree.
+  useEffect(() => {
+    return () => {
+      if (sliderRafIdRef.current !== null) {
+        cancelAnimationFrame(sliderRafIdRef.current)
+        sliderRafIdRef.current = null
+      }
+    }
+  }, [])
+
   // REQ-074 1e: trim controls.  In / Out / Confirm derive from the
   // current playhead (Original axis) so the operation model is
   // identical to NLE "set in / set out / extract".  History pushes
@@ -881,13 +990,20 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   // same position or on the wrong side.  Keeps the user out of states
   // the confirm button could not act on (and replaces the silent
   // disabled-confirm-without-reason UX).
+  // REQ-094 case B: `videoCurrentTimeSec` is read from `getState()`
+  // at click time rather than closed over from a TimelineView-level
+  // subscription.  That keeps both these callbacks' identities stable
+  // across playhead ticks (deps no longer mention the playhead) AND
+  // removes the reason for TimelineView to re-render on every tick.
+  // The click reads the same store value the subscription would have
+  // surfaced, so semantics are unchanged.
   const handleSetIn = useCallback(() => {
     if (pendingCutInSec !== null) {
       // Toggle off — clearing is always safe.
       setPendingCutIn(null)
       return
     }
-    const candidate = videoCurrentTimeSec
+    const candidate = useUiStore.getState().videoCurrentTimeSec
     if (pendingCutOutSec !== null) {
       if (candidate === pendingCutOutSec) {
         toast.error(t('timeline.trim.errorSamePosition'))
@@ -899,13 +1015,13 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       }
     }
     setPendingCutIn(candidate)
-  }, [pendingCutInSec, pendingCutOutSec, videoCurrentTimeSec, setPendingCutIn, t])
+  }, [pendingCutInSec, pendingCutOutSec, setPendingCutIn, t])
   const handleSetOut = useCallback(() => {
     if (pendingCutOutSec !== null) {
       setPendingCutOut(null)
       return
     }
-    const candidate = videoCurrentTimeSec
+    const candidate = useUiStore.getState().videoCurrentTimeSec
     if (pendingCutInSec !== null) {
       if (candidate === pendingCutInSec) {
         toast.error(t('timeline.trim.errorSamePosition'))
@@ -917,7 +1033,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       }
     }
     setPendingCutOut(candidate)
-  }, [pendingCutInSec, pendingCutOutSec, videoCurrentTimeSec, setPendingCutOut, t])
+  }, [pendingCutInSec, pendingCutOutSec, setPendingCutOut, t])
   const handleConfirmCut = useCallback(() => {
     if (pendingCutInSec === null || pendingCutOutSec === null) return
     if (!(pendingCutInSec < pendingCutOutSec)) {
@@ -954,22 +1070,46 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
 
   // Keep the playhead in view while playing.  Phase 1: simple "if playhead
   // leaves the viewport, scroll it back to one third".  Phase 6 can refine.
+  //
+  // REQ-094 case B: subscribe to `videoCurrentTimeSec` directly via
+  // `useUiStore.subscribe` instead of `useUiStore(selector)`.  The
+  // selector-form would re-render TimelineView on every playhead tick,
+  // which is the exact problem case B set out to fix.  The
+  // `subscribe`-form fires the side-effect (compare & possibly scroll)
+  // without touching React's render cycle.  The effect's deps capture
+  // `pixelsPerSec` and `cuts` so the subscription rebuilds with fresh
+  // closure values when zoom or cuts change.
   const scrollRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    // Playhead lives on the EDITED axis here (videoCurrentTimeSec is the
-    // <video>.currentTime = Original; translate to Edited for the visual
-    // position).  Empty cuts → identity.
-    const playheadEditedSec = origToEdited(videoCurrentTimeSec, cuts)
-    const playheadXPx = playheadEditedSec * pixelsPerSec + TRACK_GUTTER_LEFT_PX
-    const visibleLeft  = el.scrollLeft
-    const visibleRight = visibleLeft + el.clientWidth
-    if (playheadXPx < visibleLeft || playheadXPx > visibleRight - 24) {
-      const target = playheadXPx - el.clientWidth / 3
-      el.scrollLeft = Math.max(0, target)
+    function maybeScrollPlayheadIntoView(playhead: number): void {
+      const el = scrollRef.current
+      if (!el) return
+      // Playhead lives on the EDITED axis here (videoCurrentTimeSec is
+      // the <video>.currentTime = Original; translate for the visual
+      // position).  Empty cuts → identity.
+      const playheadEditedSec = origToEdited(playhead, cuts)
+      const playheadXPx = playheadEditedSec * pixelsPerSec + TRACK_GUTTER_LEFT_PX
+      const visibleLeft  = el.scrollLeft
+      const visibleRight = visibleLeft + el.clientWidth
+      if (playheadXPx < visibleLeft || playheadXPx > visibleRight - 24) {
+        const target = playheadXPx - el.clientWidth / 3
+        el.scrollLeft = Math.max(0, target)
+      }
     }
-  }, [videoCurrentTimeSec, pixelsPerSec, cuts])
+    // Run once with the current value so a zoom/cuts change re-aligns
+    // the playhead even without the user playing.
+    maybeScrollPlayheadIntoView(useUiStore.getState().videoCurrentTimeSec)
+    // Subscribe to videoCurrentTimeSec changes (no re-render of
+    // TimelineView).  The callback receives the FULL state; we
+    // hand-pick the slice and bail when it didn't change.
+    let prev = useUiStore.getState().videoCurrentTimeSec
+    return useUiStore.subscribe((state) => {
+      const next = state.videoCurrentTimeSec
+      if (next === prev) return
+      prev = next
+      maybeScrollPlayheadIntoView(next)
+    })
+  }, [pixelsPerSec, cuts])
 
   // Consume scrollToRowId from ui-store — set by the subtitle-table when
   // a row is added or its time is adjusted.  In timeline view we honour
@@ -1042,9 +1182,11 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   // Render
   // -------------------------------------------------------------------------
 
-  // Playhead in Edited pixels (origin-snapped via origToEdited; identity
-  // when cuts is empty).
-  const playheadXPx = origToEdited(videoCurrentTimeSec, cuts) * pixelsPerSec
+  // REQ-094 case B: the playhead position is computed inside the
+  // <Playhead> sub-component (which owns the videoCurrentTimeSec
+  // subscription).  TimelineView no longer recomputes
+  // `playheadXPx` here, so playhead-driven re-renders stop at the
+  // sub-component boundary.
 
   const hasAnyVisible = visibleEntries.length > 0
 
@@ -1080,7 +1222,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
             max={TIMELINE_PPS_MAX}
             step={1}
             value={pixelsPerSec}
-            onChange={(e) => setPixelsPerSec(Number(e.target.value))}
+            onChange={handleSliderChange}
             title={t('timeline.toolbar.zoomSlider')}
             aria-label={t('timeline.toolbar.zoomSlider')}
             className="w-32"
@@ -1546,30 +1688,16 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                 />
               )}
 
-              {/* Playhead — vertical red line spanning ruler + tracks.
-                  Rendered last so it draws over blocks. */}
-              {videoCurrentTimeSec >= 0 && (
-                <div
-                  aria-hidden
-                  className="absolute top-0 pointer-events-none"
-                  style={{
-                    left: `${playheadXPx}px`,
-                    width: '1px',
-                    height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
-                    background: 'rgb(239, 68, 68)' // red-500
-                  }}
-                >
-                  {/* Top arrow head */}
-                  <div
-                    className="absolute -top-px -left-1.5 h-0 w-0"
-                    style={{
-                      borderLeft: '6px solid transparent',
-                      borderRight: '6px solid transparent',
-                      borderTop: '6px solid rgb(239, 68, 68)'
-                    }}
-                  />
-                </div>
-              )}
+              {/* REQ-094 case B: playhead is an independent memo'd
+                  sub-component.  It subscribes to videoCurrentTimeSec
+                  internally so TimelineView's own subscription can be
+                  dropped — only this small subtree re-renders on
+                  every tick. */}
+              <Playhead
+                cuts={cuts}
+                pixelsPerSec={pixelsPerSec}
+                totalHeightPx={RULER_HEIGHT_PX + tracksHeightPx}
+              />
             </div>
           </div>
         )}

@@ -11,6 +11,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { TimeInput } from '@/components/time-input'
 import { cn } from '@/lib/utils'
+import { useUiStore } from '@/stores/ui-store'
+import { ENABLE_VIDEO_PREVIEW } from '../../../shared/constants'
 
 export type TimeEditorMode = 'add' | 'edit'
 
@@ -32,8 +34,6 @@ export interface TimeEditorDialogProps {
   /** Focused row's endSec — drives the "set from selected row end" button (add mode only). */
   selectedEntryEndSec: number | null
   videoDurationSec: number
-  /** Current playback position. `null` when the video preview is disabled. */
-  videoCurrentTimeSec: number | null
   onConfirm: (startSec: number, endSec: number) => void
   onCancel: () => void
 }
@@ -314,11 +314,24 @@ export function TimeEditorDialog({
   nextEntryEndSec,
   selectedEntryStartSec,
   selectedEntryEndSec,
-  videoCurrentTimeSec,
   onConfirm,
   onCancel
 }: TimeEditorDialogProps) {
   const { t } = useTranslation(['step2', 'common'])
+
+  // REQ-094 case C: the dialog owns its own subscription to
+  // `videoCurrentTimeSec` so the parent route does NOT re-render on
+  // every playhead tick.  Step2Route's previous subscription was held
+  // solely to forward this value as a prop — moving the read here
+  // means the playhead cascade stops at the dialog boundary instead
+  // of repainting the whole route tree (Step2Route → VideoPreviewPanel
+  // → SubtitleOverlay, etc.).  When the dialog is closed the Radix
+  // `<Dialog open={false}>` short-circuits its body, so the
+  // 50 fps-during-scrub render of this component is essentially free.
+  // Honours the same ENABLE_VIDEO_PREVIEW gate the route used.
+  const videoCurrentTimeSec = useUiStore((s) =>
+    ENABLE_VIDEO_PREVIEW ? s.videoCurrentTimeSec : null,
+  )
 
   // Local working copy.  Reset every time the dialog opens so re-opening
   // for a different entry shows the fresh values, not stale state.
