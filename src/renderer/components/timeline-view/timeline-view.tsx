@@ -1,6 +1,9 @@
 import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X } from 'lucide-react'
+import {
+  ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X,
+  ChevronFirst, ChevronLast, ChevronLeft, ChevronRight
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -31,6 +34,11 @@ import {
   editedToOrig,
   origToEdited
 } from '../../../shared/cuts'
+import {
+  buildBoundarySet,
+  findPrevBoundary,
+  findNextBoundary
+} from '@/lib/timeline-boundaries'
 import type { EntryWarnings } from '@/lib/entry-warnings'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TimelineBlockInspector } from './timeline-block-inspector'
@@ -79,6 +87,17 @@ const TIME_ROW_MIN_BLOCK_WIDTH_PX = 220
  * accidentally clamped to this floor by a normal drag.
  */
 const MIN_BLOCK_SEC          = 0.05
+/**
+ * REQ-077 #3: stop scrub / nav seeks one centisecond before the very end
+ * of the Edited timeline.  Without this margin, setting <video>.currentTime
+ * to exactly video.durationSec triggers Chromium's `ended` event, which
+ * VideoPreviewPanel.handleEnded reacts to by warping the playhead back to
+ * 0 — the bug the user reported as "right-drag past the end snaps to the
+ * left edge".  1cs is below the project's cs precision unit and matches
+ * `roundToCs` rounding, so no scrub target ever lands closer than this
+ * to the end anyway; the eps is imperceptible.
+ */
+const SCRUB_END_EPS_SEC      = 0.01
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -840,10 +859,58 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
    * Boundary convention (post-cut side) comes from `editedToOrig` itself
    * — a click landing exactly on a cut-collapse point seeks to the start
    * of the next kept segment, matching NLE behaviour.
+   *
+   * REQ-077 #3: clamp the Edited target to `[0, editedTotalSec - EPS]`.
+   * Without the upper EPS, dragging the Ruler past the right edge (or any
+   * other path landing on editedTotalSec) sets <video>.currentTime to
+   * exactly video.durationSec, which Chromium treats as EOF and fires
+   * the `ended` event; VideoPreviewPanel.handleEnded then warps the
+   * playhead back to 0.  Clamping to one centisecond before the Edited
+   * end avoids the EOF trigger entirely, and the 0 fallback keeps
+   * negative-x drags pinned at the left edge instead of leaking into
+   * editedToOrig with a negative argument.
    */
   const handleSeek = useCallback((editedSec: number) => {
-    setVideoSeekRequest(editedToOrig(editedSec, cuts))
-  }, [setVideoSeekRequest, cuts])
+    const ceiling = Math.max(0, editedTotalSec - SCRUB_END_EPS_SEC)
+    const clamped = Math.max(0, Math.min(ceiling, editedSec))
+    setVideoSeekRequest(editedToOrig(clamped, cuts))
+  }, [setVideoSeekRequest, cuts, editedTotalSec])
+
+  /**
+   * REQ-077 #4: four playhead navigation buttons.  All four read live
+   * project + ui state via `getState()` so the callback identity stays
+   * constant across renders — playhead ticks (which re-render
+   * TimelineView 50× during the perf e2e) must NOT invalidate these
+   * callbacks, otherwise Block's React.memo would shake loose.
+   */
+  const handleNavFirst = useCallback(() => {
+    handleSeek(0)
+  }, [handleSeek])
+  const handleNavLast = useCallback(() => {
+    handleSeek(editedTotalSec)
+  }, [handleSeek, editedTotalSec])
+  const handleNavPrev = useCallback(() => {
+    const liveCuts = useProjectStore.getState().cuts
+    const liveEntries = useProjectStore.getState().entries
+    const livePlayhead = origToEdited(
+      useUiStore.getState().videoCurrentTimeSec,
+      liveCuts
+    )
+    const boundaries = buildBoundarySet(liveEntries, liveCuts)
+    const prev = findPrevBoundary(livePlayhead, boundaries)
+    handleSeek(prev !== null ? prev : 0)
+  }, [handleSeek])
+  const handleNavNext = useCallback(() => {
+    const liveCuts = useProjectStore.getState().cuts
+    const liveEntries = useProjectStore.getState().entries
+    const livePlayhead = origToEdited(
+      useUiStore.getState().videoCurrentTimeSec,
+      liveCuts
+    )
+    const boundaries = buildBoundarySet(liveEntries, liveCuts)
+    const next = findNextBoundary(livePlayhead, boundaries)
+    handleSeek(next !== null ? next : editedTotalSec)
+  }, [handleSeek, editedTotalSec])
 
   function handleTracksBackgroundClick(e: React.MouseEvent<HTMLDivElement>) {
     // Only react to clicks on the empty track background; the blocks themselves
@@ -1111,90 +1178,143 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         </div>
 
         <div className="flex items-center gap-3">
-          {/* REQ-076 #1 — legend-style frame.
-              ┌── トリミング ─────────────────────┐
-              │  [始点 00:00:08.22] [終点 ...] [実行]  │
-              └─────────────────────────────────┘
-              Implemented as a div + absolute-positioned label that sits
-              on the top border (px-1 mask in the parent's bg-zinc-900
-              colour, so the border visually cuts under the text).  The
-              clear-all X stays inside the frame, to the right of 実行,
-              and remains shown only when BOTH points are set
-              (REQ-075 #3.5 consistency rule). */}
-          <div className="relative">
-            <span className="absolute -top-2 left-2 px-1 bg-zinc-900 text-label font-medium uppercase tracking-wider text-zinc-500 select-none pointer-events-none">
+          {/* REQ-077 #4 — playhead navigation cluster.
+              [先頭へ] [前境界へ] [次境界へ] [末尾へ]
+              Placed immediately to the LEFT of the trim toolbar so it
+              reads "jog controls → trim controls" left to right.  Each
+              button is h-7 w-7 to match the zoom-out/-in icon buttons
+              on the toolbar's other end. */}
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={handleNavFirst}
+              title={t('timeline.nav.first')}
+              aria-label={t('timeline.nav.first')}
+              className={cn(
+                'flex h-7 w-7 items-center justify-center rounded-md text-zinc-400',
+                'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
+              )}
+            >
+              <ChevronFirst className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNavPrev}
+              title={t('timeline.nav.prevBoundary')}
+              aria-label={t('timeline.nav.prevBoundary')}
+              className={cn(
+                'flex h-7 w-7 items-center justify-center rounded-md text-zinc-400',
+                'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
+              )}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNavNext}
+              title={t('timeline.nav.nextBoundary')}
+              aria-label={t('timeline.nav.nextBoundary')}
+              className={cn(
+                'flex h-7 w-7 items-center justify-center rounded-md text-zinc-400',
+                'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
+              )}
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNavLast}
+              title={t('timeline.nav.last')}
+              aria-label={t('timeline.nav.last')}
+              className={cn(
+                'flex h-7 w-7 items-center justify-center rounded-md text-zinc-400',
+                'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
+              )}
+            >
+              <ChevronLast className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* REQ-077 #1 — trim toolbar.
+              The REQ-076 legend-style label (absolute on the top border)
+              bloated the toolbar vertically and conflicted with REQ-075's
+              vertical-budget goals.  Reverted to an inline left-anchored
+              label inside the bordered group, py-0.5 so the outer height
+              matches the other h-7 toolbar segments (zoom buttons, snap
+              toggle).  The label stays on the LEFT inside the box per
+              the user's "枠の左側に来ること" requirement. */}
+          <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2 py-0.5">
+            <span className="text-label font-medium uppercase tracking-wider text-zinc-500 select-none">
               {t('timeline.trim.toolbarLabel')}
             </span>
-            <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2 pt-2 pb-1">
-              <button
-                type="button"
-                onClick={handleSetIn}
-                title={t('timeline.trim.setInTooltip')}
-                aria-pressed={pendingCutInSec !== null}
-                className={cn(
-                  'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
-                  'transition-colors duration-150',
-                  pendingCutInSec !== null
-                    ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
-                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
-                )}
-              >
-                <span>{t('timeline.trim.setIn')}</span>
-                <span className="font-mono tabular-nums text-caption text-zinc-500">
-                  {pendingCutInSec !== null
-                    ? formatTimecode(pendingCutInSec)
-                    : t('timeline.trim.noPoint')}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={handleSetOut}
-                title={t('timeline.trim.setOutTooltip')}
-                aria-pressed={pendingCutOutSec !== null}
-                className={cn(
-                  'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
-                  'transition-colors duration-150',
-                  pendingCutOutSec !== null
-                    ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
-                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
-                )}
-              >
-                <span>{t('timeline.trim.setOut')}</span>
-                <span className="font-mono tabular-nums text-caption text-zinc-500">
-                  {pendingCutOutSec !== null
-                    ? formatTimecode(pendingCutOutSec)
-                    : t('timeline.trim.noPoint')}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmCut}
-                disabled={
-                  pendingCutInSec === null ||
-                  pendingCutOutSec === null ||
-                  !(pendingCutInSec < pendingCutOutSec)
-                }
-                title={t('timeline.trim.confirmCutTooltip')}
-                className={cn(
-                  'flex h-7 items-center px-2.5 rounded-md text-body-sm font-medium',
-                  'transition-colors duration-150',
-                  'bg-green-500 text-zinc-950 hover:bg-green-400',
-                  'disabled:bg-zinc-800 disabled:text-zinc-500 disabled:hover:bg-zinc-800 disabled:cursor-not-allowed'
-                )}
-              >
-                {t('timeline.trim.confirmCut')}
-              </button>
-              {pendingCutInSec !== null && pendingCutOutSec !== null && (
-                <button
-                  type="button"
-                  onClick={clearPendingCut}
-                  title={t('timeline.trim.clearPendingTooltip')}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors duration-150"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+            <button
+              type="button"
+              onClick={handleSetIn}
+              title={t('timeline.trim.setInTooltip')}
+              aria-pressed={pendingCutInSec !== null}
+              className={cn(
+                'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
+                'transition-colors duration-150',
+                pendingCutInSec !== null
+                  ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
+                  : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
               )}
-            </div>
+            >
+              <span>{t('timeline.trim.setIn')}</span>
+              <span className="font-mono tabular-nums text-caption text-zinc-500">
+                {pendingCutInSec !== null
+                  ? formatTimecode(pendingCutInSec)
+                  : t('timeline.trim.noPoint')}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={handleSetOut}
+              title={t('timeline.trim.setOutTooltip')}
+              aria-pressed={pendingCutOutSec !== null}
+              className={cn(
+                'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
+                'transition-colors duration-150',
+                pendingCutOutSec !== null
+                  ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
+                  : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
+              )}
+            >
+              <span>{t('timeline.trim.setOut')}</span>
+              <span className="font-mono tabular-nums text-caption text-zinc-500">
+                {pendingCutOutSec !== null
+                  ? formatTimecode(pendingCutOutSec)
+                  : t('timeline.trim.noPoint')}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmCut}
+              disabled={
+                pendingCutInSec === null ||
+                pendingCutOutSec === null ||
+                !(pendingCutInSec < pendingCutOutSec)
+              }
+              title={t('timeline.trim.confirmCutTooltip')}
+              className={cn(
+                'flex h-7 items-center px-2.5 rounded-md text-body-sm font-medium',
+                'transition-colors duration-150',
+                'bg-green-500 text-zinc-950 hover:bg-green-400',
+                'disabled:bg-zinc-800 disabled:text-zinc-500 disabled:hover:bg-zinc-800 disabled:cursor-not-allowed'
+              )}
+            >
+              {t('timeline.trim.confirmCut')}
+            </button>
+            {pendingCutInSec !== null && pendingCutOutSec !== null && (
+              <button
+                type="button"
+                onClick={clearPendingCut}
+                title={t('timeline.trim.clearPendingTooltip')}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors duration-150"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Snap toggle — unchanged, kept after the trim cluster so its

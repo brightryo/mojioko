@@ -245,6 +245,12 @@
       "commitHint": "Ctrl+Enter to commit · Esc to cancel",
       "styleLabel": "Style"
     },
+    "nav": {
+      "first": "Jump to start",
+      "prevBoundary": "Previous boundary",
+      "nextBoundary": "Next boundary",
+      "last": "Jump to end"
+    },
     "trim": {
       "toolbarLabel": "Trim",
       "setIn": "In",
