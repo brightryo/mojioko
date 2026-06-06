@@ -99,6 +99,12 @@ test('timeline render volume — zoom slider drag vs playhead tick', async () =>
   // subscribers of `videoCurrentTimeSec` (Step2Route, TimelineView).
   // This is a measurement, not a budget — no assertions on the
   // returned counters; values just get logged.
+  //
+  // REQ-094 case B + C: with TimelineView's videoCurrentTimeSec
+  // subscription moved into a Playhead sub-component and Step2Route's
+  // subscription pushed down into TimeEditorDialog, this scenario's
+  // Step2Route / TimelineView counters should now read 0 — the
+  // cascade has been cut.
   const scrubResult = await window.evaluate(async () => {
     const w = window as unknown as {
       __mojioko_test: { ui: { setState: (s: unknown) => void; getState: () => { videoSeekRequestSec: number | null } } }
@@ -119,6 +125,63 @@ test('timeline render volume — zoom slider drag vs playhead tick', async () =>
     return { totalMs: Math.round(end - start), counters: { ...w.__mojioko_profile } }
   })
 
+  // -------------------------------------------------------------------
+  // Scenario D (REQ-094 case E): zoom slider RAF throttle.  Dispatch
+  // 10 `input` events on the real slider DOM element synchronously,
+  // all within ONE rAF tick.  Without the throttle this would fire 10
+  // setPixelsPerSec → 10 Block/Ruler/TimelineView passes; with the
+  // throttle the rAF callback coalesces them into ONE commit.
+  // PpsSliderInput counts every onChange handler entry (= 10),
+  // PpsSliderCommit counts every actual store write (= 1 when
+  // throttled).  After the rAF the React render flushes once.
+  const sliderThrottleResult = await window.evaluate(async () => {
+    const w = window as unknown as {
+      __mojioko_profile: Record<string, number>
+      __mojioko_profile_reset: () => void
+    }
+    w.__mojioko_profile_reset()
+    const allRangeInputs = Array.from(document.querySelectorAll('input[type="range"]')) as HTMLInputElement[]
+    // Target the timeline zoom slider specifically.  Multiple range
+    // inputs live in Step 2 (video preview seekbar, outline thickness,
+    // bg opacity); we want the one whose min/max match TIMELINE_PPS_*.
+    const slider = allRangeInputs.find((el) => {
+      const min = Number(el.getAttribute('min'))
+      const max = Number(el.getAttribute('max'))
+      return min === 10 && max <= 400  // matches TIMELINE_PPS_MIN/MAX shape
+    }) as HTMLInputElement | null
+    if (!slider) return {
+      totalMs: 0,
+      counters: {},
+      note: 'no zoom-slider element found',
+      rangeInputCount: allRangeInputs.length,
+      attrs: allRangeInputs.map((el) => ({ min: el.min, max: el.max, ariaLabel: el.getAttribute('aria-label') })),
+    }
+    // React tracks the input's `value` via a property descriptor it
+    // monkey-patches at synthetic event registration time.  A plain
+    // `slider.value = X` then `dispatchEvent('input')` silently
+    // bypasses React's onChange because React sees no "real" value
+    // delta.  Calling the ORIGINAL HTMLInputElement value setter
+    // (captured before React touches it) bypasses React's tracker
+    // and forces it to fire onChange.  Standard "react-testing-library
+    // fireEvent.input"-style trick.
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value',
+    )?.set
+    const start = performance.now()
+    // Fire 10 input events without yielding between them — simulates
+    // a fast cursor that overruns the display refresh.
+    for (let i = 0; i < 10; i++) {
+      if (nativeSetter) nativeSetter.call(slider, String(60 + i * 5))
+      else slider.value = String(60 + i * 5)
+      slider.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    // Wait for the rAF callback to fire AND React to flush.
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const end = performance.now()
+    return { totalMs: Math.round(end - start), counters: { ...w.__mojioko_profile } }
+  })
+
   // eslint-disable-next-line no-console
   console.log('\n[3.9 perf] zoom drag (50 pps ticks):',
     JSON.stringify(dragResult, null, 2))
@@ -128,6 +191,9 @@ test('timeline render volume — zoom slider drag vs playhead tick', async () =>
   // eslint-disable-next-line no-console
   console.log('\n[REQ-093 measurement] scrub via seek-request (50 ticks):',
     JSON.stringify(scrubResult, null, 2))
+  // eslint-disable-next-line no-console
+  console.log('\n[REQ-094 case E] zoom slider throttle (10 input events / 1 frame):',
+    JSON.stringify(sliderThrottleResult, null, 2))
 
   // ---- Assertions ----
   // Playhead ticks must NOT cause Block or Ruler re-renders — their props
@@ -139,11 +205,37 @@ test('timeline render volume — zoom slider drag vs playhead tick', async () =>
   expect(playheadResult.counters.Block ?? 0).toBe(0)
   expect(playheadResult.counters.Ruler ?? 0).toBe(0)
 
+  // REQ-094 case B: TimelineView itself no longer subscribes to
+  // videoCurrentTimeSec — the Playhead sub-component does instead.
+  // So TimelineView must read 0 during a playhead-only burst.
+  expect(playheadResult.counters.TimelineView ?? 0).toBe(0)
+  // REQ-094 case C: Step2Route stopped forwarding videoCurrentTimeSec
+  // as a prop, so it no longer re-renders during a playhead-only
+  // burst (and VideoPreviewPanel no longer cascades from it).
+  expect(playheadResult.counters.Step2Route ?? 0).toBe(0)
+  expect(playheadResult.counters.VideoPreviewPanel ?? 0).toBe(0)
+
+  // REQ-094 case B + C: scrub via seek-request must also leave
+  // Step2Route and TimelineView alone.  VideoPreviewPanel still
+  // renders (it OWNS the videoSeekRequestSec subscription and clears
+  // it from its effect — ~2 renders per scrub tick), so we assert
+  // upper bounds rather than zero on VPP.
+  expect(scrubResult.counters.Step2Route ?? 0).toBe(0)
+  expect(scrubResult.counters.TimelineView ?? 0).toBe(0)
+
   // Zoom drag MUST re-render Blocks (block geometry depends on pps), but
   // the count should stay close to N × ticks with no doubling.  With 11
   // visible fixtures + 50 ticks we expect ~550 Block renders.  Allow a
   // generous ceiling so this doesn't flake on StrictMode toggles.
   expect(dragResult.counters.Block ?? 0).toBeLessThanOrEqual(700)
+
+  // REQ-094 case E: 10 synchronous input events within one rAF must
+  // commit AT MOST once.  PpsSliderInput should be 10 (the handler
+  // entered 10 times), PpsSliderCommit at most 1 (rAF coalesced).
+  // This is the proof that the throttle actually reduces store
+  // writes — a regression would show Commit ≈ Input.
+  expect(sliderThrottleResult.counters.PpsSliderInput ?? 0).toBe(10)
+  expect(sliderThrottleResult.counters.PpsSliderCommit ?? 0).toBeLessThanOrEqual(1)
 
   await electronApp.close()
 })

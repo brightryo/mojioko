@@ -123,7 +123,13 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const focusedRowId = useUiStore((s) => s.focusedRowId)
   const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
-  const videoCurrentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
+  // REQ-094 case C: `videoCurrentTimeSec` subscription removed.  The
+  // route used to hold this slice solely to forward it to
+  // TimeEditorDialog as a prop, which made the whole route re-render
+  // on every playhead tick (~50 fps during scrub) and cascaded into
+  // VideoPreviewPanel / SubtitleOverlay.  The dialog now subscribes
+  // itself (see time-editor-dialog.tsx), so the cascade stops at the
+  // dialog boundary and Step2Route stays at 0 renders during scrub.
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
   const setRowSelection = useUiStore((s) => s.setRowSelection)
 
@@ -328,17 +334,15 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   /**
    * Open the dialog in `edit` mode for the given existing entry.
    *
-   * REQ-071 Phase 3.9: wrapped in useCallback so the function reference is
-   * stable across re-renders driven by unrelated state (specifically the
-   * `videoCurrentTimeSec` subscription this route holds for the dialog's
-   * "current playhead" snap button).  Step 2 re-renders on every playhead
-   * tick during playback; without useCallback, every tick produced a fresh
-   * `openEditTimeDialog` reference, which propagated into `TimelineView`'s
-   * `onAdjustTime` prop, then into every `Block` as `onAdjustTime`, which
-   * defeated `React.memo(Block)`'s shallow prop compare and re-reconciled
-   * all 12 blocks per tick.  Caching with `[entries]` keeps the reference
-   * steady through the playback case (where entries don't change), so
-   * Block's memo successfully skips the unchanged work.
+   * REQ-071 Phase 3.9 (original): wrapped in useCallback so the function
+   * reference stayed stable across re-renders driven by Step2Route's
+   * `videoCurrentTimeSec` subscription — Step 2 used to re-render on every
+   * playhead tick, so without useCallback every tick produced a fresh
+   * `openEditTimeDialog` reference, which propagated into TimelineView's
+   * `onAdjustTime` prop, then into every Block as `onAdjustTime`, and
+   * defeated `React.memo(Block)`.  REQ-094 case C removed that route-level
+   * subscription, so the playback-driven cascade no longer reaches here;
+   * the useCallback is still cheap insurance against future props churn.
    */
   const openEditTimeDialog = useCallback((entryId: string) => {
     const fullIdx = entries.findIndex((e) => e.id === entryId)
@@ -796,7 +800,6 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         selectedEntryStartSec={editor.open && editor.mode === 'add' ? editor.selectedEntryStartSec : null}
         selectedEntryEndSec={editor.open && editor.mode === 'add' ? editor.selectedEntryEndSec : null}
         videoDurationSec={videoDurationSec}
-        videoCurrentTimeSec={ENABLE_VIDEO_PREVIEW ? videoCurrentTimeSec : null}
         onConfirm={handleEditorConfirm}
         onCancel={closeEditor}
       />
