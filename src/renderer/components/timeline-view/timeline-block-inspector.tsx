@@ -291,10 +291,6 @@ export function TimelineBlockInspector({
           of these fields reach text/SRT export. */}
       {!isAudioOnly && (
         <div className="space-y-2 border-t border-zinc-800 pt-2">
-          <p className="text-label text-zinc-500 select-none">
-            {t('timeline.inspector.styleLabel')}
-          </p>
-
           {/* Size */}
           <div className="flex items-center justify-between gap-2">
             <label className="text-callout font-semibold text-zinc-300">{t('styleCell.size')}</label>
