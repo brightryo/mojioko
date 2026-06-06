@@ -475,8 +475,17 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         outlineThicknessPx: defaults.outlineThicknessPx,
         fadeEnabled: defaults.fadeEnabled
       }
+      // REQ-079 #2: collision-resistant id.  Date.now() alone collides
+      // when two rows are added within the same millisecond — both rows
+      // then share a key in the layout's `trackOf` map, with the later
+      // assignment overwriting the earlier, and the timeline blocks
+      // render on top of each other.  Matches the cuts uuid pattern in
+      // timeline-view.tsx for consistency.
+      const id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+        ? `new-${crypto.randomUUID()}`
+        : `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       const newEntry: SubtitleEntry = {
-        id: `new-${Date.now()}`,
+        id,
         ...base,
         isDeleted: false,
         isEdited: true,
