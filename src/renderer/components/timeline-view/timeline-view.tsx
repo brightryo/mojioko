@@ -869,12 +869,49 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   // when it is already set clears that point.  Lets the user retract a
   // single end without nuking the other one (the Clear-all X stays for
   // wiping both at once when both are set).
+  //
+  // REQ-076 #2: set-time validation.  When the OTHER point is already
+  // set, reject the proposed value with a toast if it lands at the
+  // same position or on the wrong side.  Keeps the user out of states
+  // the confirm button could not act on (and replaces the silent
+  // disabled-confirm-without-reason UX).
   const handleSetIn = useCallback(() => {
-    setPendingCutIn(pendingCutInSec === null ? videoCurrentTimeSec : null)
-  }, [pendingCutInSec, videoCurrentTimeSec, setPendingCutIn])
+    if (pendingCutInSec !== null) {
+      // Toggle off — clearing is always safe.
+      setPendingCutIn(null)
+      return
+    }
+    const candidate = videoCurrentTimeSec
+    if (pendingCutOutSec !== null) {
+      if (candidate === pendingCutOutSec) {
+        toast.error(t('timeline.trim.errorSamePosition'))
+        return
+      }
+      if (candidate > pendingCutOutSec) {
+        toast.error(t('timeline.trim.errorInAfterOut'))
+        return
+      }
+    }
+    setPendingCutIn(candidate)
+  }, [pendingCutInSec, pendingCutOutSec, videoCurrentTimeSec, setPendingCutIn, t])
   const handleSetOut = useCallback(() => {
-    setPendingCutOut(pendingCutOutSec === null ? videoCurrentTimeSec : null)
-  }, [pendingCutOutSec, videoCurrentTimeSec, setPendingCutOut])
+    if (pendingCutOutSec !== null) {
+      setPendingCutOut(null)
+      return
+    }
+    const candidate = videoCurrentTimeSec
+    if (pendingCutInSec !== null) {
+      if (candidate === pendingCutInSec) {
+        toast.error(t('timeline.trim.errorSamePosition'))
+        return
+      }
+      if (candidate < pendingCutInSec) {
+        toast.error(t('timeline.trim.errorOutBeforeIn'))
+        return
+      }
+    }
+    setPendingCutOut(candidate)
+  }, [pendingCutInSec, pendingCutOutSec, videoCurrentTimeSec, setPendingCutOut, t])
   const handleConfirmCut = useCallback(() => {
     if (pendingCutInSec === null || pendingCutOutSec === null) return
     if (!(pendingCutInSec < pendingCutOutSec)) {
@@ -1074,87 +1111,90 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         </div>
 
         <div className="flex items-center gap-3">
-          {/* REQ-074 1e + REQ-075 #3 — trim controls.
-              Layout: [✂ icon | 「トリミング」 | 始点 | 終点 | 実行]
-              enclosed in a single rounded border so the group reads as a
-              cohesive cluster.  Each set-point button TOGGLES (REQ-075 #3:
-              press 始点 again to clear it).  実行 stays disabled until
-              both points are set AND in < out — pressing it with a
-              partial range is impossible by construction. */}
-          <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/60 pl-2 pr-1 py-0.5">
-            <Scissors className="h-3.5 w-3.5 text-zinc-500" />
-            <span className="text-label font-medium uppercase tracking-wider text-zinc-500 select-none">
+          {/* REQ-076 #1 — legend-style frame.
+              ┌── トリミング ─────────────────────┐
+              │  [始点 00:00:08.22] [終点 ...] [実行]  │
+              └─────────────────────────────────┘
+              Implemented as a div + absolute-positioned label that sits
+              on the top border (px-1 mask in the parent's bg-zinc-900
+              colour, so the border visually cuts under the text).  The
+              clear-all X stays inside the frame, to the right of 実行,
+              and remains shown only when BOTH points are set
+              (REQ-075 #3.5 consistency rule). */}
+          <div className="relative">
+            <span className="absolute -top-2 left-2 px-1 bg-zinc-900 text-label font-medium uppercase tracking-wider text-zinc-500 select-none pointer-events-none">
               {t('timeline.trim.toolbarLabel')}
             </span>
-            <span className="h-4 w-px bg-zinc-800" aria-hidden />
-            <button
-              type="button"
-              onClick={handleSetIn}
-              title={t('timeline.trim.setInTooltip')}
-              aria-pressed={pendingCutInSec !== null}
-              className={cn(
-                'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
-                'transition-colors duration-150',
-                pendingCutInSec !== null
-                  ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
-                  : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
-              )}
-            >
-              <span>{t('timeline.trim.setIn')}</span>
-              <span className="font-mono tabular-nums text-caption text-zinc-500">
-                {pendingCutInSec !== null
-                  ? formatTimecode(pendingCutInSec)
-                  : t('timeline.trim.noPoint')}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={handleSetOut}
-              title={t('timeline.trim.setOutTooltip')}
-              aria-pressed={pendingCutOutSec !== null}
-              className={cn(
-                'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
-                'transition-colors duration-150',
-                pendingCutOutSec !== null
-                  ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
-                  : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
-              )}
-            >
-              <span>{t('timeline.trim.setOut')}</span>
-              <span className="font-mono tabular-nums text-caption text-zinc-500">
-                {pendingCutOutSec !== null
-                  ? formatTimecode(pendingCutOutSec)
-                  : t('timeline.trim.noPoint')}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={handleConfirmCut}
-              disabled={
-                pendingCutInSec === null ||
-                pendingCutOutSec === null ||
-                !(pendingCutInSec < pendingCutOutSec)
-              }
-              title={t('timeline.trim.confirmCutTooltip')}
-              className={cn(
-                'flex h-7 items-center px-2.5 rounded-md text-body-sm font-medium',
-                'transition-colors duration-150',
-                'bg-green-500 text-zinc-950 hover:bg-green-400',
-                'disabled:bg-zinc-800 disabled:text-zinc-500 disabled:hover:bg-zinc-800 disabled:cursor-not-allowed'
-              )}
-            >
-              {t('timeline.trim.confirmCut')}
-            </button>
-            {pendingCutInSec !== null && pendingCutOutSec !== null && (
+            <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2 pt-2 pb-1">
               <button
                 type="button"
-                onClick={clearPendingCut}
-                title={t('timeline.trim.clearPendingTooltip')}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors duration-150"
+                onClick={handleSetIn}
+                title={t('timeline.trim.setInTooltip')}
+                aria-pressed={pendingCutInSec !== null}
+                className={cn(
+                  'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
+                  'transition-colors duration-150',
+                  pendingCutInSec !== null
+                    ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
+                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
+                )}
               >
-                <X className="h-3.5 w-3.5" />
+                <span>{t('timeline.trim.setIn')}</span>
+                <span className="font-mono tabular-nums text-caption text-zinc-500">
+                  {pendingCutInSec !== null
+                    ? formatTimecode(pendingCutInSec)
+                    : t('timeline.trim.noPoint')}
+                </span>
               </button>
-            )}
+              <button
+                type="button"
+                onClick={handleSetOut}
+                title={t('timeline.trim.setOutTooltip')}
+                aria-pressed={pendingCutOutSec !== null}
+                className={cn(
+                  'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
+                  'transition-colors duration-150',
+                  pendingCutOutSec !== null
+                    ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
+                    : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
+                )}
+              >
+                <span>{t('timeline.trim.setOut')}</span>
+                <span className="font-mono tabular-nums text-caption text-zinc-500">
+                  {pendingCutOutSec !== null
+                    ? formatTimecode(pendingCutOutSec)
+                    : t('timeline.trim.noPoint')}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCut}
+                disabled={
+                  pendingCutInSec === null ||
+                  pendingCutOutSec === null ||
+                  !(pendingCutInSec < pendingCutOutSec)
+                }
+                title={t('timeline.trim.confirmCutTooltip')}
+                className={cn(
+                  'flex h-7 items-center px-2.5 rounded-md text-body-sm font-medium',
+                  'transition-colors duration-150',
+                  'bg-green-500 text-zinc-950 hover:bg-green-400',
+                  'disabled:bg-zinc-800 disabled:text-zinc-500 disabled:hover:bg-zinc-800 disabled:cursor-not-allowed'
+                )}
+              >
+                {t('timeline.trim.confirmCut')}
+              </button>
+              {pendingCutInSec !== null && pendingCutOutSec !== null && (
+                <button
+                  type="button"
+                  onClick={clearPendingCut}
+                  title={t('timeline.trim.clearPendingTooltip')}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors duration-150"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Snap toggle — unchanged, kept after the trim cluster so its

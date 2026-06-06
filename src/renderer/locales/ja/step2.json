@@ -259,7 +259,10 @@
       "outLabel": "終点",
       "noPoint": "—",
       "cutMarkerTitle": "カット {{start}} 〜 {{end}}（クリックで削除）",
-      "invalidRange": "始点は終点より前である必要があります"
+      "invalidRange": "始点は終点より前である必要があります",
+      "errorSamePosition": "始点と終点は同じ位置に設定できません",
+      "errorInAfterOut": "始点は終点より前に設定してください",
+      "errorOutBeforeIn": "終点は始点より後に設定してください"
     }
   }
 }
