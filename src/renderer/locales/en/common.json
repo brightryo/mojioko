@@ -41,7 +41,7 @@
   },
   "dialog": {
     "discardChanges": "Discard changes?",
-    "discardChangesDesc": "You have edited rows. Navigate back anyway?",
+    "discardChangesDesc": "You have unsaved edits. Navigate back anyway?",
     "dontAskAgain": "Don't ask again this session"
   },
   "error": {

@@ -358,7 +358,7 @@ function BlockImpl({
             className={cn(
               'absolute inset-0 flex flex-col justify-center gap-0.5 px-2 py-1 rounded-md text-left',
               'transition-colors duration-150 select-none overflow-hidden',
-              'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/40',
+              'focus:outline-none focus-visible:outline-none',
               'bg-zinc-700/70 text-zinc-100 border border-zinc-600/70',
               'hover:bg-zinc-700 hover:border-zinc-500',
               entry.isEdited && !entry.isDeleted && 'bg-amber-400/15 border-amber-400/40 hover:bg-amber-400/25',
