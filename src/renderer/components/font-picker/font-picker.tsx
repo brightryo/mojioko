@@ -363,17 +363,10 @@ function FontRow({
     : {}
 
   // Whole-row click → select.  Action buttons inside stopPropagation so
-  // they don't double-trigger.  Keyboard: Enter / Space mirror the click
-  // when the row is focusable (canSelect).
+  // they don't double-trigger.  REQ-082: removed Enter / Space keyboard
+  // activation; click is the only way to select a row.
   function handleRowClick() {
     if (canSelect) onSelect()
-  }
-  function handleRowKey(e: React.KeyboardEvent) {
-    if (!canSelect) return
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onSelect()
-    }
   }
 
   return (
@@ -381,7 +374,6 @@ function FontRow({
       role={canSelect ? 'button' : undefined}
       tabIndex={canSelect ? 0 : undefined}
       onClick={canSelect ? handleRowClick : undefined}
-      onKeyDown={canSelect ? handleRowKey : undefined}
       aria-pressed={canSelect ? isActive : undefined}
       className={cn(
         'flex items-center justify-between gap-3 px-3 py-2 transition-colors',

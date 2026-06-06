@@ -271,17 +271,12 @@ export function WhisperModelManager({
   return (
     <div className={cn(disabled && 'opacity-50 pointer-events-none')}>
       {/* ---- Accordion Header ---- */}
+      {/* REQ-082: Enter / Space keyboard activation removed. */}
       <div
         role="button"
         aria-expanded={isOpen}
         tabIndex={0}
         onClick={() => setIsOpen(!isOpen)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            setIsOpen(!isOpen)
-          }
-        }}
         className="flex items-center gap-2 w-full cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
       >
         <Sparkles className="h-4 w-4 text-zinc-400 flex-shrink-0" />

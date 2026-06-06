@@ -76,12 +76,7 @@ export function SettingsDialog() {
     clampAndCommit(fadeDraft)
   }
 
-  function handleFadeKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      clampAndCommit(fadeDraft)
-      ;(e.target as HTMLInputElement).blur()
-    }
-  }
+  // REQ-082: Enter handler removed.  Blur commits the value.
 
   function handleLanguageChange(lang: string) {
     setLanguage(lang)
@@ -154,7 +149,6 @@ export function SettingsDialog() {
                   value={fadeDraft}
                   onChange={handleFadeDraftChange}
                   onBlur={handleFadeBlur}
-                  onKeyDown={handleFadeKeyDown}
                   className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-center text-body text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <p className="text-body-sm text-zinc-500">{t('general.fadeDurationHint')}</p>

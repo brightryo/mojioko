@@ -152,12 +152,7 @@ export function ColorPicker({
     }
   }
 
-  function handleHexKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      commitHexInput()
-      ;(e.target as HTMLInputElement).blur()
-    }
-  }
+  // REQ-082: Enter handler removed.  Blur (= click elsewhere) commits the hex.
 
   // -------------------------------------------------------------------------
   // Popover content
@@ -288,7 +283,6 @@ export function ColorPicker({
         value={hexDraft}
         onChange={handleHexChange}
         onBlur={commitHexInput}
-        onKeyDown={handleHexKeyDown}
         maxLength={7}
         spellCheck={false}
         placeholder="#FFFFFF"

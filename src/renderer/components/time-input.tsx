@@ -33,14 +33,10 @@ export function TimeInput({ value, onChange, className, disabled, error, warning
     commit()
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter') {
-      commit()
-      inputRef.current?.blur()
-    } else if (e.key === 'Escape') {
-      setEditing(false)
-    }
-  }
+  // REQ-082: Enter/Esc handlers removed.  blur (= click elsewhere or
+  // Tab away) still commits the typed value.  There is no longer a
+  // "cancel the draft" affordance — the user types over their change
+  // to revert, or relies on history undo.
 
   function commit() {
     const parsed = parseTimecode(draft)
@@ -57,7 +53,6 @@ export function TimeInput({ value, onChange, className, disabled, error, warning
       onChange={(e) => setDraft(e.target.value)}
       onFocus={handleFocus}
       onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
       spellCheck={false}
       title={title}
       className={cn(
