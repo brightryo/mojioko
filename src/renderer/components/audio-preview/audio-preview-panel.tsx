@@ -6,33 +6,12 @@ import { useUiStore } from '@/stores/ui-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
+import { findActiveEntryId } from '@/lib/active-entry'
 import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
-import type { SubtitleEntry } from '../../../shared/types'
 
-/**
- * Binary-search the sorted `entries` array for the entry active at
- * `timeSec`.  Returns the entry's id, or null if none covers the
- * timestamp.  Duplicates the function in video-preview-panel.tsx — the
- * sort + search is small enough that extracting it to a shared module
- * would add more import noise than it removes; both panels stay
- * self-contained.
- */
-function findActiveEntryId(entries: SubtitleEntry[], timeSec: number): string | null {
-  let lo = 0
-  let hi = entries.length - 1
-  while (lo <= hi) {
-    const mid = (lo + hi) >>> 1
-    const e = entries[mid]
-    if (timeSec < e.startSec) {
-      hi = mid - 1
-    } else if (timeSec > e.endSec) {
-      lo = mid + 1
-    } else {
-      return e.id
-    }
-  }
-  return null
-}
+// REQ-080 #1: findActiveEntryId moved to @/lib/active-entry — shared
+// with VideoPreviewPanel + unit-tested for [start, end) end-exclusive
+// boundary semantics.
 
 /**
  * Convert a local file path to a `mojioko-media://` URL served by the

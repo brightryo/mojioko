@@ -12,6 +12,7 @@ import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
 import { Switch } from '@/components/ui/switch'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
+import { findActiveEntryId } from '@/lib/active-entry'
 import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -53,29 +54,8 @@ function formatTime(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-/**
- * Binary-search the sorted `entries` array for the entry active at `timeSec`.
- * Returns the entry's id, or null if none covers the timestamp.
- *
- * Assumes entries are sorted by startSec ascending (guaranteed by the
- * transcription pipeline; SubtitleTable preserves this order).
- */
-function findActiveEntryId(entries: SubtitleEntry[], timeSec: number): string | null {
-  let lo = 0
-  let hi = entries.length - 1
-  while (lo <= hi) {
-    const mid = (lo + hi) >>> 1
-    const e = entries[mid]
-    if (timeSec < e.startSec) {
-      hi = mid - 1
-    } else if (timeSec > e.endSec) {
-      lo = mid + 1
-    } else {
-      return e.id
-    }
-  }
-  return null
-}
+// findActiveEntryId moved to @/lib/active-entry for shared use + unit tests.
+// REQ-080 #1: range semantics changed to [start, end) — end exclusive.
 
 // ---------------------------------------------------------------------------
 // Component
@@ -131,7 +111,9 @@ export function VideoPreviewPanel() {
 
   const videoSeekRequestSec    = useUiStore((s) => s.videoSeekRequestSec)
   const setVideoSeekRequest    = useUiStore((s) => s.setVideoSeekRequest)
-  const focusedRowId           = useUiStore((s) => s.focusedRowId)
+  // REQ-080 #1: overlayEntry no longer falls back to focusedRowId on
+  // paused, so we only need the SETTER (handleTimeUpdate writes during
+  // playback so the subtitle table highlights the active row).
   const setFocusedRowId        = useUiStore((s) => s.setFocusedRowId)
   const setVideoCurrentTimeSec = useUiStore((s) => s.setVideoCurrentTimeSec)
   const isExpanded             = useUiStore((s) => s.videoPreviewExpanded)
@@ -172,19 +154,29 @@ export function VideoPreviewPanel() {
   }, [entries])
 
   /**
-   * Decide which subtitle entry to overlay on the video.
-   *   Playing  → entry covering `currentTime` (null between subtitles)
-   *   Stopped  → focused row in the table (the user's current selection)
+   * REQ-080 #1: single source of truth for the overlay — the entry
+   * whose `[startSec, endSec)` covers the current playhead.  Works
+   * identically for playback and paused states:
+   *
+   *   - During playback, `currentTime` tracks `<video>.currentTime`;
+   *     the active subtitle (if any) renders.
+   *   - When the user clicks a row in the subtitle table, the seek
+   *     path sets `currentTime` to the row's startSec, so the same
+   *     lookup naturally surfaces that row's subtitle.
+   *   - When playback stops at duration (no more 0-warp since
+   *     REQ-079), `currentTime === lastEntry.endSec` and the
+   *     end-exclusive lookup returns null — no stale subtitle baked
+   *     on top of the final frame.
+   *
+   * The old isPlaying-gated path that unconditionally fell back to
+   * `focusedRowId` produced the REQ-080-reported bug because
+   * `focusedRowId` is retained across gap-time (so it stays pointed
+   * at the last-played subtitle after EOF).
    */
   const overlayEntry = useMemo<SubtitleEntry | null>(() => {
-    if (isPlaying) {
-      const id = findActiveEntryId(sortedActiveEntries, currentTime)
-      return id ? sortedActiveEntries.find((e) => e.id === id) ?? null : null
-    }
-    return focusedRowId
-      ? sortedActiveEntries.find((e) => e.id === focusedRowId) ?? null
-      : null
-  }, [isPlaying, currentTime, focusedRowId, sortedActiveEntries])
+    const id = findActiveEntryId(sortedActiveEntries, currentTime)
+    return id ? sortedActiveEntries.find((e) => e.id === id) ?? null : null
+  }, [currentTime, sortedActiveEntries])
 
   // Load the subtitle font on mount and refresh whenever the active font
   // changes so the preview reflects the new metrics without requiring a
