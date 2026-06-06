@@ -60,11 +60,10 @@ function getRowState(entry: SubtitleEntry, isOverflow: boolean): RowState {
 interface CellEditorProps {
   value: string
   onCommit: (v: string) => void
-  onCancel: () => void
   multiline?: boolean
 }
 
-function CellEditor({ value, onCommit, onCancel, multiline }: CellEditorProps) {
+function CellEditor({ value, onCommit, multiline }: CellEditorProps) {
   const [draft, setDraft] = useState(value)
   const ref = useRef<HTMLTextAreaElement & HTMLInputElement>(null)
 
@@ -83,14 +82,8 @@ function CellEditor({ value, onCommit, onCancel, multiline }: CellEditorProps) {
     el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden'
   }, [draft, multiline])
 
-  function handleKey(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && e.ctrlKey) {
-      e.preventDefault()
-      onCommit(draft)
-    } else if (e.key === 'Escape') {
-      onCancel()
-    }
-  }
+  // REQ-082: Ctrl+Enter / Esc removed.  onBlur (= click elsewhere or
+  // Tab away) still commits the typed value.
 
   const sharedClass = cn(
     'w-full bg-zinc-800 rounded px-2 py-1 text-body text-zinc-50 resize-none',
@@ -104,7 +97,6 @@ function CellEditor({ value, onCommit, onCancel, multiline }: CellEditorProps) {
         value={draft}
         rows={1}
         onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={handleKey}
         onBlur={() => onCommit(draft)}
         className={sharedClass}
       />
@@ -116,7 +108,6 @@ function CellEditor({ value, onCommit, onCancel, multiline }: CellEditorProps) {
       type="text"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
-      onKeyDown={handleKey}
       onBlur={() => onCommit(draft)}
       className={sharedClass}
     />
@@ -550,7 +541,6 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           <CellEditor
             value={entry.text.replace(/\\N/g, '\n')}
             onCommit={handleTextCommit}
-            onCancel={() => setEditingText(false)}
             multiline
           />
         ) : entry.isDeleted ? (

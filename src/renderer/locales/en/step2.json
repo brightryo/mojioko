@@ -124,8 +124,8 @@
     "bulkAppliedUndo": "Undo"
   },
   "tooltip": {
-    "undo": "Undo (Ctrl+Z)",
-    "redo": "Redo (Ctrl+Y)"
+    "undo": "Undo",
+    "redo": "Redo"
   },
   "styleCell": {
     "size": "Size",
@@ -242,7 +242,6 @@
       "adjustTime": "Adjust time",
       "delete": "Delete",
       "restore": "Restore",
-      "commitHint": "Ctrl+Enter to commit · Esc to cancel",
       "styleLabel": "Style"
     },
     "nav": {

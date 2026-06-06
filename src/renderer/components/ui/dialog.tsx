@@ -36,6 +36,12 @@ const DialogContent = React.forwardRef<
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
+      // REQ-082: suppress Radix Dialog's default Esc-to-close — Esc is no
+      // longer a keyboard shortcut anywhere in the app.  The X icon
+      // (rendered just below) and any per-dialog Cancel buttons are the
+      // only close affordances.  Outside-click closing is left intact
+      // because it's a mouse gesture, not a keyboard shortcut.
+      onEscapeKeyDown={(e) => e.preventDefault()}
       className={cn(
         'fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%]',
         'w-full max-w-lg rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl shadow-black/60',

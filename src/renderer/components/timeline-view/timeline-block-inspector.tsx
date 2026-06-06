@@ -138,18 +138,9 @@ export function TimelineBlockInspector({
     applyStyleEdit(t('history.editFont'), { fontId: next })
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && e.ctrlKey) {
-      e.preventDefault()
-      commitText(draft)
-      onClose()
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      // Cancel — restore draft to last-committed value but do NOT commit.
-      setDraft(entry.text.replace(/\\N/g, '\n'))
-      onClose()
-    }
-  }
+  // REQ-082: Ctrl+Enter / Esc removed.  handleBlur (= focus leaves the
+  // textarea — click elsewhere or close the inspector) commits the
+  // text.  The inspector itself closes via its X button.
 
   function handleBlur() {
     // Blur fires when the user clicks any of the inspector's other
@@ -410,7 +401,6 @@ export function TimelineBlockInspector({
           ref={textareaRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           rows={3}
           disabled={entry.isDeleted}
@@ -422,9 +412,8 @@ export function TimelineBlockInspector({
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         />
-        <p className="mt-1 text-caption text-zinc-500 select-none">
-          {t('timeline.inspector.commitHint')}
-        </p>
+        {/* REQ-082: "Ctrl+Enter to commit · Esc to cancel" hint
+            removed — both shortcuts have been deleted. */}
       </div>
 
       {/* § 6 — Time row.  Read-only display + adjust-time CTA at the

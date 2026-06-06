@@ -399,9 +399,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               if (e.target.value === '') return
               handleSizeCommit(e.target.value)
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-            }}
+            /* REQ-082: Enter handler removed.  Blur commits the value. */
             className={cn(
               'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
               'focus:outline-none focus:ring-1 focus:ring-ring/30',

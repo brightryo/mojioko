@@ -3,7 +3,6 @@ import { bumpRenderCount } from '@/lib/perf-counter'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Plus, RotateCcw, RotateCw, ChevronDown } from 'lucide-react'
-import { useHotkeys } from 'react-hotkeys-hook'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { Button } from '@/components/ui/button'
@@ -127,7 +126,6 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const videoCurrentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
   const setRowSelection = useUiStore((s) => s.setRowSelection)
-  const clearRowSelection = useUiStore((s) => s.clearRowSelection)
 
   const [editor, setEditor] = useState<EditorState>({ open: false })
   const [discardOpen, setDiscardOpen] = useState(false)
@@ -143,46 +141,12 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     loadSubtitleFont().then(setSubtitleFont).catch(() => {})
   }, [activeFontId])
 
-  useHotkeys('ctrl+z', (e) => {
-    e.preventDefault()
-    const label = useHistoryStore.getState().past.at(-1)?.label ?? ''
-    undo()
-    toast.info(t('toast.undo', { label }))
-  }, { enableOnFormTags: false })
-  useHotkeys('ctrl+y', (e) => {
-    e.preventDefault()
-    const label = useHistoryStore.getState().future.at(0)?.label ?? ''
-    redo()
-    toast.info(t('toast.redo', { label }))
-  }, { enableOnFormTags: false })
-  useHotkeys('ctrl+shift+z', (e) => { e.preventDefault(); redo() }, { enableOnFormTags: false })
-  useHotkeys('ctrl+n', (e) => { e.preventDefault(); openAddRowDialog() }, { enableOnFormTags: false })
-  // Ctrl+Shift+L / Ctrl+Shift+T — toggle between list and timeline editor
-  // views.  Phase 6 (REQ-056): keep the two shortcuts mirror-symmetric so
-  // the user doesn't have to remember which one means "go to the other".
-  useHotkeys('ctrl+shift+l', (e) => {
-    e.preventDefault()
-    useUiStore.getState().setEditorViewMode('list')
-  }, { enableOnFormTags: false })
-  useHotkeys('ctrl+shift+t', (e) => {
-    e.preventDefault()
-    useUiStore.getState().setEditorViewMode('timeline')
-  }, { enableOnFormTags: false })
-  // Ctrl+A — select every row currently visible under the active filter.
-  // Intentionally additive: rows hidden by the filter that were already
-  // selected stay selected, matching how the table-header checkbox behaves.
-  useHotkeys('ctrl+a', (e) => {
-    e.preventDefault()
-    const next = new Set(selectedRowIds)
-    for (const id of visibleEntryIds) next.add(id)
-    setRowSelection(next)
-  }, { enableOnFormTags: false })
-  // Esc clears the bulk-edit selection when one exists.  Yields to the
-  // browser/native handlers when nothing is selected, so dialogs and
-  // inputs keep their own Esc behaviour.
-  useHotkeys('escape', () => {
-    if (selectedRowIds.size > 0) clearRowSelection()
-  }, { enableOnFormTags: false })
+  // REQ-082: removed Step 2 keyboard shortcuts.
+  // Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z (undo/redo) — use the toolbar buttons.
+  // Ctrl+N (add row) — use the Add button.
+  // Ctrl+Shift+L / Ctrl+Shift+T (view switch) — use the view switcher.
+  // Ctrl+A (select all visible) — use the table header checkbox.
+  // Esc (clear bulk selection) — use the bulk-edit bar's clear button.
 
   const videoWidthPx = video?.widthPx ?? 1920
 

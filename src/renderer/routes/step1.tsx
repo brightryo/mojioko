@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, Settings2, ChevronUp, ChevronDown, AudioWaveform } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useHotkeys } from 'react-hotkeys-hook'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { AppShell } from '@/components/app-shell/app-shell'
@@ -104,7 +103,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const [openSection, setOpenSection] = useState<'whisper' | 'inputVideo'>('inputVideo')
   const transcriptionRunRef = useRef<TranscriptionRun | null>(null)
 
-  useHotkeys('enter', () => { if (canStart && !isTranscribing) handleStartTranscription() }, { enableOnFormTags: false })
+  // REQ-082: removed Enter-to-start-transcription hotkey.
 
   // Preload subtitle font so applyAutoLineBreak can use accurate glyph metrics
   // when transcription completes (instead of falling back to character estimates).
@@ -458,6 +457,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
               header when this section is already open switches the
               expanded panel to 'whisper'; clicking when collapsed
               switches back here.  Either way exactly one panel is open. */}
+          {/* REQ-082: Enter / Space keyboard activation removed. */}
           <div
             role="button"
             aria-expanded={openSection === 'inputVideo'}
@@ -465,12 +465,6 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             onClick={() =>
               setOpenSection(openSection === 'inputVideo' ? 'whisper' : 'inputVideo')
             }
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                setOpenSection(openSection === 'inputVideo' ? 'whisper' : 'inputVideo')
-              }
-            }}
             className="flex items-center justify-between cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
           >
             <div className="flex items-center gap-1.5">

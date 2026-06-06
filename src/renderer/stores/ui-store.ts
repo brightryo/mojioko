@@ -19,9 +19,7 @@ export const TIMELINE_PPS_DEFAULT = 50
 const MAX_RECENT_COLORS = 5
 
 interface UiStore {
-  isCommandPaletteOpen: boolean
   isSettingsDialogOpen: boolean
-  isShortcutsDialogOpen: boolean
   isAboutDialogOpen: boolean
   isDonationDialogOpen: boolean
   isFontLicensesDialogOpen: boolean
@@ -121,9 +119,7 @@ interface UiStore {
   pendingCutInSec: number | null
   pendingCutOutSec: number | null
 
-  setCommandPaletteOpen: (open: boolean) => void
   setSettingsDialogOpen: (open: boolean) => void
-  setShortcutsDialogOpen: (open: boolean) => void
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
   setFontLicensesDialogOpen: (open: boolean) => void
@@ -159,9 +155,7 @@ interface UiStore {
 }
 
 export const useUiStore = create<UiStore>((set) => ({
-  isCommandPaletteOpen: false,
   isSettingsDialogOpen: false,
-  isShortcutsDialogOpen: false,
   isAboutDialogOpen: false,
   isDonationDialogOpen: false,
   isFontLicensesDialogOpen: false,
@@ -181,9 +175,7 @@ export const useUiStore = create<UiStore>((set) => ({
   pendingCutInSec: null,
   pendingCutOutSec: null,
 
-  setCommandPaletteOpen: (open) => set({ isCommandPaletteOpen: open }),
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
-  setShortcutsDialogOpen: (open) => set({ isShortcutsDialogOpen: open }),
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
   setDonationDialogOpen: (open) => set({ isDonationDialogOpen: open }),
   setFontLicensesDialogOpen: (open) => set({ isFontLicensesDialogOpen: open }),

@@ -409,17 +409,12 @@ export function VideoPreviewPanel() {
               its height against the left column's video element.
           stopPropagation on the folder button so clicking the icon does
           not also toggle the accordion. */}
+      {/* REQ-082: Enter / Space keyboard activation removed. */}
       <div
         role="button"
         aria-expanded={isExpanded}
         tabIndex={0}
         onClick={() => setExpanded(!isExpanded)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            setExpanded(!isExpanded)
-          }
-        }}
         className="flex items-center gap-2 cursor-pointer select-none hover:opacity-90 transition-opacity duration-150 px-3 py-2"
       >
         <Play className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />

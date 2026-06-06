@@ -84,8 +84,8 @@ export function buildMenu(win: BrowserWindow, lang: Lang = 'en'): Menu {
       label: L.file,
       submenu: [
         {
+          // REQ-082: accelerator removed (no keyboard shortcuts except Space).
           label: L.quit,
-          accelerator: 'CmdOrCtrl+Q',
           click: () => app.quit()
         }
       ]
@@ -94,8 +94,8 @@ export function buildMenu(win: BrowserWindow, lang: Lang = 'en'): Menu {
       label: L.tools,
       submenu: [
         {
+          // REQ-082: accelerator removed (no keyboard shortcuts except Space).
           label: L.settings,
-          accelerator: 'CmdOrCtrl+,',
           click: () => send('menu:openSettings')
         }
       ]
