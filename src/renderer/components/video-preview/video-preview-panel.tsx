@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore } from '@/stores/ui-store'
+import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
 import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
@@ -133,6 +134,9 @@ export function VideoPreviewPanel() {
 
   const videoRef  = useRef<HTMLVideoElement>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
+  // REQ-074 1b: while playing, jump past any frame that falls inside a
+  // user-confirmed cut (ripple-preview behaviour).  No-op when cuts is empty.
+  useCutSkip(videoRef)
   const [isPlaying,  setIsPlaying]  = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration,    setDuration]    = useState(0)

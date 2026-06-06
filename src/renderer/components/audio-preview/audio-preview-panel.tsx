@@ -3,6 +3,7 @@ import { Play, Pause, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useUiStore } from '@/stores/ui-store'
+import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
 import type { SubtitleEntry } from '../../../shared/types'
@@ -83,6 +84,8 @@ export function AudioPreviewPanel() {
   const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
 
   const audioRef = useRef<HTMLAudioElement>(null)
+  // REQ-074 1b: jump past any time inside a confirmed cut while playing.
+  useCutSkip(audioRef)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
