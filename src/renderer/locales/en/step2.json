@@ -259,7 +259,10 @@
       "outLabel": "Out",
       "noPoint": "—",
       "cutMarkerTitle": "Cut {{start}} – {{end}} (click to remove)",
-      "invalidRange": "In must come before Out"
+      "invalidRange": "In must come before Out",
+      "errorSamePosition": "In and Out cannot be at the same position",
+      "errorInAfterOut": "In must be set before Out",
+      "errorOutBeforeIn": "Out must be set after In"
     }
   }
 }
