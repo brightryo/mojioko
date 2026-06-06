@@ -804,7 +804,6 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         liveEntries,
         draggingEntryId: d.entryId,
       })
-      if (result === null) return  // sub-3 px move noop
 
       // Visual snap guide — 1 px vertical line at the snap target's
       // pixel position.  Cleared when no snap was applied.
@@ -821,12 +820,24 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       // which is the position-mismatch the owner reported.  Empty
       // cuts → identity, so the legacy non-trim behaviour is
       // unchanged.
+      //
+      // REQ-100: this write runs UNCONDITIONALLY now, including for
+      // move-drag noops (|dxPx| < 3).  Previously the sub-3 px
+      // early-return at the top of this block left snapGuidePx
+      // frozen at whatever the last non-noop event had set it to,
+      // which surfaced as the owner-reported "guide flickers /
+      // disappears at random during move" — any cursor oscillation
+      // around the drag origin produced visible gaps.  `result` is
+      // never null from `computeDragPatch` anymore; `result.isNoop`
+      // is the new gating signal for the entry-write below.
       const liveCuts = useProjectStore.getState().cuts
       setSnapGuidePx(
         result.guideTimeSec !== null
           ? origToEdited(result.guideTimeSec, liveCuts) * pps
           : null,
       )
+
+      if (result.isNoop) return // skip the entry write but keep the snap guide fresh
 
       // Build the minimal patch — different kinds touch different
       // fields to keep history pushes meaningful (a resize-end

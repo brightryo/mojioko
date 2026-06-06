@@ -59,9 +59,22 @@ export interface DragPatchOutput {
   endSec: number
   guideTimeSec: number | null
   guideKind: SnapKind | null
+  /**
+   * REQ-100: signalled `true` when a `move` drag's cursor is within
+   * MOVE_DRAG_NOOP_THRESHOLD_PX of the drag origin (i.e., the user has
+   * not yet committed to dragging vs. clicking).  Callers should skip
+   * writing the block patch when this is set, but the `guideTimeSec`
+   * / `guideKind` fields remain authoritative — the snap guide stays
+   * in sync with the cursor even during the click-vs-drag dead zone.
+   *
+   * For `resize-start` / `resize-end` this is always `false`; the
+   * resize handles use the edge-handle pointer-down which doesn't
+   * need a click-vs-drag threshold.
+   */
+  isNoop: boolean
 }
 
-export function computeDragPatch(input: DragPatchInputs): DragPatchOutput | null {
+export function computeDragPatch(input: DragPatchInputs): DragPatchOutput {
   const {
     snapshot,
     kind,
@@ -80,6 +93,15 @@ export function computeDragPatch(input: DragPatchInputs): DragPatchOutput | null
 
   let rawStart = snapshot.startSec
   let rawEnd = snapshot.endSec
+  // REQ-100: even when the move drag is in the sub-3-px click-vs-drag
+  // dead zone, compute rawStart/rawEnd so the snap guide reflects what
+  // WOULD snap if the user moved further.  The previous early-return
+  // at this point left snapGuidePx frozen at a stale value (the cause
+  // of the owner's "guide flickers / disappears at random during
+  // move" report — the guide was deterministic but only updated at
+  // dxPx >= 3 px, so any cursor oscillation around the drag origin
+  // produced visible gaps).
+  let isNoop = false
   if (kind === 'resize-start') {
     const ceiling = snapshot.endSec - minBlockSec
     rawStart = Math.min(ceiling, Math.max(0, snapshot.startSec + dxSec))
@@ -87,8 +109,11 @@ export function computeDragPatch(input: DragPatchInputs): DragPatchOutput | null
     const floor = snapshot.startSec + minBlockSec
     rawEnd = Math.max(floor, Math.min(maxEnd, snapshot.endSec + dxSec))
   } else {
-    // move
-    if (Math.abs(dxPx) < MOVE_DRAG_NOOP_THRESHOLD_PX) return null
+    // move — note we no longer early-return here.  isNoop is signalled
+    // back to the caller so it can skip the entry write.
+    if (Math.abs(dxPx) < MOVE_DRAG_NOOP_THRESHOLD_PX) {
+      isNoop = true
+    }
     const duration = snapshot.endSec - snapshot.startSec
     const maxStart = Math.max(0, maxEnd - duration)
     rawStart = Math.min(maxStart, Math.max(0, snapshot.startSec + dxSec))
@@ -136,5 +161,6 @@ export function computeDragPatch(input: DragPatchInputs): DragPatchOutput | null
     endSec: finalEnd,
     guideTimeSec,
     guideKind,
+    isNoop,
   }
 }
