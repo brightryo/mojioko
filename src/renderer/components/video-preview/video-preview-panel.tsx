@@ -9,6 +9,7 @@ import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
+import { scrubState } from '@/lib/scrub-state'
 import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
 import { Switch } from '@/components/ui/switch'
 import { loadSubtitleFont } from '@/lib/font-metrics'
@@ -280,7 +281,18 @@ export function VideoPreviewPanel() {
           el.currentTime = videoSeekRequestSec
         })
         setCurrentTime(videoSeekRequestSec)
-        setVideoCurrentTimeSec(videoSeekRequestSec)
+        // REQ-096: while a manual ruler scrub is in progress, the
+        // optimistic-playhead path in TimelineView's handleSeek has
+        // already written `videoCurrentTimeSec` to the LATEST cursor
+        // position.  The rAF-throttled seek that triggered this
+        // effect carries the value the cursor had a frame ago, so
+        // writing it here would briefly snap the Playhead BACKWARD
+        // until the next pointermove.  Skip during scrub; on
+        // pointerup the scrub handler clears the flag and the next
+        // `timeupdate` (from the actual video element) re-syncs.
+        if (!scrubState.inProgress) {
+          setVideoCurrentTimeSec(videoSeekRequestSec)
+        }
       }
       // Clear the request immediately after consuming it.
       setVideoSeekRequest(null)
@@ -296,7 +308,17 @@ export function VideoPreviewPanel() {
     if (!el || isSeeking.current) return
     const time = el.currentTime
     setCurrentTime(time)
-    setVideoCurrentTimeSec(time)
+    // REQ-096: same rationale as the seek useEffect — during a
+    // manual ruler scrub, the optimistic write owns
+    // `videoCurrentTimeSec` and writing it from the video element's
+    // `timeupdate` event (which fires after every successful
+    // `el.currentTime = X` commit, carrying the rAF-throttled
+    // value) would race the latest pointermove and pull the
+    // Playhead backward.  pointerup clears scrubState.inProgress
+    // and the next `timeupdate` re-syncs.
+    if (!scrubState.inProgress) {
+      setVideoCurrentTimeSec(time)
+    }
 
     // Drive focusedRowId from playback — but not while the user is editing
     // a subtitle cell (CellEditor mounts a <textarea>).
