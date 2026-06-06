@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Play, Pause, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
@@ -90,6 +90,22 @@ export function AudioPreviewPanel() {
   const audioRef = useRef<HTMLAudioElement>(null)
   // REQ-074 1b: jump past any time inside a confirmed cut while playing.
   useCutSkip(audioRef)
+  /**
+   * REQ-078 #1 — "manual seek in flight" gate (mirrors VideoPreviewPanel).
+   * Set whenever we assign to <audio>.currentTime in response to a user
+   * action; held for 300 ms so handleEnded ignores any 'ended' that
+   * Chromium fires from a seek to duration.
+   */
+  const manualSeekHoldRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const notifyManualSeek = useCallback(() => {
+    if (manualSeekHoldRef.current !== null) clearTimeout(manualSeekHoldRef.current)
+    manualSeekHoldRef.current = setTimeout(() => {
+      manualSeekHoldRef.current = null
+    }, 300)
+  }, [])
+  useEffect(() => () => {
+    if (manualSeekHoldRef.current !== null) clearTimeout(manualSeekHoldRef.current)
+  }, [])
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -130,12 +146,14 @@ export function AudioPreviewPanel() {
     if (videoSeekRequestSec === null) return
     const el = audioRef.current
     if (el) {
+      // REQ-078 #1: tag this assignment as a manual seek before writing.
+      notifyManualSeek()
       el.currentTime = videoSeekRequestSec
       setCurrentTime(videoSeekRequestSec)
       setVideoCurrentTimeSec(videoSeekRequestSec)
     }
     setVideoSeekRequest(null)
-  }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec])
+  }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec, notifyManualSeek])
 
   function togglePlay() {
     const el = audioRef.current
@@ -202,7 +220,27 @@ export function AudioPreviewPanel() {
     const origVal = editedToOrig(editedVal, cuts)
     setCurrentTime(origVal)
     setVideoCurrentTimeSec(origVal)
-    if (audioRef.current) audioRef.current.currentTime = origVal
+    if (audioRef.current) {
+      // REQ-078 #1: tag this seek so handleEnded ignores any 'ended'
+      // Chromium fires from dragging the bar to the very end.
+      notifyManualSeek()
+      audioRef.current.currentTime = origVal
+    }
+  }
+
+  /**
+   * REQ-078 #1: extracted from the inline onEnded so the manual-seek
+   * guard can be applied.  Original behaviour preserved for natural EOF
+   * during playback (warp to 0 = ready to replay), suppressed for
+   * seek-induced 'ended' (= leave the playhead where the user put it).
+   */
+  function handleEnded() {
+    setIsPlaying(false)
+    if (manualSeekHoldRef.current !== null) return
+    setCurrentTime(0)
+    setVideoCurrentTimeSec(0)
+    activeEntryIdRef.current = null
+    setFocusedRowId(null)
   }
 
   if (!video || !mediaUrl) return null
@@ -303,15 +341,7 @@ export function AudioPreviewPanel() {
         onLoadedMetadata={handleLoadedMetadata}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
-        onEnded={() => {
-          setIsPlaying(false)
-          setCurrentTime(0)
-          setVideoCurrentTimeSec(0)
-          // Clear the active-row tracker so the next play starts from a
-          // clean state (matches VideoPreviewPanel's onEnded behaviour).
-          activeEntryIdRef.current = null
-          setFocusedRowId(null)
-        }}
+        onEnded={handleEnded}
         onError={() => setHasError(true)}
         className="hidden"
       />

@@ -142,6 +142,36 @@ export function VideoPreviewPanel() {
   // REQ-074 1b: while playing, jump past any frame that falls inside a
   // user-confirmed cut (ripple-preview behaviour).  No-op when cuts is empty.
   useCutSkip(videoRef)
+  /**
+   * REQ-078 #1 — "manual seek in flight" gate.
+   *
+   * Set whenever WE assign to <video>.currentTime in response to a user
+   * action (Ruler scrub, ⏭ button, preview seekbar drag, SubtitleTable
+   * row click).  Held for 300 ms — long enough to swallow any 'ended'
+   * event Chromium fires after a near-duration seek, regardless of the
+   * 'seeked' vs 'ended' interleaving the browser happens to pick.
+   *
+   * handleEnded reads this ref to decide whether the event is natural
+   * EOF (flag null → warp to 0 to "rewind for replay") or seek-induced
+   * (flag set → leave the playhead where the user put it).
+   *
+   * Why a 300 ms window rather than reacting to 'seeked' / 'seeking'
+   * events: those events fire BEFORE 'ended' in most browsers when
+   * seeking to duration, so clearing on 'seeked' would re-open the warp
+   * window before the seek-driven 'ended' arrives.  A 300 ms hold
+   * decouples us from event-ordering quirks while staying short enough
+   * that a real EOF moments after a seek still triggers natural reset.
+   */
+  const manualSeekHoldRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const notifyManualSeek = useCallback(() => {
+    if (manualSeekHoldRef.current !== null) clearTimeout(manualSeekHoldRef.current)
+    manualSeekHoldRef.current = setTimeout(() => {
+      manualSeekHoldRef.current = null
+    }, 300)
+  }, [])
+  useEffect(() => () => {
+    if (manualSeekHoldRef.current !== null) clearTimeout(manualSeekHoldRef.current)
+  }, [])
   const [isPlaying,  setIsPlaying]  = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration,    setDuration]    = useState(0)
@@ -261,13 +291,17 @@ export function VideoPreviewPanel() {
     if (videoSeekRequestSec === null) return
     const el = videoRef.current
     if (el) {
+      // REQ-078 #1: notify the ended-guard BEFORE writing currentTime so
+      // any 'ended' event Chromium fires from this seek (currentTime near
+      // duration) is swallowed by handleEnded.
+      notifyManualSeek()
       el.currentTime = videoSeekRequestSec
       setCurrentTime(videoSeekRequestSec)
       setVideoCurrentTimeSec(videoSeekRequestSec)
     }
     // Clear the request immediately after consuming it.
     setVideoSeekRequest(null)
-  }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec])
+  }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec, notifyManualSeek])
 
   // -------------------------------------------------------------------------
   // Video event handlers
@@ -307,6 +341,16 @@ export function VideoPreviewPanel() {
   function handlePause() { setIsPlaying(false) }
   function handleEnded() {
     setIsPlaying(false)
+    // REQ-078 #1: only warp to 0 when 'ended' arrived from natural
+    // playback reaching EOF.  When a user seek (Ruler scrub, ⏭ button,
+    // preview seekbar) lands at or near duration, manualSeekHoldRef is
+    // set; we leave the playhead where the user put it.  This is the
+    // root-cause fix for the REQ-077 #3 regression — the SCRUB_END_EPS
+    // clamp in handleSeek narrowed the warp window but did not close it
+    // because layout.totalSec can exceed video.durationSec by more than
+    // the eps for some inputs, and floating-point quirks let some
+    // browsers fire 'ended' a frame before duration.
+    if (manualSeekHoldRef.current !== null) return
     setCurrentTime(0)
     setVideoCurrentTimeSec(0)
     if (videoRef.current) videoRef.current.currentTime = 0
@@ -332,7 +376,12 @@ export function VideoPreviewPanel() {
     const origVal = editedToOrig(editedVal, cuts)
     setCurrentTime(origVal)
     setVideoCurrentTimeSec(origVal)
-    if (videoRef.current) videoRef.current.currentTime = origVal
+    if (videoRef.current) {
+      // REQ-078 #1: tag this as a manual seek so any 'ended' fired by
+      // dragging the slider to the very end is ignored by handleEnded.
+      notifyManualSeek()
+      videoRef.current.currentTime = origVal
+    }
   }
 
   // -------------------------------------------------------------------------
