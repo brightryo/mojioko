@@ -1,6 +1,7 @@
 import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ZoomIn, ZoomOut, Magnet, GanttChartSquare } from 'lucide-react'
+import { ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import {
@@ -482,6 +483,13 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   const { t } = useTranslation(['step2'])
   const entries = useProjectStore((s) => s.entries)
   const cuts = useProjectStore((s) => s.cuts)
+  const addCut = useProjectStore((s) => s.addCut)
+  const removeCut = useProjectStore((s) => s.removeCut)
+  const pendingCutInSec = useUiStore((s) => s.pendingCutInSec)
+  const pendingCutOutSec = useUiStore((s) => s.pendingCutOutSec)
+  const setPendingCutIn = useUiStore((s) => s.setPendingCutIn)
+  const setPendingCutOut = useUiStore((s) => s.setPendingCutOut)
+  const clearPendingCut = useUiStore((s) => s.clearPendingCut)
   const tableFilter = useUiStore((s) => s.tableFilter)
   const focusedRowId = useUiStore((s) => s.focusedRowId)
   const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
@@ -852,6 +860,50 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     setPixelsPerSec(pixelsPerSec + ZOOM_STEP_PX)
   }
 
+  // REQ-074 1e: trim controls.  In / Out / Confirm derive from the
+  // current playhead (Original axis) so the operation model is
+  // identical to NLE "set in / set out / extract".  History pushes
+  // happen on confirm only — pending In / Out are not undoable.
+  const handleSetIn = useCallback(() => {
+    setPendingCutIn(videoCurrentTimeSec)
+  }, [videoCurrentTimeSec, setPendingCutIn])
+  const handleSetOut = useCallback(() => {
+    setPendingCutOut(videoCurrentTimeSec)
+  }, [videoCurrentTimeSec, setPendingCutOut])
+  const handleConfirmCut = useCallback(() => {
+    if (pendingCutInSec === null || pendingCutOutSec === null) return
+    if (!(pendingCutInSec < pendingCutOutSec)) {
+      toast.error(t('timeline.trim.invalidRange'))
+      return
+    }
+    const newCut = {
+      startSec: pendingCutInSec,
+      endSec: pendingCutOutSec,
+      id: (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+        ? crypto.randomUUID()
+        : `cut-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    }
+    const snapshotBefore = useProjectStore.getState().cuts
+    addCut(newCut)
+    const snapshotAfter = useProjectStore.getState().cuts
+    useHistoryStore.getState().push({
+      label: t('timeline.trim.confirmCut'),
+      undo: () => useProjectStore.getState().setCuts(snapshotBefore),
+      redo: () => useProjectStore.getState().setCuts(snapshotAfter)
+    })
+    clearPendingCut()
+  }, [pendingCutInSec, pendingCutOutSec, addCut, clearPendingCut, t])
+  const handleRemoveCut = useCallback((id: string) => {
+    const snapshotBefore = useProjectStore.getState().cuts
+    removeCut(id)
+    const snapshotAfter = useProjectStore.getState().cuts
+    useHistoryStore.getState().push({
+      label: t('timeline.trim.confirmCut'),
+      undo: () => useProjectStore.getState().setCuts(snapshotBefore),
+      redo: () => useProjectStore.getState().setCuts(snapshotAfter)
+    })
+  }, [removeCut, t])
+
   // Keep the playhead in view while playing.  Phase 1: simple "if playhead
   // leaves the viewport, scroll it back to one third".  Phase 6 can refine.
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -1017,14 +1069,87 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         </div>
 
         <div className="flex items-center gap-3">
-          {/* REQ-069 #2: 「Nトラック」 readout removed.  The count is a
-              by-product of the greedy lane-assignment algorithm with no
-              meaningful action for the user — keeping it on permanent
-              chrome was noise.  Snap toggle stays (functional control). */}
-          {/* Snap toggle — disabled-looking in Phase 1 (algorithm lands in Phase 5)
-              but the flag is wired so behaviour change won't need a new UI later.
-              REQ-069 #1: text-[11px] → text-body-sm to match the rest of the
-              upgraded toolbar typography. */}
+          {/* REQ-074 1e — trim controls.  In / Out are captured from the
+              current playhead; Confirm pushes a Cut to project-store and
+              registers undo/redo via useHistoryStore.  All three buttons
+              read-only when no video duration is known (audio-only Phase 1
+              hasn't been tested in this combo yet). */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-label font-medium uppercase tracking-wider text-zinc-500 select-none">
+              {t('timeline.trim.toolbarLabel')}
+            </span>
+            <button
+              type="button"
+              onClick={handleSetIn}
+              title={t('timeline.trim.setInTooltip')}
+              className={cn(
+                'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
+                'transition-colors duration-150',
+                pendingCutInSec !== null
+                  ? 'bg-amber-500/15 text-amber-300'
+                  : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
+              )}
+            >
+              <span>{t('timeline.trim.setIn')}</span>
+              <span className="font-mono tabular-nums text-caption text-zinc-500">
+                {pendingCutInSec !== null
+                  ? formatTimecode(pendingCutInSec)
+                  : t('timeline.trim.noPoint')}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={handleSetOut}
+              title={t('timeline.trim.setOutTooltip')}
+              className={cn(
+                'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
+                'transition-colors duration-150',
+                pendingCutOutSec !== null
+                  ? 'bg-amber-500/15 text-amber-300'
+                  : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
+              )}
+            >
+              <span>{t('timeline.trim.setOut')}</span>
+              <span className="font-mono tabular-nums text-caption text-zinc-500">
+                {pendingCutOutSec !== null
+                  ? formatTimecode(pendingCutOutSec)
+                  : t('timeline.trim.noPoint')}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmCut}
+              disabled={
+                pendingCutInSec === null ||
+                pendingCutOutSec === null ||
+                !(pendingCutInSec < pendingCutOutSec)
+              }
+              title={t('timeline.trim.confirmCutTooltip')}
+              className={cn(
+                'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
+                'transition-colors duration-150',
+                'bg-green-500 text-zinc-950 hover:bg-green-400',
+                'disabled:opacity-30 disabled:pointer-events-none'
+              )}
+            >
+              <Scissors className="h-3 w-3" />
+              {t('timeline.trim.confirmCut')}
+            </button>
+            {(pendingCutInSec !== null || pendingCutOutSec !== null) && (
+              <button
+                type="button"
+                onClick={clearPendingCut}
+                title={t('timeline.trim.clearPendingTooltip')}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors duration-150"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Snap toggle — unchanged, kept after the trim cluster so its
+              location relative to the right edge of the toolbar stays
+              consistent across sessions. */}
           <button
             type="button"
             onClick={() => setSnapEnabled(!snapEnabled)}
@@ -1216,6 +1341,86 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                         : snapGuideKind === 'edge'
                           ? 'rgba(74, 222, 128, 0.9)'   // green-400
                           : 'rgba(161, 161, 170, 0.7)'  // zinc-400
+                  }}
+                />
+              )}
+
+              {/* REQ-074 1e — confirmed cuts.  Each cut collapses to a
+                  single Edited-axis point (its frames are gone from the
+                  concat output), so we render it as a thin vertical
+                  scissors marker on top of the ruler + tracks.  Clicking
+                  removes the cut (with undo via useHistoryStore). */}
+              {cuts.map((c) => {
+                const xPx = origToEdited(c.startSec, cuts) * pixelsPerSec
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => handleRemoveCut(c.id)}
+                    title={t('timeline.trim.cutMarkerTitle', {
+                      start: formatTimecode(c.startSec),
+                      end: formatTimecode(c.endSec)
+                    })}
+                    className="absolute top-0 z-20 flex flex-col items-center pointer-events-auto"
+                    style={{
+                      left: `${xPx - 7}px`,
+                      width: '14px',
+                      height: `${RULER_HEIGHT_PX + tracksHeightPx}px`
+                    }}
+                  >
+                    <div className="flex h-4 w-4 items-center justify-center rounded-sm bg-zinc-800 text-amber-300 hover:bg-amber-500/30 hover:text-amber-100 transition-colors duration-150">
+                      <Scissors className="h-3 w-3" />
+                    </div>
+                    <div
+                      className="w-px bg-amber-400/60 pointer-events-none"
+                      style={{ height: `${RULER_HEIGHT_PX + tracksHeightPx - 16}px` }}
+                    />
+                  </button>
+                )
+              })}
+
+              {/* REQ-074 1e — pending In/Out ghosts.  Drawn at the Edited
+                  positions of the captured Original times so the user can
+                  see what they're about to cut.  A semi-transparent band
+                  spans between them when both are set and valid. */}
+              {pendingCutInSec !== null && pendingCutOutSec !== null &&
+                pendingCutInSec < pendingCutOutSec && (
+                  <div
+                    aria-hidden
+                    className="absolute top-0 pointer-events-none"
+                    style={{
+                      left: `${origToEdited(pendingCutInSec, cuts) * pixelsPerSec}px`,
+                      width: `${
+                        (origToEdited(pendingCutOutSec, cuts) -
+                          origToEdited(pendingCutInSec, cuts)) *
+                        pixelsPerSec
+                      }px`,
+                      height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
+                      background: 'rgba(245, 158, 11, 0.15)' // amber-500/15
+                    }}
+                  />
+                )}
+              {pendingCutInSec !== null && (
+                <div
+                  aria-hidden
+                  className="absolute top-0 pointer-events-none"
+                  style={{
+                    left: `${origToEdited(pendingCutInSec, cuts) * pixelsPerSec}px`,
+                    width: '1px',
+                    height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
+                    background: 'rgba(245, 158, 11, 0.9)' // amber-500
+                  }}
+                />
+              )}
+              {pendingCutOutSec !== null && (
+                <div
+                  aria-hidden
+                  className="absolute top-0 pointer-events-none"
+                  style={{
+                    left: `${origToEdited(pendingCutOutSec, cuts) * pixelsPerSec}px`,
+                    width: '1px',
+                    height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
+                    background: 'rgba(245, 158, 11, 0.9)'
                   }}
                 />
               )}

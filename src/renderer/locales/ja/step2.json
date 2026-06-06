@@ -244,6 +244,22 @@
       "restore": "復元",
       "commitHint": "Ctrl+Enter で確定 · Esc で取消",
       "styleLabel": "スタイル"
+    },
+    "trim": {
+      "toolbarLabel": "トリミング",
+      "setIn": "In 点",
+      "setInTooltip": "現在の再生位置を In 点に設定",
+      "setOut": "Out 点",
+      "setOutTooltip": "現在の再生位置を Out 点に設定",
+      "confirmCut": "区間カット",
+      "confirmCutTooltip": "In 〜 Out をカットして後ろを詰める",
+      "clearPending": "クリア",
+      "clearPendingTooltip": "保留中の In / Out をクリア",
+      "inLabel": "In",
+      "outLabel": "Out",
+      "noPoint": "—",
+      "cutMarkerTitle": "カット {{start}} 〜 {{end}}（クリックで削除）",
+      "invalidRange": "In は Out より前である必要があります"
     }
   }
 }
