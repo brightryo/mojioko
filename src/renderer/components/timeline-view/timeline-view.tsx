@@ -699,13 +699,14 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         rawEnd = rawStart + duration
       }
 
-      // Snap pass — bypassed when the user holds Alt (Sketch / Figma
-      // convention for "temporarily disable snap") or when snap is
-      // turned off in the toolbar.
+      // Snap pass — gated only by the toolbar's吸着 toggle now that the
+      // Alt-bypass modifier has been retired (REQ-083 #1: the policy is
+      // "no keyboard shortcuts except Space play-pause").  Snap is on
+      // or off; the only way to switch it is the toolbar button.
       let finalStart = rawStart
       let finalEnd   = rawEnd
       let guide: SnapResult | null = null
-      if (snapEnabled && !e.altKey) {
+      if (snapEnabled) {
         const totalForGrid = isFinite(dur) && dur > 0
           ? dur
           : Math.max(
@@ -1040,46 +1041,30 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     return () => clearTimeout(timer)
   }, [scrollToRowId, pixelsPerSec, setScrollToRowId, cuts])
 
-  // Ctrl+wheel zoom around the mouse position.  React's onWheel is passive
-  // by default so it cannot preventDefault; attach the listener manually
-  // on the scroll container with `{ passive: false }` so we can suppress
-  // the default ctrl+wheel "browser page zoom" behaviour as well as the
-  // overflow-scroll the container would otherwise do.
+  // REQ-083 #2: Ctrl+wheel zoom (modifier + mouse gesture) removed.
+  // The previous implementation here intercepted Ctrl+wheel to drive
+  // pixelsPerSec; per the "no keyboard shortcuts except Space" policy
+  // (REQ-082 / REQ-083) zoom changes go through the toolbar's [−] /
+  // slider / [+] only.
+  //
+  // The listener is KEPT — but only to `preventDefault()` on Ctrl+wheel
+  // so Chromium's built-in "Ctrl+wheel = page zoom" does not fire and
+  // shrink/grow the entire app UI by accident.  Normal (no-Ctrl) wheel
+  // events early-return without touching default behaviour, so the
+  // overflow-x horizontal scroll on the scroll container continues to
+  // work natively — verified against the same code path that used to
+  // run before REQ-083.
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     function onWheel(e: WheelEvent) {
-      if (!e.ctrlKey || !el) return
-      e.preventDefault()
-      const rect = el.getBoundingClientRect()
-      const mouseClientX = e.clientX - rect.left
-      // Convert pointer position to a fixed timeline-content x, then to a
-      // time in seconds at the CURRENT zoom — that anchor stays under the
-      // cursor across the zoom.
-      const mouseContentX = mouseClientX + el.scrollLeft
-      const currentPps = liveContextRef.current.pixelsPerSec
-      const timeAtMouse = (mouseContentX - TRACK_GUTTER_LEFT_PX) / currentPps
-      // Geometric zoom factor — feels more natural than linear because the
-      // px/sec scale spans more than a decade.  10 % per wheel tick.
-      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
-      const nextPps = Math.min(
-        TIMELINE_PPS_MAX,
-        Math.max(TIMELINE_PPS_MIN, currentPps * factor)
-      )
-      if (nextPps === currentPps) return
-      setPixelsPerSec(nextPps)
-      // Adjust scrollLeft after the next paint so the same time still sits
-      // under the cursor.  rAF (not setTimeout) so the visual frame is the
-      // post-zoom one and the user sees no flicker.
-      requestAnimationFrame(() => {
-        if (!el) return
-        const newContentX = timeAtMouse * nextPps + TRACK_GUTTER_LEFT_PX
-        el.scrollLeft = newContentX - mouseClientX
-      })
+      if (!e.ctrlKey) return  // ← non-Ctrl wheel: let the browser scroll natively
+      e.preventDefault()       // ← Ctrl+wheel: swallow Chromium's page-zoom default
+      // No zoom action — toolbar controls own that now.
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [setPixelsPerSec])
+  }, [])
 
   // -------------------------------------------------------------------------
   // Render
@@ -1115,8 +1100,8 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               because zoom needs LIVE updates so the user sees the timeline
               re-scale while they drag.  accentColor routes the thumb through
               --primary like every other slider in the app.  Reads pixelsPerSec
-              from the store (Ctrl+wheel zoom updates the same slice) so
-              wheel-driven zoom drives the slider position automatically. */}
+              from the store, so the slider stays in sync if some other
+              caller mutates the zoom (currently only the [−] / [+] buttons). */}
           <input
             type="range"
             min={TIMELINE_PPS_MIN}

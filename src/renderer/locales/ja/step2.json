@@ -227,7 +227,7 @@
       "zoomSlider": "ズーム倍率",
       "zoomLevel": "{{pps}} px/秒",
       "snap": "吸着",
-      "snapHelp": "再生ヘッダ・隣接ブロックの端・ルーラーの目盛に吸着（Alt で一時無効）"
+      "snapHelp": "再生ヘッダ・隣接ブロックの端・ルーラーの目盛に吸着"
     },
     "block": {
       "ariaLabel": "字幕ブロック T{{track}} / 番号 {{index}}",
