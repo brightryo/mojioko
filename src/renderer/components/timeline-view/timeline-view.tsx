@@ -864,12 +864,17 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   // current playhead (Original axis) so the operation model is
   // identical to NLE "set in / set out / extract".  History pushes
   // happen on confirm only — pending In / Out are not undoable.
+  //
+  // REQ-075 #3: each set-point button TOGGLES — pressing 始点 again
+  // when it is already set clears that point.  Lets the user retract a
+  // single end without nuking the other one (the Clear-all X stays for
+  // wiping both at once when both are set).
   const handleSetIn = useCallback(() => {
-    setPendingCutIn(videoCurrentTimeSec)
-  }, [videoCurrentTimeSec, setPendingCutIn])
+    setPendingCutIn(pendingCutInSec === null ? videoCurrentTimeSec : null)
+  }, [pendingCutInSec, videoCurrentTimeSec, setPendingCutIn])
   const handleSetOut = useCallback(() => {
-    setPendingCutOut(videoCurrentTimeSec)
-  }, [videoCurrentTimeSec, setPendingCutOut])
+    setPendingCutOut(pendingCutOutSec === null ? videoCurrentTimeSec : null)
+  }, [pendingCutOutSec, videoCurrentTimeSec, setPendingCutOut])
   const handleConfirmCut = useCallback(() => {
     if (pendingCutInSec === null || pendingCutOutSec === null) return
     if (!(pendingCutInSec < pendingCutOutSec)) {
@@ -1069,24 +1074,29 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         </div>
 
         <div className="flex items-center gap-3">
-          {/* REQ-074 1e — trim controls.  In / Out are captured from the
-              current playhead; Confirm pushes a Cut to project-store and
-              registers undo/redo via useHistoryStore.  All three buttons
-              read-only when no video duration is known (audio-only Phase 1
-              hasn't been tested in this combo yet). */}
-          <div className="flex items-center gap-1.5">
+          {/* REQ-074 1e + REQ-075 #3 — trim controls.
+              Layout: [✂ icon | 「トリミング」 | 始点 | 終点 | 実行]
+              enclosed in a single rounded border so the group reads as a
+              cohesive cluster.  Each set-point button TOGGLES (REQ-075 #3:
+              press 始点 again to clear it).  実行 stays disabled until
+              both points are set AND in < out — pressing it with a
+              partial range is impossible by construction. */}
+          <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/60 pl-2 pr-1 py-0.5">
+            <Scissors className="h-3.5 w-3.5 text-zinc-500" />
             <span className="text-label font-medium uppercase tracking-wider text-zinc-500 select-none">
               {t('timeline.trim.toolbarLabel')}
             </span>
+            <span className="h-4 w-px bg-zinc-800" aria-hidden />
             <button
               type="button"
               onClick={handleSetIn}
               title={t('timeline.trim.setInTooltip')}
+              aria-pressed={pendingCutInSec !== null}
               className={cn(
                 'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
                 'transition-colors duration-150',
                 pendingCutInSec !== null
-                  ? 'bg-amber-500/15 text-amber-300'
+                  ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
                   : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
               )}
             >
@@ -1101,11 +1111,12 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               type="button"
               onClick={handleSetOut}
               title={t('timeline.trim.setOutTooltip')}
+              aria-pressed={pendingCutOutSec !== null}
               className={cn(
                 'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
                 'transition-colors duration-150',
                 pendingCutOutSec !== null
-                  ? 'bg-amber-500/15 text-amber-300'
+                  ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
                   : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
               )}
             >
@@ -1126,16 +1137,15 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               }
               title={t('timeline.trim.confirmCutTooltip')}
               className={cn(
-                'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
+                'flex h-7 items-center px-2.5 rounded-md text-body-sm font-medium',
                 'transition-colors duration-150',
                 'bg-green-500 text-zinc-950 hover:bg-green-400',
-                'disabled:opacity-30 disabled:pointer-events-none'
+                'disabled:bg-zinc-800 disabled:text-zinc-500 disabled:hover:bg-zinc-800 disabled:cursor-not-allowed'
               )}
             >
-              <Scissors className="h-3 w-3" />
               {t('timeline.trim.confirmCut')}
             </button>
-            {(pendingCutInSec !== null || pendingCutOutSec !== null) && (
+            {pendingCutInSec !== null && pendingCutOutSec !== null && (
               <button
                 type="button"
                 onClick={clearPendingCut}

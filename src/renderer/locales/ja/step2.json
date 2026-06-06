@@ -219,7 +219,7 @@
   "timeline": {
     "emptyAll": "字幕がありません",
     "emptyFiltered": "現在のフィルターに該当する字幕がありません",
-    "trackLabel": "T{{index}}",
+    "trackLabel": "{{index}}",
     "deletedTrackLabel": "削除済み",
     "toolbar": {
       "zoomOut": "縮小",
@@ -247,19 +247,19 @@
     },
     "trim": {
       "toolbarLabel": "トリミング",
-      "setIn": "In 点",
-      "setInTooltip": "現在の再生位置を In 点に設定",
-      "setOut": "Out 点",
-      "setOutTooltip": "現在の再生位置を Out 点に設定",
-      "confirmCut": "区間カット",
-      "confirmCutTooltip": "In 〜 Out をカットして後ろを詰める",
+      "setIn": "始点",
+      "setInTooltip": "現在の再生位置を始点に設定（同じボタンで解除）",
+      "setOut": "終点",
+      "setOutTooltip": "現在の再生位置を終点に設定（同じボタンで解除）",
+      "confirmCut": "実行",
+      "confirmCutTooltip": "始点〜終点をカットして後ろを詰める",
       "clearPending": "クリア",
-      "clearPendingTooltip": "保留中の In / Out をクリア",
-      "inLabel": "In",
-      "outLabel": "Out",
+      "clearPendingTooltip": "保留中の始点 / 終点をクリア",
+      "inLabel": "始点",
+      "outLabel": "終点",
       "noPoint": "—",
       "cutMarkerTitle": "カット {{start}} 〜 {{end}}（クリックで削除）",
-      "invalidRange": "In は Out より前である必要があります"
+      "invalidRange": "始点は終点より前である必要があります"
     }
   }
 }

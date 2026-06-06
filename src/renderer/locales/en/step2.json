@@ -219,7 +219,7 @@
   "timeline": {
     "emptyAll": "No subtitle entries.",
     "emptyFiltered": "No entries match the current filter.",
-    "trackLabel": "T{{index}}",
+    "trackLabel": "{{index}}",
     "deletedTrackLabel": "Deleted",
     "toolbar": {
       "zoomOut": "Zoom out",
@@ -248,10 +248,10 @@
     "trim": {
       "toolbarLabel": "Trim",
       "setIn": "In",
-      "setInTooltip": "Set in-point to the current playhead",
+      "setInTooltip": "Set in-point to the current playhead (click again to clear)",
       "setOut": "Out",
-      "setOutTooltip": "Set out-point to the current playhead",
-      "confirmCut": "Cut range",
+      "setOutTooltip": "Set out-point to the current playhead (click again to clear)",
+      "confirmCut": "Cut",
       "confirmCutTooltip": "Cut In..Out and ripple the tail forward",
       "clearPending": "Clear",
       "clearPendingTooltip": "Clear the pending In / Out points",
