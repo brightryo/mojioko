@@ -658,18 +658,14 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
       noScroll
     >
       <div className="flex flex-col h-full gap-3">
-        {/* Page header */}
-        {/* Page header — REQ-028 moved the export DropdownMenu from
-            here into the footer so the text/SRT export action sits
-            alongside the "Continue to render" CTA.  Keeps the export
-            within thumb's reach in both video and audio modes; in
-            audio mode there is no Continue button so Export becomes
-            the single primary action. */}
-        <div className="flex items-start justify-between flex-shrink-0">
-          <div>
-            <h1 className="text-heading font-semibold text-zinc-50">{t('title')}</h1>
-            <p className="mt-0.5 text-body text-zinc-400">{t('subtitle')}</p>
-          </div>
+        {/* Page header — REQ-075 #1: title + subtitle laid out on a single
+            row to reclaim vertical space.  Subtitle keeps its muted tone
+            (text-body-sm + zinc-400) but moves to the right of the heading
+            with a baseline alignment and a small inset gap.  REQ-028 still
+            governs the export DropdownMenu (footer-right). */}
+        <div className="flex items-baseline gap-3 flex-shrink-0">
+          <h1 className="text-heading font-semibold text-zinc-50">{t('title')}</h1>
+          <p className="text-body-sm text-zinc-400">{t('subtitle')}</p>
         </div>
 
         {/* Preview panel — swaps to a minimal audio player when the

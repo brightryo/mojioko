@@ -6,6 +6,7 @@ import { useUiStore } from '@/stores/ui-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
+import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
 import type { SubtitleEntry } from '../../../shared/types'
 
 /**
@@ -78,6 +79,9 @@ export function AudioPreviewPanel() {
   const { t } = useTranslation(['step2'])
   const video = useProjectStore((s) => s.video)
   const entries = useProjectStore((s) => s.entries)
+  // REQ-075 #5: seekbar lives on the EDITED axis.  Identity transforms
+  // when cuts is empty, so existing audio-mode users see no change.
+  const cuts = useProjectStore((s) => s.cuts)
   const videoSeekRequestSec = useUiStore((s) => s.videoSeekRequestSec)
   const setVideoSeekRequest = useUiStore((s) => s.setVideoSeekRequest)
   const setVideoCurrentTimeSec = useUiStore((s) => s.setVideoCurrentTimeSec)
@@ -191,10 +195,14 @@ export function AudioPreviewPanel() {
   }
 
   function handleSeekChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = parseFloat(e.target.value)
-    setCurrentTime(v)
-    setVideoCurrentTimeSec(v)
-    if (audioRef.current) audioRef.current.currentTime = v
+    // Slider's value is EDITED; convert back to ORIGINAL before writing
+    // to <audio>.currentTime (Original) and the playhead store slice
+    // (also Original).  editedToOrig is identity for empty cuts.
+    const editedVal = parseFloat(e.target.value)
+    const origVal = editedToOrig(editedVal, cuts)
+    setCurrentTime(origVal)
+    setVideoCurrentTimeSec(origVal)
+    if (audioRef.current) audioRef.current.currentTime = origVal
   }
 
   if (!video || !mediaUrl) return null
@@ -258,23 +266,31 @@ export function AudioPreviewPanel() {
                 : <Play className="h-5 w-5 ml-0.5" />}
             </button>
 
-            <div className="w-full flex flex-col gap-1">
-              <span className="text-caption tabular-nums text-muted-foreground text-center">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={duration || 0}
-                step={0.01}
-                value={currentTime}
-                onChange={handleSeekChange}
-                onPointerDown={() => { isSeeking.current = true }}
-                onPointerUp={() => { isSeeking.current = false }}
-                className="w-full accent-primary"
-                aria-label={t('videoPreview.play')}
-              />
-            </div>
+            {(() => {
+              // REQ-075 #5 — seek + readout in EDITED coordinates.
+              // Identical to (currentTime, duration) when cuts is empty.
+              const editedTotalSec = editedDuration(duration, cuts)
+              const editedCurrentTime = origToEdited(currentTime, cuts)
+              return (
+                <div className="w-full flex flex-col gap-1">
+                  <span className="text-caption tabular-nums text-muted-foreground text-center">
+                    {formatTime(editedCurrentTime)} / {formatTime(editedTotalSec)}
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={editedTotalSec || 0}
+                    step={0.01}
+                    value={editedCurrentTime}
+                    onChange={handleSeekChange}
+                    onPointerDown={() => { isSeeking.current = true }}
+                    onPointerUp={() => { isSeeking.current = false }}
+                    className="w-full accent-primary"
+                    aria-label={t('videoPreview.play')}
+                  />
+                </div>
+              )
+            })()}
           </div>
         )}
       </div>
