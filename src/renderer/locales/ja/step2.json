@@ -227,10 +227,10 @@
       "zoomSlider": "ズーム倍率",
       "zoomLevel": "{{pps}} px/秒",
       "snap": "吸着",
-      "snapHelp": "再生ヘッダ・隣接ブロックの端・ルーラーの目盛に吸着"
+      "snapHelp": "隣接する字幕の端・ルーラーの目盛に吸着"
     },
     "block": {
-      "ariaLabel": "字幕ブロック T{{track}} / 番号 {{index}}",
+      "ariaLabel": "字幕 T{{track}} / 番号 {{index}}",
       "resizeStart": "開始時間をドラッグで調整",
       "resizeEnd": "終了時間をドラッグで調整"
     },

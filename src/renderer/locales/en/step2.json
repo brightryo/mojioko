@@ -227,10 +227,10 @@
       "zoomSlider": "Zoom level",
       "zoomLevel": "{{pps}} px/s",
       "snap": "Snap",
-      "snapHelp": "Snap to playhead, neighbouring block edges, and ruler ticks"
+      "snapHelp": "Snap to neighbouring subtitle edges and ruler ticks"
     },
     "block": {
-      "ariaLabel": "Subtitle block T{{track}} #{{index}}",
+      "ariaLabel": "Subtitle T{{track}} #{{index}}",
       "resizeStart": "Drag to adjust start time",
       "resizeEnd": "Drag to adjust end time"
     },
