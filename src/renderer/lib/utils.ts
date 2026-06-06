@@ -5,8 +5,7 @@ import { extendTailwindMerge } from 'tailwind-merge'
  * tailwind-merge instance teaching the merger about MOJIOKO's custom
  * font-size tokens (`text-display`, `text-heading`, `text-title`,
  * `text-headline`, `text-body`, `text-body-sm`, `text-callout`,
- * `text-caption`, `text-label`, `text-micro`, and the legacy `subheading`
- * / `2xs` aliases).
+ * `text-caption`, `text-label`, `text-micro`).
  *
  * **Why this matters (Phase 3.8 incident).**  tailwind-merge's default
  * config only recognises the built-in Tailwind font-size names (`xs`,
@@ -32,15 +31,13 @@ const twMerge = extendTailwindMerge({
             'display',
             'heading',
             'title',
-            'subheading',
             'headline',
             'body',
             'body-sm',
             'callout',
             'caption',
             'label',
-            'micro',
-            '2xs'
+            'micro'
           ]
         }
       ]
