@@ -39,7 +39,7 @@ import {
 import type { EntryWarnings } from '@/lib/entry-warnings'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TimelineBlockInspector } from './timeline-block-inspector'
-import { bumpRenderCount } from '@/lib/perf-counter'
+import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import type { SubtitleEntry } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -137,7 +137,13 @@ function RulerImpl({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
 
   function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!isScrubbingRef.current) return
-    onSeek(xToSec(e.clientX))
+    // REQ-095: time the SYNC part of the scrub handler so the e2e can
+    // attribute milliseconds, not just render counts.  Real video seek
+    // (`<video>.currentTime = X`) runs later in VPP's useEffect — measured
+    // there separately.
+    measureSync('Ruler.pointermove', () => {
+      onSeek(xToSec(e.clientX))
+    })
   }
 
   function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
@@ -1104,10 +1110,16 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     // hand-pick the slice and bail when it didn't change.
     let prev = useUiStore.getState().videoCurrentTimeSec
     return useUiStore.subscribe((state) => {
-      const next = state.videoCurrentTimeSec
-      if (next === prev) return
-      prev = next
-      maybeScrollPlayheadIntoView(next)
+      // REQ-095: time the callback so the e2e can attribute scrub-
+      // attribution work that lands here.  Fast path (no playhead
+      // delta) returns inside the same measure block so the early
+      // exit cost is counted too.
+      measureSync('TimelineView.autoScrollSubscribe', () => {
+        const next = state.videoCurrentTimeSec
+        if (next === prev) return
+        prev = next
+        maybeScrollPlayheadIntoView(next)
+      })
     })
   }, [pixelsPerSec, cuts])
 

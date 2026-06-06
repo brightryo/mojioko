@@ -8,7 +8,7 @@ import { useUiStore } from '@/stores/ui-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
-import { bumpRenderCount } from '@/lib/perf-counter'
+import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
 import { Switch } from '@/components/ui/switch'
 import { loadSubtitleFont } from '@/lib/font-metrics'
@@ -266,14 +266,25 @@ export function VideoPreviewPanel() {
 
   useEffect(() => {
     if (videoSeekRequestSec === null) return
-    const el = videoRef.current
-    if (el) {
-      el.currentTime = videoSeekRequestSec
-      setCurrentTime(videoSeekRequestSec)
-      setVideoCurrentTimeSec(videoSeekRequestSec)
-    }
-    // Clear the request immediately after consuming it.
-    setVideoSeekRequest(null)
+    // REQ-095: time the seek effect — this is where the (real-video)
+    // `el.currentTime = X` blocking seek lands, plus the three setStates
+    // that drive Playhead / VPP / autoScroll subscribers.  Split into
+    // (a) the `el.currentTime` assignment alone (= the HTML5 video
+    // engine's keyframe-snap + decode cost) and (b) the rest of the
+    // effect body, so the e2e can tell whether the bottleneck is the
+    // video element or our store fan-out.
+    measureSync('VPP.seekEffect.total', () => {
+      const el = videoRef.current
+      if (el) {
+        measureSync('VPP.seekEffect.videoSeek', () => {
+          el.currentTime = videoSeekRequestSec
+        })
+        setCurrentTime(videoSeekRequestSec)
+        setVideoCurrentTimeSec(videoSeekRequestSec)
+      }
+      // Clear the request immediately after consuming it.
+      setVideoSeekRequest(null)
+    })
   }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec])
 
   // -------------------------------------------------------------------------
