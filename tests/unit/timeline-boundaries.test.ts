@@ -3,6 +3,7 @@ import {
   buildBoundarySet,
   findPrevBoundary,
   findNextBoundary,
+  NAV_EPS_SEC,
 } from '../../src/renderer/lib/timeline-boundaries'
 import type { Cut } from '../../src/shared/cuts'
 import type { SubtitleEntry } from '../../src/shared/types'
@@ -107,13 +108,20 @@ describe('findPrevBoundary', () => {
     expect(findPrevBoundary(0, boundaries)).toBeNull()
   })
 
-  it('returns the largest boundary strictly less than t', () => {
+  it('returns the largest boundary at least NAV_EPS_SEC less than t', () => {
     expect(findPrevBoundary(4, boundaries)).toBe(3)
-    expect(findPrevBoundary(5.0001, boundaries)).toBe(5)
+    // t = 5 + 1.5×eps lies past the eps window of the boundary at 5,
+    // so it is a genuine prev target.
+    expect(findPrevBoundary(5 + NAV_EPS_SEC * 1.5, boundaries)).toBe(5)
   })
 
-  it('strict comparison: t exactly on a boundary returns the boundary before it', () => {
+  it('treats boundaries within ±NAV_EPS_SEC of t as "already there" and skips them', () => {
+    // The defining REQ-088 #1 scenario: video element drift parks the
+    // playhead 0.1 ms past a boundary; "prev" must skip past it to the
+    // genuinely-previous boundary, not back to the one it is on.
     expect(findPrevBoundary(5, boundaries)).toBe(3)
+    expect(findPrevBoundary(5 + NAV_EPS_SEC * 0.1, boundaries)).toBe(3)
+    expect(findPrevBoundary(5 - NAV_EPS_SEC * 0.1, boundaries)).toBe(3)
     expect(findPrevBoundary(8, boundaries)).toBe(5)
   })
 
@@ -134,13 +142,16 @@ describe('findNextBoundary', () => {
     expect(findNextBoundary(100, boundaries)).toBeNull()
   })
 
-  it('returns the smallest boundary strictly greater than t', () => {
+  it('returns the smallest boundary at least NAV_EPS_SEC greater than t', () => {
     expect(findNextBoundary(4, boundaries)).toBe(5)
     expect(findNextBoundary(0, boundaries)).toBe(1)
   })
 
-  it('strict comparison: t exactly on a boundary returns the boundary after it', () => {
+  it('treats boundaries within ±NAV_EPS_SEC of t as "already there" and skips them', () => {
+    // Mirror of the prev-direction REQ-088 #1 scenario.
     expect(findNextBoundary(1, boundaries)).toBe(3)
+    expect(findNextBoundary(1 + NAV_EPS_SEC * 0.1, boundaries)).toBe(3)
+    expect(findNextBoundary(1 - NAV_EPS_SEC * 0.1, boundaries)).toBe(3)
     expect(findNextBoundary(5, boundaries)).toBe(8)
   })
 
@@ -167,5 +178,33 @@ describe('boundary navigation integration', () => {
     // From playhead at 4 — "prev" once goes to 3, not "5 then 3".
     expect(findPrevBoundary(4, b)).toBe(3)
     expect(findPrevBoundary(3, b)).toBe(1)
+  })
+
+  /**
+   * REQ-088 #1: 18-second block (1:04.63 → 1:22.74).  Playhead lands at
+   * (or microscopically past) the block's startSec because the HTML5
+   * video element returned 64.6299 after the seek target was 64.63.
+   * "Next" must jump to the block's endSec (82.74), not bounce back to
+   * 64.63 — a sub-millisecond no-op the user reads as a dead button.
+   * "Prev" must reach the boundary BEFORE 64.63, not 64.63 itself.
+   */
+  it('long block — playhead near its startSec must jump to far end on Next', () => {
+    const entries = [
+      makeEntry('prev', 50.00, 60.00),
+      makeEntry('long', 64.63, 82.74),
+      makeEntry('next', 90.00, 95.00),
+    ]
+    const b = buildBoundarySet(entries, [])
+    expect(b).toEqual([50.00, 60.00, 64.63, 82.74, 90.00, 95.00])
+
+    // Inside the long block at its start, drift-shifted to 64.6299.
+    expect(findNextBoundary(64.6299, b)).toBe(82.74)
+    expect(findPrevBoundary(64.6299, b)).toBe(60.00)
+    // Exactly at the boundary too.
+    expect(findNextBoundary(64.63, b)).toBe(82.74)
+    expect(findPrevBoundary(64.63, b)).toBe(60.00)
+    // And just-past, like 64.6301.
+    expect(findNextBoundary(64.6301, b)).toBe(82.74)
+    expect(findPrevBoundary(64.6301, b)).toBe(60.00)
   })
 })

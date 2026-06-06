@@ -20,7 +20,8 @@ import { formatTimecode } from '@/lib/time'
 import {
   layoutEntries,
   chooseRulerStepSec,
-  formatRulerLabel
+  formatRulerLabel,
+  LAYOUT_MIN_BLOCK_SEC
 } from '@/lib/timeline-layout'
 import { type SnapResult } from '@/lib/timeline-snap'
 import { computeDragPatch } from '@/lib/timeline-drag'
@@ -523,7 +524,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   }, [videoDurationSec, entries])
 
   const layout = useMemo(
-    () => layoutEntries(visibleEntries, fallbackDurationSec),
+    () => layoutEntries(visibleEntries, fallbackDurationSec, LAYOUT_MIN_BLOCK_SEC),
     [visibleEntries, fallbackDurationSec]
   )
 
