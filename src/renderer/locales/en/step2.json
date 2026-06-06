@@ -227,7 +227,7 @@
       "zoomSlider": "Zoom level",
       "zoomLevel": "{{pps}} px/s",
       "snap": "Snap",
-      "snapHelp": "Snap to playhead, neighbouring block edges, and ruler ticks (hold Alt to bypass)"
+      "snapHelp": "Snap to playhead, neighbouring block edges, and ruler ticks"
     },
     "block": {
       "ariaLabel": "Subtitle block T{{track}} #{{index}}",

@@ -43,8 +43,8 @@ interface TimelineBlockInspectorProps {
  *   3. Style controls (size / textColour / outlineColour / outlineWidth /
  *      fade) — hidden in audio-only mode.
  *   4. Per-row font (RowFontSelector) — same component the table cell uses.
- *   5. Text editor — Ctrl+Enter / Esc / blur commit semantics preserved
- *      from earlier phases; `\n` ↔ `\N` round-trip retained.
+ *   5. Text editor — blur commits the typed value (Ctrl+Enter / Esc
+ *      shortcuts removed by REQ-082); `\n` ↔ `\N` round-trip retained.
  *   6. Time row — start / end / duration display plus "Adjust time" CTA
  *      that opens the shared TimeEditorDialog.
  *

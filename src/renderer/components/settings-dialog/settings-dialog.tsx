@@ -86,13 +86,11 @@ export function SettingsDialog() {
   return (
     <Dialog open={isOpen} onOpenChange={setOpen}>
       {/* onOpenAutoFocus prevented: Radix' default focus-on-open sends focus
-          into the active tabpanel (tabindex=0), and because the dialog is
-          typically opened via Ctrl+, / menu (keyboard activation),
-          :focus-visible matches → the panel renders with the green focus
-          ring as if the user had Tab-keyed in.  Preventing the auto-focus
-          keeps the highlighted element on whatever opened the dialog;
-          users can still Tab into the dialog normally for keyboard
-          navigation.
+          into the active tabpanel (tabindex=0), which can cause the
+          :focus-visible style to land on the panel as if the user had
+          Tab-keyed in.  Preventing the auto-focus keeps the highlighted
+          element on whatever opened the dialog; users can still Tab into
+          the dialog normally for keyboard navigation.
           REQ-018 #1. */}
       <DialogContent
         className="max-w-[640px] max-h-[85vh] overflow-y-auto"
