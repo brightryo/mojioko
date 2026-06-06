@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Clock, Trash2, Undo2, Eraser, WrapText, X, Type, PenTool, Eclipse } from 'lucide-react'
+import { Clock, Trash2, Undo2, Eraser, WrapText, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -289,18 +289,18 @@ export function TimelineBlockInspector({
 
       {/* § 3 — Style.  Hidden in audio-only mode (REQ-028) because none
           of these fields reach text/SRT export.
-          REQ-084 #2: text labels dropped (「スタイル」見出し / サイズ /
-          文字色 / アウトライン色 / アウトライン幅 / フェード) to shrink
-          the inspector's vertical footprint.  Each row carries a small
-          identifying icon (text/outline/etc.) + a `title` tooltip so
-          users can still tell the two ColorPicker swatches apart at a
-          glance. */}
+          REQ-085 #2: REQ-084's over-reach (icons / shrunken paddings /
+          h-7 → h-6) reverted.  Only the requested change applies — the
+          text labels for the section heading, size, outline-width, and
+          fade are removed.  Text-color and outline-color KEEP their
+          labels: deleting them would leave the two ColorPicker swatches
+          visually indistinguishable, and the owner spec said to report
+          that case for explicit judgement instead of solving it with
+          icons (see RES §2.3). */}
       {!isAudioOnly && (
-        <div className="space-y-1.5 border-t border-zinc-800 pt-1.5">
-          {/* Size — numeric input is self-explanatory in style context;
-              "px" suffix anchors the unit. */}
-          <div className="flex items-center gap-2" title={t('styleCell.size')}>
-            <Type className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
+        <div className="space-y-2 border-t border-zinc-800 pt-2">
+          {/* Size — label text removed (REQ-085 #2). */}
+          <div className="flex items-center justify-between gap-2">
             <input
               type="number"
               min={FONT_SIZE_MIN_PX}
@@ -315,7 +315,7 @@ export function TimelineBlockInspector({
                 max: FONT_SIZE_MAX_PX
               })}
               className={cn(
-                'w-16 h-6 rounded border bg-zinc-950 px-1.5 text-center text-body-sm text-zinc-100',
+                'w-20 h-7 rounded border bg-zinc-950 px-1.5 text-center text-body text-zinc-100',
                 'focus:outline-none focus:ring-1',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
@@ -324,12 +324,11 @@ export function TimelineBlockInspector({
                   : 'border-zinc-700 focus:border-zinc-600 focus:ring-green-500/30'
               )}
             />
-            <span className="text-caption text-zinc-500 select-none">px</span>
           </div>
 
-          {/* Text colour — Type icon disambiguates from the outline swatch. */}
-          <div className="flex items-center gap-2" title={t('styleCell.textColor')}>
-            <Type className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
+          {/* Text colour — label KEPT pending owner decision (REQ-085 #2). */}
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.textColor')}</label>
             <ColorPicker
               value={entry.textColorHex}
               onChange={handleTextColorChange}
@@ -339,11 +338,9 @@ export function TimelineBlockInspector({
             />
           </div>
 
-          {/* Outline colour — PenTool icon contrasts with the Type icon
-              for text colour so the two ColorPicker swatches read at a
-              glance. */}
-          <div className="flex items-center gap-2" title={t('styleCell.outlineColor')}>
-            <PenTool className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
+          {/* Outline colour — label KEPT pending owner decision (REQ-085 #2). */}
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.outlineColor')}</label>
             <ColorPicker
               value={entry.outlineColorHex}
               onChange={handleOutlineColorChange}
@@ -353,10 +350,9 @@ export function TimelineBlockInspector({
             />
           </div>
 
-          {/* Outline width — slider, same shared component the table uses. */}
-          <div className="flex items-center gap-2" title={t('styleCell.outlineWidth')}>
-            <PenTool className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
-            <div className="flex-1" onClick={(e) => e.stopPropagation()}>
+          {/* Outline width — label text removed (REQ-085 #2). */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="w-[160px]" onClick={(e) => e.stopPropagation()}>
               <OutlineThicknessSlider
                 value={entry.outlineThicknessPx}
                 onCommit={handleOutlineThicknessCommit}
@@ -366,24 +362,21 @@ export function TimelineBlockInspector({
             </div>
           </div>
 
-          {/* Fade — Eclipse icon evokes a smooth fade-in/out gradient. */}
-          <div className="flex items-center gap-2" title={t('styleCell.fade')}>
-            <Eclipse className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
+          {/* Fade — label text removed (REQ-085 #2). */}
+          <div className="flex items-center justify-between gap-2">
             <Switch
               checked={entry.fadeEnabled}
               onCheckedChange={handleFadeChange}
               disabled={entry.isDeleted}
-              className="scale-75 origin-left"
+              className="scale-75 origin-right"
             />
           </div>
         </div>
       )}
 
-      {/* § 4 — Font.  Per-row override via the shared RowFontSelector.
-          REQ-084 #2: 「フォント」 label removed — the selector's value
-          (font family name) is itself the identification. */}
+      {/* § 4 — Font.  REQ-085 #2: 「フォント」 label text removed. */}
       {!isAudioOnly && (
-        <div className="border-t border-zinc-800 pt-1.5">
+        <div className="space-y-1 border-t border-zinc-800 pt-2">
           <RowFontSelector
             value={entry.fontId}
             onChange={handleFontChange}
@@ -392,10 +385,8 @@ export function TimelineBlockInspector({
         </div>
       )}
 
-      {/* § 5 — Text editor.  REQ-084 #2: 「テキスト」 label removed —
-          the textarea is the only multi-line control in the inspector,
-          so its purpose reads at a glance. */}
-      <div className="border-t border-zinc-800 pt-1.5">
+      {/* § 5 — Text editor.  REQ-085 #2: 「テキスト」 label text removed. */}
+      <div className="border-t border-zinc-800 pt-2">
         <textarea
           ref={textareaRef}
           value={draft}
