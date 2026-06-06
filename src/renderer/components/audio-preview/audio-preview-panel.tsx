@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
 import { findActiveEntryId } from '@/lib/active-entry'
 import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
+import { bumpRenderCount } from '@/lib/perf-counter'
 
 // REQ-080 #1: findActiveEntryId moved to @/lib/active-entry — shared
 // with VideoPreviewPanel + unit-tested for [start, end) end-exclusive
@@ -55,6 +56,7 @@ function formatTime(sec: number): string {
  * when the user opens an audio file.
  */
 export function AudioPreviewPanel() {
+  bumpRenderCount('AudioPreviewPanel')
   const { t } = useTranslation(['step2'])
   const video = useProjectStore((s) => s.video)
   const entries = useProjectStore((s) => s.entries)

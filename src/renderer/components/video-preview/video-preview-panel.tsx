@@ -8,6 +8,7 @@ import { useUiStore } from '@/stores/ui-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
+import { bumpRenderCount } from '@/lib/perf-counter'
 import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
 import { Switch } from '@/components/ui/switch'
 import { loadSubtitleFont } from '@/lib/font-metrics'
@@ -90,6 +91,7 @@ function formatTime(sec: number): string {
  *   so it does NOT interfere with subtitle text editing in the table.
  */
 export function VideoPreviewPanel() {
+  bumpRenderCount('VideoPreviewPanel')
   const { t } = useTranslation(['step2'])
   const video = useProjectStore((s) => s.video)
   const entries = useProjectStore((s) => s.entries)

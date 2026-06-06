@@ -88,12 +88,46 @@ test('timeline render volume — zoom slider drag vs playhead tick', async () =>
     return { totalMs: Math.round(end - start), counters: { ...w.__mojioko_profile } }
   })
 
+  // -------------------------------------------------------------------
+  // Scenario C (REQ-093 measurement): simulate a ruler-scrub drag —
+  // 50 rapid setVideoSeekRequest ticks.  This exercises the seek
+  // request → VideoPreviewPanel useEffect → setVideoCurrentTimeSec
+  // chain that real pointermove events traverse.  Each tick toggles
+  // the seekRequest field twice (set → cleared by the effect), so
+  // subscribers of `videoSeekRequestSec` (VideoPreviewPanel,
+  // AudioPreviewPanel) see roughly 2× the render volume of
+  // subscribers of `videoCurrentTimeSec` (Step2Route, TimelineView).
+  // This is a measurement, not a budget — no assertions on the
+  // returned counters; values just get logged.
+  const scrubResult = await window.evaluate(async () => {
+    const w = window as unknown as {
+      __mojioko_test: { ui: { setState: (s: unknown) => void; getState: () => { videoSeekRequestSec: number | null } } }
+      __mojioko_profile: Record<string, number>
+      __mojioko_profile_reset: () => void
+    }
+    w.__mojioko_profile_reset()
+    const start = performance.now()
+    for (let i = 0; i < 50; i++) {
+      // Push a seek request — the renderer's video-preview-panel
+      // effect will fan this out to setVideoCurrentTimeSec +
+      // setVideoSeekRequest(null) the same way a real pointermove
+      // would.
+      w.__mojioko_test.ui.setState({ videoSeekRequestSec: 1 + i * 0.5 })
+      await new Promise((r) => requestAnimationFrame(r))
+    }
+    const end = performance.now()
+    return { totalMs: Math.round(end - start), counters: { ...w.__mojioko_profile } }
+  })
+
   // eslint-disable-next-line no-console
   console.log('\n[3.9 perf] zoom drag (50 pps ticks):',
     JSON.stringify(dragResult, null, 2))
   // eslint-disable-next-line no-console
   console.log('\n[3.9 perf] playhead (50 ticks, no geometry change):',
     JSON.stringify(playheadResult, null, 2))
+  // eslint-disable-next-line no-console
+  console.log('\n[REQ-093 measurement] scrub via seek-request (50 ticks):',
+    JSON.stringify(scrubResult, null, 2))
 
   // ---- Assertions ----
   // Playhead ticks must NOT cause Block or Ruler re-renders — their props
