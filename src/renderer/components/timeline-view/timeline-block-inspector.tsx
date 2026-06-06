@@ -288,19 +288,16 @@ export function TimelineBlockInspector({
       )}
 
       {/* § 3 — Style.  Hidden in audio-only mode (REQ-028) because none
-          of these fields reach text/SRT export.
-          REQ-085 #2: REQ-084's over-reach (icons / shrunken paddings /
-          h-7 → h-6) reverted.  Only the requested change applies — the
-          text labels for the section heading, size, outline-width, and
-          fade are removed.  Text-color and outline-color KEEP their
-          labels: deleting them would leave the two ColorPicker swatches
-          visually indistinguishable, and the owner spec said to report
-          that case for explicit judgement instead of solving it with
-          icons (see RES §2.3). */}
+          of these fields reach text/SRT export. */}
       {!isAudioOnly && (
         <div className="space-y-2 border-t border-zinc-800 pt-2">
-          {/* Size — label text removed (REQ-085 #2). */}
+          <p className="text-label text-zinc-500 select-none">
+            {t('timeline.inspector.styleLabel')}
+          </p>
+
+          {/* Size */}
           <div className="flex items-center justify-between gap-2">
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.size')}</label>
             <input
               type="number"
               min={FONT_SIZE_MIN_PX}
@@ -315,6 +312,10 @@ export function TimelineBlockInspector({
                 max: FONT_SIZE_MAX_PX
               })}
               className={cn(
+                // Phase 3.5: size input bumped to `body` (15) so the numeric
+                // value reads at the same scale as the screen's body content
+                // instead of sitting one tier below the field label
+                // (callout 13/600).
                 'w-20 h-7 rounded border bg-zinc-950 px-1.5 text-center text-body text-zinc-100',
                 'focus:outline-none focus:ring-1',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
@@ -326,7 +327,7 @@ export function TimelineBlockInspector({
             />
           </div>
 
-          {/* Text colour — label KEPT pending owner decision (REQ-085 #2). */}
+          {/* Text colour */}
           <div className="flex items-center justify-between gap-2">
             <label className="text-callout font-semibold text-zinc-300">{t('styleCell.textColor')}</label>
             <ColorPicker
@@ -338,7 +339,7 @@ export function TimelineBlockInspector({
             />
           </div>
 
-          {/* Outline colour — label KEPT pending owner decision (REQ-085 #2). */}
+          {/* Outline colour */}
           <div className="flex items-center justify-between gap-2">
             <label className="text-callout font-semibold text-zinc-300">{t('styleCell.outlineColor')}</label>
             <ColorPicker
@@ -350,8 +351,10 @@ export function TimelineBlockInspector({
             />
           </div>
 
-          {/* Outline width — label text removed (REQ-085 #2). */}
+          {/* Outline width — shared slider component (same as subtitle-table
+              per-row + bulk-edit-bar). */}
           <div className="flex items-center justify-between gap-2">
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.outlineWidth')}</label>
             <div className="w-[160px]" onClick={(e) => e.stopPropagation()}>
               <OutlineThicknessSlider
                 value={entry.outlineThicknessPx}
@@ -362,8 +365,9 @@ export function TimelineBlockInspector({
             </div>
           </div>
 
-          {/* Fade — label text removed (REQ-085 #2). */}
+          {/* Fade */}
           <div className="flex items-center justify-between gap-2">
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.fade')}</label>
             <Switch
               checked={entry.fadeEnabled}
               onCheckedChange={handleFadeChange}
@@ -374,9 +378,10 @@ export function TimelineBlockInspector({
         </div>
       )}
 
-      {/* § 4 — Font.  REQ-085 #2: 「フォント」 label text removed. */}
+      {/* § 4 — Font.  Per-row override via the shared RowFontSelector. */}
       {!isAudioOnly && (
         <div className="space-y-1 border-t border-zinc-800 pt-2">
+          <label className="text-callout font-semibold text-zinc-300 block">{t('bulkRowFont.label')}</label>
           <RowFontSelector
             value={entry.fontId}
             onChange={handleFontChange}
@@ -385,8 +390,14 @@ export function TimelineBlockInspector({
         </div>
       )}
 
-      {/* § 5 — Text editor.  REQ-085 #2: 「テキスト」 label text removed. */}
+      {/* § 5 — Text editor.  Blur commits the typed value
+          (Ctrl+Enter / Esc shortcuts removed by REQ-082).  No
+          auto-focus on mount — see PopoverContent's
+          `onOpenAutoFocus={preventDefault}` upstream. */}
       <div className="border-t border-zinc-800 pt-2">
+        <label className="block text-label text-zinc-500 mb-1">
+          {t('timeline.inspector.textLabel')}
+        </label>
         <textarea
           ref={textareaRef}
           value={draft}
