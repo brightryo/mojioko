@@ -23,6 +23,8 @@ import { TranscriptionAdvancedDialog } from '@/components/step1/transcription-ad
 import { SubtitleStyleDialog } from '@/components/step1/subtitle-style-dialog'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useUiStore } from '@/stores/ui-store'
+import { useHistoryStore } from '@/stores/history-store'
 import { probeVideo, extractThumbnail } from '@/services/video'
 import { openVideoDialog } from '@/services/dialog'
 import { runTranscription } from '@/services/transcription'
@@ -293,6 +295,22 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           }
         })
       : entries
+
+    // REQ-091: a fresh (or repeated) transcription means a fresh
+    // editing session.  Clear the cut list, any in-flight trim toolbar
+    // points, and undo/redo history; reset Step 2/3 layout + background
+    // settings to BURNIN_DEFAULTS so the user lands in Step 2 with no
+    // carry-over from the previous edit.  Per-entry styles do not need
+    // an explicit clear — `setEntries(finalEntries)` immediately below
+    // overwrites the entry array with brand-new entries seeded from
+    // `runDefaults`, so the old entries' fontSize / colour / fade /
+    // fontId edits cannot survive.  Done AFTER the post-cancel return
+    // above (line ~227) so that cancelling a transcription does NOT
+    // wipe the user's prior session.
+    useProjectStore.getState().setCuts([])
+    useUiStore.getState().clearPendingCut()
+    useHistoryStore.getState().clear()
+    resetStep3Settings()
 
     setEntries(finalEntries)
     toast.success(t('toast.transcriptionComplete', { count: finalEntries.length }))
