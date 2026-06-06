@@ -182,6 +182,123 @@ test('timeline render volume — zoom slider drag vs playhead tick', async () =>
     return { totalMs: Math.round(end - start), counters: { ...w.__mojioko_profile } }
   })
 
+  // -------------------------------------------------------------------
+  // Scenario E (REQ-095 measurement): the REAL ruler-scrub path.
+  //
+  // REQ-094 cut every render count to zero for the
+  // direct-setState-of-videoCurrentTimeSec scenario (Scenario B), yet
+  // the owner still reported stutter.  The hypothesis (RES-094 §7
+  // hand-off) is that the bottleneck is per-event WORK time, not
+  // render volume: each real pointermove drives
+  // setVideoSeekRequest → VPP useEffect → `el.currentTime = X` →
+  // setVideoCurrentTimeSec → autoScroll subscribe, with the
+  // `el.currentTime` line in particular doing a synchronous HTML5
+  // video decode that exceeds the per-frame budget for non-keyframe
+  // positions.
+  //
+  // This scenario fires real PointerEvents on the Ruler DOM at the
+  // same cadence the user produces and reads `__mojioko_profile_times`
+  // for the per-step breakdown.  It also varies the entry count
+  // (5 / 20 / 50) to detect any O(N) work hiding in the React layer.
+  //
+  // CAVEAT: the seed fixture's video path does not exist, so VPP
+  // goes into `hasError=true` and unmounts the <video>.  That means
+  // `videoRef.current === null` and the `VPP.seekEffect.videoSeek`
+  // timer never enters the `if (el)` branch — it stays at 0 in this
+  // test.  Real-video cost MUST be measured in dev mode against a
+  // real file; the e2e numbers here only attribute the React/Zustand
+  // overhead, which is the part RES-095 needs to confirm is small
+  // (and therefore NOT the cause of the stutter).
+  const sampleScrubResults: Array<{ entryCount: number; counters: Record<string, number>; times: Record<string, number>; totalMs: number }> = []
+  for (const targetCount of [5, 20, 50]) {
+    const result = await window.evaluate(async ({ targetCount: n }) => {
+      const w = window as unknown as {
+        __mojioko_test: {
+          ui: { setState: (s: unknown) => void; getState: () => { videoSeekRequestSec: number | null; videoCurrentTimeSec: number } }
+          project: { setState: (s: unknown) => void; getState: () => { entries: ReadonlyArray<{ id: string; startSec: number; endSec: number; text: string; fontSizePx: number; textColorHex: string; outlineColorHex: string; outlineThicknessPx: number; fadeEnabled: boolean; isDeleted: boolean; isEdited: boolean; original: unknown }> } }
+        }
+        __mojioko_profile: Record<string, number>
+        __mojioko_profile_times?: Record<string, number>
+        __mojioko_profile_reset: () => void
+        __mojioko_profile_times_reset?: () => void
+      }
+      // Replicate the seed's first entry shape N times, spaced 1 s
+      // apart so the timeline has visibly distinct blocks but the
+      // total duration stays inside the seed video's 872 s.
+      const sample = w.__mojioko_test.project.getState().entries[0]
+      const entries = Array.from({ length: n }, (_, i) => ({
+        ...sample,
+        id: `req-095-${i}`,
+        startSec: 5 + i * 3,
+        endSec: 5 + i * 3 + 2,
+        original: { ...(sample.original as object) },
+      }))
+      w.__mojioko_test.project.setState({ entries })
+
+      // Make sure the renderer has flushed the new entry array.
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+
+      // Reset both perf maps so this scenario's numbers are isolated.
+      w.__mojioko_profile_reset()
+      w.__mojioko_profile_times_reset?.()
+
+      // Find the Ruler element — it sits under the timeline view's
+      // tracks container.  Identifying it via its cursor class
+      // (`cursor-ew-resize`) and the scrubable role.
+      const ruler = document.querySelector('[class*="cursor-ew-resize"]') as HTMLElement | null
+      if (!ruler) {
+        return { entryCount: n, counters: {}, times: {}, totalMs: 0, note: 'ruler element not found' }
+      }
+      const rect = ruler.getBoundingClientRect()
+
+      // Build a fake pointerId so the Ruler's setPointerCapture call
+      // is honoured by the browser.
+      const pointerId = 7
+
+      // pointerdown at left edge — initiates scrubbing.
+      ruler.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        pointerId,
+        clientX: rect.left + 4,
+        clientY: rect.top + 8,
+      }))
+
+      const start = performance.now()
+      // Fire 50 pointermoves across the ruler width.
+      for (let i = 0; i < 50; i++) {
+        const x = rect.left + 4 + (rect.width - 8) * (i / 49)
+        ruler.dispatchEvent(new PointerEvent('pointermove', {
+          bubbles: true,
+          button: 0,
+          pointerId,
+          clientX: x,
+          clientY: rect.top + 8,
+        }))
+        // Yield so React + the VPP useEffect have a chance to land
+        // their work between events (otherwise the test would measure
+        // batched cost, not per-event cost).
+        await new Promise((r) => requestAnimationFrame(r))
+      }
+      ruler.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        button: 0,
+        pointerId,
+        clientX: rect.right - 4,
+        clientY: rect.top + 8,
+      }))
+      const end = performance.now()
+
+      return {
+        entryCount: n,
+        counters: { ...w.__mojioko_profile },
+        times: { ...(w.__mojioko_profile_times ?? {}) },
+        totalMs: Math.round(end - start),
+      }
+    }, { targetCount })
+    sampleScrubResults.push(result)
+  }
+
   // eslint-disable-next-line no-console
   console.log('\n[3.9 perf] zoom drag (50 pps ticks):',
     JSON.stringify(dragResult, null, 2))
@@ -194,6 +311,9 @@ test('timeline render volume — zoom slider drag vs playhead tick', async () =>
   // eslint-disable-next-line no-console
   console.log('\n[REQ-094 case E] zoom slider throttle (10 input events / 1 frame):',
     JSON.stringify(sliderThrottleResult, null, 2))
+  // eslint-disable-next-line no-console
+  console.log('\n[REQ-095 measurement] real ruler scrub — per-entry-count breakdown (50 pointermoves):',
+    JSON.stringify(sampleScrubResults, null, 2))
 
   // ---- Assertions ----
   // Playhead ticks must NOT cause Block or Ruler re-renders — their props
