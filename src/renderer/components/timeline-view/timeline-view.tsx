@@ -16,19 +16,14 @@ import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { cn } from '@/lib/utils'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
-import { roundToCs } from '@/lib/entry-edits'
 import { formatTimecode } from '@/lib/time'
 import {
   layoutEntries,
   chooseRulerStepSec,
   formatRulerLabel
 } from '@/lib/timeline-layout'
-import {
-  buildSnapTargets,
-  snapInterval,
-  SNAP_DISTANCE_PX,
-  type SnapResult
-} from '@/lib/timeline-snap'
+import { type SnapResult } from '@/lib/timeline-snap'
+import { computeDragPatch } from '@/lib/timeline-drag'
 import {
   editedDuration,
   editedToOrig,
@@ -680,87 +675,47 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         entries: liveEntries
       } = liveContextRef.current
       const dxPx = e.clientX - d.originClientX
-      const dxSec = dxPx / pps
-      const snap = d.snapshot
-      const maxEnd = isFinite(dur) && dur > 0 ? dur : Number.MAX_VALUE
-      let rawStart = snap.startSec
-      let rawEnd   = snap.endSec
-      if (d.kind === 'resize-start') {
-        const ceiling = snap.endSec - MIN_BLOCK_SEC
-        rawStart = Math.min(ceiling, Math.max(0, snap.startSec + dxSec))
-      } else if (d.kind === 'resize-end') {
-        const floor = snap.startSec + MIN_BLOCK_SEC
-        rawEnd = Math.max(floor, Math.min(maxEnd, snap.endSec + dxSec))
-      } else if (d.kind === 'move') {
-        if (Math.abs(dxPx) < 3) return
-        const duration = snap.endSec - snap.startSec
-        const maxStart = Math.max(0, maxEnd - duration)
-        rawStart = Math.min(maxStart, Math.max(0, snap.startSec + dxSec))
-        rawEnd = rawStart + duration
-      }
 
-      // Snap pass — gated only by the toolbar's吸着 toggle now that the
-      // Alt-bypass modifier has been retired (REQ-083 #1: the policy is
-      // "no keyboard shortcuts except Space play-pause").  Snap is on
-      // or off; the only way to switch it is the toolbar button.
-      let finalStart = rawStart
-      let finalEnd   = rawEnd
-      let guide: SnapResult | null = null
-      if (snapEnabled) {
-        const totalForGrid = isFinite(dur) && dur > 0
-          ? dur
-          : Math.max(
-              10,
-              liveEntries.reduce((m, x) => (x.endSec > m ? x.endSec : m), 0) * 1.2
-            )
-        const targets = buildSnapTargets(
-          liveEntries,
-          d.entryId,
-          playhead,
-          totalForGrid,
-          chooseRulerStepSec(pps)
-        )
-        const snapped = snapInterval(
-          rawStart,
-          rawEnd,
-          d.kind,
-          targets,
-          pps,
-          SNAP_DISTANCE_PX
-        )
-        // Re-clamp after snap so a snapped edge that would put start > end
-        // or exceed video duration is corrected.  Snap targets are vetted
-        // for proximity not legality.
-        finalStart = Math.max(0, Math.min(maxEnd - MIN_BLOCK_SEC, snapped.startSec))
-        finalEnd   = Math.max(finalStart + MIN_BLOCK_SEC, Math.min(maxEnd, snapped.endSec))
-        guide = snapped.guide
-      }
+      // REQ-085 #1: the previous inline snap / clamp / round pipeline was
+      // declared "verified" in RES-084 §1.1 on the strength of the snap-
+      // algorithm unit tests, but those tests covered the snap functions
+      // in isolation — they never asserted the production wiring actually
+      // ran them.  The owner reported snap "全く吸い付かず" both before and
+      // after REQ-084's 6 → 12 px threshold bump, which proved the bug was
+      // not the threshold.  Extracting the whole patch computation into
+      // `computeDragPatch` lets the 10 tests in
+      // `tests/unit/timeline-drag.test.ts` drive the EXACT same code path
+      // production uses, and prevents future "tests-pass-but-production-
+      // breaks" regressions in this lane.
+      const result = computeDragPatch({
+        snapshot: d.snapshot,
+        kind: d.kind,
+        dxPx,
+        pps,
+        dur,
+        minBlockSec: MIN_BLOCK_SEC,
+        snapEnabled,
+        playhead,
+        liveEntries,
+        draggingEntryId: d.entryId,
+      })
+      if (result === null) return  // sub-3 px move noop
 
-      // Round to centisecond precision before writing — `dxPx / pps` and the
-      // subsequent additions produce float drift (e.g. 13.0700001s for a
-      // round-trip drag back to 13.07s), which leaves the row visibly
-      // unchanged in the cs-formatted TimeInput but flagged as edited
-      // forever because the stored float ≠ original.  REQ-059.  This makes
-      // drag output match the TimeEditorDialog's `roundCs` confirm path and
-      // the cs-aligned values produced by the inline TimeInput.
-      finalStart = roundToCs(finalStart)
-      finalEnd   = roundToCs(finalEnd)
+      // Visual snap guide — 1 px vertical line at the snap target's
+      // pixel position.  Cleared when no snap was applied.
+      setSnapGuidePx(result.guideTimeSec !== null ? result.guideTimeSec * pps : null)
+      setSnapGuideKind(result.guideKind)
 
-      // Visual snap guide — a 1 px vertical line in timeline-content
-      // coordinates.  Cleared if no snap.
-      setSnapGuidePx(guide ? guide.timeSec * pps : null)
-      setSnapGuideKind(guide ? guide.kind : null)
-
-      // Build the minimal patch — different kinds touch different fields
-      // to keep history pushes meaningful (a resize-end shouldn't claim
-      // it touched startSec).
+      // Build the minimal patch — different kinds touch different
+      // fields to keep history pushes meaningful (a resize-end
+      // shouldn't claim it touched startSec).
       let patch: Partial<SubtitleEntry>
       if (d.kind === 'resize-start') {
-        patch = { startSec: finalStart, isEdited: true }
+        patch = { startSec: result.startSec, isEdited: true }
       } else if (d.kind === 'resize-end') {
-        patch = { endSec: finalEnd, isEdited: true }
+        patch = { endSec: result.endSec, isEdited: true }
       } else {
-        patch = { startSec: finalStart, endSec: finalEnd, isEdited: true }
+        patch = { startSec: result.startSec, endSec: result.endSec, isEdited: true }
       }
       useProjectStore.getState().updateEntry(d.entryId, patch)
     }
