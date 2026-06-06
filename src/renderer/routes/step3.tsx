@@ -42,6 +42,7 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
 
   const video = useProjectStore((s) => s.video)
   const entries = useProjectStore((s) => s.entries)
+  const cuts = useProjectStore((s) => s.cuts)
   // burnin / subtitleBackground are still consumed at render time to feed
   // startBurnin's burninOpts, but the editing UI moved to Step 2's
   // VideoPreviewPanel.  Only the read-side hooks remain here.
@@ -208,7 +209,8 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
       fadeDurationSec,
       subtitleBackground,
       outputContainer,
-      fontId: activeFontId
+      fontId: activeFontId,
+      cuts
     }
 
     const run = await startBurnin(burninOpts, (evt) => {

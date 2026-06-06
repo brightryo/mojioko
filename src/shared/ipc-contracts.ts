@@ -1,5 +1,6 @@
 import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams } from './types'
 import type { FontId } from './fonts'
+import type { Cut } from './cuts'
 export type { ModelsState }
 
 // ---------------------------------------------------------------------------
@@ -46,6 +47,14 @@ export interface BurninStartRequest {
    * font when omitted at the main-side handler.
    */
   fontId?: FontId
+  /**
+   * REQ-074: trim/cut list — Original-axis intervals to remove from the
+   * final video via filter_complex trim+concat.  Optional and absent /
+   * empty means "no cuts", in which case the main handler falls back to
+   * the legacy single-input argv byte-for-byte (back-compat with every
+   * caller predating Phase 1d).
+   */
+  cuts?: Cut[]
 }
 
 export interface EncoderDetectionResult {
