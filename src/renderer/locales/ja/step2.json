@@ -245,13 +245,19 @@
       "commitHint": "Ctrl+Enter で確定 · Esc で取消",
       "styleLabel": "スタイル"
     },
+    "nav": {
+      "first": "先頭へ",
+      "prevBoundary": "前の境界へ",
+      "nextBoundary": "次の境界へ",
+      "last": "末尾へ"
+    },
     "trim": {
       "toolbarLabel": "トリミング",
       "setIn": "始点",
       "setInTooltip": "現在の再生位置を始点に設定（同じボタンで解除）",
       "setOut": "終点",
       "setOutTooltip": "現在の再生位置を終点に設定（同じボタンで解除）",
-      "confirmCut": "実行",
+      "confirmCut": "カット",
       "confirmCutTooltip": "始点〜終点をカットして後ろを詰める",
       "clearPending": "クリア",
       "clearPendingTooltip": "保留中の始点 / 終点をクリア",
