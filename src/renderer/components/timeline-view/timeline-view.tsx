@@ -23,7 +23,6 @@ import {
   formatRulerLabel,
   LAYOUT_MIN_BLOCK_SEC
 } from '@/lib/timeline-layout'
-import { type SnapResult } from '@/lib/timeline-snap'
 import { computeDragPatch } from '@/lib/timeline-drag'
 import {
   editedDuration,
@@ -743,8 +742,13 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   // Snap guide: x-pixel position (in timeline content coordinates, i.e.
   // post-gutter) of the active snap target, or null when no snap is
   // currently anchoring the drag.  Cleared on drag release.
+  //
+  // REQ-099 collapsed the per-kind colour palette to a single
+  // green-500, so the matching `snapGuideKind` state is no longer
+  // needed — `result.guideKind` is still produced by
+  // `computeDragPatch` (unit-tested in `tests/unit/timeline-drag.test.ts`)
+  // but no longer kept on the component.
   const [snapGuidePx, setSnapGuidePx] = useState<number | null>(null)
-  const [snapGuideKind, setSnapGuideKind] = useState<SnapResult['kind'] | null>(null)
 
   const handleStartDrag = useCallback(
     (kind: DragKind, entry: SubtitleEntry, clientX: number) => {
@@ -804,8 +808,25 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
 
       // Visual snap guide — 1 px vertical line at the snap target's
       // pixel position.  Cleared when no snap was applied.
-      setSnapGuidePx(result.guideTimeSec !== null ? result.guideTimeSec * pps : null)
-      setSnapGuideKind(result.guideKind)
+      //
+      // REQ-099: translate `guideTimeSec` from the Original axis
+      // (every entry of `buildSnapTargets` — edges, playhead, grid —
+      // is sourced from Original-axis fields) to the Edited axis the
+      // tracks actually render in.  The Block render path uses
+      // `editedBlockPositions = origToEdited(entry.startSec, cuts) *
+      // pps` (see editedBlockPositions memo above and the Block
+      // mapping at L~1656); without the same `origToEdited` step
+      // here, the guide line drifts to the LEFT of the block edge by
+      // exactly the cumulative cut duration up to the snap target,
+      // which is the position-mismatch the owner reported.  Empty
+      // cuts → identity, so the legacy non-trim behaviour is
+      // unchanged.
+      const liveCuts = useProjectStore.getState().cuts
+      setSnapGuidePx(
+        result.guideTimeSec !== null
+          ? origToEdited(result.guideTimeSec, liveCuts) * pps
+          : null,
+      )
 
       // Build the minimal patch — different kinds touch different
       // fields to keep history pushes meaningful (a resize-end
@@ -856,7 +877,6 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       activeDragRef.current = null
       setDraggingId(null)
       setSnapGuidePx(null)
-      setSnapGuideKind(null)
     }
 
     window.addEventListener('pointermove', onMove)
@@ -1688,15 +1708,28 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                 })}
               </div>
 
-              {/* Snap guide — rendered BEFORE the playhead so the red
-                  playhead always wins z-order when both happen to land
-                  on the same column (snap-to-playhead case).  Colour
-                  varies by snap kind so the user can read what they
-                  snapped to:
-                    playhead → red (matches the playhead colour)
-                    edge     → green-400 (subtle accent)
-                    grid     → zinc-400 (muted, since the grid is itself
-                               a faint reference)
+              {/* Snap guide — vertical line at the snap target's
+                  pixel position.  Rendered BEFORE the playhead so the
+                  red playhead always wins z-order when both happen to
+                  land on the same column (the snap-to-playhead case).
+                  REQ-099: collapsed the former per-kind palette
+                  (playhead red / edge green-400 / grid zinc-400) to
+                  ONE colour — green-500 (rgba(34, 197, 94, 0.9)).
+                  Rationale:
+                    - The playhead-kind branch rendered red, which is
+                      indistinguishable from the actual playhead line
+                      and confused users about what they were aligned
+                      to.
+                    - The grid-kind branch rendered zinc-400 which
+                      reads as white on the dark timeline background.
+                    - green-500 matches the focused block's `ring-2
+                      ring-green-500 border-green-500` highlight in
+                      `BlockImpl` so the relationship "the selected
+                      block (green ring) is snapping to this line
+                      (green)" is immediately readable.
+                  `snapGuideKind` is still tracked through the drag
+                  pipeline because the drag-snap unit tests assert on
+                  it, but it no longer drives presentation.
               */}
               {snapGuidePx !== null && (
                 <div
@@ -1706,12 +1739,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                     left: `${snapGuidePx}px`,
                     width: '1px',
                     height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
-                    background:
-                      snapGuideKind === 'playhead'
-                        ? 'rgba(239, 68, 68, 0.7)'
-                        : snapGuideKind === 'edge'
-                          ? 'rgba(74, 222, 128, 0.9)'   // green-400
-                          : 'rgba(161, 161, 170, 0.7)'  // zinc-400
+                    background: 'rgba(34, 197, 94, 0.9)' // green-500
                   }}
                 />
               )}
