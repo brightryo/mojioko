@@ -9,6 +9,7 @@ import { shellShowInFolder } from '@/services/dialog'
 import { findActiveEntryId } from '@/lib/active-entry'
 import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
 import { bumpRenderCount } from '@/lib/perf-counter'
+import { scrubState } from '@/lib/scrub-state'
 
 // REQ-080 #1: findActiveEntryId moved to @/lib/active-entry — shared
 // with VideoPreviewPanel + unit-tested for [start, end) end-exclusive
@@ -113,7 +114,12 @@ export function AudioPreviewPanel() {
     if (el) {
       el.currentTime = videoSeekRequestSec
       setCurrentTime(videoSeekRequestSec)
-      setVideoCurrentTimeSec(videoSeekRequestSec)
+      // REQ-096: while a manual ruler scrub is in progress, the
+      // optimistic-playhead path owns videoCurrentTimeSec; skip the
+      // write here for the same reason as VPP's seek effect.
+      if (!scrubState.inProgress) {
+        setVideoCurrentTimeSec(videoSeekRequestSec)
+      }
     }
     setVideoSeekRequest(null)
   }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec])
@@ -157,7 +163,10 @@ export function AudioPreviewPanel() {
     if (!el || isSeeking.current) return
     const time = el.currentTime
     setCurrentTime(time)
-    setVideoCurrentTimeSec(time)
+    // REQ-096: same scrub-state guard as VPP's handleTimeUpdate.
+    if (!scrubState.inProgress) {
+      setVideoCurrentTimeSec(time)
+    }
 
     // REQ-030 #2: drive focusedRowId from playback the same way
     // VideoPreviewPanel does, so the active subtitle row highlights in

@@ -40,6 +40,8 @@ import type { EntryWarnings } from '@/lib/entry-warnings'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { TimelineBlockInspector } from './timeline-block-inspector'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
+import { scrubState } from '@/lib/scrub-state'
+import { SCRUB_SEEK_THROTTLE_ENABLED } from '../../../shared/constants'
 import type { SubtitleEntry } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -97,9 +99,17 @@ interface RulerProps {
    * jump) AND continuously during a ruler-scrub drag.  REQ-063 #2.
    */
   onSeek: (sec: number) => void
+  /**
+   * REQ-096: called from pointerup when a scrub session ends.  The
+   * parent uses this to flush any rAF-pending seek so the video
+   * lands exactly at the final position.  Optional — only wired up
+   * when `SCRUB_SEEK_THROTTLE_ENABLED` is true; the legacy path
+   * doesn't need it.
+   */
+  onScrubEnd?: () => void
 }
 
-function RulerImpl({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
+function RulerImpl({ pixelsPerSec, totalSec, onSeek, onScrubEnd }: RulerProps) {
   bumpRenderCount('Ruler')
   const stepSec = chooseRulerStepSec(pixelsPerSec)
   const tickCount = Math.ceil(totalSec / stepSec) + 1
@@ -129,6 +139,14 @@ function RulerImpl({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
     if (e.button !== 0) return
     e.preventDefault()
     isScrubbingRef.current = true
+    // REQ-096: signal a scrub session start so the optimistic-playhead
+    // path in handleSeek (parent) and the throttle-guard in VPP /
+    // handleTimeUpdate know to coordinate.  Skipped when the throttle
+    // flag is off — legacy code paths never touch this flag and behave
+    // bit-for-bit as before.
+    if (SCRUB_SEEK_THROTTLE_ENABLED) {
+      scrubState.inProgress = true
+    }
     // Capture so the up event still reaches us if the cursor leaves the
     // ruler mid-drag (matches the convention in Block.handleEdgePointerDown).
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -149,6 +167,16 @@ function RulerImpl({ pixelsPerSec, totalSec, onSeek }: RulerProps) {
   function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
     if (!isScrubbingRef.current) return
     isScrubbingRef.current = false
+    // REQ-096: flush any pending rAF-throttled seek and clear the
+    // scrub state BEFORE releasing pointer capture so the final seek
+    // commit lands while subscribers know we are still "scrubbing"
+    // (otherwise the flushed seek would also fire VPP's
+    // setVideoCurrentTimeSec, double-writing the same value but
+    // racing the rAF cleanup).  Order: flush → clear flag → release.
+    if (SCRUB_SEEK_THROTTLE_ENABLED) {
+      onScrubEnd?.()
+      scrubState.inProgress = false
+    }
     try {
       e.currentTarget.releasePointerCapture(e.pointerId)
     } catch {
@@ -883,9 +911,73 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
    * desired behaviour for ⏭ / right-end scrub.  Negative inputs are
    * still pinned to 0 to keep `editedToOrig` in its valid domain.
    */
+  // REQ-096: rAF-throttle the seek-request path so the manual ruler-
+  // scrub case does not enqueue one blocking `<video>.currentTime = X`
+  // per pointermove.  The Playhead is updated optimistically on every
+  // call so its visual position follows the cursor at input cadence
+  // (= the user's perception of "smoothness"), while the actual video
+  // element seek commits at rAF cadence (= roughly the display's
+  // refresh rate).  See SCRUB_SEEK_THROTTLE_ENABLED in
+  // shared/constants for the kill-switch.
+  const setVideoCurrentTimeSec = useUiStore((s) => s.setVideoCurrentTimeSec)
+  const scrubSeekRafIdRef = useRef<number | null>(null)
+  const scrubSeekPendingRef = useRef<number | null>(null)
   const handleSeek = useCallback((editedSec: number) => {
-    setVideoSeekRequest(editedToOrig(Math.max(0, editedSec), cuts))
-  }, [setVideoSeekRequest, cuts])
+    if (!SCRUB_SEEK_THROTTLE_ENABLED) {
+      // Legacy bit-for-bit path — exactly the behaviour pre-REQ-096.
+      setVideoSeekRequest(editedToOrig(Math.max(0, editedSec), cuts))
+      return
+    }
+    const orig = editedToOrig(Math.max(0, editedSec), cuts)
+    // (1) Optimistic playhead update — the Playhead sub-component
+    //     (REQ-094 B) subscribes to `videoCurrentTimeSec`, so writing
+    //     here lights up exactly that one tiny subtree per call.  No
+    //     other component subscribes during scrub (REQ-094 B+C cut
+    //     them out), so the cost is sub-millisecond.
+    setVideoCurrentTimeSec(orig)
+    // (2) Throttled video seek — the actual `el.currentTime = X` lives
+    //     in VPP's effect on `videoSeekRequestSec`; coalesce repeats
+    //     into one rAF per frame.
+    scrubSeekPendingRef.current = orig
+    if (scrubSeekRafIdRef.current !== null) return
+    scrubSeekRafIdRef.current = requestAnimationFrame(() => {
+      scrubSeekRafIdRef.current = null
+      const v = scrubSeekPendingRef.current
+      scrubSeekPendingRef.current = null
+      if (v !== null) setVideoSeekRequest(v)
+    })
+  }, [setVideoSeekRequest, setVideoCurrentTimeSec, cuts])
+
+  // REQ-096 — invoked from Ruler's pointerup to guarantee the final
+  // cursor position commits to the video element exactly, regardless
+  // of whether a rAF was still pending.  Returns void by design — the
+  // Ruler does not need any state back; it just signals "scrub is
+  // ending, settle now".  Identity is stable because the deps it
+  // closes over are stable Zustand setters / the cuts slice; cuts can
+  // change during a scrub session in principle, but the flush only
+  // reads the pending ref (which already carries an `editedToOrig`-
+  // applied value), so the closed-over `setVideoSeekRequest` is the
+  // only thing it really needs.
+  const flushScrubSeek = useCallback(() => {
+    if (scrubSeekRafIdRef.current !== null) {
+      cancelAnimationFrame(scrubSeekRafIdRef.current)
+      scrubSeekRafIdRef.current = null
+    }
+    const v = scrubSeekPendingRef.current
+    scrubSeekPendingRef.current = null
+    if (v !== null) setVideoSeekRequest(v)
+  }, [setVideoSeekRequest])
+
+  // Cancel any pending scrub-seek rAF on unmount so a teardown does
+  // not fire setVideoSeekRequest into a stale tree.
+  useEffect(() => {
+    return () => {
+      if (scrubSeekRafIdRef.current !== null) {
+        cancelAnimationFrame(scrubSeekRafIdRef.current)
+        scrubSeekRafIdRef.current = null
+      }
+    }
+  }, [])
 
   /**
    * REQ-077 #4: four playhead navigation buttons.  All four read live
@@ -1507,6 +1599,10 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                 pixelsPerSec={pixelsPerSec}
                 totalSec={editedTotalSec}
                 onSeek={handleSeek}
+                // REQ-096: only wire `onScrubEnd` when the throttle is
+                // enabled; the legacy path doesn't need a flush because
+                // every pointermove already committed the seek inline.
+                onScrubEnd={SCRUB_SEEK_THROTTLE_ENABLED ? flushScrubSeek : undefined}
               />
 
               {/* Tracks area */}

@@ -73,6 +73,32 @@ export const OUTLINE_THICKNESS_MAX_PX = 10
 export const ENABLE_VIDEO_PREVIEW = true
 
 /**
+ * REQ-096 feature flag: rAF-throttle the HTML5 `<video>.currentTime`
+ * seek during manual ruler scrub.  RES-095 measured the React layer
+ * at < 0.18 ms per pointermove with no entries-count dependence, so
+ * the residual stutter the owner reported has to live in the
+ * browser-side video-seek decode (5–30 ms per non-keyframe seek on
+ * real mp4/mkv).  When this flag is ON, the ruler scrub path:
+ *   1. Updates `videoCurrentTimeSec` immediately on every pointermove
+ *      so the Playhead sub-component (REQ-094 B) tracks the cursor
+ *      with no lag.
+ *   2. Coalesces multiple `setVideoSeekRequest` calls within one
+ *      rAF tick into a single store write — the actual blocking
+ *      `<video>.currentTime = X` runs at most once per frame instead
+ *      of once per pointermove.
+ *   3. Flushes any pending seek on pointerup so the final position
+ *      always commits to the video element exactly.
+ *
+ * Set this flag to `false` to revert to the legacy per-event seek
+ * behaviour bit-for-bit.  REQ-096 reversibility contract — owner
+ * keeps both paths until field-tested.  Only the manual ruler-scrub
+ * path is affected; auto-play, block-click seek, row-click seek, and
+ * the navigation buttons all bypass the throttle and write seek
+ * requests directly as before.
+ */
+export const SCRUB_SEEK_THROTTLE_ENABLED = true
+
+/**
  * Parameters passed to faster-whisper's `model.transcribe()` in the Python sidecar.
  * Displayed read-only in the Step 1 "Advanced settings" accordion.
  *
