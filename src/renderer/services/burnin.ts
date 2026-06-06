@@ -1,6 +1,7 @@
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground, IpcResult, EncoderSetting, AudioMode, OutputContainer } from '../../shared/types'
 import type { BurninEvent } from '../../shared/ipc-contracts'
 import type { FontId } from '../../shared/fonts'
+import type { Cut } from '../../shared/cuts'
 
 export interface BurninOptions {
   inputPath: string
@@ -15,6 +16,12 @@ export interface BurninOptions {
   outputContainer: OutputContainer
   /** Currently selected subtitle font.  Forwarded to libass via the ASS Style. */
   fontId: FontId
+  /**
+   * Trim/cut list (Original axis).  Omit or pass empty array for the
+   * legacy no-cut behaviour; when non-empty the main side rebuilds the
+   * ffmpeg command around filter_complex trim+concat.
+   */
+  cuts?: Cut[]
 }
 
 export interface BurninHandle {
@@ -36,7 +43,8 @@ export async function startBurnin(
     fadeDurationSec: opts.fadeDurationSec,
     subtitleBackground: opts.subtitleBackground,
     outputContainer: opts.outputContainer,
-    fontId: opts.fontId
+    fontId: opts.fontId,
+    cuts: opts.cuts
   })
 
   if (!result.ok) {
