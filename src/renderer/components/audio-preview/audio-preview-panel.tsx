@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Play, Pause, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
@@ -90,22 +90,6 @@ export function AudioPreviewPanel() {
   const audioRef = useRef<HTMLAudioElement>(null)
   // REQ-074 1b: jump past any time inside a confirmed cut while playing.
   useCutSkip(audioRef)
-  /**
-   * REQ-078 #1 — "manual seek in flight" gate (mirrors VideoPreviewPanel).
-   * Set whenever we assign to <audio>.currentTime in response to a user
-   * action; held for 300 ms so handleEnded ignores any 'ended' that
-   * Chromium fires from a seek to duration.
-   */
-  const manualSeekHoldRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const notifyManualSeek = useCallback(() => {
-    if (manualSeekHoldRef.current !== null) clearTimeout(manualSeekHoldRef.current)
-    manualSeekHoldRef.current = setTimeout(() => {
-      manualSeekHoldRef.current = null
-    }, 300)
-  }, [])
-  useEffect(() => () => {
-    if (manualSeekHoldRef.current !== null) clearTimeout(manualSeekHoldRef.current)
-  }, [])
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -146,20 +130,29 @@ export function AudioPreviewPanel() {
     if (videoSeekRequestSec === null) return
     const el = audioRef.current
     if (el) {
-      // REQ-078 #1: tag this assignment as a manual seek before writing.
-      notifyManualSeek()
       el.currentTime = videoSeekRequestSec
       setCurrentTime(videoSeekRequestSec)
       setVideoCurrentTimeSec(videoSeekRequestSec)
     }
     setVideoSeekRequest(null)
-  }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec, notifyManualSeek])
+  }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec])
 
   function togglePlay() {
     const el = audioRef.current
     if (!el) return
-    if (el.paused) { el.play().catch(() => {}) }
-    else { el.pause() }
+    if (el.paused) {
+      // REQ-079 #1: rewind to head when ▶ is pressed at EOF (mirrors
+      // VideoPreviewPanel).  Without this, "play" from end-of-clip
+      // would either silently do nothing or immediately fire 'ended'
+      // again — standard player UX is to restart from the start.
+      const PLAYBACK_RESET_EPS_SEC = 0.05
+      if (el.duration > 0 && el.currentTime >= el.duration - PLAYBACK_RESET_EPS_SEC) {
+        el.currentTime = 0
+      }
+      el.play().catch(() => {})
+    } else {
+      el.pause()
+    }
   }
 
   // Space key — play/pause when no text field is focused.  Mirrors the
@@ -221,26 +214,19 @@ export function AudioPreviewPanel() {
     setCurrentTime(origVal)
     setVideoCurrentTimeSec(origVal)
     if (audioRef.current) {
-      // REQ-078 #1: tag this seek so handleEnded ignores any 'ended'
-      // Chromium fires from dragging the bar to the very end.
-      notifyManualSeek()
       audioRef.current.currentTime = origVal
     }
   }
 
   /**
-   * REQ-078 #1: extracted from the inline onEnded so the manual-seek
-   * guard can be applied.  Original behaviour preserved for natural EOF
-   * during playback (warp to 0 = ready to replay), suppressed for
-   * seek-induced 'ended' (= leave the playhead where the user put it).
+   * REQ-079 #1: just flip the play state.  No more "warp to 0" on EOF.
+   * Whether the user pressed ⏭, dragged the seekbar to the end, or
+   * played through naturally, the playhead stays at the final frame.
+   * Pressing ▶ from rest auto-rewinds to 0 via togglePlay's at-end
+   * branch.  Supersedes the REQ-078 manualSeekHoldRef approach.
    */
   function handleEnded() {
     setIsPlaying(false)
-    if (manualSeekHoldRef.current !== null) return
-    setCurrentTime(0)
-    setVideoCurrentTimeSec(0)
-    activeEntryIdRef.current = null
-    setFocusedRowId(null)
   }
 
   if (!video || !mediaUrl) return null

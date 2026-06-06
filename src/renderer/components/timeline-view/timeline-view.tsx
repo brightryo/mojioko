@@ -87,17 +87,6 @@ const TIME_ROW_MIN_BLOCK_WIDTH_PX = 220
  * accidentally clamped to this floor by a normal drag.
  */
 const MIN_BLOCK_SEC          = 0.05
-/**
- * REQ-077 #3: stop scrub / nav seeks one centisecond before the very end
- * of the Edited timeline.  Without this margin, setting <video>.currentTime
- * to exactly video.durationSec triggers Chromium's `ended` event, which
- * VideoPreviewPanel.handleEnded reacts to by warping the playhead back to
- * 0 — the bug the user reported as "right-drag past the end snaps to the
- * left edge".  1cs is below the project's cs precision unit and matches
- * `roundToCs` rounding, so no scrub target ever lands closer than this
- * to the end anyway; the eps is imperceptible.
- */
-const SCRUB_END_EPS_SEC      = 0.01
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -851,30 +840,23 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   }, [])
 
   /**
-   * REQ-074 1c: Ruler scrub + tracks background click + any other "user
-   * clicked at time T on the timeline" event delivers an EDITED-axis time.
-   * `<video>.currentTime` (and therefore `videoSeekRequestSec`) is the
-   * ORIGINAL axis, so translate via `editedToOrig` before forwarding.
+   * REQ-074 1c: Ruler scrub + tracks background click + nav buttons all
+   * deliver an EDITED-axis time.  `<video>.currentTime` (and therefore
+   * `videoSeekRequestSec`) is the ORIGINAL axis, so translate via
+   * `editedToOrig` before forwarding.  Boundary convention (post-cut
+   * side) is baked into `editedToOrig` itself.
    *
-   * Boundary convention (post-cut side) comes from `editedToOrig` itself
-   * — a click landing exactly on a cut-collapse point seeks to the start
-   * of the next kept segment, matching NLE behaviour.
-   *
-   * REQ-077 #3: clamp the Edited target to `[0, editedTotalSec - EPS]`.
-   * Without the upper EPS, dragging the Ruler past the right edge (or any
-   * other path landing on editedTotalSec) sets <video>.currentTime to
-   * exactly video.durationSec, which Chromium treats as EOF and fires
-   * the `ended` event; VideoPreviewPanel.handleEnded then warps the
-   * playhead back to 0.  Clamping to one centisecond before the Edited
-   * end avoids the EOF trigger entirely, and the 0 fallback keeps
-   * negative-x drags pinned at the left edge instead of leaking into
-   * editedToOrig with a negative argument.
+   * REQ-079 #1: no upper-side clamp.  The earlier `SCRUB_END_EPS_SEC`
+   * margin was an attempt to keep currentTime < duration so the 'ended'
+   * event would not fire and warp the playhead to 0.  With the warp
+   * now removed (see VideoPreviewPanel.handleEnded), reaching exactly
+   * duration just leaves the playhead at the right edge — exactly the
+   * desired behaviour for ⏭ / right-end scrub.  Negative inputs are
+   * still pinned to 0 to keep `editedToOrig` in its valid domain.
    */
   const handleSeek = useCallback((editedSec: number) => {
-    const ceiling = Math.max(0, editedTotalSec - SCRUB_END_EPS_SEC)
-    const clamped = Math.max(0, Math.min(ceiling, editedSec))
-    setVideoSeekRequest(editedToOrig(clamped, cuts))
-  }, [setVideoSeekRequest, cuts, editedTotalSec])
+    setVideoSeekRequest(editedToOrig(Math.max(0, editedSec), cuts))
+  }, [setVideoSeekRequest, cuts])
 
   /**
    * REQ-077 #4: four playhead navigation buttons.  All four read live
