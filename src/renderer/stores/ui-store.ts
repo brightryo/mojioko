@@ -108,6 +108,18 @@ interface UiStore {
    * itself lands in Phase 5.  Session-only.
    */
   timelineSnapEnabled: boolean
+  /**
+   * REQ-074 1e — pending trim In / Out point set by the user from the
+   * timeline toolbar but not yet confirmed as a Cut.  Both are ORIGINAL
+   * axis seconds (= `<video>.currentTime` at capture time).  Session-only;
+   * cleared on cut confirmation or on explicit reset.
+   *
+   * Lives in ui-store rather than project-store because it represents an
+   * in-flight UI gesture, not part of the saved project state — undo /
+   * redo only push the confirmed Cut, never the pending In/Out clicks.
+   */
+  pendingCutInSec: number | null
+  pendingCutOutSec: number | null
 
   setCommandPaletteOpen: (open: boolean) => void
   setSettingsDialogOpen: (open: boolean) => void
@@ -141,6 +153,9 @@ interface UiStore {
   /** Set timeline zoom; clamped to [TIMELINE_PPS_MIN, TIMELINE_PPS_MAX]. */
   setTimelinePixelsPerSec: (v: number) => void
   setTimelineSnapEnabled: (v: boolean) => void
+  setPendingCutIn: (sec: number | null) => void
+  setPendingCutOut: (sec: number | null) => void
+  clearPendingCut: () => void
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -163,6 +178,8 @@ export const useUiStore = create<UiStore>((set) => ({
   editorViewMode: 'timeline',
   timelinePixelsPerSec: TIMELINE_PPS_DEFAULT,
   timelineSnapEnabled: true,
+  pendingCutInSec: null,
+  pendingCutOutSec: null,
 
   setCommandPaletteOpen: (open) => set({ isCommandPaletteOpen: open }),
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
@@ -238,4 +255,7 @@ export const useUiStore = create<UiStore>((set) => ({
       )
     }),
   setTimelineSnapEnabled: (v) => set({ timelineSnapEnabled: v }),
+  setPendingCutIn: (sec) => set({ pendingCutInSec: sec }),
+  setPendingCutOut: (sec) => set({ pendingCutOutSec: sec }),
+  clearPendingCut: () => set({ pendingCutInSec: null, pendingCutOutSec: null }),
 }))

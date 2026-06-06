@@ -244,6 +244,22 @@
       "restore": "Restore",
       "commitHint": "Ctrl+Enter to commit · Esc to cancel",
       "styleLabel": "Style"
+    },
+    "trim": {
+      "toolbarLabel": "Trim",
+      "setIn": "In",
+      "setInTooltip": "Set in-point to the current playhead",
+      "setOut": "Out",
+      "setOutTooltip": "Set out-point to the current playhead",
+      "confirmCut": "Cut range",
+      "confirmCutTooltip": "Cut In..Out and ripple the tail forward",
+      "clearPending": "Clear",
+      "clearPendingTooltip": "Clear the pending In / Out points",
+      "inLabel": "In",
+      "outLabel": "Out",
+      "noPoint": "—",
+      "cutMarkerTitle": "Cut {{start}} – {{end}} (click to remove)",
+      "invalidRange": "In must come before Out"
     }
   }
 }
