@@ -20,6 +20,7 @@ import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { autoLineBreakRow as runAutoLineBreakRow, resetRow as runResetRow, toggleDeleteRow as runToggleDeleteRow } from '@/lib/entry-row-actions'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
+import { effectiveEntryState, type ClipStatus } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 
 /** Step amount for the per-row size ↑/↓ buttons (REQ-039 #4). */
@@ -134,9 +135,18 @@ interface SubtitleRowProps {
   isSelected: boolean
   /** Click handler for the row's checkbox — caller decides toggle vs. range. */
   onCheckboxClick: (id: string, shiftKey: boolean) => void
+  /**
+   * REQ-103 — the row's 4-state classification (`normal` / `edited` /
+   * `manuallyDeleted` / `trimDeleted`).  Drives the primary status
+   * badge so the trim-deleted case is visually distinct from a
+   * manual delete (the two used to share the `state.deleted`
+   * badge).  Computed by the parent so the per-row component does
+   * not need its own `cuts` subscription.
+   */
+  clipStatus: ClipStatus
 }
 
-function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFocus, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick }: SubtitleRowProps) {
+function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFocus, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick, clipStatus }: SubtitleRowProps) {
   const isOverflow = overflowStartIndex !== -1
   const isStartOverlap = warnings.overlap
   // step1 namespace included so the size input's `title` tooltip can
@@ -560,34 +570,59 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
       </div>
       </div>
 
-      {/* State — shows all applicable badges simultaneously */}
+      {/* State — shows all applicable badges simultaneously.
+          REQ-103 §C: split the legacy "削除済み" badge into two —
+          `manuallyDeleted` keeps the old `state.deleted` label, while
+          `trimDeleted` gets its own `state.trimDeleted` label so the
+          user can distinguish a row they intentionally deleted from
+          a row a cut consumed.  Both are still danger-styled and
+          both suppress the per-row warning badges (the warnings are
+          still computed and surfaced in the 警告 tab — they just
+          don't decorate a row that's already gone).
+          The `edited` badge fires for any row that `wasEdited`
+          (= REQ-103 §B cross-cutting `wasEdited` flag), so a row
+          that was manually edited and then manually deleted still
+          shows its `edited` badge alongside the `deleted` one — the
+          user can see at a glance that the row WAS edited before it
+          was removed. */}
       <div className="flex flex-wrap items-center gap-1 py-3 px-1">
-        {entry.isDeleted && (
+        {clipStatus === 'manuallyDeleted' && (
           <Badge variant="danger">{t('state.deleted')}</Badge>
         )}
-        {!entry.isDeleted && entry.isEdited && (
+        {clipStatus === 'trimDeleted' && (
+          <Badge variant="danger">{t('state.trimDeleted')}</Badge>
+        )}
+        {(entry.isEdited ||
+          // REQ-103: also surface "edited" badge for rows whose times
+          // were clamped by a head/tail cut (= `clipStatus === 'edited'`
+          // when not deleted, OR `wasEdited` on a deleted row).  We
+          // detect cut-induced edit by reading the precomputed status —
+          // if the row is 'edited' the clamp happened, and for deleted
+          // rows we still want the badge when `entry.isEdited` was true
+          // pre-deletion.
+          clipStatus === 'edited') && (
           <Badge variant="default">{t('state.edited')}</Badge>
         )}
-        {!entry.isDeleted && warnings.timeInvalid && (
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.timeInvalid && (
           <Badge variant="danger">{t('badge.timeInvalid')}</Badge>
         )}
-        {!entry.isDeleted && warnings.overlap && (
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overlap && (
           /* warning (amber), not danger — overlap is an intentional pattern
              for stacked captions (libass renders both simultaneously) and
              should NOT exclude the row from burn-in.  The amber styling
              tells the user "this works, but heads-up". */
           <Badge variant="warning">{t('badge.overlap')}</Badge>
         )}
-        {!entry.isDeleted && warnings.overDuration && (
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overDuration && (
           <Badge variant="warning">{t('badge.overDuration')}</Badge>
         )}
-        {!entry.isDeleted && warnings.overflow && (
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overflow && (
           <Badge variant="warning">{t('badge.overflow')}</Badge>
         )}
-        {!entry.isDeleted && warnings.emptyText && (
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.emptyText && (
           <Badge variant="warning">{t('badge.emptyText')}</Badge>
         )}
-        {!entry.isDeleted && warnings.invalidSize && (
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.invalidSize && (
           <Badge variant="warning">{t('badge.invalidSize')}</Badge>
         )}
       </div>
@@ -911,6 +946,10 @@ export function SubtitleTable({
                   onAdjustTime={onAdjustTime}
                   isSelected={selectedRowIds.has(entry.id)}
                   onCheckboxClick={handleRowCheckboxClick}
+                  // REQ-103 — derive the row's 4-state classification
+                  // from the live cut list.  Cuts is a small array; per-
+                  // row recompute is O(cuts.length).
+                  clipStatus={effectiveEntryState(entry, cuts).status}
                 />
               </motion.div>
             ))}

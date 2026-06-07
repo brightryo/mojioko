@@ -11,18 +11,31 @@ import { effectiveEntryState, type CutList } from '../../shared/cuts'
  * for Shift+click range selection) without duplicating the rules.  Any
  * future tab is added in one place and both consumers stay in sync.
  *
- * REQ-102: every tab predicate is now driven by the cut-aware
- * `effectiveEntryState` so the table, the timeline view (which also
- * calls filterEntries with `tableFilter = 'all'` in REQ-101) and the
- * burn-in output agree on which subtitles are present.  Mapping:
- *   - effectivelyDeleted = manual `entry.isDeleted` OR
- *     `applyCutsToEntry(entry, cuts) === null` (fully contained or
- *     clamped below MIN_SUBTITLE_DURATION_SEC).
- *   - effectivelyEdited = manual `entry.isEdited` OR cut-induced
- *     start/end clamp (= partial overlap).
- * No table predicate touches `entry.isDeleted` / `entry.isEdited`
- * directly anymore; cut-induced classification rides on top of the
- * manual flags without mutating the stored entry.
+ * REQ-103 rewrite — the table now uses the spec's two-group tab model:
+ *
+ *   行き先 (mutually exclusive, count-conservation holds):
+ *     'all'     = everything (normal + edited + manuallyDeleted + trimDeleted)
+ *     'ready'   = normal + edited       (= !effectivelyDeleted)
+ *     'deleted' = manuallyDeleted + trimDeleted (= effectivelyDeleted)
+ *
+ *     ⇒  filterEntries('ready') + filterEntries('deleted')
+ *        === filterEntries('all') for every entries/cuts pair.
+ *
+ *   フィルタ (cross-cutting, may include deleted rows):
+ *     'edited'   = wasEdited        (manual edit OR cut clamp)
+ *     'warnings' = hasAnyWarning(w) (any non-empty-text warning)
+ *
+ *   The cross-cutting filters DO NOT exclude `effectivelyDeleted` rows
+ *   because REQ-103 §B explicitly wants 編集済み to surface deleted
+ *   rows that were once edited (= "削除済みでも出力対象でも、編集
+ *   されていれば表示").  The timeline view applies its own additional
+ *   `!effectivelyDeleted` filter on top so deleted rows never render
+ *   as blocks even when the user is on 編集済み / 警告.
+ *
+ *   `warnings` no longer requires `!w.emptyText` to surface the row —
+ *   that error is still excluded from the export filter in
+ *   step2.tsx:getOutputEntries (= the row appears in the 警告 tab so
+ *   the user can fix it).
  */
 export function filterEntries(
   entries: readonly SubtitleEntry[],
@@ -32,31 +45,30 @@ export function filterEntries(
 ): SubtitleEntry[] {
   switch (filter) {
     case 'all':
-      return entries.filter((e) => !effectiveEntryState(e, cuts).effectivelyDeleted)
+      // REQ-103: include deleted rows.  The whole inventory.
+      return [...entries]
     case 'ready':
-      // Output target = warnings allowed, errors (empty text /
-      // deleted / effectively-cut-deleted) dropped.
-      return entries.filter((e) => {
-        const w = warningsMap.get(e.id)
-        if (w === undefined) return false
-        const state = effectiveEntryState(e, cuts)
-        return !state.effectivelyDeleted && !w.emptyText
-      })
+      // REQ-103 行き先: normal + edited.  No emptyText filter — the
+      // tab counts emptyText rows because they ARE in `normal` /
+      // `edited` per the 4-state partition; the actual export filter
+      // (getOutputEntries) drops them at write time.
+      return entries.filter((e) => !effectiveEntryState(e, cuts).effectivelyDeleted)
     case 'edited':
-      return entries.filter((e) => {
-        const state = effectiveEntryState(e, cuts)
-        return state.effectivelyEdited && !state.effectivelyDeleted
-      })
+      // REQ-103 フィルタ: cross-cutting — include deleted rows that
+      // were once edited.  Predicate is the bare `wasEdited` flag.
+      return entries.filter((e) => effectiveEntryState(e, cuts).wasEdited)
     case 'warnings':
+      // REQ-103 フィルタ: cross-cutting — include deleted rows that
+      // still carry warnings (e.g. the user manually deleted an
+      // overflow row; the warning is still informative).
       return entries.filter((e) => {
-        const state = effectiveEntryState(e, cuts)
-        if (state.effectivelyDeleted) return false
         const w = warningsMap.get(e.id)
         return w !== undefined && hasAnyWarning(w)
       })
     case 'deleted':
+      // REQ-103 行き先: manuallyDeleted + trimDeleted.
       return entries.filter((e) => effectiveEntryState(e, cuts).effectivelyDeleted)
     default:
-      return entries.filter((e) => !effectiveEntryState(e, cuts).effectivelyDeleted)
+      return [...entries]
   }
 }

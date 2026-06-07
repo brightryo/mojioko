@@ -26,8 +26,8 @@
     "all": "すべて",
     "ready": "出力対象",
     "edited": "編集済み",
-    "warnings": "警告あり",
-    "deleted": "削除済み"
+    "warnings": "警告",
+    "deleted": "削除"
   },
   "filter": {
     "all": "すべて",
@@ -38,7 +38,8 @@
   "state": {
     "edited": "編集済み",
     "overflow": "はみ出し",
-    "deleted": "削除済み"
+    "deleted": "削除済み",
+    "trimDeleted": "トリミング削除"
   },
   "badge": {
     "overflow": "はみ出し",
