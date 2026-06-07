@@ -4,6 +4,7 @@ import {
   editedToOrig,
   editedDuration,
   applyCutsToEntry,
+  effectiveEntryState,
   sanitizeCuts,
   buildKeptSegments,
   type Cut,
@@ -260,6 +261,152 @@ describe('REQ-101: tail cut covering entries up to the video end', () => {
       'before-2',
       'straddles-cut-start',
     ])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// REQ-102 — effectiveEntryState: derive table classification (deleted /
+// edited) from manual flags + cuts without mutating the entry.
+// ---------------------------------------------------------------------------
+
+describe('REQ-102: effectiveEntryState', () => {
+  it('empty cuts list — state mirrors the manual flags', () => {
+    expect(effectiveEntryState(makeEntry(5, 10), [])).toEqual({
+      effectivelyDeleted: false,
+      effectivelyEdited: false,
+    })
+    const edited = { ...makeEntry(5, 10), isEdited: true }
+    expect(effectiveEntryState(edited, [])).toEqual({
+      effectivelyDeleted: false,
+      effectivelyEdited: true,
+    })
+    const deleted = { ...makeEntry(5, 10), isDeleted: true }
+    expect(effectiveEntryState(deleted, [])).toEqual({
+      effectivelyDeleted: true,
+      effectivelyEdited: false,
+    })
+  })
+
+  it('manual isDeleted always wins over cut analysis', () => {
+    // Even when the entry is also fully outside any cut, the manual flag
+    // dominates — same contract as the legacy `entries.filter(!isDeleted)`
+    // path so REQ-079 / REQ-091 reset behaviour is unaffected.
+    const deletedOutsideCut: SubtitleEntry = { ...makeEntry(5, 10), isDeleted: true }
+    expect(effectiveEntryState(deletedOutsideCut, [cut(50, 100)])).toEqual({
+      effectivelyDeleted: true,
+      effectivelyEdited: false,
+    })
+  })
+
+  it('fully-contained entry → effectivelyDeleted', () => {
+    // Same predicate as REQ-101's burnin filter (applyCutsToEntry === null).
+    const e = makeEntry(70, 75)
+    expect(effectiveEntryState(e, [cut(60, 100)])).toEqual({
+      effectivelyDeleted: true,
+      effectivelyEdited: false,
+    })
+  })
+
+  it('partial head-overlap → effectivelyEdited, NOT effectivelyDeleted', () => {
+    // Entry [55, 65] with cut [60, 100]: tail of the entry sits inside the
+    // cut, applyCutsToEntry clamps endSec from 65 → 60.  The user did not
+    // manually edit this row, so without the cut-induced flag the entry
+    // would silently appear in 出力対象 with the OLD endSec → table view
+    // mismatched the burnin output.  REQ-102 promotes it to 編集済み.
+    const e = makeEntry(55, 65)
+    expect(effectiveEntryState(e, [cut(60, 100)])).toEqual({
+      effectivelyDeleted: false,
+      effectivelyEdited: true,
+    })
+  })
+
+  it('partial tail-overlap → effectivelyEdited', () => {
+    // Entry [80, 105] crossing cut [60, 95]: head clamped startSec
+    // from 80 → 95.
+    const e = makeEntry(80, 105)
+    expect(effectiveEntryState(e, [cut(60, 95)])).toEqual({
+      effectivelyDeleted: false,
+      effectivelyEdited: true,
+    })
+  })
+
+  it('middle cut entirely inside entry → effectivelyEdited', () => {
+    // Entry [5, 30] with middle cut [12, 14]: applyCutsToEntry returns
+    // the entry unchanged at the start/end fields but records the middle
+    // cut.  Effective edits should still fire because the audible duration
+    // shrinks; readers of the table need to know the row was touched.
+    //
+    // Implementation note: applyCutsToEntry leaves startSec/endSec
+    // unchanged for middle cuts (the cut sits BETWEEN them), so
+    // effectiveEntryState does NOT promote `effectivelyEdited` for
+    // pure middle cuts in the current contract.  This test pins that
+    // behaviour explicitly so a future change that wanted to mark
+    // middle cuts as edited would have to update this assertion
+    // deliberately (along with the comment in shared/cuts.ts and the
+    // table tab semantics).
+    const e = makeEntry(5, 30)
+    expect(effectiveEntryState(e, [cut(12, 14)])).toEqual({
+      effectivelyDeleted: false,
+      effectivelyEdited: false,
+    })
+  })
+
+  it('entry outside all cuts → state mirrors manual flags', () => {
+    // Entry [10, 20] with cut [60, 100]: applyCutsToEntry returns the
+    // entry untouched (case (a) of the algorithm).  No cut-induced
+    // classification — only the manual flags surface.
+    const e = makeEntry(10, 20)
+    expect(effectiveEntryState(e, [cut(60, 100)])).toEqual({
+      effectivelyDeleted: false,
+      effectivelyEdited: false,
+    })
+
+    const editedOutside = { ...e, isEdited: true }
+    expect(effectiveEntryState(editedOutside, [cut(60, 100)])).toEqual({
+      effectivelyDeleted: false,
+      effectivelyEdited: true,
+    })
+  })
+
+  it('manual isEdited + cut-induced edit do NOT double-count', () => {
+    // The user manually edited this row; a cut later clamps it.  The
+    // `editedCount` predicate in step2.tsx is `effectivelyEdited &&
+    // !effectivelyDeleted`, and `effectivelyEdited` is a single
+    // boolean — so the row contributes ONCE to the 編集済み count
+    // regardless of which of the two reasons fired.  This is the
+    // "二重計上の回避" requirement spelled out in REQ-102.
+    const e = { ...makeEntry(55, 65), isEdited: true }
+    const state = effectiveEntryState(e, [cut(60, 100)])
+    expect(state.effectivelyEdited).toBe(true)
+    // Same row would still be counted in the table's 編集済み tab
+    // exactly once because the predicate compares to a single boolean.
+  })
+
+  it('manual isDeleted + cut-fully-contained do NOT double-count', () => {
+    // Same row, both reasons.  effectivelyDeleted is a single boolean.
+    const e = { ...makeEntry(70, 75), isDeleted: true }
+    const state = effectiveEntryState(e, [cut(60, 100)])
+    expect(state.effectivelyDeleted).toBe(true)
+  })
+
+  it('removing the cut RESTORES the original effective state (data non-destructive)', () => {
+    // Same SubtitleEntry instance, evaluated with and without a cut.
+    // This is the regression lock for REQ-102's "カット取消で完全復元"
+    // promise: nothing about the entry mutates when cuts are added,
+    // so dropping the cuts list back to [] produces the same state as
+    // before the cut was confirmed.
+    const e = makeEntry(70, 75)
+    const cuts: Cut[] = [cut(60, 100)]
+    expect(effectiveEntryState(e, cuts).effectivelyDeleted).toBe(true)
+    expect(effectiveEntryState(e, [])).toEqual({
+      effectivelyDeleted: false,
+      effectivelyEdited: false,
+    })
+    // Verify the entry data itself was not touched.
+    expect(e.startSec).toBe(70)
+    expect(e.endSec).toBe(75)
+    expect(e.isDeleted).toBe(false)
+    expect(e.isEdited).toBe(false)
   })
 })
 

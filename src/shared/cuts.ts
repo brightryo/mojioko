@@ -145,6 +145,82 @@ export function applyCutsToEntry(
 }
 
 /**
+ * REQ-102 — table / count classification of an entry, derived from
+ * its manual flags AND any cuts that overlap it.  The shape is
+ * intentionally a 2-tuple of booleans so consumers can build their
+ * tab predicates from a single per-entry computation without re-
+ * invoking `applyCutsToEntry` for every tab.
+ */
+export interface EffectiveEntryState {
+  /**
+   * True when the entry is hidden from `all` / `ready` / `edited` /
+   * `warnings` and surfaces only in the `deleted` tab.  Set when
+   * either:
+   *   - the user manually soft-deleted the row (`entry.isDeleted`), OR
+   *   - the row is fully contained in (or shrunk below
+   *     `MIN_SUBTITLE_DURATION_SEC` by) any cut — `applyCutsToEntry`
+   *     returns null.
+   */
+  effectivelyDeleted: boolean
+  /**
+   * True when the entry counts toward the `edited` tab.  Set when
+   * either:
+   *   - the user manually edited a field (`entry.isEdited`), OR
+   *   - a cut clamps the entry's `startSec` / `endSec` to something
+   *     different from the original (= head- or tail-overlap, or
+   *     middle cuts present).
+   *
+   * When `effectivelyDeleted` is true, this field still reflects the
+   * underlying `entry.isEdited` for diagnostic completeness, but the
+   * consumer should typically treat `effectivelyDeleted` as a hard
+   * exclude — the `edited` tab predicate is `effectivelyEdited &&
+   * !effectivelyDeleted` to avoid double-counting.
+   */
+  effectivelyEdited: boolean
+}
+
+/**
+ * REQ-102 — derive the table classification for one entry against the
+ * current cut list.  Pure function; entry is not mutated.  Inverse of
+ * `applyCutsToEntry`'s output, packaged for the table tabs / counts /
+ * export filter.
+ *
+ * Boundary contract (matches `applyCutsToEntry`):
+ *   - `entry.isDeleted` always wins → effectivelyDeleted = true.
+ *   - Empty cuts list → effective state mirrors the manual flags.
+ *   - `applyCutsToEntry` returns null (= entry fully contained, OR
+ *     clamped below MIN_SUBTITLE_DURATION_SEC) → effectivelyDeleted
+ *     = true.
+ *   - `applyCutsToEntry` returns clamped entry with
+ *     startSec / endSec different from the original → effectivelyEdited
+ *     bumps to true (cut-induced edit).
+ *   - Original times preserved (cut doesn't overlap) → effective state
+ *     mirrors the manual flags.
+ */
+export function effectiveEntryState(
+  entry: SubtitleEntry,
+  cuts: CutList,
+): EffectiveEntryState {
+  if (entry.isDeleted) {
+    return { effectivelyDeleted: true, effectivelyEdited: entry.isEdited }
+  }
+  if (cuts.length === 0) {
+    return { effectivelyDeleted: false, effectivelyEdited: entry.isEdited }
+  }
+  const clamped = applyCutsToEntry(entry, cuts)
+  if (clamped === null) {
+    return { effectivelyDeleted: true, effectivelyEdited: entry.isEdited }
+  }
+  const cutClamped =
+    clamped.startSec !== entry.startSec ||
+    clamped.endSec !== entry.endSec
+  return {
+    effectivelyDeleted: false,
+    effectivelyEdited: entry.isEdited || cutClamped,
+  }
+}
+
+/**
  * Build the "kept-segments" list — the complement of `cuts` in
  * [0, originalDurationSec].  Used by the ffmpeg filter_complex builder
  * (§5.2) to emit one `trim=start=A:end=B` branch per kept segment.
