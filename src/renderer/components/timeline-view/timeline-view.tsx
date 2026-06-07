@@ -28,6 +28,7 @@ import {
   editedDuration,
   editedToOrig,
   origToEdited,
+  applyCutsToEntry,
   type CutList
 } from '../../../shared/cuts'
 import {
@@ -605,10 +606,33 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
 
   // Apply the same filter the table uses so a "Ready" tab hides warning
   // rows in timeline view too.
-  const visibleEntries = useMemo(
-    () => filterEntries(entries, tableFilter, warningsMap),
-    [entries, tableFilter, warningsMap]
-  )
+  //
+  // REQ-101: when cuts are present, ALSO drop any entry that
+  // `applyCutsToEntry` reports as fully contained in a cut (or
+  // clamped below MIN_SUBTITLE_DURATION_SEC).  Before this filter,
+  // fully-contained entries fell through to the layout / position
+  // pipeline below: layoutEntries kept them on tracks, and
+  // editedBlockPositions collapsed both ends via origToEdited to the
+  // same cut.startSec, so the renderer drew them as 2-px slivers
+  // (the `Math.max(2, widthPx)` floor) RIGHT AT the timeline's right
+  // edge — visually 2 px PAST `editedTotalSec * pixelsPerSec`.  The
+  // owner read this as "the cut didn't take effect: clips remain at
+  // a position past the post-cut max time", which is exactly the
+  // REQ-101 symptom.  The ffmpeg-burnin path
+  // (src/main/services/ffmpeg-burnin.ts:135) already filters via
+  // `applyCutsToEntry` and emits the correct ASS; we just lift the
+  // same rule into the renderer so preview matches export.
+  //
+  // Architectural note: we deliberately do NOT mutate the entry
+  // array on cut confirmation.  Cuts are a separate layer (REQ-074
+  // §3.3); undo of a cut restores the original view by removing the
+  // cut, and the next render reveals the previously-filtered
+  // entries automatically.  No history coupling needed.
+  const visibleEntries = useMemo(() => {
+    const filtered = filterEntries(entries, tableFilter, warningsMap)
+    if (cuts.length === 0) return filtered
+    return filtered.filter((e) => applyCutsToEntry(e, cuts) !== null)
+  }, [entries, tableFilter, warningsMap, cuts])
 
   // Fallback duration: video duration when available, otherwise the last
   // entry's endSec stretched by 20 % so the timeline still has something to

@@ -180,6 +180,90 @@ describe('applyCutsToEntry — branch coverage', () => {
 })
 
 // ---------------------------------------------------------------------------
+// REQ-101 — tail cut to videoDuration: every entry fully contained in the
+// cut MUST be reported as null by applyCutsToEntry, so both ffmpeg-burnin
+// (which already filters) and the timeline-view filter introduced in REQ-101
+// drop them from rendering / ASS emission.  The owner reported that confirming
+// a "trim end → video end" cut left clips visible at the post-cut right edge,
+// which traced to the timeline preview NOT filtering through this function
+// (ffmpeg-burnin already does).
+// ---------------------------------------------------------------------------
+
+describe('REQ-101: tail cut covering entries up to the video end', () => {
+  it('entry fully inside a tail-to-end cut returns null', () => {
+    // videoDuration = 100; user trims [60, 100] (entire tail).
+    // Whisper segment lives at [70, 75] — fully inside.
+    expect(applyCutsToEntry(makeEntry(70, 75), [cut(60, 100)])).toBeNull()
+  })
+
+  it('entry whose endSec === cut.endSec === videoDuration is still fully contained', () => {
+    // Boundary: entry ends EXACTLY at the cut end (= video duration).
+    // The applyCutsToEntry test on `<=` at the right edge is the critical
+    // bit — a strict `<` would have surfaced the entry here.
+    expect(applyCutsToEntry(makeEntry(80, 100), [cut(60, 100)])).toBeNull()
+  })
+
+  it('entry whose startSec === cut.startSec is still fully contained', () => {
+    // Boundary: entry starts EXACTLY at the cut start.
+    expect(applyCutsToEntry(makeEntry(60, 80), [cut(60, 100)])).toBeNull()
+  })
+
+  it('entry exactly spanning the cut [cutStart, cutEnd] returns null', () => {
+    // Both edges align with cut boundaries.
+    expect(applyCutsToEntry(makeEntry(60, 100), [cut(60, 100)])).toBeNull()
+  })
+
+  it('entry that straddles cut.endSec is kept, head-clamped to cut.endSec', () => {
+    // Tail cut [60, 95], entry [80, 100] — head overlap with the cut.
+    const r = applyCutsToEntry(makeEntry(80, 100), [cut(60, 95)])
+    expect(r).not.toBeNull()
+    expect(r!.startSec).toBe(95)
+    expect(r!.endSec).toBe(100)
+  })
+
+  it('multiple entries fully inside a tail cut all return null individually', () => {
+    // The renderer-side filter loops applyCutsToEntry across the entry
+    // array, so verifying each entry independently is the contract this
+    // test locks.
+    const tailCut = [cut(60, 100)]
+    expect(applyCutsToEntry(makeEntry(70, 75), tailCut)).toBeNull()
+    expect(applyCutsToEntry(makeEntry(80, 85), tailCut)).toBeNull()
+    expect(applyCutsToEntry(makeEntry(90, 95), tailCut)).toBeNull()
+    expect(applyCutsToEntry(makeEntry(95, 100), tailCut)).toBeNull()
+  })
+
+  it('entries OUTSIDE the cut survive and are reported with their original times', () => {
+    // Tail cut [60, 100] does not affect entries before the cut.
+    const tailCut = [cut(60, 100)]
+    const before = applyCutsToEntry(makeEntry(10, 20), tailCut)
+    expect(before).not.toBeNull()
+    expect(before!.startSec).toBe(10)
+    expect(before!.endSec).toBe(20)
+  })
+
+  it('integration: filtering an entries[] array via applyCutsToEntry produces the burn-in-equivalent set', () => {
+    // This is the user's exact reported scenario.  Five entries, tail cut
+    // from 60 to videoDuration (= 100).  Expected result: only the
+    // before-cut entries and the head-clamped partial-overlap entry pass.
+    const entries: SubtitleEntry[] = [
+      makeEntry(10, 15, 'before-1'),
+      makeEntry(30, 35, 'before-2'),
+      makeEntry(55, 65, 'straddles-cut-start'), // head-overlap, keep
+      makeEntry(70, 75, 'inside-1'),            // drop
+      makeEntry(85, 95, 'inside-2'),            // drop
+      makeEntry(95, 100, 'flush-with-cut-end'), // drop (endSec === cut.endSec)
+    ]
+    const tailCut: Cut[] = [cut(60, 100)]
+    const filtered = entries.filter((e) => applyCutsToEntry(e, tailCut) !== null)
+    expect(filtered.map((e) => e.id)).toEqual([
+      'before-1',
+      'before-2',
+      'straddles-cut-start',
+    ])
+  })
+})
+
+// ---------------------------------------------------------------------------
 // editedDuration
 // ---------------------------------------------------------------------------
 
