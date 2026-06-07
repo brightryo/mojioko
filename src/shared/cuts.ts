@@ -145,78 +145,116 @@ export function applyCutsToEntry(
 }
 
 /**
- * REQ-102 — table / count classification of an entry, derived from
- * its manual flags AND any cuts that overlap it.  The shape is
- * intentionally a 2-tuple of booleans so consumers can build their
- * tab predicates from a single per-entry computation without re-
- * invoking `applyCutsToEntry` for every tab.
+ * REQ-103 — top-level mutually-exclusive status for one entry.
+ * Drives the 行き先 tab partition (すべて / 出力対象 / 削除) and
+ * the per-row status badge.  Exactly one of the four values applies
+ * to every entry; partitioning ensures the 件数整合
+ * (`出力対象 + 削除 = すべて`) invariant the REQ spelled out.
+ */
+export type ClipStatus =
+  /** Not edited, not deleted.  Default state. */
+  | 'normal'
+  /** Manually edited (`entry.isEdited`) OR cut head/tail clamp.
+   *  Surfaces in 出力対象 + 編集済み filter. */
+  | 'edited'
+  /** `entry.isDeleted` is set by the user.  Surfaces in 削除 only. */
+  | 'manuallyDeleted'
+  /** Cut fully contained the entry (`applyCutsToEntry === null`) and the
+   *  user did NOT also manually delete it.  Surfaces in 削除 only. */
+  | 'trimDeleted'
+
+/**
+ * REQ-103 — table / count classification of an entry, derived from
+ * its manual flags AND any cuts that overlap it.  Replaces the REQ-102
+ * 2-boolean shape with a 4-state `status` so the 行き先 partition
+ * (すべて / 出力対象 / 削除) is exact and 'trimDeleted' can be
+ * distinguished from 'manuallyDeleted' (= the REQ-103 §C badge
+ * requirement).
+ *
+ * `wasEdited` is a cross-cutting flag for the 編集済み filter that
+ * stays true even when the row is also deleted — exactly per the
+ * REQ-103 §B clause "削除済みでも出力対象でも、編集されていれば表示".
+ * The OR over manual + cut-induced edits means a row never
+ * double-counts in 編集済み.
+ *
+ * Backwards-compat: `effectivelyDeleted` / `effectivelyEdited` are
+ * kept as convenience accessors for callers that haven't migrated to
+ * `status` yet.  New code should prefer `status` / `wasEdited`.
  */
 export interface EffectiveEntryState {
-  /**
-   * True when the entry is hidden from `all` / `ready` / `edited` /
-   * `warnings` and surfaces only in the `deleted` tab.  Set when
-   * either:
-   *   - the user manually soft-deleted the row (`entry.isDeleted`), OR
-   *   - the row is fully contained in (or shrunk below
-   *     `MIN_SUBTITLE_DURATION_SEC` by) any cut — `applyCutsToEntry`
-   *     returns null.
-   */
+  /** REQ-103 — mutually exclusive 4-state classification.  Use this
+   *  for tab partition and the row's primary status badge. */
+  status: ClipStatus
+  /** REQ-103 — cross-cutting "was edited" flag.  True when the entry
+   *  was manually edited OR a cut clamped its start/end times, even
+   *  if it was later deleted (manual or trim).  Drives the 編集済み
+   *  filter; not affected by `status === 'manuallyDeleted'` /
+   *  `'trimDeleted'`. */
+  wasEdited: boolean
+  /** Convenience: `status === 'manuallyDeleted' || status === 'trimDeleted'`.
+   *  Use for "should this row appear on the timeline?" and the 削除
+   *  tab predicate. */
   effectivelyDeleted: boolean
-  /**
-   * True when the entry counts toward the `edited` tab.  Set when
-   * either:
-   *   - the user manually edited a field (`entry.isEdited`), OR
-   *   - a cut clamps the entry's `startSec` / `endSec` to something
-   *     different from the original (= head- or tail-overlap, or
-   *     middle cuts present).
-   *
-   * When `effectivelyDeleted` is true, this field still reflects the
-   * underlying `entry.isEdited` for diagnostic completeness, but the
-   * consumer should typically treat `effectivelyDeleted` as a hard
-   * exclude — the `edited` tab predicate is `effectivelyEdited &&
-   * !effectivelyDeleted` to avoid double-counting.
-   */
+  /** Convenience: `wasEdited && !effectivelyDeleted`.  Equivalent to
+   *  the REQ-102 field of the same name and kept as a back-compat
+   *  alias; deletion-aware "edited" counts (= the new 編集済み tab
+   *  that includes deleted rows) should read `wasEdited` instead. */
   effectivelyEdited: boolean
 }
 
 /**
- * REQ-102 — derive the table classification for one entry against the
- * current cut list.  Pure function; entry is not mutated.  Inverse of
- * `applyCutsToEntry`'s output, packaged for the table tabs / counts /
- * export filter.
+ * REQ-103 — derive the table classification for one entry against the
+ * current cut list.  Pure function; entry is not mutated.
  *
  * Boundary contract (matches `applyCutsToEntry`):
- *   - `entry.isDeleted` always wins → effectivelyDeleted = true.
- *   - Empty cuts list → effective state mirrors the manual flags.
- *   - `applyCutsToEntry` returns null (= entry fully contained, OR
- *     clamped below MIN_SUBTITLE_DURATION_SEC) → effectivelyDeleted
- *     = true.
- *   - `applyCutsToEntry` returns clamped entry with
- *     startSec / endSec different from the original → effectivelyEdited
- *     bumps to true (cut-induced edit).
- *   - Original times preserved (cut doesn't overlap) → effective state
- *     mirrors the manual flags.
+ *   1. `entry.isDeleted` ALWAYS wins → `status = 'manuallyDeleted'`.
+ *      Locks the REQ-079 / REQ-091 contract that manual delete is the
+ *      strongest signal.
+ *   2. Empty cuts list → `status` mirrors the manual flags
+ *      (normal or 'edited' depending on `entry.isEdited`).
+ *   3. `applyCutsToEntry` returns null AND `!entry.isDeleted` →
+ *      `status = 'trimDeleted'` (= REQ-103 §A new state).
+ *   4. `applyCutsToEntry` returns clamped entry with start/end
+ *      different from the original → `wasEdited = true`.  If no
+ *      deletion took the row, `status = 'edited'`.
+ *   5. Times preserved (cut doesn't overlap) → manual flags only.
+ *
+ * `wasEdited` is independent of `status`.  A row that was manually
+ * edited and then manually deleted reports `status =
+ * 'manuallyDeleted'`, `wasEdited = true` — so the 削除 tab counts it
+ * once AND the 編集済み filter also surfaces it (the
+ * cross-cutting contract from REQ-103 §B).
  */
 export function effectiveEntryState(
   entry: SubtitleEntry,
   cuts: CutList,
 ): EffectiveEntryState {
-  if (entry.isDeleted) {
-    return { effectivelyDeleted: true, effectivelyEdited: entry.isEdited }
-  }
-  if (cuts.length === 0) {
-    return { effectivelyDeleted: false, effectivelyEdited: entry.isEdited }
-  }
-  const clamped = applyCutsToEntry(entry, cuts)
-  if (clamped === null) {
-    return { effectivelyDeleted: true, effectivelyEdited: entry.isEdited }
-  }
+  const clamped = cuts.length === 0 ? null : applyCutsToEntry(entry, cuts)
+  const cutContained = cuts.length > 0 && clamped === null
   const cutClamped =
-    clamped.startSec !== entry.startSec ||
-    clamped.endSec !== entry.endSec
+    clamped !== null &&
+    (clamped.startSec !== entry.startSec || clamped.endSec !== entry.endSec)
+
+  const wasEdited = entry.isEdited || cutClamped
+
+  let status: ClipStatus
+  if (entry.isDeleted) {
+    status = 'manuallyDeleted'
+  } else if (cutContained) {
+    status = 'trimDeleted'
+  } else if (wasEdited) {
+    status = 'edited'
+  } else {
+    status = 'normal'
+  }
+
+  const effectivelyDeleted =
+    status === 'manuallyDeleted' || status === 'trimDeleted'
   return {
-    effectivelyDeleted: false,
-    effectivelyEdited: entry.isEdited || cutClamped,
+    status,
+    wasEdited,
+    effectivelyDeleted,
+    effectivelyEdited: wasEdited && !effectivelyDeleted,
   }
 }
 

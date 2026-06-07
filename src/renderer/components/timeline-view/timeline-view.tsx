@@ -28,6 +28,7 @@ import {
   editedDuration,
   editedToOrig,
   origToEdited,
+  effectiveEntryState,
   type CutList
 } from '../../../shared/cuts'
 import {
@@ -606,20 +607,27 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   // Apply the same filter the table uses so a "Ready" tab hides warning
   // rows in timeline view too.
   //
-  // REQ-101 / REQ-102: cut-induced visibility now flows through
-  // `filterEntries(entries, tableFilter, warningsMap, cuts)` — the
-  // shared filter routes through `effectiveEntryState` so an entry
-  // that `applyCutsToEntry` returns null for is reported as
-  // `effectivelyDeleted` and excluded from `all` / `ready` / `edited`
-  // / `warnings`.  The previous REQ-101 inline `applyCutsToEntry`
-  // filter in this memo is therefore redundant and was removed —
-  // doing the work in the shared helper keeps the table view, the
-  // timeline view and the BulkEdit bar's visible-id list in lockstep
-  // on the same predicate (the goal of subtitle-filter.ts since
-  // REQ-066).  Entries are still NEVER mutated; cut classification
-  // is derived per render.
+  // REQ-103: deleted rows (manual + trim) NEVER render on the timeline
+  // — they have no playable position once cut.  This drops them
+  // unconditionally on top of the shared `filterEntries` pass so that
+  //   - 'all' / 'ready' tabs show identical content on the timeline
+  //     (the only difference is the table itself, where 'all' also
+  //     surfaces deleted rows as a complete inventory),
+  //   - cross-cutting filter tabs (編集済み / 警告) still narrow
+  //     what's on the timeline, but stripped of any deleted rows that
+  //     the table-side filter let through per REQ-103 §B,
+  //   - the '削除' tab leaves the timeline empty by design.
+  //
+  // `filterEntries` already excludes deleted from 'ready' but allows
+  // them through 'all' / 'edited' / 'warnings' (REQ-103 §B
+  // cross-cutting contract), so the explicit `effectivelyDeleted`
+  // strip here is the canonical "timeline-only" rule.  Entries are
+  // still NEVER mutated; everything derives from `effectiveEntryState`.
   const visibleEntries = useMemo(
-    () => filterEntries(entries, tableFilter, warningsMap, cuts),
+    () =>
+      filterEntries(entries, tableFilter, warningsMap, cuts).filter(
+        (e) => !effectiveEntryState(e, cuts).effectivelyDeleted,
+      ),
     [entries, tableFilter, warningsMap, cuts],
   )
 

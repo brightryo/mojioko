@@ -27,7 +27,7 @@
     "ready": "Ready",
     "edited": "Edited",
     "warnings": "Warnings",
-    "deleted": "Deleted"
+    "deleted": "Removed"
   },
   "filter": {
     "all": "All",
@@ -38,7 +38,8 @@
   "state": {
     "edited": "Edited",
     "overflow": "Overflow",
-    "deleted": "Deleted"
+    "deleted": "Deleted",
+    "trimDeleted": "Trim-deleted"
   },
   "badge": {
     "overflow": "Overflow",

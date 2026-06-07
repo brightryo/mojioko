@@ -21,7 +21,7 @@ import { saveFileDialog, writeTextFile } from '@/services/dialog'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { computeEntryWarnings, hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
-import { effectiveEntryState } from '../../shared/cuts'
+import { applyCutsToEntry, effectiveEntryState, origToEdited } from '../../shared/cuts'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font-metrics'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -252,60 +252,62 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     setRowSelection(intersection)
   }, [visibleEntryIds, selectedRowIds, setRowSelection])
 
-  // REQ-102: tab counts now derive from the cut-aware
-  // `effectiveEntryState` so that
-  //   - 出力対象 (= "ready") drops fully-cut entries (matches the
-  //     timeline view and the ffmpeg burn-in output),
-  //   - 編集済み (= "edited") counts cut-clamped partial overlaps
-  //     in addition to manually-edited rows (single-counted via the
-  //     OR inside effectiveEntryState — manual + cut on the same
-  //     row only contributes once),
-  //   - 削除済み (= "deleted") includes fully-cut entries alongside
-  //     manually-deleted ones,
-  //   - すべて (= "all") and 警告あり (= "warnings") both hide
-  //     effectivelyDeleted rows (so cut-removed subtitles do not
-  //     surface as ghost rows in the everyday "everything visible"
-  //     tab).
+  // REQ-103 — tab counts implement the two-group model from the
+  // trimming spec (§6).
+  //
+  //   行き先 (mutually exclusive — `ready + deleted === all`):
+  //     allCount     = every entry, including manually-deleted +
+  //                    trim-deleted rows so the inventory is complete.
+  //     readyCount   = entries whose status is 'normal' or 'edited'
+  //                    (= !effectivelyDeleted).  emptyText rows ARE
+  //                    counted here because they still belong to one of
+  //                    the two undeleted states; the actual TXT/SRT
+  //                    export step in getOutputEntries below filters
+  //                    them out at write time.
+  //     deletedCount = manuallyDeleted + trimDeleted (= effectivelyDeleted).
+  //
+  //   フィルタ (cross-cutting — do NOT exclude deleted rows per REQ-103 §B):
+  //     editedCount  = `wasEdited` (manual edit OR cut clamp).  A row
+  //                    that was edited and later deleted still counts —
+  //                    the user wants to see what was edited even if
+  //                    the row no longer makes it to the timeline.
+  //     warningCount = hasAnyWarning(w).  Same rationale; a warning on
+  //                    a deleted row is still informative.
+  //
   // effectiveStates is computed once per (entries, cuts) change so
-  // the five .filter() walks below each cost O(N) only.
+  // each .filter() walk below costs O(N) only.
   const effectiveStates = useMemo(() => {
     const map = new Map<string, ReturnType<typeof effectiveEntryState>>()
     for (const e of entries) map.set(e.id, effectiveEntryState(e, cuts))
     return map
   }, [entries, cuts])
-  const activeEntries = entries.filter((e) => {
+  const allCount      = entries.length
+  const readyCount    = entries.filter((e) => {
     const s = effectiveStates.get(e.id)
     return s !== undefined && !s.effectivelyDeleted
-  })
-  const allCount      = activeEntries.length
-  const editedCount   = activeEntries.filter((e) => {
-    const s = effectiveStates.get(e.id)
-    return s !== undefined && s.effectivelyEdited
-  }).length
-  // Ready (= "出力対象") aligns with text-export inclusion: warning rows are
-  // counted (the user may want to export and fix externally), error rows
-  // (emptyText, effectivelyDeleted) are dropped.  See
-  // `isOutputTarget` / `hasAnyWarning` in entry-warnings.ts and
-  // `effectiveEntryState` in shared/cuts.ts for the canonical rules.
-  const warningCount  = activeEntries.filter((e) => {
-    const w = warningsMap.get(e.id)
-    return w !== undefined && hasAnyWarning(w)
-  }).length
-  const readyCount    = activeEntries.filter((e) => {
-    const w = warningsMap.get(e.id)
-    return w !== undefined && !w.emptyText
   }).length
   const deletedCount  = entries.filter((e) => {
     const s = effectiveStates.get(e.id)
     return s !== undefined && s.effectivelyDeleted
   }).length
+  const editedCount   = entries.filter((e) => {
+    const s = effectiveStates.get(e.id)
+    return s !== undefined && s.wasEdited
+  }).length
+  const warningCount  = entries.filter((e) => {
+    const w = warningsMap.get(e.id)
+    return w !== undefined && hasAnyWarning(w)
+  }).length
 
+  // REQ-103 tab order: すべて・出力対象・削除・編集済み・警告.  The
+  // two destination tabs come first (left-to-right "where does each
+  // clip go") followed by the two cross-cutting filters.
   const FILTERS: { key: TableFilter; count: number }[] = [
     { key: 'all',      count: allCount },
     { key: 'ready',    count: readyCount },
+    { key: 'deleted',  count: deletedCount },
     { key: 'edited',   count: editedCount },
     { key: 'warnings', count: warningCount },
-    { key: 'deleted',  count: deletedCount },
   ]
 
   /**
@@ -543,24 +545,55 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   }
 
   /**
-   * Entries written to TXT / SRT export.  Matches the Ready tab count.
+   * Entries written to TXT / SRT export.
    *
-   * REQ-102: rebased onto `effectiveStates` so cut-deleted entries are
-   * dropped from text exports the same way they are dropped from the
-   * 出力対象 tab and the ffmpeg burnin (which independently runs
-   * `applyCutsToEntry` in src/main/services/ffmpeg-burnin.ts).  Empty
-   * text continues to be classified as an error and excluded.  This
-   * makes "what the table tab says is exported" === "what the export
-   * actually writes" for every output format.
+   * REQ-103 §D: timestamps now go through the same
+   *   applyCutsToEntry → origToEdited
+   * pipeline that ffmpeg-burnin.ts:133-143 already runs, so the
+   * Dialogue Start/End in the rendered video, the SRT cue times,
+   * and the TXT row order all agree on the post-cut Edited axis.
+   * Previously the SRT / TXT path emitted raw Original-axis times
+   * (= REQ-102 RES §8 hand-off item), which placed the cues at
+   * wall-clock positions that did not exist in the burnin output —
+   * downstream tools (Premiere, Resolve) consuming the SRT against
+   * the burnin video saw a constant cumulative-cut offset.
+   *
+   * Filter chain (mirrors ffmpeg-burnin.ts):
+   *   1. Drop `effectivelyDeleted` rows (manual delete + fully-cut).
+   *      For fully-cut rows, applyCutsToEntry would also return null
+   *      below — but we check effectiveStates first to keep the
+   *      manual-delete case explicit.
+   *   2. Drop `emptyText` rows (= error, not exportable).
+   *   3. Run `applyCutsToEntry` to clamp partial-overlap rows.
+   *      Returns null in rare cases (visible duration below
+   *      MIN_SUBTITLE_DURATION_SEC after head + tail clamp) —
+   *      drop those too.
+   *   4. Translate the clamped Original-axis times to Edited axis
+   *      via origToEdited.  No cuts → identity, so the legacy
+   *      non-trim path is byte-identical.
+   *
+   * `getOutputEntries` returns NEW SubtitleEntry objects with
+   * translated startSec/endSec — the entries in the project store
+   * stay untouched (the data-non-destructive contract from REQ-101 /
+   * REQ-102).
    */
   function getOutputEntries(): SubtitleEntry[] {
-    return entries.filter((e) => {
+    const out: SubtitleEntry[] = []
+    for (const e of entries) {
       const w = warningsMap.get(e.id)
-      if (w === undefined) return false
+      if (w === undefined) continue
       const s = effectiveStates.get(e.id)
-      if (s === undefined || s.effectivelyDeleted) return false
-      return !w.emptyText
-    })
+      if (s === undefined || s.effectivelyDeleted) continue
+      if (w.emptyText) continue
+      const clamped = cuts.length === 0 ? e : applyCutsToEntry(e, cuts)
+      if (clamped === null) continue
+      out.push({
+        ...e,
+        startSec: cuts.length === 0 ? e.startSec : origToEdited(clamped.startSec, cuts),
+        endSec:   cuts.length === 0 ? e.endSec   : origToEdited(clamped.endSec, cuts),
+      })
+    }
+    return out
   }
 
   async function handleExportText() {
@@ -598,7 +631,10 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     toast.success(t('toast.exportedSrt'))
   }
 
-  const canContinue = activeEntries.length > 0
+  // REQ-103 — `activeEntries` from REQ-102 was removed in favour of the
+  // per-tab counts above; `canContinue` reads `readyCount` directly
+  // (= the 出力対象 count = entries not effectivelyDeleted).
+  const canContinue = readyCount > 0
 
   const hasChanges = entries.some((e) => e.isEdited || e.isDeleted)
 
