@@ -20,7 +20,8 @@ import { cn } from '@/lib/utils'
 import { saveFileDialog, writeTextFile } from '@/services/dialog'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
-import { computeEntryWarnings, hasAnyWarning, isOutputTarget, type EntryWarnings } from '@/lib/entry-warnings'
+import { computeEntryWarnings, hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
+import { effectiveEntryState } from '../../shared/cuts'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font-metrics'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -107,6 +108,13 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const navigate = useNavigate()
 
   const entries = useProjectStore((s) => s.entries)
+  // REQ-102: subscribe to cuts so the tab counts (allCount /
+  // editedCount / readyCount / warningCount / deletedCount) AND the
+  // text/SRT export filter (getOutputEntries) AND the shared
+  // filterEntries call below all see the same cut list as the
+  // timeline view.  Cuts as a separate layer (REQ-074 §3.3) — we
+  // never write back into `entries` from cut confirmation.
+  const cuts = useProjectStore((s) => s.cuts)
   const addEntry = useProjectStore((s) => s.addEntry)
   const updateEntry = useProjectStore((s) => s.updateEntry)
   const defaults = useProjectStore((s) => s.defaults)
@@ -209,8 +217,8 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   // Currently-visible entries under the active filter — drives Ctrl+A's
   // target list and the bulk-selection pruning effect below.
   const visibleEntries = useMemo(
-    () => filterEntries(entries, tableFilter, warningsMap),
-    [entries, tableFilter, warningsMap]
+    () => filterEntries(entries, tableFilter, warningsMap, cuts),
+    [entries, tableFilter, warningsMap, cuts]
   )
   const visibleEntryIds = useMemo(() => visibleEntries.map((e) => e.id), [visibleEntries])
 
@@ -244,22 +252,53 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     setRowSelection(intersection)
   }, [visibleEntryIds, selectedRowIds, setRowSelection])
 
-  const activeEntries = entries.filter((e) => !e.isDeleted)
+  // REQ-102: tab counts now derive from the cut-aware
+  // `effectiveEntryState` so that
+  //   - 出力対象 (= "ready") drops fully-cut entries (matches the
+  //     timeline view and the ffmpeg burn-in output),
+  //   - 編集済み (= "edited") counts cut-clamped partial overlaps
+  //     in addition to manually-edited rows (single-counted via the
+  //     OR inside effectiveEntryState — manual + cut on the same
+  //     row only contributes once),
+  //   - 削除済み (= "deleted") includes fully-cut entries alongside
+  //     manually-deleted ones,
+  //   - すべて (= "all") and 警告あり (= "warnings") both hide
+  //     effectivelyDeleted rows (so cut-removed subtitles do not
+  //     surface as ghost rows in the everyday "everything visible"
+  //     tab).
+  // effectiveStates is computed once per (entries, cuts) change so
+  // the five .filter() walks below each cost O(N) only.
+  const effectiveStates = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof effectiveEntryState>>()
+    for (const e of entries) map.set(e.id, effectiveEntryState(e, cuts))
+    return map
+  }, [entries, cuts])
+  const activeEntries = entries.filter((e) => {
+    const s = effectiveStates.get(e.id)
+    return s !== undefined && !s.effectivelyDeleted
+  })
   const allCount      = activeEntries.length
-  const editedCount   = activeEntries.filter((e) => e.isEdited).length
+  const editedCount   = activeEntries.filter((e) => {
+    const s = effectiveStates.get(e.id)
+    return s !== undefined && s.effectivelyEdited
+  }).length
   // Ready (= "出力対象") aligns with text-export inclusion: warning rows are
   // counted (the user may want to export and fix externally), error rows
-  // (emptyText, deleted) are dropped.  See `isOutputTarget` / `hasAnyWarning`
-  // in entry-warnings.ts for the canonical rules.
+  // (emptyText, effectivelyDeleted) are dropped.  See
+  // `isOutputTarget` / `hasAnyWarning` in entry-warnings.ts and
+  // `effectiveEntryState` in shared/cuts.ts for the canonical rules.
   const warningCount  = activeEntries.filter((e) => {
     const w = warningsMap.get(e.id)
     return w !== undefined && hasAnyWarning(w)
   }).length
   const readyCount    = activeEntries.filter((e) => {
     const w = warningsMap.get(e.id)
-    return w !== undefined && isOutputTarget(e, w)
+    return w !== undefined && !w.emptyText
   }).length
-  const deletedCount  = entries.filter((e) => e.isDeleted).length
+  const deletedCount  = entries.filter((e) => {
+    const s = effectiveStates.get(e.id)
+    return s !== undefined && s.effectivelyDeleted
+  }).length
 
   const FILTERS: { key: TableFilter; count: number }[] = [
     { key: 'all',      count: allCount },
@@ -504,14 +543,23 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   }
 
   /**
-   * Entries written to TXT / SRT export.  Matches the Ready tab count —
-   * warnings included, errors (empty text, deleted) excluded.  See
-   * `isOutputTarget` in entry-warnings.ts.
+   * Entries written to TXT / SRT export.  Matches the Ready tab count.
+   *
+   * REQ-102: rebased onto `effectiveStates` so cut-deleted entries are
+   * dropped from text exports the same way they are dropped from the
+   * 出力対象 tab and the ffmpeg burnin (which independently runs
+   * `applyCutsToEntry` in src/main/services/ffmpeg-burnin.ts).  Empty
+   * text continues to be classified as an error and excluded.  This
+   * makes "what the table tab says is exported" === "what the export
+   * actually writes" for every output format.
    */
   function getOutputEntries(): SubtitleEntry[] {
     return entries.filter((e) => {
       const w = warningsMap.get(e.id)
-      return w !== undefined && isOutputTarget(e, w)
+      if (w === undefined) return false
+      const s = effectiveStates.get(e.id)
+      if (s === undefined || s.effectivelyDeleted) return false
+      return !w.emptyText
     })
   }
 

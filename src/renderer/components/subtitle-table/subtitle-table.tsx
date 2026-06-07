@@ -680,6 +680,11 @@ export function SubtitleTable({
 }) {
   const { t } = useTranslation(['step2'])
   const entries = useProjectStore((s) => s.entries)
+  // REQ-102: filterEntries is now cut-aware so the table tabs / counts
+  // agree with the timeline view and the ffmpeg burnin output.  See
+  // src/renderer/lib/subtitle-filter.ts for the predicate; this
+  // subscription wires the live cut list into that filter.
+  const cuts = useProjectStore((s) => s.cuts)
   const tableFilter = useUiStore((s) => s.tableFilter)
   const focusedRowId = useUiStore((s) => s.focusedRowId)
   // REQ-028: blank out the "Size" / "Style" header labels when the
@@ -782,7 +787,7 @@ export function SubtitleTable({
     return () => clearTimeout(timer)
   }, [scrollToRowId, setScrollToRowId])
 
-  const filtered = filterEntries(entries, tableFilter, warningsMap)
+  const filtered = filterEntries(entries, tableFilter, warningsMap, cuts)
 
   const emptyKey =
     tableFilter === 'all'      ? 'empty.all'      :
