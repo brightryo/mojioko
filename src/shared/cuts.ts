@@ -19,14 +19,36 @@ export interface ClampedEntry extends SubtitleEntry {
 export const MIN_SUBTITLE_DURATION_SEC = 0.05
 
 /**
- * Sort, clamp, and merge a raw cut list so the §1.1 invariants hold:
+ * Sort and clean a raw cut list so the §1.1 invariants hold:
  *   - 0 <= startSec < endSec <= maxSec (when maxSec given)
- *   - sorted by startSec ascending
- *   - no overlapping or touching pairs
+ *   - sorted by startSec ASC; tie-break by endSec DESC (= outer cut comes
+ *     first when two cuts share startSec)
+ *   - no two cuts share the exact same (startSec, endSec) pair
+ *   - OVERLAPPING and TOUCHING cuts are KEPT as separate entries with
+ *     their original `id`s (REQ-105 Phase 2 — the staged-unbind UI needs
+ *     each cut addressable by id so the user can remove the outer one
+ *     while the inner one stays in storage).
  *
- * Used by every project-store mutation (addCut / updateCut / setCuts) so
- * downstream code (origToEdited, applyCutsToEntry, ffmpeg filter_complex
- * builder) can rely on the invariants without re-validating.
+ * Used by every project-store mutation (addCut / updateCut / setCuts).
+ * Downstream coordinate math (`origToEdited` / `editedToOrig` /
+ * `editedDuration`) routes through `unionizeCuts` so overlapping cuts
+ * do not double-subtract — that's the Phase 1 contract this function
+ * relies on.
+ *
+ * Dedupe rule: only "fully identical" cuts (= same startSec AND same
+ * endSec) are collapsed.  The first occurrence wins, so the original
+ * `id` (and any history reference to it) is preserved.  Different ids
+ * on the same interval are pointless — the user can never tell them
+ * apart visually — but they could leak into storage via a history
+ * snapshot replay, and this rule guarantees the storage shape stays
+ * deterministic.
+ *
+ * Tie-break rationale (`endSec DESC` on equal startSec): the
+ * staged-unbind logic in Phase 4 needs to find "the outer cut" quickly.
+ * With outer-first ordering, the linear scan in `containsCut` /
+ * `removableCutIds` can short-circuit as soon as it hits a containing
+ * cut whose startSec equals the candidate's startSec — without this
+ * tie-break we would have to sort or rescan elsewhere.
  */
 export function sanitizeCuts(cuts: readonly Cut[], maxSec?: number): Cut[] {
   const cleaned: Cut[] = []
@@ -37,17 +59,20 @@ export function sanitizeCuts(cuts: readonly Cut[], maxSec?: number): Cut[] {
     if (!(e > s)) continue
     cleaned.push({ id: c.id, startSec: s, endSec: e })
   }
-  cleaned.sort((a, b) => a.startSec - b.startSec)
-  const merged: Cut[] = []
+  // Sort: startSec ASC; tie-break endSec DESC so the outer cut comes first
+  // when two cuts share the same startSec.
+  cleaned.sort((a, b) => a.startSec - b.startSec || b.endSec - a.endSec)
+  // Dedupe by exact (startSec, endSec) pair — first occurrence wins so the
+  // `id` from the earliest mutation is preserved.  Different `id`s on the
+  // same interval are indistinguishable to the user, so collapsing them
+  // is purely a storage cleanup, not a semantic change.
+  const out: Cut[] = []
   for (const c of cleaned) {
-    const last = merged[merged.length - 1]
-    if (last && c.startSec <= last.endSec) {
-      if (c.endSec > last.endSec) last.endSec = c.endSec
-    } else {
-      merged.push({ ...c })
-    }
+    const dup = out.find((p) => p.startSec === c.startSec && p.endSec === c.endSec)
+    if (dup) continue
+    out.push({ id: c.id, startSec: c.startSec, endSec: c.endSec })
   }
-  return merged
+  return out
 }
 
 /**

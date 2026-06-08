@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildTrimConcatFilter } from '../../src/main/services/ffmpeg-trim-filter'
-import type { Cut } from '../../src/shared/cuts'
+import { sanitizeCuts, type Cut } from '../../src/shared/cuts'
 
 const SUBS = "subtitles='/tmp/x.ass':fontsdir='/tmp/fonts'"
 
@@ -62,5 +62,41 @@ describe('buildTrimConcatFilter', () => {
     expect(() => buildTrimConcatFilter(60, [cut(0, 60)], 'simple', 0, SUBS)).toThrow(
       /no kept segments/
     )
+  })
+
+  // ---------------------------------------------------------------------------
+  // REQ-105 Phase 2 — nested / touching cuts now appear in storage.  The
+  // filter_complex must produce the SAME trim/concat chain it would have
+  // produced for the union-equivalent disjoint shape.  buildKeptSegments
+  // (which the builder routes through) handles this; these tests lock the
+  // resulting argv so a regression in either function is visible here.
+  // ---------------------------------------------------------------------------
+
+  it('nested cuts produce the same filter_complex as the outer cut alone', () => {
+    const nested = sanitizeCuts([cut(10, 30, 'outer'), cut(15, 20, 'inner')])
+    const merged = sanitizeCuts([cut(10, 30, 'merged-equivalent')])
+    const rNested = buildTrimConcatFilter(60, nested, 'simple', 0, SUBS)
+    const rMerged = buildTrimConcatFilter(60, merged, 'simple', 0, SUBS)
+    expect(rNested.filterComplex).toBe(rMerged.filterComplex)
+    // Spot check: two kept segments [0,10] + [30,60].
+    expect(rNested.filterComplex).toContain('[0:v]trim=start=0.000000:end=10.000000,setpts=PTS-STARTPTS[v0]')
+    expect(rNested.filterComplex).toContain('[0:v]trim=start=30.000000:end=60.000000,setpts=PTS-STARTPTS[v1]')
+    expect(rNested.filterComplex).toContain('[v0][v1]concat=n=2:v=1:a=0[vcat]')
+  })
+
+  it('touching cuts produce the same filter_complex as one continuous cut', () => {
+    const touching = sanitizeCuts([cut(10, 15, 'a'), cut(15, 20, 'b')])
+    const merged = sanitizeCuts([cut(10, 20, 'merged-equivalent')])
+    const rTouching = buildTrimConcatFilter(60, touching, 'simple', 0, SUBS)
+    const rMerged = buildTrimConcatFilter(60, merged, 'simple', 0, SUBS)
+    expect(rTouching.filterComplex).toBe(rMerged.filterComplex)
+  })
+
+  it('3-way overlap collapses to a single span in the kept-segment chain', () => {
+    const cuts = sanitizeCuts([cut(10, 18, 'a'), cut(15, 22, 'b'), cut(20, 30, 'c')])
+    const r = buildTrimConcatFilter(60, cuts, 'simple', 0, SUBS)
+    expect(r.filterComplex).toContain('[0:v]trim=start=0.000000:end=10.000000,setpts=PTS-STARTPTS[v0]')
+    expect(r.filterComplex).toContain('[0:v]trim=start=30.000000:end=60.000000,setpts=PTS-STARTPTS[v1]')
+    expect(r.filterComplex).toContain('[v0][v1]concat=n=2:v=1:a=0[vcat]')
   })
 })
