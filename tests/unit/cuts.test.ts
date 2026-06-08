@@ -347,26 +347,24 @@ describe('REQ-102: effectiveEntryState (REQ-103 expanded shape)', () => {
     })
   })
 
-  it('middle cut entirely inside entry → status stays normal', () => {
+  it('middle cut entirely inside entry → status edited (REQ-104 flip)', () => {
     // Entry [5, 30] with middle cut [12, 14]: applyCutsToEntry returns
-    // the entry unchanged at the start/end fields but records the middle
-    // cut.  Effective edits should still fire because the audible duration
-    // shrinks; readers of the table need to know the row was touched.
+    // the entry with startSec / endSec unchanged but records the middle
+    // cut in `middleCuts`.  Per Phase 0.5 spec §3.1 / SPEC-trimming
+    // §2.2 ("端・真ん中とも編集済み"), the row is "edited" because the
+    // audible duration shrinks even when the boundaries don't move.
     //
-    // Implementation note: applyCutsToEntry leaves startSec/endSec
-    // unchanged for middle cuts (the cut sits BETWEEN them), so
-    // effectiveEntryState does NOT promote `effectivelyEdited` for
-    // pure middle cuts in the current contract.  This test pins that
-    // behaviour explicitly so a future change that wanted to mark
-    // middle cuts as edited would have to update this assertion
-    // deliberately (along with the comment in shared/cuts.ts and the
-    // table tab semantics).
+    // REQ-104 flipped this from 'normal' → 'edited' by extending the
+    // `cutClamped` predicate in shared/cuts.ts to also fire when
+    // `middleCuts.length > 0`.  The owner reported a middle-cut entry
+    // showing 編集済み=0 / 出力対象 short-by-one; this test locks the
+    // corrected contract.
     const e = makeEntry(5, 30)
     expect(effectiveEntryState(e, [cut(12, 14)])).toEqual({
-      status: 'normal',
-      wasEdited: false,
+      status: 'edited',
+      wasEdited: true,
       effectivelyDeleted: false,
-      effectivelyEdited: false,
+      effectivelyEdited: true,
     })
   })
 
@@ -514,6 +512,70 @@ describe('REQ-103: 4-state classification + count conservation', () => {
     expect(manuallyDeleted).toBe(1)
     expect(readyCount).toBe(4)
     expect(deletedCount).toBe(4)
+  })
+
+  it('REQ-104: pure middle cut → edited + wasEdited + NOT effectivelyDeleted', () => {
+    // The owner's regression: a clip that has a cut sitting INSIDE its
+    // [startSec, endSec] interval (both sides survive) used to be
+    // classified as 'normal' because cutClamped only checked the
+    // start/end fields.  Per Phase 0.5 spec §3.1 the row is edited.
+    const e = makeEntry(5, 30)
+    const state = effectiveEntryState(e, [cut(12, 14)])
+    expect(state.status).toBe('edited')
+    expect(state.wasEdited).toBe(true)
+    expect(state.effectivelyDeleted).toBe(false)
+    expect(state.effectivelyEdited).toBe(true)
+  })
+
+  it('REQ-104: multiple middle cuts on one entry → edited (single classification)', () => {
+    // Two middle cuts on the same entry — the row is still ONE
+    // edited row, not double-counted.  Locks "字幕の個数は増えない"
+    // from spec §0.4: the row is never split.
+    const e = makeEntry(5, 30)
+    const state = effectiveEntryState(e, [cut(10, 12), cut(20, 22)])
+    expect(state.status).toBe('edited')
+    expect(state.wasEdited).toBe(true)
+  })
+
+  it('REQ-104: head + middle combo → edited', () => {
+    // Phase 0.5 trace 1 — head clamp AND middle cut.  Before the
+    // REQ-104 fix this was already 'edited' via the head clamp;
+    // after the fix the middle-cut signal independently confirms
+    // it.  Regression-locks both paths.
+    const e = makeEntry(5, 20)
+    const state = effectiveEntryState(e, [cut(3, 7), cut(12, 14)])
+    expect(state.status).toBe('edited')
+    expect(state.wasEdited).toBe(true)
+  })
+
+  it('REQ-104: middle cut count + filter agreement on the same (entries, cuts)', () => {
+    // Locks the REQ-104 "件数計算と表示フィルタが同一判定" contract.
+    // Both the step2.tsx tab-count predicate and subtitle-filter.ts
+    // filterEntries() consume effectiveEntryState; if the partition
+    // counted here and the per-tab `entries.filter(...)` walk land
+    // on the same number for any (entries, cuts) pair, the table
+    // and the count badge can NEVER disagree.
+    const entries: SubtitleEntry[] = [
+      makeEntry(5, 30, 'middle-cut'),               // middle cut → edited
+      makeEntry(50, 55, 'untouched'),               // outside → normal
+      makeEntry(70, 75, 'fully-contained'),         // contained → trimDeleted
+    ]
+    const cuts: Cut[] = [cut(12, 14), cut(60, 100)]
+    // ‘deleted’ filter mirrors the deletedCount predicate exactly.
+    const deletedCount = entries.filter(
+      (e) => effectiveEntryState(e, cuts).effectivelyDeleted,
+    ).length
+    const readyCount = entries.filter(
+      (e) => !effectiveEntryState(e, cuts).effectivelyDeleted,
+    ).length
+    const editedCount = entries.filter(
+      (e) => effectiveEntryState(e, cuts).wasEdited,
+    ).length
+    expect(readyCount).toBe(2)
+    expect(deletedCount).toBe(1)
+    expect(editedCount).toBe(1)
+    // Count-conservation invariant.
+    expect(readyCount + deletedCount).toBe(entries.length)
   })
 
   it('wasEdited filter is cross-cutting: includes deleted rows that were edited', () => {
