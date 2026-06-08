@@ -215,9 +215,11 @@ export interface EffectiveEntryState {
  *   3. `applyCutsToEntry` returns null AND `!entry.isDeleted` →
  *      `status = 'trimDeleted'` (= REQ-103 §A new state).
  *   4. `applyCutsToEntry` returns clamped entry with start/end
- *      different from the original → `wasEdited = true`.  If no
- *      deletion took the row, `status = 'edited'`.
- *   5. Times preserved (cut doesn't overlap) → manual flags only.
+ *      different from the original OR a non-empty `middleCuts`
+ *      array (= REQ-104 pure-middle-cut path: start/end preserved
+ *      but the cut sits inside the visible interval) → `wasEdited
+ *      = true`.  If no deletion took the row, `status = 'edited'`.
+ *   5. Times preserved AND no middle cuts overlap → manual flags only.
  *
  * `wasEdited` is independent of `status`.  A row that was manually
  * edited and then manually deleted reports `status =
@@ -231,9 +233,18 @@ export function effectiveEntryState(
 ): EffectiveEntryState {
   const clamped = cuts.length === 0 ? null : applyCutsToEntry(entry, cuts)
   const cutContained = cuts.length > 0 && clamped === null
+  // REQ-104 — pure middle cuts leave startSec / endSec untouched (Phase 0.5
+  // spec §3.1: "中間切り抜き ⇒ sClamped / enClamped も変えない") and instead
+  // record the consumed interval in `middleCuts`.  Treat that as a cut-
+  // induced edit so the row surfaces in 編集済み / 出力対象 just like
+  // head- / tail-clamped rows do, matching the spec §2.2 promise "端・真ん中
+  // とも編集済み".  Without the `middleCuts.length > 0` clause the row was
+  // silently classified as 'normal'.
   const cutClamped =
     clamped !== null &&
-    (clamped.startSec !== entry.startSec || clamped.endSec !== entry.endSec)
+    (clamped.startSec !== entry.startSec ||
+      clamped.endSec !== entry.endSec ||
+      clamped.middleCuts.length > 0)
 
   const wasEdited = entry.isEdited || cutClamped
 
