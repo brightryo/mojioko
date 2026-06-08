@@ -619,23 +619,33 @@ describe('editedDuration', () => {
 // sanitizeCuts
 // ---------------------------------------------------------------------------
 
-describe('sanitizeCuts', () => {
+describe('sanitizeCuts (REQ-105 Phase 2: no-merge, dedupe-only)', () => {
   it('sorts by startSec ascending', () => {
     const out = sanitizeCuts([cut(10, 12, 'b'), cut(3, 5, 'a')])
     expect(out.map((c) => c.id)).toEqual(['a', 'b'])
   })
 
-  it('merges overlapping cuts', () => {
-    const out = sanitizeCuts([cut(3, 8), cut(5, 10)])
-    expect(out).toHaveLength(1)
-    expect(out[0].startSec).toBe(3)
-    expect(out[0].endSec).toBe(10)
+  it('preserves overlapping cuts as separate entries (REQ-105 Phase 2 flip)', () => {
+    // Phase 0.5 (旧): two overlapping cuts merged into one.
+    // Phase 2 (新): kept as TWO separate cuts with their original ids so
+    // the staged-unbind UI (Phase 4) can address each one independently.
+    const out = sanitizeCuts([cut(3, 8, 'a'), cut(5, 10, 'b')])
+    expect(out).toHaveLength(2)
+    expect(out.map((c) => c.id)).toEqual(['a', 'b'])
+    expect(out).toEqual([
+      { id: 'a', startSec: 3, endSec: 8 },
+      { id: 'b', startSec: 5, endSec: 10 },
+    ])
   })
 
-  it('merges touching cuts (endSec === next startSec)', () => {
-    const out = sanitizeCuts([cut(3, 7), cut(7, 10)])
-    expect(out).toHaveLength(1)
-    expect(out[0].endSec).toBe(10)
+  it('preserves touching cuts (endSec === next startSec) as separate entries (REQ-105 Phase 2 flip)', () => {
+    // REQ-107 confirmed: touching cuts are kept separate.  Coordinate math
+    // (unionizeCuts in Phase 1) collapses them on the math side, so the
+    // visible result is identical to a single merged cut; the user can
+    // still un-do them step by step.
+    const out = sanitizeCuts([cut(3, 7, 'a'), cut(7, 10, 'b')])
+    expect(out).toHaveLength(2)
+    expect(out.map((c) => c.id)).toEqual(['a', 'b'])
   })
 
   it('drops cuts with start >= end', () => {
@@ -650,6 +660,73 @@ describe('sanitizeCuts', () => {
 
   it('drops NaN / Infinity', () => {
     expect(sanitizeCuts([cut(NaN, 10), cut(5, Number.POSITIVE_INFINITY)])).toHaveLength(0)
+  })
+
+  // -------------------------------------------------------------------------
+  // REQ-105 Phase 2 new contracts: nested preserved, exact-duplicate dedupe,
+  // tie-break (endSec DESC on equal startSec).
+  // -------------------------------------------------------------------------
+
+  it('preserves nested cuts (outer + inner) as two separate entries', () => {
+    // The staged-unbind contract: removing the outer must NOT remove
+    // the inner, so they have to be in storage as two distinct ids.
+    const out = sanitizeCuts([cut(10, 30, 'outer'), cut(15, 20, 'inner')])
+    expect(out).toHaveLength(2)
+    expect(out.map((c) => c.id)).toEqual(['outer', 'inner'])
+    expect(out[0]).toEqual({ id: 'outer', startSec: 10, endSec: 30 })
+    expect(out[1]).toEqual({ id: 'inner', startSec: 15, endSec: 20 })
+  })
+
+  it('dedupes fully identical (startSec, endSec) — first id wins', () => {
+    // History snapshot replay or a buggy caller could push the "same"
+    // cut twice with two ids.  The user has no way to tell them apart, so
+    // we keep the earlier one and drop the later.  Different `id`s with
+    // the same interval are pointless.
+    const out = sanitizeCuts([cut(10, 20, 'first'), cut(10, 20, 'second')])
+    expect(out).toHaveLength(1)
+    expect(out[0]).toEqual({ id: 'first', startSec: 10, endSec: 20 })
+  })
+
+  it('does NOT dedupe cuts with same startSec but different endSec', () => {
+    // Same start, different end = different operations.  Must stay
+    // separate so the user can remove the wider/narrower one
+    // independently.
+    const out = sanitizeCuts([cut(10, 30, 'wide'), cut(10, 20, 'narrow')])
+    expect(out).toHaveLength(2)
+  })
+
+  it('tie-break on equal startSec puts the wider (outer) cut first (endSec DESC)', () => {
+    // Outer-first ordering is exploited by `containsCut` /
+    // `removableCutIds` in Phase 4: the scan can short-circuit as soon as
+    // it sees a containing cut whose startSec equals the candidate's.
+    const out = sanitizeCuts([cut(10, 20, 'narrow'), cut(10, 30, 'wide')])
+    expect(out.map((c) => c.id)).toEqual(['wide', 'narrow'])
+  })
+
+  it('tie-break still respects startSec ordering across groups', () => {
+    // Outer-first applies WITHIN a single startSec group; across groups
+    // the primary key is startSec.
+    const out = sanitizeCuts([
+      cut(20, 25, 'late'),
+      cut(10, 20, 'mid-narrow'),
+      cut(10, 30, 'mid-wide'),
+      cut(5, 8, 'early'),
+    ])
+    expect(out.map((c) => c.id)).toEqual([
+      'early',
+      'mid-wide',
+      'mid-narrow',
+      'late',
+    ])
+  })
+
+  it('preserves identity (id) across mutation rounds for non-overlapping cuts', () => {
+    // Regression lock: the existing "addCut → setCuts(prevSnapshot) →
+    // addCut" undo path must not lose `id`s when sanitize re-clones the
+    // entries (it does: it copies id + startSec + endSec into a fresh
+    // object).
+    const out = sanitizeCuts([cut(0, 5, 'id-a'), cut(10, 15, 'id-b')])
+    expect(out.map((c) => c.id)).toEqual(['id-a', 'id-b'])
   })
 })
 
@@ -820,5 +897,151 @@ describe('REQ-105 Phase 1: coordinate functions tolerate overlapping cuts', () =
       const tOrig = editedToOrig(tEdited, cuts)
       expect(origToEdited(tOrig, cuts)).toBeCloseTo(tEdited, 10)
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// REQ-105 Phase 2 — downstream consumers of overlapping cuts.  Phase 2
+// puts nested / touching cuts INTO storage; the consumers below must
+// keep working without modification (RES-105 §1.3 B / Phase 2 verification
+// gate).
+//
+// Each test exercises one consumer with a representative overlapping shape
+// (nested outer/inner or touching) and locks the expected result.
+// ---------------------------------------------------------------------------
+
+describe('REQ-105 Phase 2: applyCutsToEntry with nested/touching cuts', () => {
+  it('nested cuts: entry fully inside the OUTER → status trimDeleted (outer fires first)', () => {
+    // Sort order after sanitize: outer first (tie-break endSec DESC).
+    // applyCutsToEntry's branch (c) catches the outer at the first iter
+    // and returns null — inner never gets visited.
+    const cuts: Cut[] = sanitizeCuts([cut(10, 30, 'outer'), cut(15, 20, 'inner')])
+    const e = makeEntry(16, 18)
+    expect(applyCutsToEntry(e, cuts)).toBeNull()
+    expect(effectiveEntryState(e, cuts).status).toBe('trimDeleted')
+  })
+
+  it('nested cuts: removing the OUTER alone does NOT revive an entry the inner still consumes', () => {
+    // Staged-unbind: user removes outer → entry is still inside inner →
+    // remains trimDeleted.  Phase 5 will surface this as the "revive
+    // failed" toast.
+    const e = makeEntry(16, 18)
+    // After removing outer, cuts = [inner only].
+    const afterRemove = sanitizeCuts([cut(15, 20, 'inner')])
+    expect(applyCutsToEntry(e, afterRemove)).toBeNull()
+    expect(effectiveEntryState(e, afterRemove).status).toBe('trimDeleted')
+  })
+
+  it('nested cuts: removing BOTH revives the entry (becomes normal)', () => {
+    const e = makeEntry(16, 18)
+    expect(effectiveEntryState(e, []).status).toBe('normal')
+    // Verify the entry data was not touched along the way.
+    expect(e.startSec).toBe(16)
+    expect(e.endSec).toBe(18)
+    expect(e.isDeleted).toBe(false)
+  })
+
+  it('nested cuts: entry that straddles the outer head clamps normally', () => {
+    // Entry [5, 15] straddles outer [10, 30]'s startSec.  applyCutsToEntry
+    // takes branch (e) for the outer (tail-overlap from the entry's POV:
+    // c.startSec(10) < e.endSec(15) AND e.endSec(15) <= c.endSec(30)),
+    // clamps enClamped=10, and breaks.  Inner [15, 20] is past the break.
+    const cuts: Cut[] = sanitizeCuts([cut(10, 30, 'outer'), cut(15, 20, 'inner')])
+    const e = makeEntry(5, 15)
+    const r = applyCutsToEntry(e, cuts)
+    expect(r).not.toBeNull()
+    expect(r!.startSec).toBe(5)
+    expect(r!.endSec).toBe(10)
+    expect(effectiveEntryState(e, cuts).status).toBe('edited')
+  })
+
+  it('touching cuts: entry across the boundary is still head-clamped to the latest cut.endSec', () => {
+    // Cuts [10,15] + [15,20] (touching).  Entry [12, 25].  Outer-first
+    // sort gives [10,15] first.  Branch (d): clamps sClamped = 15.
+    // Next iter cut [15,20]: branch (a) (c.endSec(20) <= e.startSec(12)?
+    // No) → (d) again (c.startSec(15) <= e.startSec(12)? No) → (e)?
+    // (c.startSec(15) < e.endSec(25)? yes AND e.endSec(25) <= c.endSec(20)?
+    // No) → (f) middle… wait, c.startSec(15)===sClamped, but ALGORITHM
+    // tests against e.startSec(12), not sClamped.  So this falls to
+    // middleCuts.push({15,20}).  That's a middle cut by the algorithm's
+    // contract even though sClamped already moved past it.
+    //
+    // Lock the resulting shape so a future cleanup that rewrote this path
+    // would have to flip this assertion deliberately.
+    const cuts: Cut[] = sanitizeCuts([cut(10, 15, 'a'), cut(15, 20, 'b')])
+    const e = makeEntry(12, 25)
+    const r = applyCutsToEntry(e, cuts)
+    expect(r).not.toBeNull()
+    expect(r!.startSec).toBe(15)
+    expect(r!.endSec).toBe(25)
+    // Touching second cut surfaces in middleCuts because the algorithm
+    // reads e.startSec (not sClamped) — consistent with the Phase 0.5
+    // invariant.  The visible duration math (sClamped..enClamped minus
+    // middleCuts) collapses correctly: (25 - 15) - (20 - 15) = 5.
+    expect(r!.middleCuts).toEqual([{ startSec: 15, endSec: 20 }])
+  })
+})
+
+describe('REQ-105 Phase 2: count conservation + tab classification with overlapping cuts', () => {
+  it('count conservation holds for an entries[] / nested-cuts pair', () => {
+    // Three entries, two nested cuts.  The partition still satisfies
+    // ready + deleted === all and `status` is in {normal, edited,
+    // trimDeleted, manuallyDeleted} exactly once.
+    const cuts: Cut[] = sanitizeCuts([cut(10, 30, 'outer'), cut(15, 20, 'inner')])
+    const entries: SubtitleEntry[] = [
+      makeEntry(2, 5, 'before'),          // outside cuts → normal
+      makeEntry(5, 12, 'tail-of-outer'),  // tail clamp by outer → edited
+      makeEntry(16, 18, 'inside-both'),   // outer kills first → trimDeleted
+      makeEntry(40, 45, 'after'),         // outside cuts → normal
+    ]
+    let normal = 0, edited = 0, trim = 0, manual = 0
+    for (const e of entries) {
+      const s = effectiveEntryState(e, cuts)
+      switch (s.status) {
+        case 'normal':           normal++; break
+        case 'edited':           edited++; break
+        case 'trimDeleted':      trim++; break
+        case 'manuallyDeleted':  manual++; break
+      }
+    }
+    expect(normal).toBe(2)
+    expect(edited).toBe(1)
+    expect(trim).toBe(1)
+    expect(manual).toBe(0)
+    expect(normal + edited + trim + manual).toBe(entries.length)
+    expect((normal + edited) + (trim + manual)).toBe(entries.length)
+  })
+})
+
+describe('REQ-105 Phase 2: buildKeptSegments + ffmpeg-trim-filter consume overlapping cuts correctly', () => {
+  it('buildKeptSegments: nested cuts produce the SAME kept segments as the union [outer]', () => {
+    // The user's burnin must NOT remove the inner cut's frames twice.
+    // buildKeptSegments has a Math.max(cursor, c.endSec) that naturally
+    // unions overlaps — verify it stays true with the Phase 2 storage
+    // shape.
+    const nested = sanitizeCuts([cut(10, 30, 'outer'), cut(15, 20, 'inner')])
+    const merged = sanitizeCuts([cut(10, 30, 'merged-equivalent')])
+    expect(buildKeptSegments(60, nested)).toEqual(buildKeptSegments(60, merged))
+    // Spot check: kept segments are [0,10] + [30,60].
+    expect(buildKeptSegments(60, nested)).toEqual([
+      { startSec: 0, endSec: 10 },
+      { startSec: 30, endSec: 60 },
+    ])
+  })
+
+  it('buildKeptSegments: touching cuts produce the SAME kept segments as one continuous cut', () => {
+    const touching = sanitizeCuts([cut(10, 15, 'a'), cut(15, 20, 'b')])
+    expect(buildKeptSegments(60, touching)).toEqual([
+      { startSec: 0, endSec: 10 },
+      { startSec: 20, endSec: 60 },
+    ])
+  })
+
+  it('buildKeptSegments: 3-way overlap collapses to single union span', () => {
+    const cuts = sanitizeCuts([cut(10, 18, 'a'), cut(15, 22, 'b'), cut(20, 30, 'c')])
+    expect(buildKeptSegments(60, cuts)).toEqual([
+      { startSec: 0, endSec: 10 },
+      { startSec: 30, endSec: 60 },
+    ])
   })
 })
