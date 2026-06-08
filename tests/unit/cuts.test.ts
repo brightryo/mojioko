@@ -7,6 +7,7 @@ import {
   effectiveEntryState,
   sanitizeCuts,
   buildKeptSegments,
+  unionizeCuts,
   type Cut,
 } from '../../src/shared/cuts'
 import type { SubtitleEntry } from '../../src/shared/types'
@@ -676,5 +677,148 @@ describe('buildKeptSegments', () => {
 
   it('handles cut at end (no trailing kept segment)', () => {
     expect(buildKeptSegments(60, [cut(50, 60)])).toEqual([{ startSec: 0, endSec: 50 }])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// REQ-105 Phase 1 — unionizeCuts + overlap tolerance for the 3 coordinate
+// functions.
+//
+// Phase 1 invariant the tests below must enforce:
+//   - For disjoint inputs (the entire Phase 1 storage shape, since
+//     sanitizeCuts still merges in Phase 1), origToEdited / editedToOrig /
+//     editedDuration are BIT-IDENTICAL to their pre-REQ-105 behaviour.
+//     The pre-Phase-0.5 trace 1 / trace 2 / REQ-101 boundary tests above
+//     already lock this — no edits needed to keep the lock active.
+//   - For overlapping / nested / touching inputs (the Phase 2 storage
+//     shape), the same three functions must NOT double-count and must
+//     return the same result as the disjoint-union-equivalent input.
+// ---------------------------------------------------------------------------
+
+describe('REQ-105 Phase 1: unionizeCuts', () => {
+  it('empty input → empty output', () => {
+    expect(unionizeCuts([])).toEqual([])
+  })
+
+  it('single cut → identity (id stripped)', () => {
+    expect(unionizeCuts([cut(10, 20)])).toEqual([{ startSec: 10, endSec: 20 }])
+  })
+
+  it('disjoint cuts → identity ordering (id stripped)', () => {
+    // The Phase 1 storage shape — sanitizeCuts already enforces this.
+    // unionizeCuts must be the identity here to preserve bit-identicality
+    // of the three coordinate functions.
+    expect(unionizeCuts([cut(3, 7), cut(15, 17), cut(28, 35)])).toEqual([
+      { startSec: 3, endSec: 7 },
+      { startSec: 15, endSec: 17 },
+      { startSec: 28, endSec: 35 },
+    ])
+  })
+
+  it('overlapping cuts → merged into one interval', () => {
+    // c0 ends inside c1 → union covers [10, 25].
+    expect(unionizeCuts([cut(10, 20), cut(15, 25)])).toEqual([
+      { startSec: 10, endSec: 25 },
+    ])
+  })
+
+  it('nested cut → outer wins (inner absorbed)', () => {
+    // Phase 2 storage shape — both kept in storage, but for axis math
+    // they reduce to the outer interval since the inner removes the
+    // same frames the outer already removed.
+    expect(unionizeCuts([cut(10, 30), cut(15, 20)])).toEqual([
+      { startSec: 10, endSec: 30 },
+    ])
+  })
+
+  it('fully identical (startSec, endSec) collapse to one', () => {
+    // The §4.5 dedupe ask — same range, two ids.  Phase 1 already
+    // handles this at the union level so Phase 2's sanitizeCuts dedupe
+    // is just a storage-side cleanup, not a math correctness fix.
+    expect(unionizeCuts([cut(10, 20), cut(10, 20)])).toEqual([
+      { startSec: 10, endSec: 20 },
+    ])
+  })
+
+  it('touching cuts (endSec === next startSec) merge for math purposes', () => {
+    // Storage will keep them separate (Phase 2 + §4.2 owner decision),
+    // but for coordinate math two touching intervals remove the exact
+    // same frames as one continuous interval.
+    expect(unionizeCuts([cut(10, 15), cut(15, 20)])).toEqual([
+      { startSec: 10, endSec: 20 },
+    ])
+  })
+
+  it('chain of three overlapping cuts → single span', () => {
+    expect(unionizeCuts([cut(10, 18), cut(15, 22), cut(20, 30)])).toEqual([
+      { startSec: 10, endSec: 30 },
+    ])
+  })
+})
+
+describe('REQ-105 Phase 1: coordinate functions tolerate overlapping cuts', () => {
+  // The "lock" tests in Phase 0.5 trace 1 / trace 2 / REQ-101 above keep
+  // disjoint-input bit-identicality alive.  These new tests prove the
+  // overlap-handling branch is correct for the Phase 2 storage shape.
+
+  it('origToEdited: nested cut yields the same result as the outer alone', () => {
+    // Outer [10, 30], inner [15, 20].  Frames removed = 20 (outer only).
+    // tOrig = 35 → Edited = 35 - 20 = 15.
+    expect(origToEdited(35, [cut(10, 30), cut(15, 20)])).toBeCloseTo(15.0, 10)
+    // Compare with the merged-equivalent disjoint input.
+    expect(origToEdited(35, [cut(10, 30)])).toBeCloseTo(15.0, 10)
+  })
+
+  it('origToEdited: chain of overlapping cuts does not double-subtract', () => {
+    // [10, 18] ∪ [15, 22] ∪ [20, 30] = [10, 30] (= 20 frames).
+    // tOrig = 35 → 35 - 20 = 15.
+    expect(origToEdited(35, [cut(10, 18), cut(15, 22), cut(20, 30)])).toBeCloseTo(
+      15.0,
+      10,
+    )
+  })
+
+  it('origToEdited: touching cuts produce same result as one continuous cut', () => {
+    // [10, 15] + [15, 20] = [10, 20] (= 10 frames).  tOrig = 25 → 25 - 10 = 15.
+    expect(origToEdited(25, [cut(10, 15), cut(15, 20)])).toBeCloseTo(15.0, 10)
+    expect(origToEdited(25, [cut(10, 20)])).toBeCloseTo(15.0, 10)
+  })
+
+  it('editedToOrig: nested cut yields the same result as the outer alone', () => {
+    // Inverse of the above: Edited 15 → Original 35 with cuts unioning to [10, 30].
+    expect(editedToOrig(15, [cut(10, 30), cut(15, 20)])).toBeCloseTo(35.0, 10)
+    expect(editedToOrig(15, [cut(10, 30)])).toBeCloseTo(35.0, 10)
+  })
+
+  it('editedToOrig: touching cuts produce same result as one continuous cut', () => {
+    expect(editedToOrig(15, [cut(10, 15), cut(15, 20)])).toBeCloseTo(25.0, 10)
+    expect(editedToOrig(15, [cut(10, 20)])).toBeCloseTo(25.0, 10)
+  })
+
+  it('editedDuration: nested cut counts the OUTER interval once, not twice', () => {
+    // Without the unionizeCuts fix, this would return 60 - (20 + 5) = 35
+    // because inner [15, 20] = 5 frames would be subtracted on top of the
+    // outer's 20.  The correct value is 60 - 20 = 40.
+    expect(editedDuration(60, [cut(10, 30), cut(15, 20)])).toBe(40)
+  })
+
+  it('editedDuration: touching cuts count once total', () => {
+    // [10, 15] + [15, 20] = 10 frames removed total.  60 - 10 = 50.
+    expect(editedDuration(60, [cut(10, 15), cut(15, 20)])).toBe(50)
+  })
+
+  it('editedDuration: fully duplicated (startSec, endSec) does not double-subtract', () => {
+    expect(editedDuration(60, [cut(10, 20), cut(10, 20)])).toBe(50)
+  })
+
+  it('origToEdited / editedToOrig: round-trip survives overlapping cuts', () => {
+    // Round-trip lock — every t in [0, edited duration] must round-trip
+    // back to itself through edited→orig→edited.  Anchors the
+    // overlap-tolerant inverse pair contract.
+    const cuts: Cut[] = [cut(10, 30), cut(15, 20)]   // nested
+    for (const tEdited of [0, 5, 9, 10, 15, 25, 35]) {
+      const tOrig = editedToOrig(tEdited, cuts)
+      expect(origToEdited(tOrig, cuts)).toBeCloseTo(tEdited, 10)
+    }
   })
 })

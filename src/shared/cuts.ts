@@ -51,6 +51,52 @@ export function sanitizeCuts(cuts: readonly Cut[], maxSec?: number): Cut[] {
 }
 
 /**
+ * REQ-105 Phase 1 — collapse `cuts` into the disjoint union of intervals
+ * that they cover.  Used INTERNALLY by `origToEdited` / `editedToOrig` /
+ * `editedDuration` to make those functions overlap-tolerant when the
+ * stored cuts list contains overlapping / touching entries (= the future
+ * Phase 2 storage shape).
+ *
+ * Contract:
+ *   - Input MAY contain overlapping, touching, or fully-identical
+ *     intervals (caller's responsibility to ensure they are sorted by
+ *     `startSec` ascending — `sanitizeCuts` already does this; defensive
+ *     sort here would be cheap but is intentionally omitted so this
+ *     function stays a pure linear-time merge).
+ *   - Output: disjoint, sorted, non-touching intervals (= the actual
+ *     frames the concat path would remove).  Cut identity (`id`) is
+ *     dropped — this is computation-only, never written back to storage.
+ *   - Empty input returns empty output.
+ *
+ * Phase 1 invariant: when input is already disjoint (= the current
+ * Phase 1 storage shape after sanitizeCuts), output equals input with
+ * the `id` stripped — so the three coordinate functions are
+ * bit-identical to their pre-REQ-105 behaviour for every existing
+ * caller.
+ *
+ * Phase 2 (next REQ) will relax `sanitizeCuts` to allow overlapping
+ * cuts in storage; at that point this function's overlap-handling
+ * branch starts running for real inputs.
+ */
+export function unionizeCuts(
+  cuts: CutList,
+): Array<{ startSec: number; endSec: number }> {
+  const out: Array<{ startSec: number; endSec: number }> = []
+  for (const c of cuts) {
+    const last = out[out.length - 1]
+    if (last && c.startSec <= last.endSec) {
+      // Overlap OR touch — extend the previous interval's end.  `Math.max`
+      // (rather than blind assignment) handles the case where `c` is fully
+      // contained in `last` (c.endSec <= last.endSec) without shrinking it.
+      if (c.endSec > last.endSec) last.endSec = c.endSec
+    } else {
+      out.push({ startSec: c.startSec, endSec: c.endSec })
+    }
+  }
+  return out
+}
+
+/**
  * Map a time in the ORIGINAL (uncut) timeline to its position on the EDITED
  * (ripple-applied) timeline.  Times that fall strictly inside a cut snap to
  * that cut's startSec on the Edited axis (= "the moment the cut consumed
@@ -60,10 +106,15 @@ export function sanitizeCuts(cuts: readonly Cut[], maxSec?: number): Cut[] {
  *   origToEdited(28, [c0={3,7}, c1={15,17}, c2={28,35}]) === 22
  * — when tOrig is exactly at a cut's startSec, that cut's duration must NOT
  * be subtracted from `removed`.
+ *
+ * REQ-105 Phase 1 — pre-unions overlapping cuts so the `removed`
+ * accumulator does not double-count.  Existing disjoint inputs are
+ * bit-identical (unionizeCuts is the identity on disjoint input).
  */
 export function origToEdited(tOrig: number, cuts: CutList): number {
+  const ranges = unionizeCuts(cuts)
   let removed = 0
-  for (const c of cuts) {
+  for (const c of ranges) {
     if (tOrig <= c.startSec) break
     if (tOrig < c.endSec) return c.startSec - removed
     removed += c.endSec - c.startSec
@@ -85,18 +136,27 @@ export function origToEdited(tOrig: number, cuts: CutList): number {
  * frame for non-cut t and on the post-cut frame for cut-boundary t.
  */
 export function editedToOrig(tEdited: number, cuts: CutList): number {
+  const ranges = unionizeCuts(cuts)
   let tOrig = tEdited
-  for (const c of cuts) {
+  for (const c of ranges) {
     if (c.startSec > tOrig) break
     tOrig += c.endSec - c.startSec
   }
   return tOrig
 }
 
-/** Total Edited timeline duration in seconds (always >= 0). */
+/**
+ * Total Edited timeline duration in seconds (always >= 0).
+ *
+ * REQ-105 Phase 1 — sums the union of cut intervals, not the raw cuts
+ * list, so overlapping cuts (Phase 2 storage shape) do not double-subtract.
+ * For disjoint inputs (Phase 1 / pre-REQ-105 callers) `unionizeCuts` is the
+ * identity and the result is bit-identical.
+ */
 export function editedDuration(originalDurationSec: number, cuts: CutList): number {
+  const ranges = unionizeCuts(cuts)
   let removed = 0
-  for (const c of cuts) removed += c.endSec - c.startSec
+  for (const c of ranges) removed += c.endSec - c.startSec
   return Math.max(0, originalDurationSec - removed)
 }
 
