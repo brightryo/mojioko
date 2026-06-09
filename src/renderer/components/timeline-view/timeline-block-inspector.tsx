@@ -319,12 +319,15 @@ export function TimelineBlockInspector({
           {entry.isEdited && !entry.isDeleted && (
             <Badge variant="default">{t('state.edited')}</Badge>
           )}
+          {/* REQ-121 — errors (timeInvalid / overDuration / invalidSize)
+              wear the danger variant; warnings (overlap / overflow /
+              emptyText) keep the warning amber. */}
           {warnings?.timeInvalid  && <Badge variant="danger">{t('badge.timeInvalid')}</Badge>}
           {warnings?.overlap      && <Badge variant="warning">{t('badge.overlap')}</Badge>}
-          {warnings?.overDuration && <Badge variant="warning">{t('badge.overDuration')}</Badge>}
+          {warnings?.overDuration && <Badge variant="danger">{t('badge.overDuration')}</Badge>}
           {warnings?.overflow     && <Badge variant="warning">{t('badge.overflow')}</Badge>}
           {warnings?.emptyText    && <Badge variant="warning">{t('badge.emptyText')}</Badge>}
-          {warnings?.invalidSize  && <Badge variant="warning">{t('badge.invalidSize')}</Badge>}
+          {warnings?.invalidSize  && <Badge variant="danger">{t('badge.invalidSize')}</Badge>}
         </div>
       )}
 

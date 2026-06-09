@@ -660,8 +660,10 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
              tells the user "this works, but heads-up". */
           <Badge variant="warning">{t('badge.overlap')}</Badge>
         )}
+        {/* REQ-121 — overDuration is an error (concat path can't include
+            an out-of-range time); badge promoted to danger. */}
         {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overDuration && (
-          <Badge variant="warning">{t('badge.overDuration')}</Badge>
+          <Badge variant="danger">{t('badge.overDuration')}</Badge>
         )}
         {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overflow && (
           <Badge variant="warning">{t('badge.overflow')}</Badge>
@@ -669,8 +671,10 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.emptyText && (
           <Badge variant="warning">{t('badge.emptyText')}</Badge>
         )}
+        {/* REQ-121 — invalidSize (fontSizePx ≤ 0) is an error (libass
+            cannot render); badge promoted to danger. */}
         {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.invalidSize && (
-          <Badge variant="warning">{t('badge.invalidSize')}</Badge>
+          <Badge variant="danger">{t('badge.invalidSize')}</Badge>
         )}
       </div>
 

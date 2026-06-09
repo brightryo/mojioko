@@ -26,7 +26,7 @@
     "all": "All",
     "ready": "Ready",
     "edited": "Edited",
-    "warnings": "Warnings",
+    "warnings": "Issues",
     "deleted": "Removed"
   },
   "filter": {
@@ -54,7 +54,7 @@
     "all": "No subtitle entries.",
     "ready": "All entries are ready to output.",
     "edited": "No edited entries.",
-    "warnings": "No entries with warnings.",
+    "warnings": "No subtitle entries have issues.",
     "overflow": "No overflow entries.",
     "deleted": "No deleted entries."
   },
@@ -128,7 +128,8 @@
   },
   "tooltip": {
     "undo": "Undo",
-    "redo": "Redo"
+    "redo": "Redo",
+    "fixErrorsFirst": "{{count}} subtitle(s) have errors that block export. Open the Issues tab and fix every red badge first."
   },
   "styleCell": {
     "size": "Size",
