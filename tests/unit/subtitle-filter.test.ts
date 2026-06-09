@@ -400,3 +400,95 @@ describe('REQ-112: owner reproduction — head clamp + inner middle (REAL count 
     expect(readyCount + deletedCount).toBe(entries.length)
   })
 })
+
+// ---------------------------------------------------------------------------
+// REQ-113 — the owner's TRUE reproduction.  When the owner trimmed clip A
+// in the middle, the "deleted=1" they saw was actually a different entry:
+// a Whisper-produced duplicate-start segment with near-zero duration that
+// the timeline renders in a stacked second row.  The cut never touched it,
+// but the floor check in applyCutsToEntry would silently null it any time
+// `cuts` was non-empty, flipping it from 'normal' to 'trimDeleted'.
+// ---------------------------------------------------------------------------
+
+describe('REQ-113: Whisper duplicate-start entries survive irrelevant cuts', () => {
+  it('★ entry [10, 10.001] + irrelevant cut [50, 60] → status normal, NOT trimDeleted', () => {
+    // The headline case.  The cut at [50, 60] never touches the entry,
+    // so the floor must NOT retroactively classify the entry as deleted.
+    const entries: SubtitleEntry[] = [
+      makeEntry(10, 10.001, 'near-zero-duplicate'),
+    ]
+    const cuts: Cut[] = [cut(50, 60, 'irrelevant-trim')]
+    expect(effectiveEntryState(entries[0], cuts).status).toBe('normal')
+    expect(effectiveEntryState(entries[0], cuts).effectivelyDeleted).toBe(false)
+    expect(filterEntries(entries, 'deleted', EMPTY_WARNINGS_MAP, cuts)).toEqual([])
+  })
+
+  it('★ exact duplicate-start pair (A and B share startSec, B has zero duration) survives any irrelevant cut', () => {
+    // Entry A: a real Whisper segment.  Entry B: the duplicate-start
+    // glitch (same startSec, point-like duration).  Both must survive
+    // when the user trims elsewhere.
+    const entries: SubtitleEntry[] = [
+      makeEntry(20, 25, 'real-A'),
+      makeEntry(20, 20, 'duplicate-zero-B'),
+    ]
+    const cuts: Cut[] = [cut(100, 110, 'far-trim')]
+    const states = entries.map((e) => effectiveEntryState(e, cuts))
+    expect(states[0].status).toBe('normal')
+    expect(states[1].status).toBe('normal')
+    expect(filterEntries(entries, 'deleted', EMPTY_WARNINGS_MAP, cuts)).toEqual([])
+  })
+
+  it('★ owner reproduction: trimming clip A elsewhere does NOT mark duplicate-start entry B as deleted', () => {
+    // 41 Whisper-style entries; entry 13 is a duplicate-start with entry
+    // 12 (= rendered as 2 timeline rows).  Owner trims the middle of
+    // entry 5.  Pre-REQ-113: entry 13 (near-zero duration) silently
+    // flipped to trimDeleted, deletedCount=1 / display=0.  Post-REQ-113:
+    // entry 13 stays 'normal', deletedCount=0.
+    const entries: SubtitleEntry[] = []
+    for (let i = 0; i < 41; i++) {
+      if (i === 13) {
+        // Duplicate start with entry 12 — Whisper "glitch" segment.
+        entries.push(makeEntry(120, 120.005, `duplicate-${i}`))
+      } else {
+        entries.push(makeEntry(i * 10, i * 10 + 8, `whisper-${i}`))
+      }
+    }
+    // Owner's cut: middle of entry 5 (= [50, 58]).  Far from entry 13.
+    const cuts: Cut[] = sanitizeCuts([cut(52, 55, 'owner-middle-cut')])
+    const deletedCount = entries.filter(
+      (e) => effectiveEntryState(e, cuts).effectivelyDeleted,
+    ).length
+    expect(deletedCount).toBe(0)
+    expect(effectiveEntryState(entries[13], cuts).status).toBe('normal')
+    expect(filterEntries(entries, 'deleted', EMPTY_WARNINGS_MAP, cuts)).toEqual([])
+  })
+
+  it('the genuine floor case (cut shrinks duration below 0.05) STILL fires', () => {
+    // Lock the regression-prevention boundary.  REQ-113 only relaxed the
+    // floor for UNTOUCHED entries; entries the cut consumes still null
+    // when the surviving duration is < 0.05s.
+    // cut [5.001, 5.99] is a middle cut on entry [5, 6]: removedMiddleSec
+    // = 0.989, visibleSec = 1.0 - 0.989 = 0.011 < 0.05 → null.
+    const e = makeEntry(5, 6)
+    const cuts: Cut[] = sanitizeCuts([cut(5.001, 5.99)])
+    expect(effectiveEntryState(e, cuts).status).toBe('trimDeleted')
+  })
+
+  it('count + display still agree (no "1 counted / 0 displayed" mismatch in the duplicate-start case)', () => {
+    // Same shape as the REQ-112 mismatch lock, but exercising the
+    // REQ-113 fix path.  Pre-fix: filterEntries('deleted') would return
+    // the duplicate entry; timeline view's extra strip dropped it →
+    // count=1 / display=0.  Post-fix: filter returns empty → match.
+    const entries: SubtitleEntry[] = [
+      makeEntry(20, 25, 'real'),
+      makeEntry(20, 20.001, 'duplicate-near-zero'),
+    ]
+    const cuts: Cut[] = [cut(60, 70, 'far')]
+    const filterResult = filterEntries(entries, 'deleted', EMPTY_WARNINGS_MAP, cuts)
+    const timelineDisplay = filterResult.filter(
+      (e) => !effectiveEntryState(e, cuts).effectivelyDeleted,
+    )
+    expect(filterResult.length).toBe(timelineDisplay.length)
+    expect(filterResult.length).toBe(0)
+  })
+})
