@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
 import { saveFileDialog, writeTextFile } from '@/services/dialog'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
-import { computeEntryWarnings, hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
+import { computeEntryWarnings, hasAnyError, hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
 import { applyCutsToEntry, effectiveEntryState, origToEdited } from '../../shared/cuts'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font-metrics'
@@ -294,14 +294,33 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     const s = effectiveStates.get(e.id)
     return s !== undefined && s.wasEdited
   }).length
-  const warningCount  = entries.filter((e) => {
+  // REQ-121 — split the legacy single "warnings" count into errors and
+  // warnings.  The "Issues" tab (was: Warnings) shows the union; the
+  // continue-to-Step-3 button gates only on errors.  Both counts
+  // ignore `effectivelyDeleted` rows because:
+  //   - the source `warningsMap` already skips manually-deleted rows
+  //     (= `entry.isDeleted` is filtered out at construction time)
+  //   - trim-deleted rows (`status === 'trimDeleted'`) never reach the
+  //     SRT / burnin pipeline either, so flagging them as "blocking
+  //     export" would be misleading
+  const errorCount    = entries.filter((e) => {
+    const s = effectiveStates.get(e.id)
+    if (s === undefined || s.effectivelyDeleted) return false
     const w = warningsMap.get(e.id)
-    return w !== undefined && hasAnyWarning(w)
+    return w !== undefined && hasAnyError(w)
+  }).length
+  const warningCount  = entries.filter((e) => {
+    const s = effectiveStates.get(e.id)
+    if (s === undefined || s.effectivelyDeleted) return false
+    const w = warningsMap.get(e.id)
+    return w !== undefined && (hasAnyError(w) || hasAnyWarning(w))
   }).length
 
-  // REQ-103 tab order: すべて・出力対象・削除・編集済み・警告.  The
-  // two destination tabs come first (left-to-right "where does each
-  // clip go") followed by the two cross-cutting filters.
+  // REQ-103 tab order + REQ-121 rename: すべて・出力対象・削除・編集済み・
+  // 問題あり.  The two destination tabs come first (left-to-right "where
+  // does each clip go") followed by the two cross-cutting filters.  The
+  // single "問題あり" tab (= "Issues") covers both errors AND warnings;
+  // the badge colour inside the row distinguishes them (REQ-121 §3.4).
   const FILTERS: { key: TableFilter; count: number }[] = [
     { key: 'all',      count: allCount },
     { key: 'ready',    count: readyCount },
@@ -632,9 +651,15 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   }
 
   // REQ-103 — `activeEntries` from REQ-102 was removed in favour of the
-  // per-tab counts above; `canContinue` reads `readyCount` directly
-  // (= the 出力対象 count = entries not effectivelyDeleted).
-  const canContinue = readyCount > 0
+  // per-tab counts above; `canContinue` originally read `readyCount`
+  // directly (= the 出力対象 count = entries not effectivelyDeleted).
+  // REQ-121 — gate the Step 3 transition on `errorCount === 0` too.
+  // Pre-REQ-121 the renderer silently dropped error rows in Step 3's
+  // `activeEntries` filter; the user could ship a video missing every
+  // time-invalid / out-of-duration / invalid-size subtitle without
+  // noticing.  The new gate stops at Step 2 with a tooltip pointing to
+  // the Issues tab so the user fixes (or knowingly deletes) each error.
+  const canContinue = readyCount > 0 && errorCount === 0
 
   const hasChanges = entries.some((e) => e.isEdited || e.isDeleted)
 
@@ -697,14 +722,40 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         </DropdownMenuContent>
       </DropdownMenu>
       {!isAudioOnly && (
-        <Button
-          variant="primary"
-          size="md"
-          disabled={!canContinue}
-          onClick={() => navigate('/step3')}
-        >
-          {t('action.continueToRender')}
-        </Button>
+        // REQ-121 — when the only thing blocking the transition is the
+        // errorCount gate, surface a tooltip pointing the user at the
+        // Issues tab.  Radix's <TooltipTrigger asChild> on a disabled
+        // <button> would swallow pointer events (the disabled DOM node
+        // does not fire enter/leave); wrap in a span so the tooltip
+        // still appears on hover.
+        errorCount > 0 ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="primary"
+                  size="md"
+                  disabled
+                  onClick={() => navigate('/step3')}
+                >
+                  {t('action.continueToRender')}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {t('tooltip.fixErrorsFirst', { count: errorCount })}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <Button
+            variant="primary"
+            size="md"
+            disabled={!canContinue}
+            onClick={() => navigate('/step3')}
+          >
+            {t('action.continueToRender')}
+          </Button>
+        )
       )}
     </div>
   )

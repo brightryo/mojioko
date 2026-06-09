@@ -1,6 +1,6 @@
 import type { SubtitleEntry } from '../../shared/types'
 import type { TableFilter } from '@/stores/ui-store'
-import { hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
+import { hasAnyError, hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
 import { effectiveEntryState, type CutList } from '../../shared/cuts'
 
 /**
@@ -58,12 +58,19 @@ export function filterEntries(
       // were once edited.  Predicate is the bare `wasEdited` flag.
       return entries.filter((e) => effectiveEntryState(e, cuts).wasEdited)
     case 'warnings':
-      // REQ-103 フィルタ: cross-cutting — include deleted rows that
-      // still carry warnings (e.g. the user manually deleted an
-      // overflow row; the warning is still informative).
+      // REQ-103 フィルタ + REQ-121 「問題あり」: cross-cutting — include
+      // every row that carries an error OR a warning so the user has
+      // one place to find things to address.  Pre-REQ-121 this tab
+      // showed warnings only and `emptyText` was missing entirely; the
+      // new tab name ("問題あり" / "Issues") reflects the broader scope.
+      // Deleted rows are still allowed through (REQ-103 §B cross-
+      // cutting) so a previously-flagged row the user deleted is still
+      // visible.  Step 3 transition gating in `step2.tsx` reads
+      // `errorCount` (= hasAnyError) directly so the disable logic is
+      // independent of which filter the user is on.
       return entries.filter((e) => {
         const w = warningsMap.get(e.id)
-        return w !== undefined && hasAnyWarning(w)
+        return w !== undefined && (hasAnyError(w) || hasAnyWarning(w))
       })
     case 'deleted':
       // REQ-103 行き先: manuallyDeleted + trimDeleted.
