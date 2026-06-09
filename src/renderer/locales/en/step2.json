@@ -265,14 +265,12 @@
       "outLabel": "Out",
       "noPoint": "—",
       "cutMarkerTitle": "Cut {{start}} – {{end}} (click to remove)",
-      "cutMarkerInnerTitle": "An outer trim still consumes this cut — remove the outer one first",
       "invalidRange": "In must come before Out",
       "errorSamePosition": "In and Out cannot be at the same position",
       "errorInAfterOut": "In must be set before Out",
       "errorOutBeforeIn": "Out must be set after In",
       "toast": {
         "cutApplied": "Cut applied — click its scissor marker to undo",
-        "cannotRemoveInnerCut": "Remove the outer trim first",
         "reviveFailedStillCut": "{{count}} subtitle(s) could not be restored — another trim still consumes them"
       }
     }

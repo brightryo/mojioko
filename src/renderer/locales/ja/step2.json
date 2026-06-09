@@ -265,14 +265,12 @@
       "outLabel": "終点",
       "noPoint": "—",
       "cutMarkerTitle": "カット {{start}} 〜 {{end}}（クリックで削除）",
-      "cutMarkerInnerTitle": "外側のトリミングが残っているため、 このカットは取り消せません",
       "invalidRange": "始点は終点より前である必要があります",
       "errorSamePosition": "始点と終点は同じ位置に設定できません",
       "errorInAfterOut": "始点は終点より前に設定してください",
       "errorOutBeforeIn": "終点は始点より後に設定してください",
       "toast": {
         "cutApplied": "カットしました。 はさみマーカーで戻せます",
-        "cannotRemoveInnerCut": "先に外側のトリミングを取り消してください",
         "reviveFailedStillCut": "{{count}} 件の字幕は、 別のトリミングが残っているため戻せませんでした"
       }
     }
