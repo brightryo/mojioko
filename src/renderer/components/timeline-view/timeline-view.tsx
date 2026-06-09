@@ -1822,81 +1822,53 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                   concat output), so we render it as a thin vertical
                   scissors marker on top of the ruler + tracks.  Clicking
                   removes the cut (with undo via useHistoryStore).
-                  REQ-105 Phase 4 — staged-unbind: when a cut is "inside"
-                  another (= contained by an outer cut), the user cannot
-                  remove it directly.  Its marker is rendered in a muted /
-                  disabled style and `disabled` is set so clicks do
-                  nothing.  Removing the outer one promotes the inner to
-                  "outermost" (next render the marker becomes active).
-                  Phase 5 will add the "why is this locked" toast; for
-                  now the disabled visual + no-op click is the contract. */}
-              {cuts.map((c) => {
-                const xPx = origToEdited(c.startSec, cuts) * pixelsPerSec
-                const removable = removableIds.has(c.id)
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    // REQ-105 Phase 5 — `aria-disabled` instead of the
-                    // HTML `disabled` attribute so the click event still
-                    // reaches our handler and we can surface a "remove
-                    // the outer one first" toast.  The visual disabled
-                    // state lives in the className branch below; the
-                    // onClick branch makes sure the inner click is a
-                    // toast-only no-op for the cuts list (= storage is
-                    // untouched, the Phase 4 contract is preserved).
-                    aria-disabled={!removable}
-                    onClick={
-                      removable
-                        ? () => handleRemoveCut(c.id)
-                        : () =>
-                            toast.error(
-                              t('timeline.trim.toast.cannotRemoveInnerCut'),
-                            )
-                    }
-                    title={
-                      removable
-                        ? t('timeline.trim.cutMarkerTitle', {
-                            // REQ-115 — show the cut's Edited-axis collapse
-                            // point.  origToEdited maps both endpoints of a
-                            // cut to the same Edited time (cut.startSec -
-                            // removed), so either input collapses to the
-                            // same string; we pass startSec for clarity.
-                            start: formatEditedTimecode(c.startSec, cuts),
-                            end: formatEditedTimecode(c.endSec, cuts),
-                          })
-                        : t('timeline.trim.cutMarkerInnerTitle')
-                    }
-                    className={cn(
-                      'absolute top-0 z-20 flex flex-col items-center pointer-events-auto',
-                      !removable && 'cursor-not-allowed'
-                    )}
-                    style={{
-                      left: `${xPx - 7}px`,
-                      width: '14px',
-                      height: `${RULER_HEIGHT_PX + tracksHeightPx}px`
-                    }}
-                  >
-                    <div
-                      className={cn(
-                        'flex h-4 w-4 items-center justify-center rounded-sm transition-colors duration-150',
-                        removable
-                          ? 'bg-zinc-800 text-amber-300 hover:bg-amber-500/30 hover:text-amber-100'
-                          : 'bg-zinc-800/40 text-zinc-500'
-                      )}
+                  REQ-105 Phase 4 / 5 / REQ-116 — staged unbind: a cut
+                  contained by another (= an inner / nested cut) is NOT
+                  rendered at all.  The previous Phase 4 contract showed
+                  it greyed-out + Phase 5 raised a "remove the outer
+                  first" toast, but the inner marker landed on the same
+                  Edited-axis collapse point as its outer (origToEdited
+                  of any orig time inside a cut returns the cut's
+                  startSec — removed, which the outer also returns)
+                  and overlaid the outer in the DOM order, leaving the
+                  user with no clickable target → "no way out".
+                  Today: render ONLY the cuts in `removableIds`.  After
+                  the user clicks one, the remaining cut becomes the
+                  new outermost and its marker appears on the next
+                  render (= the staged unbind promise, now reachable). */}
+              {cuts
+                .filter((c) => removableIds.has(c.id))
+                .map((c) => {
+                  const xPx = origToEdited(c.startSec, cuts) * pixelsPerSec
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => handleRemoveCut(c.id)}
+                      title={t('timeline.trim.cutMarkerTitle', {
+                        // REQ-115 — Edited-axis collapse point.  Both
+                        // endpoints map to the same Edited time, so
+                        // passing startSec is enough.
+                        start: formatEditedTimecode(c.startSec, cuts),
+                        end: formatEditedTimecode(c.endSec, cuts),
+                      })}
+                      className="absolute top-0 z-20 flex flex-col items-center pointer-events-auto"
+                      style={{
+                        left: `${xPx - 7}px`,
+                        width: '14px',
+                        height: `${RULER_HEIGHT_PX + tracksHeightPx}px`
+                      }}
                     >
-                      <Scissors className="h-3 w-3" />
-                    </div>
-                    <div
-                      className={cn(
-                        'w-px pointer-events-none',
-                        removable ? 'bg-amber-400/60' : 'bg-zinc-600/30'
-                      )}
-                      style={{ height: `${RULER_HEIGHT_PX + tracksHeightPx - 16}px` }}
-                    />
-                  </button>
-                )
-              })}
+                      <div className="flex h-4 w-4 items-center justify-center rounded-sm bg-zinc-800 text-amber-300 hover:bg-amber-500/30 hover:text-amber-100 transition-colors duration-150">
+                        <Scissors className="h-3 w-3" />
+                      </div>
+                      <div
+                        className="w-px bg-amber-400/60 pointer-events-none"
+                        style={{ height: `${RULER_HEIGHT_PX + tracksHeightPx - 16}px` }}
+                      />
+                    </button>
+                  )
+                })}
 
               {/* REQ-074 1e — pending In/Out ghosts.  Drawn at the Edited
                   positions of the captured Original times so the user can

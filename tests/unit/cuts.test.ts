@@ -1364,6 +1364,107 @@ describe('REQ-105 Phase 4: removableCutIds', () => {
 })
 
 // ---------------------------------------------------------------------------
+// REQ-116 — the Phase-4/5 "render inner markers grey + toast on click" model
+// landed the owner in a dead end: nested cuts share the same Edited-axis
+// collapse point (origToEdited returns `cut.startSec - removed` for every
+// Original time strictly inside the cut — both outer and inner cuts have
+// their `startSec` consumed by the outer), so the inner marker stacked on
+// top of the outer in DOM order, hiding the outer's amber click target.
+// Now the timeline-view filters cuts through removableCutIds before
+// rendering — the marker the user sees is always one they can click.
+//
+// The tests below exercise the visibility contract via removableCutIds
+// (= same predicate the production filter calls) so the rule that drives
+// the UI is locked at the function level.
+// ---------------------------------------------------------------------------
+
+describe('REQ-116: marker visibility rule — only removable cuts render', () => {
+  it('a lone cut renders (= it is the only one, trivially outermost)', () => {
+    const cuts: Cut[] = sanitizeCuts([cut(10, 20, 'only')])
+    const visible = cuts.filter((c) => removableCutIds(cuts).has(c.id))
+    expect(visible.map((c) => c.id)).toEqual(['only'])
+  })
+
+  it('nested pair: only the OUTER renders (= the inner one is hidden)', () => {
+    // The pre-REQ-116 dead-end: the inner sat on top of the outer in DOM,
+    // grey + disabled.  Now the inner is filtered out before render →
+    // the outer's clickable marker is the only thing on screen.
+    const cuts: Cut[] = sanitizeCuts([
+      cut(10, 30, 'outer'),
+      cut(15, 20, 'inner'),
+    ])
+    const visible = cuts.filter((c) => removableCutIds(cuts).has(c.id))
+    expect(visible.map((c) => c.id)).toEqual(['outer'])
+  })
+
+  it('staged unbind: removing the outer makes the inner appear next render', () => {
+    // Click → handleRemoveCut removes 'outer' → cuts is now [inner].
+    // 'inner' has no other cut containing it → removable → renders.
+    const before: Cut[] = sanitizeCuts([
+      cut(10, 30, 'outer'),
+      cut(15, 20, 'inner'),
+    ])
+    const beforeVisible = before.filter((c) => removableCutIds(before).has(c.id))
+    expect(beforeVisible.map((c) => c.id)).toEqual(['outer'])
+
+    const after = before.filter((c) => c.id !== 'outer')
+    const afterVisible = after.filter((c) => removableCutIds(after).has(c.id))
+    expect(afterVisible.map((c) => c.id)).toEqual(['inner'])
+  })
+
+  it('depth-3 chain: only the outermost renders at each step', () => {
+    let cuts: Cut[] = sanitizeCuts([
+      cut(5, 40, 'L1'),
+      cut(10, 30, 'L2'),
+      cut(15, 25, 'L3'),
+    ])
+    // Step 0: only L1 visible
+    let visible = cuts.filter((c) => removableCutIds(cuts).has(c.id))
+    expect(visible.map((c) => c.id)).toEqual(['L1'])
+    // Step 1: remove L1, L2 becomes visible
+    cuts = cuts.filter((c) => c.id !== 'L1')
+    visible = cuts.filter((c) => removableCutIds(cuts).has(c.id))
+    expect(visible.map((c) => c.id)).toEqual(['L2'])
+    // Step 2: remove L2, L3 becomes visible
+    cuts = cuts.filter((c) => c.id !== 'L2')
+    visible = cuts.filter((c) => removableCutIds(cuts).has(c.id))
+    expect(visible.map((c) => c.id)).toEqual(['L3'])
+  })
+
+  it('disjoint cuts: every one renders (= they are all independently outermost)', () => {
+    const cuts: Cut[] = sanitizeCuts([
+      cut(10, 20, 'a'),
+      cut(30, 40, 'b'),
+      cut(50, 60, 'c'),
+    ])
+    const visible = cuts.filter((c) => removableCutIds(cuts).has(c.id))
+    expect(visible.map((c) => c.id).sort()).toEqual(['a', 'b', 'c'])
+  })
+
+  it('cross-overlap (no containment): both render', () => {
+    // [10, 20] and [15, 25] share frames but neither contains the other,
+    // so both remain independently removable — both markers render.
+    const cuts: Cut[] = sanitizeCuts([cut(10, 20, 'a'), cut(15, 25, 'b')])
+    const visible = cuts.filter((c) => removableCutIds(cuts).has(c.id))
+    expect(visible.map((c) => c.id).sort()).toEqual(['a', 'b'])
+  })
+
+  it('mixed shape: only the outermost / lone / cross-overlap cuts render', () => {
+    const cuts: Cut[] = sanitizeCuts([
+      cut(5, 25, 'outer'),
+      cut(10, 15, 'inner'),        // hidden — contained by 'outer'
+      cut(30, 40, 'lone'),
+      cut(50, 60, 'left-over'),
+      cut(55, 65, 'right-over'),
+    ])
+    const visible = cuts.filter((c) => removableCutIds(cuts).has(c.id))
+    expect(new Set(visible.map((c) => c.id))).toEqual(
+      new Set(['outer', 'lone', 'left-over', 'right-over']),
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
 // REQ-105 Phase 4 — Phase 2 sort order is still the foundation that makes
 // staged-unbind work.  Keep these locks alive so a future change to
 // sanitizeCuts' ordering surfaces here too.
