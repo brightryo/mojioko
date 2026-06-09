@@ -234,6 +234,26 @@
       "snap": "Snap",
       "snapHelp": "Snap to neighbouring subtitle edges and ruler ticks"
     },
+    "help": {
+      "button": "How to use",
+      "title": "Timeline tips",
+      "trim": {
+        "title": "Trimming",
+        "body": "Set In and Out around the range you want to remove, then press Cut. The selected span is removed from the video and the rest of the timeline ripples forward to fill the gap. Press Clear to drop pending In / Out points before you commit."
+      },
+      "scissor": {
+        "title": "Undo a cut with the scissor marker",
+        "body": "Each cut leaves a scissor marker at its position. Click the marker to undo that cut. When cuts are nested, only the outermost is clickable — remove it first, the next layer becomes clickable on the following render."
+      },
+      "zoom": {
+        "title": "Zoom and snap",
+        "body": "Use Zoom out / Zoom in and the slider to scale the timeline. Toggle Snap to make subtitle edges and the playhead lock to nearby block ends and ruler ticks."
+      },
+      "singleRow": {
+        "title": "Keep subtitles in a single row",
+        "body": "When subtitles overlap in time, the timeline stacks them into a second row (and beyond). However, the preview only shows the first row, and the rendered video stacks the rest on top of it — so the preview and the final burn-in look different. Adjust your subtitle timings so they do not overlap whenever possible."
+      }
+    },
     "block": {
       "ariaLabel": "Subtitle T{{track}} #{{index}}",
       "resizeStart": "Drag to adjust start time",
