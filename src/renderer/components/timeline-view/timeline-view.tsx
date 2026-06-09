@@ -1,7 +1,7 @@
 import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X,
+  ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X, HelpCircle,
   ChevronFirst, ChevronLast, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -1395,6 +1395,70 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 flex-shrink-0 border-b border-zinc-800 bg-zinc-900 px-3 py-1.5">
         <div className="flex items-center gap-2">
+          {/* REQ-122 — "How to use" Popover, anchored before the zoom
+              cluster.  Documents trimming, the scissor marker undo,
+              zoom + snap, and the "keep subtitles in a single row"
+              recommendation — the last item is the practical reason
+              the popover was added (preview vs. burnin diverge when
+              clips stack into multiple rows). */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                title={t('timeline.help.button')}
+                aria-label={t('timeline.help.button')}
+                className={cn(
+                  'flex h-7 items-center gap-1 px-2 rounded-md text-zinc-400',
+                  'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150',
+                )}
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+                <span className="text-body-sm">{t('timeline.help.button')}</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="w-[360px] p-4 space-y-3 text-zinc-100"
+            >
+              <div className="text-body font-semibold text-zinc-50">
+                {t('timeline.help.title')}
+              </div>
+              <ul className="space-y-2.5 text-body-sm leading-relaxed">
+                <li>
+                  <div className="font-semibold text-zinc-200">
+                    {t('timeline.help.trim.title')}
+                  </div>
+                  <div className="text-zinc-400">
+                    {t('timeline.help.trim.body')}
+                  </div>
+                </li>
+                <li>
+                  <div className="font-semibold text-zinc-200">
+                    {t('timeline.help.scissor.title')}
+                  </div>
+                  <div className="text-zinc-400">
+                    {t('timeline.help.scissor.body')}
+                  </div>
+                </li>
+                <li>
+                  <div className="font-semibold text-zinc-200">
+                    {t('timeline.help.zoom.title')}
+                  </div>
+                  <div className="text-zinc-400">
+                    {t('timeline.help.zoom.body')}
+                  </div>
+                </li>
+                <li>
+                  <div className="font-semibold text-amber-300">
+                    {t('timeline.help.singleRow.title')}
+                  </div>
+                  <div className="text-zinc-300">
+                    {t('timeline.help.singleRow.body')}
+                  </div>
+                </li>
+              </ul>
+            </PopoverContent>
+          </Popover>
           <button
             type="button"
             onClick={handleZoomOut}
