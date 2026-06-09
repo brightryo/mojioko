@@ -69,6 +69,7 @@
     "resetRow": "Reset",
     "deleteRow": "Delete",
     "restoreRow": "Restore",
+    "trimDeletedHint": "Trim-deleted by a cut — use the scissor marker to undo the cut",
     "autoLineBreakRow": "Auto wrap",
     "autoLineBreakRowHelp": "Re-wrap line breaks",
     "sizeStepUp": "Size +{{step}}px (max {{max}})",
@@ -122,7 +123,8 @@
     "undo": "Undo: {{label}}",
     "redo": "Redo: {{label}}",
     "bulkApplied": "Applied to {{count}} rows ({{label}})",
-    "bulkAppliedUndo": "Undo"
+    "bulkAppliedUndo": "Undo",
+    "trimDeletedRestoreHint": "Removed by a trim — click its scissor marker to undo the cut and restore the subtitle"
   },
   "tooltip": {
     "undo": "Undo",

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Eraser, Trash2, Undo2, FileText, Clock, ChevronUp, ChevronDown, WrapText } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -180,6 +181,13 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
   }, [entry.id])
 
   const rowState = getRowState(entry, isOverflow)
+  // REQ-118 [2] — trim-deleted entries are frozen by spec §2.1.  Mirror
+  // the existing `entry.isDeleted` lockout (manual delete) so every
+  // editable affordance respects the same "no edits" rule for both
+  // deletion states.  The flag is read by every disabled-prop below and
+  // by the Restore / Delete button branch.
+  const isTrimDeleted = clipStatus === 'trimDeleted'
+  const isFrozen = entry.isDeleted || isTrimDeleted
 
   function applyPatch(patch: Partial<SubtitleEntry>) {
     updateEntry(entry.id, { ...patch, isEdited: true })
@@ -315,11 +323,18 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
   const rowBg = cn(
     'group grid items-start gap-0 border-b border-zinc-800/50 transition-colors duration-150',
     TABLE_GRID_COLS,
+    // REQ-118 [1] — the focused-row green tint used to win over the
+    // edited (amber) / overflow (red) state tint, hiding the row state
+    // the moment the user clicked it.  Split focus into "always-show"
+    // (= green left border) and "neutral fill" (= zinc-800/50 ONLY when
+    // no state tint is present), so amber / red rows keep showing
+    // their state colour while focused.
     isFocused
-      ? 'bg-zinc-800/50 border-l-2 border-l-green-500'
+      ? 'border-l-2 border-l-green-500'
       : isSelected
         ? 'border-l-2 border-l-[hsl(var(--row-selected-border))]'
         : 'border-l-2 border-l-transparent',
+    isFocused && rowState !== 'edited' && rowState !== 'overflow' && 'bg-zinc-800/50',
     !isFocused && !isSelected && 'hover:bg-zinc-800/20',
     // REQ-117 [1] — fade every cell EXCEPT the actions column so the
     // Restore / Reset buttons that the user CAN click never look like
@@ -329,8 +344,12 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     // cell carries `data-row-actions` and is matched out via the
     // arbitrary `:not()` selector.
     rowState === 'deleted' && '[&>*:not([data-row-actions])]:opacity-40',
-    !isSelected && rowState === 'edited' && !isFocused && 'bg-amber-400/[0.04]',
-    !isSelected && rowState === 'overflow' && !isFocused && 'bg-red-500/[0.04]'
+    // REQ-118 [1] — the previous `!isFocused` gate erased the amber /
+    // red tint as soon as the row was selected.  Drop it: state tints
+    // now persist through focus + selection (they layer under the
+    // green left-border and the selection chrome).
+    !isSelected && rowState === 'edited' && 'bg-amber-400/[0.04]',
+    !isSelected && rowState === 'overflow' && 'bg-red-500/[0.04]'
   )
 
   return (
@@ -377,7 +396,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           value={entry.startSec}
           cuts={cuts}
           onChange={handleStartChange}
-          disabled={entry.isDeleted}
+          disabled={isFrozen}
           warning={isStartOverlap || isStartExceedsDuration}
           title={isStartExceedsDuration ? t('warning.exceedsDuration') : undefined}
         />
@@ -386,7 +405,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           value={entry.endSec}
           cuts={cuts}
           onChange={handleEndChange}
-          disabled={entry.isDeleted}
+          disabled={isFrozen}
           warning={isEndExceedsDuration}
           title={isEndExceedsDuration ? t('warning.exceedsDuration') : undefined}
         />
@@ -395,7 +414,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onAdjustTime(entry.id) }}
-          disabled={entry.isDeleted}
+          disabled={isFrozen}
           className={cn(
             'mt-0.5 flex items-center justify-center gap-1 self-center',
             'h-5 px-1.5 rounded text-micro text-zinc-500',
@@ -424,7 +443,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); handleSizeBump(+SIZE_STEP_PX) }}
-              disabled={entry.isDeleted || entry.fontSizePx >= FONT_SIZE_MAX_PX}
+              disabled={isFrozen || entry.fontSizePx >= FONT_SIZE_MAX_PX}
               title={t('action.sizeStepUp', { step: SIZE_STEP_PX, max: FONT_SIZE_MAX_PX })}
               aria-label={t('action.sizeStepUp', { step: SIZE_STEP_PX, max: FONT_SIZE_MAX_PX })}
               className={cn(
@@ -443,7 +462,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
               key={entry.fontSizePx}
               onChange={handleSizeChange}
               onBlur={handleSizeBlur}
-              disabled={entry.isDeleted}
+              disabled={isFrozen}
               // REQ-034 #3: 64 px column has no room for an inline hint
               // line, so surface the clamp range as a hover tooltip.
               title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
@@ -460,7 +479,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); handleSizeBump(-SIZE_STEP_PX) }}
-              disabled={entry.isDeleted || entry.fontSizePx <= FONT_SIZE_MIN_PX}
+              disabled={isFrozen || entry.fontSizePx <= FONT_SIZE_MIN_PX}
               title={t('action.sizeStepDown', { step: SIZE_STEP_PX, min: FONT_SIZE_MIN_PX })}
               aria-label={t('action.sizeStepDown', { step: SIZE_STEP_PX, min: FONT_SIZE_MIN_PX })}
               className={cn(
@@ -488,7 +507,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
             onPairApply={(text, outline) =>
               withHistory(t('history.editColor'), { textColorHex: text, outlineColorHex: outline })
             }
-            disabled={entry.isDeleted}
+            disabled={isFrozen}
             swatchOnly
           />
         </div>
@@ -500,7 +519,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
             onPairApply={(text, outline) =>
               withHistory(t('history.editColor'), { textColorHex: text, outlineColorHex: outline })
             }
-            disabled={entry.isDeleted}
+            disabled={isFrozen}
             swatchOnly
           />
         </div>
@@ -515,13 +534,13 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           <OutlineThicknessSlider
             value={entry.outlineThicknessPx}
             onCommit={(v) => withHistory(t('history.editStroke'), { outlineThicknessPx: v })}
-            disabled={entry.isDeleted}
+            disabled={isFrozen}
             ariaLabel={t('styleCell.outlineWidth')}
           />
         </div>
         <div className="grid grid-cols-[80px_1fr] items-center gap-2">
           <span className="text-micro text-zinc-500 truncate">{t('styleCell.fade')}</span>
-          <Switch checked={entry.fadeEnabled} onCheckedChange={handleFadeChange} disabled={entry.isDeleted} className="scale-75 origin-left" />
+          <Switch checked={entry.fadeEnabled} onCheckedChange={handleFadeChange} disabled={isFrozen} className="scale-75 origin-left" />
         </div>
       </div>
       )}
@@ -543,7 +562,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         <RowFontSelector
           value={entry.fontId}
           onChange={handleFontChange}
-          disabled={entry.isDeleted}
+          disabled={isFrozen}
         />
       )}
       <div
@@ -552,7 +571,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           // Non-editing: always show a subtle inset border (no layout shift vs a real border)
           !editingText && 'shadow-[inset_0_0_0_1px_rgba(63,63,70,0.5)]',
           // Hover: brighten border + light bg
-          !editingText && !entry.isDeleted && 'hover:shadow-[inset_0_0_0_1px_rgba(113,113,122,0.5)] hover:bg-zinc-800/30',
+          !editingText && !isFrozen && 'hover:shadow-[inset_0_0_0_1px_rgba(113,113,122,0.5)] hover:bg-zinc-800/30',
           // Editing: green border + bg
           editingText && 'shadow-[inset_0_0_0_1px_rgba(34,197,94,0.5)] bg-zinc-800/20'
         )}
@@ -560,7 +579,10 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           e.stopPropagation()
           onFocus(entry.id)
           useUiStore.getState().setVideoSeekRequest(entry.startSec)
-          if (!entry.isDeleted) setEditingText(true)
+          // REQ-118 [2] — refuse to enter text-edit mode on trim-deleted
+          // entries (= spec §2.1 freeze); manual-delete behaviour
+          // unchanged.
+          if (!isFrozen) setEditingText(true)
         }}
       >
         {editingText ? (
@@ -570,7 +592,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
             onCommit={handleTextCommit}
             multiline
           />
-        ) : entry.isDeleted ? (
+        ) : isFrozen ? (
           <span className="text-body leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-zinc-500 cursor-text select-text">
             {entry.text.replace(/\\N/g, '\n')}
           </span>
@@ -656,17 +678,40 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           buttons read as clickable instead of greyed-out. */}
       <div data-row-actions className="flex flex-col gap-1 py-3 px-1">
         <div className="flex items-center justify-center gap-1">
+          {/* REQ-118 [2] — three branches now:
+              · trim-deleted: show the restore glyph in zinc (the user
+                CAN click — they get a hint toast — but the button is
+                NOT the green "ready to undo" affordance because clicking
+                does not restore.  Storage stays untouched, so the
+                trim/manual states never swap roles).
+              · manually-deleted: green restore glyph, click un-deletes.
+              · normal: red-tinted-on-hover delete glyph. */}
           <button
             type="button"
-            title={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
-            onClick={(e) => { e.stopPropagation(); handleDelete() }}
+            title={
+              isTrimDeleted
+                ? t('action.trimDeletedHint')
+                : entry.isDeleted
+                  ? t('action.restoreRow')
+                  : t('action.deleteRow')
+            }
+            onClick={(e) => {
+              e.stopPropagation()
+              if (isTrimDeleted) {
+                toast.info(t('toast.trimDeletedRestoreHint'))
+                return
+              }
+              handleDelete()
+            }}
             className={cn(
               'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
               'hover:bg-zinc-800 hover:text-zinc-200',
-              entry.isDeleted && 'text-green-500 hover:text-green-400'
+              entry.isDeleted && !isTrimDeleted && 'text-green-500 hover:text-green-400'
             )}
           >
-            {entry.isDeleted ? <Undo2 className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+            {isTrimDeleted || entry.isDeleted
+              ? <Undo2 className="h-3.5 w-3.5" />
+              : <Trash2 className="h-3.5 w-3.5" />}
           </button>
           <button
             type="button"
@@ -694,7 +739,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
             title={t('action.autoLineBreakRowHelp')}
             aria-label={t('action.autoLineBreakRowHelp')}
             onClick={(e) => { e.stopPropagation(); handleAutoLineBreakRow() }}
-            disabled={entry.isDeleted}
+            disabled={isFrozen}
             className={cn(
               'flex items-center justify-center gap-0.5',
               'h-5 px-1 rounded text-micro text-zinc-500',
