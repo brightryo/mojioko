@@ -365,6 +365,54 @@ export function effectiveEntryState(
 }
 
 /**
+ * REQ-105 Phase 4 — staged-unbind containment predicate.
+ *
+ * Returns true when `outer` strictly contains `inner`:
+ *   - they are not the same cut (`id` differs)
+ *   - `outer.startSec <= inner.startSec` AND `inner.endSec <= outer.endSec`
+ *
+ * "Same-range" cuts (identical `startSec` AND `endSec`, different `id`) are
+ * already deduped by `sanitizeCuts` (REQ-105 Phase 2), so in practice
+ * `containsCut` only fires when the geometry is a real proper containment.
+ * The `id` guard protects the predicate against accidentally calling it
+ * on a cut against itself in a single-pass scan.
+ *
+ * Pure function; no React / store dependencies.
+ */
+export function containsCut(outer: Cut, inner: Cut): boolean {
+  if (outer.id === inner.id) return false
+  return outer.startSec <= inner.startSec && inner.endSec <= outer.endSec
+}
+
+/**
+ * REQ-105 Phase 4 — staged-unbind "currently removable" set.
+ *
+ * Returns the set of cut `id`s the user is currently allowed to remove via
+ * the scissor marker UI.  A cut is removable iff no OTHER cut in the same
+ * list contains it.  Inner / nested cuts are locked until their outer
+ * container is removed first; once the outer goes, the next layer becomes
+ * the new "outermost" and gets unlocked automatically (the predicate is
+ * re-evaluated against the new cut list on every storage mutation).
+ *
+ * Time complexity: O(N²) over `cuts.length`.  Cuts list is typically < 100
+ * entries even for heavy editing sessions, so the cost is sub-millisecond
+ * in practice; the memo at the call site keeps it from running per render.
+ *
+ * Pure function — Phase 3 locked the algebra in `cuts.test.ts` against
+ * pre-computed scenarios; this is the same logic factored out of the test
+ * so the test and the production UI go through the same predicate
+ * physically.
+ */
+export function removableCutIds(cuts: CutList): Set<string> {
+  const out = new Set<string>()
+  for (const c of cuts) {
+    const isInside = cuts.some((other) => containsCut(other, c))
+    if (!isInside) out.add(c.id)
+  }
+  return out
+}
+
+/**
  * Build the "kept-segments" list — the complement of `cuts` in
  * [0, originalDurationSec].  Used by the ffmpeg filter_complex builder
  * (§5.2) to emit one `trim=start=A:end=B` branch per kept segment.
