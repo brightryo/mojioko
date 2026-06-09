@@ -1636,10 +1636,20 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         {!hasAnyVisible ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-zinc-500">
             <GanttChartSquare className="h-8 w-8 text-zinc-700" />
-            <p className="text-body font-medium">
+            {/* REQ-117 [2] — the timeline can never render deleted
+                entries by design (cuts collapsed their position, manual
+                deletes have no playable slot), so the generic "no entries
+                match the current filter" message reads as confusing when
+                the user has just deleted something and switched to the
+                Deleted tab.  Surface a tab-specific hint that points them
+                at the list view instead.  Other empty tabs keep the
+                generic copy. */}
+            <p className="text-body font-medium text-center max-w-[420px] px-4">
               {tableFilter === 'all'
                 ? t('timeline.emptyAll')
-                : t('timeline.emptyFiltered')}
+                : tableFilter === 'deleted'
+                  ? t('timeline.emptyDeleted')
+                  : t('timeline.emptyFiltered')}
             </p>
           </div>
         ) : (

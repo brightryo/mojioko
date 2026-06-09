@@ -220,6 +220,7 @@
   "timeline": {
     "emptyAll": "No subtitle entries.",
     "emptyFiltered": "No entries match the current filter.",
+    "emptyDeleted": "Deleted entries do not appear on the timeline. Switch to list view to review them.",
     "trackLabel": "{{index}}",
     "deletedTrackLabel": "Deleted",
     "toolbar": {
