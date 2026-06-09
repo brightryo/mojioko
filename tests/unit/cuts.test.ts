@@ -8,6 +8,8 @@ import {
   sanitizeCuts,
   buildKeptSegments,
   unionizeCuts,
+  containsCut,
+  removableCutIds,
   type Cut,
 } from '../../src/shared/cuts'
 import type { SubtitleEntry } from '../../src/shared/types'
@@ -1207,77 +1209,161 @@ describe('REQ-105 Phase 3 (f): degenerate / boundary shapes', () => {
 })
 
 // ---------------------------------------------------------------------------
-// REQ-105 Phase 3 — Phase 4 PREP (no implementation, design sketch only).
+// REQ-105 Phase 4 — staged-unbind containment predicates promoted to
+// production (containsCut + removableCutIds in src/shared/cuts.ts).
 //
-// These tests do NOT exercise production code (containsCut / removableCutIds
-// will be implemented in Phase 4).  They lock the EXPECTED algebra of the
-// containment predicate against the Phase 2 sort order so Phase 4 can be
-// implemented without re-discovering the rules.  Each `it()` block is a
-// pure scenario description.
+// The "Phase 4 prep" describe block from REQ-108 has been folded into the
+// production tests below — same scenarios, but now the assertions go
+// through `containsCut(...)` / `removableCutIds(...)` directly so the
+// UI in timeline-view.tsx and the unit test exercise THE SAME code path.
+// (Test/production parity — the lesson from RES-105 about pure-function
+// extraction.)
 // ---------------------------------------------------------------------------
 
-describe('REQ-105 Phase 3 (Phase 4 prep): containment algebra against Phase 2 sort order', () => {
-  it('Phase 2 sort puts the WIDER cut first when two cuts share startSec', () => {
-    // The `endSec DESC` tie-break is exactly what makes a one-pass
-    // containment scan possible: the "wider" candidate is always seen
-    // before the "narrower" one when they share startSec.
+describe('REQ-105 Phase 4: containsCut predicate', () => {
+  it('proper containment returns true (outer strictly contains inner)', () => {
+    const outer = cut(10, 30, 'outer')
+    const inner = cut(15, 20, 'inner')
+    expect(containsCut(outer, inner)).toBe(true)
+  })
+
+  it('non-overlapping siblings → false', () => {
+    expect(containsCut(cut(10, 20, 'a'), cut(30, 40, 'b'))).toBe(false)
+  })
+
+  it('partial overlap (no full containment) → false', () => {
+    // [10, 20] and [15, 25] — the "inner" extends past outer.endSec.
+    expect(containsCut(cut(10, 20, 'a'), cut(15, 25, 'b'))).toBe(false)
+  })
+
+  it('boundary equality counts as containment (outer.startSec === inner.startSec)', () => {
+    // Phase 2 tie-break: outer comes first when startSec is equal,
+    // because endSec DESC.  containsCut must accept the equality at
+    // either boundary — the staged-unbind UI needs this so e.g.
+    // adding cut [10,15] inside an existing [10,30] locks the inner.
+    expect(containsCut(cut(10, 30, 'wide'), cut(10, 20, 'narrow'))).toBe(true)
+    expect(containsCut(cut(10, 30, 'wide'), cut(20, 30, 'narrow'))).toBe(true)
+  })
+
+  it('a cut never contains itself (id guard)', () => {
+    const c = cut(10, 20, 'same')
+    expect(containsCut(c, c)).toBe(false)
+  })
+
+  it('two structurally-identical cuts with different ids: each contains the other', () => {
+    // sanitizeCuts dedupes identical (startSec, endSec) pairs, but the
+    // predicate must still be defined for any (outer, inner) the caller
+    // throws at it.  Identical geometries satisfy the inequalities both
+    // ways, so containsCut returns true in either direction.  The dedupe
+    // happens upstream so this case doesn't actually appear at the call
+    // site.
+    expect(containsCut(cut(10, 20, 'a'), cut(10, 20, 'b'))).toBe(true)
+    expect(containsCut(cut(10, 20, 'b'), cut(10, 20, 'a'))).toBe(true)
+  })
+})
+
+describe('REQ-105 Phase 4: removableCutIds', () => {
+  it('empty cuts list → empty set', () => {
+    expect(removableCutIds([])).toEqual(new Set())
+  })
+
+  it('single cut → that cut is removable', () => {
+    expect(removableCutIds([cut(10, 20, 'only')])).toEqual(new Set(['only']))
+  })
+
+  it('disjoint cuts → ALL removable (none contains another)', () => {
+    expect(
+      removableCutIds([cut(10, 20, 'a'), cut(30, 40, 'b'), cut(50, 60, 'c')]),
+    ).toEqual(new Set(['a', 'b', 'c']))
+  })
+
+  it('nested pair: only the outer is removable', () => {
+    expect(
+      removableCutIds([cut(10, 30, 'outer'), cut(15, 20, 'inner')]),
+    ).toEqual(new Set(['outer']))
+  })
+
+  it('two nested pairs: outers removable, inners locked', () => {
+    const cuts: Cut[] = sanitizeCuts([
+      cut(10, 30, 'outer-A'),
+      cut(15, 20, 'inner-of-A'),
+      cut(40, 50, 'outer-B'),
+      cut(45, 48, 'inner-of-B'),
+    ])
+    expect(removableCutIds(cuts)).toEqual(new Set(['outer-A', 'outer-B']))
+  })
+
+  it('depth-3 chain: only the OUTERMOST is removable', () => {
+    const cuts: Cut[] = sanitizeCuts([
+      cut(5, 40, 'L1-outer'),
+      cut(7, 30, 'L2-middle'),
+      cut(8, 25, 'L3-inner'),
+    ])
+    expect(removableCutIds(cuts)).toEqual(new Set(['L1-outer']))
+  })
+
+  it('after removing the outer, the next layer becomes removable (staged unbind)', () => {
+    // Phase 4 staged-unbind contract: the user clicks the outermost
+    // scissor marker → removeCut('L1-outer') → the next render's
+    // removableIds promotes 'L2-middle' to removable.  Simulates that
+    // single hop here.
+    const before: Cut[] = sanitizeCuts([
+      cut(5, 40, 'L1-outer'),
+      cut(7, 30, 'L2-middle'),
+      cut(8, 25, 'L3-inner'),
+    ])
+    expect(removableCutIds(before)).toEqual(new Set(['L1-outer']))
+    const after = before.filter((c) => c.id !== 'L1-outer')
+    expect(removableCutIds(after)).toEqual(new Set(['L2-middle']))
+    const afterAfter = after.filter((c) => c.id !== 'L2-middle')
+    expect(removableCutIds(afterAfter)).toEqual(new Set(['L3-inner']))
+  })
+
+  it('touching cuts: NEITHER contains the other → both removable', () => {
+    // The endSec === startSec boundary is NOT containment (an inner cut
+    // touching the outer edge from outside is just adjacent).
+    expect(
+      removableCutIds([cut(10, 15, 'a'), cut(15, 20, 'b')]),
+    ).toEqual(new Set(['a', 'b']))
+  })
+
+  it('partial overlap (cross-overlap, no containment) → BOTH removable', () => {
+    // [10, 20] and [15, 25] share frames but neither strictly contains
+    // the other.  Removing either is safe — they are independent in the
+    // staged-unbind sense.
+    expect(
+      removableCutIds([cut(10, 20, 'a'), cut(15, 25, 'b')]),
+    ).toEqual(new Set(['a', 'b']))
+  })
+
+  it('mixed: nested + disjoint + cross-overlap in the same list', () => {
+    const cuts: Cut[] = sanitizeCuts([
+      cut(5, 25, 'outer'),       // contains inner
+      cut(10, 15, 'inner'),      // locked
+      cut(30, 40, 'lone'),       // alone → removable
+      cut(50, 60, 'left-over'),  // cross-overlaps right-over
+      cut(55, 65, 'right-over'), // cross-overlaps left-over
+    ])
+    expect(removableCutIds(cuts)).toEqual(
+      new Set(['outer', 'lone', 'left-over', 'right-over']),
+    )
+  })
+})
+
+// ---------------------------------------------------------------------------
+// REQ-105 Phase 4 — Phase 2 sort order is still the foundation that makes
+// staged-unbind work.  Keep these locks alive so a future change to
+// sanitizeCuts' ordering surfaces here too.
+// ---------------------------------------------------------------------------
+
+describe('REQ-105 Phase 4: Phase 2 sort order remains intact', () => {
+  it('wider cut comes first when two cuts share startSec', () => {
     const out = sanitizeCuts([cut(10, 15, 'narrow'), cut(10, 30, 'wide')])
     expect(out.map((c) => c.id)).toEqual(['wide', 'narrow'])
   })
 
   it('nested cuts (different startSec) keep startSec-ascending order', () => {
-    // sanitizeCuts sorts by startSec ASC.  The outer (smaller startSec)
-    // is naturally first.
     const out = sanitizeCuts([cut(15, 20, 'inner'), cut(10, 30, 'outer')])
     expect(out.map((c) => c.id)).toEqual(['outer', 'inner'])
-  })
-
-  it('a candidate "outer" must satisfy outer.startSec <= inner.startSec AND inner.endSec <= outer.endSec', () => {
-    // Pure algebra — Phase 4 will implement this as `containsCut(outer,
-    // inner)`.  Locks the predicate so Phase 4 can copy it verbatim.
-    const outer = { startSec: 10, endSec: 30 }
-    const inner = { startSec: 15, endSec: 20 }
-    expect(outer.startSec <= inner.startSec).toBe(true)
-    expect(inner.endSec <= outer.endSec).toBe(true)
-
-    // Conversely: a non-containing case fails the predicate.
-    const sibling = { startSec: 40, endSec: 50 }
-    expect(outer.startSec <= sibling.startSec).toBe(true)
-    expect(sibling.endSec <= outer.endSec).toBe(false)   // disjoint
-  })
-
-  it('a cut with NO outer containing it is "removable"; otherwise locked', () => {
-    // Phase 4 will implement removableCutIds(cuts) as: for each cut c,
-    // c is removable IFF no other cut in the same list contains it.
-    // This test traces the expected output of that algorithm against a
-    // mixed input.
-    const cuts: Cut[] = sanitizeCuts([
-      cut(10, 30, 'outer-A'),
-      cut(15, 20, 'inner-of-A'),
-      cut(40, 50, 'disjoint-B'),
-      cut(45, 48, 'inner-of-B'),
-    ])
-    // Outer-A and disjoint-B have no container → removable.
-    // Inner-of-A is inside outer-A → locked.
-    // Inner-of-B is inside disjoint-B → locked.
-    const removable = new Set<string>()
-    for (const c of cuts) {
-      const isInside = cuts.some(
-        (o) =>
-          o.id !== c.id &&
-          o.startSec <= c.startSec &&
-          c.endSec <= o.endSec,
-      )
-      if (!isInside) removable.add(c.id)
-    }
-    expect(removable).toEqual(new Set(['outer-A', 'disjoint-B']))
-  })
-
-  it('two fully-identical cuts: after sanitize dedupes, only one survives — that one is removable', () => {
-    // The §4.5 dedupe rule combined with the containment algebra:
-    // identical cuts collapse to one, which has no other cut containing
-    // it, so it is removable.
-    const cuts: Cut[] = sanitizeCuts([cut(10, 20, 'first'), cut(10, 20, 'second')])
-    expect(cuts).toHaveLength(1)
   })
 })

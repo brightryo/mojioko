@@ -29,6 +29,7 @@ import {
   editedToOrig,
   origToEdited,
   effectiveEntryState,
+  removableCutIds,
   type CutList
 } from '../../../shared/cuts'
 import {
@@ -697,6 +698,14 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     }
     return map
   }, [layout.placements, cuts, pixelsPerSec])
+
+  // REQ-105 Phase 4 — staged-unbind: which scissor markers the user is
+  // allowed to remove right now.  A cut is removable iff no OTHER cut
+  // contains it (= nested inner cuts are locked until their outer is
+  // gone).  Recomputed whenever the cuts list changes; cuts.length is
+  // tiny in practice so the O(N²) inside `removableCutIds` is dwarfed by
+  // a single render.  See `src/shared/cuts.ts` for the predicate.
+  const removableIds = useMemo(() => removableCutIds(cuts), [cuts])
 
   // Inspector open-id — single-popover invariant.  Lives as local state
   // rather than in ui-store because no other component needs to know
@@ -1780,30 +1789,55 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                   single Edited-axis point (its frames are gone from the
                   concat output), so we render it as a thin vertical
                   scissors marker on top of the ruler + tracks.  Clicking
-                  removes the cut (with undo via useHistoryStore). */}
+                  removes the cut (with undo via useHistoryStore).
+                  REQ-105 Phase 4 — staged-unbind: when a cut is "inside"
+                  another (= contained by an outer cut), the user cannot
+                  remove it directly.  Its marker is rendered in a muted /
+                  disabled style and `disabled` is set so clicks do
+                  nothing.  Removing the outer one promotes the inner to
+                  "outermost" (next render the marker becomes active).
+                  Phase 5 will add the "why is this locked" toast; for
+                  now the disabled visual + no-op click is the contract. */}
               {cuts.map((c) => {
                 const xPx = origToEdited(c.startSec, cuts) * pixelsPerSec
+                const removable = removableIds.has(c.id)
                 return (
                   <button
                     key={c.id}
                     type="button"
-                    onClick={() => handleRemoveCut(c.id)}
+                    disabled={!removable}
+                    onClick={removable ? () => handleRemoveCut(c.id) : undefined}
                     title={t('timeline.trim.cutMarkerTitle', {
                       start: formatTimecode(c.startSec),
                       end: formatTimecode(c.endSec)
                     })}
-                    className="absolute top-0 z-20 flex flex-col items-center pointer-events-auto"
+                    className={cn(
+                      'absolute top-0 z-20 flex flex-col items-center',
+                      removable
+                        ? 'pointer-events-auto'
+                        : 'pointer-events-auto cursor-not-allowed'
+                    )}
                     style={{
                       left: `${xPx - 7}px`,
                       width: '14px',
                       height: `${RULER_HEIGHT_PX + tracksHeightPx}px`
                     }}
                   >
-                    <div className="flex h-4 w-4 items-center justify-center rounded-sm bg-zinc-800 text-amber-300 hover:bg-amber-500/30 hover:text-amber-100 transition-colors duration-150">
+                    <div
+                      className={cn(
+                        'flex h-4 w-4 items-center justify-center rounded-sm transition-colors duration-150',
+                        removable
+                          ? 'bg-zinc-800 text-amber-300 hover:bg-amber-500/30 hover:text-amber-100'
+                          : 'bg-zinc-800/40 text-zinc-500'
+                      )}
+                    >
                       <Scissors className="h-3 w-3" />
                     </div>
                     <div
-                      className="w-px bg-amber-400/60 pointer-events-none"
+                      className={cn(
+                        'w-px pointer-events-none',
+                        removable ? 'bg-amber-400/60' : 'bg-zinc-600/30'
+                      )}
                       style={{ height: `${RULER_HEIGHT_PX + tracksHeightPx - 16}px` }}
                     />
                   </button>
