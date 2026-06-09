@@ -204,6 +204,17 @@ export function applyCutsToEntry(
   let sClamped = e.startSec
   let enClamped = e.endSec
   const middleCuts: Array<{ startSec: number; endSec: number }> = []
+  // REQ-113 — track whether any cut actually overlapped the entry's
+  // [startSec, endSec] interval.  Branches (a) / (b) skip cuts that are
+  // disjoint from the entry; only (c)/(d)/(e)/(f) represent real
+  // entry-vs-cut interaction.  This flag gates the `visibleSec` floor
+  // check below: when no cut touched the entry, the entry's intrinsic
+  // duration is what it is — the floor must not retroactively classify
+  // it as trim-deleted just because Whisper produced a near-zero-length
+  // segment elsewhere on the timeline.  Without this gate, the act of
+  // adding ANY cut anywhere would silently flip every short entry to
+  // 'trimDeleted', which is the regression the owner observed.
+  let cutAffected = false
 
   for (const c of cuts) {
     if (c.endSec <= e.startSec) continue                                // (a)
@@ -211,13 +222,16 @@ export function applyCutsToEntry(
     if (c.startSec <= e.startSec && e.endSec <= c.endSec) return null   // (c)
     if (c.startSec <= e.startSec && e.startSec < c.endSec) {            // (d)
       sClamped = c.endSec
+      cutAffected = true
       continue
     }
     if (c.startSec < e.endSec && e.endSec <= c.endSec) {                // (e)
       enClamped = c.startSec
+      cutAffected = true
       break
     }
     middleCuts.push({ startSec: c.startSec, endSec: c.endSec })         // (f)
+    cutAffected = true
   }
 
   // REQ-105 Phase 3 — `middleCuts` may overlap each other once Phase 2's
@@ -253,7 +267,13 @@ export function applyCutsToEntry(
     (a, c) => a + (c.endSec - c.startSec), 0,
   )
   const visibleSec = (enClamped - sClamped) - removedMiddleSec
-  if (visibleSec < MIN_SUBTITLE_DURATION_SEC) return null
+  // REQ-113 — only enforce the visible-duration floor when a cut actually
+  // touched the entry.  An untouched entry returns whatever shape Whisper
+  // (or the user's manual edit) gave it — including near-zero-length
+  // duplicates that the timeline renders in a stacked second row.  Those
+  // are valid output rows; they must not silently flip to 'trimDeleted'
+  // the moment the user adds an unrelated cut.
+  if (cutAffected && visibleSec < MIN_SUBTITLE_DURATION_SEC) return null
 
   return { ...e, startSec: sClamped, endSec: enClamped, middleCuts }
 }

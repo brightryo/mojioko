@@ -174,13 +174,25 @@ describe('applyCutsToEntry — branch coverage', () => {
     expect(e).toEqual(before)
   })
 
-  it('visible duration below MIN_SUBTITLE_DURATION_SEC returns null', () => {
-    // Original entry shorter than the floor.
-    expect(applyCutsToEntry(makeEntry(5, 5.04), [])).toBeNull()
-    // Clamped to below the floor by a head + tail combo.
+  it('visible duration below MIN_SUBTITLE_DURATION_SEC returns null when a cut caused the shrink', () => {
+    // REQ-113 — the floor check now fires ONLY when a cut actually
+    // touched the entry.  Below: a head + tail combo clamps the visible
+    // window down to < 0.05s and the entry is correctly null'd.
     const e = makeEntry(5, 6)
     const cuts: Cut[] = [cut(4, 5.5), cut(5.52, 7)]
     expect(applyCutsToEntry(e, cuts)).toBeNull()
+  })
+
+  it('REQ-113: untouched short entry is preserved even when cuts is non-empty (irrelevant cuts elsewhere)', () => {
+    // Whisper occasionally emits near-zero-duration segments.  Adding a
+    // cut elsewhere on the timeline must NOT retroactively flip them to
+    // trim-deleted — the cut never touched them.  This was the owner-
+    // reported regression: cuts at one location silently killed
+    // duplicate-start entries at another.
+    expect(applyCutsToEntry(makeEntry(5, 5.04), [cut(50, 60)])).not.toBeNull()
+    // Zero-duration entry — even more aggressive: cuts is non-empty,
+    // entry is point-like, no cut touches it → preserved.
+    expect(applyCutsToEntry(makeEntry(10, 10), [cut(50, 60)])).not.toBeNull()
   })
 })
 
