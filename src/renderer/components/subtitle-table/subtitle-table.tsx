@@ -321,7 +321,14 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         ? 'border-l-2 border-l-[hsl(var(--row-selected-border))]'
         : 'border-l-2 border-l-transparent',
     !isFocused && !isSelected && 'hover:bg-zinc-800/20',
-    rowState === 'deleted' && 'opacity-40',
+    // REQ-117 [1] — fade every cell EXCEPT the actions column so the
+    // Restore / Reset buttons that the user CAN click never look like
+    // they are disabled.  Previously `opacity-40` was applied to the
+    // whole row, and CSS opacity cannot be re-set higher on a child,
+    // so the actually-clickable affordances looked muted.  The actions
+    // cell carries `data-row-actions` and is matched out via the
+    // arbitrary `:not()` selector.
+    rowState === 'deleted' && '[&>*:not([data-row-actions])]:opacity-40',
     !isSelected && rowState === 'edited' && !isFocused && 'bg-amber-400/[0.04]',
     !isSelected && rowState === 'overflow' && !isFocused && 'bg-red-500/[0.04]'
   )
@@ -643,8 +650,11 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           so the user does not have to hunt the mouse over each row to
           see / target them.  The auto-line-break button is still
           suppressed in audio mode because there's no burn-in stage
-          that would consume the rewrapped text. */}
-      <div className="flex flex-col gap-1 py-3 px-1">
+          that would consume the rewrapped text.
+          REQ-117 [1] — `data-row-actions` exempts this column from the
+          row-level deleted-state opacity fade so the Restore / Reset
+          buttons read as clickable instead of greyed-out. */}
+      <div data-row-actions className="flex flex-col gap-1 py-3 px-1">
         <div className="flex items-center justify-center gap-1">
           <button
             type="button"

@@ -220,6 +220,7 @@
   "timeline": {
     "emptyAll": "字幕がありません",
     "emptyFiltered": "現在のフィルターに該当する字幕がありません",
+    "emptyDeleted": "削除した字幕はタイムラインに表示されません。 一覧表示に切り替えると確認できます",
     "trackLabel": "{{index}}",
     "deletedTrackLabel": "削除済み",
     "toolbar": {
