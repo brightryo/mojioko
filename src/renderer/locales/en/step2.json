@@ -251,7 +251,7 @@
       },
       "singleRow": {
         "title": "Keep subtitles in a single row",
-        "body": "When subtitles overlap in time, the timeline stacks them into a second row (and beyond). However, the preview only shows the first row, and the rendered video stacks the rest on top of it — so the preview and the final burn-in look different. Adjust your subtitle timings so they do not overlap whenever possible."
+        "body": "When subtitles overlap in time, the timeline stacks them into a second row (and beyond). However, the preview only shows the first row, and the rendered video stacks the rest on top of it — so the preview and the final burn-in look different. Adjust your subtitle timings so they fit on a single timeline row without overlap whenever possible."
       }
     },
     "block": {
