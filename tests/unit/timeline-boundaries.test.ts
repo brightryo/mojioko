@@ -94,6 +94,41 @@ describe('buildBoundarySet', () => {
     const cuts: Cut[] = [cut(3, 7), cut(12, 14)]
     expect(buildBoundarySet(entries, cuts)).toEqual([3, 14])
   })
+
+  // ---------------------------------------------------------------------------
+  // REQ-105 Phase 3 — Phase 2 storage now holds overlapping cuts.  buildBoundarySet
+  // delegates to origToEdited, which routes through unionizeCuts, so the boundary
+  // set must remain correct for nested / touching / 3-way overlap inputs.
+  // ---------------------------------------------------------------------------
+
+  it('nested cuts: boundary set equals the union-equivalent (single outer cut)', () => {
+    // Entry [5, 30] with cuts [{8, 28}, {10, 26}] (inner inside outer).
+    // Boundaries on the Edited axis:
+    //   origToEdited(5)  = 5 - 0 = 5      (before any cut)
+    //   origToEdited(30) = 30 - 20 = 10   (after the OUTER cut span;
+    //                                     inner adds nothing)
+    const entries = [makeEntry('a', 5, 30)]
+    const nested: Cut[] = [cut(8, 28), cut(10, 26)]
+    const merged: Cut[] = [cut(8, 28)]
+    expect(buildBoundarySet(entries, nested)).toEqual(buildBoundarySet(entries, merged))
+    expect(buildBoundarySet(entries, nested)).toEqual([5, 10])
+  })
+
+  it('touching cuts: boundaries equal those of one continuous cut', () => {
+    const entries = [makeEntry('a', 5, 25)]
+    const touching: Cut[] = [cut(10, 15), cut(15, 20)]
+    const merged: Cut[] = [cut(10, 20)]
+    expect(buildBoundarySet(entries, touching)).toEqual(buildBoundarySet(entries, merged))
+  })
+
+  it('3-way overlap: boundaries reflect the union span', () => {
+    // Cuts [10,18] + [15,22] + [20,30] union to [10,30].  Entry [5, 40]:
+    //   origToEdited(5)  = 5
+    //   origToEdited(40) = 40 - 20 = 20
+    const entries = [makeEntry('a', 5, 40)]
+    const cuts: Cut[] = [cut(10, 18), cut(15, 22), cut(20, 30)]
+    expect(buildBoundarySet(entries, cuts)).toEqual([5, 20])
+  })
 })
 
 // ---------------------------------------------------------------------------
