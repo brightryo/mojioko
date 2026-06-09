@@ -370,15 +370,23 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     >
       {/* Selection checkbox — stopPropagation so toggling it does not also
           set focusedRowId / seek the video.  Shift+click handled by the
-          parent table (range vs. toggle). */}
+          parent table (range vs. toggle).
+          REQ-119 [1] — frozen rows (manual-delete OR trim-delete) cannot
+          enter the bulk-edit selection.  The disabled checkbox is the
+          first line of defence; the parent's "select all" and the
+          bulk-edit-bar apply paths apply the same `isFrozen` filter as
+          belt-and-braces (= even a programmatic selection cannot reach
+          a frozen row). */}
       <div
         className="flex items-center justify-center py-3"
         onClick={(e) => e.stopPropagation()}
       >
         <Checkbox
           checked={isSelected}
+          disabled={isFrozen}
           onClick={(e) => {
             e.stopPropagation()
+            if (isFrozen) return
             onCheckboxClick(entry.id, (e as React.MouseEvent).shiftKey)
           }}
           aria-label={`Select row ${displayIndex}`}
@@ -717,7 +725,11 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
             type="button"
             title={t('action.resetRow')}
             onClick={(e) => { e.stopPropagation(); handleReset() }}
-            disabled={!entry.isEdited && !entry.isDeleted}
+            // REQ-119 [2] — Reset is an EDIT, not a revive.  Frozen rows
+            // (= manual delete OR trim delete) only accept the
+            // Restore/Undo button next to it.  `!entry.isEdited` keeps
+            // the original "nothing to reset" gate for live rows.
+            disabled={isFrozen || !entry.isEdited}
             className={cn(
               'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
               'hover:bg-zinc-800 hover:text-zinc-200',
@@ -901,10 +913,25 @@ export function SubtitleTable({
     TABLE_GRID_COLS
   )
 
-  // Visible-row order is the authoritative input for both Shift+click range
-  // selection and the header "select all" checkbox.  Memoised so callbacks
-  // closing over it don't see a fresh array every render.
-  const visibleIds = useMemo(() => filtered.map((e) => e.id), [filtered])
+  // REQ-119 [1] — bulk-edit cannot reach a frozen row (= manually-deleted
+  // OR trim-deleted per REQ-118 spec §2.1).  Compute a "selectable"
+  // subset of the visible rows so the header "select all" toggle, the
+  // Shift+click range, and the per-row checkbox all agree on the same
+  // exclusion rule.  Storage selection (`selectedRowIds`) keeps its
+  // existing shape; we just narrow what the header adds.  The Shift+
+  // click range expansion runs against `selectableIds`, which means the
+  // user can never drag a selection across a frozen row.
+  const selectableIds = useMemo(
+    () =>
+      filtered
+        .filter(
+          (e) =>
+            !e.isDeleted &&
+            effectiveEntryState(e, cuts).status !== 'trimDeleted',
+        )
+        .map((e) => e.id),
+    [filtered, cuts],
+  )
 
   // Header checkbox state — three values:
   //   - true            : every visible row is selected
@@ -914,36 +941,47 @@ export function SubtitleTable({
   // that aren't currently visible; the header only reflects the *visible*
   // subset so clicking it produces a deterministic outcome for what the user
   // can see.
-  const visibleSelectedCount = useMemo(() => {
+  // REQ-119 [1] — header checkbox state mirrors the SELECTABLE subset
+  // (= frozen rows are excluded from "all rows selected" calculations).
+  // When the visible tab is entirely frozen (= the Deleted tab), the
+  // selectable set is empty and the header checkbox stays unchecked +
+  // disabled so the user has no way to bulk-select frozen rows.
+  const selectableSelectedCount = useMemo(() => {
     let n = 0
-    for (const id of visibleIds) if (selectedRowIds.has(id)) n++
+    for (const id of selectableIds) if (selectedRowIds.has(id)) n++
     return n
-  }, [visibleIds, selectedRowIds])
+  }, [selectableIds, selectedRowIds])
   const headerCheckState: boolean | 'indeterminate' =
-    visibleSelectedCount === 0
+    selectableSelectedCount === 0
       ? false
-      : visibleSelectedCount === visibleIds.length
+      : selectableSelectedCount === selectableIds.length
         ? true
         : 'indeterminate'
+  const headerCheckDisabled = selectableIds.length === 0
 
   function handleHeaderCheckboxClick() {
     // Toggle semantics:
-    //   - any visible row selected → clear visible rows from selection
-    //     (rows hidden by the filter are intentionally preserved)
-    //   - no visible row selected  → add all visible rows to selection
-    if (visibleSelectedCount > 0) {
+    //   - any SELECTABLE row selected → clear selectable rows from selection
+    //     (rows hidden by the filter, and frozen rows in the current
+    //      filter, are intentionally preserved)
+    //   - none selected → add all SELECTABLE rows (= frozen rows skipped)
+    if (selectableSelectedCount > 0) {
       const next = new Set(selectedRowIds)
-      for (const id of visibleIds) next.delete(id)
+      for (const id of selectableIds) next.delete(id)
       setRowSelection(next)
     } else {
       const next = new Set(selectedRowIds)
-      for (const id of visibleIds) next.add(id)
+      for (const id of selectableIds) next.add(id)
       setRowSelection(next)
     }
   }
 
   function handleRowCheckboxClick(id: string, shiftKey: boolean) {
-    if (shiftKey) selectRowRange(id, visibleIds)
+    // REQ-119 [1] — Shift+click range uses selectableIds so dragging
+    // across a frozen row never adds it to the selection.  Single-click
+    // toggling is already guarded by the per-row `disabled={isFrozen}`
+    // in SubtitleRow.
+    if (shiftKey) selectRowRange(id, selectableIds)
     else toggleRowSelected(id)
   }
 
@@ -956,7 +994,12 @@ export function SubtitleTable({
         >
           <Checkbox
             checked={headerCheckState}
-            onClick={(e) => { e.stopPropagation(); handleHeaderCheckboxClick() }}
+            disabled={headerCheckDisabled}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (headerCheckDisabled) return
+              handleHeaderCheckboxClick()
+            }}
             aria-label={t('table.selectAllAria')}
           />
         </div>
