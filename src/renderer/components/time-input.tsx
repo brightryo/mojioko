@@ -1,10 +1,28 @@
 import { useState, useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { formatTimecode, parseTimecode } from '@/lib/time'
+import { origToEdited, editedToOrig, type CutList } from '../../shared/cuts'
 
 interface TimeInputProps {
+  /** Original-axis time value (= what the SubtitleEntry stores). */
   value: number
-  onChange: (seconds: number) => void
+  /**
+   * Commit handler.  Receives the new ORIGINAL-axis time.  When `cuts`
+   * is provided, the user types on the Edited axis and the callback
+   * applies `editedToOrig` before invoking this; callers therefore
+   * always store Original-axis values (= data-non-destructive contract).
+   */
+  onChange: (originalSec: number) => void
+  /**
+   * REQ-115 — when provided, the displayed text and the parsed user
+   * input are interpreted on the EDITED axis.  Display: `origToEdited
+   * (value, cuts)`.  Commit: `editedToOrig(parsed, cuts)` → onChange.
+   * When omitted (default) the input shows / writes raw Original
+   * values, which keeps every pre-REQ-115 call site bit-identical
+   * (origToEdited / editedToOrig are the identity on an empty cuts
+   * list anyway, so passing `cuts={[]}` is equivalent to omitting it).
+   */
+  cuts?: CutList
   className?: string
   disabled?: boolean
   /** When true, renders the value in red to indicate a timing conflict. */
@@ -15,17 +33,22 @@ interface TimeInputProps {
   title?: string
 }
 
-export function TimeInput({ value, onChange, className, disabled, error, warning, title }: TimeInputProps) {
+export function TimeInput({ value, onChange, cuts, className, disabled, error, warning, title }: TimeInputProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // REQ-115 — `displayed` is the Edited-axis projection of `value` when
+  // `cuts` is provided, otherwise just `value` itself (= bit-identical
+  // legacy path).
+  const displayed = cuts !== undefined ? origToEdited(value, cuts) : value
 
   useEffect(() => {
     if (editing) inputRef.current?.select()
   }, [editing])
 
   function handleFocus() {
-    setDraft(formatTimecode(value))
+    setDraft(formatTimecode(displayed))
     setEditing(true)
   }
 
@@ -40,7 +63,14 @@ export function TimeInput({ value, onChange, className, disabled, error, warning
 
   function commit() {
     const parsed = parseTimecode(draft)
-    if (!isNaN(parsed) && parsed >= 0) onChange(parsed)
+    if (!isNaN(parsed) && parsed >= 0) {
+      // REQ-115 — when cuts is provided, `parsed` is on the Edited axis
+      // and must be inverse-mapped to Original before being persisted.
+      // `editedToOrig` is monotonic so user-visible validations (start
+      // ≤ end) carry over from Edited to Original automatically.
+      const original = cuts !== undefined ? editedToOrig(parsed, cuts) : parsed
+      onChange(original)
+    }
     setEditing(false)
   }
 
@@ -49,7 +79,7 @@ export function TimeInput({ value, onChange, className, disabled, error, warning
       ref={inputRef}
       type="text"
       disabled={disabled}
-      value={editing ? draft : formatTimecode(value)}
+      value={editing ? draft : formatTimecode(displayed)}
       onChange={(e) => setDraft(e.target.value)}
       onFocus={handleFocus}
       onBlur={handleBlur}

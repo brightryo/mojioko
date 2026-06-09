@@ -16,7 +16,7 @@ import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { cn } from '@/lib/utils'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
-import { formatTimecode } from '@/lib/time'
+import { formatEditedTimecode } from '@/lib/time'
 import {
   layoutEntries,
   chooseRulerStepSec,
@@ -261,6 +261,14 @@ interface BlockProps {
   onAdjustTime: (entryId: string) => void
   /** Start a drag (resize or move) — TimelineView attaches window listeners. */
   onStartDrag: (kind: DragKind, entry: SubtitleEntry, clientX: number) => void
+  /**
+   * REQ-115 — live cut list, used to render the block-internal start/end
+   * timecodes on the EDITED axis (= matches the ruler and burnin output).
+   * Memoised parent passes the same `cuts` reference until the cut list
+   * itself mutates, so playhead ticks do NOT invalidate Block via this
+   * prop (= 3.9 perf budget unchanged).
+   */
+  cuts: CutList
 }
 
 function BlockImpl({
@@ -278,7 +286,8 @@ function BlockImpl({
   onSelect,
   onInspectorOpenChange,
   onAdjustTime,
-  onStartDrag
+  onStartDrag,
+  cuts,
 }: BlockProps) {
   bumpRenderCount('Block')
   const { t } = useTranslation(['step2'])
@@ -408,8 +417,8 @@ function BlockImpl({
                 go all-or-nothing.  REQ-061. */}
             {widthPx >= TIME_ROW_MIN_BLOCK_WIDTH_PX && (
               <div className="flex w-full items-baseline justify-between text-caption font-mono tabular-nums text-zinc-300/80 leading-none">
-                <span>{formatTimecode(entry.startSec)}</span>
-                <span>{formatTimecode(entry.endSec)}</span>
+                <span>{formatEditedTimecode(entry.startSec, cuts)}</span>
+                <span>{formatEditedTimecode(entry.endSec, cuts)}</span>
               </div>
             )}
             {/* Row 2 — text (truncated, single line for now to keep the
@@ -1536,7 +1545,10 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               <span>{t('timeline.trim.setIn')}</span>
               {pendingCutInSec !== null && (
                 <span className="font-mono tabular-nums text-caption text-amber-300/80">
-                  {formatTimecode(pendingCutInSec)}
+                  {/* REQ-115 — pending In is captured as Original (videoCurrent
+                      TimeSec); show it on the Edited axis to match the ruler
+                      the user is scrubbing against. */}
+                  {formatEditedTimecode(pendingCutInSec, cuts)}
                 </span>
               )}
             </button>
@@ -1556,7 +1568,8 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               <span>{t('timeline.trim.setOut')}</span>
               {pendingCutOutSec !== null && (
                 <span className="font-mono tabular-nums text-caption text-amber-300/80">
-                  {formatTimecode(pendingCutOutSec)}
+                  {/* REQ-115 — Edited-axis display, see setIn comment above. */}
+                  {formatEditedTimecode(pendingCutOutSec, cuts)}
                 </span>
               )}
             </button>
@@ -1762,6 +1775,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                       onInspectorOpenChange={handleInspectorOpenChange}
                       onAdjustTime={onAdjustTime}
                       onStartDrag={handleStartDrag}
+                      cuts={cuts}
                     />
                   )
                 })}
@@ -1843,8 +1857,13 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                     title={
                       removable
                         ? t('timeline.trim.cutMarkerTitle', {
-                            start: formatTimecode(c.startSec),
-                            end: formatTimecode(c.endSec),
+                            // REQ-115 — show the cut's Edited-axis collapse
+                            // point.  origToEdited maps both endpoints of a
+                            // cut to the same Edited time (cut.startSec -
+                            // removed), so either input collapses to the
+                            // same string; we pass startSec for clarity.
+                            start: formatEditedTimecode(c.startSec, cuts),
+                            end: formatEditedTimecode(c.endSec, cuts),
                           })
                         : t('timeline.trim.cutMarkerInnerTitle')
                     }

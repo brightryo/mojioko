@@ -16,7 +16,7 @@ import {
   resetRow as runResetRow,
   toggleDeleteRow as runToggleDeleteRow
 } from '@/lib/entry-row-actions'
-import { formatTimecode } from '@/lib/time'
+import { formatEditedTimecode, editedDurationOfEntry } from '@/lib/time'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 import type { FontId } from '../../../shared/fonts'
 import type { SubtitleEntry } from '../../../shared/types'
@@ -184,7 +184,11 @@ export function TimelineBlockInspector({
     onAdjustTime(entry.id)
   }
 
-  const durationSec = Math.max(0, entry.endSec - entry.startSec)
+  // REQ-115 — duration shown to the user is the visible-on-Edited-axis
+  // duration so a middle-cut entry reads as the actual surviving length
+  // (= what the burnin video will show), not the pre-cut span.
+  const cuts = useProjectStore((s) => s.cuts)
+  const durationSec = editedDurationOfEntry(entry, cuts)
   const canReset = entry.isEdited || entry.isDeleted
 
   // Aggregate "any warning visible" so §2 (badge row) only renders when
@@ -427,9 +431,9 @@ export function TimelineBlockInspector({
           time it modifies. */}
       <div className="flex flex-col gap-1.5 border-t border-zinc-800 pt-2">
         <div className="flex items-baseline gap-1 text-body-sm font-mono tabular-nums text-zinc-400">
-          <span>{formatTimecode(entry.startSec)}</span>
+          <span>{formatEditedTimecode(entry.startSec, cuts)}</span>
           <span className="text-zinc-600">→</span>
-          <span>{formatTimecode(entry.endSec)}</span>
+          <span>{formatEditedTimecode(entry.endSec, cuts)}</span>
           <span className="ml-1 text-zinc-500">
             ({durationSec.toFixed(2)}s)
           </span>
