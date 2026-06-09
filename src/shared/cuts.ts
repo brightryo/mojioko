@@ -413,6 +413,47 @@ export function removableCutIds(cuts: CutList): Set<string> {
 }
 
 /**
+ * REQ-105 Phase 5 — list the entries that would STILL be trim-deleted
+ * after a specific cut is removed from `cutsBefore`.
+ *
+ * Used by the staged-unbind UI to surface "the outer cut you just
+ * scissor-removed could not bring N subtitle(s) back — another cut
+ * still consumes them" (= the spec §3 unified revival eligibility
+ * criterion, evaluated against `cutsBefore - removingCutId`).
+ *
+ * Algorithm: an entry contributes IFF
+ *   1. `entry.isDeleted === false` (manually-deleted entries belong to
+ *      the manual-delete tab's revival path, NEVER to scissor-marker
+ *      revival per spec §3)
+ *   2. `applyCutsToEntry(entry, cutsBefore) === null` (= it was already
+ *      trim-deleted by the cuts that included the one we're removing)
+ *   3. `applyCutsToEntry(entry, cutsAfter) === null` (= still
+ *      trim-deleted even after the cut is gone — some OTHER cut still
+ *      consumes it)
+ *
+ * Returns entries (not just count) so the caller can inspect them if
+ * needed; the Phase 5 UI uses `.length` for the toast.
+ *
+ * Pure function — no React / store dependency.
+ */
+export function entriesStillTrimDeletedAfter(
+  entries: readonly SubtitleEntry[],
+  cutsBefore: CutList,
+  removingCutId: string,
+): SubtitleEntry[] {
+  const cutsAfter = cutsBefore.filter((c) => c.id !== removingCutId)
+  const out: SubtitleEntry[] = []
+  for (const e of entries) {
+    if (e.isDeleted) continue   // spec §3 — manual delete is its own revival path
+    const wasTrimDeleted = applyCutsToEntry(e, cutsBefore) === null
+    if (!wasTrimDeleted) continue
+    const stillTrimDeleted = applyCutsToEntry(e, cutsAfter) === null
+    if (stillTrimDeleted) out.push(e)
+  }
+  return out
+}
+
+/**
  * Build the "kept-segments" list — the complement of `cuts` in
  * [0, originalDurationSec].  Used by the ffmpeg filter_complex builder
  * (§5.2) to emit one `trim=start=A:end=B` branch per kept segment.
