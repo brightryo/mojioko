@@ -1510,3 +1510,147 @@ describe('REQ-105 Phase 5: entriesStillTrimDeletedAfter', () => {
     expect(entriesStillTrimDeletedAfter([e], afterL1L2, 'L3')).toEqual([])
   })
 })
+
+// ---------------------------------------------------------------------------
+// REQ-112 — applyCutsToEntry double-counts head-clamp + inner-middle.
+//
+// The owner-observed regression: count says deleted=1, timeline view shows 0.
+// REQ-111's fixture used a single isolated middle cut so the bug never fired
+// there.  The actual reproduction needs a head-clamp cut PLUS a middle cut
+// whose interval sits inside the head-clamped range — both wind up in the
+// algorithm's bookkeeping and the unclamped middleCuts sum drives visibleSec
+// negative.  Fix: clip middleCuts to [sClamped, enClamped] before summing.
+// ---------------------------------------------------------------------------
+
+describe('REQ-112: head clamp + middle cut inside clamp region → edited (regression lock)', () => {
+  it('★ head clamp [5,18] + inner middle [12,15] on entry [10,20] → edited (pre-fix returned null → trimDeleted)', () => {
+    // Numerical trace (post-fix):
+    //   iter cut1 [5, 18]: branch (d) → sClamped = 18
+    //   iter cut2 [12, 15]: branch (f) → middleCuts.push({12, 15})
+    //   clippedMiddleCuts: max(12,18)=18, min(15,20)=15 → endSec(15) <= startSec(18) → DROP
+    //   middleUnion = [], removedMiddleSec = 0
+    //   visibleSec = (20 - 18) - 0 = 2 → above floor → returns clamped
+    //   status = 'edited'
+    // Pre-fix (without the clip step):
+    //   removedMiddleSec = 3 → visibleSec = -1 → < 0.05 → null → trimDeleted
+    const e = makeEntry(10, 20)
+    const cuts: Cut[] = sanitizeCuts([cut(5, 18, 'head'), cut(12, 15, 'middle-inside')])
+    const r = applyCutsToEntry(e, cuts)
+    expect(r).not.toBeNull()
+    expect(r!.startSec).toBe(18)
+    expect(r!.endSec).toBe(20)
+    expect(effectiveEntryState(e, cuts).status).toBe('edited')
+    expect(effectiveEntryState(e, cuts).effectivelyDeleted).toBe(false)
+  })
+
+  it('head clamp + inner middle: count flips from deleted=1 to deleted=0 after fix', () => {
+    // The owner's headline number.  41 entries with one head-clamp + inner-
+    // middle pair on a chosen entry.  Pre-fix: deletedCount=1 (the entry is
+    // null'd by overcounted middleCuts).  Post-fix: deletedCount=0 (the
+    // entry is edited; head clamp moved start, middle cut is inside the
+    // clamp and clipped to zero contribution).
+    //
+    // Use 8s-wide entries with 2s gaps so the head-clamp cut on entry 20
+    // doesn't bleed into entry 19's range — otherwise entry 19 would tail-
+    // clamp and add to editedCount.
+    const entries: SubtitleEntry[] = []
+    for (let i = 0; i < 41; i++) {
+      entries.push(makeEntry(i * 10, i * 10 + 8, `whisper-${i}`))
+    }
+    // Entry 20 is [200, 208].  Head-clamp [199, 206] + inner-middle
+    // [201, 204] both inside [200, 208], head-clamp starts in the 2s gap
+    // before entry 20.
+    const cuts: Cut[] = sanitizeCuts([
+      cut(199, 206, 'head'),
+      cut(201, 204, 'middle-inside'),
+    ])
+    const deletedCount = entries.filter(
+      (e) => effectiveEntryState(e, cuts).effectivelyDeleted,
+    ).length
+    const editedCount = entries.filter(
+      (e) => effectiveEntryState(e, cuts).wasEdited,
+    ).length
+    expect(deletedCount).toBe(0)
+    expect(editedCount).toBe(1)
+  })
+
+  it('tail clamp + inner middle [16,18] on entry [10,20]: still safe (case (e) breaks early)', () => {
+    // Mirror case — tail clamp from cut [16, 25] catches branch (e) and
+    // breaks, so the inner middle never reaches branch (f).  No double-count.
+    // Just locking the symmetric case.
+    const e = makeEntry(10, 20)
+    const cuts: Cut[] = sanitizeCuts([cut(16, 25, 'tail'), cut(17, 19, 'middle-inside-tail')])
+    const r = applyCutsToEntry(e, cuts)
+    expect(r).not.toBeNull()
+    expect(r!.startSec).toBe(10)
+    expect(r!.endSec).toBe(16)
+    expect(effectiveEntryState(e, cuts).status).toBe('edited')
+  })
+
+  it('head clamp + middle that STRADDLES sClamped → counts only the in-clamp portion', () => {
+    // Head clamp moves sClamped to 15.  Middle cut [13, 17] straddles the
+    // boundary: [13, 15] is already removed by head clamp, only [15, 17]
+    // adds new removal.  Clip → {15, 17}, removedMiddleSec = 2.
+    //   visibleSec = (20 - 15) - 2 = 3 → above floor → edited.
+    const e = makeEntry(10, 20)
+    const cuts: Cut[] = sanitizeCuts([cut(5, 15, 'head'), cut(13, 17, 'straddle')])
+    const r = applyCutsToEntry(e, cuts)
+    expect(r).not.toBeNull()
+    expect(r!.startSec).toBe(15)
+    expect(r!.endSec).toBe(20)
+    expect(effectiveEntryState(e, cuts).status).toBe('edited')
+  })
+
+  it('two head-clamp + chain of inner middles: union, not naive sum', () => {
+    // Stress case: head clamp + multiple middle cuts ALL inside head-clamp
+    // region.  Naive sum would have been (5-3) + 2 + 1 = 5 (wrong), pushing
+    // visibleSec negative.  Clipped + unioned: every middle inside head
+    // clamp → drops to 0 contribution.
+    const e = makeEntry(10, 20)
+    const cuts: Cut[] = sanitizeCuts([
+      cut(5, 17, 'head'),
+      cut(11, 13, 'middle-a'),
+      cut(14, 16, 'middle-b'),
+    ])
+    const r = applyCutsToEntry(e, cuts)
+    expect(r).not.toBeNull()
+    expect(r!.startSec).toBe(17)
+    expect(r!.endSec).toBe(20)
+    expect(effectiveEntryState(e, cuts).status).toBe('edited')
+  })
+
+  it('REQ-104 lock: pure middle cut still edited (no head clamp present)', () => {
+    // Defensive — the REQ-104 invariant (REQ-111 fixture) must still hold.
+    const e = makeEntry(5, 30)
+    expect(effectiveEntryState(e, [cut(12, 14)]).status).toBe('edited')
+  })
+
+  it('REQ-105 Phase 3 lock: nested middles without head clamp still edited', () => {
+    // The Phase 3 case must continue to work — clipping is the identity on
+    // [sClamped=5, enClamped=30] for both cuts, then union catches the
+    // nested overlap as before.
+    const e = makeEntry(5, 30)
+    const cuts: Cut[] = sanitizeCuts([cut(8, 28, 'outer'), cut(10, 26, 'inner')])
+    expect(effectiveEntryState(e, cuts).status).toBe('edited')
+  })
+
+  it('Phase 3 threshold case: huge middle cut consuming ≥99% still trim-deleted', () => {
+    // Below-floor case must keep firing — clipping is the identity when
+    // no head/tail clamp is involved, so visibleSec calculation matches
+    // pre-fix exactly.
+    const e = makeEntry(5, 6)
+    const cuts: Cut[] = sanitizeCuts([cut(5.005, 5.99), cut(5.04, 5.96)])
+    expect(applyCutsToEntry(e, cuts)).toBeNull()
+    expect(effectiveEntryState(e, cuts).status).toBe('trimDeleted')
+  })
+
+  it('TRUE full containment (no head clamp interaction): still trim-deleted', () => {
+    // Spec-correct case (c): cut fully covers entry → null regardless of
+    // clip.  Lock so the fix never accidentally promotes a real trimDeleted
+    // entry to edited.
+    const e = makeEntry(15, 18)
+    expect(effectiveEntryState(e, sanitizeCuts([cut(10, 25)])).status).toBe(
+      'trimDeleted',
+    )
+  })
+})

@@ -229,7 +229,26 @@ export function applyCutsToEntry(
   // the actual frames removed.  `middleCuts` itself stays as the raw
   // per-cut list so UI consumers (Phase 4 scissor badges) can still
   // address each cut individually.
-  const middleUnion = unionizeCuts(middleCuts)
+  //
+  // REQ-112 — a second double-count source: branch (f) decides "middle"
+  // against the IMMUTABLE `e.startSec` / `e.endSec`, not against the
+  // CLAMPED `sClamped` / `enClamped`.  When a head-clamp cut (branch d)
+  // moves sClamped forward AND another cut later falls in the head-clamp
+  // region (because it's still strictly inside [e.startSec, e.endSec]),
+  // it lands in middleCuts.  Its frames were already removed by the
+  // head-clamp cut, so summing them double-subtracts and visibleSec
+  // can go negative — the user's observed regression.  Clip each middle
+  // cut to the surviving `[sClamped, enClamped]` interval BEFORE the
+  // union so the floor check counts only frames inside the visible
+  // window.  The raw `middleCuts` array is still returned unchanged so
+  // the Phase 4 scissor-badge UI sees every cut the user made.
+  const clippedMiddleCuts = middleCuts
+    .map((c) => ({
+      startSec: Math.max(c.startSec, sClamped),
+      endSec: Math.min(c.endSec, enClamped),
+    }))
+    .filter((c) => c.endSec > c.startSec)
+  const middleUnion = unionizeCuts(clippedMiddleCuts)
   const removedMiddleSec = middleUnion.reduce(
     (a, c) => a + (c.endSec - c.startSec), 0,
   )

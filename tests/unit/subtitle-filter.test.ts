@@ -325,3 +325,78 @@ describe('REQ-111: subtitle-filter.ts and effectiveEntryState classify every ent
     expect(filteredEdited).toEqual(predicateEdited)
   })
 })
+
+// ---------------------------------------------------------------------------
+// REQ-112 — the owner's actual reproduction.  REQ-111 missed it because the
+// fixture used a single isolated middle cut; the real shape needs a
+// head-clamp cut + a middle cut nested INSIDE the head-clamp range so
+// applyCutsToEntry over-subtracts the inner middle.  Mirror the production
+// count path AND the timeline-view extra filter so the "削除 1 / タイムライン
+// 表示 0" mismatch the owner saw is reproducible here.
+// ---------------------------------------------------------------------------
+
+describe('REQ-112: owner reproduction — head clamp + inner middle (REAL count vs display divergence)', () => {
+  // Entries with 1s gaps so the head-clamp cut on entry 20 cannot leak
+  // into entry 19 (= isolates the bug surface to entry 20 exactly).
+  // Each entry is 8s wide; gap is 2s.  Entry i = [i*10, i*10 + 8].
+  const entries: SubtitleEntry[] = []
+  for (let i = 0; i < 41; i++) {
+    entries.push(makeEntry(i * 10, i * 10 + 8, `whisper-${i}`))
+  }
+  // Entry 20 = [200, 208].  Head clamp [199, 206] starts in the 2s gap
+  // before entry 20 (entry 19 ends at 198), so cut affects entry 20 ONLY.
+  // Inner middle [201, 204] sits inside the head-clamped [206..208]
+  // window's complement — the very shape that triggered the bug.
+  const cuts: Cut[] = sanitizeCuts([
+    cut(199, 206, 'pre-existing-head'),
+    cut(201, 204, 'small-middle'),
+  ])
+
+  it('★ post-REQ-112: filterEntries("deleted") is EMPTY (no entry classified as trimDeleted)', () => {
+    // Pre-REQ-112 this would have returned [entries[20]].  Post-fix the
+    // clip step keeps middle [201, 204] out of the sClamped=206..208
+    // window, so visibleSec stays positive and entry 20 is 'edited'.
+    expect(filterEntries(entries, 'deleted', EMPTY_WARNINGS_MAP, cuts)).toEqual([])
+  })
+
+  it('★ post-REQ-112: deletedCount = 0', () => {
+    const deletedCount = entries.filter(
+      (e) => effectiveEntryState(e, cuts).effectivelyDeleted,
+    ).length
+    expect(deletedCount).toBe(0)
+  })
+
+  it('★ post-REQ-112: editedCount = 1 (entry 20 alone, no leak into entry 19)', () => {
+    const editedCount = entries.filter(
+      (e) => effectiveEntryState(e, cuts).wasEdited,
+    ).length
+    expect(editedCount).toBe(1)
+    expect(effectiveEntryState(entries[20], cuts).status).toBe('edited')
+    // Entry 19 = [190, 198], cut [199, 206] doesn't touch it.
+    expect(effectiveEntryState(entries[19], cuts).status).toBe('normal')
+  })
+
+  it('★ count and timeline-display agree (no "1 counted / 0 displayed" mismatch)', () => {
+    // The timeline view (RES-103) applies an additional
+    // `.filter(!effectivelyDeleted)` on top of `filterEntries('deleted')`.
+    // Pre-fix: `filterEntries('deleted')` returned the entry, the timeline
+    // strip dropped it → count=1, display=0.  Post-fix: filter returns
+    // empty → count=0, display=0.  They agree.
+    const filterResult = filterEntries(entries, 'deleted', EMPTY_WARNINGS_MAP, cuts)
+    const timelineDisplay = filterResult.filter(
+      (e) => !effectiveEntryState(e, cuts).effectivelyDeleted,
+    )
+    expect(filterResult.length).toBe(timelineDisplay.length)
+    expect(filterResult.length).toBe(0)
+  })
+
+  it('count conservation still holds (ready + deleted === all)', () => {
+    const readyCount = entries.filter(
+      (e) => !effectiveEntryState(e, cuts).effectivelyDeleted,
+    ).length
+    const deletedCount = entries.filter(
+      (e) => effectiveEntryState(e, cuts).effectivelyDeleted,
+    ).length
+    expect(readyCount + deletedCount).toBe(entries.length)
+  })
+})
