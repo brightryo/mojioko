@@ -30,6 +30,7 @@ import {
   origToEdited,
   effectiveEntryState,
   removableCutIds,
+  entriesStillTrimDeletedAfter,
   type CutList
 } from '../../../shared/cuts'
 import {
@@ -1215,9 +1216,21 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       redo: () => useProjectStore.getState().setCuts(snapshotAfter)
     })
     clearPendingCut()
+    // REQ-105 Phase 5 — tell the user the cut is reversible via the
+    // scissor marker that just appeared.  `toast.success` matches the
+    // tone of other "successful destructive-looking action" toasts in
+    // the app (row delete, bulk apply).
+    toast.success(t('timeline.trim.toast.cutApplied'))
   }, [pendingCutInSec, pendingCutOutSec, addCut, clearPendingCut, t])
   const handleRemoveCut = useCallback((id: string) => {
     const snapshotBefore = useProjectStore.getState().cuts
+    // REQ-105 Phase 5 — compute revival eligibility BEFORE the mutation
+    // so we can compare "still trim-deleted with the cut gone" against
+    // "was trim-deleted with the cut present" and surface the count of
+    // subtitles a sibling / inner cut still consumes.  Pure function
+    // (`entriesStillTrimDeletedAfter`), no store writes.
+    const entries = useProjectStore.getState().entries
+    const stillTrim = entriesStillTrimDeletedAfter(entries, snapshotBefore, id)
     removeCut(id)
     const snapshotAfter = useProjectStore.getState().cuts
     useHistoryStore.getState().push({
@@ -1225,6 +1238,11 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       undo: () => useProjectStore.getState().setCuts(snapshotBefore),
       redo: () => useProjectStore.getState().setCuts(snapshotAfter)
     })
+    if (stillTrim.length > 0) {
+      toast.info(
+        t('timeline.trim.toast.reviveFailedStillCut', { count: stillTrim.length }),
+      )
+    }
   }, [removeCut, t])
 
   // Keep the playhead in view while playing.  Phase 1: simple "if playhead
@@ -1805,17 +1823,34 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                   <button
                     key={c.id}
                     type="button"
-                    disabled={!removable}
-                    onClick={removable ? () => handleRemoveCut(c.id) : undefined}
-                    title={t('timeline.trim.cutMarkerTitle', {
-                      start: formatTimecode(c.startSec),
-                      end: formatTimecode(c.endSec)
-                    })}
-                    className={cn(
-                      'absolute top-0 z-20 flex flex-col items-center',
+                    // REQ-105 Phase 5 — `aria-disabled` instead of the
+                    // HTML `disabled` attribute so the click event still
+                    // reaches our handler and we can surface a "remove
+                    // the outer one first" toast.  The visual disabled
+                    // state lives in the className branch below; the
+                    // onClick branch makes sure the inner click is a
+                    // toast-only no-op for the cuts list (= storage is
+                    // untouched, the Phase 4 contract is preserved).
+                    aria-disabled={!removable}
+                    onClick={
                       removable
-                        ? 'pointer-events-auto'
-                        : 'pointer-events-auto cursor-not-allowed'
+                        ? () => handleRemoveCut(c.id)
+                        : () =>
+                            toast.error(
+                              t('timeline.trim.toast.cannotRemoveInnerCut'),
+                            )
+                    }
+                    title={
+                      removable
+                        ? t('timeline.trim.cutMarkerTitle', {
+                            start: formatTimecode(c.startSec),
+                            end: formatTimecode(c.endSec),
+                          })
+                        : t('timeline.trim.cutMarkerInnerTitle')
+                    }
+                    className={cn(
+                      'absolute top-0 z-20 flex flex-col items-center pointer-events-auto',
+                      !removable && 'cursor-not-allowed'
                     )}
                     style={{
                       left: `${xPx - 7}px`,

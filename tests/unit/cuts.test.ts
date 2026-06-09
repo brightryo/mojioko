@@ -10,6 +10,7 @@ import {
   unionizeCuts,
   containsCut,
   removableCutIds,
+  entriesStillTrimDeletedAfter,
   type Cut,
 } from '../../src/shared/cuts'
 import type { SubtitleEntry } from '../../src/shared/types'
@@ -1365,5 +1366,147 @@ describe('REQ-105 Phase 4: Phase 2 sort order remains intact', () => {
   it('nested cuts (different startSec) keep startSec-ascending order', () => {
     const out = sanitizeCuts([cut(15, 20, 'inner'), cut(10, 30, 'outer')])
     expect(out.map((c) => c.id)).toEqual(['outer', 'inner'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// REQ-105 Phase 5 — `entriesStillTrimDeletedAfter` revival-eligibility
+// predicate.  Drives the Phase 5 "revive failed" toast when the user
+// scissor-removes an outer cut and one or more subtitles remain consumed
+// by a sibling / inner cut.
+// ---------------------------------------------------------------------------
+
+describe('REQ-105 Phase 5: entriesStillTrimDeletedAfter', () => {
+  it('cut fully contains entry, only one cut → revival succeeds (returns empty)', () => {
+    // Single cut [10, 30] consuming entry [15, 20].  Removing this cut
+    // leaves the entry free again → not in the "still trim-deleted" list.
+    const entries: SubtitleEntry[] = [makeEntry(15, 20, 'consumed')]
+    const cuts: Cut[] = [cut(10, 30, 'only')]
+    expect(entriesStillTrimDeletedAfter(entries, cuts, 'only')).toEqual([])
+  })
+
+  it('nested cuts: removing the outer leaves the inner consuming the entry → returns it', () => {
+    // The user's "I removed the outer trim but my subtitle is still gone"
+    // scenario.  Entry [16, 18] is consumed by outer [10, 30] AND inner
+    // [15, 20].  After removing 'outer', the inner still contains the
+    // entry → it remains trimDeleted → the toast counts it.
+    const entries: SubtitleEntry[] = [makeEntry(16, 18, 'inside-both')]
+    const cuts: Cut[] = sanitizeCuts([
+      cut(10, 30, 'outer'),
+      cut(15, 20, 'inner'),
+    ])
+    const stuck = entriesStillTrimDeletedAfter(entries, cuts, 'outer')
+    expect(stuck.map((e) => e.id)).toEqual(['inside-both'])
+  })
+
+  it('nested cuts: removing the INNER does NOT count entries the outer still consumes', () => {
+    // Phase 4's staged-unbind locks the inner so this code path is never
+    // hit from the production UI, but the predicate itself should still
+    // be defined: the entry was already inside the outer's range, so it
+    // remains trim-deleted after removing only the inner.  The "still
+    // trim-deleted" toast counts it → the user is told the inner cut's
+    // removal did nothing for the entry.
+    const entries: SubtitleEntry[] = [makeEntry(16, 18, 'inside-both')]
+    const cuts: Cut[] = sanitizeCuts([
+      cut(10, 30, 'outer'),
+      cut(15, 20, 'inner'),
+    ])
+    const stuck = entriesStillTrimDeletedAfter(entries, cuts, 'inner')
+    expect(stuck.map((e) => e.id)).toEqual(['inside-both'])
+  })
+
+  it('entry that was NOT trim-deleted in the first place is never counted', () => {
+    // Entry [50, 55] is outside every cut, so it was never trim-deleted.
+    // Removing any cut leaves it unaffected — the predicate must NOT
+    // include it (only entries the user could have expected to revive
+    // appear in the toast).
+    const entries: SubtitleEntry[] = [makeEntry(50, 55, 'outside')]
+    const cuts: Cut[] = [cut(10, 30, 'far')]
+    expect(entriesStillTrimDeletedAfter(entries, cuts, 'far')).toEqual([])
+  })
+
+  it('manually-deleted entries are NEVER candidates (spec §3 boundary)', () => {
+    // Manual delete owns its own revival path (the deleted-tab UI).
+    // The scissor-marker revival path silently skips them so the toast
+    // counts don't claim "we could not bring back" entries the user
+    // never expected to see.
+    const e: SubtitleEntry = {
+      ...makeEntry(16, 18, 'manually-deleted'),
+      isDeleted: true,
+    }
+    const cuts: Cut[] = sanitizeCuts([
+      cut(10, 30, 'outer'),
+      cut(15, 20, 'inner'),
+    ])
+    expect(entriesStillTrimDeletedAfter([e], cuts, 'outer')).toEqual([])
+    expect(entriesStillTrimDeletedAfter([e], cuts, 'inner')).toEqual([])
+  })
+
+  it('mixed entries: only the ones genuinely stuck appear in the result', () => {
+    // outer [10, 30] + inner [15, 20].  Three entries:
+    //   - 'free-after-outer': inside outer only (not inner) → revives
+    //   - 'stuck-in-inner':   inside BOTH → still consumed by inner
+    //   - 'unrelated':        outside everything → never trim-deleted
+    const entries: SubtitleEntry[] = [
+      makeEntry(11, 14, 'free-after-outer'),
+      makeEntry(16, 18, 'stuck-in-inner'),
+      makeEntry(50, 55, 'unrelated'),
+    ]
+    const cuts: Cut[] = sanitizeCuts([
+      cut(10, 30, 'outer'),
+      cut(15, 20, 'inner'),
+    ])
+    const stuck = entriesStillTrimDeletedAfter(entries, cuts, 'outer')
+    expect(stuck.map((e) => e.id)).toEqual(['stuck-in-inner'])
+  })
+
+  it('cross-overlap cuts: removing one leaves the other consuming what it shares', () => {
+    // [10, 25] and [20, 35] cross-overlap.  Entry [22, 24] is inside the
+    // shared span [20, 25] → consumed by both.  Removing either cut
+    // leaves the other consuming the entry → still trim-deleted.
+    const entries: SubtitleEntry[] = [makeEntry(22, 24, 'in-shared-span')]
+    const cuts: Cut[] = sanitizeCuts([
+      cut(10, 25, 'left'),
+      cut(20, 35, 'right'),
+    ])
+    expect(
+      entriesStillTrimDeletedAfter(entries, cuts, 'left').map((e) => e.id),
+    ).toEqual(['in-shared-span'])
+    expect(
+      entriesStillTrimDeletedAfter(entries, cuts, 'right').map((e) => e.id),
+    ).toEqual(['in-shared-span'])
+  })
+
+  it('removing a cut whose id does not exist in cuts → empty (no-op)', () => {
+    // Defensive: the production UI never asks about a cut that isn't in
+    // the list, but the predicate should still tolerate it.  All entries
+    // would have been trim-deleted "before" AND "after" with the same
+    // cuts list, but the filter sees `cutsAfter === cutsBefore` and
+    // returns whatever was already trim-deleted.
+    const entries: SubtitleEntry[] = [makeEntry(50, 55, 'outside')]
+    const cuts: Cut[] = [cut(10, 30, 'real')]
+    expect(entriesStillTrimDeletedAfter(entries, cuts, 'ghost-id')).toEqual([])
+  })
+
+  it('depth-3 chain: removing L1 leaves L2+L3 still consuming → toast fires', () => {
+    // Anchors the staged-unbind toast loop: user clicks the outermost
+    // marker → toast says "N still stuck" → user clicks the next one,
+    // etc.  Eventually L3 is removed and the entry revives.
+    const e = makeEntry(15, 20, 'deep')
+    const cuts: Cut[] = sanitizeCuts([
+      cut(5, 40, 'L1'),
+      cut(10, 30, 'L2'),
+      cut(12, 25, 'L3'),
+    ])
+    // Removing L1: L2 + L3 still contain the entry.
+    expect(entriesStillTrimDeletedAfter([e], cuts, 'L1').map((x) => x.id))
+      .toEqual(['deep'])
+    // After L1 gone, removing L2: L3 still contains.
+    const afterL1 = cuts.filter((c) => c.id !== 'L1')
+    expect(entriesStillTrimDeletedAfter([e], afterL1, 'L2').map((x) => x.id))
+      .toEqual(['deep'])
+    // After L1 + L2 gone, removing L3: entry revives — empty.
+    const afterL1L2 = afterL1.filter((c) => c.id !== 'L2')
+    expect(entriesStillTrimDeletedAfter([e], afterL1L2, 'L3')).toEqual([])
   })
 })
