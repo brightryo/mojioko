@@ -1045,3 +1045,239 @@ describe('REQ-105 Phase 2: buildKeptSegments + ffmpeg-trim-filter consume overla
     ])
   })
 })
+
+// ---------------------------------------------------------------------------
+// REQ-105 Phase 3 — supplemental regression guards.  Each describe block
+// addresses a verification slice from REQ-108 §a-f; together they fill the
+// gaps left by Phase 1 / Phase 2 testing.
+//
+// Two of these blocks expose a Phase-2-reachable bug found during this
+// verification pass: when nested or overlapping middle cuts fall strictly
+// inside an entry, `applyCutsToEntry` used to double-count their removed
+// frames in the visible-duration floor check.  The fix routes the
+// `middleCuts` sum through `unionizeCuts` (`cuts.ts:223-234`).
+// ---------------------------------------------------------------------------
+
+describe('REQ-105 Phase 3 (a): state classification with nested + middle-cut mix', () => {
+  it('manual delete WINS over a nested cut that would also kill the entry', () => {
+    // Phase 2 nested storage shape: outer + inner both consume the entry,
+    // AND the user manually deleted it.  Precedence order from REQ-103
+    // boundary contract: manuallyDeleted > trimDeleted.  Tests both that
+    // sanitizeCuts keeps both cuts in storage AND that the precedence
+    // is unaffected.
+    const cuts: Cut[] = sanitizeCuts([cut(10, 30, 'outer'), cut(15, 20, 'inner')])
+    const e: SubtitleEntry = { ...makeEntry(16, 18), isDeleted: true }
+    const state = effectiveEntryState(e, cuts)
+    expect(state.status).toBe('manuallyDeleted')
+    expect(state.effectivelyDeleted).toBe(true)
+  })
+
+  it('entry with TWO nested middle cuts → status edited (REQ-105 Phase 3 bug fix lock)', () => {
+    // ★ Phase 3 bug discovered: Entry [5, 30] with cuts [8, 28] and
+    // [10, 26] (the second nested inside the first).  Both fall through
+    // to branch (f) of applyCutsToEntry and accumulate in `middleCuts`.
+    // The pre-fix `removedMiddleSec` summed them directly:
+    //   removed = (28-8) + (26-10) = 20 + 16 = 36
+    //   visibleSec = (30-5) - 36 = -11 → null → trimDeleted (WRONG)
+    // The Phase 2 sanitize relaxation made this reachable.  The fix
+    // unions middleCuts before summing:
+    //   removed = union([{8,28},{10,26}]) = 20
+    //   visibleSec = 25 - 20 = 5 → returns clamped → edited (CORRECT)
+    const cuts: Cut[] = sanitizeCuts([cut(8, 28, 'outer'), cut(10, 26, 'inner')])
+    const e = makeEntry(5, 30)
+    const r = applyCutsToEntry(e, cuts)
+    expect(r).not.toBeNull()
+    expect(r!.startSec).toBe(5)
+    expect(r!.endSec).toBe(30)
+    // middleCuts itself still holds BOTH for the future scissor-badge
+    // UI — only the visibleSec floor check uses the union.
+    expect(r!.middleCuts).toHaveLength(2)
+    expect(effectiveEntryState(e, cuts).status).toBe('edited')
+  })
+
+  it('entry with 3-deep nested middle cuts → status edited', () => {
+    // Same bug class, depth-3 chain.  Real removed frames = 22 (outer);
+    // naive sum would have been 22 + 18 + 6 = 46 (way over the 25-second
+    // entry duration).
+    const cuts: Cut[] = sanitizeCuts([
+      cut(7, 29, 'l1'),
+      cut(10, 28, 'l2'),
+      cut(15, 21, 'l3'),
+    ])
+    const e = makeEntry(5, 30)
+    const r = applyCutsToEntry(e, cuts)
+    expect(r).not.toBeNull()
+    expect(r!.middleCuts).toHaveLength(3)
+    expect(effectiveEntryState(e, cuts).status).toBe('edited')
+  })
+
+  it('entry with disjoint middle cuts still computes visibleSec correctly (regression lock)', () => {
+    // Lock that the union-in-floor-check change is a no-op for disjoint
+    // middleCuts (the only shape that existed before Phase 2).
+    const cuts: Cut[] = sanitizeCuts([cut(8, 10, 'a'), cut(20, 22, 'b')])
+    const e = makeEntry(5, 30)
+    const r = applyCutsToEntry(e, cuts)
+    expect(r).not.toBeNull()
+    expect(r!.startSec).toBe(5)
+    expect(r!.endSec).toBe(30)
+    expect(r!.middleCuts).toEqual([
+      { startSec: 8, endSec: 10 },
+      { startSec: 20, endSec: 22 },
+    ])
+    // Real visibleSec = 25 - 2 - 2 = 21 (well above the floor).
+    expect(effectiveEntryState(e, cuts).status).toBe('edited')
+  })
+
+  it('entry with nested middles whose union still under-floors → null (trimDeleted)', () => {
+    // The fix MUST still fire when even the unionized middle-cut span
+    // exceeds the entry's duration.  Two cuts whose union spans almost
+    // the entire entry width.
+    const cuts: Cut[] = sanitizeCuts([cut(5.005, 5.99, 'a'), cut(5.04, 5.96, 'b')])
+    const e = makeEntry(5, 6)
+    expect(applyCutsToEntry(e, cuts)).toBeNull()
+    expect(effectiveEntryState(e, cuts).status).toBe('trimDeleted')
+  })
+})
+
+describe('REQ-105 Phase 3 (b): cross-cutting wasEdited filter with nested cuts', () => {
+  it('wasEdited fires for nested-middle-cut entries (REQ-104 contract preserved)', () => {
+    // REQ-104 extended `cutClamped` to fire when middleCuts.length > 0,
+    // regardless of nesting.  This test pins that the nested-middles
+    // bug fix above did not regress the wasEdited flag — the row still
+    // surfaces in the cross-cutting 編集済み filter even though it
+    // could have been silently mis-classified as trimDeleted pre-fix.
+    const cuts: Cut[] = sanitizeCuts([cut(8, 28, 'outer'), cut(10, 26, 'inner')])
+    const e = makeEntry(5, 30)
+    const state = effectiveEntryState(e, cuts)
+    expect(state.wasEdited).toBe(true)
+    expect(state.effectivelyEdited).toBe(true)
+    expect(state.effectivelyDeleted).toBe(false)
+  })
+
+  it('wasEdited STILL fires for a nested-killed entry that was once manually edited', () => {
+    // The REQ-103 §B cross-cutting contract: a row that the user edited
+    // and a cut later killed must still surface in the 編集済み filter
+    // via `wasEdited` (= cross-cutting), even though `effectivelyEdited`
+    // (= alias) goes false.
+    const cuts: Cut[] = sanitizeCuts([cut(10, 30, 'outer'), cut(15, 20, 'inner')])
+    const e: SubtitleEntry = { ...makeEntry(16, 18), isEdited: true }
+    const state = effectiveEntryState(e, cuts)
+    expect(state.status).toBe('trimDeleted')
+    expect(state.wasEdited).toBe(true)         // ← user's manual edit
+    expect(state.effectivelyEdited).toBe(false) // ← deleted, so alias goes false
+  })
+})
+
+describe('REQ-105 Phase 3 (f): degenerate / boundary shapes', () => {
+  it('two fully-identical cuts collapse via sanitize → behave like a single cut', () => {
+    const cuts: Cut[] = sanitizeCuts([cut(10, 20, 'first'), cut(10, 20, 'second')])
+    expect(cuts).toHaveLength(1)
+    expect(cuts[0].id).toBe('first')
+    const e = makeEntry(15, 18)
+    expect(applyCutsToEntry(e, cuts)).toBeNull()
+    expect(effectiveEntryState(e, cuts).status).toBe('trimDeleted')
+  })
+
+  it('chain of touching cuts behaves like one continuous cut for entry consumption', () => {
+    // Three touching cuts: [5,10] + [10,15] + [15,20].  Entry [11, 14]
+    // sits inside the middle one — but the union is [5, 20] so the
+    // entry is wholly consumed.  applyCutsToEntry sees the middle cut
+    // as case (c) (containment) and returns null directly.
+    const cuts: Cut[] = sanitizeCuts([
+      cut(5, 10, 'a'),
+      cut(10, 15, 'b'),
+      cut(15, 20, 'c'),
+    ])
+    expect(applyCutsToEntry(makeEntry(11, 14), cuts)).toBeNull()
+  })
+
+  it('depth-3 nested cuts that all contain the entry → outer fires first → trimDeleted', () => {
+    // sanitizeCuts orders by startSec ASC, endSec DESC, so the outermost
+    // cut comes first and applyCutsToEntry's branch (c) (full containment)
+    // catches it immediately.  Inner cuts are never visited.
+    const cuts: Cut[] = sanitizeCuts([
+      cut(5, 40, 'L1-outer'),
+      cut(7, 30, 'L2-middle'),
+      cut(8, 25, 'L3-inner'),
+    ])
+    const e = makeEntry(15, 20)
+    expect(applyCutsToEntry(e, cuts)).toBeNull()
+    expect(effectiveEntryState(e, cuts).status).toBe('trimDeleted')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// REQ-105 Phase 3 — Phase 4 PREP (no implementation, design sketch only).
+//
+// These tests do NOT exercise production code (containsCut / removableCutIds
+// will be implemented in Phase 4).  They lock the EXPECTED algebra of the
+// containment predicate against the Phase 2 sort order so Phase 4 can be
+// implemented without re-discovering the rules.  Each `it()` block is a
+// pure scenario description.
+// ---------------------------------------------------------------------------
+
+describe('REQ-105 Phase 3 (Phase 4 prep): containment algebra against Phase 2 sort order', () => {
+  it('Phase 2 sort puts the WIDER cut first when two cuts share startSec', () => {
+    // The `endSec DESC` tie-break is exactly what makes a one-pass
+    // containment scan possible: the "wider" candidate is always seen
+    // before the "narrower" one when they share startSec.
+    const out = sanitizeCuts([cut(10, 15, 'narrow'), cut(10, 30, 'wide')])
+    expect(out.map((c) => c.id)).toEqual(['wide', 'narrow'])
+  })
+
+  it('nested cuts (different startSec) keep startSec-ascending order', () => {
+    // sanitizeCuts sorts by startSec ASC.  The outer (smaller startSec)
+    // is naturally first.
+    const out = sanitizeCuts([cut(15, 20, 'inner'), cut(10, 30, 'outer')])
+    expect(out.map((c) => c.id)).toEqual(['outer', 'inner'])
+  })
+
+  it('a candidate "outer" must satisfy outer.startSec <= inner.startSec AND inner.endSec <= outer.endSec', () => {
+    // Pure algebra — Phase 4 will implement this as `containsCut(outer,
+    // inner)`.  Locks the predicate so Phase 4 can copy it verbatim.
+    const outer = { startSec: 10, endSec: 30 }
+    const inner = { startSec: 15, endSec: 20 }
+    expect(outer.startSec <= inner.startSec).toBe(true)
+    expect(inner.endSec <= outer.endSec).toBe(true)
+
+    // Conversely: a non-containing case fails the predicate.
+    const sibling = { startSec: 40, endSec: 50 }
+    expect(outer.startSec <= sibling.startSec).toBe(true)
+    expect(sibling.endSec <= outer.endSec).toBe(false)   // disjoint
+  })
+
+  it('a cut with NO outer containing it is "removable"; otherwise locked', () => {
+    // Phase 4 will implement removableCutIds(cuts) as: for each cut c,
+    // c is removable IFF no other cut in the same list contains it.
+    // This test traces the expected output of that algorithm against a
+    // mixed input.
+    const cuts: Cut[] = sanitizeCuts([
+      cut(10, 30, 'outer-A'),
+      cut(15, 20, 'inner-of-A'),
+      cut(40, 50, 'disjoint-B'),
+      cut(45, 48, 'inner-of-B'),
+    ])
+    // Outer-A and disjoint-B have no container → removable.
+    // Inner-of-A is inside outer-A → locked.
+    // Inner-of-B is inside disjoint-B → locked.
+    const removable = new Set<string>()
+    for (const c of cuts) {
+      const isInside = cuts.some(
+        (o) =>
+          o.id !== c.id &&
+          o.startSec <= c.startSec &&
+          c.endSec <= o.endSec,
+      )
+      if (!isInside) removable.add(c.id)
+    }
+    expect(removable).toEqual(new Set(['outer-A', 'disjoint-B']))
+  })
+
+  it('two fully-identical cuts: after sanitize dedupes, only one survives — that one is removable', () => {
+    // The §4.5 dedupe rule combined with the containment algebra:
+    // identical cuts collapse to one, which has no other cut containing
+    // it, so it is removable.
+    const cuts: Cut[] = sanitizeCuts([cut(10, 20, 'first'), cut(10, 20, 'second')])
+    expect(cuts).toHaveLength(1)
+  })
+})

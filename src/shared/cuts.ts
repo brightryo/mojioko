@@ -104,7 +104,7 @@ export function sanitizeCuts(cuts: readonly Cut[], maxSec?: number): Cut[] {
  * branch starts running for real inputs.
  */
 export function unionizeCuts(
-  cuts: CutList,
+  cuts: readonly { startSec: number; endSec: number }[],
 ): Array<{ startSec: number; endSec: number }> {
   const out: Array<{ startSec: number; endSec: number }> = []
   for (const c of cuts) {
@@ -220,7 +220,17 @@ export function applyCutsToEntry(
     middleCuts.push({ startSec: c.startSec, endSec: c.endSec })         // (f)
   }
 
-  const removedMiddleSec = middleCuts.reduce(
+  // REQ-105 Phase 3 — `middleCuts` may overlap each other once Phase 2's
+  // sanitizeCuts allowed overlapping cuts into storage (e.g. two cuts that
+  // both fall strictly inside the entry, with one nested in the other).
+  // Summing them naively double-counts the overlapping frames and can
+  // push `visibleSec` below the floor, mis-classifying the entry as
+  // trim-deleted.  Route through `unionizeCuts` so the floor check uses
+  // the actual frames removed.  `middleCuts` itself stays as the raw
+  // per-cut list so UI consumers (Phase 4 scissor badges) can still
+  // address each cut individually.
+  const middleUnion = unionizeCuts(middleCuts)
+  const removedMiddleSec = middleUnion.reduce(
     (a, c) => a + (c.endSec - c.startSec), 0,
   )
   const visibleSec = (enClamped - sClamped) - removedMiddleSec
