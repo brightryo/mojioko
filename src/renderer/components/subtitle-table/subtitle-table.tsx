@@ -20,7 +20,7 @@ import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { autoLineBreakRow as runAutoLineBreakRow, resetRow as runResetRow, toggleDeleteRow as runToggleDeleteRow } from '@/lib/entry-row-actions'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
-import { effectiveEntryState, type ClipStatus } from '../../../shared/cuts'
+import { effectiveEntryState, type ClipStatus, type CutList } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 
 /** Step amount for the per-row size ↑/↓ buttons (REQ-039 #4). */
@@ -144,9 +144,17 @@ interface SubtitleRowProps {
    * not need its own `cuts` subscription.
    */
   clipStatus: ClipStatus
+  /**
+   * REQ-115 — current cut list, forwarded to the row's TimeInputs so
+   * the displayed timecode is on the EDITED axis (= matches the SRT
+   * export, ruler, and video preview).  Stored as the SubtitleEntry
+   * value remains on the Original axis; the input applies
+   * `editedToOrig` on commit so persistence is unchanged.
+   */
+  cuts: CutList
 }
 
-function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFocus, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick, clipStatus }: SubtitleRowProps) {
+function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFocus, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick, clipStatus, cuts }: SubtitleRowProps) {
   const isOverflow = overflowStartIndex !== -1
   const isStartOverlap = warnings.overlap
   // step1 namespace included so the size input's `title` tooltip can
@@ -360,6 +368,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
       <div className="flex flex-col gap-1 py-2 px-1">
         <TimeInput
           value={entry.startSec}
+          cuts={cuts}
           onChange={handleStartChange}
           disabled={entry.isDeleted}
           warning={isStartOverlap || isStartExceedsDuration}
@@ -368,6 +377,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         <div className="w-[90px] text-body-sm text-zinc-600 text-center leading-none select-none">|</div>
         <TimeInput
           value={entry.endSec}
+          cuts={cuts}
           onChange={handleEndChange}
           disabled={entry.isDeleted}
           warning={isEndExceedsDuration}
@@ -950,6 +960,9 @@ export function SubtitleTable({
                   // from the live cut list.  Cuts is a small array; per-
                   // row recompute is O(cuts.length).
                   clipStatus={effectiveEntryState(entry, cuts).status}
+                  // REQ-115 — forward the live cut list so the row's
+                  // TimeInputs display Edited-axis timecodes.
+                  cuts={cuts}
                 />
               </motion.div>
             ))}
