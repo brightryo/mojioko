@@ -1417,8 +1417,20 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               </button>
             </PopoverTrigger>
             <PopoverContent
+              // REQ-124 — anchor the popover BELOW the help button so it
+              // never flips up into the AppShell header.  Radix's
+              // default `avoidCollisions=true` would otherwise hop the
+              // panel above the trigger when the body grew long enough
+              // to clip the bottom of the viewport, and the panel ends
+              // up partially hidden behind the header.  Pin `side=bottom`
+              // + `avoidCollisions=false`, then cap the height so a body
+              // that overflows the remaining viewport scrolls inside
+              // the panel instead of expanding it off-screen.
+              side="bottom"
               align="start"
-              className="w-[360px] p-4 space-y-3 text-zinc-100"
+              avoidCollisions={false}
+              collisionPadding={12}
+              className="w-[380px] p-4 space-y-3 text-zinc-100 max-h-[calc(100vh-120px)] overflow-y-auto"
             >
               <div className="text-body font-semibold text-zinc-50">
                 {t('timeline.help.title')}
