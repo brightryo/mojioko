@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Clock, Trash2, Undo2, Eraser, WrapText, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -17,6 +18,7 @@ import {
   toggleDeleteRow as runToggleDeleteRow
 } from '@/lib/entry-row-actions'
 import { formatEditedTimecode, editedDurationOfEntry } from '@/lib/time'
+import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 import type { FontId } from '../../../shared/fonts'
 import type { SubtitleEntry } from '../../../shared/types'
@@ -189,6 +191,12 @@ export function TimelineBlockInspector({
   // (= what the burnin video will show), not the pre-cut span.
   const cuts = useProjectStore((s) => s.cuts)
   const durationSec = editedDurationOfEntry(entry, cuts)
+  // REQ-118 [2] — mirror the subtitle-table freeze rule: trim-deleted
+  // entries are read-only and the Delete affordance hands a hint
+  // toast instead of toggling `entry.isDeleted` (which would silently
+  // swap the row from trimDeleted to manuallyDeleted).
+  const isTrimDeleted = effectiveEntryState(entry, cuts).status === 'trimDeleted'
+  const isFrozen = entry.isDeleted || isTrimDeleted
   const canReset = entry.isEdited || entry.isDeleted
 
   // Aggregate "any warning visible" so §2 (badge row) only renders when
@@ -217,7 +225,7 @@ export function TimelineBlockInspector({
               title={t('action.autoLineBreakRowHelp')}
               aria-label={t('action.autoLineBreakRowHelp')}
               onClick={handleAutoLineBreak}
-              disabled={entry.isDeleted}
+              disabled={isFrozen}
               className={cn(
                 'flex items-center justify-center h-7 w-7 rounded',
                 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
@@ -228,20 +236,44 @@ export function TimelineBlockInspector({
               <WrapText className="h-3.5 w-3.5" />
             </button>
           )}
+          {/* REQ-118 [2] — same three-branch rule as the subtitle-table
+              row.  Trim-deleted entries show the restore glyph in
+              zinc and surface a hint toast on click; the storage
+              state never toggles. */}
           <button
             type="button"
-            title={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
-            aria-label={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
-            onClick={handleDeleteToggle}
+            title={
+              isTrimDeleted
+                ? t('action.trimDeletedHint')
+                : entry.isDeleted
+                  ? t('action.restoreRow')
+                  : t('action.deleteRow')
+            }
+            aria-label={
+              isTrimDeleted
+                ? t('action.trimDeletedHint')
+                : entry.isDeleted
+                  ? t('action.restoreRow')
+                  : t('action.deleteRow')
+            }
+            onClick={() => {
+              if (isTrimDeleted) {
+                toast.info(t('toast.trimDeletedRestoreHint'))
+                return
+              }
+              handleDeleteToggle()
+            }}
             className={cn(
               'flex items-center justify-center h-7 w-7 rounded',
               'transition-colors duration-150 hover:bg-zinc-800',
-              entry.isDeleted
+              entry.isDeleted && !isTrimDeleted
                 ? 'text-green-400 hover:text-green-300'
                 : 'text-zinc-400 hover:text-zinc-100'
             )}
           >
-            {entry.isDeleted ? <Undo2 className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+            {isTrimDeleted || entry.isDeleted
+              ? <Undo2 className="h-3.5 w-3.5" />
+              : <Trash2 className="h-3.5 w-3.5" />}
           </button>
           <button
             type="button"
@@ -306,7 +338,7 @@ export function TimelineBlockInspector({
               key={entry.fontSizePx}
               onChange={handleSizeChange}
               onBlur={handleSizeBlur}
-              disabled={entry.isDeleted}
+              disabled={isFrozen}
               title={t('step1:subtitleDefaults.sizeHint', {
                 min: FONT_SIZE_MIN_PX,
                 max: FONT_SIZE_MAX_PX
@@ -334,7 +366,7 @@ export function TimelineBlockInspector({
               value={entry.textColorHex}
               onChange={handleTextColorChange}
               onPairApply={handleColorPairApply}
-              disabled={entry.isDeleted}
+              disabled={isFrozen}
               swatchOnly
             />
           </div>
@@ -346,7 +378,7 @@ export function TimelineBlockInspector({
               value={entry.outlineColorHex}
               onChange={handleOutlineColorChange}
               onPairApply={handleColorPairApply}
-              disabled={entry.isDeleted}
+              disabled={isFrozen}
               swatchOnly
             />
           </div>
@@ -359,7 +391,7 @@ export function TimelineBlockInspector({
               <OutlineThicknessSlider
                 value={entry.outlineThicknessPx}
                 onCommit={handleOutlineThicknessCommit}
-                disabled={entry.isDeleted}
+                disabled={isFrozen}
                 ariaLabel={t('styleCell.outlineWidth')}
               />
             </div>
@@ -371,7 +403,7 @@ export function TimelineBlockInspector({
             <Switch
               checked={entry.fadeEnabled}
               onCheckedChange={handleFadeChange}
-              disabled={entry.isDeleted}
+              disabled={isFrozen}
               className="scale-75 origin-right"
             />
           </div>
@@ -385,7 +417,7 @@ export function TimelineBlockInspector({
           <RowFontSelector
             value={entry.fontId}
             onChange={handleFontChange}
-            disabled={entry.isDeleted}
+            disabled={isFrozen}
           />
         </div>
       )}
@@ -404,7 +436,7 @@ export function TimelineBlockInspector({
           onChange={(e) => setDraft(e.target.value)}
           onBlur={handleBlur}
           rows={3}
-          disabled={entry.isDeleted}
+          disabled={isFrozen}
           spellCheck={false}
           className={cn(
             'w-full rounded-md bg-zinc-950 border border-zinc-700 px-2 py-1.5',

@@ -69,6 +69,7 @@
     "resetRow": "リセット",
     "deleteRow": "削除",
     "restoreRow": "復元",
+    "trimDeletedHint": "トリミングで削除されています。 はさみマーカーで取り消してください",
     "autoLineBreakRow": "自動改行",
     "autoLineBreakRowHelp": "改行を引き直します",
     "sizeStepUp": "サイズを +{{step}}px (最大 {{max}})",
@@ -122,7 +123,8 @@
     "undo": "元に戻す: {{label}}",
     "redo": "やり直し: {{label}}",
     "bulkApplied": "{{count}}件に適用しました ({{label}})",
-    "bulkAppliedUndo": "元に戻す"
+    "bulkAppliedUndo": "元に戻す",
+    "trimDeletedRestoreHint": "トリミングで削除された字幕です。 はさみマーカーでトリミングを取り消すと復元されます"
   },
   "tooltip": {
     "undo": "元に戻す",
