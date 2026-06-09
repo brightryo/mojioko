@@ -197,7 +197,12 @@ export function TimelineBlockInspector({
   // swap the row from trimDeleted to manuallyDeleted).
   const isTrimDeleted = effectiveEntryState(entry, cuts).status === 'trimDeleted'
   const isFrozen = entry.isDeleted || isTrimDeleted
-  const canReset = entry.isEdited || entry.isDeleted
+  // REQ-119 [2] — Reset is an EDIT (= wipe per-row overrides back to
+  // `entry.original`).  A frozen row only accepts the Restore button
+  // next to it; the table chrome already rejects the Reset for the
+  // same row, this keeps the inspector aligned.  Live rows still need
+  // `entry.isEdited` to have something to reset.
+  const canReset = !isFrozen && entry.isEdited
 
   // Aggregate "any warning visible" so §2 (badge row) only renders when
   // there's actually something to show.  Empty-text is included because

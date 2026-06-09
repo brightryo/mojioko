@@ -15,6 +15,7 @@ import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
+import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 import { FONT_REGISTRY, getFontMeta, type FontId } from '../../../shared/fonts'
 
@@ -146,10 +147,20 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     if (ids.length === 0) return
 
     const all = useProjectStore.getState().entries
+    // REQ-119 [1] — bulk-edit cannot touch frozen rows (manual delete OR
+    // trim delete per REQ-118 spec §2.1).  The subtitle-table chrome
+    // already blocks frozen rows from entering the selection; this
+    // belt-and-braces filter catches any selection that pre-dates a
+    // status change (e.g. the user selected a normal row, then a cut
+    // turned it into trimDeleted while it was still in the selection set).
+    const cuts = useProjectStore.getState().cuts
     const snapshots = new Map<string, SubtitleEntry>()
     for (const id of ids) {
       const e = all.find((x) => x.id === id)
-      if (e) snapshots.set(id, { ...e })
+      if (!e) continue
+      if (e.isDeleted) continue
+      if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
+      snapshots.set(id, { ...e })
     }
     if (snapshots.size === 0) return
 
@@ -279,6 +290,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
 
     const all = useProjectStore.getState().entries
     const videoWidthPx = useProjectStore.getState().video?.widthPx ?? 1920
+    // REQ-119 [1] — same freeze filter as `applyBulk` so auto-line-break
+    // never rewraps a trim-deleted row mid-bulk.
+    const cuts = useProjectStore.getState().cuts
 
     const snapshots = new Map<string, SubtitleEntry>()
     const patches = new Map<string, string>()
@@ -286,6 +300,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     for (const id of ids) {
       const e = all.find((x) => x.id === id)
       if (!e || e.isDeleted) continue
+      if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
       const stripped = e.text.replace(/\\N/g, '')
       // Per-row fontId (REQ-021): bulk-applied breaks must respect each
       // row's own font, otherwise rows whose fontId differs from the
