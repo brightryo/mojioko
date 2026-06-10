@@ -239,7 +239,7 @@
       "title": "タイムラインの使い方",
       "trim": {
         "title": "トリミング",
-        "body": "「始点」「終点」で範囲を決めて「カット」を押すと、 動画の尺ごとその区間が消えて後ろが詰まります。 「クリア」で確定前の始点・終点を取り消せます。"
+        "body": "「始点」「終点」で範囲を決めて「トリミング」を押すと、 動画の尺ごとその区間が消えて後ろが詰まります。 「クリア」で確定前の始点・終点を取り消せます。"
       },
       "scissor": {
         "title": "はさみマーカーで戻す",
@@ -281,20 +281,20 @@
       "setInTooltip": "現在の再生位置を始点に設定（同じボタンで解除）",
       "setOut": "終点",
       "setOutTooltip": "現在の再生位置を終点に設定（同じボタンで解除）",
-      "confirmCut": "カット",
-      "confirmCutTooltip": "始点〜終点をカットして後ろを詰める",
+      "confirmCut": "トリミング",
+      "confirmCutTooltip": "始点〜終点をトリミングして後ろを詰める",
       "clearPending": "クリア",
       "clearPendingTooltip": "保留中の始点 / 終点をクリア",
       "inLabel": "始点",
       "outLabel": "終点",
       "noPoint": "—",
-      "cutMarkerTitle": "カット {{start}} 〜 {{end}}（クリックで削除）",
+      "cutMarkerTitle": "トリミング {{start}} 〜 {{end}}（クリックで削除）",
       "invalidRange": "始点は終点より前である必要があります",
       "errorSamePosition": "始点と終点は同じ位置に設定できません",
       "errorInAfterOut": "始点は終点より前に設定してください",
       "errorOutBeforeIn": "終点は始点より後に設定してください",
       "toast": {
-        "cutApplied": "カットしました。 はさみマーカーで戻せます",
+        "cutApplied": "トリミングしました。 はさみマーカーで戻せます",
         "reviveFailedStillCut": "{{count}} 件の字幕は、 別のトリミングが残っているため戻せませんでした"
       }
     }
