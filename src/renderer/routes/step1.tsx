@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, Settings2, ChevronUp, ChevronDown, AudioWaveform } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useHotkeys } from 'react-hotkeys-hook'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { AppShell } from '@/components/app-shell/app-shell'
@@ -24,6 +23,8 @@ import { TranscriptionAdvancedDialog } from '@/components/step1/transcription-ad
 import { SubtitleStyleDialog } from '@/components/step1/subtitle-style-dialog'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useUiStore } from '@/stores/ui-store'
+import { useHistoryStore } from '@/stores/history-store'
 import { probeVideo, extractThumbnail } from '@/services/video'
 import { openVideoDialog } from '@/services/dialog'
 import { runTranscription } from '@/services/transcription'
@@ -36,10 +37,17 @@ import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 
 function InfoRow({ label, value }: { label: string; value: string }) {
+  // REQ-071 Phase 3.5: value bumped to `body` (15) so it physically reads as
+  // the primary info on the row.  Label stays `callout` (13/semibold + muted)
+  // as the supporting category marker.  Hierarchy now is:
+  //   - size : value (15) > label (13)
+  //   - color: value (foreground) > label (muted)
+  //   - weight: label (semibold) carries category emphasis without
+  //             out-shouting the value
   return (
     <div className="flex items-center justify-between py-1.5">
-      <span className="text-[12px] text-muted-foreground">{label}</span>
-      <span className="text-[12px] text-foreground font-mono tabular-nums">{value}</span>
+      <span className="text-callout font-semibold text-muted-foreground">{label}</span>
+      <span className="text-body text-foreground font-mono tabular-nums">{value}</span>
     </div>
   )
 }
@@ -97,7 +105,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const [openSection, setOpenSection] = useState<'whisper' | 'inputVideo'>('inputVideo')
   const transcriptionRunRef = useRef<TranscriptionRun | null>(null)
 
-  useHotkeys('enter', () => { if (canStart && !isTranscribing) handleStartTranscription() }, { enableOnFormTags: false })
+  // REQ-082: removed Enter-to-start-transcription hotkey.
 
   // Preload subtitle font so applyAutoLineBreak can use accurate glyph metrics
   // when transcription completes (instead of falling back to character estimates).
@@ -288,6 +296,39 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         })
       : entries
 
+    // REQ-091: a fresh (or repeated) transcription means a fresh
+    // editing session.  Clear the cut list, any in-flight trim toolbar
+    // points, and undo/redo history; reset Step 2/3 layout + background
+    // settings to BURNIN_DEFAULTS so the user lands in Step 2 with no
+    // carry-over from the previous edit.  Per-entry styles do not need
+    // an explicit clear — `setEntries(finalEntries)` immediately below
+    // overwrites the entry array with brand-new entries seeded from
+    // `runDefaults`, so the old entries' fontSize / colour / fade /
+    // fontId edits cannot survive.
+    //
+    // Placement note (REQ-092 audit): the 4 resets sit AFTER the
+    // post-cancel `if (cancelled) return` above (line ~227), but
+    // crucially NOT because we are protecting a recoverable
+    // "cancelled-transcription preserves prior session" path — no
+    // such path exists.  From Step 1, the breadcrumb
+    // (`breadcrumb.tsx:64-66`, `isCompleted = step < currentStep`)
+    // disables the Step 2 button because `step1.tsx`'s
+    // `currentStep={1}` makes Step 2 isFuture, and Step 1 has no
+    // other forward navigate beyond the `navigate('/step2')` at
+    // line ~317 below.  So a cancelled run leaves projectStore
+    // stale on Step 1, but the user can ONLY reach Step 2 by
+    // re-running transcription — which re-enters this same block
+    // and wipes the stale state.  The "after cancel-check"
+    // placement is kept for code locality: these 4 resets and
+    // `setEntries` form one logical "commit transcription
+    // success" block, and keeping them together makes the
+    // invariant "fresh transcription ⇒ fresh editing state"
+    // locally obvious.
+    useProjectStore.getState().setCuts([])
+    useUiStore.getState().clearPendingCut()
+    useHistoryStore.getState().clear()
+    resetStep3Settings()
+
     setEntries(finalEntries)
     toast.success(t('toast.transcriptionComplete', { count: finalEntries.length }))
     navigate('/step2')
@@ -306,14 +347,17 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const audioTracks = video?.audioTracks ?? []
 
   const footerCenter = (
+    /* REQ-067 phase B: status colors lifted from text-zinc-500 to
+       text-zinc-300 so the model-status and privacy line stay legible
+       in the chrome.  Matches the same treatment in step2 / step3. */
     <div className="flex items-center gap-4">
-      <span className="text-[12px] text-zinc-500">
+      <span className="text-body-sm text-zinc-300">
         {activeModelId
           ? t('footer.modelStatus', { model: activeModelId })
           : t('footer.modelNotDownloaded', { model: '—' })}
       </span>
       <span className="w-px h-3 bg-zinc-700 flex-shrink-0" />
-      <span className="flex items-center gap-1.5 text-[12px] text-zinc-500">
+      <span className="flex items-center gap-1.5 text-body-sm text-zinc-300">
         <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
         {t('footer.privacyNote')}
       </span>
@@ -390,8 +434,8 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
       <div className="space-y-4">
         {/* Page header */}
         <div>
-          <h1 className="text-[18px] font-semibold text-foreground">{t('title')}</h1>
-          <p className="mt-1 text-[13px] text-muted-foreground">{t('guidance')}</p>
+          <h1 className="text-heading font-semibold text-foreground">{t('title')}</h1>
+          <p className="mt-1 text-body text-muted-foreground">{t('guidance')}</p>
         </div>
 
         {/* Whisper model + Advanced (engine) trigger.  Subtitle Style
@@ -448,6 +492,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
               header when this section is already open switches the
               expanded panel to 'whisper'; clicking when collapsed
               switches back here.  Either way exactly one panel is open. */}
+          {/* REQ-082: Enter / Space keyboard activation removed. */}
           <div
             role="button"
             aria-expanded={openSection === 'inputVideo'}
@@ -455,17 +500,11 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             onClick={() =>
               setOpenSection(openSection === 'inputVideo' ? 'whisper' : 'inputVideo')
             }
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                setOpenSection(openSection === 'inputVideo' ? 'whisper' : 'inputVideo')
-              }
-            }}
             className="flex items-center justify-between cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
           >
             <div className="flex items-center gap-1.5">
               <Video className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <Label className="uppercase tracking-wider text-[10px] cursor-pointer">
+              <Label className="cursor-pointer">
                 {t('inputVideo.label')}
               </Label>
               <span onClick={(e) => e.stopPropagation()}>
@@ -473,7 +512,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted-foreground/60">{t('inputVideo.hint')}</span>
+              <span className="text-body-sm text-muted-foreground/60">{t('inputVideo.hint')}</span>
               {openSection === 'inputVideo' ? (
                 <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
               ) : (
@@ -499,19 +538,30 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           {isLoading ? (
             <div className="flex items-center gap-2.5 h-9 px-1">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
-              <span className="text-[13px] text-muted-foreground">{t('inputVideo.loading')}</span>
+              <span className="text-body text-muted-foreground">{t('inputVideo.loading')}</span>
             </div>
           ) : (
             <div className="flex items-center gap-2">
               <div className="flex-1 h-9 rounded-md border border-border bg-input px-3.5 flex items-center min-w-0">
                 <span className={cn(
-                  'text-[13px] truncate',
+                  'text-body truncate',
                   video ? 'text-foreground' : 'text-muted-foreground/60'
                 )}>
                   {video?.path ?? t('inputVideo.placeholder')}
                 </span>
               </div>
-              <Button variant="secondary" size="md" onClick={handleBrowse}>
+              {/* REQ-072 Q4: secondary's `bg-zinc-50` white slab dominated the
+                  STEP 1 input row visually — same pattern bulk-edit-bar already
+                  flagged (see comment there).  Pending the full Button variant
+                  redesign (REQ-073), this single site is overridden to a tonal
+                  (bg-zinc-800) treatment so Browse reads as a secondary action
+                  in the dark theme without claiming primary emphasis. */}
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={handleBrowse}
+                className="bg-zinc-800 text-zinc-100 hover:bg-zinc-700 active:bg-zinc-600"
+              >
                 <FolderOpen className="h-4 w-4 mr-1.5" />
                 {t('inputVideo.chooseVideo')}
               </Button>
@@ -606,13 +656,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           )}>
             <div className="flex items-center gap-1.5">
               <Mic className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <Label className="uppercase tracking-wider text-[10px]">{t('audioTracks.label')}</Label>
+              <Label>{t('audioTracks.label')}</Label>
               <HelpIcon content={t('audioTracks.help')} />
               {audioTracks.length > 0 && (
                 <Badge variant="muted">{t('audioTracks.tracksCount', { count: audioTracks.length })}</Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">{t('audioTracks.description')}</p>
+            <p className="text-body-sm text-muted-foreground">{t('audioTracks.description')}</p>
             <div className="grid grid-cols-2 gap-2">
               {audioTracks.map((track) => (
                 <button
@@ -634,12 +684,12 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
                 >
                   <span className="h-2 w-2 rounded-full flex-shrink-0 bg-primary" />
                   <span className={cn(
-                    'text-[13px] font-medium flex-shrink-0',
+                    'text-body font-medium flex-shrink-0',
                     selectedTrack === track.index ? 'text-primary' : 'text-foreground'
                   )}>
                     {t('audioTracks.trackLabel', { index: track.index })}
                   </span>
-                  <span className="text-[11px] text-muted-foreground truncate min-w-0">
+                  <span className="text-body-sm text-muted-foreground truncate min-w-0">
                     {`${track.channels} · ${track.sampleRateHz / 1000}kHz · ${track.codec}`}
                   </span>
                   {selectedTrack === track.index && (

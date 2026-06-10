@@ -76,12 +76,7 @@ export function SettingsDialog() {
     clampAndCommit(fadeDraft)
   }
 
-  function handleFadeKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      clampAndCommit(fadeDraft)
-      ;(e.target as HTMLInputElement).blur()
-    }
-  }
+  // REQ-082: Enter handler removed.  Blur commits the value.
 
   function handleLanguageChange(lang: string) {
     setLanguage(lang)
@@ -91,13 +86,11 @@ export function SettingsDialog() {
   return (
     <Dialog open={isOpen} onOpenChange={setOpen}>
       {/* onOpenAutoFocus prevented: Radix' default focus-on-open sends focus
-          into the active tabpanel (tabindex=0), and because the dialog is
-          typically opened via Ctrl+, / menu (keyboard activation),
-          :focus-visible matches → the panel renders with the green focus
-          ring as if the user had Tab-keyed in.  Preventing the auto-focus
-          keeps the highlighted element on whatever opened the dialog;
-          users can still Tab into the dialog normally for keyboard
-          navigation.
+          into the active tabpanel (tabindex=0), which can cause the
+          :focus-visible style to land on the panel as if the user had
+          Tab-keyed in.  Preventing the auto-focus keeps the highlighted
+          element on whatever opened the dialog; users can still Tab into
+          the dialog normally for keyboard navigation.
           REQ-018 #1. */}
       <DialogContent
         className="max-w-[640px] max-h-[85vh] overflow-y-auto"
@@ -126,7 +119,7 @@ export function SettingsDialog() {
           <TabsContent value="general" className="min-h-[490px]">
             <div className="grid grid-cols-2 items-start gap-y-4 gap-x-6 pt-1">
               {/* Language */}
-              <span className="whitespace-nowrap text-[13px] text-zinc-300 self-center leading-none mt-1">
+              <span className="whitespace-nowrap text-body text-zinc-300 self-center leading-none mt-1">
                 {t('general.language')}
               </span>
               <div className="flex items-center">
@@ -142,7 +135,7 @@ export function SettingsDialog() {
               </div>
 
               {/* Fade duration */}
-              <span className="whitespace-nowrap text-[13px] text-zinc-300 self-start leading-none mt-2.5">
+              <span className="whitespace-nowrap text-body text-zinc-300 self-start leading-none mt-2.5">
                 {t('general.fadeDuration')}
               </span>
               <div className="space-y-1">
@@ -154,10 +147,9 @@ export function SettingsDialog() {
                   value={fadeDraft}
                   onChange={handleFadeDraftChange}
                   onBlur={handleFadeBlur}
-                  onKeyDown={handleFadeKeyDown}
-                  className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-center text-[13px] text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                  className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-center text-body text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                 />
-                <p className="text-[11px] text-zinc-500">{t('general.fadeDurationHint')}</p>
+                <p className="text-body-sm text-zinc-500">{t('general.fadeDurationHint')}</p>
               </div>
             </div>
           </TabsContent>
@@ -168,13 +160,13 @@ export function SettingsDialog() {
               choice, and DL / Trash icons handle inventory in the same
               list.  No separate dropdown / management-only split. */}
           <TabsContent value="fonts" className="space-y-1.5 min-h-[490px]">
-            <p className="text-[11px] text-muted-foreground">{t('fonts.hint')}</p>
+            <p className="text-body-sm text-muted-foreground">{t('fonts.hint')}</p>
             <FontPicker />
           </TabsContent>
 
           {/* ─ Default style ──────────────────────────────────────── */}
           <TabsContent value="defaultStyle" className="space-y-2 min-h-[490px]">
-            <p className="text-[11px] text-muted-foreground">{t('defaultStyle.hint')}</p>
+            <p className="text-body-sm text-muted-foreground">{t('defaultStyle.hint')}</p>
             <DefaultStyleControls
               fontSizePx={transcriptionDefaults.fontSizePx}
               textColorHex={transcriptionDefaults.textColorHex}
@@ -189,7 +181,7 @@ export function SettingsDialog() {
 
           {/* ─ Whisper engine ─────────────────────────────────────── */}
           <TabsContent value="whisper" className="space-y-3 min-h-[490px]">
-            <p className="text-[11px] text-muted-foreground">{t('whisper.hint')}</p>
+            <p className="text-body-sm text-muted-foreground">{t('whisper.hint')}</p>
             <WhisperAdvancedControls
               transcriptionAdvanced={transcriptionAdvanced}
               onUpdate={setTranscriptionAdvanced}

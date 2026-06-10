@@ -15,6 +15,7 @@ import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
+import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 import { FONT_REGISTRY, getFontMeta, type FontId } from '../../../shared/fonts'
 
@@ -146,10 +147,20 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     if (ids.length === 0) return
 
     const all = useProjectStore.getState().entries
+    // REQ-119 [1] — bulk-edit cannot touch frozen rows (manual delete OR
+    // trim delete per REQ-118 spec §2.1).  The subtitle-table chrome
+    // already blocks frozen rows from entering the selection; this
+    // belt-and-braces filter catches any selection that pre-dates a
+    // status change (e.g. the user selected a normal row, then a cut
+    // turned it into trimDeleted while it was still in the selection set).
+    const cuts = useProjectStore.getState().cuts
     const snapshots = new Map<string, SubtitleEntry>()
     for (const id of ids) {
       const e = all.find((x) => x.id === id)
-      if (e) snapshots.set(id, { ...e })
+      if (!e) continue
+      if (e.isDeleted) continue
+      if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
+      snapshots.set(id, { ...e })
     }
     if (snapshots.size === 0) return
 
@@ -279,6 +290,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
 
     const all = useProjectStore.getState().entries
     const videoWidthPx = useProjectStore.getState().video?.widthPx ?? 1920
+    // REQ-119 [1] — same freeze filter as `applyBulk` so auto-line-break
+    // never rewraps a trim-deleted row mid-bulk.
+    const cuts = useProjectStore.getState().cuts
 
     const snapshots = new Map<string, SubtitleEntry>()
     const patches = new Map<string, string>()
@@ -286,6 +300,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     for (const id of ids) {
       const e = all.find((x) => x.id === id)
       if (!e || e.isDeleted) continue
+      if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
       const stripped = e.text.replace(/\\N/g, '')
       // Per-row fontId (REQ-021): bulk-applied breaks must respect each
       // row's own font, otherwise rows whose fontId differs from the
@@ -354,7 +369,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     >
       {/* Left: count + clear */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <span className="text-[12px] font-medium text-foreground tabular-nums">
+        <span className="text-body-sm font-medium text-foreground tabular-nums">
           {countLabel}
         </span>
         <button
@@ -381,7 +396,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             after blur.  onFocus selects the existing content so re-
             typing replaces in one keystroke (vs. clicking + manually
             highlighting before typing). */}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.size')}</span>
           <input
             type="number"
@@ -399,11 +414,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               if (e.target.value === '') return
               handleSizeCommit(e.target.value)
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-            }}
+            /* REQ-082: Enter handler removed.  Blur commits the value. */
             className={cn(
-              'w-16 h-7 rounded border bg-input px-2 text-center text-[12px] text-foreground',
+              'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
               'focus:outline-none focus:ring-1 focus:ring-ring/30',
               'border-border',
               '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
@@ -415,7 +428,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             fallback to white is now only the empty-selection safety net
             (BulkEditBar does not render while empty); during normal use
             this branch never runs. */}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.textColor')}</span>
           <ColorPicker
             value={colorDraftText ?? '#FFFFFF'}
@@ -427,7 +440,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </label>
 
         {/* Outline color — same seeding contract as text color above. */}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.outlineColor')}</span>
           <ColorPicker
             value={colorDraftOutline ?? '#000000'}
@@ -442,7 +455,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             OutlineThicknessSlider.  Commit semantics, accent-color
             sourcing, readout width and disabled handling all live in
             that component so the two surfaces cannot drift. */}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.outlineWidth')}</span>
           <OutlineThicknessSlider
             value={outlineSliderDraft}
@@ -452,7 +465,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </label>
 
         {/* Fade */}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.fade')}</span>
           <Switch onCheckedChange={handleFadeChange} />
         </label>
@@ -461,7 +474,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             per-row picker (RowFontSelector) but with a static "フォント"
             trigger label — selection here applies to every row in the
             current bulk selection. */}
-        <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulkRowFont.label')}</span>
           <BulkFontPicker onPick={handleFontChange} />
         </label>
@@ -492,9 +505,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           aria-label={t('bulk.autoLineBreakHelp')}
           className={cn(
             'inline-flex items-center justify-center gap-1.5',
-            'h-7 px-2 rounded border bg-input text-[12px] text-foreground',
+            'h-7 px-2 rounded border bg-input text-body-sm text-foreground',
             'border-border hover:border-zinc-700 transition-colors duration-150',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
+            'focus:outline-none focus-visible:outline-none'
           )}
         >
           <WrapText className="h-3.5 w-3.5" />
@@ -530,9 +543,9 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
           type="button"
           className={cn(
             'inline-flex items-center justify-between gap-1.5',
-            'h-7 px-2 rounded border bg-input text-[12px] text-foreground',
+            'h-7 px-2 rounded border bg-input text-body-sm text-foreground',
             'border-border hover:border-zinc-700',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
+            'focus:outline-none focus-visible:outline-none'
           )}
           aria-label={t('bulkRowFont.label')}
         >
@@ -545,12 +558,12 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
           <button
             type="button"
             onClick={() => pick(undefined)}
-            className="flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-left text-zinc-100 hover:bg-accent/40 cursor-pointer"
+            className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-zinc-100 hover:bg-accent/40 cursor-pointer"
           >
             <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="flex-1 min-w-0">
               <span className="block leading-tight">{t('bulkRowFont.useDefault')}</span>
-              <span className="block text-[10px] text-zinc-500 truncate">
+              <span className="block text-caption text-zinc-500 truncate">
                 {getFontMeta(activeFontId).displayName}
               </span>
             </span>
@@ -563,7 +576,7 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
               key={m.id}
               type="button"
               onClick={() => pick(m.id)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-left text-zinc-300 hover:bg-accent/40"
+              className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-zinc-300 hover:bg-accent/40"
             >
               <span className="h-2 w-2 rounded-full bg-zinc-600 shrink-0" aria-hidden="true" />
               <span

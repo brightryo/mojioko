@@ -23,7 +23,7 @@ const Checkbox = React.forwardRef<
       // --border (= --secondary, faint) is too quiet for a small interactive
       // affordance; the var pairing matches the Step 3 Support button hover.
       'peer h-4 w-4 shrink-0 rounded-[3px] border border-[hsl(var(--separator-strong))] ring-offset-background',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-offset-2',
+      'focus:outline-none focus-visible:outline-none',
       'disabled:cursor-not-allowed disabled:opacity-40',
       'data-[state=checked]:bg-primary data-[state=checked]:border-primary',
       'data-[state=indeterminate]:bg-primary data-[state=indeterminate]:border-primary',

@@ -1,6 +1,6 @@
 {
   "name": "mojioko",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Local video transcription and subtitle burn-in tool",
   "main": "./out/main/index.js",
   "scripts": {
@@ -28,7 +28,6 @@
     "@radix-ui/react-tooltip": "^1.1.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
-    "cmdk": "^1.0.0",
     "electron-log": "^5.1.5",
     "framer-motion": "^11.3.0",
     "i18next": "^23.12.2",

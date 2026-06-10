@@ -6,7 +6,14 @@ import { spawn } from 'child_process'
 import { getBinPath, getFontResolveDir } from '../lib/paths'
 import { generateAss } from './ass-generator'
 import { getBestEncoder, buildEncoderArgs } from './encoder-detector'
+import { buildTrimConcatFilter } from './ffmpeg-trim-filter'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
+import {
+  applyCutsToEntry,
+  editedDuration,
+  origToEdited
+} from '../../shared/cuts'
+import type { SubtitleEntry } from '../../shared/types'
 import type { BurninStartRequest, BurninEvent } from '../../shared/ipc-contracts'
 import { FfmpegError } from '../../shared/errors'
 import log from '../lib/logger'
@@ -88,7 +95,17 @@ export async function startBurnin(
   onEvent: BurninEventCallback,
   signal: AbortSignal
 ): Promise<void> {
-  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, fadeDurationSec, subtitleBackground, outputContainer, fontId } = request
+  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, fadeDurationSec, subtitleBackground, outputContainer, fontId, cuts } = request
+
+  // REQ-074 1d: when cuts is non-empty the ffmpeg run is rebuilt around
+  // filter_complex trim+concat (audio + video).  When empty / absent we
+  // fall back to the legacy single-input argv byte-for-byte so every
+  // pre-REQ-074 caller is unaffected.
+  const cutsList = cuts ?? []
+  const hasCuts = cutsList.length > 0
+  const effectiveDurationSec = hasCuts
+    ? editedDuration(video.durationSec, cutsList)
+    : video.durationSec
 
   // Resolve project default font.  Defensive: an unknown / missing fontId
   // falls back to the bundled default so a stale renderer never blocks a
@@ -106,9 +123,32 @@ export async function startBurnin(
     `[ffmpeg-burnin] referenced fonts: ${referencedFontIds.length} — ${referencedFontIds.join(', ')}; staged at ${fontsDir}`
   )
 
+  // REQ-074 1d: when cuts are present, drop entries fully contained in any
+  // cut and clamp head/tail overlaps via applyCutsToEntry, then translate
+  // the surviving timestamps to the EDITED axis (origToEdited) — the ASS
+  // Dialogue Start/End must match the post-concat frame positions because
+  // subtitles= is applied to the concat output (§5.3).  When no cuts are
+  // present this transformation is the identity, so the assContent is
+  // byte-identical to pre-1d output.
+  const entriesForAss: SubtitleEntry[] = hasCuts
+    ? entries.flatMap((e) => {
+        const clamped = applyCutsToEntry(e, cutsList)
+        if (clamped === null) return []
+        return [{
+          ...e,
+          startSec: origToEdited(clamped.startSec, cutsList),
+          endSec: origToEdited(clamped.endSec, cutsList),
+        }]
+      })
+    : entries
+  log.info(
+    `[ffmpeg-burnin] cuts=${cutsList.length} effectiveDuration=${effectiveDurationSec.toFixed(3)}s ` +
+    `entries=${entries.length}→${entriesForAss.length}`
+  )
+
   // Write ASS to temp file (project default goes into Style:, per-row
   // overrides come through as \fn<family> inline tags — see ass-generator).
-  const assContent = generateAss(entries, video, burnin, fadeDurationSec, subtitleBackground, fontMeta.assFontName)
+  const assContent = generateAss(entriesForAss, video, burnin, fadeDurationSec, subtitleBackground, fontMeta.assFontName)
   const assPath = join(tmpdir(), `mojioko-${randomUUID()}.ass`)
   await fs.writeFile(assPath, assContent, 'utf-8')
 
@@ -130,7 +170,36 @@ export async function startBurnin(
     : []
 
   let args: string[]
-  if (audioMode === 'preserve') {
+  if (hasCuts) {
+    // REQ-074 1d: trim+concat path.  Falls through to one shape for both
+    // audioMode values — preserve maps source tracks 1:1 (aac), simple
+    // amixes them — and emits `-an` when the source has no audio.
+    // Note: preserve+cuts cannot honour `-c:a copy` because trim is a
+    // filtergraph operation; we fall back to aac re-encode here.  Spec §5.2.
+    const audioModeForFilter: 'simple' | 'preserve' = audioMode === 'preserve' ? 'preserve' : 'simple'
+    const N = video.audioTracks.length
+    const built = buildTrimConcatFilter(
+      video.durationSec,
+      cutsList,
+      audioModeForFilter,
+      N,
+      subtitlesFilter
+    )
+    args = [
+      '-y',
+      '-i', inputPath,
+      '-filter_complex', built.filterComplex,
+      ...built.mapArgs,
+      ...encoderArgs,
+      ...built.outputCodecArgs,
+      ...containerArgs,
+      '-progress', 'pipe:1',
+      outputPath
+    ]
+    log.info(
+      `[ffmpeg-burnin] trim path: cuts=${cutsList.length} audioTracks=${N} audioModeForFilter=${audioModeForFilter}`
+    )
+  } else if (audioMode === 'preserve') {
     args = [
       '-y',
       '-i', inputPath,
@@ -194,7 +263,10 @@ export async function startBurnin(
     }, { once: true })
 
     let progressBuffer = ''
-    const durationMs = video.durationSec * 1000
+    // REQ-074 1d: progress denominator must be the EDITED duration when
+    // cuts are present — ffmpeg's `out_time_ms` advances against the
+    // concat output's timeline, which is exactly `editedDuration`.
+    const durationMs = effectiveDurationSec * 1000
 
     proc.stdout.on('data', (chunk: Buffer) => {
       progressBuffer += chunk.toString()

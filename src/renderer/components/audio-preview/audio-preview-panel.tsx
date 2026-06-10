@@ -3,34 +3,17 @@ import { Play, Pause, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useUiStore } from '@/stores/ui-store'
+import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
-import type { SubtitleEntry } from '../../../shared/types'
+import { findActiveEntryId } from '@/lib/active-entry'
+import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
+import { bumpRenderCount } from '@/lib/perf-counter'
+import { scrubState } from '@/lib/scrub-state'
 
-/**
- * Binary-search the sorted `entries` array for the entry active at
- * `timeSec`.  Returns the entry's id, or null if none covers the
- * timestamp.  Duplicates the function in video-preview-panel.tsx — the
- * sort + search is small enough that extracting it to a shared module
- * would add more import noise than it removes; both panels stay
- * self-contained.
- */
-function findActiveEntryId(entries: SubtitleEntry[], timeSec: number): string | null {
-  let lo = 0
-  let hi = entries.length - 1
-  while (lo <= hi) {
-    const mid = (lo + hi) >>> 1
-    const e = entries[mid]
-    if (timeSec < e.startSec) {
-      hi = mid - 1
-    } else if (timeSec > e.endSec) {
-      lo = mid + 1
-    } else {
-      return e.id
-    }
-  }
-  return null
-}
+// REQ-080 #1: findActiveEntryId moved to @/lib/active-entry — shared
+// with VideoPreviewPanel + unit-tested for [start, end) end-exclusive
+// boundary semantics.
 
 /**
  * Convert a local file path to a `mojioko-media://` URL served by the
@@ -74,15 +57,21 @@ function formatTime(sec: number): string {
  * when the user opens an audio file.
  */
 export function AudioPreviewPanel() {
+  bumpRenderCount('AudioPreviewPanel')
   const { t } = useTranslation(['step2'])
   const video = useProjectStore((s) => s.video)
   const entries = useProjectStore((s) => s.entries)
+  // REQ-075 #5: seekbar lives on the EDITED axis.  Identity transforms
+  // when cuts is empty, so existing audio-mode users see no change.
+  const cuts = useProjectStore((s) => s.cuts)
   const videoSeekRequestSec = useUiStore((s) => s.videoSeekRequestSec)
   const setVideoSeekRequest = useUiStore((s) => s.setVideoSeekRequest)
   const setVideoCurrentTimeSec = useUiStore((s) => s.setVideoCurrentTimeSec)
   const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
 
   const audioRef = useRef<HTMLAudioElement>(null)
+  // REQ-074 1b: jump past any time inside a confirmed cut while playing.
+  useCutSkip(audioRef)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -125,7 +114,12 @@ export function AudioPreviewPanel() {
     if (el) {
       el.currentTime = videoSeekRequestSec
       setCurrentTime(videoSeekRequestSec)
-      setVideoCurrentTimeSec(videoSeekRequestSec)
+      // REQ-096: while a manual ruler scrub is in progress, the
+      // optimistic-playhead path owns videoCurrentTimeSec; skip the
+      // write here for the same reason as VPP's seek effect.
+      if (!scrubState.inProgress) {
+        setVideoCurrentTimeSec(videoSeekRequestSec)
+      }
     }
     setVideoSeekRequest(null)
   }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec])
@@ -133,8 +127,19 @@ export function AudioPreviewPanel() {
   function togglePlay() {
     const el = audioRef.current
     if (!el) return
-    if (el.paused) { el.play().catch(() => {}) }
-    else { el.pause() }
+    if (el.paused) {
+      // REQ-079 #1: rewind to head when ▶ is pressed at EOF (mirrors
+      // VideoPreviewPanel).  Without this, "play" from end-of-clip
+      // would either silently do nothing or immediately fire 'ended'
+      // again — standard player UX is to restart from the start.
+      const PLAYBACK_RESET_EPS_SEC = 0.05
+      if (el.duration > 0 && el.currentTime >= el.duration - PLAYBACK_RESET_EPS_SEC) {
+        el.currentTime = 0
+      }
+      el.play().catch(() => {})
+    } else {
+      el.pause()
+    }
   }
 
   // Space key — play/pause when no text field is focused.  Mirrors the
@@ -158,7 +163,10 @@ export function AudioPreviewPanel() {
     if (!el || isSeeking.current) return
     const time = el.currentTime
     setCurrentTime(time)
-    setVideoCurrentTimeSec(time)
+    // REQ-096: same scrub-state guard as VPP's handleTimeUpdate.
+    if (!scrubState.inProgress) {
+      setVideoCurrentTimeSec(time)
+    }
 
     // REQ-030 #2: drive focusedRowId from playback the same way
     // VideoPreviewPanel does, so the active subtitle row highlights in
@@ -188,10 +196,27 @@ export function AudioPreviewPanel() {
   }
 
   function handleSeekChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = parseFloat(e.target.value)
-    setCurrentTime(v)
-    setVideoCurrentTimeSec(v)
-    if (audioRef.current) audioRef.current.currentTime = v
+    // Slider's value is EDITED; convert back to ORIGINAL before writing
+    // to <audio>.currentTime (Original) and the playhead store slice
+    // (also Original).  editedToOrig is identity for empty cuts.
+    const editedVal = parseFloat(e.target.value)
+    const origVal = editedToOrig(editedVal, cuts)
+    setCurrentTime(origVal)
+    setVideoCurrentTimeSec(origVal)
+    if (audioRef.current) {
+      audioRef.current.currentTime = origVal
+    }
+  }
+
+  /**
+   * REQ-079 #1: just flip the play state.  No more "warp to 0" on EOF.
+   * Whether the user pressed ⏭, dragged the seekbar to the end, or
+   * played through naturally, the playhead stays at the final frame.
+   * Pressing ▶ from rest auto-rewinds to 0 via togglePlay's at-end
+   * branch.  Supersedes the REQ-078 manualSeekHoldRef approach.
+   */
+  function handleEnded() {
+    setIsPlaying(false)
   }
 
   if (!video || !mediaUrl) return null
@@ -206,11 +231,11 @@ export function AudioPreviewPanel() {
           collapsing it gains nothing). */}
       <div className="flex items-center gap-2 px-3 py-2">
         <Play className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground flex-shrink-0">
+        <span className="text-label font-medium uppercase tracking-wider text-muted-foreground flex-shrink-0">
           {t('videoPreview.play')}
         </span>
         <div className="flex-1 flex items-center justify-center gap-1.5 min-w-0 px-2">
-          <span className="min-w-0 truncate text-[12px] text-foreground/80" title={video.path}>
+          <span className="min-w-0 truncate text-body-sm text-foreground/80" title={video.path}>
             {filename}
           </span>
           <button
@@ -237,7 +262,7 @@ export function AudioPreviewPanel() {
           so the bar gets the full panel width. */}
       <div className="flex items-center justify-center px-4 pb-4 pt-2" style={{ minHeight: 180 }}>
         {hasError ? (
-          <span className="text-xs text-muted-foreground">{t('videoPreview.error')}</span>
+          <span className="text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
         ) : (
           <div className="flex flex-col items-center gap-3 w-full max-w-md">
             <button
@@ -247,7 +272,7 @@ export function AudioPreviewPanel() {
               className={cn(
                 'flex items-center justify-center rounded-full transition-colors duration-150',
                 'h-10 w-10 bg-primary text-primary-foreground hover:bg-primary/90',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30'
+                'focus:outline-none focus-visible:outline-none'
               )}
             >
               {isPlaying
@@ -255,23 +280,31 @@ export function AudioPreviewPanel() {
                 : <Play className="h-5 w-5 ml-0.5" />}
             </button>
 
-            <div className="w-full flex flex-col gap-1">
-              <span className="text-[11px] tabular-nums text-muted-foreground text-center">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
-              <input
-                type="range"
-                min={0}
-                max={duration || 0}
-                step={0.01}
-                value={currentTime}
-                onChange={handleSeekChange}
-                onPointerDown={() => { isSeeking.current = true }}
-                onPointerUp={() => { isSeeking.current = false }}
-                className="w-full accent-primary"
-                aria-label={t('videoPreview.play')}
-              />
-            </div>
+            {(() => {
+              // REQ-075 #5 — seek + readout in EDITED coordinates.
+              // Identical to (currentTime, duration) when cuts is empty.
+              const editedTotalSec = editedDuration(duration, cuts)
+              const editedCurrentTime = origToEdited(currentTime, cuts)
+              return (
+                <div className="w-full flex flex-col gap-1">
+                  <span className="text-caption tabular-nums text-muted-foreground text-center">
+                    {formatTime(editedCurrentTime)} / {formatTime(editedTotalSec)}
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={editedTotalSec || 0}
+                    step={0.01}
+                    value={editedCurrentTime}
+                    onChange={handleSeekChange}
+                    onPointerDown={() => { isSeeking.current = true }}
+                    onPointerUp={() => { isSeeking.current = false }}
+                    className="w-full accent-primary"
+                    aria-label={t('videoPreview.play')}
+                  />
+                </div>
+              )
+            })()}
           </div>
         )}
       </div>
@@ -284,15 +317,7 @@ export function AudioPreviewPanel() {
         onLoadedMetadata={handleLoadedMetadata}
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
-        onEnded={() => {
-          setIsPlaying(false)
-          setCurrentTime(0)
-          setVideoCurrentTimeSec(0)
-          // Clear the active-row tracker so the next play starts from a
-          // clean state (matches VideoPreviewPanel's onEnded behaviour).
-          activeEntryIdRef.current = null
-          setFocusedRowId(null)
-        }}
+        onEnded={handleEnded}
         onError={() => setHasError(true)}
         className="hidden"
       />

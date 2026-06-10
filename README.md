@@ -18,6 +18,7 @@ All processing runs locally on your PC—no data leaves your device.
 - **Multilingual transcription** — Powered by OpenAI Whisper, supports 11 languages.
 - **Hardware-accelerated encoding** — Auto-detects NVIDIA, AMD, Intel GPU encoders, with software fallback.
 - **Subtitle editor** — Inline text editing, time adjustment, undo/redo, multi-format export (TXT/SRT).
+- **Timeline trimming** — Mark In / Out on the timeline and remove unwanted segments from the video together with the surrounding subtitles. Each trim leaves a scissor marker you can click to undo, even when trims are nested.
 - **Colour palette** — 30 curated colours including a colour-blind-friendly (CUD) set.
 - **DaVinci Resolve compatible** — SRT output works directly with DaVinci Resolve and other video editors.
 
@@ -66,6 +67,6 @@ Copyright © 2026 brightryo. All rights reserved.
 
 ## Technical Notes
 
-- **Smart screen warning**: The installer is not code-signed in v1.0.0. Windows Defender SmartScreen may show a warning on first launch. This will be addressed in future versions.
+- **Smart screen warning**: The installer is not code-signed, so Windows Defender SmartScreen may show a warning on first launch. Code signing is planned for a future release.
 - **No auto-update**: Manual update checks via Help → Open Download Page.
 - **macOS / Linux**: Not currently supported. Windows only.

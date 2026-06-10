@@ -7,7 +7,6 @@ import jaStep1 from './locales/ja/step1.json'
 import jaStep2 from './locales/ja/step2.json'
 import jaStep3 from './locales/ja/step3.json'
 import jaSettings from './locales/ja/settings.json'
-import jaCommands from './locales/ja/commands.json'
 import jaErrors from './locales/ja/errors.json'
 import jaDonation from './locales/ja/donation.json'
 
@@ -16,14 +15,14 @@ import enStep1 from './locales/en/step1.json'
 import enStep2 from './locales/en/step2.json'
 import enStep3 from './locales/en/step3.json'
 import enSettings from './locales/en/settings.json'
-import enCommands from './locales/en/commands.json'
 import enErrors from './locales/en/errors.json'
 import enDonation from './locales/en/donation.json'
 
 i18n.use(initReactI18next).init({
   lng: DEFAULT_LANGUAGE,
   fallbackLng: 'en',
-  ns: ['common', 'step1', 'step2', 'step3', 'settings', 'commands', 'errors', 'donation'],
+  // REQ-082: 'commands' namespace removed alongside the command palette.
+  ns: ['common', 'step1', 'step2', 'step3', 'settings', 'errors', 'donation'],
   defaultNS: 'common',
   resources: {
     ja: {
@@ -32,7 +31,6 @@ i18n.use(initReactI18next).init({
       step2: jaStep2,
       step3: jaStep3,
       settings: jaSettings,
-      commands: jaCommands,
       errors: jaErrors,
       donation: jaDonation
     },
@@ -42,7 +40,6 @@ i18n.use(initReactI18next).init({
       step2: enStep2,
       step3: enStep3,
       settings: enSettings,
-      commands: enCommands,
       errors: enErrors,
       donation: enDonation
     }

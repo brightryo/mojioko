@@ -36,6 +36,12 @@ const DialogContent = React.forwardRef<
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
+      // REQ-082: suppress Radix Dialog's default Esc-to-close — Esc is no
+      // longer a keyboard shortcut anywhere in the app.  The X icon
+      // (rendered just below) and any per-dialog Cancel buttons are the
+      // only close affordances.  Outside-click closing is left intact
+      // because it's a mouse gesture, not a keyboard shortcut.
+      onEscapeKeyDown={(e) => e.preventDefault()}
       className={cn(
         'fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%]',
         'w-full max-w-lg rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl shadow-black/60',
@@ -51,7 +57,7 @@ const DialogContent = React.forwardRef<
     >
       {children}
       {!hideClose && (
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md p-1 text-zinc-500 transition-colors hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-green-500/30">
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md p-1 text-zinc-500 transition-colors hover:text-zinc-200 focus:outline-none focus-visible:outline-none">
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>
@@ -77,7 +83,7 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('text-[15px] font-semibold text-zinc-50 leading-none', className)}
+    className={cn('text-title font-semibold text-zinc-50 leading-none', className)}
     {...props}
   />
 ))
@@ -89,7 +95,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn('text-[13px] text-zinc-400', className)}
+    className={cn('text-body text-zinc-400', className)}
     {...props}
   />
 ))

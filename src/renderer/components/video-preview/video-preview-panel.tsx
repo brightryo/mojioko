@@ -5,12 +5,17 @@ import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore } from '@/stores/ui-store'
+import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
+import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
+import { scrubState } from '@/lib/scrub-state'
 import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
 import { Switch } from '@/components/ui/switch'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
+import { findActiveEntryId } from '@/lib/active-entry'
+import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
 import type { SubtitleEntry } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -51,29 +56,8 @@ function formatTime(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-/**
- * Binary-search the sorted `entries` array for the entry active at `timeSec`.
- * Returns the entry's id, or null if none covers the timestamp.
- *
- * Assumes entries are sorted by startSec ascending (guaranteed by the
- * transcription pipeline; SubtitleTable preserves this order).
- */
-function findActiveEntryId(entries: SubtitleEntry[], timeSec: number): string | null {
-  let lo = 0
-  let hi = entries.length - 1
-  while (lo <= hi) {
-    const mid = (lo + hi) >>> 1
-    const e = entries[mid]
-    if (timeSec < e.startSec) {
-      hi = mid - 1
-    } else if (timeSec > e.endSec) {
-      lo = mid + 1
-    } else {
-      return e.id
-    }
-  }
-  return null
-}
+// findActiveEntryId moved to @/lib/active-entry for shared use + unit tests.
+// REQ-080 #1: range semantics changed to [start, end) — end exclusive.
 
 // ---------------------------------------------------------------------------
 // Component
@@ -108,9 +92,14 @@ function findActiveEntryId(entries: SubtitleEntry[], timeSec: number): string | 
  *   so it does NOT interfere with subtitle text editing in the table.
  */
 export function VideoPreviewPanel() {
+  bumpRenderCount('VideoPreviewPanel')
   const { t } = useTranslation(['step2'])
   const video = useProjectStore((s) => s.video)
   const entries = useProjectStore((s) => s.entries)
+  // REQ-075 #5: the seekbar lives on the EDITED axis (= origToEdited of
+  // <video>.currentTime); when cuts is empty the transforms are identity,
+  // so existing non-trim users see byte-identical behaviour.
+  const cuts = useProjectStore((s) => s.cuts)
 
   // burnin / subtitleBackground used to live behind the Step 3 form;
   // in the new layout this panel owns the editing UI so the user can
@@ -125,7 +114,9 @@ export function VideoPreviewPanel() {
 
   const videoSeekRequestSec    = useUiStore((s) => s.videoSeekRequestSec)
   const setVideoSeekRequest    = useUiStore((s) => s.setVideoSeekRequest)
-  const focusedRowId           = useUiStore((s) => s.focusedRowId)
+  // REQ-080 #1: overlayEntry no longer falls back to focusedRowId on
+  // paused, so we only need the SETTER (handleTimeUpdate writes during
+  // playback so the subtitle table highlights the active row).
   const setFocusedRowId        = useUiStore((s) => s.setFocusedRowId)
   const setVideoCurrentTimeSec = useUiStore((s) => s.setVideoCurrentTimeSec)
   const isExpanded             = useUiStore((s) => s.videoPreviewExpanded)
@@ -133,6 +124,9 @@ export function VideoPreviewPanel() {
 
   const videoRef  = useRef<HTMLVideoElement>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
+  // REQ-074 1b: while playing, jump past any frame that falls inside a
+  // user-confirmed cut (ripple-preview behaviour).  No-op when cuts is empty.
+  useCutSkip(videoRef)
   const [isPlaying,  setIsPlaying]  = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration,    setDuration]    = useState(0)
@@ -163,19 +157,29 @@ export function VideoPreviewPanel() {
   }, [entries])
 
   /**
-   * Decide which subtitle entry to overlay on the video.
-   *   Playing  → entry covering `currentTime` (null between subtitles)
-   *   Stopped  → focused row in the table (the user's current selection)
+   * REQ-080 #1: single source of truth for the overlay — the entry
+   * whose `[startSec, endSec)` covers the current playhead.  Works
+   * identically for playback and paused states:
+   *
+   *   - During playback, `currentTime` tracks `<video>.currentTime`;
+   *     the active subtitle (if any) renders.
+   *   - When the user clicks a row in the subtitle table, the seek
+   *     path sets `currentTime` to the row's startSec, so the same
+   *     lookup naturally surfaces that row's subtitle.
+   *   - When playback stops at duration (no more 0-warp since
+   *     REQ-079), `currentTime === lastEntry.endSec` and the
+   *     end-exclusive lookup returns null — no stale subtitle baked
+   *     on top of the final frame.
+   *
+   * The old isPlaying-gated path that unconditionally fell back to
+   * `focusedRowId` produced the REQ-080-reported bug because
+   * `focusedRowId` is retained across gap-time (so it stays pointed
+   * at the last-played subtitle after EOF).
    */
   const overlayEntry = useMemo<SubtitleEntry | null>(() => {
-    if (isPlaying) {
-      const id = findActiveEntryId(sortedActiveEntries, currentTime)
-      return id ? sortedActiveEntries.find((e) => e.id === id) ?? null : null
-    }
-    return focusedRowId
-      ? sortedActiveEntries.find((e) => e.id === focusedRowId) ?? null
-      : null
-  }, [isPlaying, currentTime, focusedRowId, sortedActiveEntries])
+    const id = findActiveEntryId(sortedActiveEntries, currentTime)
+    return id ? sortedActiveEntries.find((e) => e.id === id) ?? null : null
+  }, [currentTime, sortedActiveEntries])
 
   // Load the subtitle font on mount and refresh whenever the active font
   // changes so the preview reflects the new metrics without requiring a
@@ -215,8 +219,21 @@ export function VideoPreviewPanel() {
   const togglePlay = useCallback(() => {
     const el = videoRef.current
     if (!el) return
-    if (el.paused) { el.play().catch(() => {}) }
-    else           { el.pause() }
+    if (el.paused) {
+      // REQ-079 #1: with handleEnded no longer warping to 0, the
+      // playhead may be sitting at the very end when the user presses
+      // ▶ again.  Standard player UX rewinds to the start in that
+      // case so playback always starts somewhere watchable.  The eps
+      // (~50 ms) matches MIN_BLOCK_SEC and handles float drift around
+      // the EOF boundary; well below the threshold of perception.
+      const PLAYBACK_RESET_EPS_SEC = 0.05
+      if (el.duration > 0 && el.currentTime >= el.duration - PLAYBACK_RESET_EPS_SEC) {
+        el.currentTime = 0
+      }
+      el.play().catch(() => {})
+    } else {
+      el.pause()
+    }
   }, [])
 
   // Space key — play/pause when no text field is focused
@@ -250,14 +267,36 @@ export function VideoPreviewPanel() {
 
   useEffect(() => {
     if (videoSeekRequestSec === null) return
-    const el = videoRef.current
-    if (el) {
-      el.currentTime = videoSeekRequestSec
-      setCurrentTime(videoSeekRequestSec)
-      setVideoCurrentTimeSec(videoSeekRequestSec)
-    }
-    // Clear the request immediately after consuming it.
-    setVideoSeekRequest(null)
+    // REQ-095: time the seek effect — this is where the (real-video)
+    // `el.currentTime = X` blocking seek lands, plus the three setStates
+    // that drive Playhead / VPP / autoScroll subscribers.  Split into
+    // (a) the `el.currentTime` assignment alone (= the HTML5 video
+    // engine's keyframe-snap + decode cost) and (b) the rest of the
+    // effect body, so the e2e can tell whether the bottleneck is the
+    // video element or our store fan-out.
+    measureSync('VPP.seekEffect.total', () => {
+      const el = videoRef.current
+      if (el) {
+        measureSync('VPP.seekEffect.videoSeek', () => {
+          el.currentTime = videoSeekRequestSec
+        })
+        setCurrentTime(videoSeekRequestSec)
+        // REQ-096: while a manual ruler scrub is in progress, the
+        // optimistic-playhead path in TimelineView's handleSeek has
+        // already written `videoCurrentTimeSec` to the LATEST cursor
+        // position.  The rAF-throttled seek that triggered this
+        // effect carries the value the cursor had a frame ago, so
+        // writing it here would briefly snap the Playhead BACKWARD
+        // until the next pointermove.  Skip during scrub; on
+        // pointerup the scrub handler clears the flag and the next
+        // `timeupdate` (from the actual video element) re-syncs.
+        if (!scrubState.inProgress) {
+          setVideoCurrentTimeSec(videoSeekRequestSec)
+        }
+      }
+      // Clear the request immediately after consuming it.
+      setVideoSeekRequest(null)
+    })
   }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec])
 
   // -------------------------------------------------------------------------
@@ -269,7 +308,17 @@ export function VideoPreviewPanel() {
     if (!el || isSeeking.current) return
     const time = el.currentTime
     setCurrentTime(time)
-    setVideoCurrentTimeSec(time)
+    // REQ-096: same rationale as the seek useEffect — during a
+    // manual ruler scrub, the optimistic write owns
+    // `videoCurrentTimeSec` and writing it from the video element's
+    // `timeupdate` event (which fires after every successful
+    // `el.currentTime = X` commit, carrying the rAF-throttled
+    // value) would race the latest pointermove and pull the
+    // Playhead backward.  pointerup clears scrubState.inProgress
+    // and the next `timeupdate` re-syncs.
+    if (!scrubState.inProgress) {
+      setVideoCurrentTimeSec(time)
+    }
 
     // Drive focusedRowId from playback — but not while the user is editing
     // a subtitle cell (CellEditor mounts a <textarea>).
@@ -296,13 +345,17 @@ export function VideoPreviewPanel() {
 
   function handlePlay()  { setIsPlaying(true) }
   function handlePause() { setIsPlaying(false) }
+  /**
+   * REQ-079 #1: `ended` only flips the play state to false.  No more
+   * "warp to 0" on EOF.  Whether the user pressed ⏭, scrubbed past the
+   * right edge, or simply played through to the end, the playhead now
+   * stays at the final frame.  Pressing ▶ from that resting state
+   * restarts from the head — see togglePlay's at-end branch.  This
+   * supersedes the REQ-078 manualSeekHoldRef 300 ms gating: with no
+   * warp ever, there is nothing for that flag to guard.
+   */
   function handleEnded() {
     setIsPlaying(false)
-    setCurrentTime(0)
-    setVideoCurrentTimeSec(0)
-    if (videoRef.current) videoRef.current.currentTime = 0
-    activeEntryIdRef.current = null
-    setFocusedRowId(null)
   }
   function handleError() { setHasError(true) }
 
@@ -314,10 +367,18 @@ export function VideoPreviewPanel() {
   function handleSeekUp()    { isSeeking.current = false }
 
   function handleSeekChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = parseFloat(e.target.value)
-    setCurrentTime(val)
-    setVideoCurrentTimeSec(val)
-    if (videoRef.current) videoRef.current.currentTime = val
+    // The slider's value lives on the EDITED axis (its max is
+    // editedDuration); translate back to ORIGINAL before writing to
+    // <video>.currentTime and to the playhead store slice (both are
+    // Original axis).  editedToOrig is identity when cuts is empty so
+    // legacy users get the same behaviour.
+    const editedVal = parseFloat(e.target.value)
+    const origVal = editedToOrig(editedVal, cuts)
+    setCurrentTime(origVal)
+    setVideoCurrentTimeSec(origVal)
+    if (videoRef.current) {
+      videoRef.current.currentTime = origVal
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -361,7 +422,7 @@ export function VideoPreviewPanel() {
             type="button"
             onClick={() => onChange(opt)}
             className={cn(
-              'px-2.5 py-1 text-[11px] transition-colors duration-150',
+              'px-2.5 py-1 text-caption transition-colors duration-150',
               value === opt
                 ? 'bg-primary/15 text-primary font-medium'
                 : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
@@ -383,21 +444,16 @@ export function VideoPreviewPanel() {
               its height against the left column's video element.
           stopPropagation on the folder button so clicking the icon does
           not also toggle the accordion. */}
+      {/* REQ-082: Enter / Space keyboard activation removed. */}
       <div
         role="button"
         aria-expanded={isExpanded}
         tabIndex={0}
         onClick={() => setExpanded(!isExpanded)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            setExpanded(!isExpanded)
-          }
-        }}
         className="flex items-center gap-2 cursor-pointer select-none hover:opacity-90 transition-opacity duration-150 px-3 py-2"
       >
         <Play className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground flex-shrink-0">
+        <span className="text-label font-medium uppercase tracking-wider text-muted-foreground flex-shrink-0">
           {t('videoPreview.play')}
         </span>
 
@@ -405,7 +461,7 @@ export function VideoPreviewPanel() {
             remaining horizontal space so the filename sits in the middle
             of the header regardless of how wide the panel is. */}
         <div className="flex-1 flex items-center justify-center gap-1.5 min-w-0 px-2">
-          <span className="min-w-0 truncate text-[12px] text-foreground/80" title={video.path}>
+          <span className="min-w-0 truncate text-body-sm text-foreground/80" title={video.path}>
             {filename}
           </span>
           <button
@@ -492,12 +548,12 @@ export function VideoPreviewPanel() {
                     }}
                   >
 
-                    {/* ── Left: video + subtitle overlay + disclaimer ─────
-                        The "approximate preview" disclaimer sits directly
-                        under the video frame so the warning attaches to
-                        what it describes; column track's minmax floor
-                        keeps the disclaimer readable for vertical videos
-                        even though the video itself is narrower. */}
+                    {/* ── Left: video + subtitle overlay ─────
+                        REQ-075 #2: the "approximate preview" disclaimer
+                        used to sit directly under the video here; it has
+                        moved to the top of the right column so the space
+                        under the video frame stays free (helps Step 2's
+                        overall vertical budget). */}
                     <div className="flex flex-col">
                       <div
                         ref={videoContainerRef}
@@ -505,7 +561,7 @@ export function VideoPreviewPanel() {
                         style={{ width: `${videoW}px`, height: `${videoH}px` }}
                       >
                         {hasError ? (
-                          <span className="px-6 text-xs text-muted-foreground">{t('videoPreview.error')}</span>
+                          <span className="px-6 text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
                         ) : (
                           <>
                             <video
@@ -532,9 +588,6 @@ export function VideoPreviewPanel() {
                           </>
                         )}
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {t('subtitleLayout.previewNote')}
-                      </p>
                     </div>
 
                 {/* ── Right: 2-row layout (settings / player) ──────────
@@ -542,6 +595,16 @@ export function VideoPreviewPanel() {
                     accordion header so the right column is shorter and
                     closer to the left column's height. */}
                 <div className="flex flex-col py-1 min-w-0">
+
+                  {/* REQ-075 #2: previewNote moved here (was directly
+                      under the video frame on the left).  Putting it
+                      above the subtitle-layout group keeps the warning
+                      visible without consuming any vertical space below
+                      the video, which is what the left column was
+                      bleeding before. */}
+                  <p className="mb-2 text-body-sm text-muted-foreground">
+                    {t('subtitleLayout.previewNote')}
+                  </p>
 
                   {/* Top: two boxed groups (Subtitle layout / Subtitle
                       background).  Each group is a rounded outline with
@@ -559,10 +622,10 @@ export function VideoPreviewPanel() {
                   <div className="space-y-2">
                     {/* ── Group 1: Subtitle layout ─────────────────── */}
                     <div className="rounded-md border border-border px-3 py-2">
-                      <p className="text-[10px] font-medium uppercase tracking-wider text-foreground/70 mb-1.5">
+                      <p className="text-label font-medium uppercase tracking-wider text-foreground/70 mb-1.5">
                         {t('subtitleLayout.layoutGroup')}
                       </p>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-body-sm text-muted-foreground">
                         <div className="flex items-center gap-1.5">
                           <span>{t('subtitleLayout.horizontalShort')}</span>
                           <Segmented
@@ -591,7 +654,7 @@ export function VideoPreviewPanel() {
                             max={300}
                             value={burnin.verticalMarginPx}
                             onChange={(e) => updateBurnin({ verticalMarginPx: parseInt(e.target.value, 10) || 0 })}
-                            className="h-7 w-14 rounded border border-border bg-input px-1.5 text-center text-[12px] text-foreground focus:outline-none focus:ring-1 focus:ring-ring/30 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                            className="h-7 w-14 rounded border border-border bg-input px-1.5 text-center text-body-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring/30 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </div>
                       </div>
@@ -599,10 +662,10 @@ export function VideoPreviewPanel() {
 
                     {/* ── Group 2: Subtitle background ─────────────── */}
                     <div className="rounded-md border border-border px-3 py-2">
-                      <p className="text-[10px] font-medium uppercase tracking-wider text-foreground/70 mb-1.5">
+                      <p className="text-label font-medium uppercase tracking-wider text-foreground/70 mb-1.5">
                         {t('subtitleLayout.backgroundGroup')}
                       </p>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-body-sm text-muted-foreground">
                         {/* Toggle — label-less because the group title
                             ("文字背景") already names the switch. */}
                         <Switch
@@ -656,7 +719,7 @@ export function VideoPreviewPanel() {
                           is on.  Stays inside the background group's box
                           so the cause/effect link is visually obvious. */}
                       {subtitleBackground.enabled && (
-                        <p className="mt-1.5 text-[11px] text-[hsl(var(--warning))]">
+                        <p className="mt-1.5 text-body-sm text-[hsl(var(--warning))]">
                           {t('background.outlineNote')}
                         </p>
                       )}
@@ -669,47 +732,58 @@ export function VideoPreviewPanel() {
                       columns visually balance. */}
                   <div className="flex-1" />
 
-                  {/* Bottom: smaller play/pause + scrub + time */}
-                  <div className="flex items-center gap-2 px-1">
-                    <button
-                      type="button"
-                      onClick={togglePlay}
-                      disabled={hasError || duration === 0}
-                      className={cn(
-                        'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
-                        'bg-secondary text-foreground transition-all duration-150',
-                        'hover:bg-accent active:scale-95',
-                        'focus:outline-none focus:ring-2 focus:ring-ring/30',
-                        'disabled:cursor-not-allowed disabled:opacity-40'
-                      )}
-                      aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
-                    >
-                      {isPlaying
-                        ? <Pause className="h-5 w-5" />
-                        : <Play  className="h-5 w-5 translate-x-0.5" />
-                      }
-                    </button>
-                    <input
-                      type="range"
-                      min={0}
-                      max={duration > 0 ? duration : 100}
-                      step={0.1}
-                      value={currentTime}
-                      disabled={duration === 0 || hasError}
-                      onMouseDown={handleSeekDown}
-                      onChange={handleSeekChange}
-                      onMouseUp={handleSeekUp}
-                      onTouchStart={handleSeekDown}
-                      onTouchEnd={handleSeekUp}
-                      style={{
-                        accentColor: 'hsl(var(--primary))'
-                      }}
-                      className="flex-1 h-1.5 cursor-pointer disabled:cursor-default disabled:opacity-40"
-                    />
-                    <span className="flex-shrink-0 select-none font-mono tabular-nums text-xs text-muted-foreground">
-                      {formatTime(currentTime)}&nbsp;/&nbsp;{formatTime(duration)}
-                    </span>
-                  </div>
+                  {/* Bottom: smaller play/pause + scrub + time.
+                      REQ-075 #5 — seekbar + readout on the EDITED axis.
+                      `editedTotalSec` and `editedCurrentTime` collapse to
+                      `duration` and `currentTime` exactly when cuts is
+                      empty (origToEdited / editedDuration are identity),
+                      so legacy users notice no change. */}
+                  {(() => {
+                    const editedTotalSec = editedDuration(duration, cuts)
+                    const editedCurrentTime = origToEdited(currentTime, cuts)
+                    return (
+                      <div className="flex items-center gap-2 px-1">
+                        <button
+                          type="button"
+                          onClick={togglePlay}
+                          disabled={hasError || duration === 0}
+                          className={cn(
+                            'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
+                            'bg-secondary text-foreground transition-all duration-150',
+                            'hover:bg-accent active:scale-95',
+                            'focus:outline-none focus-visible:outline-none',
+                            'disabled:cursor-not-allowed disabled:opacity-40'
+                          )}
+                          aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
+                        >
+                          {isPlaying
+                            ? <Pause className="h-5 w-5" />
+                            : <Play  className="h-5 w-5 translate-x-0.5" />
+                          }
+                        </button>
+                        <input
+                          type="range"
+                          min={0}
+                          max={editedTotalSec > 0 ? editedTotalSec : 100}
+                          step={0.1}
+                          value={editedCurrentTime}
+                          disabled={duration === 0 || hasError}
+                          onMouseDown={handleSeekDown}
+                          onChange={handleSeekChange}
+                          onMouseUp={handleSeekUp}
+                          onTouchStart={handleSeekDown}
+                          onTouchEnd={handleSeekUp}
+                          style={{
+                            accentColor: 'hsl(var(--primary))'
+                          }}
+                          className="flex-1 h-1.5 cursor-pointer disabled:cursor-default disabled:opacity-40"
+                        />
+                        <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-muted-foreground">
+                          {formatTime(editedCurrentTime)}&nbsp;/&nbsp;{formatTime(editedTotalSec)}
+                        </span>
+                      </div>
+                    )
+                  })()}
 
                 </div>
 
