@@ -1417,21 +1417,28 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               </button>
             </PopoverTrigger>
             <PopoverContent
-              // REQ-124 / REQ-127 — anchor the popover BELOW the help
-              // button (Radix's default `avoidCollisions=true` would
-              // otherwise hop the panel above the trigger and slide it
-              // behind the AppShell header).  REQ-127 widens the panel
-              // and splits the four sections into a 2x2 grid so the
-              // vertical height actually shrinks — the previous 380 px
-              // single-column layout was tall enough to clip the
-              // bottom on a 718 px-tall window.  The `max-h` + scroll
-              // is kept as belt-and-braces in case a translation runs
-              // longer than expected.
-              side="bottom"
+              // REQ-128 — open SIDEWAYS (to the right of the help
+              // button) instead of downward.  The help button sits at
+              // the very top-left of the timeline toolbar, so a
+              // downward-opening panel always pushes its bottom edge
+              // toward the viewport floor; long copy (English in
+              // particular) clipped the last section in REQ-127's
+              // 2x2 grid.  Pointing right escapes that constraint:
+              // the panel uses the wide horizontal space to the right
+              // of the toolbar, and Radix's collision avoidance flips
+              // it to the opposite side only if the right edge runs
+              // out (avoidCollisions defaults back to true here,
+              // unlike REQ-124's pin-down).
+              //
+              // The width + 2x2 grid from REQ-127 stay; the `max-h` +
+              // scroll fallback stays as belt-and-braces for unusually
+              // long future copy.
+              side="right"
               align="start"
-              avoidCollisions={false}
+              sideOffset={8}
+              avoidCollisions
               collisionPadding={12}
-              className="w-[720px] p-4 space-y-3 text-zinc-100 max-h-[calc(100vh-160px)] overflow-y-auto"
+              className="w-[720px] p-4 space-y-3 text-zinc-100 max-h-[calc(100vh-40px)] overflow-y-auto"
             >
               <div className="text-body font-semibold text-zinc-50">
                 {t('timeline.help.title')}
