@@ -72,6 +72,13 @@ win:
   requestedExecutionLevel: asInvoker
 
 nsis:
+  # Hyphen-separated installer filename so the .exe survives GitHub Releases'
+  # whitespace-to-dot mangling.  electron-builder's default would emit
+  # `MOJIOKO Setup 1.2.0.exe`; GitHub then exposes the asset as
+  # `MOJIOKO.Setup.1.2.0.exe` from one redirect and as the spaced original
+  # from another, which previously broke deep-link download URLs (404).
+  # `MOJIOKO-Setup-1.2.0.exe` round-trips unchanged.
+  artifactName: ${productName}-Setup-${version}.${ext}
   # Multi-step wizard installer: welcome → license → install dir → progress →
   # finish.  Pre-v1.0.0 we shipped oneClick:true, but a published license
   # (EULA) acceptance step is a legal-feeling requirement that NSIS surfaces
