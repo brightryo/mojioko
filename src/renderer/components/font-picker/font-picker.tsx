@@ -252,7 +252,7 @@ export function FontPicker({ onChange }: FontPickerProps) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-1">
-        <span className="text-sm font-medium text-foreground">{t('fontPicker.title')}</span>
+        <span className="text-body font-medium text-foreground">{t('fontPicker.title')}</span>
         <HelpIcon content={t('fontPicker.help')} />
       </div>
       <div className="rounded-md border border-border bg-card divide-y divide-border max-h-[300px] overflow-y-auto">
@@ -363,17 +363,10 @@ function FontRow({
     : {}
 
   // Whole-row click → select.  Action buttons inside stopPropagation so
-  // they don't double-trigger.  Keyboard: Enter / Space mirror the click
-  // when the row is focusable (canSelect).
+  // they don't double-trigger.  REQ-082: removed Enter / Space keyboard
+  // activation; click is the only way to select a row.
   function handleRowClick() {
     if (canSelect) onSelect()
-  }
-  function handleRowKey(e: React.KeyboardEvent) {
-    if (!canSelect) return
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onSelect()
-    }
   }
 
   return (
@@ -381,11 +374,10 @@ function FontRow({
       role={canSelect ? 'button' : undefined}
       tabIndex={canSelect ? 0 : undefined}
       onClick={canSelect ? handleRowClick : undefined}
-      onKeyDown={canSelect ? handleRowKey : undefined}
       aria-pressed={canSelect ? isActive : undefined}
       className={cn(
         'flex items-center justify-between gap-3 px-3 py-2 transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30 focus-visible:ring-inset',
+        'focus:outline-none focus-visible:outline-none',
         isActive && 'bg-primary/10',
         canSelect && !isActive && 'cursor-pointer hover:bg-accent/30',
         !canSelect && !isActive && 'cursor-default'
@@ -401,7 +393,7 @@ function FontRow({
           )}
           aria-hidden="true"
         />
-        <span className="text-[14px] text-foreground truncate" style={labelStyle}>
+        <span className="text-body text-foreground truncate" style={labelStyle}>
           {meta.displayName}
         </span>
         {/* Rare-kanji-missing note (REQ-022 step 5).  Only renders for
@@ -410,7 +402,7 @@ function FontRow({
             without crowding the row. */}
         {meta.lacksRareKanji && (
           <span
-            className="inline-flex items-center gap-1 shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300/90 border border-amber-400/30 bg-amber-400/10"
+            className="inline-flex items-center gap-1 shrink-0 rounded px-1.5 py-0.5 text-caption uppercase tracking-wide text-amber-300/90 border border-amber-400/30 bg-amber-400/10"
             title={t('fontPicker.note.missingRareKanjiHelp')}
           >
             <AlertCircle className="h-3 w-3" aria-hidden="true" />
@@ -428,7 +420,7 @@ function FontRow({
                 style={{ width: `${Math.min(100, downloadPercent)}%` }}
               />
             </div>
-            <span className="text-[11px] text-muted-foreground tabular-nums w-9 text-right">
+            <span className="text-caption text-muted-foreground tabular-nums w-9 text-right">
               {downloadPercent}%
             </span>
             <Button

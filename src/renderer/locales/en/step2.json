@@ -16,7 +16,7 @@
     "defaultPrefix": "Default:",
     "useDefault": "Use project default",
     "tooltipDefault": "Project default font ({{name}}). Click to override",
-    "tooltipOverride": "This row uses {{name}}. Click to change"
+    "tooltipOverride": "This subtitle uses {{name}}. Click to change"
   },
   "bulkRowFont": {
     "label": "Font",
@@ -26,8 +26,8 @@
     "all": "All",
     "ready": "Ready",
     "edited": "Edited",
-    "warnings": "Warnings",
-    "deleted": "Deleted"
+    "warnings": "Issues",
+    "deleted": "Removed"
   },
   "filter": {
     "all": "All",
@@ -38,7 +38,8 @@
   "state": {
     "edited": "Edited",
     "overflow": "Overflow",
-    "deleted": "Deleted"
+    "deleted": "Deleted",
+    "trimDeleted": "Trim-deleted"
   },
   "badge": {
     "overflow": "Overflow",
@@ -53,42 +54,43 @@
     "all": "No subtitle entries.",
     "ready": "All entries are ready to output.",
     "edited": "No edited entries.",
-    "warnings": "No entries with warnings.",
+    "warnings": "No subtitle entries have issues.",
     "overflow": "No overflow entries.",
     "deleted": "No deleted entries."
   },
   "action": {
-    "addRow": "Add row",
+    "addRow": "Add",
     "addRowAt": "Add at position {{index}}",
     "adjustTime": "Adjust time",
     "export": "Export text",
     "exportText": "Export as text",
     "exportSrt": "Export as SRT",
     "continueToRender": "Continue to render",
-    "resetRow": "Reset this row",
-    "deleteRow": "Delete this row",
-    "restoreRow": "Restore this row",
+    "resetRow": "Reset",
+    "deleteRow": "Delete",
+    "restoreRow": "Restore",
+    "trimDeletedHint": "Trim-deleted by a cut — use the scissor marker to undo the cut",
     "autoLineBreakRow": "Auto wrap",
-    "autoLineBreakRowHelp": "Re-wrap this row's line breaks",
+    "autoLineBreakRowHelp": "Re-wrap line breaks",
     "sizeStepUp": "Size +{{step}}px (max {{max}})",
     "sizeStepDown": "Size −{{step}}px (min {{min}})"
   },
   "dialog": {
     "timeEditor": {
       "title": {
-        "add": "Add Row",
+        "add": "Add",
         "edit": "Adjust Time"
       },
       "startTime": "Start time",
       "endTime": "End time",
       "setFromPlayhead": "Set from playhead",
       "currentPlayhead": "current",
-      "setFromPrevStart": "Set from previous row start",
-      "setFromPrevEnd": "Set from previous row end",
-      "setFromNextStart": "Set from next row start",
-      "setFromNextEnd": "Set from next row end",
-      "setFromSelectedStart": "Set from selected row start",
-      "setFromSelectedEnd": "Set from selected row end",
+      "setFromPrevStart": "Previous subtitle start",
+      "setFromPrevEnd": "Previous subtitle end",
+      "setFromNextStart": "Next subtitle start",
+      "setFromNextEnd": "Next subtitle end",
+      "setFromSelectedStart": "Selected subtitle start",
+      "setFromSelectedEnd": "Selected subtitle end",
       "add": "Add",
       "apply": "Apply",
       "cancel": "Cancel"
@@ -96,12 +98,12 @@
   },
   "addRowPopover": {
     "label": "Insert position",
-    "hint": "Enter row number"
+    "hint": "Enter position number"
   },
   "addRowDialog": {
     "startTime": "Start time",
     "endTime": "End time",
-    "insertAfter": "Insert after row {{n}}",
+    "insertAfter": "Insert after position {{n}}",
     "appendEnd": "Append to end",
     "errorTimeOrder": "End time must be after start time",
     "errorOverlap": "Overlaps with an existing subtitle"
@@ -112,22 +114,25 @@
     "selected": "{{count}} selected"
   },
   "toast": {
-    "rowAdded": "Row added at position {{index}}",
-    "rowDeleted": "Row deleted",
-    "rowRestored": "Row restored",
-    "rowReset": "Row reset",
+    "rowAdded": "Added at position {{index}}",
+    "rowDeleted": "Deleted",
+    "rowRestored": "Restored",
+    "rowReset": "Reset",
     "exported": "Transcript exported",
     "exportedSrt": "SRT exported",
     "undo": "Undo: {{label}}",
     "redo": "Redo: {{label}}",
     "bulkApplied": "Applied to {{count}} rows ({{label}})",
-    "bulkAppliedUndo": "Undo"
+    "bulkAppliedUndo": "Undo",
+    "trimDeletedRestoreHint": "Removed by a trim — click its scissor marker to undo the cut and restore the subtitle"
   },
   "tooltip": {
-    "undo": "Undo (Ctrl+Z)",
-    "redo": "Redo (Ctrl+Y)"
+    "undo": "Undo",
+    "redo": "Redo",
+    "fixErrorsFirst": "{{count}} subtitle(s) have errors that block export. Open the Issues tab and fix every red badge first."
   },
   "styleCell": {
+    "size": "Size",
     "textColor": "Text color",
     "outlineColor": "Outline color",
     "outlineWidth": "Outline width",
@@ -141,10 +146,10 @@
     "editStroke": "Change stroke width",
     "editFade": "Change fade",
     "editFont": "Change font",
-    "deleteRow": "Delete row",
-    "restoreRow": "Restore row",
-    "resetRow": "Reset row",
-    "addRow": "Add row",
+    "deleteRow": "Delete",
+    "restoreRow": "Restore",
+    "resetRow": "Reset",
+    "addRow": "Add",
     "autoLineBreak": "Auto wrap"
   },
   "bulk": {
@@ -209,5 +214,89 @@
     "white": "White",
     "opacity": "Opacity",
     "outlineNote": "Note: Outline is disabled when background is enabled"
+  },
+  "viewMode": {
+    "list": "List",
+    "timeline": "Timeline",
+    "ariaLabel": "Editor view mode"
+  },
+  "timeline": {
+    "emptyAll": "No subtitle entries.",
+    "emptyFiltered": "No entries match the current filter.",
+    "emptyDeleted": "Deleted entries do not appear on the timeline. Switch to list view to review them.",
+    "trackLabel": "{{index}}",
+    "deletedTrackLabel": "Deleted",
+    "toolbar": {
+      "zoomOut": "Zoom out",
+      "zoomIn": "Zoom in",
+      "zoomSlider": "Zoom level",
+      "zoomLevel": "{{pps}} px/s",
+      "snap": "Snap",
+      "snapHelp": "Snap to neighbouring subtitle edges and ruler ticks"
+    },
+    "help": {
+      "button": "How to use",
+      "title": "Timeline tips",
+      "trim": {
+        "title": "Trimming",
+        "body": "Set In and Out around the range you want to remove, then press Trim. The selected span is removed from the video and the rest of the timeline ripples forward to fill the gap. Press Clear to drop pending In / Out points before you commit."
+      },
+      "scissor": {
+        "title": "Undo a cut with the scissor marker",
+        "body": "Each cut leaves a scissor marker at its position. Click the marker to undo that cut. When cuts are nested, only the outermost is clickable — remove it first, the next layer becomes clickable on the following render."
+      },
+      "zoom": {
+        "title": "Zoom and snap",
+        "body": "Use Zoom out / Zoom in and the slider to scale the timeline. Toggle Snap to make subtitle edges and the playhead lock to nearby block ends and ruler ticks."
+      },
+      "singleRow": {
+        "title": "Keep subtitles in a single row",
+        "body": "When subtitles overlap in time, the timeline stacks them into a second row (and beyond). However, the preview only shows the first row, and the rendered video stacks the rest on top of it — so the preview and the final burn-in look different. Adjust your subtitle timings so they fit on a single timeline row without overlap whenever possible."
+      }
+    },
+    "block": {
+      "ariaLabel": "Subtitle T{{track}} #{{index}}",
+      "resizeStart": "Drag to adjust start time",
+      "resizeEnd": "Drag to adjust end time"
+    },
+    "playhead": {
+      "ariaLabel": "Playhead"
+    },
+    "inspector": {
+      "textLabel": "Text",
+      "adjustTime": "Adjust time",
+      "delete": "Delete",
+      "restore": "Restore",
+      "styleLabel": "Style"
+    },
+    "nav": {
+      "first": "Jump to start",
+      "prevBoundary": "Previous boundary",
+      "nextBoundary": "Next boundary",
+      "last": "Jump to end"
+    },
+    "trim": {
+      "toolbarLabel": "Trim",
+      "setIn": "In",
+      "setInTooltip": "Set in-point to the current playhead (click again to clear)",
+      "setOut": "Out",
+      "setOutTooltip": "Set out-point to the current playhead (click again to clear)",
+      "confirmCut": "Trim",
+      "confirmCutTooltip": "Trim In..Out and ripple the tail forward",
+      "clearPending": "Clear",
+      "clearPendingTooltip": "Clear the pending In / Out points",
+      "inLabel": "In",
+      "outLabel": "Out",
+      "noPoint": "—",
+      "cutMarkerTitle": "Trim {{start}} – {{end}} (click to remove)",
+      "invalidRange": "In must come before Out",
+      "errorSamePosition": "In and Out cannot be at the same position",
+      "errorInAfterOut": "In must be set before Out",
+      "errorOutBeforeIn": "Out must be set after In",
+      "toast": {
+        "cutApplied": "Trim applied — click its scissor marker to undo",
+        "reviveFailedStillCut": "{{count}} subtitle(s) could not be restored — another trim still consumes them"
+      }
+    }
   }
 }

@@ -62,9 +62,9 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
           onClick={(e) => e.stopPropagation()}
           className={cn(
             'inline-flex items-center justify-between gap-1.5 w-full',
-            'h-6 px-2 rounded-md border text-[11px] text-left transition-colors duration-150',
+            'h-6 px-2 rounded-md border text-caption text-left transition-colors duration-150',
             'border-zinc-800 bg-zinc-950 hover:border-zinc-700',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30',
+            'focus:outline-none focus-visible:outline-none',
             'disabled:opacity-40 disabled:cursor-not-allowed',
             isOverriding ? 'text-zinc-100' : 'text-zinc-400'
           )}
@@ -74,7 +74,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
         >
           <span className="flex items-center gap-1.5 min-w-0">
             {!isOverriding && (
-              <span className="text-[10px] uppercase tracking-wide text-zinc-500 shrink-0">
+              <span className="text-micro uppercase tracking-wide text-zinc-500 shrink-0">
                 {t('rowFont.defaultPrefix')}
               </span>
             )}
@@ -103,7 +103,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
             onClick={() => pick(undefined)}
             disabled={!isOverriding}
             className={cn(
-              'flex items-center gap-2 px-2 py-1.5 rounded text-[12px] transition-colors text-left',
+              'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
               isOverriding
                 ? 'hover:bg-accent/40 text-zinc-100 cursor-pointer'
                 : 'text-zinc-500 cursor-default'
@@ -112,7 +112,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
             <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="flex-1 min-w-0">
               <span className="block leading-tight">{t('rowFont.useDefault')}</span>
-              <span className="block text-[10px] text-zinc-500 truncate">
+              <span className="block text-caption text-zinc-500 truncate">
                 {getFontMeta(activeFontId).displayName}
               </span>
             </span>
@@ -128,7 +128,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
                 type="button"
                 onClick={() => pick(m.id === activeFontId ? undefined : m.id)}
                 className={cn(
-                  'flex items-center gap-2 px-2 py-1.5 rounded text-[12px] transition-colors text-left',
+                  'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
                   'hover:bg-accent/40',
                   isCurrent ? 'text-zinc-50' : 'text-zinc-300'
                 )}
@@ -148,7 +148,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
                 </span>
                 {m.lacksRareKanji && (
                   <span
-                    className="inline-flex items-center gap-0.5 shrink-0 text-[9px] uppercase tracking-wide text-amber-300/80"
+                    className="inline-flex items-center gap-0.5 shrink-0 text-micro uppercase tracking-wide text-amber-300/80"
                     title={t('step1:fontPicker.note.missingRareKanjiHelp')}
                   >
                     <AlertCircle className="h-2.5 w-2.5" aria-hidden="true" />

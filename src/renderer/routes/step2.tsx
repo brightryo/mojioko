@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { bumpRenderCount } from '@/lib/perf-counter'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Plus, RotateCcw, RotateCw, ChevronDown } from 'lucide-react'
-import { useHotkeys } from 'react-hotkeys-hook'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,8 @@ import { cn } from '@/lib/utils'
 import { saveFileDialog, writeTextFile } from '@/services/dialog'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
-import { computeEntryWarnings, hasAnyWarning, isOutputTarget, type EntryWarnings } from '@/lib/entry-warnings'
+import { computeEntryWarnings, hasAnyError, hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
+import { applyCutsToEntry, effectiveEntryState, origToEdited } from '../../shared/cuts'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font-metrics'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -29,6 +30,8 @@ import { NEW_ROW_DURATION_SEC, ENABLE_VIDEO_PREVIEW } from '../../shared/constan
 import { VideoPreviewPanel } from '@/components/video-preview/video-preview-panel'
 import { AudioPreviewPanel } from '@/components/audio-preview/audio-preview-panel'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
+import { EditorViewSwitcher } from '@/components/editor-view-switcher/editor-view-switcher'
+import { TimelineView } from '@/components/timeline-view/timeline-view'
 
 /**
  * State driving the shared TimeEditorDialog.
@@ -100,10 +103,18 @@ interface Step2RouteProps {
 
 
 export default function Step2Route({ appVersion }: Step2RouteProps) {
+  bumpRenderCount('Step2Route')
   const { t } = useTranslation(['step2', 'common'])
   const navigate = useNavigate()
 
   const entries = useProjectStore((s) => s.entries)
+  // REQ-102: subscribe to cuts so the tab counts (allCount /
+  // editedCount / readyCount / warningCount / deletedCount) AND the
+  // text/SRT export filter (getOutputEntries) AND the shared
+  // filterEntries call below all see the same cut list as the
+  // timeline view.  Cuts as a separate layer (REQ-074 §3.3) — we
+  // never write back into `entries` from cut confirmation.
+  const cuts = useProjectStore((s) => s.cuts)
   const addEntry = useProjectStore((s) => s.addEntry)
   const updateEntry = useProjectStore((s) => s.updateEntry)
   const defaults = useProjectStore((s) => s.defaults)
@@ -116,13 +127,19 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const redo = useHistoryStore((s) => s.redo)
   const tableFilter = useUiStore((s) => s.tableFilter)
   const setTableFilter = useUiStore((s) => s.setTableFilter)
+  const editorViewMode = useUiStore((s) => s.editorViewMode)
   const focusedRowId = useUiStore((s) => s.focusedRowId)
   const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
-  const videoCurrentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
+  // REQ-094 case C: `videoCurrentTimeSec` subscription removed.  The
+  // route used to hold this slice solely to forward it to
+  // TimeEditorDialog as a prop, which made the whole route re-render
+  // on every playhead tick (~50 fps during scrub) and cascaded into
+  // VideoPreviewPanel / SubtitleOverlay.  The dialog now subscribes
+  // itself (see time-editor-dialog.tsx), so the cascade stops at the
+  // dialog boundary and Step2Route stays at 0 renders during scrub.
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
   const setRowSelection = useUiStore((s) => s.setRowSelection)
-  const clearRowSelection = useUiStore((s) => s.clearRowSelection)
 
   const [editor, setEditor] = useState<EditorState>({ open: false })
   const [discardOpen, setDiscardOpen] = useState(false)
@@ -138,35 +155,12 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     loadSubtitleFont().then(setSubtitleFont).catch(() => {})
   }, [activeFontId])
 
-  useHotkeys('ctrl+z', (e) => {
-    e.preventDefault()
-    const label = useHistoryStore.getState().past.at(-1)?.label ?? ''
-    undo()
-    toast.info(t('toast.undo', { label }))
-  }, { enableOnFormTags: false })
-  useHotkeys('ctrl+y', (e) => {
-    e.preventDefault()
-    const label = useHistoryStore.getState().future.at(0)?.label ?? ''
-    redo()
-    toast.info(t('toast.redo', { label }))
-  }, { enableOnFormTags: false })
-  useHotkeys('ctrl+shift+z', (e) => { e.preventDefault(); redo() }, { enableOnFormTags: false })
-  useHotkeys('ctrl+n', (e) => { e.preventDefault(); openAddRowDialog() }, { enableOnFormTags: false })
-  // Ctrl+A — select every row currently visible under the active filter.
-  // Intentionally additive: rows hidden by the filter that were already
-  // selected stay selected, matching how the table-header checkbox behaves.
-  useHotkeys('ctrl+a', (e) => {
-    e.preventDefault()
-    const next = new Set(selectedRowIds)
-    for (const id of visibleEntryIds) next.add(id)
-    setRowSelection(next)
-  }, { enableOnFormTags: false })
-  // Esc clears the bulk-edit selection when one exists.  Yields to the
-  // browser/native handlers when nothing is selected, so dialogs and
-  // inputs keep their own Esc behaviour.
-  useHotkeys('escape', () => {
-    if (selectedRowIds.size > 0) clearRowSelection()
-  }, { enableOnFormTags: false })
+  // REQ-082: removed Step 2 keyboard shortcuts.
+  // Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z (undo/redo) — use the toolbar buttons.
+  // Ctrl+N (add row) — use the Add button.
+  // Ctrl+Shift+L / Ctrl+Shift+T (view switch) — use the view switcher.
+  // Ctrl+A (select all visible) — use the table header checkbox.
+  // Esc (clear bulk selection) — use the bulk-edit bar's clear button.
 
   const videoWidthPx = video?.widthPx ?? 1920
 
@@ -223,8 +217,8 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   // Currently-visible entries under the active filter — drives Ctrl+A's
   // target list and the bulk-selection pruning effect below.
   const visibleEntries = useMemo(
-    () => filterEntries(entries, tableFilter, warningsMap),
-    [entries, tableFilter, warningsMap]
+    () => filterEntries(entries, tableFilter, warningsMap, cuts),
+    [entries, tableFilter, warningsMap, cuts]
   )
   const visibleEntryIds = useMemo(() => visibleEntries.map((e) => e.id), [visibleEntries])
 
@@ -258,29 +252,81 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     setRowSelection(intersection)
   }, [visibleEntryIds, selectedRowIds, setRowSelection])
 
-  const activeEntries = entries.filter((e) => !e.isDeleted)
-  const allCount      = activeEntries.length
-  const editedCount   = activeEntries.filter((e) => e.isEdited).length
-  // Ready (= "出力対象") aligns with text-export inclusion: warning rows are
-  // counted (the user may want to export and fix externally), error rows
-  // (emptyText, deleted) are dropped.  See `isOutputTarget` / `hasAnyWarning`
-  // in entry-warnings.ts for the canonical rules.
-  const warningCount  = activeEntries.filter((e) => {
-    const w = warningsMap.get(e.id)
-    return w !== undefined && hasAnyWarning(w)
+  // REQ-103 — tab counts implement the two-group model from the
+  // trimming spec (§6).
+  //
+  //   行き先 (mutually exclusive — `ready + deleted === all`):
+  //     allCount     = every entry, including manually-deleted +
+  //                    trim-deleted rows so the inventory is complete.
+  //     readyCount   = entries whose status is 'normal' or 'edited'
+  //                    (= !effectivelyDeleted).  emptyText rows ARE
+  //                    counted here because they still belong to one of
+  //                    the two undeleted states; the actual TXT/SRT
+  //                    export step in getOutputEntries below filters
+  //                    them out at write time.
+  //     deletedCount = manuallyDeleted + trimDeleted (= effectivelyDeleted).
+  //
+  //   フィルタ (cross-cutting — do NOT exclude deleted rows per REQ-103 §B):
+  //     editedCount  = `wasEdited` (manual edit OR cut clamp).  A row
+  //                    that was edited and later deleted still counts —
+  //                    the user wants to see what was edited even if
+  //                    the row no longer makes it to the timeline.
+  //     warningCount = hasAnyWarning(w).  Same rationale; a warning on
+  //                    a deleted row is still informative.
+  //
+  // effectiveStates is computed once per (entries, cuts) change so
+  // each .filter() walk below costs O(N) only.
+  const effectiveStates = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof effectiveEntryState>>()
+    for (const e of entries) map.set(e.id, effectiveEntryState(e, cuts))
+    return map
+  }, [entries, cuts])
+  const allCount      = entries.length
+  const readyCount    = entries.filter((e) => {
+    const s = effectiveStates.get(e.id)
+    return s !== undefined && !s.effectivelyDeleted
   }).length
-  const readyCount    = activeEntries.filter((e) => {
-    const w = warningsMap.get(e.id)
-    return w !== undefined && isOutputTarget(e, w)
+  const deletedCount  = entries.filter((e) => {
+    const s = effectiveStates.get(e.id)
+    return s !== undefined && s.effectivelyDeleted
   }).length
-  const deletedCount  = entries.filter((e) => e.isDeleted).length
+  const editedCount   = entries.filter((e) => {
+    const s = effectiveStates.get(e.id)
+    return s !== undefined && s.wasEdited
+  }).length
+  // REQ-121 — split the legacy single "warnings" count into errors and
+  // warnings.  The "Issues" tab (was: Warnings) shows the union; the
+  // continue-to-Step-3 button gates only on errors.  Both counts
+  // ignore `effectivelyDeleted` rows because:
+  //   - the source `warningsMap` already skips manually-deleted rows
+  //     (= `entry.isDeleted` is filtered out at construction time)
+  //   - trim-deleted rows (`status === 'trimDeleted'`) never reach the
+  //     SRT / burnin pipeline either, so flagging them as "blocking
+  //     export" would be misleading
+  const errorCount    = entries.filter((e) => {
+    const s = effectiveStates.get(e.id)
+    if (s === undefined || s.effectivelyDeleted) return false
+    const w = warningsMap.get(e.id)
+    return w !== undefined && hasAnyError(w)
+  }).length
+  const warningCount  = entries.filter((e) => {
+    const s = effectiveStates.get(e.id)
+    if (s === undefined || s.effectivelyDeleted) return false
+    const w = warningsMap.get(e.id)
+    return w !== undefined && (hasAnyError(w) || hasAnyWarning(w))
+  }).length
 
+  // REQ-103 tab order + REQ-121 rename: すべて・出力対象・削除・編集済み・
+  // 問題あり.  The two destination tabs come first (left-to-right "where
+  // does each clip go") followed by the two cross-cutting filters.  The
+  // single "問題あり" tab (= "Issues") covers both errors AND warnings;
+  // the badge colour inside the row distinguishes them (REQ-121 §3.4).
   const FILTERS: { key: TableFilter; count: number }[] = [
     { key: 'all',      count: allCount },
     { key: 'ready',    count: readyCount },
+    { key: 'deleted',  count: deletedCount },
     { key: 'edited',   count: editedCount },
     { key: 'warnings', count: warningCount },
-    { key: 'deleted',  count: deletedCount },
   ]
 
   /**
@@ -345,8 +391,20 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     })
   }
 
-  /** Open the dialog in `edit` mode for the given existing entry. */
-  function openEditTimeDialog(entryId: string) {
+  /**
+   * Open the dialog in `edit` mode for the given existing entry.
+   *
+   * REQ-071 Phase 3.9 (original): wrapped in useCallback so the function
+   * reference stayed stable across re-renders driven by Step2Route's
+   * `videoCurrentTimeSec` subscription — Step 2 used to re-render on every
+   * playhead tick, so without useCallback every tick produced a fresh
+   * `openEditTimeDialog` reference, which propagated into TimelineView's
+   * `onAdjustTime` prop, then into every Block as `onAdjustTime`, and
+   * defeated `React.memo(Block)`.  REQ-094 case C removed that route-level
+   * subscription, so the playback-driven cascade no longer reaches here;
+   * the useCallback is still cheap insurance against future props churn.
+   */
+  const openEditTimeDialog = useCallback((entryId: string) => {
     const fullIdx = entries.findIndex((e) => e.id === entryId)
     if (fullIdx === -1) return
     const entry = entries[fullIdx]
@@ -387,7 +445,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
       nextEntryStartSec: nextStart,
       nextEntryEndSec: nextEnd
     })
-  }
+  }, [entries])
 
   function closeEditor() {
     setEditor({ open: false })
@@ -445,8 +503,17 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         outlineThicknessPx: defaults.outlineThicknessPx,
         fadeEnabled: defaults.fadeEnabled
       }
+      // REQ-079 #2: collision-resistant id.  Date.now() alone collides
+      // when two rows are added within the same millisecond — both rows
+      // then share a key in the layout's `trackOf` map, with the later
+      // assignment overwriting the earlier, and the timeline blocks
+      // render on top of each other.  Matches the cuts uuid pattern in
+      // timeline-view.tsx for consistency.
+      const id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+        ? `new-${crypto.randomUUID()}`
+        : `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       const newEntry: SubtitleEntry = {
-        id: `new-${Date.now()}`,
+        id,
         ...base,
         isDeleted: false,
         isEdited: true,
@@ -497,15 +564,55 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   }
 
   /**
-   * Entries written to TXT / SRT export.  Matches the Ready tab count —
-   * warnings included, errors (empty text, deleted) excluded.  See
-   * `isOutputTarget` in entry-warnings.ts.
+   * Entries written to TXT / SRT export.
+   *
+   * REQ-103 §D: timestamps now go through the same
+   *   applyCutsToEntry → origToEdited
+   * pipeline that ffmpeg-burnin.ts:133-143 already runs, so the
+   * Dialogue Start/End in the rendered video, the SRT cue times,
+   * and the TXT row order all agree on the post-cut Edited axis.
+   * Previously the SRT / TXT path emitted raw Original-axis times
+   * (= REQ-102 RES §8 hand-off item), which placed the cues at
+   * wall-clock positions that did not exist in the burnin output —
+   * downstream tools (Premiere, Resolve) consuming the SRT against
+   * the burnin video saw a constant cumulative-cut offset.
+   *
+   * Filter chain (mirrors ffmpeg-burnin.ts):
+   *   1. Drop `effectivelyDeleted` rows (manual delete + fully-cut).
+   *      For fully-cut rows, applyCutsToEntry would also return null
+   *      below — but we check effectiveStates first to keep the
+   *      manual-delete case explicit.
+   *   2. Drop `emptyText` rows (= error, not exportable).
+   *   3. Run `applyCutsToEntry` to clamp partial-overlap rows.
+   *      Returns null in rare cases (visible duration below
+   *      MIN_SUBTITLE_DURATION_SEC after head + tail clamp) —
+   *      drop those too.
+   *   4. Translate the clamped Original-axis times to Edited axis
+   *      via origToEdited.  No cuts → identity, so the legacy
+   *      non-trim path is byte-identical.
+   *
+   * `getOutputEntries` returns NEW SubtitleEntry objects with
+   * translated startSec/endSec — the entries in the project store
+   * stay untouched (the data-non-destructive contract from REQ-101 /
+   * REQ-102).
    */
   function getOutputEntries(): SubtitleEntry[] {
-    return entries.filter((e) => {
+    const out: SubtitleEntry[] = []
+    for (const e of entries) {
       const w = warningsMap.get(e.id)
-      return w !== undefined && isOutputTarget(e, w)
-    })
+      if (w === undefined) continue
+      const s = effectiveStates.get(e.id)
+      if (s === undefined || s.effectivelyDeleted) continue
+      if (w.emptyText) continue
+      const clamped = cuts.length === 0 ? e : applyCutsToEntry(e, cuts)
+      if (clamped === null) continue
+      out.push({
+        ...e,
+        startSec: cuts.length === 0 ? e.startSec : origToEdited(clamped.startSec, cuts),
+        endSec:   cuts.length === 0 ? e.endSec   : origToEdited(clamped.endSec, cuts),
+      })
+    }
+    return out
   }
 
   async function handleExportText() {
@@ -543,7 +650,16 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     toast.success(t('toast.exportedSrt'))
   }
 
-  const canContinue = activeEntries.length > 0
+  // REQ-103 — `activeEntries` from REQ-102 was removed in favour of the
+  // per-tab counts above; `canContinue` originally read `readyCount`
+  // directly (= the 出力対象 count = entries not effectivelyDeleted).
+  // REQ-121 — gate the Step 3 transition on `errorCount === 0` too.
+  // Pre-REQ-121 the renderer silently dropped error rows in Step 3's
+  // `activeEntries` filter; the user could ship a video missing every
+  // time-invalid / out-of-duration / invalid-size subtitle without
+  // noticing.  The new gate stops at Step 2 with a tooltip pointing to
+  // the Issues tab so the user fixes (or knowingly deletes) each error.
+  const canContinue = readyCount > 0 && errorCount === 0
 
   const hasChanges = entries.some((e) => e.isEdited || e.isDeleted)
 
@@ -562,7 +678,11 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   )
 
   const footerCenter = (
-    <span className="text-[12px] text-zinc-500">
+    /* REQ-067 phase B: zinc-500 → zinc-300 so the per-step counts
+       (edited / warnings / deleted) stay readable at a glance.  The
+       inner "selected" span keeps its `text-foreground` accent so the
+       active-selection callout still wins visual priority. */
+    <span className="text-body-sm text-zinc-300">
       {selectedRowIds.size > 0 && (
         <>
           <span className="text-foreground">
@@ -602,14 +722,40 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         </DropdownMenuContent>
       </DropdownMenu>
       {!isAudioOnly && (
-        <Button
-          variant="primary"
-          size="md"
-          disabled={!canContinue}
-          onClick={() => navigate('/step3')}
-        >
-          {t('action.continueToRender')}
-        </Button>
+        // REQ-121 — when the only thing blocking the transition is the
+        // errorCount gate, surface a tooltip pointing the user at the
+        // Issues tab.  Radix's <TooltipTrigger asChild> on a disabled
+        // <button> would swallow pointer events (the disabled DOM node
+        // does not fire enter/leave); wrap in a span so the tooltip
+        // still appears on hover.
+        errorCount > 0 ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="primary"
+                  size="md"
+                  disabled
+                  onClick={() => navigate('/step3')}
+                >
+                  {t('action.continueToRender')}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {t('tooltip.fixErrorsFirst', { count: errorCount })}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <Button
+            variant="primary"
+            size="md"
+            disabled={!canContinue}
+            onClick={() => navigate('/step3')}
+          >
+            {t('action.continueToRender')}
+          </Button>
+        )
       )}
     </div>
   )
@@ -624,18 +770,14 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
       noScroll
     >
       <div className="flex flex-col h-full gap-3">
-        {/* Page header */}
-        {/* Page header — REQ-028 moved the export DropdownMenu from
-            here into the footer so the text/SRT export action sits
-            alongside the "Continue to render" CTA.  Keeps the export
-            within thumb's reach in both video and audio modes; in
-            audio mode there is no Continue button so Export becomes
-            the single primary action. */}
-        <div className="flex items-start justify-between flex-shrink-0">
-          <div>
-            <h1 className="text-[18px] font-semibold text-zinc-50">{t('title')}</h1>
-            <p className="mt-0.5 text-[13px] text-zinc-400">{t('subtitle')}</p>
-          </div>
+        {/* Page header — REQ-075 #1: title + subtitle laid out on a single
+            row to reclaim vertical space.  Subtitle keeps its muted tone
+            (text-body-sm + zinc-400) but moves to the right of the heading
+            with a baseline alignment and a small inset gap.  REQ-028 still
+            governs the export DropdownMenu (footer-right). */}
+        <div className="flex items-baseline gap-3 flex-shrink-0">
+          <h1 className="text-heading font-semibold text-zinc-50">{t('title')}</h1>
+          <p className="text-body-sm text-zinc-400">{t('subtitle')}</p>
         </div>
 
         {/* Preview panel — swaps to a minimal audio player when the
@@ -644,24 +786,31 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
             shift between modes. */}
         {ENABLE_VIDEO_PREVIEW && (isAudioOnly ? <AudioPreviewPanel /> : <VideoPreviewPanel />)}
 
-        {/* Filter tabs + Add Row button */}
+        {/* View switcher + Filter tabs + Undo/Redo + Add Row.  View switcher
+            is left-anchored next to the filter tabs (REQ-052 Phase 1) so the
+            two pill-group controls visually pair as siblings.  Filter tabs
+            stay visible in both views — they apply the same filterEntries
+            rules to the timeline so a "Ready" tab hides warning blocks too. */}
         <div className="flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-1 bg-zinc-900 rounded-lg p-1">
-            {FILTERS.map(({ key, count }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setTableFilter(key)}
-                className={cn(
-                  'h-7 px-3 rounded-md text-[12px] font-medium transition-colors duration-150',
-                  tableFilter === key
-                    ? 'bg-zinc-800 text-zinc-50'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                )}
-              >
-                {t(`tab.${key}`)} · <span className="tabular-nums">{count}</span>
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <EditorViewSwitcher />
+            <div className="flex items-center gap-1 bg-zinc-900 rounded-lg p-1">
+              {FILTERS.map(({ key, count }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setTableFilter(key)}
+                  className={cn(
+                    'h-7 px-3 rounded-md text-body-sm font-medium transition-colors duration-150',
+                    tableFilter === key
+                      ? 'bg-zinc-800 text-zinc-50'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  )}
+                >
+                  {t(`tab.${key}`)} · <span className="tabular-nums">{count}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Undo / Redo + Add Row — right side of the filter row */}
@@ -701,8 +850,11 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               <TooltipContent>{t('tooltip.redo')}</TooltipContent>
             </Tooltip>
 
-          {/* Add Row button — opens the shared TimeEditorDialog in add mode. */}
-          <Button variant="ghost" size="md" onClick={openAddRowDialog}>
+          {/* Add Row button — opens the shared TimeEditorDialog in add mode.
+              `data-testid="add-row"` lets the green-button-color e2e click
+              the button without depending on the localised label ("追加" /
+              "Add"), so the test works under DEFAULT_LANGUAGE='en'. */}
+          <Button variant="ghost" size="md" onClick={openAddRowDialog} data-testid="add-row">
             <Plus className="h-4 w-4 mr-1" />
             {t('action.addRow')}
           </Button>
@@ -718,7 +870,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
             auto-line-break).  Selection itself stays available — we
             just don't surface the bar. */}
         <AnimatePresence initial={false}>
-          {selectedRowIds.size > 0 && !isAudioOnly && (
+          {editorViewMode === 'list' && selectedRowIds.size > 0 && !isAudioOnly && (
             <motion.div
               key="bulk-edit-bar"
               initial={{ opacity: 0, height: 0 }}
@@ -748,14 +900,25 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
           )}
         </AnimatePresence>
 
-        {/* Table — fills remaining height */}
+        {/* Table or Timeline — fills remaining height.  Same `entries` are
+            edited from either view (1-data-2-views, REQ-052).  Phase 1
+            timeline is read-only: clicks focus a row + seek the video, but
+            edit affordances land in Phases 2–5.  See dev-docs/specs/timeline.md. */}
         <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">
-          <SubtitleTable
-            overflowMap={overflowMap}
-            warningsMap={warningsMap}
-            videoDurationSec={videoDurationSec}
-            onAdjustTime={openEditTimeDialog}
-          />
+          {editorViewMode === 'list' ? (
+            <SubtitleTable
+              overflowMap={overflowMap}
+              warningsMap={warningsMap}
+              videoDurationSec={videoDurationSec}
+              onAdjustTime={openEditTimeDialog}
+            />
+          ) : (
+            <TimelineView
+              warningsMap={warningsMap}
+              videoDurationSec={videoDurationSec}
+              onAdjustTime={openEditTimeDialog}
+            />
+          )}
         </div>
       </div>
 
@@ -775,7 +938,6 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         selectedEntryStartSec={editor.open && editor.mode === 'add' ? editor.selectedEntryStartSec : null}
         selectedEntryEndSec={editor.open && editor.mode === 'add' ? editor.selectedEntryEndSec : null}
         videoDurationSec={videoDurationSec}
-        videoCurrentTimeSec={ENABLE_VIDEO_PREVIEW ? videoCurrentTimeSec : null}
         onConfirm={handleEditorConfirm}
         onCancel={closeEditor}
       />
@@ -795,7 +957,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               onChange={(e) => setSkipDiscardWarning(e.target.checked)}
               className="h-3.5 w-3.5 rounded border-zinc-600 accent-green-500"
             />
-            <label htmlFor="skip-discard" className="text-[12px] text-zinc-400 cursor-pointer">
+            <label htmlFor="skip-discard" className="text-body-sm text-zinc-400 cursor-pointer">
               {t('common:dialog.dontAskAgain')}
             </label>
           </div>

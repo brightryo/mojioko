@@ -11,6 +11,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { TimeInput } from '@/components/time-input'
 import { cn } from '@/lib/utils'
+import { useUiStore } from '@/stores/ui-store'
+import { useProjectStore } from '@/stores/project-store'
+import { origToEdited, editedToOrig } from '../../../shared/cuts'
+import { ENABLE_VIDEO_PREVIEW } from '../../../shared/constants'
 
 export type TimeEditorMode = 'add' | 'edit'
 
@@ -32,8 +36,6 @@ export interface TimeEditorDialogProps {
   /** Focused row's endSec — drives the "set from selected row end" button (add mode only). */
   selectedEntryEndSec: number | null
   videoDurationSec: number
-  /** Current playback position. `null` when the video preview is disabled. */
-  videoCurrentTimeSec: number | null
   onConfirm: (startSec: number, endSec: number) => void
   onCancel: () => void
 }
@@ -97,7 +99,11 @@ function StepperButton({ label, onStep, ariaLabel }: StepperButtonProps) {
       onTouchCancel={stop}
       className={cn(
         'inline-flex items-center justify-center',
-        'h-9 px-2.5 rounded-md text-[12px] font-mono tabular-nums select-none',
+        // REQ-071 Phase 3.7-B: stepper labels ('-1s', '-0.1s' etc.) lifted
+        // text-body-sm (13) -> text-body (15) so the ±delta digits are at the
+        // same scale as the TimeInput field they drive.  h-9 (36 px) with
+        // body line-h 22 still leaves 14 px of vertical breathing room.
+        'h-9 px-2.5 rounded-md text-body font-mono tabular-nums select-none',
         'bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-50',
         'active:bg-zinc-600 transition-colors duration-100',
         'border border-zinc-800'
@@ -135,8 +141,12 @@ function SnapButton({ icon, label, trailingLabel, onClick }: SnapButtonProps) {
       <span className="flex h-3.5 w-3.5 items-center justify-center flex-shrink-0 text-zinc-400">
         {icon}
       </span>
-      <span className="text-[12px] text-zinc-200">{label}</span>
-      <span className="ml-auto text-[11px] font-mono tabular-nums text-zinc-400">
+      <span className="text-body-sm text-zinc-200">{label}</span>
+      {/* REQ-071 Phase 3.7-B: trailing timecode lifted text-caption (12) ->
+          text-body-sm (13) — these are time *values* the user reads to
+          decide whether to snap, not chrome.  Same micro-to-readable
+          stance the timeline ruler took in Phase 3.6. */}
+      <span className="ml-auto text-body-sm font-mono tabular-nums text-zinc-400">
         {trailingLabel}
       </span>
     </button>
@@ -154,17 +164,33 @@ type SnapItem =
 
 interface TimeFieldProps {
   labelKey: string
+  /** Original-axis value stored on the dialog state. */
   valueSec: number
+  /** REQ-115 — current cut list.  When non-empty, all the field's
+   *  affordances (TimeInput, stepper, snap labels, playhead label)
+   *  speak Edited-axis times; the inverse mapping is applied before
+   *  values reach `onSetSec` / `onDelta` so the dialog's `valueSec`
+   *  state stays on the Original axis (= unchanged onConfirm shape). */
+  cuts: import('../../../shared/cuts').CutList
+  /** Delta in EDITED-axis seconds.  Parent applies origToEdited /
+   *  editedToOrig to translate it into the underlying Original-axis
+   *  state mutation. */
   onDelta: (deltaSec: number) => void
-  /** Live playhead value — `null` to hide the "set from playhead" action. */
+  /** Live playhead value — `null` to hide the "set from playhead" action.
+   *  Always Original axis (= `<video>.currentTime`); display is Edited. */
   playheadSec: number | null
-  /** Set the field directly to a fixed seconds value (from TimeInput edits or snap clicks). */
+  /** Set the field directly to a fixed ORIGINAL seconds value (from
+   *  TimeInput edits or snap clicks).  TimeInput in cuts-aware mode
+   *  already inverse-maps Edited → Original (REQ-115 Step 2), so the
+   *  callback uniformly receives Original axis regardless of source. */
   onSetSec: (sec: number) => void
-  /** Snap buttons rendered below the playhead row, in array order. */
+  /** Snap buttons rendered below the playhead row, in array order.  Each
+   *  `sec` is Original axis; the field projects it to Edited only for
+   *  the trailing label. */
   snapItems: SnapItem[]
 }
 
-function TimeField({ labelKey, valueSec, onDelta, playheadSec, onSetSec, snapItems }: TimeFieldProps) {
+function TimeField({ labelKey, valueSec, cuts, onDelta, playheadSec, onSetSec, snapItems }: TimeFieldProps) {
   const { t } = useTranslation(['step2'])
 
   function formatHHMMSSCC(sec: number): string {
@@ -183,7 +209,11 @@ function TimeField({ labelKey, valueSec, onDelta, playheadSec, onSetSec, snapIte
 
   return (
     <div className="space-y-2">
-      <div className="text-[12px] font-medium text-zinc-300">
+      {/* REQ-071 Phase 3.7-B: section label ('開始時間' / '終了時間') is the
+          structural divider between the two TimeFields inside the dialog —
+          promote from body-sm/medium to body/semibold so it reads as a
+          real section heading, not a sub-row label. */}
+      <div className="text-body font-semibold text-zinc-300">
         {t(labelKey)}
       </div>
 
@@ -196,11 +226,14 @@ function TimeField({ labelKey, valueSec, onDelta, playheadSec, onSetSec, snapIte
         <div className="flex-1 flex justify-center">
           {/* Reuses Step2's row TimeInput so format / parse / Enter-commit
               behaviour stays identical between the inline cell editor and
-              this dialog field. */}
+              this dialog field.  REQ-115 — `cuts` is forwarded so the
+              field displays Edited-axis times and inverse-maps user
+              input on commit, while the dialog state stays Original. */}
           <TimeInput
             value={roundCs(valueSec)}
+            cuts={cuts}
             onChange={(sec) => onSetSec(roundCs(sec))}
-            className="h-9 w-[140px] text-[15px]"
+            className="h-9 w-[140px] text-body"
           />
         </div>
         <div className="flex items-center gap-1">
@@ -209,20 +242,26 @@ function TimeField({ labelKey, valueSec, onDelta, playheadSec, onSetSec, snapIte
         </div>
       </div>
 
-      {/* Quick-set actions: playhead + ordered snap items */}
+      {/* Quick-set actions: playhead + ordered snap items.  REQ-115 —
+          every trailing time label is Edited-axis (origToEdited).  The
+          onClick handler still sets the field to the snap target's
+          Original-axis value so the persisted SubtitleEntry stays in
+          Original coordinates; subsequent renders project that Original
+          through origToEdited to display the same Edited time the user
+          just clicked. */}
       {(playheadSec !== null || snapItems.length > 0) && (
         <div className="space-y-1.5">
           {playheadSec !== null && (
             <SnapButton
               icon={<Play className="h-3.5 w-3.5" />}
               label={t('dialog.timeEditor.setFromPlayhead')}
-              trailingLabel={`${t('dialog.timeEditor.currentPlayhead')}: ${formatHHMMSSCC(playheadSec)}`}
+              trailingLabel={`${t('dialog.timeEditor.currentPlayhead')}: ${formatHHMMSSCC(origToEdited(playheadSec, cuts))}`}
               onClick={() => onSetSec(roundCs(playheadSec))}
             />
           )}
 
           {snapItems.map((item) => {
-            const time = formatHHMMSSCC(item.sec)
+            const time = formatHHMMSSCC(origToEdited(item.sec, cuts))
             const handler = () => onSetSec(roundCs(item.sec))
             switch (item.kind) {
               case 'prevStart':
@@ -302,11 +341,31 @@ export function TimeEditorDialog({
   nextEntryEndSec,
   selectedEntryStartSec,
   selectedEntryEndSec,
-  videoCurrentTimeSec,
   onConfirm,
   onCancel
 }: TimeEditorDialogProps) {
   const { t } = useTranslation(['step2', 'common'])
+
+  // REQ-094 case C: the dialog owns its own subscription to
+  // `videoCurrentTimeSec` so the parent route does NOT re-render on
+  // every playhead tick.  Step2Route's previous subscription was held
+  // solely to forward this value as a prop — moving the read here
+  // means the playhead cascade stops at the dialog boundary instead
+  // of repainting the whole route tree (Step2Route → VideoPreviewPanel
+  // → SubtitleOverlay, etc.).  When the dialog is closed the Radix
+  // `<Dialog open={false}>` short-circuits its body, so the
+  // 50 fps-during-scrub render of this component is essentially free.
+  // Honours the same ENABLE_VIDEO_PREVIEW gate the route used.
+  const videoCurrentTimeSec = useUiStore((s) =>
+    ENABLE_VIDEO_PREVIEW ? s.videoCurrentTimeSec : null,
+  )
+
+  // REQ-115 — live cut list, used by every Edited-axis projection
+  // inside this dialog (TimeField TimeInputs, stepper math, snap
+  // labels, playhead label).  When cuts is empty `origToEdited` /
+  // `editedToOrig` are identities and the whole dialog is bit-
+  // identical to the pre-REQ-115 behaviour.
+  const cuts = useProjectStore((s) => s.cuts)
 
   // Local working copy.  Reset every time the dialog opens so re-opening
   // for a different entry shows the fresh values, not stale state.
@@ -323,11 +382,28 @@ export function TimeEditorDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
+  // REQ-115 — Stepper / ±delta operations apply on the EDITED axis (=
+  // the user sees the field move by exactly the labelled amount in
+  // the timeline they're looking at).  We project the current Original
+  // value to Edited, add the delta, then inverse-map back to Original
+  // for storage.
+  //
+  // Note: crossing a cut boundary on the Edited axis can produce a
+  // visibly large jump in the underlying Original value (the cut
+  // duration is added by editedToOrig).  This is intentional and
+  // mirrors how NLE editors behave when "rippling over" a deleted
+  // region.  RES-115 §3 calls this out explicitly so the owner can
+  // verify in `npm run dev` and decide whether further smoothing is
+  // wanted (= REQ-114 §3 confirmation #4).
   const updateStart = (delta: number) => {
-    setStartSec((s) => Math.max(0, roundCs(s + delta)))
+    const currentEdited = origToEdited(startSec, cuts)
+    const nextEdited = Math.max(0, roundCs(currentEdited + delta))
+    setStartSec(editedToOrig(nextEdited, cuts))
   }
   const updateEnd = (delta: number) => {
-    setEndSec((s) => Math.max(0, roundCs(s + delta)))
+    const currentEdited = origToEdited(endSec, cuts)
+    const nextEdited = Math.max(0, roundCs(currentEdited + delta))
+    setEndSec(editedToOrig(nextEdited, cuts))
   }
   const setStartTo = (sec: number) => setStartSec(Math.max(0, sec))
   const setEndTo = (sec: number) => setEndSec(Math.max(0, sec))
@@ -382,6 +458,7 @@ export function TimeEditorDialog({
           <TimeField
             labelKey="dialog.timeEditor.startTime"
             valueSec={startSec}
+            cuts={cuts}
             onDelta={updateStart}
             playheadSec={videoCurrentTimeSec}
             onSetSec={setStartTo}
@@ -390,6 +467,7 @@ export function TimeEditorDialog({
           <TimeField
             labelKey="dialog.timeEditor.endTime"
             valueSec={endSec}
+            cuts={cuts}
             onDelta={updateEnd}
             playheadSec={videoCurrentTimeSec}
             onSetSec={setEndTo}

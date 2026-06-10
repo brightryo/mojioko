@@ -3,13 +3,25 @@ import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
+// REQ-081 #2: no focus ring on buttons.  Owner decision — keyboard
+// navigation lands silently on the button without the green halo the
+// previous focus-visible:ring-2 produced.  Inputs keep their focus
+// indication (see ui/input.tsx + time-input.tsx); only button-like
+// elements drop the ring.
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-40',
+  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium transition-colors duration-150 focus:outline-none focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40',
   {
     variants: {
       variant: {
-        /** Main action per screen — green background. */
-        primary: 'bg-green-500 text-green-950 hover:bg-green-600 active:bg-green-700 rounded-lg',
+        /** Main action per screen — green background.
+         *  REQ-071 Phase 3.6: text colour shifted green-950 -> zinc-950.
+         *  green-950 (#052e16) is a very dark forest green and shares hue
+         *  with bg-green-500 (#22c55e), so the label visually washed into the
+         *  background even though contrast was AA (~6.7:1).  zinc-950
+         *  (#09090b, near-black neutral) gives AAA contrast (~9.4:1) AND a
+         *  neutral hue that snaps off the green — the label now reads as a
+         *  dark button label rather than fading into the green plate. */
+        primary: 'bg-green-500 text-zinc-950 hover:bg-green-600 active:bg-green-700 rounded-lg',
         /** Secondary emphasis — light background. */
         secondary: 'bg-zinc-50 text-zinc-950 hover:bg-zinc-200 active:bg-zinc-300 rounded-md',
         /** Tertiary / ghost — transparent with border. */
@@ -24,11 +36,11 @@ const buttonVariants = cva(
         link: 'bg-transparent text-zinc-400 hover:text-zinc-100 underline-offset-4 hover:underline'
       },
       size: {
-        sm: 'h-7 px-3 py-1.5 text-xs',
-        md: 'h-9 px-4 py-2.5 text-[13px]',
-        lg: 'h-11 px-5 py-3 text-sm',
+        sm: 'h-7 px-3 py-1.5 text-body-sm',
+        md: 'h-9 px-4 py-2.5 text-body',
+        lg: 'h-11 px-5 py-3 text-body',
         /** Square icon button. */
-        icon: 'h-8 w-8 p-0 text-[13px]'
+        icon: 'h-8 w-8 p-0 text-body'
       }
     },
     defaultVariants: {

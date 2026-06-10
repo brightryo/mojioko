@@ -94,7 +94,7 @@ export function DefaultStyleControls({
             })
           }}
           className={cn(
-            'h-9 w-32 rounded-md border bg-input px-2 text-center text-[13px] text-foreground',
+            'h-9 w-32 rounded-md border bg-input px-2 text-center text-body text-foreground',
             'focus:outline-none focus:ring-2',
             '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
             fontSizeOutOfRange
@@ -109,7 +109,7 @@ export function DefaultStyleControls({
             unambiguous. */}
         <p
           className={cn(
-            'text-[11px] transition-colors',
+            'text-body-sm transition-colors',
             fontSizeOutOfRange ? 'text-[hsl(var(--warning))]' : 'text-muted-foreground'
           )}
         >
@@ -173,7 +173,7 @@ export function DefaultStyleControls({
             checked={fadeEnabled}
             onCheckedChange={(v) => onUpdateDefaults({ fadeEnabled: v })}
           />
-          <span className="text-[12px] text-muted-foreground">
+          <span className="text-body-sm text-muted-foreground">
             {fadeEnabled
               ? t('subtitleDefaults.fadeOn')
               : t('subtitleDefaults.fadeOff')}
@@ -195,7 +195,7 @@ export function DefaultStyleControls({
             checked={autoLineBreak}
             onCheckedChange={(v) => onSetAutoLineBreak(v)}
           />
-          <span className="text-[12px] text-muted-foreground">
+          <span className="text-body-sm text-muted-foreground">
             {autoLineBreak ? t('advanced.enabled') : t('advanced.disabled')}
           </span>
         </div>

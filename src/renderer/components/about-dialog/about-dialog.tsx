@@ -36,8 +36,11 @@ export function AboutDialog() {
               to sit next to these lines was removed in v1.0.0.  The Windows
               window icon (build/icon.ico) is the canonical brand mark. */}
           <div>
-            <p className="text-[14px] font-semibold text-zinc-50">{APP_NAME}</p>
-            <p className="text-[12px] text-zinc-500">{t('settings:about.version')} {APP_VERSION}</p>
+            <p className="text-body font-semibold text-zinc-50">{APP_NAME}</p>
+            {/* REQ-067 phase B: was text-zinc-500 (hint tier).  Version is
+                meta info that the user reads when filing bug reports — lift
+                to text-zinc-400 (secondary tier, AAA pass). */}
+            <p className="text-body-sm text-zinc-400">{t('settings:about.version')} {APP_VERSION}</p>
           </div>
           <div className="border-t border-zinc-800 pt-3 space-y-2">
             <InfoRow label={t('settings:about.license')} value={t('settings:about.licenseValue')} />
@@ -58,7 +61,7 @@ export function AboutDialog() {
                 setOpen(false)
                 setTimeout(() => useUiStore.getState().setFontLicensesDialogOpen(true), 100)
               }}
-              className="text-[12px] text-primary hover:underline text-left pt-1"
+              className="text-body-sm text-primary hover:underline text-left pt-1"
             >
               {t('common:fontLicenses.title')} →
             </button>
@@ -73,7 +76,7 @@ export function AboutDialog() {
                 // surface the user can reach.
                 window.electronAPI?.shellOpenThirdPartyLicensesFolder().catch(() => {})
               }}
-              className="text-[12px] text-primary hover:underline text-left"
+              className="text-body-sm text-primary hover:underline text-left"
             >
               {t('common:thirdPartyLicenses.openFolder')} →
             </button>
@@ -93,8 +96,8 @@ export function AboutDialog() {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-[12px] text-zinc-400">{label}</span>
-      <span className="text-[12px] text-zinc-100 font-mono">{value}</span>
+      <span className="text-body-sm text-zinc-400">{label}</span>
+      <span className="text-body-sm text-zinc-100 font-mono">{value}</span>
     </div>
   )
 }

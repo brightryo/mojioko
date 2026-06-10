@@ -2,13 +2,24 @@ import { create } from 'zustand'
 
 export type TableFilter = 'all' | 'ready' | 'edited' | 'warnings' | 'deleted'
 
+/**
+ * STEP 2 lower-area view mode.  Both views read/write the same
+ * `useProjectStore.entries` — this flag only decides which UI is rendered.
+ * See `dev-docs/specs/timeline.md` for the 1-data-2-views design.
+ */
+export type EditorViewMode = 'list' | 'timeline'
+
+/** Minimum / maximum timeline zoom in pixels-per-second. */
+export const TIMELINE_PPS_MIN = 10
+export const TIMELINE_PPS_MAX = 400
+/** Default timeline zoom (50 px/sec → 10 s spans 500 px). */
+export const TIMELINE_PPS_DEFAULT = 50
+
 /** Maximum number of recent colors kept in memory. */
 const MAX_RECENT_COLORS = 5
 
 interface UiStore {
-  isCommandPaletteOpen: boolean
   isSettingsDialogOpen: boolean
-  isShortcutsDialogOpen: boolean
   isAboutDialogOpen: boolean
   isDonationDialogOpen: boolean
   isFontLicensesDialogOpen: boolean
@@ -75,10 +86,40 @@ interface UiStore {
    * on launch.
    */
   fontInventoryVersion: number
+  /**
+   * STEP 2 lower-area view selection.  Session-only — defaults to
+   * `'timeline'` on every fresh mount (REQ-063) so the user lands on the
+   * timeline editor immediately after transcription; the list view is
+   * still one click away via `<EditorViewSwitcher>` and the choice
+   * persists for the rest of the session.  Both views read/write the
+   * same `useProjectStore.entries`; this flag only controls which
+   * component renders.  See `dev-docs/specs/timeline.md`.
+   */
+  editorViewMode: EditorViewMode
+  /**
+   * Timeline horizontal zoom in pixels per second.  Drives time→x mapping
+   * for the ruler, blocks, and playhead.  Session-only.
+   */
+  timelinePixelsPerSec: number
+  /**
+   * Timeline snap toggle.  Phase 1 only stores the flag — the snap algorithm
+   * itself lands in Phase 5.  Session-only.
+   */
+  timelineSnapEnabled: boolean
+  /**
+   * REQ-074 1e — pending trim In / Out point set by the user from the
+   * timeline toolbar but not yet confirmed as a Cut.  Both are ORIGINAL
+   * axis seconds (= `<video>.currentTime` at capture time).  Session-only;
+   * cleared on cut confirmation or on explicit reset.
+   *
+   * Lives in ui-store rather than project-store because it represents an
+   * in-flight UI gesture, not part of the saved project state — undo /
+   * redo only push the confirmed Cut, never the pending In/Out clicks.
+   */
+  pendingCutInSec: number | null
+  pendingCutOutSec: number | null
 
-  setCommandPaletteOpen: (open: boolean) => void
   setSettingsDialogOpen: (open: boolean) => void
-  setShortcutsDialogOpen: (open: boolean) => void
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
   setFontLicensesDialogOpen: (open: boolean) => void
@@ -104,12 +145,17 @@ interface UiStore {
   clearRowSelection: () => void
   /** Increment fontInventoryVersion — call after a font is installed / uninstalled. */
   bumpFontInventoryVersion: () => void
+  setEditorViewMode: (m: EditorViewMode) => void
+  /** Set timeline zoom; clamped to [TIMELINE_PPS_MIN, TIMELINE_PPS_MAX]. */
+  setTimelinePixelsPerSec: (v: number) => void
+  setTimelineSnapEnabled: (v: boolean) => void
+  setPendingCutIn: (sec: number | null) => void
+  setPendingCutOut: (sec: number | null) => void
+  clearPendingCut: () => void
 }
 
 export const useUiStore = create<UiStore>((set) => ({
-  isCommandPaletteOpen: false,
   isSettingsDialogOpen: false,
-  isShortcutsDialogOpen: false,
   isAboutDialogOpen: false,
   isDonationDialogOpen: false,
   isFontLicensesDialogOpen: false,
@@ -123,10 +169,13 @@ export const useUiStore = create<UiStore>((set) => ({
   selectedRowIds: new Set<string>(),
   selectionAnchorId: null,
   fontInventoryVersion: 0,
+  editorViewMode: 'timeline',
+  timelinePixelsPerSec: TIMELINE_PPS_DEFAULT,
+  timelineSnapEnabled: true,
+  pendingCutInSec: null,
+  pendingCutOutSec: null,
 
-  setCommandPaletteOpen: (open) => set({ isCommandPaletteOpen: open }),
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
-  setShortcutsDialogOpen: (open) => set({ isShortcutsDialogOpen: open }),
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
   setDonationDialogOpen: (open) => set({ isDonationDialogOpen: open }),
   setFontLicensesDialogOpen: (open) => set({ isFontLicensesDialogOpen: open }),
@@ -189,4 +238,16 @@ export const useUiStore = create<UiStore>((set) => ({
     set({ selectedRowIds: new Set<string>(), selectionAnchorId: null }),
   bumpFontInventoryVersion: () =>
     set((s) => ({ fontInventoryVersion: s.fontInventoryVersion + 1 })),
+  setEditorViewMode: (m) => set({ editorViewMode: m }),
+  setTimelinePixelsPerSec: (v) =>
+    set({
+      timelinePixelsPerSec: Math.min(
+        TIMELINE_PPS_MAX,
+        Math.max(TIMELINE_PPS_MIN, v)
+      )
+    }),
+  setTimelineSnapEnabled: (v) => set({ timelineSnapEnabled: v }),
+  setPendingCutIn: (sec) => set({ pendingCutInSec: sec }),
+  setPendingCutOut: (sec) => set({ pendingCutOutSec: sec }),
+  clearPendingCut: () => set({ pendingCutInSec: null, pendingCutOutSec: null }),
 }))

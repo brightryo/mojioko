@@ -152,12 +152,7 @@ export function ColorPicker({
     }
   }
 
-  function handleHexKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      commitHexInput()
-      ;(e.target as HTMLInputElement).blur()
-    }
-  }
+  // REQ-082: Enter handler removed.  Blur (= click elsewhere) commits the hex.
 
   // -------------------------------------------------------------------------
   // Popover content
@@ -185,7 +180,7 @@ export function ColorPicker({
           popover via onInteractOutside, but REQ-033 asks for a visible
           dismiss control. */}
       <div className="flex items-start justify-between">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+        <p className="text-label font-medium uppercase tracking-wider text-zinc-500">
           {t('colorPicker.basic')}
         </p>
         <button
@@ -217,10 +212,10 @@ export function ColorPicker({
       {onPairApply && (
         <div>
           <div className="mb-1.5 flex items-baseline gap-2">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-label font-medium uppercase tracking-wider text-zinc-500">
               {t('colorPicker.pairs')}
             </p>
-            <span className="text-[9px] text-zinc-600">{t('colorPicker.pairsHint')}</span>
+            <span className="text-caption text-zinc-600">{t('colorPicker.pairsHint')}</span>
           </div>
           <div className="grid grid-cols-5 gap-1.5">
             {COLOR_PAIRS.map((p) => (
@@ -238,10 +233,10 @@ export function ColorPicker({
       {/* Group 3: CUD palette (10) */}
       <div>
         <div className="mb-1.5 flex items-baseline gap-2">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+          <p className="text-label font-medium uppercase tracking-wider text-zinc-500">
             {t('colorPicker.cud')}
           </p>
-          <span className="text-[9px] text-zinc-600">{t('colorPicker.cudHint')}</span>
+          <span className="text-caption text-zinc-600">{t('colorPicker.cudHint')}</span>
         </div>
         <div className="grid grid-cols-10 gap-1.5">
           {CUD_COLORS.map((c) => (
@@ -258,7 +253,7 @@ export function ColorPicker({
       {/* Recent colors (capped to 5 by useUiStore.addRecentColor) */}
       {recentColors.length > 0 && (
         <div>
-          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+          <p className="mb-1.5 text-label font-medium uppercase tracking-wider text-zinc-500">
             {t('colorPicker.recent')}
           </p>
           <div className="flex gap-1.5">
@@ -288,13 +283,12 @@ export function ColorPicker({
         value={hexDraft}
         onChange={handleHexChange}
         onBlur={commitHexInput}
-        onKeyDown={handleHexKeyDown}
         maxLength={7}
         spellCheck={false}
         placeholder="#FFFFFF"
         className={cn(
           'h-8 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-center',
-          'font-mono text-[12px] text-zinc-100',
+          'font-mono text-body-sm text-zinc-100',
           'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30'
         )}
       />
@@ -316,7 +310,7 @@ export function ColorPicker({
               'h-6 w-6 flex-shrink-0 rounded border border-zinc-700',
               'transition-all duration-150',
               'hover:border-zinc-500 hover:scale-110',
-              'focus:outline-none focus:ring-2 focus:ring-green-500/30',
+              'focus:outline-none focus-visible:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-40',
               className
             )}
@@ -338,7 +332,7 @@ export function ColorPicker({
           className={cn(
             'flex h-9 w-full items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2.5',
             'transition-colors duration-150 hover:border-zinc-700',
-            'focus:outline-none focus:ring-2 focus:ring-green-500/30',
+            'focus:outline-none focus-visible:outline-none',
             'disabled:cursor-not-allowed disabled:opacity-40',
             className
           )}
@@ -348,7 +342,7 @@ export function ColorPicker({
             className="h-5 w-5 flex-shrink-0 rounded border border-zinc-700"
             style={{ backgroundColor: value }}
           />
-          <span className="font-mono text-[12px] text-zinc-300">{normalise(value)}</span>
+          <span className="font-mono text-body-sm text-zinc-300">{normalise(value)}</span>
         </button>
       </PopoverTrigger>
       {pickerContent}
@@ -417,7 +411,7 @@ function PairSwatch({ pair, tooltip, onClick }: PairSwatchProps) {
           fill mirrors SubtitleOverlay so the visible stroke is the
           OUTSIDE half. */}
       <span
-        className="text-[13px] font-bold leading-none"
+        className="text-body font-bold leading-none"
         style={{
           color: pair.text,
           WebkitTextStrokeWidth: '1.5px',

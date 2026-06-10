@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
-import { MemoryRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Toaster } from 'sonner'
-import { useHotkeys } from 'react-hotkeys-hook'
 import { useTranslation } from 'react-i18next'
 import { TooltipProvider } from '@/components/ui/tooltip'
 // Splash screen disabled — kept commented out for possible reintroduction.
@@ -10,32 +9,18 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import Step1Route from '@/routes/step1'
 import Step2Route from '@/routes/step2'
 import Step3Route from '@/routes/step3'
-import { CommandPalette } from '@/components/command-palette/command-palette'
-import { ShortcutsDialog } from '@/components/shortcuts-dialog/shortcuts-dialog'
 import { AboutDialog } from '@/components/about-dialog/about-dialog'
 import { SettingsDialog } from '@/components/settings-dialog/settings-dialog'
 import { DonationDialog } from '@/components/donation-dialog/donation-dialog'
 import { FontLicensesDialog } from '@/components/font-licenses/font-licenses-dialog'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
-import { useProjectStore } from '@/stores/project-store'
-import { useHistoryStore } from '@/stores/history-store'
-import { registerCommands } from '@/lib/commands'
 import { loadSettings, saveSettings } from '@/services/settings'
 import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { listFonts } from '@/services/font'
 import { APP_VERSION } from '../shared/app-info'
 import type { AppSettings } from '../shared/types'
-import {
-  FileVideo,
-  Keyboard,
-  Info,
-  RotateCcw,
-  Undo2,
-  Redo2,
-  Heart
-} from 'lucide-react'
 
 const PAGE_VARIANTS = {
   initial: { opacity: 0, x: 8 },
@@ -46,77 +31,11 @@ const PAGE_VARIANTS = {
 const PAGE_TRANSITION = { duration: 0.25, ease: 'easeOut' }
 
 
-function GlobalHotkeys() {
-  const setCommandPaletteOpen = useUiStore((s) => s.setCommandPaletteOpen)
-  const setShortcutsOpen = useUiStore((s) => s.setShortcutsDialogOpen)
-
-  useHotkeys('ctrl+k', (e) => { e.preventDefault(); setCommandPaletteOpen(true) }, { enableOnFormTags: false })
-  useHotkeys('ctrl+/', (e) => { e.preventDefault(); setShortcutsOpen(true) }, { enableOnFormTags: false })
-
-  return null
-}
-
-function CommandRegistrar() {
-  const { t } = useTranslation('commands')
-  const navigate = useNavigate()
-  const setShortcutsOpen = useUiStore((s) => s.setShortcutsDialogOpen)
-  const setAboutOpen = useUiStore((s) => s.setAboutDialogOpen)
-  const setDonationOpen = useUiStore((s) => s.setDonationDialogOpen)
-  const setCommandPaletteOpen = useUiStore((s) => s.setCommandPaletteOpen)
-  const setTableFilter = useUiStore((s) => s.setTableFilter)
-  const setLanguage = useSettingsStore((s) => s.setLanguage)
-  const undo = useHistoryStore((s) => s.undo)
-  const redo = useHistoryStore((s) => s.redo)
-
-  useEffect(() => {
-    registerCommands([
-      // Navigation
-      { id: 'goToStep1', labelKey: 'navigation.goToStep1', group: 'navigation', run: () => navigate('/step1') },
-      { id: 'goToStep2', labelKey: 'navigation.goToStep2', group: 'navigation', run: () => navigate('/step2') },
-      {
-        id: 'goToStep3',
-        labelKey: 'navigation.goToStep3',
-        group: 'navigation',
-        // REQ-028: STEP 3 (burn-in) is unreachable for audio-only inputs.
-        // Hide the command so the user does not get a navigation that
-        // lands on a step with nothing to do.
-        predicate: () => {
-          const v = useProjectStore.getState().video
-          return v === null || v.hasVideoStream
-        },
-        run: () => navigate('/step3')
-      },
-      { id: 'filterAll',      labelKey: 'navigation.filterAll',      group: 'navigation', run: () => setTableFilter('all') },
-      { id: 'filterReady',    labelKey: 'navigation.filterReady',    group: 'navigation', run: () => setTableFilter('ready') },
-      { id: 'filterEdited',   labelKey: 'navigation.filterEdited',   group: 'navigation', run: () => setTableFilter('edited') },
-      { id: 'filterWarnings', labelKey: 'navigation.filterWarnings', group: 'navigation', run: () => setTableFilter('warnings') },
-      { id: 'filterDeleted',  labelKey: 'navigation.filterDeleted',  group: 'navigation', run: () => setTableFilter('deleted') },
-
-      // File
-      { id: 'openVideo',    labelKey: 'file.openVideo',    group: 'file', icon: FileVideo, shortcut: 'Ctrl+O', run: () => {} },
-      { id: 'exportText',   labelKey: 'file.exportText',   group: 'file', shortcut: 'Ctrl+S', run: () => {} },
-
-      // Edit
-      { id: 'undo',      labelKey: 'edit.undo',      group: 'edit', icon: Undo2,      shortcut: 'Ctrl+Z', run: () => undo() },
-      { id: 'redo',      labelKey: 'edit.redo',      group: 'edit', icon: Redo2,      shortcut: 'Ctrl+Y', run: () => redo() },
-      { id: 'addRow',    labelKey: 'edit.addRow',    group: 'edit', shortcut: 'Ctrl+N', run: () => {} },
-      { id: 'deleteRow', labelKey: 'edit.deleteRow', group: 'edit', run: () => {} },
-      { id: 'resetRow',  labelKey: 'edit.resetRow',  group: 'edit', icon: RotateCcw, shortcut: 'Ctrl+R', run: () => {} },
-
-      // Settings
-      { id: 'switchToJapanese',  labelKey: 'settings.switchToJapanese',  group: 'settings', run: () => setLanguage('ja') },
-      { id: 'switchToEnglish',   labelKey: 'settings.switchToEnglish',   group: 'settings', run: () => setLanguage('en') },
-
-      // Help
-      { id: 'showShortcuts',    labelKey: 'help.showShortcuts',    group: 'help', icon: Keyboard, shortcut: 'Ctrl+/', run: () => setShortcutsOpen(true) },
-      { id: 'about',            labelKey: 'help.about',            group: 'help', icon: Info,     run: () => { setCommandPaletteOpen(false); setAboutOpen(true) } },
-      { id: 'support',          labelKey: 'help.support',          group: 'help', icon: Heart,    run: () => { setCommandPaletteOpen(false); setDonationOpen(true) } },
-    ])
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t])
-
-  return null
-}
+// REQ-082: Ctrl+K command palette + Ctrl+/ shortcuts dialog removed.
+// All global keyboard shortcuts have been deleted along with their UI
+// affordances (command palette, shortcuts list, registerCommands).
+// Space (video/audio play-pause) is the only keyboard binding the app
+// still owns; see {video,audio}-preview-panel.tsx.
 
 function AppInner() {
   const [appVersion, setAppVersion] = useState(APP_VERSION)
@@ -240,9 +159,6 @@ function AppInner() {
 
   return (
     <>
-      <CommandRegistrar />
-      <GlobalHotkeys />
-
       <AnimatePresence mode="wait">
         <motion.div
           key={location.pathname}
@@ -264,8 +180,6 @@ function AppInner() {
         </motion.div>
       </AnimatePresence>
 
-      <CommandPalette />
-      <ShortcutsDialog />
       <AboutDialog />
       <SettingsDialog />
       <DonationDialog />
@@ -278,10 +192,10 @@ function AppInner() {
           classNames: {
             toast:
               'bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-50 shadow-2xl shadow-black/40',
-            title: 'text-[13px] font-medium text-zinc-50',
-            description: 'text-[12px] text-zinc-400',
-            actionButton: 'bg-zinc-700 text-zinc-50 text-[12px] rounded-md px-2 py-1',
-            cancelButton: 'bg-zinc-800 text-zinc-400 text-[12px] rounded-md px-2 py-1'
+            title: 'text-body font-medium text-zinc-50',
+            description: 'text-body-sm text-zinc-400',
+            actionButton: 'bg-zinc-700 text-zinc-50 text-body-sm rounded-md px-2 py-1',
+            cancelButton: 'bg-zinc-800 text-zinc-400 text-body-sm rounded-md px-2 py-1'
           }
         }}
       />
@@ -290,12 +204,23 @@ function AppInner() {
 }
 
 export default function App() {
+  // Smoke-only override: when launched with `?seed=demo&start=stepN` the
+  // router boots on that step instead of Step 1.  Lets a Playwright
+  // screenshot smoke jump straight into STEP 2's timeline view (where the
+  // fixtures seeded by main.tsx are visible) without driving the breadcrumb.
+  // No effect on the shipped app — main never appends these params.
+  const initialPath = (() => {
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('seed') !== 'demo') return '/step1'
+    const start = p.get('start')
+    return start === 'step2' || start === 'step3' ? `/${start}` : '/step1'
+  })()
   return (
     <TooltipProvider delayDuration={300}>
       <MemoryRouter
         // Splash screen disabled — start directly on /step1.
         // Original: initialEntries={['/splash']}
-        initialEntries={['/step1']}
+        initialEntries={[initialPath]}
         initialIndex={0}
         future={{
           v7_startTransition: true,

@@ -3,6 +3,7 @@ import { ASS_MARGIN_LR_PX } from '../../../shared/constants'
 import { getLibassScaleFor } from '@/lib/font-metrics'
 import { useSettingsStore } from '@/stores/settings-store'
 import { getFontMeta, isFontId } from '../../../shared/fonts'
+import { bumpRenderCount } from '@/lib/perf-counter'
 
 /** Floor (in OUTPUT pixels, not on the scale factor) applied to the visible
  *  outline so the thinnest setting (= 1) remains discernible at small preview
@@ -72,6 +73,7 @@ export function SubtitleOverlay({
   containerWidthPx,
   subtitleBackground,
 }: SubtitleOverlayProps) {
+  bumpRenderCount('SubtitleOverlay')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   // Per-row font override (REQ-022 step 4): when the entry carries a
   // fontId, render with that family + its own libassScale.  Otherwise

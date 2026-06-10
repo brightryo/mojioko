@@ -210,7 +210,7 @@ export function StyleSamplePreview({
     <div className="rounded-xl border border-border bg-card p-4 space-y-2 self-start">
       <div className="flex items-center gap-1.5">
         <Type className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-        <Label className="uppercase tracking-wider text-[10px]">
+        <Label>
           {t('subtitleDefaults.previewLabel', 'プレビュー')}
         </Label>
       </div>
@@ -254,7 +254,7 @@ export function StyleSamplePreview({
         </div>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-body-sm text-muted-foreground">
         {t(
           'subtitleDefaults.previewNote',
           '※ 近似表示です。書き出し後の動画で最終確認してください。'

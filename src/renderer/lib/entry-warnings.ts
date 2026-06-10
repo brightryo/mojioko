@@ -72,22 +72,52 @@ export function computeEntryWarnings(
 }
 
 /**
- * True when the "Warnings" tab should count the row.
+ * REQ-121 — classification of the six `EntryWarnings` flags into
+ * "errors" (= ffmpeg + libass physically cannot render the row, so the
+ * export must stop) and "warnings" (= the row still ships, the user may
+ * leave it).  Split as confirmed by the owner in RES-20260601-120 §3.1:
  *
- * Note: `emptyText` is classified as an ERROR rather than a warning — it
- * unconditionally excludes the row from every output (TXT, SRT, burn-in,
- * Ready tab) — and is therefore deliberately excluded from this predicate
- * so a text-empty row is NOT counted in the Warnings tab.  The "テキスト未入力"
- * badge is still rendered separately by the table for visual cues.
+ *   errors   = timeInvalid (start ≥ end), overDuration (times outside
+ *              the video duration), invalidSize (fontSizePx ≤ 0)
+ *   warnings = emptyText (skipped from outputs but does not block burn-in),
+ *              overlap (libass renders simultaneous captions),
+ *              overflow (libass clips wide text)
+ *
+ * Both predicates are pure boolean ORs over the type's flags; together
+ * they cover all six fields without overlap.
+ */
+export function isError(w: EntryWarnings): boolean {
+  return w.timeInvalid || w.overDuration || w.invalidSize
+}
+
+export function isWarning(w: EntryWarnings): boolean {
+  return w.emptyText || w.overlap || w.overflow
+}
+
+/**
+ * Alias for {@link isError}.  Kept as a separate name so callers that
+ * read like "do any rows have errors?" stay grep-friendly even though
+ * the implementation is the per-row predicate.
+ */
+export function hasAnyError(w: EntryWarnings): boolean {
+  return isError(w)
+}
+
+/**
+ * REQ-121 — true when the row should appear in the "Issues" tab
+ * (= the renamed "Warnings" tab; carries BOTH errors and warnings so
+ * the user has a single place to look for things to fix).  See
+ * {@link isError} and {@link isWarning} for the split.
+ *
+ * History: before REQ-121 this returned errors AND warnings as a single
+ * mixed "warnings" group, and `emptyText` was deliberately excluded
+ * because the codebase treated empty text as an export-blocker.
+ * REQ-121 promoted `emptyText` to a warning (it is silently dropped
+ * from outputs but does not block them) and added the matching
+ * `errorCount` gate on the Step 3 transition (see `step2.tsx`).
  */
 export function hasAnyWarning(w: EntryWarnings): boolean {
-  return (
-    w.timeInvalid ||
-    w.overDuration ||
-    w.overlap ||
-    w.invalidSize ||
-    w.overflow
-  )
+  return isWarning(w)
 }
 
 /**

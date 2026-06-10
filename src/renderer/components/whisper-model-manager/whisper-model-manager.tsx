@@ -250,16 +250,19 @@ export function WhisperModelManager({
   // Header status badge (always visible regardless of open/closed)
   const headerBadge = !state ? null : hasActive ? (
     <div className="flex items-center gap-1.5 flex-shrink-0">
-      <span className="flex items-center gap-1 text-[12px] text-zinc-300">
+      <span className="flex items-center gap-1 text-body-sm text-zinc-300">
         <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
         <span className="font-mono">{activeModel?.displayName}</span>
       </span>
-      <span className="flex items-center gap-0.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-500 text-green-950 whitespace-nowrap">
+      {/* REQ-071 Phase 3.7-A: text-green-950 -> text-zinc-950 — same hue
+          collision Phase 3.6 fixed on the primary button variant.  Even
+          this small pill suffered from green-on-green readability. */}
+      <span className="flex items-center gap-0.5 text-caption font-medium px-2 py-0.5 rounded-full bg-green-500 text-zinc-950 whitespace-nowrap">
         {t('model.active')}
       </span>
     </div>
   ) : (
-    <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 whitespace-nowrap flex-shrink-0">
+    <span className="flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 whitespace-nowrap flex-shrink-0">
       <AlertTriangle className="h-3 w-3 flex-shrink-0" />
       {hasAnyInstalled ? t('model.noActiveBadge') : t('model.notInstalledBadge')}
     </span>
@@ -268,21 +271,16 @@ export function WhisperModelManager({
   return (
     <div className={cn(disabled && 'opacity-50 pointer-events-none')}>
       {/* ---- Accordion Header ---- */}
+      {/* REQ-082: Enter / Space keyboard activation removed. */}
       <div
         role="button"
         aria-expanded={isOpen}
         tabIndex={0}
         onClick={() => setIsOpen(!isOpen)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            setIsOpen(!isOpen)
-          }
-        }}
         className="flex items-center gap-2 w-full cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
       >
         <Sparkles className="h-4 w-4 text-zinc-400 flex-shrink-0" />
-        <span className="text-[13px] font-medium text-zinc-300 uppercase tracking-wider">
+        <span className="text-headline font-semibold text-zinc-300 uppercase tracking-wider">
           {t('whisperModel.label')}
         </span>
         {/* Stop propagation so tooltip interaction doesn't toggle accordion */}
@@ -303,7 +301,7 @@ export function WhisperModelManager({
                              required, now that the accordion no longer
                              auto-expands on first run). */}
         {!isOpen && state && (
-          <span className="text-[11px] text-zinc-500 flex-shrink-0 ml-1">
+          <span className="text-caption text-zinc-500 flex-shrink-0 ml-1">
             {hasActive ? t('model.clickToChange') : t('model.clickToSelect')}
           </span>
         )}
@@ -328,7 +326,7 @@ export function WhisperModelManager({
           >
             <div className="space-y-3 pt-3">
               {/* Long description */}
-              <p className="text-[12px] text-zinc-500 leading-relaxed">
+              <p className="text-body-sm text-zinc-500 leading-relaxed">
                 {t('whisperModel.descriptionLong')}
               </p>
 
@@ -354,7 +352,7 @@ export function WhisperModelManager({
 
               {/* Bottom status bar */}
               <div className="rounded-lg border border-zinc-800 px-4 py-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-5 text-[12px]">
+                <div className="flex items-center gap-5 text-body-sm">
                   <span className="flex items-center gap-1.5 text-zinc-400">
                     <Database className="h-3.5 w-3.5 flex-shrink-0" />
                     {t('model.totalUsed')}: {state ? formatBytes(state.totalUsedBytes) : '—'}
@@ -370,7 +368,7 @@ export function WhisperModelManager({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-6 px-2 text-[11px] text-zinc-500 hover:text-zinc-300"
+                      className="h-6 px-2 text-caption text-zinc-500 hover:text-zinc-300"
                       onClick={(e) => {
                         e.stopPropagation()
                         openModelsFolder().catch(() => {})
@@ -380,7 +378,7 @@ export function WhisperModelManager({
                       {t('model.openFolder')}
                     </Button>
                   )}
-                  <span className="flex items-center gap-1.5 text-[11px] text-green-600">
+                  <span className="flex items-center gap-1.5 text-caption text-green-600">
                     <ShieldCheck className="h-3.5 w-3.5" />
                     {t('model.localOnly')}
                   </span>
@@ -512,10 +510,10 @@ function InstallInfoRow({
   mono?: boolean
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 text-[12px]">
+    <div className="flex items-start justify-between gap-3 text-body-sm">
       <span className="text-zinc-500 flex-shrink-0">{label}</span>
       <span
-        className={cn('text-zinc-300 text-right min-w-0 break-all', mono && 'font-mono text-[11px]')}
+        className={cn('text-zinc-300 text-right min-w-0 break-all', mono && 'font-mono text-body-sm')}
         title={mono ? value : undefined}
       >
         {value}
@@ -564,18 +562,20 @@ function ModelCard({
       {/* Top: name + status badge */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[14px] font-semibold text-zinc-100 leading-tight">
+          <p className="text-headline font-semibold text-zinc-100 leading-tight">
             {model.displayName}
           </p>
-          <p className={cn('text-[11px] mt-0.5', isActive ? 'text-green-600' : 'text-zinc-600')}>
+          <p className={cn('text-body-sm mt-0.5', isActive ? 'text-green-600' : 'text-zinc-600')}>
             {formatBytes(model.expectedSizeBytes)}
           </p>
         </div>
         {isInstalled && (
           <span
             className={cn(
-              'flex-shrink-0 flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
-              isActive ? 'bg-green-500 text-green-950' : 'bg-blue-500/15 text-blue-400'
+              'flex-shrink-0 flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
+              // REQ-071 Phase 3.7-A: green-950 -> zinc-950 on the green
+              // active branch — same hue-collision fix.
+              isActive ? 'bg-green-500 text-zinc-950' : 'bg-blue-500/15 text-blue-400'
             )}
           >
             <Check className="h-2.5 w-2.5" />
@@ -585,14 +585,14 @@ function ModelCard({
       </div>
 
       {/* Description */}
-      <p className="text-[11px] text-zinc-500 leading-relaxed flex-1">
+      <p className="text-body-sm text-zinc-500 leading-relaxed flex-1">
         {t(DESC_KEY[model.id] ?? 'whisperModel.descMedium')}
       </p>
 
       {/* Action area */}
       {isDownloading ? (
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-[10px] text-zinc-500">
+          <div className="flex items-center justify-between text-caption text-zinc-500">
             <span className="truncate mr-2">{downloadFile || t('model.downloading')}</span>
             <span className="tabular-nums flex-shrink-0">{downloadPercent}%</span>
           </div>
@@ -602,7 +602,7 @@ function ModelCard({
               style={{ width: `${downloadPercent}%` }}
             />
           </div>
-          <Button variant="ghost" size="sm" className="w-full h-7 text-[11px]" onClick={onCancelDownload}>
+          <Button variant="ghost" size="sm" className="w-full h-7 text-caption" onClick={onCancelDownload}>
             {t('model.cancelDownload')}
           </Button>
         </div>

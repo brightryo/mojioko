@@ -30,7 +30,7 @@ function AdvancedParamRow({
       <div className="flex items-center gap-1.5 shrink-0">
         <span
           className={cn(
-            'text-sm transition-colors duration-150',
+            'text-body transition-colors duration-150',
             changed ? 'text-[hsl(var(--warning))]' : 'text-muted-foreground'
           )}
         >
@@ -92,7 +92,7 @@ export function WhisperAdvancedControls({
 
   function numberInputClass(modified: boolean): string {
     return cn(
-      'w-20 h-7 rounded-md border bg-input px-2 text-center text-[13px]',
+      'w-20 h-7 rounded-md border bg-input px-2 text-center text-body',
       'focus:outline-none focus:ring-2 tabular-nums',
       '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
       modified
@@ -105,7 +105,7 @@ export function WhisperAdvancedControls({
     <div className="space-y-5">
       {/* ── VAD ─────────────────────────────────────────────────────── */}
       <div className="space-y-0.5">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-foreground mb-2">
+        <p className="text-label font-medium uppercase tracking-wider text-foreground mb-2">
           {t('advanced.vad')}
         </p>
         <AdvancedParamRow
@@ -120,7 +120,7 @@ export function WhisperAdvancedControls({
             />
             <span
               className={cn(
-                'text-[12px] transition-colors duration-150',
+                'text-body-sm transition-colors duration-150',
                 transcriptionAdvanced.vadFilter !== TRANSCRIPTION_DEFAULTS.vadFilter
                   ? 'text-[hsl(var(--warning))]'
                   : 'text-muted-foreground'
@@ -182,7 +182,7 @@ export function WhisperAdvancedControls({
                 transcriptionAdvanced.minSpeechDurationMs !== TRANSCRIPTION_DEFAULTS.minSpeechDurationMs
               )}
             />
-            <span className="text-[11px] text-muted-foreground/60">ms</span>
+            <span className="text-caption text-muted-foreground/60">ms</span>
           </div>
         </AdvancedParamRow>
 
@@ -210,14 +210,14 @@ export function WhisperAdvancedControls({
                 transcriptionAdvanced.minSilenceDurationMs !== TRANSCRIPTION_DEFAULTS.minSilenceDurationMs
               )}
             />
-            <span className="text-[11px] text-muted-foreground/60">ms</span>
+            <span className="text-caption text-muted-foreground/60">ms</span>
           </div>
         </AdvancedParamRow>
       </div>
 
       {/* ── Recognition ─────────────────────────────────────────────── */}
       <div className="space-y-0.5">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-foreground mb-2">
+        <p className="text-label font-medium uppercase tracking-wider text-foreground mb-2">
           {t('advanced.recognition')}
         </p>
         <AdvancedParamRow
@@ -254,7 +254,7 @@ export function WhisperAdvancedControls({
           >
             <SelectTrigger
               className={cn(
-                'w-36 h-7 text-[13px] border bg-input',
+                'w-36 h-7 text-body border bg-input',
                 transcriptionAdvanced.language !== TRANSCRIPTION_DEFAULTS.language
                   ? 'border-[hsl(var(--warning)/0.6)] text-[hsl(var(--warning))]'
                   : 'border-border text-foreground'
@@ -277,7 +277,7 @@ export function WhisperAdvancedControls({
 
       {/* ── Reset + note ────────────────────────────────────────────── */}
       <div className="flex items-center justify-between pt-1">
-        <p className="text-[11px] italic text-muted-foreground/60">
+        <p className="text-body-sm italic text-muted-foreground/60">
           {t('advanced.futureNote')}
         </p>
         {isAdvancedChanged && (
@@ -285,7 +285,7 @@ export function WhisperAdvancedControls({
             variant="ghost"
             size="sm"
             onClick={onReset}
-            className="h-7 text-[12px] text-muted-foreground hover:text-foreground gap-1.5 flex-shrink-0"
+            className="h-7 text-body-sm text-muted-foreground hover:text-foreground gap-1.5 flex-shrink-0"
           >
             <RotateCcw className="h-3 w-3" />
             {t('advanced.resetToDefaults')}
