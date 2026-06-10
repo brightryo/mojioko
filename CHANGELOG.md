@@ -9,6 +9,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-06-10
+
+Third minor-line release: timeline editing with non-destructive
+trimming, scissor-marker undo, on-the-fly help guide, and a clearer
+error / warning model.
+
+### Added
+
+#### Timeline editor — trimming
+
+- New STEP 2 timeline view gains a **Trim** action: mark an In point
+  and an Out point on the timeline ruler, press **Trim**, and the
+  selected span is removed from the video while every later subtitle
+  ripples forward to fill the gap.  The trim is non-destructive — the
+  original entries stay in the data, only the displayed time axis
+  shrinks.
+- **Scissor markers** stay at every trim location.  Click a scissor
+  to undo that specific trim and restore the subtitles it removed.
+  Nested trims unwind from the outermost inward — the next layer
+  becomes clickable after the previous one is removed.
+- Subtitles that fall entirely inside a trimmed span are temporarily
+  hidden (and marked "trim-deleted" in the table); they reappear when
+  the trim is reverted.
+- A "How to use" popover lives on the timeline toolbar with four
+  short tips covering trimming, the scissor undo, zoom / snap, and the
+  recommendation to keep subtitles on a single timeline row.
+
+#### Issues tab and error vs warning split
+
+- The subtitle filter formerly known as "Warnings" is now **Issues**,
+  and groups every problem the user has to look at.
+- Problems are now split into two tiers:
+  - **Errors** (red): block export — invalid time, time exceeds video
+    duration, invalid size.  The "Continue to render" button is
+    disabled while any error remains, with a tooltip pointing at the
+    Issues tab.
+  - **Warnings** (amber): allow export but should be reviewed —
+    empty text, time overlap, overflow.
+- The state-badge column now shows red badges for errors and amber
+  badges for warnings.
+
+### Changed
+
+- **Time display unified on the edited axis**: every time readout in
+  STEP 2 (table cells, time-edit dialog, timeline ruler, inspector)
+  now shows the **edited** time — i.e. the time the subtitle will
+  have in the rendered output after all trims.  Previously the
+  table showed original-axis time, which read inconsistently with
+  the timeline.
+- **Deleted clips are frozen on the timeline**: subtitles that have
+  been removed by a trim show in a dimmed state and reject edits
+  (text, time, size, style, bulk operations, delete, restore, auto-
+  line-break, font, colour, fade).  The only way to revive them is to
+  click the scissor marker that consumed them.
+- "Cut" / カット renamed to **Trim** / トリミング throughout the UI
+  for consistency with the feature name (button label, tooltip,
+  scissor-marker title, toast, help popover).
+- Trim toolbar now reads left-to-right as **In → Out → Trim**, with
+  the "Trim" heading label removed (the bordered frame around the
+  three buttons already groups them visually).
+- Bulk-edit operations and Reset on rows that fall inside a trimmed
+  span are skipped (with no surprise edits to frozen rows).
+
+### Fixed
+
+- Trimming a span in the middle of an entry that already has a
+  trim on one side now unions the two trims correctly (previously
+  the second trim could over-shrink the entry).
+- Scissor markers no longer appear for trims that are fully
+  contained by another trim — only the outermost is clickable.
+- The "Issues" tab now correctly counts the unionised set of errors
+  and warnings instead of double-counting overlap.
+- Removed-rows action buttons stay visible and clickable on the
+  Deleted tab so a removed row can be restored without unfreezing
+  the whole row first.
+- Help popover stays inside the viewport in every window size — opens
+  to the right of the help button to escape the bottom-of-window
+  clipping that long English translations would otherwise hit.
+
+### Tests / infrastructure
+
+- E2E test selectors switched from localised text matching
+  (`button:has-text("追加")` etc.) to `data-testid` so the suite
+  passes regardless of `DEFAULT_LANGUAGE`.
+
+---
+
 ## [1.1.1] - 2026-06-02
 
 Second minor-line release: per-row font selection, audio file input, expanded

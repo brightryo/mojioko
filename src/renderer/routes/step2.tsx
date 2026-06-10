@@ -850,8 +850,11 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               <TooltipContent>{t('tooltip.redo')}</TooltipContent>
             </Tooltip>
 
-          {/* Add Row button — opens the shared TimeEditorDialog in add mode. */}
-          <Button variant="ghost" size="md" onClick={openAddRowDialog}>
+          {/* Add Row button — opens the shared TimeEditorDialog in add mode.
+              `data-testid="add-row"` lets the green-button-color e2e click
+              the button without depending on the localised label ("追加" /
+              "Add"), so the test works under DEFAULT_LANGUAGE='en'. */}
+          <Button variant="ghost" size="md" onClick={openAddRowDialog} data-testid="add-row">
             <Plus className="h-4 w-4 mr-1" />
             {t('action.addRow')}
           </Button>

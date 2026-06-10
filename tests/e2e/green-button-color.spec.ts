@@ -139,10 +139,11 @@ test('TimeEditorDialog (add mode) confirm renders zinc-950 on green-500', async 
   const { app, window } = await launchAt('?seed=demo&start=step2')
   await window.waitForFunction(() => Boolean((window as unknown as { __mojioko_test?: unknown }).__mojioko_test))
 
-  // The "追加" / "Add" button is rendered with `variant="ghost"` and is
-  // the only one carrying the Plus icon next to its label.  Click it to
-  // drive the dialog open.  (REQ-081 #3 dropped the "行/row" prefix.)
-  await window.locator('button:has-text("追加")').first().click()
+  // REQ-129 Step 2 — locale-independent selector.  The Add-row button
+  // ships with `data-testid="add-row"` so the e2e works regardless of
+  // DEFAULT_LANGUAGE (the previous `:has-text("追加")` matcher broke
+  // when the default switched to 'en').
+  await window.locator('[data-testid="add-row"]').first().click()
   await window.waitForSelector('[role="dialog"]')
   await window.waitForTimeout(100) // let the dialog complete its open transition
 
@@ -170,9 +171,11 @@ test('TimeEditorDialog (edit mode) confirm renders zinc-950 on green-500', async
     if (firstId) t.ui.setState({ focusedRowId: firstId })
   })
 
-  // Click any "時間調整" chip — the first non-deleted row exposes one.
-  // (step2.json action.adjustTime = "時間調整", not "時刻調整".)
-  await window.locator('button:has-text("時間調整")').first().click()
+  // REQ-129 Step 2 — locale-independent selector.  Each subtitle-table
+  // row mounts the same `data-testid="adjust-time"` on its time-edit
+  // chip; `.first()` clicks the first non-frozen row.  Works under
+  // DEFAULT_LANGUAGE='en' where the label is "Adjust time".
+  await window.locator('[data-testid="adjust-time"]').first().click()
   await window.waitForSelector('[role="dialog"]')
   await window.waitForTimeout(100)
 

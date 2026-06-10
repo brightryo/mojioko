@@ -418,9 +418,14 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           title={isEndExceedsDuration ? t('warning.exceedsDuration') : undefined}
         />
         {/* Adjust-time button — opens the shared modal time editor.
-            Hidden for deleted rows since editing a deleted row's time is a no-op. */}
+            Hidden for deleted rows since editing a deleted row's time is a no-op.
+            `data-testid="adjust-time"` lets the green-button-color e2e click
+            the chip without depending on the localised label ("時間調整" /
+            "Adjust time"), so the test works under DEFAULT_LANGUAGE='en'.
+            Multiple rows render the same testid; the test uses `.first()`. */}
         <button
           type="button"
+          data-testid="adjust-time"
           onClick={(e) => { e.stopPropagation(); onAdjustTime(entry.id) }}
           disabled={isFrozen}
           className={cn(
