@@ -1,50 +1,70 @@
 # MOJIOKO — Third-Party Licenses
 
-MOJIOKO bundles the following third-party components. Their licenses are
-included in this directory.  The user can reach this folder from the
+MOJIOKO bundles the following third-party components.  Their licence
+files live in this directory.  Users can reach this folder from the
 **About** dialog → **Third-party licenses** link.
 
 ---
 
-## ffmpeg / ffprobe (LGPL v2.1)
+## ffmpeg / ffprobe (LGPL v3)
 
-- **License**: GNU Lesser General Public License, Version 2.1 (LGPL-2.1)
-- **Source**: https://ffmpeg.org/
-- **Component notice**: `ffmpeg-lgpl.txt` (FFmpeg-specific copyright,
-  build flags, linking method, how to relink, source-availability
-  pointer)
-- **License full text**: `lgpl-2.1.txt` (verbatim GNU LGPL v2.1 from
-  https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt)
+- **Distribution source**: Pre-built binaries from
+  [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds/releases),
+  flavour `win64-lgpl-shared`.  MOJIOKO ships them verbatim.
+- **Upstream**: https://ffmpeg.org/
+- **Licence**: GNU **Lesser General Public License, Version 3**
+  (LGPL-3.0).
+- **Component notice**: `ffmpeg-lgpl.txt` (build flags, source-
+  availability, linking method, why this is v3 rather than v2.1).
+- **Licence full text**: `lgpl-3.0.txt` (verbatim LGPL v3).
+- **Supplementing GPL v3**: `gpl-3.0.txt` (verbatim GPL v3 — LGPL v3
+  §0 incorporates GPL v3 by reference; LGPL v3 §4 requires the GPL
+  text to accompany the binary as well).
 - **Notes**:
-  - MOJIOKO uses LGPL-only builds of ffmpeg and ffprobe.  No GPL or
-    nonfree components are linked in (no `--enable-gpl`, no
-    `--enable-nonfree`).
-  - The binaries are linked **dynamically** via shared libraries
-    (`avcodec*.dll`, `avdevice*.dll`, `avfilter*.dll`,
-    `avformat*.dll`, `avutil*.dll`, `swresample*.dll`,
-    `swscale*.dll`) shipped next to `ffmpeg.exe`.  This satisfies
-    LGPL §6(b) — a user can replace those .dlls with a custom
-    FFmpeg build of the same major version / ABI.
-  - No source modifications were made by the MOJIOKO project.
+  - This is an **LGPL-only** build.  `--enable-gpl` and
+    `--enable-nonfree` are **disabled**.  GPL codecs (libx264,
+    libx265, libxavs2, libxvid, frei0r, libdvdread, libdvdnav,
+    librubberband, libvidstab, avisynth) and proprietary codecs
+    (libfdk-aac) are explicitly disabled.
+  - LGPL v3 (not v2.1) is required because the build statically
+    incorporates GMP, libaribb24, and libzmq, which are LGPL v3 (or
+    GPL v2 / LGPL v3 dual; we choose v3).  The configure flag
+    `--enable-version3` upgrades LGPL v2.1-or-later code to v3 so
+    the combined binary has a single, compatible licence.
+  - DLLs (`avcodec`, `avdevice`, `avfilter`, `avformat`, `avutil`,
+    `swresample`, `swscale`) ship next to `ffmpeg.exe` to satisfy
+    LGPL v3 §4 (the user can replace them to relink against a
+    modified FFmpeg).
 
----
+### ffmpeg statically-linked subsystems used by MOJIOKO
 
-## libass (ISC)
+MOJIOKO drives the FFmpeg `subtitles=` filter, which pulls in these
+text/font subsystems.  They are statically incorporated into the
+FFmpeg DLLs; their attribution files live here so the obligation to
+include each licence travels with the binary:
 
-- **License**: ISC License
-- **Source**: https://github.com/libass/libass
-- **File**: `libass-isc.txt` (verbatim COPYING from upstream)
-- **Notes**: MOJIOKO uses libass through ffmpeg's `subtitles=` filter
-  for ASS subtitle burn-in.  Whether libass is linked statically into
-  the bundled ffmpeg binaries or shipped as a separate DLL depends on
-  the upstream FFmpeg build flavour shipped in `resources/bin/ffmpeg/`.
-  Either way, the ISC notice is reproduced here.
+| Component | Licence | File |
+|---|---|---|
+| libass | ISC | `libass-isc.txt` |
+| libfreetype | FreeType License (FTL) | `freetype-ftl.txt` |
+| libharfbuzz | "Old MIT" | `harfbuzz-mit.txt` |
+| libfribidi | LGPL v2.1+ (this notice retains the v2.1 selection FriBidi originally ships under) | `fribidi-lgpl-2.1.txt` |
+| fontconfig | MIT-style | `fontconfig-mit.txt` |
+
+Other FFmpeg subsystems listed in the build configuration (zlib,
+libxml2, libvmaf, libaom, libdav1d, libsvtav1, libvorbis, libopus,
+libmp3lame, libwebp, libtheora, libvpx, libwhisper, ...) ship under
+permissive or LGPL-compatible licences as documented at the
+[BtbN/FFmpeg-Builds release page](https://github.com/BtbN/FFmpeg-Builds/releases)
+and inside the [FFmpeg source tree](https://github.com/FFmpeg/FFmpeg).
+MOJIOKO does not call them through their own API surface; they are
+reached only via FFmpeg's command-line / filter API.
 
 ---
 
 ## faster-whisper (MIT)
 
-- **License**: MIT
+- **Licence**: MIT
 - **Source**: https://github.com/SYSTRAN/faster-whisper
 - **File**: `faster-whisper-mit.txt`
 
@@ -52,7 +72,7 @@ included in this directory.  The user can reach this folder from the
 
 ## Electron (MIT)
 
-- **License**: MIT
+- **Licence**: MIT
 - **Source**: https://electronjs.org/
 - **File**: `electron-mit.txt`
 - **Notes**: Electron embeds Chromium (BSD-3-Clause) and Node.js
@@ -63,41 +83,67 @@ included in this directory.  The user can reach this folder from the
 
 ---
 
-## React (MIT)
+## npm runtime dependencies
 
-- **License**: MIT
-- **Source**: https://reactjs.org/
-- **File**: `react-mit.txt`
+The application's renderer process is bundled with the following 31
+packages from `dependencies` in `package.json`.
 
----
+### Apache-2.0
 
-## Other npm dependencies (MIT / ISC / BSD / Apache 2.0)
+| Package | Version | Notice |
+|---|---|---|
+| class-variance-authority | 0.7.1 | `class-variance-authority-apache-2.0.txt` |
 
-All other npm dependencies used at runtime are distributed under
-permissive licences (MIT, ISC, BSD-2/3, or Apache 2.0).  The
-authoritative list is the `dependencies` block of `package.json` in
-the source repository.  Key runtime modules include:
+Apache-2.0 §4(d) NOTICE: the upstream package does **not** ship a
+NOTICE file, so no additional NOTICE attribution is required.
 
-- `@radix-ui/*` (MIT) — UI primitives for the shadcn-style design
-- `framer-motion` (MIT) — animation engine
-- `react-i18next` / `i18next` (MIT) — localisation
-- `react-hook-form` / `zod` (MIT) — forms and validation
-- `zustand` (MIT) — state management
-- `tailwind-merge` / `clsx` / `class-variance-authority` (MIT) — styling
-  helpers
-- `lucide-react` (ISC) — icons
-- `sonner` (MIT) — toasts
-- `react-hotkeys-hook` (MIT) — keyboard shortcuts
-- `opentype.js` (MIT) — font metric reader used by the overflow
-  calculator
-- `react-colorful` (MIT) — colour picker
-- `electron-log` (MIT) — main-process logger
-- `react-router-dom` (MIT) — routing
+### ISC
 
-Each of those packages carries its own LICENCE file inside its
-`node_modules/<pkg>/` directory; the MOJIOKO installer does not
-re-bundle every file individually but the source-repository
-`node_modules/` retains them verbatim during build.
+| Package | Version | Notice |
+|---|---|---|
+| lucide-react | 0.400.0 | `lucide-react-isc.txt` |
+
+### MIT (29 packages — each licence header retained verbatim within bundled JS source comments)
+
+| Package | Version |
+|---|---|
+| @radix-ui/react-checkbox | 1.3.3 |
+| @radix-ui/react-dialog | 1.1.15 |
+| @radix-ui/react-dropdown-menu | 2.1.16 |
+| @radix-ui/react-label | 2.1.8 |
+| @radix-ui/react-popover | 1.1.15 |
+| @radix-ui/react-scroll-area | 1.2.10 |
+| @radix-ui/react-select | 2.2.6 |
+| @radix-ui/react-separator | 1.1.8 |
+| @radix-ui/react-slot | 1.2.4 |
+| @radix-ui/react-switch | 1.2.6 |
+| @radix-ui/react-tabs | 1.1.13 |
+| @radix-ui/react-tooltip | 1.2.8 |
+| clsx | 2.1.1 |
+| electron-log | 5.4.4 |
+| framer-motion | 11.18.2 |
+| i18next | 23.16.8 |
+| opentype.js | 2.0.0 |
+| react | 18.3.1 |
+| react-colorful | 5.7.0 |
+| react-dom | 18.3.1 |
+| react-hook-form | 7.76.0 |
+| react-hotkeys-hook | 4.6.2 |
+| react-i18next | 14.1.3 |
+| react-router-dom | 6.30.3 |
+| sonner | 1.7.4 |
+| tailwind-merge | 2.6.1 |
+| tailwindcss-animate | 1.0.7 |
+| zod | 3.25.76 |
+| zustand | 4.5.7 |
+
+Each of those packages is distributed under the standard MIT
+licence.  React's licence text is reproduced as `react-mit.txt`
+(this folder) as a representative example.  The corresponding
+`node_modules/<pkg>/LICENSE` file for every package above is the
+authoritative per-package text and is available in the source
+repository at `<repo>\node_modules\<pkg>\LICENSE`, as well
+as at each upstream's homepage.
 
 ---
 
@@ -117,7 +163,7 @@ licence.
 
 ### Noto Sans JP (SIL OFL v1.1)
 
-- **License**: SIL Open Font License, Version 1.1
+- **Licence**: SIL Open Font License, Version 1.1
 - **Source**: https://fonts.google.com/noto/specimen/Noto+Sans+JP
 - **File**: `noto-sans-jp-ofl.txt` (verbatim OFL.txt taken from
   https://github.com/google/fonts/raw/main/ofl/notosansjp/OFL.txt)
@@ -139,15 +185,22 @@ under **About → Font licenses**.
 
 ---
 
-## File index (for the installer NSIS step)
+## File index
 
 ```
-ffmpeg-lgpl.txt        (FFmpeg per-component notice)
-lgpl-2.1.txt           (GNU LGPL v2.1 verbatim full text)
-libass-isc.txt         (libass ISC notice)
-faster-whisper-mit.txt (faster-whisper MIT)
-electron-mit.txt       (Electron MIT)
-react-mit.txt          (React MIT)
-noto-sans-jp-ofl.txt   (Noto Sans JP SIL OFL v1.1)
-README.md              (this file)
+ffmpeg-lgpl.txt                          (FFmpeg per-component notice)
+lgpl-3.0.txt                             (GNU LGPL v3 verbatim full text)
+gpl-3.0.txt                              (GNU GPL v3 verbatim — LGPL v3 §0)
+libass-isc.txt                           (libass ISC)
+freetype-ftl.txt                         (libfreetype FTL)
+harfbuzz-mit.txt                         (libharfbuzz Old MIT)
+fontconfig-mit.txt                       (fontconfig MIT-style)
+fribidi-lgpl-2.1.txt                     (libfribidi LGPL v2.1+)
+faster-whisper-mit.txt                   (faster-whisper MIT)
+electron-mit.txt                         (Electron MIT)
+react-mit.txt                            (React MIT — also representative for the 29 MIT npm pkgs)
+class-variance-authority-apache-2.0.txt  (Apache-2.0)
+lucide-react-isc.txt                     (ISC)
+noto-sans-jp-ofl.txt                     (Noto Sans JP SIL OFL v1.1)
+README.md                                (this file)
 ```

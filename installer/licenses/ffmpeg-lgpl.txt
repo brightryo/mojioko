@@ -1,28 +1,53 @@
-FFmpeg / FFprobe — LGPL bundling notice for MOJIOKO
-=====================================================
+FFmpeg / FFprobe — LGPL v3 bundling notice for MOJIOKO
+======================================================
 
 This file documents MOJIOKO's distribution of the FFmpeg shared
 libraries and the ffmpeg / ffprobe command-line binaries that ship
-inside this installer.  The full text of the GNU Lesser General
-Public License, Version 2.1 — under which these binaries are
-licensed — is included verbatim alongside this notice as
-`lgpl-2.1.txt`, in the same folder.  Together, these two files
-satisfy the LGPL v2.1 §1 / §6(d) obligation to include the licence
-text with the binary distribution.
+inside this installer.  These binaries are licensed under the GNU
+Lesser General Public License, **Version 3** (LGPL-3.0).  Two
+companion files in the same folder satisfy the LGPL v3 §4 / GPL v3
+§7 "accompany the licence" obligations:
+
+  - `lgpl-3.0.txt` — verbatim GNU Lesser General Public License v3
+  - `gpl-3.0.txt`  — verbatim GNU General Public License v3, which
+                     LGPL v3 supplements by reference (LGPL v3 §0
+                     defines LGPL v3 as "additional permissions" on
+                     top of GPL v3, so the GPL text is part of the
+                     licence and must travel with the binary).
 
 
 1. Component
 -------------
 
   Name:        FFmpeg (including ffmpeg.exe, ffprobe.exe, and the
-               shared libraries avcodec, avdevice, avfilter,
-               avformat, avutil, swresample, swscale)
+               shared libraries avcodec-62.dll, avdevice-62.dll,
+               avfilter-11.dll, avformat-62.dll, avutil-60.dll,
+               swresample-6.dll, swscale-9.dll)
   Upstream:    https://ffmpeg.org/
-  Licence:     GNU Lesser General Public License, version 2.1
-               (LGPL-2.1) — see `lgpl-2.1.txt` in this folder.
-  Build flag:  LGPL-only build (no `--enable-gpl`, no
-               `--enable-nonfree`).  No GPL-licensed components are
-               linked in.
+  Distribution
+  source:      Pre-built binaries taken from BtbN/FFmpeg-Builds
+               (https://github.com/BtbN/FFmpeg-Builds/releases),
+               specifically the `win64-lgpl-shared` flavour.  MOJIOKO
+               does not patch, recompile, or otherwise modify these
+               binaries.
+  Licence:     GNU Lesser General Public License, **Version 3**
+               (LGPL-3.0).  The full text is at `lgpl-3.0.txt` in
+               this folder; the supplemented GPL v3 text is at
+               `gpl-3.0.txt`.
+
+  Why LGPL v3 (not v2.1):
+
+    This FFmpeg build is configured with `--enable-version3` to
+    accommodate three statically-linked dependencies that are only
+    available under LGPL v3 (or compatible v3 licences):
+
+      - GMP             (LGPL v3 or GPL v2, this build selects v3)
+      - libaribb24      (LGPL v3)
+      - libzmq          (LGPL v3 with linking exception)
+
+    LGPL v2.1-or-later code inside FFmpeg is consequently
+    distributed under LGPL v3 (the "or later" upgrade path) so that
+    the combined binary has a single, compatible licence.
 
 
 2. Copyright
@@ -33,52 +58,82 @@ text with the binary distribution.
   `AUTHORS` / `MAINTAINERS` files in the FFmpeg source tree for
   the full list of authors.
 
-  FFmpeg is licensed under the LGPL v2.1 or later (most files), and
-  some files under the GNU LGPL v2.1 only.  MOJIOKO accepts the
-  LGPL v2.1 terms.
+
+3. GPL-licensed components: none
+---------------------------------
+
+  This build has `--enable-gpl` **disabled** and `--enable-nonfree`
+  **disabled**.  All GPL-licensed and patent-encumbered codecs
+  (libx264, libx265, libxavs2, libxvid, frei0r, libdvdread,
+  libdvdnav, librubberband, libvidstab, avisynth, libfdk-aac) are
+  explicitly disabled in the build configuration.  No GPL code is
+  linked into the FFmpeg binaries that MOJIOKO ships.
 
 
-3. Source code availability (LGPL §6)
---------------------------------------
+4. Source code availability (LGPL v3 §4(d) / GPL v3 §6)
+--------------------------------------------------------
 
-  The full FFmpeg source code corresponding to the binaries
-  shipped in this installer can be obtained from:
+  The full FFmpeg source corresponding to the shipped binaries can
+  be obtained from:
 
     https://ffmpeg.org/download.html
+        (the FFmpeg project's canonical source archive)
 
-  No source modifications were made by the MOJIOKO project.  The
-  binaries are taken from upstream LGPL release builds; MOJIOKO
-  does not patch, recompile with proprietary changes, or
-  statically link FFmpeg against any non-LGPL component.
+    https://github.com/FFmpeg/FFmpeg
+        (the upstream git repository — find the commit listed in
+        `ffmpeg.exe -version` for the exact source revision)
 
+    https://github.com/BtbN/FFmpeg-Builds
+        (the build scripts that produced the binaries shipped here;
+        clone this repository plus the FFmpeg source above to
+        reproduce the exact binary set MOJIOKO ships)
 
-4. Method of linking and how to relink
----------------------------------------
-
-  MOJIOKO links to FFmpeg dynamically via shared libraries (.dll)
-  shipped next to ffmpeg.exe inside MOJIOKO's installation
-  directory.  A user who wishes to use a modified FFmpeg version
-  can do so by replacing the shipped .dll / .exe files with
-  binaries of the same FFmpeg major version (matching SOname /
-  ABI), as permitted by LGPL §6(b) ("use a suitable shared
-  library mechanism for linking with the Library").
+  No source modifications were made by the MOJIOKO project.
 
 
-5. No warranty
+5. Method of linking and how to relink (LGPL v3 §4)
+----------------------------------------------------
+
+  MOJIOKO ships FFmpeg as dynamically-loaded shared libraries
+  (DLLs) next to ffmpeg.exe inside MOJIOKO's installation
+  directory.  A user who wishes to use a modified FFmpeg can do so
+  by replacing the shipped DLL / EXE files with binaries of the
+  same FFmpeg major version (matching SOname / ABI).  This
+  satisfies LGPL v3 §4(d)(1) — the user is given the means to
+  combine or re-link a modified version of the Library with the
+  Application.
+
+
+6. No warranty
 ---------------
 
   FFmpeg is distributed in the hope that it will be useful, but
   WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See
-  `lgpl-2.1.txt` (this folder) for the full disclaimer.
+  `lgpl-3.0.txt` (this folder) for the full disclaimer.
 
 
-6. Other libraries linked into FFmpeg
+7. Other libraries linked into FFmpeg
 --------------------------------------
 
-  Upstream LGPL FFmpeg builds may statically incorporate several
-  smaller permissively-licensed libraries (zlib, libpng, libxml2,
-  libass, ...).  Each of these libraries' notices is reproduced
-  in this folder where MOJIOKO can identify a redistribution
-  obligation; see this folder's `README.md` and the per-library
-  notice files for the canonical list.
+  The shipped FFmpeg binaries statically incorporate a number of
+  smaller permissively-licensed and LGPL-compatible libraries.
+  Per-library notice files for the ones MOJIOKO directly relies on
+  (subtitle / font rendering) live in this folder:
+
+    libass         (ISC) — `libass-isc.txt`
+    libfreetype    (FTL) — `freetype-ftl.txt`
+    libharfbuzz    (MIT-old) — `harfbuzz-mit.txt`
+    libfribidi     (LGPL v2.1+) — `fribidi-lgpl-2.1.txt`
+    fontconfig     (MIT) — `fontconfig-mit.txt`
+
+  The remaining libraries that the build configuration lists
+  (zlib, libxml2, libvmaf, libaom, libdav1d, libsvtav1, libvorbis,
+  libopus, libmp3lame, ...) ship under permissive or LGPL-
+  compatible licences as documented at the BtbN/FFmpeg-Builds
+  release page and inside the FFmpeg source tree.  MOJIOKO does
+  not call these subsystems through their own API; they are reached
+  only via FFmpeg's command-line surface.  Reproducing every
+  individual notice would duplicate the FFmpeg source tree, so the
+  pointer to BtbN/FFmpeg-Builds + the FFmpeg source tree above is
+  the canonical source of truth for those subsystems.
