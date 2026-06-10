@@ -1603,11 +1603,15 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               matches the other h-7 toolbar segments (zoom buttons, snap
               toggle).  The label stays on the LEFT inside the box per
               the user's "枠の左側に来ること" requirement. */}
+          {/* REQ-126 — drop the standalone "Trim" label (it sat to the
+              left of `始点 終点 カット` and read as a section heading).
+              The bordered frame already groups the three buttons, and
+              `confirmCut` is relabelled to "トリミング" / "Trim" so the
+              right-hand action button itself names the feature.  Order
+              is therefore: 始点 → 終点 → トリミング (left → right matches
+              the user's operation flow). */}
           <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2 py-0.5">
-            <span className="text-label font-medium uppercase tracking-wider text-zinc-500 select-none">
-              {t('timeline.trim.toolbarLabel')}
-            </span>
-            {/* REQ-080 #2 — 始点 / 終点 / カット: always look like
+            {/* REQ-080 #2 — 始点 / 終点 / トリミング: always look like
                 buttons (base bg + border).  No "−" placeholder when
                 unset — the time chip simply doesn't render until the
                 point is captured.  Set state amber-tints the background

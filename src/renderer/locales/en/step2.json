@@ -239,7 +239,7 @@
       "title": "Timeline tips",
       "trim": {
         "title": "Trimming",
-        "body": "Set In and Out around the range you want to remove, then press Cut. The selected span is removed from the video and the rest of the timeline ripples forward to fill the gap. Press Clear to drop pending In / Out points before you commit."
+        "body": "Set In and Out around the range you want to remove, then press Trim. The selected span is removed from the video and the rest of the timeline ripples forward to fill the gap. Press Clear to drop pending In / Out points before you commit."
       },
       "scissor": {
         "title": "Undo a cut with the scissor marker",
@@ -281,20 +281,20 @@
       "setInTooltip": "Set in-point to the current playhead (click again to clear)",
       "setOut": "Out",
       "setOutTooltip": "Set out-point to the current playhead (click again to clear)",
-      "confirmCut": "Cut",
-      "confirmCutTooltip": "Cut In..Out and ripple the tail forward",
+      "confirmCut": "Trim",
+      "confirmCutTooltip": "Trim In..Out and ripple the tail forward",
       "clearPending": "Clear",
       "clearPendingTooltip": "Clear the pending In / Out points",
       "inLabel": "In",
       "outLabel": "Out",
       "noPoint": "—",
-      "cutMarkerTitle": "Cut {{start}} – {{end}} (click to remove)",
+      "cutMarkerTitle": "Trim {{start}} – {{end}} (click to remove)",
       "invalidRange": "In must come before Out",
       "errorSamePosition": "In and Out cannot be at the same position",
       "errorInAfterOut": "In must be set before Out",
       "errorOutBeforeIn": "Out must be set after In",
       "toast": {
-        "cutApplied": "Cut applied — click its scissor marker to undo",
+        "cutApplied": "Trim applied — click its scissor marker to undo",
         "reviveFailedStillCut": "{{count}} subtitle(s) could not be restored — another trim still consumes them"
       }
     }
