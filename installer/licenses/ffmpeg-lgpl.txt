@@ -1,16 +1,84 @@
-GNU LESSER GENERAL PUBLIC LICENSE
-Version 2.1, February 1999
+FFmpeg / FFprobe — LGPL bundling notice for MOJIOKO
+=====================================================
 
-Copyright (C) 1991, 1999 Free Software Foundation, Inc.
-51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+This file documents MOJIOKO's distribution of the FFmpeg shared
+libraries and the ffmpeg / ffprobe command-line binaries that ship
+inside this installer.  The full text of the GNU Lesser General
+Public License, Version 2.1 — under which these binaries are
+licensed — is included verbatim alongside this notice as
+`lgpl-2.1.txt`, in the same folder.  Together, these two files
+satisfy the LGPL v2.1 §1 / §6(d) obligation to include the licence
+text with the binary distribution.
 
-Everyone is permitted to copy and distribute verbatim copies of this license
-document, but changing it is not allowed.
 
-[This is the first section of the GNU LGPL v2.1. The full text is available at
-https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html]
+1. Component
+-------------
 
-The full text of the GNU Lesser General Public License v2.1 can be found at:
-https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+  Name:        FFmpeg (including ffmpeg.exe, ffprobe.exe, and the
+               shared libraries avcodec, avdevice, avfilter,
+               avformat, avutil, swresample, swscale)
+  Upstream:    https://ffmpeg.org/
+  Licence:     GNU Lesser General Public License, version 2.1
+               (LGPL-2.1) — see `lgpl-2.1.txt` in this folder.
+  Build flag:  LGPL-only build (no `--enable-gpl`, no
+               `--enable-nonfree`).  No GPL-licensed components are
+               linked in.
 
-FFmpeg source code is available at: https://ffmpeg.org/download.html
+
+2. Copyright
+-------------
+
+  FFmpeg is copyright (C) 2000 - present, the FFmpeg project and
+  contributors.  See https://ffmpeg.org/about.html and the
+  `AUTHORS` / `MAINTAINERS` files in the FFmpeg source tree for
+  the full list of authors.
+
+  FFmpeg is licensed under the LGPL v2.1 or later (most files), and
+  some files under the GNU LGPL v2.1 only.  MOJIOKO accepts the
+  LGPL v2.1 terms.
+
+
+3. Source code availability (LGPL §6)
+--------------------------------------
+
+  The full FFmpeg source code corresponding to the binaries
+  shipped in this installer can be obtained from:
+
+    https://ffmpeg.org/download.html
+
+  No source modifications were made by the MOJIOKO project.  The
+  binaries are taken from upstream LGPL release builds; MOJIOKO
+  does not patch, recompile with proprietary changes, or
+  statically link FFmpeg against any non-LGPL component.
+
+
+4. Method of linking and how to relink
+---------------------------------------
+
+  MOJIOKO links to FFmpeg dynamically via shared libraries (.dll)
+  shipped next to ffmpeg.exe inside MOJIOKO's installation
+  directory.  A user who wishes to use a modified FFmpeg version
+  can do so by replacing the shipped .dll / .exe files with
+  binaries of the same FFmpeg major version (matching SOname /
+  ABI), as permitted by LGPL §6(b) ("use a suitable shared
+  library mechanism for linking with the Library").
+
+
+5. No warranty
+---------------
+
+  FFmpeg is distributed in the hope that it will be useful, but
+  WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See
+  `lgpl-2.1.txt` (this folder) for the full disclaimer.
+
+
+6. Other libraries linked into FFmpeg
+--------------------------------------
+
+  Upstream LGPL FFmpeg builds may statically incorporate several
+  smaller permissively-licensed libraries (zlib, libpng, libxml2,
+  libass, ...).  Each of these libraries' notices is reproduced
+  in this folder where MOJIOKO can identify a redistribution
+  obligation; see this folder's `README.md` and the per-library
+  notice files for the canonical list.
