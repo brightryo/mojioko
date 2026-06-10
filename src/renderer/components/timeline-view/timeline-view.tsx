@@ -1417,25 +1417,30 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
               </button>
             </PopoverTrigger>
             <PopoverContent
-              // REQ-124 — anchor the popover BELOW the help button so it
-              // never flips up into the AppShell header.  Radix's
-              // default `avoidCollisions=true` would otherwise hop the
-              // panel above the trigger when the body grew long enough
-              // to clip the bottom of the viewport, and the panel ends
-              // up partially hidden behind the header.  Pin `side=bottom`
-              // + `avoidCollisions=false`, then cap the height so a body
-              // that overflows the remaining viewport scrolls inside
-              // the panel instead of expanding it off-screen.
+              // REQ-124 / REQ-127 — anchor the popover BELOW the help
+              // button (Radix's default `avoidCollisions=true` would
+              // otherwise hop the panel above the trigger and slide it
+              // behind the AppShell header).  REQ-127 widens the panel
+              // and splits the four sections into a 2x2 grid so the
+              // vertical height actually shrinks — the previous 380 px
+              // single-column layout was tall enough to clip the
+              // bottom on a 718 px-tall window.  The `max-h` + scroll
+              // is kept as belt-and-braces in case a translation runs
+              // longer than expected.
               side="bottom"
               align="start"
               avoidCollisions={false}
               collisionPadding={12}
-              className="w-[380px] p-4 space-y-3 text-zinc-100 max-h-[calc(100vh-120px)] overflow-y-auto"
+              className="w-[720px] p-4 space-y-3 text-zinc-100 max-h-[calc(100vh-160px)] overflow-y-auto"
             >
               <div className="text-body font-semibold text-zinc-50">
                 {t('timeline.help.title')}
               </div>
-              <ul className="space-y-2.5 text-body-sm leading-relaxed">
+              {/* REQ-127 — 2x2 grid.  Each cell is one help section; the
+                  amber-tinted single-row tip sits bottom-right so it is
+                  still the last thing the eye lands on while staying on
+                  the same fold as the rest. */}
+              <ul className="grid grid-cols-2 gap-x-5 gap-y-3 text-body-sm leading-relaxed">
                 <li>
                   <div className="font-semibold text-zinc-200">
                     {t('timeline.help.trim.title')}
