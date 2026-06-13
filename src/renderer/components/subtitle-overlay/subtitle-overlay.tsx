@@ -1,4 +1,4 @@
-import type { SubtitleEntry, BurninPosition, SubtitleBackground } from '../../../shared/types'
+import type { SubtitleEntry } from '../../../shared/types'
 import { ASS_MARGIN_LR_PX } from '../../../shared/constants'
 import { getLibassScaleFor } from '@/lib/font-metrics'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -39,19 +39,23 @@ const STACK_LINE_HEIGHT_RATIO = 1.6
 
 export interface SubtitleOverlayProps {
   entry: SubtitleEntry
-  burnin: BurninPosition
   /** Native video width in pixels — denominator for the container/video scale. */
   videoWidthPx: number
   /** Rendered container width in pixels — measured by the caller via ResizeObserver. */
   containerWidthPx: number
-  subtitleBackground?: SubtitleBackground
   /**
-   * REQ-20260613-004: pixel offset from the burnin verticalPosition edge
-   * (top OR bottom — same edge the overlay anchors against).  0 (or
-   * undefined) for a standalone caption; for stacked captions each
-   * subsequent overlay passes the cumulative `estimateOverlayHeightPx`
-   * of preceding stack members so the captions don't overlap visually.
-   * When omitted, behaviour is byte-identical to pre-stack callers.
+   * REQ-20260613-004: additional pixel offset (ASS coordinate space) ABOVE
+   * the entry's own `verticalMarginPx`, used so multiple simultaneous
+   * captions stack the same way libass does on burn-in (first caption at
+   * the entry's preferred MarginV, later captions pushed away).  Computed
+   * by `computeFixedStackOffsets` in the parent and passed in here; 0 / undef
+   * for a standalone caption.
+   *
+   * REQ-20260613-016 Phase 3: this offset is now RELATIVE to the entry's
+   * own MarginV (which itself comes from `entry.verticalMarginPx`), so
+   * different entries in the same alignment group with different MarginV
+   * values stack correctly without the parent having to pre-mix
+   * coordinate frames.
    */
   stackOffsetPx?: number
 }
@@ -146,10 +150,8 @@ export function estimateOverlayHeightPx(
  */
 export function SubtitleOverlay({
   entry,
-  burnin,
   videoWidthPx,
   containerWidthPx,
-  subtitleBackground,
   stackOffsetPx,
 }: SubtitleOverlayProps) {
   bumpRenderCount('SubtitleOverlay')
@@ -163,8 +165,12 @@ export function SubtitleOverlay({
   const libassScale = getLibassScaleFor(resolvedFontId)
   const scale      = containerWidthPx / videoWidthPx
   const fontSizePx = entry.fontSizePx        * libassScale * scale
-  const marginVPx  = burnin.verticalMarginPx * scale
-  const marginHPx  = ASS_MARGIN_LR_PX        * scale
+  // REQ-20260613-016 Phase 3: layout is now driven by the entry itself
+  // (no more `burnin` prop).  Each entry carries its own
+  // horizontalPosition / verticalPosition / verticalMarginPx — seeded by
+  // Phase 1 and editable per row in Phase 4/5.
+  const marginVPx  = entry.verticalMarginPx * scale
+  const marginHPx  = ASS_MARGIN_LR_PX       * scale
 
   // Outline width (visible outside the glyph), in preview pixels.  Scaled by
   // the same `scale` as the text so the outline/glyph ratio matches the libass
@@ -175,29 +181,30 @@ export function SubtitleOverlay({
   // stroke, hiding the inside half — only outlinePx is visible outside.
   const strokeWidthPx = outlinePx * 2
 
-  // REQ-20260613-004: `stackOffsetPx` shifts the overlay inward from the
-  // burnin edge by the cumulative height of preceding stack members, so
-  // multiple simultaneous captions stack the same way libass does on
-  // burn-in (first caption at the edge, later captions pushed away from
-  // it).  Undefined → 0 → byte-identical to the pre-stack single-caption
-  // path.
-  const stackOffset = stackOffsetPx ?? 0
-  const vStyle = burnin.verticalPosition === 'bottom'
+  // REQ-20260613-004 + REQ-20260613-016 Phase 3: `stackOffsetPx` is the
+  // collision offset (in ASS coordinate space) BEYOND `entry.verticalMarginPx`.
+  // The CSS `bottom` / `top` therefore = (entry's own MarginV + collision
+  // offset) * scale.  When undef → 0 → standalone caption sits at its own
+  // MarginV exactly.
+  const stackOffset = (stackOffsetPx ?? 0) * scale
+  const vStyle = entry.verticalPosition === 'bottom'
     ? { bottom: `${marginVPx + stackOffset}px` }
     : { top:    `${marginVPx + stackOffset}px` }
 
   const textAlign = (
-    burnin.horizontalPosition === 'center' ? 'center' :
-    burnin.horizontalPosition === 'right'  ? 'right'  : 'left'
+    entry.horizontalPosition === 'center' ? 'center' :
+    entry.horizontalPosition === 'right'  ? 'right'  : 'left'
   ) as React.CSSProperties['textAlign']
 
   const hStyle = { left: `${marginHPx}px`, right: `${marginHPx}px`, textAlign }
 
-  // CSS background approximation for the subtitle preview
-  const bgEnabled = subtitleBackground?.enabled === true
-  const bgOpacity = bgEnabled ? (subtitleBackground!.opacityPercent / 100) : 0
+  // CSS background approximation for the subtitle preview — entry's own
+  // subtitleBackground (REQ-20260613-016 Phase 3) replaces the global prop.
+  const bg = entry.subtitleBackground
+  const bgEnabled = bg.enabled
+  const bgOpacity = bgEnabled ? (bg.opacityPercent / 100) : 0
   const bgColor   = bgEnabled
-    ? (subtitleBackground!.color === 'white'
+    ? (bg.color === 'white'
         ? `rgba(255, 255, 255, ${bgOpacity})`
         : `rgba(0, 0, 0, ${bgOpacity})`)
     : undefined

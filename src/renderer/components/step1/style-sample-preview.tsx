@@ -182,12 +182,14 @@ export function StyleSamplePreview({
       outlineColorHex: defaults.outlineColorHex,
       outlineThicknessPx: defaults.outlineThicknessPx,
       fadeEnabled: defaults.fadeEnabled,
-      // REQ-20260613-016 / v1.2.2 機能A: seed per-row layout / background.
-      // PREVIEW_BURNIN above still overrides the alignment at render time
-      // via the `burnin` prop — these fields exist on the entry only to
-      // satisfy the required type contract and the preview's `\fad`/`\fs`
-      // override path; they are not consumed by the Step 1 preview.
-      ...makeEntryLayoutDefaults()
+      // REQ-20260613-016 / v1.2.2 機能A Phase 3: SubtitleOverlay now reads
+      // layout from the entry itself (no `burnin` prop).  Seed the sample
+      // entry's layout from PREVIEW_BURNIN so the preview frame keeps its
+      // historical center-bottom positioning with the same 30-px marginV.
+      ...makeEntryLayoutDefaults(),
+      horizontalPosition: PREVIEW_BURNIN.horizontalPosition,
+      verticalPosition: PREVIEW_BURNIN.verticalPosition,
+      verticalMarginPx: PREVIEW_BURNIN.verticalMarginPx
     }
     return {
       id: 'step1-sample',
@@ -253,7 +255,6 @@ export function StyleSamplePreview({
           {containerWidth > 0 && (
             <SubtitleOverlay
               entry={sampleEntry}
-              burnin={PREVIEW_BURNIN}
               videoWidthPx={videoWidthPx}
               containerWidthPx={containerWidth}
             />

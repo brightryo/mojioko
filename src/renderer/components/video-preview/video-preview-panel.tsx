@@ -668,16 +668,22 @@ export function VideoPreviewPanel() {
                                 to one overlay at offset 0 — byte-
                                 identical to the pre-stack render
                                 path. */}
+                            {/* REQ-20260613-016 Phase 3: per-row layout
+                                lives on `entry` itself; SubtitleOverlay
+                                reads horizontalPosition / verticalPosition /
+                                verticalMarginPx / subtitleBackground from
+                                there.  The global `burnin` /
+                                `subtitleBackground` slices are no longer
+                                consumed by overlay rendering (Phase 4 will
+                                also retire the panel UI that wrote them). */}
                             {videoContainerWidth > 0 && overlayEntries.map((entry) => {
                               const offset = stackOffsetsByEntryId.get(entry.id) ?? 0
                               return (
                                 <SubtitleOverlay
                                   key={entry.id}
                                   entry={entry}
-                                  burnin={burnin}
                                   videoWidthPx={video.widthPx}
                                   containerWidthPx={videoContainerWidth}
-                                  subtitleBackground={subtitleBackground}
                                   stackOffsetPx={offset}
                                 />
                               )

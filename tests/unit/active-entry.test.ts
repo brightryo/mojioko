@@ -300,3 +300,216 @@ describe('computeFixedStackOffsets — libass fix_collisions replication', () =>
     expect(abc.get('a')).toBe(ab.get('a'))
   })
 })
+
+/**
+ * REQ-20260613-016 Phase 3 — per-row layout extensions to the stack
+ * algorithm.  The legacy contract (all rows same alignment, same MarginV)
+ * is covered by the suite above.  These tests pin the per-row extensions:
+ *   - alignment groups partition the collision graph
+ *   - each entry's own MarginV is the base position within its group
+ *   - pinned entries (\pos) are excluded entirely
+ */
+describe('computeFixedStackOffsets — per-row alignment groups (Phase 3)', () => {
+  const h = () => 10
+
+  function entryWithLayout(
+    id: string,
+    startSec: number,
+    endSec: number,
+    layout: {
+      horizontalPosition?: 'left' | 'center' | 'right'
+      verticalPosition?: 'top' | 'bottom'
+      verticalMarginPx?: number
+      posX?: number
+      posY?: number
+    } = {},
+  ): SubtitleEntry {
+    const base = entry(id, startSec, endSec)
+    return {
+      ...base,
+      horizontalPosition: layout.horizontalPosition ?? base.horizontalPosition,
+      verticalPosition: layout.verticalPosition ?? base.verticalPosition,
+      verticalMarginPx: layout.verticalMarginPx ?? base.verticalMarginPx,
+      posX: layout.posX,
+      posY: layout.posY,
+    }
+  }
+
+  it('entries in different alignment groups do NOT collide', () => {
+    // a is bottom-center; b is top-center.  They share the same time
+    // window but live on opposite edges — no interaction, both at
+    // offset 0 (= their own MarginV).
+    const entries = [
+      entryWithLayout('a', 0, 10, { verticalPosition: 'bottom' }),
+      entryWithLayout('b', 0, 10, { verticalPosition: 'top' }),
+    ]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(0)
+  })
+
+  it('three entries split across three alignment groups all sit at offset 0', () => {
+    // Each entry has a unique (horizontal, vertical) combo so no two
+    // share a collision group.  Every entry claims its own anchor.
+    const entries = [
+      entryWithLayout('a', 0, 10, { horizontalPosition: 'left',   verticalPosition: 'bottom' }),
+      entryWithLayout('b', 0, 10, { horizontalPosition: 'center', verticalPosition: 'top' }),
+      entryWithLayout('c', 0, 10, { horizontalPosition: 'right',  verticalPosition: 'bottom' }),
+    ]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(0)
+    expect(result.get('c')).toBe(0)
+  })
+
+  it('mixed groups — only same-group siblings stack', () => {
+    // Two bottom-center entries (a, c) and one top-center (b) sharing
+    // the same time window.  c stacks on a; b is alone in its group.
+    const entries = [
+      entryWithLayout('a', 0, 10, { verticalPosition: 'bottom' }),
+      entryWithLayout('b', 0, 10, { verticalPosition: 'top' }),
+      entryWithLayout('c', 0, 10, { verticalPosition: 'bottom' }),
+    ]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(0)
+    expect(result.get('c')).toBe(10) // stacked on a
+  })
+
+  it('horizontal split also partitions: bottom-left vs bottom-right do not collide', () => {
+    // libass's alignment grouping is by the FULL alignment value (1–9),
+    // so even rows that share the vertical edge but differ in horizontal
+    // position do not stack on each other.
+    const entries = [
+      entryWithLayout('a', 0, 10, { horizontalPosition: 'left',  verticalPosition: 'bottom' }),
+      entryWithLayout('b', 0, 10, { horizontalPosition: 'right', verticalPosition: 'bottom' }),
+    ]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(0)
+  })
+})
+
+describe('computeFixedStackOffsets — per-row MarginV (Phase 3)', () => {
+  const h = () => 10
+
+  function entryWithMargin(
+    id: string,
+    startSec: number,
+    endSec: number,
+    verticalMarginPx: number,
+  ): SubtitleEntry {
+    const base = entry(id, startSec, endSec)
+    return { ...base, verticalMarginPx }
+  }
+
+  it('two same-group entries with widely-different MarginV do NOT collide', () => {
+    // a sits at MarginV=40 (top edge of its band = 50).
+    // b sits at MarginV=200 (top edge = 210).
+    // Bands don't overlap → both at relative offset 0.
+    const entries = [
+      entryWithMargin('a', 0, 10, 40),
+      entryWithMargin('b', 0, 10, 200),
+    ]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(0)
+  })
+
+  it('two same-group entries with close MarginV DO collide and stack', () => {
+    // a at MarginV=40 occupies band [40, 50].
+    // b at MarginV=45 would occupy [45, 55] — collides.
+    // b climbs above a → effective base 50 → relative offset = 50-45 = 5.
+    const entries = [
+      entryWithMargin('a', 0, 10, 40),
+      entryWithMargin('b', 0, 10, 45),
+    ]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(5)
+  })
+
+  it('three entries with progressive MarginV — only adjacent ones collide', () => {
+    // a: MarginV=40 → band [40,50]
+    // b: MarginV=45 → would be [45,55], climbs above a → base 50, offset 5
+    // c: MarginV=200 → band [200,210], no collision, offset 0
+    const entries = [
+      entryWithMargin('a', 0, 10, 40),
+      entryWithMargin('b', 0, 10, 45),
+      entryWithMargin('c', 0, 10, 200),
+    ]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(5)
+    expect(result.get('c')).toBe(0)
+  })
+
+  it('relative offset for sole same-group entry is 0 regardless of MarginV', () => {
+    // Regression guard: the returned value is NOT absolute pixels.  An
+    // entry alone in its group sits at its own MarginV (relative = 0),
+    // not at 0 (which would mean "at the edge").
+    const result = computeFixedStackOffsets([entryWithMargin('a', 0, 10, 200)], h)
+    expect(result.get('a')).toBe(0)
+  })
+})
+
+describe('computeFixedStackOffsets — pinned entries excluded (Phase 3 / 機能B forward-decl)', () => {
+  const h = () => 10
+
+  function pinnedEntry(
+    id: string,
+    startSec: number,
+    endSec: number,
+    posX: number,
+    posY: number,
+  ): SubtitleEntry {
+    const base = entry(id, startSec, endSec)
+    return { ...base, posX, posY }
+  }
+
+  it('pinned entry does not appear in the result map', () => {
+    const entries = [pinnedEntry('p', 0, 10, 100, 200)]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.has('p')).toBe(false)
+  })
+
+  it('pinned entries do not act as priors for unpinned siblings', () => {
+    // a is pinned at (100, 200).  b shares the time window, same alignment
+    // group as it would be by default.  a is invisible to the collision
+    // graph, so b sits at offset 0 (= its own MarginV).
+    const entries = [
+      pinnedEntry('a', 0, 10, 100, 200),
+      entry('b', 0, 10),
+    ]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.has('a')).toBe(false)
+    expect(result.get('b')).toBe(0)
+  })
+
+  it('only posX (no posY) is NOT pinned — entry stacks normally', () => {
+    // The "pinned" state requires BOTH posX and posY (paired override of
+    // \pos).  Only one defined → semantically incomplete → entry stays
+    // in the stack.
+    const base = entry('a', 0, 10)
+    const halfPin: SubtitleEntry = { ...base, posX: 100, posY: undefined }
+    const result = computeFixedStackOffsets([halfPin], h)
+    expect(result.has('a')).toBe(true)
+    expect(result.get('a')).toBe(0)
+  })
+
+  it('pinned + unpinned mix: pinned skipped, unpinned stack with each other', () => {
+    // a: unpinned bottom-center
+    // p: pinned (excluded entirely)
+    // b: unpinned bottom-center, overlapping a
+    // → a at 0, b at 10 (stacks on a), p missing
+    const entries = [
+      entry('a', 0, 10),
+      pinnedEntry('p', 0, 10, 50, 50),
+      entry('b', 0, 10),
+    ]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.has('p')).toBe(false)
+    expect(result.get('b')).toBe(10)
+  })
+})
