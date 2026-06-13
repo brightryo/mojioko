@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, X } from 'lucide-react'
+import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
@@ -16,7 +16,8 @@ import {
   autoLineBreakRow as runAutoLineBreakRow,
   overflowWrapRow as runOverflowWrapRow,
   resetRow as runResetRow,
-  toggleDeleteRow as runToggleDeleteRow
+  toggleDeleteRow as runToggleDeleteRow,
+  duplicateRow as runDuplicateRow
 } from '@/lib/entry-row-actions'
 import { formatEditedTimecode, editedDurationOfEntry } from '@/lib/time'
 import { effectiveEntryState } from '../../../shared/cuts'
@@ -237,6 +238,17 @@ export function TimelineBlockInspector({
     runResetRow(entry, { reset: t('history.resetRow') })
   }
 
+  function handleDuplicate() {
+    // REQ-20260612-004 pattern: commit any pending text edit first so
+    // the duplicate captures the just-typed value rather than the
+    // last-committed text from the store.
+    commitText(draft)
+    runDuplicateRow(entry, {
+      history: t('history.duplicateRow'),
+      successToast: t('toast.rowDuplicated')
+    })
+  }
+
   function handleAdjustTime() {
     // Commit any pending text edit first so blur doesn't race with
     // the dialog opening.
@@ -279,11 +291,12 @@ export function TimelineBlockInspector({
 
   return (
     <div className="flex flex-col gap-3 w-[320px] text-zinc-100 max-h-[70vh] overflow-y-auto pr-1">
-      {/* § 1 — Action icons + close.  REQ-20260612-003 §2 §3:
-          icon-only buttons in order 敷き詰め改行 → はみ出し改行 →
-          削除/復元 → リセット, then the X close on the right.  Both
-          wrap buttons are suppressed in audio-only mode (no burn-in
-          pipeline consumes the rewrap). */}
+      {/* § 1 — Action icons + close.  REQ-20260612-003 §2 §3 +
+          REQ-20260613-001 §2-5: icon-only buttons in order
+          敷き詰め改行 → はみ出し改行 → 削除/復元 → リセット → 複製,
+          then the X close on the right (separated by justify-between).
+          Both wrap buttons are suppressed in audio-only mode (no
+          burn-in pipeline consumes the rewrap). */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1">
           {!isAudioOnly && (
@@ -373,6 +386,28 @@ export function TimelineBlockInspector({
             )}
           >
             <Eraser className="h-3.5 w-3.5" />
+          </button>
+          {/* REQ-20260613-001 §2-5: Duplicate is the last icon in the
+              action cluster, sitting to the right of Reset and to the
+              left of the X close.  Per REQ-20260613-001 §2-5 the user
+              asked for "the very last" position — interpreted here as
+              "last in the action cluster" since the X is a navigation
+              affordance rather than a row action.  Disabled on frozen
+              rows mirroring the wrap-button gate. */}
+          <button
+            type="button"
+            title={t('action.duplicateRowHelp')}
+            aria-label={t('action.duplicateRowHelp')}
+            onClick={handleDuplicate}
+            disabled={isFrozen}
+            className={cn(
+              'flex items-center justify-center h-7 w-7 rounded',
+              'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+              'transition-colors duration-150',
+              'disabled:opacity-30 disabled:pointer-events-none'
+            )}
+          >
+            <CopyPlus className="h-3.5 w-3.5" />
           </button>
         </div>
         <button

@@ -74,6 +74,8 @@
     "autoLineBreakRowHelp": "Pack wrap — drop existing breaks and refill lines to the full display width",
     "overflowWrapRow": "Overflow wrap",
     "overflowWrapRowHelp": "Overflow wrap — keep your manual breaks and only fold the parts that overflow the display width",
+    "duplicateRow": "Duplicate",
+    "duplicateRowHelp": "Duplicate — copy this row directly below",
     "sizeStepUp": "Size +{{step}}px (max {{max}})",
     "sizeStepDown": "Size −{{step}}px (min {{min}})"
   },
@@ -117,6 +119,7 @@
   },
   "toast": {
     "rowAdded": "Added at position {{index}}",
+    "rowDuplicated": "Row duplicated",
     "rowDeleted": "Deleted",
     "rowRestored": "Restored",
     "rowReset": "Reset",
@@ -153,7 +156,8 @@
     "resetRow": "Reset",
     "addRow": "Add",
     "autoLineBreak": "Pack wrap",
-    "overflowWrap": "Overflow wrap"
+    "overflowWrap": "Overflow wrap",
+    "duplicateRow": "Duplicate row"
   },
   "bulk": {
     "regionLabel": "Bulk edit",
