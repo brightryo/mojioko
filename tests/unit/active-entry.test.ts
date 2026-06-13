@@ -5,6 +5,7 @@ import {
   computeFixedStackOffsets,
 } from '../../src/renderer/lib/active-entry'
 import type { SubtitleEntry } from '../../src/shared/types'
+import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
 
 function entry(id: string, startSec: number, endSec: number): SubtitleEntry {
   const base = {
@@ -16,6 +17,7 @@ function entry(id: string, startSec: number, endSec: number): SubtitleEntry {
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
     fadeEnabled: false,
+    ...makeEntryLayoutDefaults(),
   }
   return { id, ...base, isDeleted: false, isEdited: false, original: { ...base } }
 }

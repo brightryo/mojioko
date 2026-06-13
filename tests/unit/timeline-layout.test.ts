@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { layoutEntries, LAYOUT_MIN_BLOCK_SEC } from '../../src/renderer/lib/timeline-layout'
 import type { SubtitleEntry } from '../../src/shared/types'
+import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
 
 /**
  * REQ-057 regression: Whisper segments often share boundaries exactly
@@ -9,6 +10,7 @@ import type { SubtitleEntry } from '../../src/shared/types'
  */
 
 function entry(id: string, startSec: number, endSec: number): SubtitleEntry {
+  const layoutDefaults = makeEntryLayoutDefaults()
   return {
     id,
     startSec,
@@ -19,6 +21,7 @@ function entry(id: string, startSec: number, endSec: number): SubtitleEntry {
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
     fadeEnabled: false,
+    ...layoutDefaults,
     isDeleted: false,
     isEdited: false,
     original: {
@@ -29,7 +32,8 @@ function entry(id: string, startSec: number, endSec: number): SubtitleEntry {
       textColorHex: '#ffffff',
       outlineColorHex: '#000000',
       outlineThicknessPx: 2,
-      fadeEnabled: false
+      fadeEnabled: false,
+      ...makeEntryLayoutDefaults()
     }
   }
 }

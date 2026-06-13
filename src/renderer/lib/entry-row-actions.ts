@@ -78,6 +78,13 @@ export function resetRow(
   const resetPatch = {
     ...original,
     fontId: original.fontId,
+    // REQ-20260613-016: deep-copy subtitleBackground out of `original` so
+    // subsequent edits to the live entry's background don't retroactively
+    // mutate the reset target.  posX/posY come through via the spread
+    // above — when `original.posX/Y` is undefined the spread carries an
+    // explicit `undefined` which the store merge applies (clears any
+    // current pinning, restoring alignment-based layout).
+    subtitleBackground: { ...original.subtitleBackground },
     isEdited: false,
     isDeleted: false
   }
@@ -268,14 +275,27 @@ export function duplicateRow(
     outlineColorHex: entry.outlineColorHex,
     outlineThicknessPx: entry.outlineThicknessPx,
     fadeEnabled: entry.fadeEnabled,
-    fontId: entry.fontId
+    fontId: entry.fontId,
+    // REQ-20260613-016 / v1.2.2 機能A+B: copy per-row layout / background /
+    // free-position fields from the source row.  subtitleBackground is
+    // deep-copied so the duplicate doesn't share object identity with the
+    // source.  posX/posY copy through verbatim — duplicating a pinned row
+    // gives a pinned duplicate, which the user can then drag elsewhere.
+    horizontalPosition: entry.horizontalPosition,
+    verticalPosition: entry.verticalPosition,
+    verticalMarginPx: entry.verticalMarginPx,
+    subtitleBackground: { ...entry.subtitleBackground },
+    posX: entry.posX,
+    posY: entry.posY
   }
   const duplicate: SubtitleEntry = {
     id: newId,
     ...base,
     isDeleted: false,
     isEdited: true,
-    original: { ...base }
+    // Deep-copy subtitleBackground a second time for the original snapshot
+    // so live + original do not share object identity.
+    original: { ...base, subtitleBackground: { ...base.subtitleBackground } }
   }
 
   pushHistory({

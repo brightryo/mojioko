@@ -11,6 +11,7 @@ import {
 } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { useSettingsStore } from '@/stores/settings-store'
+import { makeEntryLayoutDefaults } from '../../../shared/burnin-defaults'
 import type {
   TranscriptionDefaults,
   VideoInfo,
@@ -180,14 +181,20 @@ export function StyleSamplePreview({
       textColorHex: defaults.textColorHex,
       outlineColorHex: defaults.outlineColorHex,
       outlineThicknessPx: defaults.outlineThicknessPx,
-      fadeEnabled: defaults.fadeEnabled
+      fadeEnabled: defaults.fadeEnabled,
+      // REQ-20260613-016 / v1.2.2 機能A: seed per-row layout / background.
+      // PREVIEW_BURNIN above still overrides the alignment at render time
+      // via the `burnin` prop — these fields exist on the entry only to
+      // satisfy the required type contract and the preview's `\fad`/`\fs`
+      // override path; they are not consumed by the Step 1 preview.
+      ...makeEntryLayoutDefaults()
     }
     return {
       id: 'step1-sample',
       ...base,
       isDeleted: false,
       isEdited: false,
-      original: { ...base }
+      original: { ...base, subtitleBackground: { ...base.subtitleBackground } }
     }
   }, [
     sampleText,

@@ -59,6 +59,38 @@ export interface SubtitleEntryOriginal {
    * has a stable per-row reference point.  REQ-021.
    */
   fontId?: FontId
+  /**
+   * Per-row subtitle layout (REQ-20260613-016 / v1.2.2 機能A).
+   *
+   * Required (not optional) because the v1.2.2 data model is "作成時コピー
+   * 方式" — every entry carries its own concrete values, no global
+   * fallback at render time.  All entry-creation sites (fixtures, Step 2
+   * add-row dialog, transcription segment mapping, duplicateRow,
+   * style-sample-preview) seed from `ENTRY_LAYOUT_DEFAULTS` in
+   * `shared/burnin-defaults.ts`.
+   */
+  horizontalPosition: 'left' | 'center' | 'right'
+  verticalPosition: 'top' | 'bottom'
+  verticalMarginPx: number
+  /**
+   * Per-row subtitle background (REQ-20260613-016 / v1.2.2 機能A).
+   *
+   * Same "作成時コピー方式" — required concrete value seeded from
+   * `ENTRY_LAYOUT_DEFAULTS.subtitleBackground` at creation time.
+   */
+  subtitleBackground: SubtitleBackground
+  /**
+   * Free-position override (REQ-20260613-016 / v1.2.2 機能B).
+   *
+   * ASS coordinate space (= output video pixel space, same as
+   * PlayResX/Y).  When both `posX` and `posY` are defined the row is
+   * pinned at that point via `\pos(x,y)` and the alignment / MarginV
+   * fields above are ignored on burn-in.  Independently undefined →
+   * row uses alignment-based layout.  `\pos` is set/cleared as a pair;
+   * see ass-generator and subtitle-overlay for the consumption sites.
+   */
+  posX?: number
+  posY?: number
 }
 
 export interface SubtitleEntry extends SubtitleEntryOriginal {

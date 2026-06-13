@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isEditedFromOriginal, roundToCs } from '../../src/renderer/lib/entry-edits'
 import type { SubtitleEntry, SubtitleEntryOriginal } from '../../src/shared/types'
+import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
 
 /**
  * REQ-059 — `isEdited` is computed from `entry` vs `entry.original` so a
@@ -19,7 +20,8 @@ function baseOriginal(): SubtitleEntryOriginal {
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
     fadeEnabled: false,
-    fontId: undefined
+    fontId: undefined,
+    ...makeEntryLayoutDefaults()
   }
 }
 
@@ -104,6 +106,51 @@ describe('isEditedFromOriginal — non-time fields use strict equality', () => {
   it('fontId — undefined ↔ undefined is unchanged, undefined → defined is an edit', () => {
     expect(isEditedFromOriginal(entry({ fontId: undefined }))).toBe(false)
     expect(isEditedFromOriginal(entry({ fontId: 'noto-sans-jp-semibold' }))).toBe(true)
+  })
+
+  // REQ-20260613-016 / v1.2.2 機能A — per-row layout.
+  it('horizontalPosition / verticalPosition / verticalMarginPx', () => {
+    // Defaults are 'center' / 'bottom' / 40 (from ENTRY_LAYOUT_DEFAULTS).
+    expect(isEditedFromOriginal(entry({ horizontalPosition: 'center' }))).toBe(false)
+    expect(isEditedFromOriginal(entry({ horizontalPosition: 'left' }))).toBe(true)
+    expect(isEditedFromOriginal(entry({ verticalPosition: 'bottom' }))).toBe(false)
+    expect(isEditedFromOriginal(entry({ verticalPosition: 'top' }))).toBe(true)
+    expect(isEditedFromOriginal(entry({ verticalMarginPx: 40 }))).toBe(false)
+    expect(isEditedFromOriginal(entry({ verticalMarginPx: 80 }))).toBe(true)
+  })
+
+  // REQ-20260613-016 / v1.2.2 機能A — per-row background.
+  it('subtitleBackground — enabled / color / opacityPercent', () => {
+    // Default is { enabled: false, color: 'black', opacityPercent: 50 }.
+    expect(
+      isEditedFromOriginal(
+        entry({ subtitleBackground: { enabled: false, color: 'black', opacityPercent: 50 } })
+      )
+    ).toBe(false)
+    expect(
+      isEditedFromOriginal(
+        entry({ subtitleBackground: { enabled: true, color: 'black', opacityPercent: 50 } })
+      )
+    ).toBe(true)
+    expect(
+      isEditedFromOriginal(
+        entry({ subtitleBackground: { enabled: false, color: 'white', opacityPercent: 50 } })
+      )
+    ).toBe(true)
+    expect(
+      isEditedFromOriginal(
+        entry({ subtitleBackground: { enabled: false, color: 'black', opacityPercent: 75 } })
+      )
+    ).toBe(true)
+  })
+
+  // REQ-20260613-016 / v1.2.2 機能B — free position (\pos override).
+  it('posX / posY — undefined ↔ undefined is unchanged, pinning is an edit', () => {
+    expect(isEditedFromOriginal(entry({ posX: undefined, posY: undefined }))).toBe(false)
+    // Pinning at any concrete coordinate counts as edited.
+    expect(isEditedFromOriginal(entry({ posX: 100, posY: 200 }))).toBe(true)
+    // Pinning only X (incomplete pair) still differs from the original.
+    expect(isEditedFromOriginal(entry({ posX: 100 }))).toBe(true)
   })
 })
 

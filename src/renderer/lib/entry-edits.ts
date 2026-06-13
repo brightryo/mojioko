@@ -74,6 +74,23 @@ export function isEditedFromOriginal(e: SubtitleEntry): boolean {
     e.outlineColorHex !== o.outlineColorHex ||
     e.outlineThicknessPx !== o.outlineThicknessPx ||
     e.fadeEnabled !== o.fadeEnabled ||
-    e.fontId !== o.fontId
+    e.fontId !== o.fontId ||
+    // REQ-20260613-016 / v1.2.2 機能A — per-row layout fields.
+    // Strict equality for the enums + integer margin; the layout knobs
+    // have no display-precision concept.
+    e.horizontalPosition !== o.horizontalPosition ||
+    e.verticalPosition !== o.verticalPosition ||
+    e.verticalMarginPx !== o.verticalMarginPx ||
+    // REQ-20260613-016 / v1.2.2 機能A — per-row background.
+    // Structural comparison: enabled / color / opacityPercent independently.
+    e.subtitleBackground.enabled !== o.subtitleBackground.enabled ||
+    e.subtitleBackground.color !== o.subtitleBackground.color ||
+    e.subtitleBackground.opacityPercent !== o.subtitleBackground.opacityPercent ||
+    // REQ-20260613-016 / v1.2.2 機能B — free position.
+    // Strict `!==` covers the (undefined ⇄ number) transition: pinning
+    // an unpinned row, or releasing a pinned row, both flip isEdited.
+    // Two NaN-free numbers compare bitwise so no precision rule applies.
+    e.posX !== o.posX ||
+    e.posY !== o.posY
   )
 }
