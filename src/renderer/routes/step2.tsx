@@ -39,14 +39,50 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import { useRef } from 'react'
 
 /**
- * REQ-20260614-001 Phase 2 — when the available container is narrower
- * than this, the 3-pane layout falls back to a non-resizable vertical
- * stack (preview-or-empty-inspector / table-or-timeline) so the panes
- * don't crush below a usable size.  600 px is chosen so each pane gets
- * at least ~300 px on horizontal split — below that the inspector
- * becomes too narrow to expose its controls comfortably.
+ * REQ-20260614-001 補遺⑥ — per-pane PIXEL minimums.  At the minimum
+ * Electron window (1280 × 820 content area, set in main/index.ts), the
+ * paneArea ends up roughly:
+ *
+ *   width  ≈ 1232 px  (1280 minus AppShell's `px-6` = 24 + 24)
+ *   height ≈ 628 px   (820 minus breadcrumb 45 + footer 65 + main py-5 40
+ *                      + step2 heading row 30 + flex gap-3 12)
+ *
+ * Splitting those by the startup ratios (outer 70/30, left 50/50) gives:
+ *
+ *   left pane width   ≈ 862 px
+ *   right (inspector) ≈ 370 px
+ *   preview height    ≈ 314 px
+ *   bottom height     ≈ 314 px
+ *
+ * We trim each value by ~2 px to absorb the 1-px ResizableHandle and
+ * cross-platform rendering jitter (Windows scrollbar overlap, browser
+ * subpixel rounding) so the px-min sum stays just below the available
+ * paneArea size — preventing the library from being asked to fit
+ * `sum(min) > container` and producing visual artefacts.  The remaining
+ * ~3 px of slack at minimum window is below perception.
+ *
+ * Each ResizablePanel below converts its px-min to a percentage via
+ * `paneMinPct(MIN_PX, paneAreaSize.w|h)` so the constraint moves with
+ * the container (REQ補遺⑥ §実装方針 #2).
  */
-const STEP2_MIN_WIDTH_FOR_3PANE_PX = 600
+const OUTER_LEFT_MIN_PX   = 860
+const OUTER_RIGHT_MIN_PX  = 368
+const LEFT_TOP_MIN_PX     = 312
+const LEFT_BOTTOM_MIN_PX  = 312
+
+/**
+ * Convert a pixel minimum to a percentage string for ResizablePanel's
+ * `minSize` prop.  Falls back to `"0%"` while the container dimension is
+ * still 0 (first render before the layout effect commits) so the panes
+ * boot at their `defaultLayout` without being clamped against a
+ * meaningless divisor.  Caps at 99% so two panels' mins can never sum
+ * past 100% even if the math is off by a pixel.
+ */
+function paneMinPct(pxMin: number, containerPx: number): string {
+  if (containerPx <= 0) return '0%'
+  const pct = (pxMin / containerPx) * 100
+  return `${Math.min(99, pct).toFixed(2)}%`
+}
 
 /**
  * State driving the shared TimeEditorDialog.
@@ -177,17 +213,26 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const setStep2OuterLayout = useUiStore((s) => s.setStep2OuterLayout)
   const setStep2LeftLayout  = useUiStore((s) => s.setStep2LeftLayout)
 
+  // REQ-20260614-001 補遺⑥ — measure BOTH width and height of the
+  // paneArea so the px → % minSize conversion can keep up with window
+  // resize.  At the (newly enforced) minimum window the percentages
+  // resolve to ≈100% sum → handles can't move, no slack.  At larger
+  // windows the percentages shrink → slack appears and handles become
+  // useful again.  The < 600 px stacked fallback was retired in the
+  // same補遺⑥ because the Electron window minimum (also 1280×820) makes
+  // it unreachable.
   const paneAreaRef = useRef<HTMLDivElement>(null)
-  const [paneAreaWidth, setPaneAreaWidth] = useState(0)
+  const [paneAreaSize, setPaneAreaSize] = useState({ w: 0, h: 0 })
   useLayoutEffect(() => {
     const el = paneAreaRef.current
     if (!el) return
-    const obs = new ResizeObserver(() => setPaneAreaWidth(el.clientWidth))
+    const obs = new ResizeObserver(() => {
+      setPaneAreaSize({ w: el.clientWidth, h: el.clientHeight })
+    })
     obs.observe(el)
-    setPaneAreaWidth(el.clientWidth)
+    setPaneAreaSize({ w: el.clientWidth, h: el.clientHeight })
     return () => obs.disconnect()
   }, [])
-  const useStackedFallback = paneAreaWidth > 0 && paneAreaWidth < STEP2_MIN_WIDTH_FOR_3PANE_PX
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   const [subtitleFont, setSubtitleFont] = useState<SubtitleFont | null>(getSubtitleFont)
 
@@ -1011,81 +1056,77 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
             the list/timeline it operates on instead of detached at the
             page top. */}
 
-        {/* REQ-20260614-001 補遺③ — variable 3-pane area, restructured:
+        {/* REQ-20260614-001 補遺⑥ — variable 3-pane area.
             Outer = HORIZONTAL PanelGroup
               ├── Left (70% default) = VERTICAL PanelGroup
               │     ├── Preview  (50% default)
-              │     └── Bottom   (50% default) = toolbar + bulk + list/timeline
+              │     └── Bottom   (50% default) = toolbar + list/timeline
               └── Right (30% default) = Inspector full height
 
-            The Inspector becomes a full-height column on the right;
-            preview and the editing surface (list / timeline) stack
-            vertically on the left.  Min sizes guard against crushing
-            (Inspector min 20% so ~280-320 px is preserved at typical
-            windows; left + inner panes min 25%).
+            minSize: dynamically converted from px → % so px minimums
+            travel with the user's window resize.  At the Electron
+            minimum window (1280×820, also enforced as the OS-level
+            minimum) the percentages resolve to ≈100% sum → handles
+            cannot move (the REQ補遺⑥ "余白ゼロ" requirement).  At
+            larger windows the percentages shrink → slack appears.
 
-            Fallback: when the pane area is narrower than
-            STEP2_MIN_WIDTH_FOR_3PANE_PX, switch to a non-resizable
-            vertical stack ordered preview / bottom / inspector.  Order
-            "edit surface above Inspector" so the user sees the table /
-            timeline they're operating on first; tweak in实机 if
-            needed. */}
+            The < 600-px stacked fallback that used to live here was
+            retired in補遺⑥: the OS window minimum prevents the pane
+            area from ever shrinking that small. */}
         <div ref={paneAreaRef} className="flex-1 min-h-0 overflow-hidden">
-          {useStackedFallback ? (
-            <div className="flex h-full w-full flex-col gap-2">
-              <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">
-                {previewSlot}
-              </div>
-              <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">
-                {bottomSlot}
-              </div>
-              <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">
-                {inspectorSlot}
-              </div>
-            </div>
-          ) : (
-            <ResizablePanelGroup
-              direction="horizontal"
-              defaultLayout={step2OuterLayout}
-              onLayoutChange={(layout) => {
-                const left  = layout['step2-pane-left']
-                const right = layout['step2-pane-right']
-                if (typeof left === 'number' && typeof right === 'number') {
-                  setStep2OuterLayout({ 'step2-pane-left': left, 'step2-pane-right': right })
-                }
-              }}
-              className="rounded-lg border border-zinc-800 overflow-hidden"
+          <ResizablePanelGroup
+            direction="horizontal"
+            defaultLayout={step2OuterLayout}
+            onLayoutChange={(layout) => {
+              const left  = layout['step2-pane-left']
+              const right = layout['step2-pane-right']
+              if (typeof left === 'number' && typeof right === 'number') {
+                setStep2OuterLayout({ 'step2-pane-left': left, 'step2-pane-right': right })
+              }
+            }}
+            className="rounded-lg border border-zinc-800 overflow-hidden"
+          >
+            <ResizablePanel
+              id="step2-pane-left"
+              minSize={paneMinPct(OUTER_LEFT_MIN_PX, paneAreaSize.w)}
             >
-              <ResizablePanel id="step2-pane-left" minSize="40%">
-                <ResizablePanelGroup
-                  direction="vertical"
-                  defaultLayout={step2LeftLayout}
-                  onLayoutChange={(layout) => {
-                    const preview = layout['step2-pane-preview']
-                    const bottom  = layout['step2-pane-bottom']
-                    if (typeof preview === 'number' && typeof bottom === 'number') {
-                      setStep2LeftLayout({
-                        'step2-pane-preview': preview,
-                        'step2-pane-bottom': bottom,
-                      })
-                    }
-                  }}
+              <ResizablePanelGroup
+                direction="vertical"
+                defaultLayout={step2LeftLayout}
+                onLayoutChange={(layout) => {
+                  const preview = layout['step2-pane-preview']
+                  const bottom  = layout['step2-pane-bottom']
+                  if (typeof preview === 'number' && typeof bottom === 'number') {
+                    setStep2LeftLayout({
+                      'step2-pane-preview': preview,
+                      'step2-pane-bottom': bottom,
+                    })
+                  }
+                }}
+              >
+                <ResizablePanel
+                  id="step2-pane-preview"
+                  minSize={paneMinPct(LEFT_TOP_MIN_PX, paneAreaSize.h)}
                 >
-                  <ResizablePanel id="step2-pane-preview" minSize="25%">
-                    {previewSlot}
-                  </ResizablePanel>
-                  <ResizableHandle withHandle />
-                  <ResizablePanel id="step2-pane-bottom" minSize="25%">
-                    {bottomSlot}
-                  </ResizablePanel>
-                </ResizablePanelGroup>
-              </ResizablePanel>
-              <ResizableHandle withHandle />
-              <ResizablePanel id="step2-pane-right" minSize="20%">
-                {inspectorSlot}
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          )}
+                  {previewSlot}
+                </ResizablePanel>
+                <ResizableHandle withHandle />
+                <ResizablePanel
+                  id="step2-pane-bottom"
+                  minSize={paneMinPct(LEFT_BOTTOM_MIN_PX, paneAreaSize.h)}
+                >
+                  {bottomSlot}
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel
+              id="step2-pane-right"
+              minSize={paneMinPct(OUTER_RIGHT_MIN_PX, paneAreaSize.w)}
+            >
+              {inspectorSlot}
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </div>
       </div>
 
