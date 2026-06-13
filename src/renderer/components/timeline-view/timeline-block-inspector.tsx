@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
+import { useUiStore } from '@/stores/ui-store'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { ColorPicker } from '@/components/color-picker/color-picker'
@@ -295,6 +296,18 @@ export function TimelineBlockInspector({
   // (= what the burnin video will show), not the pre-cut span.
   const cuts = useProjectStore((s) => s.cuts)
   const durationSec = editedDurationOfEntry(entry, cuts)
+
+  // REQ-20260614-001 補遺⑦ — Inspector に「トリミング中の一時マーカー読み取り」
+  // セクション (§3.5) を新設。pendingCutInSec / pendingCutOutSec は調査の結果
+  // 「クリップの確定済み時間範囲」ではなく「トリミング中の一時マーカー値」
+  // (case b) と判定されたため、専用の read-only 領域として §3 (再生時間) の
+  // すぐ下に配置する。表示形式は他の Inspector 表示と同じ
+  // `formatEditedTimecode` (HH:MM:SS.cs フル表記、短縮なし) に統一。
+  // pendingCut* の値は ui-store のセッション状態のため、ここで読み取るだけで
+  // 副作用はない。Apply / Cancel は引き続きタイムラインツールバーで行う。
+  const pendingCutInSec = useUiStore((s) => s.pendingCutInSec)
+  const pendingCutOutSec = useUiStore((s) => s.pendingCutOutSec)
+  const showTrimReadout = pendingCutInSec !== null || pendingCutOutSec !== null
   // REQ-118 [2] — mirror the subtitle-table freeze rule: trim-deleted
   // entries are read-only and the Delete affordance hands a hint
   // toast instead of toggling `entry.isDeleted` (which would silently
@@ -498,6 +511,35 @@ export function TimelineBlockInspector({
           {t('timeline.inspector.adjustTime')}
         </button>
       </div>
+
+      {/* § 3.5 — Trim readout (REQ-20260614-001 補遺⑦).
+          タイムラインツールバーから移管された始点・終点の数値表示。
+          `pendingCutInSec` / `pendingCutOutSec` のどちらかが set のときだけ
+          render する read-only 領域。両方が `null` (= トリミング中ではない)
+          のときは何も描画しない。`formatEditedTimecode` で
+          `HH:MM:SS.cs` 全桁表示。Apply / Cancel は引き続きタイムライン
+          ツールバーの Scissors / X アイコンから行う。 */}
+      {showTrimReadout && (
+        <div className="flex flex-col gap-1 border-t border-zinc-800 pt-2">
+          <div className="text-label text-amber-300">
+            {t('timeline.trim.toolbarLabel')}
+          </div>
+          <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-body-sm font-mono tabular-nums">
+            <span className="text-zinc-500">{t('timeline.trim.inLabel')}</span>
+            <span className={cn(pendingCutInSec !== null ? 'text-amber-300' : 'text-zinc-600')}>
+              {pendingCutInSec !== null
+                ? formatEditedTimecode(pendingCutInSec, cuts)
+                : t('timeline.trim.noPoint')}
+            </span>
+            <span className="text-zinc-500">{t('timeline.trim.outLabel')}</span>
+            <span className={cn(pendingCutOutSec !== null ? 'text-amber-300' : 'text-zinc-600')}>
+              {pendingCutOutSec !== null
+                ? formatEditedTimecode(pendingCutOutSec, cuts)
+                : t('timeline.trim.noPoint')}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* § 4 — Text editor.  REQ-20260614-001 補遺③ relocated above the
           font / style cluster. */}
