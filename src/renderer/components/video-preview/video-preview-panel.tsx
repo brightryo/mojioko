@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { Play, Pause, FolderOpen, ChevronUp, ChevronDown } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -235,6 +235,18 @@ export function VideoPreviewPanel() {
       el.pause()
     }
   }, [])
+
+  // REQ-20260612-001: pause the video when the accordion collapses.
+  // Pairing with the always-mounted body above: the <video> element now
+  // survives collapse cycles (so currentTime / overlayEntry are
+  // preserved), but the user collapsing the panel should still feel
+  // like "stop the preview" — not "minimise to a tray that keeps
+  // playing audio".  Position is preserved; play state is not.
+  useEffect(() => {
+    if (isExpanded) return
+    const el = videoRef.current
+    if (el && !el.paused) el.pause()
+  }, [isExpanded])
 
   // Space key — play/pause when no text field is focused
   useEffect(() => {
@@ -487,16 +499,26 @@ export function VideoPreviewPanel() {
         }
       </div>
 
-      {/* Collapsible body — preview + controls. */}
-      <AnimatePresence initial={false}>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
+      {/* Collapsible body — preview + controls.
+          REQ-20260612-001: kept ALWAYS MOUNTED and animated open/closed
+          via height + opacity rather than wrapped in <AnimatePresence>
+          with a conditional render.  When the body unmounts on close,
+          the inner <video> element is destroyed; re-expanding remounts
+          it fresh, the browser reloads metadata, fires `timeupdate` at
+          currentTime=0, and that 0 propagates back into React state —
+          wiping the active subtitle entry from <SubtitleOverlay>.  By
+          keeping the subtree mounted, currentTime / videoContainerWidth
+          / overlayEntry all survive across collapse cycles and the
+          overlay paints continuously at the right playhead position. */}
+      <motion.div
+        initial={false}
+        animate={isExpanded
+          ? { height: 'auto', opacity: 1 }
+          : { height: 0, opacity: 0 }
+        }
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="overflow-hidden"
+      >
             <div className="px-3 pb-2 space-y-1 border-t border-border/50 pt-2">
               {/* REQ-044 #2: pin the left grid track to the video's
                   actual rendered width so the videoContainer never
@@ -791,9 +813,7 @@ export function VideoPreviewPanel() {
                 )
               })()}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </motion.div>
     </div>
   )
 }
