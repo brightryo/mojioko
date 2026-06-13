@@ -10,11 +10,11 @@ import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
-import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
+import { SubtitleOverlay, estimateOverlayHeightPx } from '@/components/subtitle-overlay/subtitle-overlay'
 import { Switch } from '@/components/ui/switch'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
-import { findActiveEntryId } from '@/lib/active-entry'
+import { findActiveEntryId, findActiveEntryIds } from '@/lib/active-entry'
 import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -157,28 +157,51 @@ export function VideoPreviewPanel() {
   }, [entries])
 
   /**
-   * REQ-080 #1: single source of truth for the overlay — the entry
-   * whose `[startSec, endSec)` covers the current playhead.  Works
-   * identically for playback and paused states:
+   * REQ-080 #1 + REQ-20260613-004: source of truth for the overlay — EVERY
+   * entry whose `[startSec, endSec)` covers the current playhead, in the
+   * stable startSec-ascending order that matches the ASS Dialogue order
+   * on burn-in.  Works identically for playback and paused states:
    *
-   *   - During playback, `currentTime` tracks `<video>.currentTime`;
-   *     the active subtitle (if any) renders.
-   *   - When the user clicks a row in the subtitle table, the seek
-   *     path sets `currentTime` to the row's startSec, so the same
-   *     lookup naturally surfaces that row's subtitle.
-   *   - When playback stops at duration (no more 0-warp since
-   *     REQ-079), `currentTime === lastEntry.endSec` and the
-   *     end-exclusive lookup returns null — no stale subtitle baked
-   *     on top of the final frame.
+   *   - During playback, `currentTime` tracks `<video>.currentTime`; every
+   *     active subtitle renders, stacked vertically.
+   *   - When the user clicks a row in the subtitle table, the seek path
+   *     sets `currentTime` to the row's startSec, so the same lookup
+   *     naturally surfaces that row (and any siblings sharing its span).
+   *   - When playback stops at duration (no more 0-warp since REQ-079),
+   *     `currentTime === lastEntry.endSec` and the end-exclusive lookup
+   *     returns an empty array — no stale subtitles baked on top of the
+   *     final frame.
+   *
+   * Stack ordering (REQ-20260613-004 §2-2): the array order returned by
+   * `findActiveEntryIds` matches `sortedActiveEntries` order, which in
+   * turn matches the ASS Dialogue order emitted by
+   * `ass-generator.ts:113-114` (= `entries.filter(!isDeleted)`).  On
+   * burn-in, libass's collision avoidance places the FIRST Dialogue at
+   * the configured edge (bottom for alignment 1–3, top for 7–9) and
+   * pushes subsequent Dialogues away from that edge.  The preview
+   * reproduces that exact ordering: the first entry in `overlayEntries`
+   * sits flush against the burnin edge (stackOffsetPx = 0) and each
+   * subsequent entry's offset is the cumulative height of preceding
+   * entries — so preview top/bottom always agrees with the burn-in.
    *
    * The old isPlaying-gated path that unconditionally fell back to
    * `focusedRowId` produced the REQ-080-reported bug because
-   * `focusedRowId` is retained across gap-time (so it stays pointed
-   * at the last-played subtitle after EOF).
+   * `focusedRowId` is retained across gap-time (so it stays pointed at
+   * the last-played subtitle after EOF).
    */
-  const overlayEntry = useMemo<SubtitleEntry | null>(() => {
-    const id = findActiveEntryId(sortedActiveEntries, currentTime)
-    return id ? sortedActiveEntries.find((e) => e.id === id) ?? null : null
+  const overlayEntries = useMemo<SubtitleEntry[]>(() => {
+    const ids = findActiveEntryIds(sortedActiveEntries, currentTime)
+    if (ids.length === 0) return []
+    if (ids.length === 1) {
+      // Fast path for the overwhelmingly-common single-active case.
+      const only = sortedActiveEntries.find((e) => e.id === ids[0])
+      return only ? [only] : []
+    }
+    // Preserve the order findActiveEntryIds returned (= sortedActiveEntries
+    // order = libass Dialogue order).  Filtering instead of map+find keeps
+    // that order without a per-id O(N) lookup.
+    const idSet = new Set(ids)
+    return sortedActiveEntries.filter((e) => idSet.has(e.id))
   }, [currentTime, sortedActiveEntries])
 
   // Load the subtitle font on mount and refresh whenever the active font
@@ -598,15 +621,38 @@ export function VideoPreviewPanel() {
                               onEnded={handleEnded}
                               onError={handleError}
                             />
-                            {overlayEntry && videoContainerWidth > 0 && (
-                              <SubtitleOverlay
-                                entry={overlayEntry}
-                                burnin={burnin}
-                                videoWidthPx={video.widthPx}
-                                containerWidthPx={videoContainerWidth}
-                                subtitleBackground={subtitleBackground}
-                              />
-                            )}
+                            {/* REQ-20260613-004: render every active
+                                caption as its own SubtitleOverlay,
+                                vertically stacked with cumulative
+                                pixel offsets matching libass's
+                                collision-avoidance order on burn-in.
+                                Single-active is the common case and
+                                resolves to one overlay at
+                                stackOffsetPx = 0 — byte-identical to
+                                the pre-stack render path. */}
+                            {videoContainerWidth > 0 && (() => {
+                              let cumulative = 0
+                              return overlayEntries.map((entry) => {
+                                const offset = cumulative
+                                cumulative += estimateOverlayHeightPx(
+                                  entry,
+                                  activeFontId,
+                                  video.widthPx,
+                                  videoContainerWidth,
+                                )
+                                return (
+                                  <SubtitleOverlay
+                                    key={entry.id}
+                                    entry={entry}
+                                    burnin={burnin}
+                                    videoWidthPx={video.widthPx}
+                                    containerWidthPx={videoContainerWidth}
+                                    subtitleBackground={subtitleBackground}
+                                    stackOffsetPx={offset}
+                                  />
+                                )
+                              })
+                            })()}
                           </>
                         )}
                       </div>

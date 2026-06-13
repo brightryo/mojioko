@@ -2,7 +2,7 @@ import type { SubtitleEntry, BurninPosition, SubtitleBackground } from '../../..
 import { ASS_MARGIN_LR_PX } from '../../../shared/constants'
 import { getLibassScaleFor } from '@/lib/font-metrics'
 import { useSettingsStore } from '@/stores/settings-store'
-import { getFontMeta, isFontId } from '../../../shared/fonts'
+import { getFontMeta, isFontId, type FontId } from '../../../shared/fonts'
 import { bumpRenderCount } from '@/lib/perf-counter'
 
 /** Floor (in OUTPUT pixels, not on the scale factor) applied to the visible
@@ -10,6 +10,15 @@ import { bumpRenderCount } from '@/lib/perf-counter'
  *  sizes.  Larger values pass through with their natural proportional scale,
  *  matching the libass output. */
 const MIN_VISIBLE_OUTLINE_PX = 0.5
+
+/**
+ * CSS `line-height` ratio used for stacking-height estimation.  Matches the
+ * `leading-snug` class (= 1.375) applied to SubtitleOverlay's root `<span>`,
+ * which is what the browser actually paints — keeping the two values in
+ * sync stops `estimateOverlayHeightPx` from drifting away from the rendered
+ * box height as the markup evolves.
+ */
+const STACK_LINE_HEIGHT_RATIO = 1.375
 
 export interface SubtitleOverlayProps {
   entry: SubtitleEntry
@@ -19,6 +28,58 @@ export interface SubtitleOverlayProps {
   /** Rendered container width in pixels — measured by the caller via ResizeObserver. */
   containerWidthPx: number
   subtitleBackground?: SubtitleBackground
+  /**
+   * REQ-20260613-004: pixel offset from the burnin verticalPosition edge
+   * (top OR bottom — same edge the overlay anchors against).  0 (or
+   * undefined) for a standalone caption; for stacked captions each
+   * subsequent overlay passes the cumulative `estimateOverlayHeightPx`
+   * of preceding stack members so the captions don't overlap visually.
+   * When omitted, behaviour is byte-identical to pre-stack callers.
+   */
+  stackOffsetPx?: number
+}
+
+/**
+ * REQ-20260613-004: estimate the rendered pixel height of a SubtitleOverlay
+ * for stacking purposes.  Pure function — no DOM measurement — so the
+ * caller can compute cumulative offsets synchronously per render.
+ *
+ *   fontSizePx_rendered = entry.fontSizePx * libassScale * scale
+ *   lineCount           = 1 + count of `\N` in entry.text
+ *   height              = fontSizePx_rendered * STACK_LINE_HEIGHT_RATIO * lineCount
+ *
+ * This is intentionally an approximation:
+ *   - It ignores the ascender / descender padding browsers add around the
+ *     glyph box, so very tall outlines extend past the estimated bottom.
+ *   - It assumes every line is exactly `fontSizePx * line-height` tall,
+ *     which holds for Latin glyphs but not perfectly for CJK with mixed
+ *     vocal-marker heights.
+ *   - It does not account for libass-specific spacing between stacked
+ *     captions (libass adds a small gap; we use 0 — captions touch).
+ *
+ * That said, the formula is exactly what the browser's CSS box height
+ * resolves to (font-size * line-height * line-count) for an inline-block
+ * with `leading-snug`, so within the "preview is approximate" disclaimer
+ * the stacking position is faithful enough that the user can see
+ *   (a) HOW MANY captions overlap,
+ *   (b) IN WHAT ORDER (= same as the burn-in output), and
+ *   (c) ROUGHLY WHERE each one will sit.
+ * Pixel-perfect alignment with libass is explicitly out of scope per
+ * REQ-20260613-004 §1.
+ */
+export function estimateOverlayHeightPx(
+  entry: SubtitleEntry,
+  activeFontId: FontId,
+  videoWidthPx: number,
+  containerWidthPx: number,
+): number {
+  const resolvedFontId = isFontId(entry.fontId) ? entry.fontId : activeFontId
+  const libassScale = getLibassScaleFor(resolvedFontId)
+  const scale = containerWidthPx / videoWidthPx
+  const renderedFontSizePx = entry.fontSizePx * libassScale * scale
+  // `\N` is the persisted line-break marker (RES-20260612-002 Q2).
+  const lineCount = 1 + (entry.text.match(/\\N/g)?.length ?? 0)
+  return renderedFontSizePx * STACK_LINE_HEIGHT_RATIO * lineCount
 }
 
 /**
@@ -72,6 +133,7 @@ export function SubtitleOverlay({
   videoWidthPx,
   containerWidthPx,
   subtitleBackground,
+  stackOffsetPx,
 }: SubtitleOverlayProps) {
   bumpRenderCount('SubtitleOverlay')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
@@ -96,9 +158,16 @@ export function SubtitleOverlay({
   // stroke, hiding the inside half — only outlinePx is visible outside.
   const strokeWidthPx = outlinePx * 2
 
+  // REQ-20260613-004: `stackOffsetPx` shifts the overlay inward from the
+  // burnin edge by the cumulative height of preceding stack members, so
+  // multiple simultaneous captions stack the same way libass does on
+  // burn-in (first caption at the edge, later captions pushed away from
+  // it).  Undefined → 0 → byte-identical to the pre-stack single-caption
+  // path.
+  const stackOffset = stackOffsetPx ?? 0
   const vStyle = burnin.verticalPosition === 'bottom'
-    ? { bottom: `${marginVPx}px` }
-    : { top:    `${marginVPx}px` }
+    ? { bottom: `${marginVPx + stackOffset}px` }
+    : { top:    `${marginVPx + stackOffset}px` }
 
   const textAlign = (
     burnin.horizontalPosition === 'center' ? 'center' :
