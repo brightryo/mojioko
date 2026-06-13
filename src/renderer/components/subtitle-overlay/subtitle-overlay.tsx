@@ -4,6 +4,7 @@ import { getLibassScaleFor } from '@/lib/font-metrics'
 import { useSettingsStore } from '@/stores/settings-store'
 import { getFontMeta, isFontId, type FontId } from '../../../shared/fonts'
 import { bumpRenderCount } from '@/lib/perf-counter'
+import { pinnedAnchorTransform } from '@/lib/preview-coords'
 
 /** Floor (in OUTPUT pixels, not on the scale factor) applied to the visible
  *  outline so the thinnest setting (= 1) remains discernible at small preview
@@ -58,6 +59,16 @@ export interface SubtitleOverlayProps {
    * coordinate frames.
    */
   stackOffsetPx?: number
+  /**
+   * REQ-20260613-016 Phase 6 — pointerdown handler installed only when the
+   * parent wants the overlay to be draggable.  Caller hooks pointermove
+   * and pointerup via `setPointerCapture` itself; the overlay just
+   * forwards the initial event.  When present, the overlay's CSS becomes
+   * `pointer-events-auto` + cursor=move so the cursor signal matches.
+   * When omitted (= legacy preview-only path) the overlay stays
+   * `pointer-events-none` and never captures clicks.
+   */
+  onPointerDown?: (e: React.PointerEvent<HTMLSpanElement>, entry: SubtitleEntry) => void
 }
 
 /**
@@ -153,6 +164,7 @@ export function SubtitleOverlay({
   videoWidthPx,
   containerWidthPx,
   stackOffsetPx,
+  onPointerDown,
 }: SubtitleOverlayProps) {
   bumpRenderCount('SubtitleOverlay')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
@@ -181,22 +193,43 @@ export function SubtitleOverlay({
   // stroke, hiding the inside half — only outlinePx is visible outside.
   const strokeWidthPx = outlinePx * 2
 
+  // REQ-20260613-016 Phase 6 — pinned rows render at their own ASS-space
+  // (posX, posY), independent of MarginV / alignment.  The alignment
+  // still drives the anchor (which corner of the text box sits at the
+  // pinned point), implemented via CSS transform.
+  const isPinned = entry.posX !== undefined && entry.posY !== undefined
+
   // REQ-20260613-004 + REQ-20260613-016 Phase 3: `stackOffsetPx` is the
   // collision offset (in ASS coordinate space) BEYOND `entry.verticalMarginPx`.
   // The CSS `bottom` / `top` therefore = (entry's own MarginV + collision
   // offset) * scale.  When undef → 0 → standalone caption sits at its own
-  // MarginV exactly.
+  // MarginV exactly.  Pinned rows skip stack offset entirely (excluded from
+  // computeFixedStackOffsets per Phase 3).
   const stackOffset = (stackOffsetPx ?? 0) * scale
-  const vStyle = entry.verticalPosition === 'bottom'
-    ? { bottom: `${marginVPx + stackOffset}px` }
-    : { top:    `${marginVPx + stackOffset}px` }
 
   const textAlign = (
     entry.horizontalPosition === 'center' ? 'center' :
     entry.horizontalPosition === 'right'  ? 'right'  : 'left'
   ) as React.CSSProperties['textAlign']
 
-  const hStyle = { left: `${marginHPx}px`, right: `${marginHPx}px`, textAlign }
+  let vStyle: React.CSSProperties
+  let hStyle: React.CSSProperties
+  let transform: string | undefined
+
+  if (isPinned) {
+    // Pinned: left/top = posX/posY in preview pixels.  CSS transform shifts
+    // the text box so the alignment-defined anchor sits at the pinned
+    // coordinate (matching libass's \pos anchor semantics).
+    vStyle = { top: `${(entry.posY ?? 0) * scale}px` }
+    hStyle = { left: `${(entry.posX ?? 0) * scale}px`, textAlign }
+    transform = pinnedAnchorTransform(entry.horizontalPosition, entry.verticalPosition)
+  } else {
+    vStyle = entry.verticalPosition === 'bottom'
+      ? { bottom: `${marginVPx + stackOffset}px` }
+      : { top:    `${marginVPx + stackOffset}px` }
+    hStyle = { left: `${marginHPx}px`, right: `${marginHPx}px`, textAlign }
+    transform = undefined
+  }
 
   // CSS background approximation for the subtitle preview — entry's own
   // subtitleBackground (REQ-20260613-016 Phase 3) replaces the global prop.
@@ -213,9 +246,23 @@ export function SubtitleOverlay({
   // libass (an opaque panel makes the outline visually redundant).
   const showOutline = !bgEnabled && outlinePx > 0
 
+  // REQ-20260613-016 Phase 6 — when the parent supplies onPointerDown the
+  // overlay becomes interactive: cursor=move, pointer-events-auto, and the
+  // raw pointer-down event is forwarded with the bound entry so the
+  // parent can start its drag bookkeeping.  When undef the overlay stays
+  // strictly visual.
+  const interactive = onPointerDown !== undefined
+
   return (
     <span
-      className="absolute leading-snug pointer-events-none"
+      className={
+        interactive
+          ? 'absolute leading-snug pointer-events-auto cursor-move select-none'
+          : 'absolute leading-snug pointer-events-none'
+      }
+      onPointerDown={interactive
+        ? (e) => onPointerDown!(e, entry)
+        : undefined}
       style={{
         ...vStyle,
         ...hStyle,
@@ -227,6 +274,7 @@ export function SubtitleOverlay({
         WebkitTextStrokeColor: showOutline ? entry.outlineColorHex : undefined,
         paintOrder: 'stroke fill',
         whiteSpace: 'pre',
+        transform,
       }}
     >
       {bgEnabled ? (

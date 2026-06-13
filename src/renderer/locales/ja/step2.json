@@ -39,7 +39,9 @@
     "edited": "編集済み",
     "overflow": "はみ出し",
     "deleted": "削除済み",
-    "trimDeleted": "トリミング削除"
+    "trimDeleted": "トリミング削除",
+    "pinned": "位置固定",
+    "pinnedTitle": "プレビューでドラッグした自由位置 (\\pos)。リセットで解除されます"
   },
   "badge": {
     "overflow": "はみ出し",
@@ -160,6 +162,7 @@
     "editLayout": "配置を変更",
     "editMargin": "マージンを変更",
     "editBackground": "背景を変更",
+    "dragPosition": "位置をドラッグで変更",
     "deleteRow": "削除",
     "restoreRow": "復元",
     "resetRow": "リセット",

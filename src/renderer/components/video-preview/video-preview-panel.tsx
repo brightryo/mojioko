@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore } from '@/stores/ui-store'
+import { useHistoryStore } from '@/stores/history-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
@@ -14,6 +15,11 @@ import { SubtitleOverlay, estimateOverlayHeightPx } from '@/components/subtitle-
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { findActiveEntryId, findActiveEntryIds, computeFixedStackOffsets } from '@/lib/active-entry'
+import {
+  previewPxToAss,
+  getAnchorAssPosition,
+  clampAssPosition,
+} from '@/lib/preview-coords'
 import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -140,6 +146,24 @@ export function VideoPreviewPanel() {
   const isSeeking = useRef(false)
   // Track last active entry id so we only write to the store on change.
   const activeEntryIdRef = useRef<string | null>(null)
+
+  // REQ-20260613-016 Phase 6 — preview drag (機能B).  Captures pointer on
+  // overlay pointerdown and tracks moves until pointerup.  The drag
+  // updates entry.posX / entry.posY directly (per-frame writes); a single
+  // history op is pushed on pointerup with the pre-drag snapshot.
+  //
+  // Stored as a ref so pointermove / pointerup handlers see synchronous
+  // state without a re-render cascade.
+  const dragRef = useRef<{
+    entryId: string
+    snapshot: SubtitleEntry
+    startClientX: number
+    startClientY: number
+    startAssX: number
+    startAssY: number
+    scale: number
+    moved: boolean
+  } | null>(null)
 
   const videoUrl = video ? pathToVideoUrl(video.path) : null
 
@@ -432,6 +456,117 @@ export function VideoPreviewPanel() {
   function handleSeekDown()  { isSeeking.current = true }
   function handleSeekUp()    { isSeeking.current = false }
 
+  // REQ-20260613-016 Phase 6 — preview drag handlers (機能B).
+  //
+  // Drag lifecycle:
+  //  1. `handleOverlayPointerDown` runs when the user presses on a caption.
+  //     We snapshot the entry (for history undo), compute the *start* ASS
+  //     coordinate (either the pinned coord if already pinned, or the
+  //     alignment-based anchor for unpinned entries), and arm `dragRef`.
+  //  2. `handleWindowPointerMove` (attached to window for the lifetime of
+  //     the drag) converts the pointer delta to ASS coords via
+  //     `previewPxToAss(delta, scale)` and writes posX/posY directly to
+  //     the store on every move.  Visual feedback is immediate.
+  //  3. `handleWindowPointerUp` pushes a single history op (snapshot →
+  //     final patch) and releases pointer capture.  Per REQ補遺: ONE
+  //     commit per drag, NOT one per pointermove.
+  //
+  // Click-without-drag: when `moved === false` at pointerup, we skip the
+  // history push entirely — the user just clicked the overlay, and a
+  // history-op for a no-op drag would be confusing.
+  const handleOverlayPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLSpanElement>, draggedEntry: SubtitleEntry) => {
+      const container = videoContainerRef.current
+      if (!container || !video) return
+      const scale = container.clientWidth / video.widthPx
+      if (scale <= 0) return
+
+      // Decide the start ASS coord:
+      //   - already pinned → use the entry's own (posX, posY)
+      //   - not pinned     → compute the alignment-based anchor so the
+      //                       drag starts from the same point the
+      //                       caption was visually anchored at.  This
+      //                       avoids a "jump" at the first pixel.
+      const startAss =
+        draggedEntry.posX !== undefined && draggedEntry.posY !== undefined
+          ? { x: draggedEntry.posX, y: draggedEntry.posY }
+          : getAnchorAssPosition(
+              draggedEntry.horizontalPosition,
+              draggedEntry.verticalPosition,
+              draggedEntry.verticalMarginPx,
+              video.widthPx,
+              video.heightPx,
+            )
+
+      dragRef.current = {
+        entryId: draggedEntry.id,
+        snapshot: { ...draggedEntry },
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startAssX: startAss.x,
+        startAssY: startAss.y,
+        scale,
+        moved: false,
+      }
+
+      // Prevent the overlay's pointerdown from also triggering text
+      // selection / focus changes on the underlying <video> element.
+      e.preventDefault()
+      e.stopPropagation()
+
+      // Listen on window so the drag continues even when the cursor
+      // leaves the overlay's tiny bounding box.
+      window.addEventListener('pointermove', handleWindowPointerMove)
+      window.addEventListener('pointerup', handleWindowPointerUp, { once: true })
+    },
+    // handleWindowPointerMove / handleWindowPointerUp are stable across
+    // renders (declared below via useCallback) so the linter wants them
+    // here, but they reference dragRef which is a ref — no missing dep.
+    [video], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  const handleWindowPointerMove = useCallback((e: PointerEvent) => {
+    const d = dragRef.current
+    if (!d || !video) return
+    const dxPx = e.clientX - d.startClientX
+    const dyPx = e.clientY - d.startClientY
+    // Threshold "any movement" as moved=true so we know whether to push
+    // a history op at pointerup.
+    if (dxPx !== 0 || dyPx !== 0) d.moved = true
+    const newAss = clampAssPosition(
+      d.startAssX + previewPxToAss(dxPx, d.scale),
+      d.startAssY + previewPxToAss(dyPx, d.scale),
+      video.widthPx,
+      video.heightPx,
+    )
+    // Round to integer ASS pixels — the burnin output is integer-px
+    // anyway, and float drift would dirty the entry's isEdited state
+    // even when the user returns the caption to its exact original pos.
+    useProjectStore.getState().updateEntry(d.entryId, {
+      posX: Math.round(newAss.x),
+      posY: Math.round(newAss.y),
+    })
+  }, [video])
+
+  const handleWindowPointerUp = useCallback(() => {
+    window.removeEventListener('pointermove', handleWindowPointerMove)
+    const d = dragRef.current
+    dragRef.current = null
+    if (!d) return
+    if (!d.moved) return // click-without-drag: nothing to commit
+
+    // Snapshot vs final-entry diff → one history op for the entire drag.
+    const final = useProjectStore.getState().entries.find((x) => x.id === d.entryId)
+    if (!final) return
+    const finalSnap = { ...final }
+    const pre = d.snapshot
+    useHistoryStore.getState().push({
+      label: t('history.dragPosition'),
+      undo: () => useProjectStore.getState().updateEntry(pre.id, pre),
+      redo: () => useProjectStore.getState().updateEntry(pre.id, finalSnap),
+    })
+  }, [handleWindowPointerMove, t])
+
   function handleSeekChange(e: React.ChangeEvent<HTMLInputElement>) {
     // The slider's value lives on the EDITED axis (its max is
     // editedDuration); translate back to ORIGINAL before writing to
@@ -641,6 +776,7 @@ export function VideoPreviewPanel() {
                                   videoWidthPx={video.widthPx}
                                   containerWidthPx={videoContainerWidth}
                                   stackOffsetPx={offset}
+                                  onPointerDown={handleOverlayPointerDown}
                                 />
                               )
                             })}

@@ -326,3 +326,112 @@ describe('generateAss — preserved per-row inline tags', () => {
     expect(dialogues[0]).toContain('keep')
   })
 })
+
+describe('generateAss — free position \\pos (REQ-20260613-016 Phase 6 / 機能B)', () => {
+  it('row with both posX and posY emits \\pos(x,y)', () => {
+    const ass = generateAss(
+      [makeEntry('e1', 0, 1, 'pinned', { posX: 100, posY: 200 })],
+      VIDEO,
+      VESTIGIAL_BURNIN,
+      0.2,
+    )
+    const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
+    expect(dialogue).toContain('\\pos(100,200)')
+  })
+
+  it('row with both posX and posY still emits \\an for anchor selection', () => {
+    // \pos uses the alignment to decide which corner of the text box
+    // sits at the (x,y) coord — so \an MUST still be emitted.  Without
+    // it libass would fall through to the Style: default alignment.
+    const ass = generateAss(
+      [makeEntry('e1', 0, 1, 'pinned', {
+        posX: 100,
+        posY: 200,
+        horizontalPosition: 'right',
+        verticalPosition: 'top',
+      })],
+      VIDEO,
+      VESTIGIAL_BURNIN,
+      0.2,
+    )
+    const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
+    expect(dialogue).toContain('\\an9') // right + top
+    expect(dialogue).toContain('\\pos(100,200)')
+  })
+
+  it('pinned row writes MarginV=0 in the Dialogue column', () => {
+    // libass ignores MarginV when \pos is present, but writing 0 keeps
+    // the ASS file unambiguous if a human reads it.
+    const ass = generateAss(
+      [makeEntry('e1', 0, 1, 'pinned', {
+        posX: 50,
+        posY: 60,
+        verticalMarginPx: 999, // would normally land here without \pos
+      })],
+      VIDEO,
+      VESTIGIAL_BURNIN,
+      0.2,
+    )
+    const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
+    expect(dialogue.split(',').slice(0, 8).join(',')).toMatch(/,0,0,0,/)
+    // Defensive: the 999 must NOT have leaked in.
+    expect(dialogue).not.toContain(',999,')
+  })
+
+  it('row with only posX (no posY) is NOT pinned — no \\pos emitted', () => {
+    const ass = generateAss(
+      [makeEntry('e1', 0, 1, 'half', { posX: 100 })],
+      VIDEO,
+      VESTIGIAL_BURNIN,
+      0.2,
+    )
+    const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
+    expect(dialogue).not.toContain('\\pos')
+  })
+
+  it('row with only posY (no posX) is NOT pinned — no \\pos emitted', () => {
+    const ass = generateAss(
+      [makeEntry('e1', 0, 1, 'half', { posY: 200 })],
+      VIDEO,
+      VESTIGIAL_BURNIN,
+      0.2,
+    )
+    const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
+    expect(dialogue).not.toContain('\\pos')
+  })
+
+  it('mixed pinned + unpinned rows each emit their own form', () => {
+    const ass = generateAss(
+      [
+        makeEntry('free', 0, 1, 'unpinned'),
+        makeEntry('pin',  1, 2, 'pinned', { posX: 100, posY: 200 }),
+      ],
+      VIDEO,
+      VESTIGIAL_BURNIN,
+      0.2,
+    )
+    const dialogues = ass.split('\n').filter((l) => l.startsWith('Dialogue:'))
+    expect(dialogues[0]).not.toContain('\\pos')
+    expect(dialogues[0]).toContain('\\an2') // unpinned still uses alignment
+    expect(dialogues[1]).toContain('\\pos(100,200)')
+    expect(dialogues[1]).toContain('\\an2') // pinned still has \an for anchor
+  })
+
+  it('\\pos coexists with WithBox background', () => {
+    const ass = generateAss(
+      [makeEntry('e1', 0, 1, 'both', {
+        posX: 100,
+        posY: 200,
+        subtitleBackground: { enabled: true, color: 'black', opacityPercent: 50 },
+      })],
+      VIDEO,
+      VESTIGIAL_BURNIN,
+      0.2,
+    )
+    const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
+    expect(dialogue).toContain(',WithBox,')
+    expect(dialogue).toContain('\\pos(100,200)')
+    expect(dialogue).toContain('\\4c')
+    expect(dialogue).toContain('\\4a')
+  })
+})
