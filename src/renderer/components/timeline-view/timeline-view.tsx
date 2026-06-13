@@ -318,6 +318,14 @@ function BlockImpl({
 
   function handleBodyPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
     if (e.button !== 0 || entry.isDeleted) return
+    // REQ-20260613-009 §2-3: stop the pointerdown from bubbling up to
+    // the tracks background, which now hosts its own pointerdown handler
+    // for the empty-area seek + scrub gesture.  Without this stop, a
+    // block click / drag would also be interpreted as a track-area
+    // scrub, racing two seek paths.  Matches the existing
+    // handleEdgePointerDown convention (resize handles already
+    // stopPropagation for the same kind of reason).
+    e.stopPropagation()
     bodyDownXRef.current = e.clientX
     bodyMovedRef.current = false
     // Kick off the 'move' drag eagerly — TimelineView's handler defers any
@@ -467,13 +475,14 @@ function BlockImpl({
         // REQ-061 #2(b) / REQ-062: the inspector lives in a Radix
         // Portal at the DOM level, but React's synthetic events still
         // bubble up the React tree — clicks inside the popover would
-        // reach the tracks' `onClick={handleTracksBackgroundClick}` and
-        // trigger a spurious video seek.  Stop the event in **bubble**
-        // phase (not capture) so the target's own handlers — X-close,
-        // Reset, Delete, AutoLineBreak, ColorPicker, sliders, etc. —
-        // fire first; we only suppress further upward propagation
-        // toward the tracks div.  Capture-phase stops killed every
-        // button inside the inspector silently (REQ-062 #1 / #2).
+        // reach the tracks' pointer-scrub handlers (REQ-20260613-009)
+        // and trigger a spurious video seek.  Stop the event in
+        // **bubble** phase (not capture) so the target's own handlers
+        // — X-close, Reset, Delete, AutoLineBreak, ColorPicker,
+        // sliders, etc. — fire first; we only suppress further upward
+        // propagation toward the tracks div.  Capture-phase stops
+        // killed every button inside the inspector silently
+        // (REQ-062 #1 / #2).
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
@@ -1135,12 +1144,55 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     handleSeek(next !== null ? next : editedTotalSec)
   }, [handleSeek, editedTotalSec])
 
-  function handleTracksBackgroundClick(e: React.MouseEvent<HTMLDivElement>) {
-    // Only react to clicks on the empty track background; the blocks themselves
-    // stop propagation in their own onClick.
-    const rect = e.currentTarget.getBoundingClientRect()
-    const xPx  = e.clientX - rect.left
-    handleSeek(Math.max(0, xPx / pixelsPerSec))
+  // REQ-20260613-009 §2-2: tracks-area pointer scrub.  Pointerdown on the
+  // empty background of the tracks area jumps the playhead to that
+  // pixel position; holding the button and moving keeps the playhead
+  // following the cursor (= a scrub identical to the ruler's gesture
+  // upstairs).  This is the workaround for the case where the user has
+  // 3+ tracks and the ruler / playhead-head have been scrolled off the
+  // top — the tracks area is the always-visible surface.  Mirrors the
+  // Ruler component's local-ref state machine (isScrubbing flag,
+  // pointer capture, optional flushScrubSeek on up) so both surfaces
+  // route through the same handleSeek + flushScrubSeek path.
+  //
+  // Block clicks / drags are excluded by the `stopPropagation()` added
+  // to `handleBodyPointerDown` (above) and `handleEdgePointerDown`
+  // (already there).  Scissor markers + popovers (inspector) likewise
+  // stop propagation so the tracks handler only fires for genuinely
+  // empty background hits.
+  const tracksScrubRef = useRef(false)
+  function tracksXToSec(target: HTMLElement, clientX: number): number {
+    const rect = target.getBoundingClientRect()
+    const xPx = clientX - rect.left
+    return Math.max(0, xPx / pixelsPerSec)
+  }
+  function handleTracksPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0) return
+    e.preventDefault()
+    tracksScrubRef.current = true
+    if (SCRUB_SEEK_THROTTLE_ENABLED) {
+      scrubState.inProgress = true
+    }
+    e.currentTarget.setPointerCapture(e.pointerId)
+    handleSeek(tracksXToSec(e.currentTarget, e.clientX))
+  }
+  function handleTracksPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!tracksScrubRef.current) return
+    handleSeek(tracksXToSec(e.currentTarget, e.clientX))
+  }
+  function handleTracksPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!tracksScrubRef.current) return
+    tracksScrubRef.current = false
+    if (SCRUB_SEEK_THROTTLE_ENABLED) {
+      flushScrubSeek()
+      scrubState.inProgress = false
+    }
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      // Capture may already be released if the element re-mounted —
+      // safe to ignore.  Same guard the Ruler uses.
+    }
   }
 
   function handleZoomOut() {
@@ -1838,20 +1890,44 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                 width: `${widthPx}px`
               }}
             >
-              <Ruler
-                pixelsPerSec={pixelsPerSec}
-                totalSec={editedTotalSec}
-                onSeek={handleSeek}
-                // REQ-096: only wire `onScrubEnd` when the throttle is
-                // enabled; the legacy path doesn't need a flush because
-                // every pointermove already committed the seek inline.
-                onScrubEnd={SCRUB_SEEK_THROTTLE_ENABLED ? flushScrubSeek : undefined}
-              />
+              {/* REQ-20260613-009 §2-1: stick the ruler to the top of
+                  the scroll viewport so the time axis stays visible
+                  when the user scrolls the tracks vertically (3+ track
+                  rows force scroll, which previously hid the ruler
+                  and the playhead's grabbable head with it).
+                  `position: sticky; top: 0` is enough because the
+                  outer `scrollRef` is the only scrolling ancestor.
+                  No z-index: the wrapper sits at z-auto in its
+                  containing block; the scissor markers (z-20) and any
+                  inspector popovers continue to layer above the ruler
+                  exactly as they did before. */}
+              <div className="sticky top-0">
+                <Ruler
+                  pixelsPerSec={pixelsPerSec}
+                  totalSec={editedTotalSec}
+                  onSeek={handleSeek}
+                  // REQ-096: only wire `onScrubEnd` when the throttle is
+                  // enabled; the legacy path doesn't need a flush because
+                  // every pointermove already committed the seek inline.
+                  onScrubEnd={SCRUB_SEEK_THROTTLE_ENABLED ? flushScrubSeek : undefined}
+                />
+              </div>
 
-              {/* Tracks area */}
+              {/* Tracks area — REQ-20260613-009 §2-2: pointerdown +
+                  pointermove + pointerup implement a seek + scrub
+                  gesture identical to the Ruler's.  Replaces the
+                  previous click-only handler so the user can scrub
+                  from the always-visible track area when the ruler
+                  has been scrolled out of reach.  `touch-none`
+                  matches the Ruler so touch devices route through
+                  the pointer events instead of synthesised mouse
+                  events with delay. */}
               <div
-                onClick={handleTracksBackgroundClick}
-                className="relative"
+                onPointerDown={handleTracksPointerDown}
+                onPointerMove={handleTracksPointerMove}
+                onPointerUp={handleTracksPointerUp}
+                onPointerCancel={handleTracksPointerUp}
+                className="relative touch-none"
                 style={{
                   width: `${widthPx}px`,
                   height: `${tracksHeightPx}px`
