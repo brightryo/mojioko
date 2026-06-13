@@ -9,6 +9,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.1] - 2026-06-13
+
+Follow-up release on the v1.2 line: small additions around subtitle
+editing (duplicate, two line-break modes, stacked preview captions)
+and a handful of fixes that landed after v1.2.0 went out.
+
+### Added
+
+- **Duplicate a subtitle row.**  Both the table and the timeline
+  block inspector now have a duplicate button.  The copy lands
+  directly under the source row in the table, carries every style
+  field (text, time, font, colour, outline, fade), and is marked as
+  edited so it stands out at a glance.
+- **Two line-break modes** replace the previous single "Auto wrap"
+  button:
+  - **Pack wrap** — drops every existing break in the row and
+    refills the line(s) to the full display width.  Same behaviour
+    as the old auto-wrap.
+  - **Overflow wrap** — keeps the manual breaks the user already
+    placed and only folds segments that exceed the display width.
+  Both buttons appear side-by-side in the row icons, the bulk-edit
+  bar, and the timeline block inspector.
+- **Simultaneous captions in the preview.**  When two or more
+  subtitles overlap in time, the preview now stacks them vertically
+  in the same order the burn-in produces (first event at the
+  configured edge, later events pushed away from it).  Previously
+  only one caption was shown at a time.
+
+### Changed
+
+- The legacy "Auto wrap" button was renamed to "Pack wrap" so the
+  name matches the new "Overflow wrap" sibling.  Behaviour of the
+  existing button is unchanged.
+
+### Fixed
+
+- Pressing a wrap button while a text input was focused could
+  silently revert the wrap on the next blur (and could discard the
+  user's last-typed character).  The text input now syncs from
+  external updates while not dirty and only commits on blur when
+  the user actually typed.
+- Dragging a timeline clip that shares its start time with another
+  clip used to swap the two clips' rows mid-drag — the user saw
+  the wrong block move.  The dragged clip's track is now pinned to
+  its starting row for the duration of the drag.
+- Preview captions used to "reflow downward" when an earlier
+  caption ended, but the burn-in (libass) freezes each caption's
+  vertical position.  The preview now matches: positions are
+  decided when a caption starts and stay put until it ends; later
+  arrivals fill any freed gap.
+
+---
+
 ## [1.2.0] - 2026-06-10
 
 Third minor-line release: timeline editing with non-destructive
