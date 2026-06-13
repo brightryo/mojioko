@@ -79,45 +79,60 @@ export function findActiveEntryIds(
 }
 
 /**
- * REQ-20260613-006: precompute each entry's vertical stack offset by
- * faithfully replicating libass's `fix_collisions` semantics — positions
- * are decided ONCE per entry at its startSec moment, then frozen for the
- * rest of the entry's lifetime.  Later entries that arrive after another
- * entry has ended fill the freed gap; entries already on screen never
- * move when a neighbour ends.
+ * REQ-20260613-006 + REQ-20260613-016 Phase 3 — libass-faithful
+ * `fix_collisions` replication, extended for the v1.2.2 per-row data
+ * model.
  *
- * This is the fix for the REQ-004 regression where the preview re-packed
- * stacks every frame and visibly shifted survivors downward when an
- * earlier caption disappeared (= the discrepancy reported in
- * VERIFY-20260613-001 and analysed in RES-20260613-005).
+ * Positions are decided ONCE per entry at its startSec moment (looking at
+ * priors already placed AND still active at that moment) and frozen for
+ * the rest of the entry's lifetime.  Later entries that arrive after
+ * another entry has ended drop into the freed gap; entries already on
+ * screen never move when a neighbour ends.
  *
- * Algorithm (RES-20260613-005 §Q3 confirmed by VERIFY-20260613-001):
+ * **Per-row extensions** (REQ-20260613-016 Phase 3):
  *
- *   1. Iterate entries in their CALLER-PROVIDED order.  The caller
- *      (`video-preview-panel.tsx`) feeds the stable-sorted
- *      `sortedActiveEntries`, so this order is (startSec ascending,
- *      original entries-array order tiebreak) — identical to the ASS
- *      Dialogue order on burn-in.
- *   2. For each entry `e`, look at every entry already iterated whose
- *      lifetime covers `e.startSec` (= `prior.startSec <= e.startSec
- *      < prior.endSec`).  Note the `<=` on startSec: same-instant
- *      siblings count as "already placed" because they were processed
- *      first in the iteration (same as libass's script-order tiebreak).
- *   3. Sort those priors by their already-assigned offset ascending.
- *      Walk them from lowest to highest; if a gap >= e's height opens
- *      up before a prior, place e in that gap; otherwise climb above
- *      the prior and continue.  This is the greedy "fill the lowest
- *      large-enough gap" behaviour the SSA spec documents for
- *      Collisions: Normal ("filling in gaps in other subtitles if one
- *      large enough is available").
- *   4. Record e's offset in `positions`.  Subsequent iterations see
- *      this offset as a fixed prior — exactly mirroring libass's
- *      `priv->height > 0 → fixed event` branch in `fix_collisions`.
+ *   1. **Group by alignment key** (`${horizontalPosition}_${verticalPosition}`).
+ *      libass only collides events that share an alignment — a
+ *      bottom-center event and a top-center event do NOT interact.
+ *      This implementation honours the same partition: an entry's
+ *      "priors" are only same-group entries.
+ *   2. **Per-row MarginV as the base position.**  Each entry's
+ *      effective base position = `entry.verticalMarginPx` (interpreted
+ *      as distance from the edge the alignment anchors against — top
+ *      for 7/8/9, bottom for 1/2/3).  Two entries in the same group
+ *      with different MarginV values do NOT collide unless their
+ *      occupied vertical bands actually intersect — matching libass's
+ *      per-event MarginV behaviour.
+ *   3. **Pinned entries (`\pos`, REQ-20260613-016 / 機能B)** are
+ *      excluded from the stack altogether — they neither act as
+ *      priors nor receive an offset.  An entry is treated as pinned
+ *      when both `posX` and `posY` are defined.  Phase 6 wires up the
+ *      drag UI; Phase 3 codifies the exclusion now so the algorithm
+ *      stays consistent through the whole feature work.
  *
- * Output offsets are pixel distances from the burn-in edge (`MarginV`).
- * For bottom-aligned subtitles the caller adds the offset to the
- * SubtitleOverlay's `bottom`; for top-aligned, to the `top`.  The
- * algorithm itself is alignment-agnostic.
+ * Algorithm:
+ *
+ *   For each entry `e` in caller-provided order:
+ *     - skip if pinned (both posX and posY defined)
+ *     - find priors `p` such that:
+ *         * groupKey(p) === groupKey(e)
+ *         * p is not pinned
+ *         * p.startSec <= e.startSec < p.endSec  (overlap; <= on start
+ *           captures same-instant siblings)
+ *     - each prior contributes a (effectiveBase, height) interval:
+ *         effectiveBase_p = p.verticalMarginPx + positions[p.id]
+ *     - sort priors by effectiveBase ascending; walk them looking for
+ *       a gap of size `heightE` below the lowest unblocked position.
+ *       Start the walk at `e.verticalMarginPx` (= e's own preferred
+ *       base) — if a prior sits below that, our effective position
+ *       climbs above the prior; if there's a gap big enough, we drop
+ *       into it.
+ *     - record the **relative** offset = (final effectiveBase) - e.verticalMarginPx
+ *       in `positions`.  Returning the relative offset (not the
+ *       absolute base) preserves backward compatibility with the
+ *       v1.0/v1.1 tests where every entry shared the same MarginV
+ *       (the relative offset for the 1st same-group entry is 0
+ *       regardless of MarginV).
  *
  * Pure function — height calculation is injected via `heightOf` so the
  * lib stays free of component imports and unit tests can pass simple
@@ -134,35 +149,62 @@ export function computeFixedStackOffsets(
 ): Map<string, number> {
   const positions = new Map<string, number>()
   const heights = new Map<string, number>()
+
+  const groupKey = (e: SubtitleEntry): string =>
+    `${e.horizontalPosition}_${e.verticalPosition}`
+
+  const isPinned = (e: SubtitleEntry): boolean =>
+    e.posX !== undefined && e.posY !== undefined
+
   for (let i = 0; i < sortedEntries.length; i++) {
     const e = sortedEntries[i]
+    // Pinned entries (\pos) render at their own coordinates — exclude
+    // them from the stack entirely (no offset, not a prior for later
+    // entries).  Phase 6 wires the drag UI; the exclusion is encoded
+    // here so the algorithm is consistent through the whole feature.
+    if (isPinned(e)) continue
+
     const heightE = heightOf(e)
+    const marginVe = e.verticalMarginPx
+    const keyE = groupKey(e)
     heights.set(e.id, heightE)
-    // Collect already-placed priors whose lifetime covers e.startSec.
-    // Using `prior.startSec <= e.startSec` (not strict <) is critical for
-    // same-instant siblings (e.g. duplicates from REQ-20260613-001) so
-    // the first one processed acts as a "fixed event" for the next.
-    const activePriors: { offset: number; height: number }[] = []
+
+    // Collect already-placed priors that:
+    //   - share alignment group with e (libass collides per group only)
+    //   - are not themselves pinned (pinned entries don't block stack)
+    //   - overlap e.startSec in time (start INCLUSIVE / end EXCLUSIVE,
+    //     same as findActiveEntryId boundary semantics)
+    const activePriors: { base: number; height: number }[] = []
     for (let j = 0; j < i; j++) {
       const p = sortedEntries[j]
+      if (isPinned(p)) continue
+      if (groupKey(p) !== keyE) continue
       if (p.startSec <= e.startSec && p.endSec > e.startSec) {
+        const priorOffset = positions.get(p.id) ?? 0
+        const priorBase = p.verticalMarginPx + priorOffset
         activePriors.push({
-          offset: positions.get(p.id) ?? 0,
+          base: priorBase,
           height: heights.get(p.id) ?? 0,
         })
       }
     }
-    activePriors.sort((a, b) => a.offset - b.offset)
-    // Greedy gap-fill scan.  `offset` tracks the lowest position e could
-    // occupy without colliding with any prior we've seen so far.  When a
-    // prior's offset is >= offset + heightE there's a gap big enough for
-    // e to drop into; otherwise climb above that prior and continue.
-    let offset = 0
+    activePriors.sort((a, b) => a.base - b.base)
+
+    // Greedy gap-fill — `effectiveBase` tracks the lowest position e
+    // can occupy without colliding with any prior we've seen so far.
+    // Start at e's own MarginV; for each prior in ascending order,
+    // either drop into the gap above (if a prior's base ≥ our top
+    // edge) or climb above the prior and continue.
+    let effectiveBase = marginVe
     for (const p of activePriors) {
-      if (p.offset >= offset + heightE) break
-      offset = Math.max(offset, p.offset + p.height)
+      if (p.base >= effectiveBase + heightE) break
+      effectiveBase = Math.max(effectiveBase, p.base + p.height)
     }
-    positions.set(e.id, offset)
+
+    // Returned value is RELATIVE to entry.verticalMarginPx.  For the
+    // single-row case the result is 0 regardless of MarginV, matching
+    // the v1.0/v1.1 contract used by the existing tests.
+    positions.set(e.id, effectiveBase - marginVe)
   }
   return positions
 }
