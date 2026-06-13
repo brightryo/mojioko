@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { findActiveEntryId, findActiveEntryIds } from '../../src/renderer/lib/active-entry'
+import {
+  findActiveEntryId,
+  findActiveEntryIds,
+  computeFixedStackOffsets,
+} from '../../src/renderer/lib/active-entry'
 import type { SubtitleEntry } from '../../src/shared/types'
 
 function entry(id: string, startSec: number, endSec: number): SubtitleEntry {
@@ -146,5 +150,151 @@ describe('findActiveEntryIds — multi-active lookup', () => {
     // duplicates at exactly the playhead would be silently dropped.
     const entries = [entry('a', 0, 5), entry('b', 5, 10), entry('c', 5, 10)]
     expect(findActiveEntryIds(entries, 5)).toEqual(['b', 'c'])
+  })
+})
+
+/**
+ * REQ-20260613-006: libass-faithful `fix_collisions` replication.  Each
+ * entry's vertical stack offset is decided ONCE at its startSec moment
+ * (looking at priors already placed AND still active at that moment)
+ * and frozen for the rest of the entry's lifetime.  Later entries that
+ * arrive after another entry has ended drop into the freed gap.  These
+ * tests pin the algorithm against the empirical libass behaviour
+ * confirmed in VERIFY-20260613-001.
+ *
+ * Height function is injected so the tests can use constant heights
+ * (= 10 px each unless otherwise noted) and reason about pixel offsets
+ * without dragging in component metrics.
+ */
+describe('computeFixedStackOffsets — libass fix_collisions replication', () => {
+  const h = () => 10  // every entry is 10 px tall by default
+
+  it('empty input → empty map', () => {
+    expect(computeFixedStackOffsets([], h).size).toBe(0)
+  })
+
+  it('single entry → offset 0', () => {
+    const result = computeFixedStackOffsets([entry('a', 0, 5)], h)
+    expect(result.get('a')).toBe(0)
+  })
+
+  it('same-time triplet stacks in input order (= ASS Dialogue order)', () => {
+    // The REQ-20260613-001 duplicate case: three identical-span entries.
+    // The first goes to the burnin edge (offset 0); subsequent entries
+    // stack on top in their array order — matches libass's script-order
+    // tiebreak for events that share a startSec.
+    const entries = [entry('a', 0, 10), entry('b', 0, 10), entry('c', 0, 10)]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(10)
+    expect(result.get('c')).toBe(20)
+  })
+
+  /**
+   * VERIFY-20260613-001 §検証1 — the canonical partial-overlap case:
+   *   A: 2-4, B: 3-6, C: 4-8
+   *
+   * Critical assertions:
+   *   - B's offset stays at h_a (= the position it was assigned at t=3,
+   *     when A was its only active prior) for the entire 3-6 window,
+   *     INCLUDING after A ends at t=4.  Survivors must not shift.
+   *   - C arrives at t=4, when A has just ended (end-EXCLUSIVE).  C
+   *     finds offset 0 free (the slot A vacated) and slots into it —
+   *     `filling in 'gaps' in other subtitles if one large enough is
+   *     available` per the SSA spec.
+   */
+  it('partial overlap (A:2-4, B:3-6, C:4-8): B stays put, C fills the gap A left', () => {
+    const entries = [entry('a', 2, 4), entry('b', 3, 6), entry('c', 4, 8)]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(10)
+    expect(result.get('c')).toBe(0)  // C drops into A's freed slot
+  })
+
+  it('gap-fill respects height — a too-tall newcomer climbs above instead of dropping in', () => {
+    // A (h=20) at offset 0 ends.  B (h=10, lifetime spans across A and C)
+    // is at offset 20.  C (h=30) arrives after A ends.  The vacated slot
+    // is 20 px tall, but C is 30 px — too big to fit, so C climbs above B.
+    // Matches SSA spec: "if one large enough is available".
+    const heightOf = (e: { id: string }): number =>
+      e.id === 'a' ? 20 : e.id === 'b' ? 10 : 30  // c is 30
+    const entries = [entry('a', 0, 3), entry('b', 0, 8), entry('c', 4, 8)]
+    const result = computeFixedStackOffsets(entries, heightOf)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(20)  // pushed above A's 20 px
+    expect(result.get('c')).toBe(30)  // gap of 20 is too small for h=30 → climb above B
+  })
+
+  it('gap-fill takes the slot when newcomer fits exactly', () => {
+    // Same shape as above but C is small enough to fit the freed gap.
+    const heightOf = (e: { id: string }): number =>
+      e.id === 'a' ? 20 : e.id === 'b' ? 10 : 15  // c is 15
+    const entries = [entry('a', 0, 3), entry('b', 0, 8), entry('c', 4, 8)]
+    const result = computeFixedStackOffsets(entries, heightOf)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(20)
+    expect(result.get('c')).toBe(0)  // fits in the freed 20-px gap
+  })
+
+  it('non-overlapping entries all sit at offset 0', () => {
+    // Sequential, no overlap → every entry claims the burnin edge for
+    // its own lifetime; the "fixed" state of an earlier entry does not
+    // outlive the entry itself.
+    const entries = [entry('a', 0, 1), entry('b', 2, 3), entry('c', 4, 5)]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(0)
+    expect(result.get('c')).toBe(0)
+  })
+
+  it('end boundary is EXCLUSIVE — entry ending at t is NOT a prior for an entry starting at t', () => {
+    // A ends at exactly 4.  C starts at exactly 4.  Per [start, end) the
+    // two never co-exist, so C must not collide with A's position — C
+    // anchors at offset 0 even with B (which spans across the boundary)
+    // already occupying offset 10.
+    const entries = [entry('a', 0, 4), entry('b', 0, 8), entry('c', 4, 8)]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(10)
+    expect(result.get('c')).toBe(0)
+  })
+
+  it('start boundary is INCLUSIVE — same-instant siblings count as priors', () => {
+    // A and B both start at 0.  When B is processed (second in the
+    // array), A is treated as an already-placed prior (script-order
+    // tiebreak), so B stacks on top.  Using strict `<` on startSec
+    // would silently miss this case and put B at offset 0 on top of A.
+    const entries = [entry('a', 0, 5), entry('b', 0, 5)]
+    const result = computeFixedStackOffsets(entries, h)
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(10)
+  })
+
+  it('alignment-agnostic: caller decides whether offset is from top or bottom edge', () => {
+    // Same input as the duplicate-triplet test.  Offsets are
+    // produced as pixel distances from "whichever edge the burnin
+    // alignment anchors to" — they're symmetric for top vs bottom.
+    // This test exists to lock the contract: the lib never reads or
+    // assumes a vertical direction.
+    const entries = [entry('a', 0, 10), entry('b', 0, 10), entry('c', 0, 10)]
+    const result = computeFixedStackOffsets(entries, h)
+    expect([result.get('a'), result.get('b'), result.get('c')]).toEqual([0, 10, 20])
+  })
+
+  it('survivor offset is unchanged whether a later sibling exists or not', () => {
+    // Run the algorithm with just A + B (B stacks on A), then with
+    // A + B + C (C arrives after A ends).  B's offset must be
+    // identical in both runs — survivors do not shift to make room
+    // for newcomers, only newcomers find their own slot.
+    const ab = computeFixedStackOffsets(
+      [entry('a', 2, 4), entry('b', 3, 6)],
+      h,
+    )
+    const abc = computeFixedStackOffsets(
+      [entry('a', 2, 4), entry('b', 3, 6), entry('c', 4, 8)],
+      h,
+    )
+    expect(abc.get('b')).toBe(ab.get('b'))
+    expect(abc.get('a')).toBe(ab.get('a'))
   })
 })

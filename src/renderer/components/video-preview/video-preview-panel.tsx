@@ -14,7 +14,7 @@ import { SubtitleOverlay, estimateOverlayHeightPx } from '@/components/subtitle-
 import { Switch } from '@/components/ui/switch'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
-import { findActiveEntryId, findActiveEntryIds } from '@/lib/active-entry'
+import { findActiveEntryId, findActiveEntryIds, computeFixedStackOffsets } from '@/lib/active-entry'
 import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -203,6 +203,40 @@ export function VideoPreviewPanel() {
     const idSet = new Set(ids)
     return sortedActiveEntries.filter((e) => idSet.has(e.id))
   }, [currentTime, sortedActiveEntries])
+
+  /**
+   * REQ-20260613-006: precomputed stack offset per entry id.  Replaces the
+   * REQ-004 per-render cumulative loop, which re-packed the visible stack
+   * every time an entry left and visibly shifted survivors downward.  By
+   * computing offsets ONCE per entries / scale change and freezing each
+   * entry's offset for its lifetime, the preview now mirrors libass's
+   * `fix_collisions` behaviour: positions assigned at startSec, never
+   * recomputed unless a new entry arrives.
+   *
+   * Critically, `currentTime` is NOT a dependency — the playhead tick
+   * during playback does not invalidate this memo, so the per-frame cost
+   * stays at one Map lookup per active overlay (= effectively free).  The
+   * O(N²) algorithm inside `computeFixedStackOffsets` only runs when the
+   * entries list or the rendering scale changes — both rare during
+   * playback, and the user already accepts the cost in `overflowMap`,
+   * `warningsMap`, etc.  See VERIFY-20260613-001 + RES-20260613-005 §Q4
+   * for the analysis.
+   */
+  const videoWidthPx = video?.widthPx ?? 0
+  const stackOffsetsByEntryId = useMemo(() => {
+    if (videoWidthPx <= 0 || videoContainerWidth <= 0) {
+      return new Map<string, number>()
+    }
+    return computeFixedStackOffsets(
+      sortedActiveEntries,
+      (entry) => estimateOverlayHeightPx(
+        entry,
+        activeFontId,
+        videoWidthPx,
+        videoContainerWidth,
+      ),
+    )
+  }, [sortedActiveEntries, activeFontId, videoWidthPx, videoContainerWidth])
 
   // Load the subtitle font on mount and refresh whenever the active font
   // changes so the preview reflects the new metrics without requiring a
@@ -621,38 +655,33 @@ export function VideoPreviewPanel() {
                               onEnded={handleEnded}
                               onError={handleError}
                             />
-                            {/* REQ-20260613-004: render every active
-                                caption as its own SubtitleOverlay,
-                                vertically stacked with cumulative
-                                pixel offsets matching libass's
-                                collision-avoidance order on burn-in.
-                                Single-active is the common case and
-                                resolves to one overlay at
-                                stackOffsetPx = 0 — byte-identical to
-                                the pre-stack render path. */}
-                            {videoContainerWidth > 0 && (() => {
-                              let cumulative = 0
-                              return overlayEntries.map((entry) => {
-                                const offset = cumulative
-                                cumulative += estimateOverlayHeightPx(
-                                  entry,
-                                  activeFontId,
-                                  video.widthPx,
-                                  videoContainerWidth,
-                                )
-                                return (
-                                  <SubtitleOverlay
-                                    key={entry.id}
-                                    entry={entry}
-                                    burnin={burnin}
-                                    videoWidthPx={video.widthPx}
-                                    containerWidthPx={videoContainerWidth}
-                                    subtitleBackground={subtitleBackground}
-                                    stackOffsetPx={offset}
-                                  />
-                                )
-                              })
-                            })()}
+                            {/* REQ-20260613-004 + REQ-20260613-006:
+                                render every active caption as its own
+                                SubtitleOverlay.  The vertical offset
+                                comes from the pre-computed
+                                `stackOffsetsByEntryId` map (= libass-
+                                faithful `fix_collisions` positions),
+                                so survivors stay put when a sibling
+                                caption ends and a later caption fills
+                                the freed gap rather than pushing the
+                                survivor down.  Single-active resolves
+                                to one overlay at offset 0 — byte-
+                                identical to the pre-stack render
+                                path. */}
+                            {videoContainerWidth > 0 && overlayEntries.map((entry) => {
+                              const offset = stackOffsetsByEntryId.get(entry.id) ?? 0
+                              return (
+                                <SubtitleOverlay
+                                  key={entry.id}
+                                  entry={entry}
+                                  burnin={burnin}
+                                  videoWidthPx={video.widthPx}
+                                  containerWidthPx={videoContainerWidth}
+                                  subtitleBackground={subtitleBackground}
+                                  stackOffsetPx={offset}
+                                />
+                              )
+                            })}
                           </>
                         )}
                       </div>

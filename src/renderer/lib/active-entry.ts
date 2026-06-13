@@ -77,3 +77,92 @@ export function findActiveEntryIds(
   }
   return ids
 }
+
+/**
+ * REQ-20260613-006: precompute each entry's vertical stack offset by
+ * faithfully replicating libass's `fix_collisions` semantics — positions
+ * are decided ONCE per entry at its startSec moment, then frozen for the
+ * rest of the entry's lifetime.  Later entries that arrive after another
+ * entry has ended fill the freed gap; entries already on screen never
+ * move when a neighbour ends.
+ *
+ * This is the fix for the REQ-004 regression where the preview re-packed
+ * stacks every frame and visibly shifted survivors downward when an
+ * earlier caption disappeared (= the discrepancy reported in
+ * VERIFY-20260613-001 and analysed in RES-20260613-005).
+ *
+ * Algorithm (RES-20260613-005 §Q3 confirmed by VERIFY-20260613-001):
+ *
+ *   1. Iterate entries in their CALLER-PROVIDED order.  The caller
+ *      (`video-preview-panel.tsx`) feeds the stable-sorted
+ *      `sortedActiveEntries`, so this order is (startSec ascending,
+ *      original entries-array order tiebreak) — identical to the ASS
+ *      Dialogue order on burn-in.
+ *   2. For each entry `e`, look at every entry already iterated whose
+ *      lifetime covers `e.startSec` (= `prior.startSec <= e.startSec
+ *      < prior.endSec`).  Note the `<=` on startSec: same-instant
+ *      siblings count as "already placed" because they were processed
+ *      first in the iteration (same as libass's script-order tiebreak).
+ *   3. Sort those priors by their already-assigned offset ascending.
+ *      Walk them from lowest to highest; if a gap >= e's height opens
+ *      up before a prior, place e in that gap; otherwise climb above
+ *      the prior and continue.  This is the greedy "fill the lowest
+ *      large-enough gap" behaviour the SSA spec documents for
+ *      Collisions: Normal ("filling in gaps in other subtitles if one
+ *      large enough is available").
+ *   4. Record e's offset in `positions`.  Subsequent iterations see
+ *      this offset as a fixed prior — exactly mirroring libass's
+ *      `priv->height > 0 → fixed event` branch in `fix_collisions`.
+ *
+ * Output offsets are pixel distances from the burn-in edge (`MarginV`).
+ * For bottom-aligned subtitles the caller adds the offset to the
+ * SubtitleOverlay's `bottom`; for top-aligned, to the `top`.  The
+ * algorithm itself is alignment-agnostic.
+ *
+ * Pure function — height calculation is injected via `heightOf` so the
+ * lib stays free of component imports and unit tests can pass simple
+ * constants (see tests/unit/active-entry.test.ts).
+ *
+ * Complexity: O(N²) in the worst case (each entry walks every prior).
+ * Caller memoises on entries / scale changes only, so the cost is
+ * paid once per entries mutation (~rare during playback), not per
+ * playhead tick.
+ */
+export function computeFixedStackOffsets(
+  sortedEntries: readonly SubtitleEntry[],
+  heightOf: (entry: SubtitleEntry) => number,
+): Map<string, number> {
+  const positions = new Map<string, number>()
+  const heights = new Map<string, number>()
+  for (let i = 0; i < sortedEntries.length; i++) {
+    const e = sortedEntries[i]
+    const heightE = heightOf(e)
+    heights.set(e.id, heightE)
+    // Collect already-placed priors whose lifetime covers e.startSec.
+    // Using `prior.startSec <= e.startSec` (not strict <) is critical for
+    // same-instant siblings (e.g. duplicates from REQ-20260613-001) so
+    // the first one processed acts as a "fixed event" for the next.
+    const activePriors: { offset: number; height: number }[] = []
+    for (let j = 0; j < i; j++) {
+      const p = sortedEntries[j]
+      if (p.startSec <= e.startSec && p.endSec > e.startSec) {
+        activePriors.push({
+          offset: positions.get(p.id) ?? 0,
+          height: heights.get(p.id) ?? 0,
+        })
+      }
+    }
+    activePriors.sort((a, b) => a.offset - b.offset)
+    // Greedy gap-fill scan.  `offset` tracks the lowest position e could
+    // occupy without colliding with any prior we've seen so far.  When a
+    // prior's offset is >= offset + heightE there's a gap big enough for
+    // e to drop into; otherwise climb above that prior and continue.
+    let offset = 0
+    for (const p of activePriors) {
+      if (p.offset >= offset + heightE) break
+      offset = Math.max(offset, p.offset + p.height)
+    }
+    positions.set(e.id, offset)
+  }
+  return positions
+}
