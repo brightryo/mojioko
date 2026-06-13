@@ -141,7 +141,13 @@
     "textColor": "Text color",
     "outlineColor": "Outline color",
     "outlineWidth": "Outline width",
-    "fade": "Fade"
+    "fade": "Fade",
+    "layoutH": "Horizontal",
+    "layoutV": "Vertical",
+    "marginV": "Margin",
+    "bgEnabled": "Background",
+    "bgColor": "BG color",
+    "bgOpacity": "Opacity"
   },
   "history": {
     "editText": "Edit text",
@@ -151,6 +157,9 @@
     "editStroke": "Change stroke width",
     "editFade": "Change fade",
     "editFont": "Change font",
+    "editLayout": "Change layout",
+    "editMargin": "Change margin",
+    "editBackground": "Change background",
     "deleteRow": "Delete",
     "restoreRow": "Restore",
     "resetRow": "Reset",

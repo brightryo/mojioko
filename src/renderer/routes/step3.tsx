@@ -29,6 +29,7 @@ import { estimateOutputSizeMB, estimateRenderTimeSec } from '@/lib/format'
 import { computeEntryWarnings, isBurninTarget, type EntryWarnings } from '@/lib/entry-warnings'
 import type { BurninHandle } from '@/services/burnin'
 import type { OutputContainer } from '../../shared/types'
+import { BURNIN_DEFAULTS } from '../../shared/burnin-defaults'
 
 interface Step3RouteProps {
   appVersion: string
@@ -43,15 +44,17 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
   const video = useProjectStore((s) => s.video)
   const entries = useProjectStore((s) => s.entries)
   const cuts = useProjectStore((s) => s.cuts)
-  // burnin / subtitleBackground are still consumed at render time to feed
-  // startBurnin's burninOpts, but the editing UI moved to Step 2's
-  // VideoPreviewPanel.  Only the read-side hooks remain here.
-  const burnin = useSettingsStore((s) => s.burnin)
+  // REQ-20260613-016 Phase 4 — `burnin` / `subtitleBackground` were
+  // dropped from settings-store along with the global panel UI in
+  // VideoPreviewPanel.  ass-generator (Phase 2) treats both as vestigial
+  // — the per-row values on each SubtitleEntry drive ASS output instead.
+  // We still need to satisfy the BurninStartRequest IPC contract, so
+  // pass through the original BURNIN_DEFAULTS values (which were the
+  // store's defaults anyway).  Phase 5+ may clean up the contract.
   const encoderSetting = useSettingsStore((s) => s.encoder)
   const audioMode = useSettingsStore((s) => s.audioMode)
   const setAudioMode = useSettingsStore((s) => s.setAudioMode)
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
-  const subtitleBackground = useSettingsStore((s) => s.subtitleBackground)
   const outputContainer = useSettingsStore((s) => s.outputContainer)
   const setOutputContainer = useSettingsStore((s) => s.setOutputContainer)
   const activeFontId = useSettingsStore((s) => s.activeFontId)
@@ -198,16 +201,28 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
     setRenderState('rendering')
     setProgress(0)
 
+    // REQ-20260613-016 Phase 4 — `burnin` / `subtitleBackground` are
+    // forwarded as static BURNIN_DEFAULTS so the IPC contract stays
+    // valid; ass-generator ignores both and reads per-row values from
+    // each entry instead.  Phase 5+ may retire the IPC fields entirely.
     const burninOpts = {
       inputPath: video.path,
       outputPath: targetPath,
       entries: activeEntries,
       video,
-      burnin,
+      burnin: {
+        horizontalPosition: BURNIN_DEFAULTS.horizontalPosition,
+        verticalPosition: BURNIN_DEFAULTS.verticalPosition,
+        verticalMarginPx: BURNIN_DEFAULTS.verticalMarginPx,
+      },
       encoderSetting,
       audioMode,
       fadeDurationSec,
-      subtitleBackground,
+      subtitleBackground: {
+        enabled: BURNIN_DEFAULTS.subtitleBackground.enabled,
+        color: BURNIN_DEFAULTS.subtitleBackground.color,
+        opacityPercent: BURNIN_DEFAULTS.subtitleBackground.opacityPercent,
+      },
       outputContainer,
       fontId: activeFontId,
       cuts
