@@ -119,6 +119,21 @@ interface UiStore {
   pendingCutInSec: number | null
   pendingCutOutSec: number | null
 
+  /**
+   * REQ-20260614-001 Phase 2 — STEP 2 resizable 3-pane layout state
+   * (outer vertical: top/bottom; inner horizontal: preview/inspector
+   * inside the top pane).  Numbers are PERCENTAGES of the parent group
+   * (= the `Layout` map react-resizable-panels v4 returns from
+   * `onLayoutChange`).  Session-only for now; later phases may persist
+   * via `localStorage` once the user has lived with the defaults.
+   *
+   * Keys match the panel `id` props in step2.tsx (`step2-pane-top` /
+   * `step2-pane-bottom` and `step2-pane-preview` / `step2-pane-inspector`)
+   * so we can feed them straight back as Group `defaultLayout`.
+   */
+  step2OuterLayout: { 'step2-pane-top': number; 'step2-pane-bottom': number }
+  step2TopLayout:   { 'step2-pane-preview': number; 'step2-pane-inspector': number }
+
   setSettingsDialogOpen: (open: boolean) => void
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
@@ -152,6 +167,8 @@ interface UiStore {
   setPendingCutIn: (sec: number | null) => void
   setPendingCutOut: (sec: number | null) => void
   clearPendingCut: () => void
+  setStep2OuterLayout: (layout: { 'step2-pane-top': number; 'step2-pane-bottom': number }) => void
+  setStep2TopLayout:   (layout: { 'step2-pane-preview': number; 'step2-pane-inspector': number }) => void
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -174,6 +191,13 @@ export const useUiStore = create<UiStore>((set) => ({
   timelineSnapEnabled: true,
   pendingCutInSec: null,
   pendingCutOutSec: null,
+  // REQ-20260614-001 Phase 2 — defaults split the top half equally
+  // between preview / inspector and the outer half equally between
+  // top (preview+inspector) / bottom (table/timeline).  Owner-tunable
+  // via the resize handles; persisted across navigations within the
+  // session.
+  step2OuterLayout: { 'step2-pane-top': 50, 'step2-pane-bottom': 50 },
+  step2TopLayout:   { 'step2-pane-preview': 60, 'step2-pane-inspector': 40 },
 
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
@@ -250,4 +274,6 @@ export const useUiStore = create<UiStore>((set) => ({
   setPendingCutIn: (sec) => set({ pendingCutInSec: sec }),
   setPendingCutOut: (sec) => set({ pendingCutOutSec: sec }),
   clearPendingCut: () => set({ pendingCutInSec: null, pendingCutOutSec: null }),
+  setStep2OuterLayout: (layout) => set({ step2OuterLayout: layout }),
+  setStep2TopLayout:   (layout) => set({ step2TopLayout: layout }),
 }))
