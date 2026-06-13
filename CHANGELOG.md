@@ -36,6 +36,15 @@ and a handful of fixes that landed after v1.2.0 went out.
   in the same order the burn-in produces (first event at the
   configured edge, later events pushed away from it).  Previously
   only one caption was shown at a time.
+- **Timeline ruler stays on screen.**  When the timeline has three
+  or more rows and you scroll down to reach the lower tracks, the
+  time ruler now pins to the top of the timeline view instead of
+  scrolling out of sight, so the playhead is always reachable.
+- **Click or drag on empty timeline space to seek.**  You can now
+  click — or hold and drag — anywhere in the empty area of the
+  tracks to move the playhead, in addition to the existing ruler
+  gesture.  Clicks on subtitle clips continue to select / drag the
+  clip as before.
 
 ### Changed
 
@@ -59,6 +68,14 @@ and a handful of fixes that landed after v1.2.0 went out.
   vertical position.  The preview now matches: positions are
   decided when a caption starts and stay put until it ends; later
   arrivals fill any freed gap.
+- Scrolling the timeline vertically used to let subtitle clips
+  paint on top of the (newly-pinned) ruler — the time numbers ran
+  underneath the blocks.  The ruler now stays in front of the
+  scrolling clips so the time axis is always readable.
+- The playhead could be dragged past the end of the video (or
+  before the start), which left it pointing at a time the player
+  could never reach.  The playhead now stops at the video's start
+  and end no matter where you drag.
 
 ---
 
