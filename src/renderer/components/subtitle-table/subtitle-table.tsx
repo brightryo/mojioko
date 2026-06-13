@@ -192,8 +192,19 @@ interface SubtitleRowProps {
   entry: SubtitleEntry
   displayIndex: number
   overflowStartIndex: number
-  isFocused: boolean
-  onFocus: (id: string) => void
+  /**
+   * REQ-20260614-001 Phase 3 — user single-selection (drives the green
+   * left-border highlight + the inspector content via the parent).
+   */
+  isUserSelected: boolean
+  /**
+   * REQ-20260614-001 Phase 3 — playback-active follower (drives a blue
+   * accent so the user can see which subtitle is currently playing
+   * without losing their explicit selection).
+   */
+  isPlaybackActive: boolean
+  /** Click handler for the row body — caller writes `selectedEntryId`. */
+  onSelect: (id: string) => void
   /** Full warning bitmap for this entry — drives both badges and the Ready filter. */
   warnings: EntryWarnings
   /** Register / unregister the row's DOM element for auto-scroll coordination. */
@@ -227,7 +238,7 @@ interface SubtitleRowProps {
   cuts: CutList
 }
 
-function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFocus, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick, clipStatus, cuts }: SubtitleRowProps) {
+function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, isPlaybackActive, onSelect, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick, clipStatus, cuts }: SubtitleRowProps) {
   const isOverflow = overflowStartIndex !== -1
   const isStartOverlap = warnings.overlap
   // step1 namespace included so the size input's `title` tooltip can
@@ -457,22 +468,25 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
   // operation and needs to see what is targeted.  The focused-row green
   // marker still wins over selection on the left-edge border so single-row
   // focus is never lost in a sea of selected rows.
+  // REQ-20260614-001 Phase 3 — 4-level left-border priority:
+  //   user-selection (green) > playback-active (sky) > bulk-select (HSL var) > nothing
+  // The bg-zinc-800/50 fill is shared with the green path; playback-only
+  // rows get a faint sky tint so the user can tell at a glance which
+  // subtitle is currently playing without confusing it with their own
+  // selection.
   const rowBg = cn(
     'group grid items-start gap-0 border-b border-zinc-800/50 transition-colors duration-150',
     TABLE_GRID_COLS,
-    // REQ-118 [1] — the focused-row green tint used to win over the
-    // edited (amber) / overflow (red) state tint, hiding the row state
-    // the moment the user clicked it.  Split focus into "always-show"
-    // (= green left border) and "neutral fill" (= zinc-800/50 ONLY when
-    // no state tint is present), so amber / red rows keep showing
-    // their state colour while focused.
-    isFocused
+    isUserSelected
       ? 'border-l-2 border-l-green-500'
-      : isSelected
-        ? 'border-l-2 border-l-[hsl(var(--row-selected-border))]'
-        : 'border-l-2 border-l-transparent',
-    isFocused && rowState !== 'edited' && rowState !== 'overflow' && 'bg-zinc-800/50',
-    !isFocused && !isSelected && 'hover:bg-zinc-800/20',
+      : isPlaybackActive
+        ? 'border-l-2 border-l-sky-500'
+        : isSelected
+          ? 'border-l-2 border-l-[hsl(var(--row-selected-border))]'
+          : 'border-l-2 border-l-transparent',
+    isUserSelected && rowState !== 'edited' && rowState !== 'overflow' && 'bg-zinc-800/50',
+    isPlaybackActive && !isUserSelected && rowState !== 'edited' && rowState !== 'overflow' && 'bg-sky-500/[0.04]',
+    !isUserSelected && !isPlaybackActive && !isSelected && 'hover:bg-zinc-800/20',
     // REQ-117 [1] — fade every cell EXCEPT the actions column so the
     // Restore / Reset buttons that the user CAN click never look like
     // they are disabled.  Previously `opacity-40` was applied to the
@@ -481,10 +495,10 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     // cell carries `data-row-actions` and is matched out via the
     // arbitrary `:not()` selector.
     rowState === 'deleted' && '[&>*:not([data-row-actions])]:opacity-40',
-    // REQ-118 [1] — the previous `!isFocused` gate erased the amber /
-    // red tint as soon as the row was selected.  Drop it: state tints
-    // now persist through focus + selection (they layer under the
-    // green left-border and the selection chrome).
+    // REQ-118 [1] — state tints persist through both selection slices
+    // (green / sky) AND through bulk-select.  Same gating rule as before:
+    // the multi-row HSL highlight (applied inline below) wants the row
+    // bg cleared so the variable colour shines through.
     !isSelected && rowState === 'edited' && 'bg-amber-400/[0.04]',
     !isSelected && rowState === 'overflow' && 'bg-red-500/[0.04]'
   )
@@ -494,16 +508,22 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
       ref={rowDivRef}
       className={rowBg}
       style={
-        isSelected && !isFocused
+        // REQ-20260614-001 Phase 3 — bulk-select HSL bg only when no
+        // single-row highlight (green or sky) is also active.  Mirrors
+        // the pre-Phase-3 `isSelected && !isFocused` rule, now split.
+        isSelected && !isUserSelected && !isPlaybackActive
           ? { backgroundColor: 'hsl(var(--row-selected) / var(--row-selected-alpha))' }
           : undefined
       }
       onClick={() => {
-        onFocus(entry.id)
+        onSelect(entry.id)
         useUiStore.getState().setVideoSeekRequest(entry.startSec)
       }}
       role="row"
-      aria-selected={isFocused}
+      // aria-selected reflects the user-driven selection (= the inspector
+      // entry); the playback follower is a passive marker and does not
+      // change accessibility semantics.
+      aria-selected={isUserSelected}
     >
       {/* Selection checkbox — stopPropagation so toggling it does not also
           set focusedRowId / seek the video.  Shift+click handled by the
@@ -846,7 +866,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         )}
         onClick={(e) => {
           e.stopPropagation()
-          onFocus(entry.id)
+          onSelect(entry.id)
           useUiStore.getState().setVideoSeekRequest(entry.startSec)
           // REQ-118 [2] — refuse to enter text-edit mode on trim-deleted
           // entries (= spec §2.1 freeze); manual-delete behaviour
@@ -1126,13 +1146,19 @@ export function SubtitleTable({
   // subscription wires the live cut list into that filter.
   const cuts = useProjectStore((s) => s.cuts)
   const tableFilter = useUiStore((s) => s.tableFilter)
+  // REQ-20260614-001 Phase 3 — two distinct slices:
+  //   selectedEntryId  = user single-selection  → green left border
+  //   focusedRowId      = playback follower      → blue (sky-500) accent
+  // Row click writes selectedEntryId; the preview panel continues to
+  // write focusedRowId from `handleTimeUpdate`.
+  const selectedEntryId = useUiStore((s) => s.selectedEntryId)
+  const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
   const focusedRowId = useUiStore((s) => s.focusedRowId)
   // REQ-028: blank out the "Size" / "Style" header labels when the
   // input is audio-only so the dead columns don't advertise themselves.
   // Column widths stay reserved (TABLE_GRID_COLS unchanged) — only the
   // labels disappear.
   const isAudioOnly = useIsAudioOnly()
-  const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
   const scrollToRowId = useUiStore((s) => s.scrollToRowId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
@@ -1159,7 +1185,12 @@ export function SubtitleTable({
     }
   }, [])
 
-  // Auto-scroll the focused row into view when focusedRowId changes.
+  // REQ-20260614-001 Phase 3 — auto-scroll continues to track the
+  // playback-active entry (= `focusedRowId`).  User clicks land on a
+  // row that is already visible, so they do not need to drive this
+  // scroll path; explicit "add / time-edit / duplicate" flows still go
+  // through the dedicated `scrollToRowId` signal below (centred, deferred).
+  //
   // Suppressed while the user is actively scrolling the table manually.
   useEffect(() => {
     if (!focusedRowId) return
@@ -1377,8 +1408,14 @@ export function SubtitleTable({
                   entry={entry}
                   displayIndex={i + 1}
                   overflowStartIndex={overflowMap.get(entry.id) ?? -1}
-                  isFocused={focusedRowId === entry.id}
-                  onFocus={setFocusedRowId}
+                  // REQ-20260614-001 Phase 3 — split the legacy `isFocused`
+                  // into the two distinct slices: user single-selection
+                  // (green) vs playback follow (blue).  `onFocus` is
+                  // renamed `onSelect` at the prop boundary so the call
+                  // site says "this is the user picking the row".
+                  isUserSelected={selectedEntryId === entry.id}
+                  isPlaybackActive={focusedRowId === entry.id}
+                  onSelect={setSelectedEntryId}
                   warnings={warningsMap.get(entry.id) ?? NO_WARNINGS}
                   registerRef={registerRef}
                   isStartExceedsDuration={entry.startSec > videoDurationSec}

@@ -438,8 +438,13 @@ export function VideoPreviewPanel() {
       setVideoCurrentTimeSec(time)
     }
 
-    // Drive focusedRowId from playback — but not while the user is editing
-    // a subtitle cell (CellEditor mounts a <textarea>).
+    // REQ-20260614-001 Phase 3 — `focusedRowId` is now the **playback
+    // follower** (split from the user-selection slice).  Write the
+    // currently-playing entry's id here so the table / timeline can
+    // render the blue (sky) "currently playing" marker without touching
+    // the user's explicit selection (`selectedEntryId`).  Skipped while
+    // the user is editing a subtitle cell (CellEditor mounts a <textarea>)
+    // because store writes during text-edit interfere with the IME path.
     const active = document.activeElement
     const isEditingSubtitle = active?.tagName.toLowerCase() === 'textarea'
     if (!isEditingSubtitle) {

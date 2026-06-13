@@ -244,7 +244,19 @@ interface BlockProps {
   /** Absolute top in pixels (already includes track offset). */
   topPx: number
   trackIndex: number
-  isFocused: boolean
+  /**
+   * REQ-20260614-001 Phase 3 — user single-selection (green ring/border).
+   * Pre-Phase-3 this prop was named `isFocused` and conflated the user
+   * selection with the playback follower.
+   */
+  isUserSelected: boolean
+  /**
+   * REQ-20260614-001 Phase 3 — playback-active follower (sky ring/border).
+   * Distinct from `isUserSelected`: when both are true, green wins on the
+   * dominant indicator and the block shows a small blue accent so the
+   * user can tell the playhead is on this block.
+   */
+  isPlaybackActive: boolean
   isOverflow: boolean
   displayIndex: number
   /** Whether this block's inspector Popover is currently open. */
@@ -278,7 +290,8 @@ function BlockImpl({
   widthPx,
   topPx,
   trackIndex,
-  isFocused,
+  isUserSelected,
+  isPlaybackActive,
   isOverflow,
   displayIndex,
   isInspectorOpen,
@@ -413,15 +426,16 @@ function BlockImpl({
               'hover:bg-zinc-700 hover:border-zinc-500',
               entry.isEdited && !entry.isDeleted && 'bg-amber-400/15 border-amber-400/40 hover:bg-amber-400/25',
               isOverflow && !entry.isDeleted && 'bg-red-500/15 border-red-500/40 hover:bg-red-500/25',
-              // REQ-118 [1] — selection shows up as a green ring + border
-              // around the block.  Previously `bg-green-500/15` filled the
-              // body too, masking the amber edited / red overflow state
-              // tint and making selection erase the state signal.  Keep
-              // the ring + border + foreground brightening on every
-              // focused block; ADD the green body fill only when the
-              // block has no other state colour to preserve.
-              isFocused && 'ring-2 ring-green-500 border-green-500 text-zinc-50',
-              isFocused && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-green-500/15',
+              // REQ-20260614-001 Phase 3 — two-tone highlights split from
+              // the pre-Phase-3 `isFocused`:
+              //   user-selection (green)    → ring + border + text bright + body fill (when no state tint)
+              //   playback-active (sky)     → same shape but in sky-500
+              // When both are true the user selection wins on the dominant
+              // ring/border so the inspector context stays visually obvious.
+              isUserSelected && 'ring-2 ring-green-500 border-green-500 text-zinc-50',
+              isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-green-500/15',
+              isPlaybackActive && !isUserSelected && 'ring-2 ring-sky-500 border-sky-500 text-zinc-50',
+              isPlaybackActive && !isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-sky-500/15',
               entry.isDeleted && 'opacity-40 line-through',
               !entry.isDeleted && 'cursor-grab active:cursor-grabbing'
             )}
@@ -623,8 +637,12 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   const setPendingCutOut = useUiStore((s) => s.setPendingCutOut)
   const clearPendingCut = useUiStore((s) => s.clearPendingCut)
   const tableFilter = useUiStore((s) => s.tableFilter)
+  // REQ-20260614-001 Phase 3 — read BOTH selection slices so we can
+  // render the user-selection (green) and playback-active (blue)
+  // markers on each Block.
+  const selectedEntryId = useUiStore((s) => s.selectedEntryId)
+  const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
   const focusedRowId = useUiStore((s) => s.focusedRowId)
-  const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
   const setVideoSeekRequest = useUiStore((s) => s.setVideoSeekRequest)
   // REQ-094 case B: TimelineView no longer subscribes to
   // `videoCurrentTimeSec`.  The playhead lives in its own memo'd
@@ -1017,10 +1035,16 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   // -------------------------------------------------------------------------
 
   const handleSelectBlock = useCallback((id: string, startSec: number) => {
-    setFocusedRowId(id)
+    // REQ-20260614-001 Phase 3 — block click is a user action → write
+    // `selectedEntryId` (the user-selection slice).  `focusedRowId`
+    // continues to be the playback follower and is touched only by the
+    // preview panel's `handleTimeUpdate`.
+    setSelectedEntryId(id)
     setVideoSeekRequest(startSec)
+    // TimelineBlockInspector popover continues to fire here until Phase 4
+    // retires it in favour of the always-on right-pane inspector.
     setOpenInspectorId(id)
-  }, [setFocusedRowId, setVideoSeekRequest])
+  }, [setSelectedEntryId, setVideoSeekRequest])
 
   // REQ-071 Phase 3.9: signature is (id, open) so the parent can pass a
   // SINGLE stable callback to every Block (rather than baking a
@@ -2027,7 +2051,8 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                       widthPx={widthBl}
                       topPx={topPx}
                       trackIndex={trackIndex}
-                      isFocused={focusedRowId === entry.id}
+                      isUserSelected={selectedEntryId === entry.id}
+                      isPlaybackActive={focusedRowId === entry.id}
                       isOverflow={isOverflow}
                       displayIndex={indexOfEntry.get(entry.id) ?? 0}
                       isInspectorOpen={openInspectorId === entry.id}

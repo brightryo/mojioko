@@ -141,8 +141,13 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const tableFilter = useUiStore((s) => s.tableFilter)
   const setTableFilter = useUiStore((s) => s.setTableFilter)
   const editorViewMode = useUiStore((s) => s.editorViewMode)
-  const focusedRowId = useUiStore((s) => s.focusedRowId)
-  const setFocusedRowId = useUiStore((s) => s.setFocusedRowId)
+  // REQ-20260614-001 Phase 3 — `selectedEntryId` is the user-driven
+  // single selection (row click / block click / add / duplicate / time-
+  // edit commit).  `focusedRowId` continues to track the playback-active
+  // entry but is no longer the source of truth for "what the user is
+  // currently editing".
+  const selectedEntryId = useUiStore((s) => s.selectedEntryId)
+  const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
   // REQ-094 case C: `videoCurrentTimeSec` subscription removed.  The
   // route used to hold this slice solely to forward it to
@@ -391,9 +396,15 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     let initialStart = 0
     let initialEnd = 0
 
-    if (focusedRowId) {
+    // REQ-20260614-001 Phase 3 — prev/next snap targets come from the
+    // user's explicit selection, not from playback.  Playback follow
+    // (`focusedRowId`) is intentionally ignored here: the user opening
+    // the add-row dialog is acting on "the row I clicked", not "the row
+    // currently playing".  When no row has been selected yet, all snap
+    // targets stay null.
+    if (selectedEntryId) {
       const active = entries.filter((e) => !e.isDeleted)
-      const activeIdx = active.findIndex((e) => e.id === focusedRowId)
+      const activeIdx = active.findIndex((e) => e.id === selectedEntryId)
 
       if (activeIdx !== -1) {
         if (activeIdx > 0) {
@@ -569,12 +580,12 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         redo: () => addEntry(newEntry, idx)
       })
       addEntry(newEntry, idx)
-      // Focus the freshly added row (green left border highlight) and
-      // explicitly request that SubtitleTable scroll it into view.  The
-      // dedicated scroll signal defers until after framer-motion's entry
-      // animation settles, so the viewport ends up centred on the new row
-      // even when it lands far from the previous scroll position.
-      setFocusedRowId(newEntry.id)
+      // REQ-20260614-001 Phase 3 — select the freshly added row so it
+      // gets the green left-border highlight AND becomes the inspector's
+      // current entry.  setScrollToRowId still uses the dedicated
+      // "deferred + centre" scroll signal so the row lands inside the
+      // viewport once framer-motion's entry animation settles.
+      setSelectedEntryId(newEntry.id)
       setScrollToRowId(newEntry.id)
       toast.success(t('toast.rowAdded', { index: visiblePos }))
     } else {

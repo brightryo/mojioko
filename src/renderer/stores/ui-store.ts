@@ -24,7 +24,33 @@ interface UiStore {
   isDonationDialogOpen: boolean
   isFontLicensesDialogOpen: boolean
   tableFilter: TableFilter
+  /**
+   * REQ-20260614-001 Phase 3 — **playback-active entry id**.  Set by the
+   * preview panel's `handleTimeUpdate` to the subtitle whose
+   * `[startSec, endSec)` covers the current playhead; cleared on video
+   * change.  Distinct from `selectedEntryId` (= user-driven single
+   * selection) and from `selectedRowIds` (= bulk-edit checkbox set).
+   *
+   * Old behaviour (pre-Phase 3): `focusedRowId` was overloaded as both
+   * the user selection and the playback follower.  After Phase 3 it is
+   * the *playback follower only* — user-driven selection lives in
+   * `selectedEntryId`.  The split surfaces both states in the table /
+   * timeline UI (green = selected, blue = playing).
+   */
   focusedRowId: string | null
+  /**
+   * REQ-20260614-001 Phase 3 — **user-selected single entry id**.  Set
+   * by row click (SubtitleTable), block click (TimelineView), add-row /
+   * duplicate-row flows, and time-edit commits.  Drives:
+   *   - The (常設) Inspector content (Phase 4).
+   *   - The green ring/border highlight in both the list and the timeline.
+   *   - The prev/next snap targets in the add-row dialog.
+   *
+   * Null when the user has not interacted with any specific row yet.
+   * Independent of `focusedRowId` (playback follower) so playback can
+   * advance through the video without changing the inspector context.
+   */
+  selectedEntryId: string | null
   /** Session-only recent color history (not persisted to settings.json). */
   recentColors: string[]
   /**
@@ -140,6 +166,7 @@ interface UiStore {
   setFontLicensesDialogOpen: (open: boolean) => void
   setTableFilter: (f: TableFilter) => void
   setFocusedRowId: (id: string | null) => void
+  setSelectedEntryId: (id: string | null) => void
   /** Prepend a color to the recent list, de-duplicating and capping at MAX_RECENT_COLORS. */
   addRecentColor: (hex: string) => void
   setVideoSeekRequest: (sec: number | null) => void
@@ -178,6 +205,7 @@ export const useUiStore = create<UiStore>((set) => ({
   isFontLicensesDialogOpen: false,
   tableFilter: 'all',
   focusedRowId: null,
+  selectedEntryId: null,
   recentColors: [],
   videoSeekRequestSec: null,
   videoCurrentTimeSec: 0,
@@ -205,6 +233,7 @@ export const useUiStore = create<UiStore>((set) => ({
   setFontLicensesDialogOpen: (open) => set({ isFontLicensesDialogOpen: open }),
   setTableFilter: (f) => set({ tableFilter: f }),
   setFocusedRowId: (id) => set({ focusedRowId: id }),
+  setSelectedEntryId: (id) => set({ selectedEntryId: id }),
   addRecentColor: (hex) =>
     set((s) => {
       const upper = hex.toUpperCase()

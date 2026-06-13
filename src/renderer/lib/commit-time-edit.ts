@@ -6,8 +6,11 @@ import { useUiStore } from '@/stores/ui-store'
  * changed the row's chronological position:
  *
  *   1. Re-sort `entries` by `startSec` ascending (stable).
- *   2. Set `focusedRowId` so the row keeps its green highlight after the
- *      sort moves it.
+ *   2. Set `selectedEntryId` so the row keeps its green highlight (the
+ *      user-selection marker) after the sort moves it.  REQ-20260614-001
+ *      Phase 3 — pre-Phase-3 this called `setFocusedRowId`, but after the
+ *      split that store slice tracks playback only.  Time-edit is a
+ *      user action → user-selection slice is the right target.
  *   3. Fire the one-shot `scrollToRowId` signal so SubtitleTable centres the
  *      row in the viewport after framer-motion's layout animation settles.
  *
@@ -24,6 +27,6 @@ import { useUiStore } from '@/stores/ui-store'
  */
 export function commitTimeEdit(editedId: string): void {
   useProjectStore.getState().sortByStartSec()
-  useUiStore.getState().setFocusedRowId(editedId)
+  useUiStore.getState().setSelectedEntryId(editedId)
   useUiStore.getState().setScrollToRowId(editedId)
 }

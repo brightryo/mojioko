@@ -168,16 +168,13 @@ export function AudioPreviewPanel() {
       setVideoCurrentTimeSec(time)
     }
 
-    // REQ-030 #2: drive focusedRowId from playback the same way
-    // VideoPreviewPanel does, so the active subtitle row highlights in
-    // the table as the audio plays through it.  Skipped while a
-    // <textarea> is focused — that means the user is editing a
-    // subtitle cell and the focus would yank them out mid-keystroke.
-    // Only write on change (newId !== ref) to keep the store quiet
-    // during the many timeupdate events fired per second.  We also
-    // retain the previous focus across gap-time between subtitles
-    // (newId === null) to avoid flickering off then back on at every
-    // subtitle boundary — mirrors VideoPreviewPanel's contract.
+    // REQ-20260614-001 Phase 3 — `focusedRowId` is the playback follower
+    // (split from the user-selection slice).  Same role as
+    // VideoPreviewPanel's `handleTimeUpdate` writer: drives the blue
+    // (sky) "currently playing" marker in the table without touching
+    // the user's explicit `selectedEntryId`.  Skipped while a <textarea>
+    // is focused (active subtitle cell edit) and only writes on entry
+    // change so playhead ticks don't flood the store.
     const active = document.activeElement
     const isEditingSubtitle = active?.tagName.toLowerCase() === 'textarea'
     if (!isEditingSubtitle) {
