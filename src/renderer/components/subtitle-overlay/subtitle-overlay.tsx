@@ -12,13 +12,30 @@ import { bumpRenderCount } from '@/lib/perf-counter'
 const MIN_VISIBLE_OUTLINE_PX = 0.5
 
 /**
- * CSS `line-height` ratio used for stacking-height estimation.  Matches the
- * `leading-snug` class (= 1.375) applied to SubtitleOverlay's root `<span>`,
- * which is what the browser actually paints — keeping the two values in
- * sync stops `estimateOverlayHeightPx` from drifting away from the rendered
- * box height as the markup evolves.
+ * Per-caption line-height ratio used by `estimateOverlayHeightPx` for the
+ * stacking gap between successive captions.  Tuned for the libass burn-in,
+ * NOT for the CSS box of a single caption:
+ *
+ *   - The root `<span>` itself paints with Tailwind's `leading-snug`
+ *     (= 1.375), so the caption's own visual height is unchanged whatever
+ *     value we pick here.  Only the *gap* between stacked captions moves.
+ *   - libass adds its own line gap on top of font metrics when it stacks
+ *     overlapping events, so a CSS-faithful 1.375 produces a stack that
+ *     reads as visibly "tighter" than the burn-in.  VERIFY-20260613-001
+ *     §4 confirmed this empirically (the gap discrepancy compounds with
+ *     stack depth).
+ *   - 1.5 is a deliberate over-estimate that brings successive captions'
+ *     centres into closer alignment with the burn-in output, at the cost
+ *     of leaving a touch more empty space between captions than the CSS
+ *     box would suggest.  Within the "approximate preview" disclaimer
+ *     (RES-20260612-003 §Q3) that trade is the right way round —
+ *     under-estimating the gap silently overlapped captions, while
+ *     slightly over-estimating just spaces them out.
+ *
+ * REQ-20260613-006 §3: revisit this constant if subsequent VERIFY runs
+ * show the stack is still off; it is a knob, not a derivation.
  */
-const STACK_LINE_HEIGHT_RATIO = 1.375
+const STACK_LINE_HEIGHT_RATIO = 1.6
 
 export interface SubtitleOverlayProps {
   entry: SubtitleEntry
