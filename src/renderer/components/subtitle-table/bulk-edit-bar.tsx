@@ -68,6 +68,36 @@ function pickFirstSelectedSize(selectedIds: ReadonlySet<string>): string {
 }
 
 /**
+ * REQ-20260613-016 Phase 5 — seed the bulk-edit-bar's per-row layout +
+ * background drafts from the first selected row.  Returns undefined when
+ * the selection is empty so the caller can decide on a sensible fallback.
+ */
+function pickFirstSelectedLayout(selectedIds: ReadonlySet<string>): {
+  horizontalPosition: 'left' | 'center' | 'right'
+  verticalPosition: 'top' | 'bottom'
+  verticalMarginPx: number
+  bgEnabled: boolean
+  bgColor: 'black' | 'white'
+  bgOpacityPercent: number
+} | null {
+  if (selectedIds.size === 0) return null
+  const entries = useProjectStore.getState().entries
+  for (const e of entries) {
+    if (selectedIds.has(e.id)) {
+      return {
+        horizontalPosition: e.horizontalPosition,
+        verticalPosition: e.verticalPosition,
+        verticalMarginPx: e.verticalMarginPx,
+        bgEnabled: e.subtitleBackground.enabled,
+        bgColor: e.subtitleBackground.color,
+        bgOpacityPercent: e.subtitleBackground.opacityPercent,
+      }
+    }
+  }
+  return null
+}
+
+/**
  * Bulk-edit bar for Step 2.
  *
  * Renders above the subtitle table when any rows are selected.  Each
@@ -127,6 +157,20 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     pickFirstSelectedSize(selectedRowIds)
   )
 
+  // REQ-20260613-016 Phase 5 — per-row layout + background drafts.  Seed
+  // from the first selected row so the initial values show "what the
+  // selection currently has" and a re-pick of the seed is a genuine
+  // no-op (same contract as colourDraftText/Outline).  When the
+  // selection is empty fall back to safe defaults (the bar is hidden
+  // while empty so users won't see these).
+  const initialLayout = pickFirstSelectedLayout(selectedRowIds)
+  const [hPosDraft,   setHPosDraft]   = useState<'left' | 'center' | 'right'>(initialLayout?.horizontalPosition ?? 'center')
+  const [vPosDraft,   setVPosDraft]   = useState<'top' | 'bottom'>(initialLayout?.verticalPosition ?? 'bottom')
+  const [marginDraft, setMarginDraft] = useState<string>(String(initialLayout?.verticalMarginPx ?? 40))
+  const [bgEnabledDraft, setBgEnabledDraft]     = useState<boolean>(initialLayout?.bgEnabled ?? false)
+  const [bgColorDraft, setBgColorDraft]         = useState<'black' | 'white'>(initialLayout?.bgColor ?? 'black')
+  const [bgOpacityDraft, setBgOpacityDraft]     = useState<string>(String(initialLayout?.bgOpacityPercent ?? 50))
+
   // Re-seed every draft when the selection itself changes.  Reads
   // `entries` via getState() so the effect only fires on selection
   // change — not on every entry mutation (which would otherwise reset
@@ -136,6 +180,15 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftOutline(pickFirstSelectedColor(selectedRowIds, 'outline'))
     setOutlineSliderDraft(0)
     setSizeDraft(pickFirstSelectedSize(selectedRowIds))
+    const layout = pickFirstSelectedLayout(selectedRowIds)
+    if (layout !== null) {
+      setHPosDraft(layout.horizontalPosition)
+      setVPosDraft(layout.verticalPosition)
+      setMarginDraft(String(layout.verticalMarginPx))
+      setBgEnabledDraft(layout.bgEnabled)
+      setBgColorDraft(layout.bgColor)
+      setBgOpacityDraft(String(layout.bgOpacityPercent))
+    }
   }, [selectedRowIds])
 
   // ---------------------------------------------------------------------
@@ -249,6 +302,75 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       { fadeEnabled: checked },
       t('bulk.history.fade', { count: selectedRowIds.size })
     )
+  }
+
+  // REQ-20260613-016 Phase 5 — per-row layout / background bulk handlers.
+  // Layout fields (horizontal / vertical / margin) commit independently
+  // since each row's existing value of the other two should stay put.
+  // Background commits as a single object with the bulk bar's full draft
+  // (enabled + color + opacity), matching how the user mentally configures
+  // a background as "ON, black, 70%" all at once.
+
+  function handleHPosCommit(v: 'left' | 'center' | 'right') {
+    setHPosDraft(v)
+    applyBulk(
+      { horizontalPosition: v },
+      t('bulk.history.layout', { count: selectedRowIds.size })
+    )
+  }
+  function handleVPosCommit(v: 'top' | 'bottom') {
+    setVPosDraft(v)
+    applyBulk(
+      { verticalPosition: v },
+      t('bulk.history.layout', { count: selectedRowIds.size })
+    )
+  }
+  function handleMarginCommit(raw: string) {
+    const v = parseInt(raw, 10)
+    if (isNaN(v)) return
+    const clamped = Math.max(0, Math.min(300, v))
+    applyBulk(
+      { verticalMarginPx: clamped },
+      t('bulk.history.margin', { count: selectedRowIds.size })
+    )
+    setMarginDraft(String(clamped))
+  }
+  function applyBackgroundFromDrafts(next: {
+    enabled: boolean
+    color: 'black' | 'white'
+    opacityPercent: number
+  }) {
+    applyBulk(
+      { subtitleBackground: next },
+      t('bulk.history.background', { count: selectedRowIds.size })
+    )
+  }
+  function handleBgEnabledToggle(checked: boolean) {
+    setBgEnabledDraft(checked)
+    applyBackgroundFromDrafts({
+      enabled: checked,
+      color: bgColorDraft,
+      opacityPercent: Math.max(0, Math.min(100, parseInt(bgOpacityDraft, 10) || 50)),
+    })
+  }
+  function handleBgColorChange(color: 'black' | 'white') {
+    setBgColorDraft(color)
+    applyBackgroundFromDrafts({
+      enabled: bgEnabledDraft,
+      color,
+      opacityPercent: Math.max(0, Math.min(100, parseInt(bgOpacityDraft, 10) || 50)),
+    })
+  }
+  function handleBgOpacityCommit(raw: string) {
+    const v = parseInt(raw, 10)
+    if (isNaN(v)) return
+    const clamped = Math.max(0, Math.min(100, v))
+    setBgOpacityDraft(String(clamped))
+    applyBackgroundFromDrafts({
+      enabled: bgEnabledDraft,
+      color: bgColorDraft,
+      opacityPercent: clamped,
+    })
   }
 
   // Bulk font change — `undefined` means "fall back to project default"
@@ -494,6 +616,118 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.fade')}</span>
           <Switch onCheckedChange={handleFadeChange} />
+        </label>
+
+        {/* REQ-20260613-016 Phase 5 / 機能A — bulk layout + background.
+            Drafts seeded from the first selected row so the displayed
+            values reflect "what the selection looks like now".  Layout
+            fields commit independently; background commits the full
+            object from drafts so toggling enabled mid-edit captures
+            the user's intended color + opacity in one step. */}
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+          <span>{t('styleCell.layoutH')}</span>
+          <select
+            value={hPosDraft}
+            onChange={(e) => handleHPosCommit(e.target.value as 'left' | 'center' | 'right')}
+            className={cn(
+              'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
+              'focus:outline-none focus:ring-1 focus:ring-ring/30',
+              'border-border'
+            )}
+            aria-label={t('subtitlePosition.horizontal')}
+          >
+            <option value="left">{t('subtitlePosition.left')}</option>
+            <option value="center">{t('subtitlePosition.center')}</option>
+            <option value="right">{t('subtitlePosition.right')}</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+          <span>{t('styleCell.layoutV')}</span>
+          <select
+            value={vPosDraft}
+            onChange={(e) => handleVPosCommit(e.target.value as 'top' | 'bottom')}
+            className={cn(
+              'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
+              'focus:outline-none focus:ring-1 focus:ring-ring/30',
+              'border-border'
+            )}
+            aria-label={t('subtitlePosition.vertical')}
+          >
+            <option value="top">{t('subtitlePosition.top')}</option>
+            <option value="bottom">{t('subtitlePosition.bottom')}</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+          <span>{t('styleCell.marginV')}</span>
+          <input
+            type="number"
+            min={0}
+            max={300}
+            value={marginDraft}
+            onChange={(e) => setMarginDraft(e.target.value)}
+            onBlur={(e) => {
+              if (e.target.value === '') return
+              handleMarginCommit(e.target.value)
+            }}
+            className={cn(
+              'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
+              'focus:outline-none focus:ring-1 focus:ring-ring/30',
+              'border-border',
+              '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+            )}
+            aria-label={t('subtitlePosition.margin')}
+          />
+        </label>
+        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+          <span>{t('styleCell.bgEnabled')}</span>
+          <Switch checked={bgEnabledDraft} onCheckedChange={handleBgEnabledToggle} aria-label={t('styleCell.bgEnabled')} />
+        </label>
+        <label className={cn(
+          'flex items-center gap-2 text-callout font-semibold text-muted-foreground',
+          !bgEnabledDraft && 'opacity-40'
+        )}>
+          <span>{t('styleCell.bgColor')}</span>
+          <select
+            value={bgColorDraft}
+            onChange={(e) => handleBgColorChange(e.target.value as 'black' | 'white')}
+            disabled={!bgEnabledDraft}
+            className={cn(
+              'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
+              'focus:outline-none focus:ring-1 focus:ring-ring/30',
+              'border-border',
+              'disabled:cursor-not-allowed'
+            )}
+            aria-label={t('styleCell.bgColor')}
+          >
+            <option value="black">{t('background.black')}</option>
+            <option value="white">{t('background.white')}</option>
+          </select>
+        </label>
+        <label className={cn(
+          'flex items-center gap-2 text-callout font-semibold text-muted-foreground',
+          !bgEnabledDraft && 'opacity-40'
+        )}>
+          <span>{t('styleCell.bgOpacity')}</span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={bgOpacityDraft}
+            disabled={!bgEnabledDraft}
+            onChange={(e) => setBgOpacityDraft(e.target.value)}
+            onBlur={(e) => {
+              if (e.target.value === '') return
+              handleBgOpacityCommit(e.target.value)
+            }}
+            className={cn(
+              'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
+              'focus:outline-none focus:ring-1 focus:ring-ring/30',
+              'border-border',
+              'disabled:cursor-not-allowed',
+              '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+            )}
+            aria-label={t('styleCell.bgOpacity')}
+          />
         </label>
 
         {/* Bulk font (REQ-022 step 2).  Same popover content as the

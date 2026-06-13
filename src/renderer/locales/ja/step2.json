@@ -193,7 +193,10 @@
       "fade": "フェードを一括変更 ({{count}}件)",
       "font": "フォントを一括変更 ({{count}}件)",
       "autoLineBreak": "敷き詰め改行を一括適用 ({{count}}件)",
-      "overflowWrap": "はみ出し改行を一括適用 ({{count}}件)"
+      "overflowWrap": "はみ出し改行を一括適用 ({{count}}件)",
+      "layout": "配置を一括変更 ({{count}}件)",
+      "margin": "マージンを一括変更 ({{count}}件)",
+      "background": "背景を一括変更 ({{count}}件)"
     }
   },
   "videoPreview": {
