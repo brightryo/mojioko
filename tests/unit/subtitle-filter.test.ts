@@ -6,6 +6,7 @@ import {
   type Cut,
 } from '../../src/shared/cuts'
 import type { SubtitleEntry } from '../../src/shared/types'
+import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
 import type { EntryWarnings } from '../../src/renderer/lib/entry-warnings'
 
 /**
@@ -40,6 +41,7 @@ function makeEntry(
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
     fadeEnabled: false,
+    ...makeEntryLayoutDefaults(),
   }
   return {
     id,

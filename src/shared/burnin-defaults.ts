@@ -1,4 +1,4 @@
-import type { EncoderSetting, AudioMode } from './types'
+import type { EncoderSetting, AudioMode, SubtitleBackground } from './types'
 import { FADE_DURATION_SEC_DEFAULT } from './constants'
 
 export type WhisperModelId = 'small' | 'medium' | 'large-v3' | string
@@ -30,3 +30,36 @@ export const BURNIN_DEFAULTS = {
     opacityPercent: 50
   }
 } as const
+
+/**
+ * Per-row layout / background defaults seeded onto every new SubtitleEntry
+ * (REQ-20260613-016 / v1.2.2 機能A).
+ *
+ * Drawn from `BURNIN_DEFAULTS` so the values are physically the same as the
+ * legacy global panel default — but exposed via a dedicated factory so:
+ *   1. Every creation site (fixtures, Step 2 add-row, transcription,
+ *      duplicateRow, style-sample-preview) has a single source of truth.
+ *   2. Phase 4 (global panel removal) can repoint these defaults without
+ *      touching every call site.
+ *   3. `subtitleBackground` is returned as a FRESH object literal each call
+ *      so mutating one entry's background never aliases another entry's
+ *      (BURNIN_DEFAULTS is `as const` = frozen, but spread would still
+ *      share nested object identity).
+ */
+export function makeEntryLayoutDefaults(): {
+  horizontalPosition: 'left' | 'center' | 'right'
+  verticalPosition: 'top' | 'bottom'
+  verticalMarginPx: number
+  subtitleBackground: SubtitleBackground
+} {
+  return {
+    horizontalPosition: BURNIN_DEFAULTS.horizontalPosition,
+    verticalPosition: BURNIN_DEFAULTS.verticalPosition,
+    verticalMarginPx: BURNIN_DEFAULTS.verticalMarginPx,
+    subtitleBackground: {
+      enabled: BURNIN_DEFAULTS.subtitleBackground.enabled,
+      color: BURNIN_DEFAULTS.subtitleBackground.color,
+      opacityPercent: BURNIN_DEFAULTS.subtitleBackground.opacityPercent,
+    },
+  }
+}

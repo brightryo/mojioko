@@ -7,6 +7,7 @@ import {
 } from '../../src/renderer/lib/timeline-boundaries'
 import type { Cut } from '../../src/shared/cuts'
 import type { SubtitleEntry } from '../../src/shared/types'
+import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
 
 function makeEntry(
   id: string,
@@ -23,6 +24,7 @@ function makeEntry(
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
     fadeEnabled: false,
+    ...makeEntryLayoutDefaults(),
   }
   return {
     id,

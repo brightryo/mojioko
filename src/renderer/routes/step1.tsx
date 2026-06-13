@@ -32,6 +32,7 @@ import type { TranscriptionRun } from '@/services/transcription'
 import { formatDuration } from '@/lib/time'
 import { formatBytes } from '@/lib/format'
 import type { SubtitleEntry as SubtitleEntryType, WhisperModelId } from '../../shared/types'
+import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
@@ -236,6 +237,11 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
     // Build SubtitleEntry array from collected segments
     const entries: SubtitleEntryType[] = segments.map((seg, i) => {
+      // REQ-20260613-016 / v1.2.2 機能A: every transcribed row carries its
+      // own layout + background values seeded from ENTRY_LAYOUT_DEFAULTS
+      // (= BURNIN_DEFAULTS).  `makeEntryLayoutDefaults` returns a fresh
+      // object literal per call so each row owns its own subtitleBackground
+      // — mutating one row never aliases another.
       const base = {
         startSec: seg.startSec,
         endSec: seg.endSec,
@@ -245,14 +251,18 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         outlineColorHex: runDefaults.outlineColorHex,
         outlineThicknessPx: runDefaults.outlineThicknessPx,
         fadeEnabled: runDefaults.fadeEnabled,
-        fontId: runFontId
+        fontId: runFontId,
+        ...makeEntryLayoutDefaults()
       }
       return {
         id: `t-${i}-${Date.now()}`,
         ...base,
         isDeleted: false,
         isEdited: false,
-        original: { ...base }
+        // Deep-copy the nested subtitleBackground so the live entry and
+        // its `original` snapshot don't share object identity (otherwise
+        // an inline edit would also mutate the reset target).
+        original: { ...base, subtitleBackground: { ...base.subtitleBackground } }
       }
     })
 

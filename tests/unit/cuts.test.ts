@@ -14,6 +14,7 @@ import {
   type Cut,
 } from '../../src/shared/cuts'
 import type { SubtitleEntry } from '../../src/shared/types'
+import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
 
 /**
  * REQ-074 Phase 1a — coordinate / clamp algorithm verification.
@@ -34,6 +35,7 @@ function makeEntry(startSec: number, endSec: number, id = 'e'): SubtitleEntry {
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
     fadeEnabled: false,
+    ...makeEntryLayoutDefaults(),
   }
   return {
     id,

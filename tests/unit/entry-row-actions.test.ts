@@ -3,6 +3,7 @@ import { useProjectStore } from '../../src/renderer/stores/project-store'
 import { useHistoryStore } from '../../src/renderer/stores/history-store'
 import { resetRow, toggleDeleteRow } from '../../src/renderer/lib/entry-row-actions'
 import type { SubtitleEntry } from '../../src/shared/types'
+import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
 
 /**
  * REQ-062 regression — the timeline inspector's Reset button must
@@ -27,11 +28,15 @@ function makeEntry(overrides: Partial<SubtitleEntry> = {}): SubtitleEntry {
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
     fadeEnabled: false,
-    fontId: undefined
+    fontId: undefined,
+    ...makeEntryLayoutDefaults()
   }
   return {
     id: 'e1',
     ...original,
+    // Deep-copy subtitleBackground out of `original` so the live entry
+    // and the reset target don't share object identity in this fixture.
+    subtitleBackground: { ...original.subtitleBackground },
     isDeleted: false,
     isEdited: false,
     original,

@@ -1,5 +1,5 @@
 import type { VideoInfo, SubtitleEntry, TranscriptionDefaults } from '../../shared/types'
-import { BURNIN_DEFAULTS } from '../../shared/burnin-defaults'
+import { BURNIN_DEFAULTS, makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
 
 export const sampleVideoInfo: VideoInfo = {
   path: 'C:\\Users\\user\\Videos\\stream_2024-01-15.mkv',
@@ -41,14 +41,15 @@ function makeEntry(
     textColorHex: sampleDefaults.textColorHex,
     outlineColorHex: sampleDefaults.outlineColorHex,
     outlineThicknessPx: sampleDefaults.outlineThicknessPx,
-    fadeEnabled: sampleDefaults.fadeEnabled
+    fadeEnabled: sampleDefaults.fadeEnabled,
+    ...makeEntryLayoutDefaults()
   }
   return {
     id,
     ...base,
     isDeleted: false,
     isEdited: false,
-    original: { ...base },
+    original: { ...base, subtitleBackground: { ...base.subtitleBackground } },
     ...overrides
   }
 }
@@ -68,7 +69,8 @@ export const sampleEntries: SubtitleEntry[] = [
       textColorHex: '#ffffff',
       outlineColorHex: '#000000',
       outlineThicknessPx: 3,
-      fadeEnabled: true
+      fadeEnabled: true,
+      ...makeEntryLayoutDefaults()
     }
   }),
   makeEntry('e-005', 20.1, 23.4, 'ボスが登場しました。'),
@@ -84,7 +86,8 @@ export const sampleEntries: SubtitleEntry[] = [
       textColorHex: '#ffffff',
       outlineColorHex: '#000000',
       outlineThicknessPx: 3,
-      fadeEnabled: true
+      fadeEnabled: true,
+      ...makeEntryLayoutDefaults()
     }
   }),
   makeEntry('e-008', 33.5, 36.0, 'なんとか生き残ることができました。'),

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useProjectStore } from '../../src/renderer/stores/project-store'
 import type { SubtitleEntry } from '../../src/shared/types'
+import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
 
 /**
  * REQ-059 — `updateEntry` recomputes `isEdited` from value comparison so a
@@ -19,7 +20,8 @@ function makeEntry(): SubtitleEntry {
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
     fadeEnabled: false,
-    fontId: undefined
+    fontId: undefined,
+    ...makeEntryLayoutDefaults()
   }
   return {
     id: 'e1',

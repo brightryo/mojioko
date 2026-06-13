@@ -26,6 +26,7 @@ import { filterEntries } from '@/lib/subtitle-filter'
 import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font-metrics'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { SubtitleEntry } from '../../shared/types'
+import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
 import { NEW_ROW_DURATION_SEC, ENABLE_VIDEO_PREVIEW } from '../../shared/constants'
 import { VideoPreviewPanel } from '@/components/video-preview/video-preview-panel'
 import { AudioPreviewPanel } from '@/components/audio-preview/audio-preview-panel'
@@ -501,7 +502,11 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         textColorHex: defaults.textColorHex,
         outlineColorHex: defaults.outlineColorHex,
         outlineThicknessPx: defaults.outlineThicknessPx,
-        fadeEnabled: defaults.fadeEnabled
+        fadeEnabled: defaults.fadeEnabled,
+        // REQ-20260613-016 / v1.2.2 機能A: seed per-row layout + background
+        // defaults at creation time.  Same pattern as the transcription
+        // segment mapping in step1.tsx.
+        ...makeEntryLayoutDefaults()
       }
       // REQ-079 #2: collision-resistant id.  Date.now() alone collides
       // when two rows are added within the same millisecond — both rows
@@ -517,7 +522,9 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         ...base,
         isDeleted: false,
         isEdited: true,
-        original: { ...base }
+        // Deep-copy subtitleBackground so the live entry and original
+        // snapshot do not share object identity.
+        original: { ...base, subtitleBackground: { ...base.subtitleBackground } }
       }
       pushHistory({
         label: t('history.addRow'),
