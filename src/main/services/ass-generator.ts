@@ -1,11 +1,32 @@
-import log from '../lib/logger'
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground } from '../../shared/types'
 import { ASS_MARGIN_LR_PX, FADE_DURATION_SEC_DEFAULT } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
 
+/**
+ * REQ-20260613-016 Phase 2 — ass-generator no longer imports the main-process
+ * logger (`../lib/logger`) so the module is reachable from Node-only unit
+ * tests without dragging in the Electron `app` global.  The caller side
+ * (`ffmpeg-burnin.ts`) still logs the ASS file path / fontsdir / encoder
+ * choice, so production triage is unaffected.
+ */
+
 type HorizontalPos = 'left' | 'center' | 'right'
 type VerticalPos = 'top' | 'bottom'
 
+/**
+ * Map (horizontal × vertical) to the libass numpad alignment value (1–9).
+ *
+ *   top    : left=7  center=8  right=9
+ *   bottom : left=1  center=2  right=3
+ *
+ * Used for both:
+ *   - the Style: `Alignment` column (a sensible static default of 2 =
+ *     bottom-center is chosen so legacy projects without explicit row
+ *     overrides still anchor correctly), and
+ *   - each Dialogue's inline `\an<N>` tag (REQ-20260613-016 Phase 2 §A).
+ *
+ * Pure mapping; safe to call per-entry inside the row loop.
+ */
 function getAlignment(h: HorizontalPos, v: VerticalPos): number {
   if (v === 'bottom') {
     if (h === 'left') return 1
@@ -65,6 +86,39 @@ function opacityToAssAlpha(opacityPercent: number): string {
   return alpha.toString(16).toUpperCase().padStart(2, '0')
 }
 
+/**
+ * REQ-20260613-016 Phase 2 — generate ASS from per-row entries.
+ *
+ * **Per-row model** (replaces v1.0/v1.1's single-style + global-burnin):
+ *   - Each entry carries its own horizontalPosition / verticalPosition /
+ *     verticalMarginPx + subtitleBackground { enabled, color, opacityPercent }
+ *     (REQ-20260613-016 Phase 1 seeded these on every entry).
+ *   - Two styles emitted side-by-side:
+ *       Default  : BorderStyle=1 (outline + shadow)
+ *       WithBox  : BorderStyle=3 (opaque box)
+ *     The choice cannot be flipped inline (ASS spec) so we pre-emit both
+ *     and pick per-row via the Dialogue `Style` column.
+ *   - Each Dialogue:
+ *       * Style column: 'Default' or 'WithBox' based on
+ *         entry.subtitleBackground.enabled.
+ *       * MarginV column: entry.verticalMarginPx — overrides Style-level
+ *         default per libass spec.
+ *       * Inline `\an<N>` from (horizontalPosition × verticalPosition).
+ *       * Inline `\fs` / `\c` / `\3c` / `\bord` / `\fn` / `\fad` continue
+ *         per-row as in v1.1.
+ *       * WithBox rows additionally emit `\4c<color>` + `\4a<alpha>` (the
+ *         BackColour / BackAlpha override that libass binds to the opaque
+ *         box paint when BorderStyle=3).  Default rows skip these tags so
+ *         their outline / shadow rendering is unaffected.
+ *
+ * **`burnin` and `subtitleBackground` parameters** (kept for ABI continuity
+ * with ffmpeg-burnin.ts:151 — see Phase 4 cleanup ticket): both are now
+ * **vestigial**.  The Style header bakes in static defaults (alignment 2 =
+ * bottom-center, MarginV 40) which every Dialogue overrides per-row, so
+ * the args are accepted but no longer drive the output.  Phase 4 will
+ * remove them from both ass-generator and the BurninStartRequest IPC
+ * contract once the renderer-side global panel is fully retired.
+ */
 export function generateAss(
   entries: SubtitleEntry[],
   video: VideoInfo,
@@ -79,19 +133,18 @@ export function generateAss(
    */
   assFontName: string = 'Noto Sans JP SemiBold'
 ): string {
-  const alignment = getAlignment(burnin.horizontalPosition, burnin.verticalPosition)
-  const marginV = burnin.verticalMarginPx
-  const bgEnabled = subtitleBackground?.enabled === true
+  // `burnin` / `subtitleBackground` are vestigial (see JSDoc above).  Reference
+  // them once so `noUnusedParameters` stays quiet without disabling lint.
+  void burnin
+  void subtitleBackground
 
-  // BorderStyle: 1 = outline + shadow, 3 = opaque box background
-  const borderStyle = bgEnabled ? 3 : 1
-
-  log.debug('[ass-generator] generateAss called', {
-    bgEnabled,
-    borderStyle,
-    subtitleBackground: subtitleBackground ?? null,
-    entryCount: entries.length,
-  })
+  // Static Style-header defaults — alignment 2 (bottom-center) and MarginV
+  // 40 match the legacy global defaults.  Both are overridden per-Dialogue
+  // (`\an` inline + MarginV column) so these values primarily serve as a
+  // sensible fallback if a future Dialogue accidentally lacks an inline
+  // alignment override.
+  const DEFAULT_ALIGNMENT = 2
+  const DEFAULT_MARGIN_V = 40
 
   const scriptInfo = [
     '[Script Info]',
@@ -103,10 +156,14 @@ export function generateAss(
     ''
   ].join('\n')
 
+  // Two parallel styles — Default (outline+shadow) and WithBox (opaque box).
+  // libass cannot flip BorderStyle inline, so this is the only way to mix
+  // the two rendering modes within one ASS file.
   const styles = [
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BorderStyle, Outline, Alignment, MarginL, MarginR, MarginV',
-    `Style: Default,${assFontName},100,&H00FFFFFF,&H00000000,${borderStyle},3,${alignment},${ASS_MARGIN_LR_PX},${ASS_MARGIN_LR_PX},${marginV}`,
+    `Style: Default,${assFontName},100,&H00FFFFFF,&H00000000,1,3,${DEFAULT_ALIGNMENT},${ASS_MARGIN_LR_PX},${ASS_MARGIN_LR_PX},${DEFAULT_MARGIN_V}`,
+    `Style: WithBox,${assFontName},100,&H00FFFFFF,&H00000000,3,3,${DEFAULT_ALIGNMENT},${ASS_MARGIN_LR_PX},${ASS_MARGIN_LR_PX},${DEFAULT_MARGIN_V}`,
     ''
   ].join('\n')
 
@@ -116,6 +173,9 @@ export function generateAss(
     '[Events]',
     'Format: Layer, Start, End, Style, MarginL, MarginR, MarginV, Effect, Text',
     ...activeEntries.map((e) => {
+      const rowBgEnabled = e.subtitleBackground.enabled
+      const styleName = rowBgEnabled ? 'WithBox' : 'Default'
+
       const fadeDurationMs = Math.round(fadeDurationSec * 1000)
       const fadeTag = e.fadeEnabled ? `\\fad(${fadeDurationMs},${fadeDurationMs})` : ''
 
@@ -128,50 +188,54 @@ export function generateAss(
       const rowAssFontName = isFontId(e.fontId) ? getFontMeta(e.fontId).assFontName : assFontName
       const fontTag = rowAssFontName !== assFontName ? `\\fn${rowAssFontName}` : ''
 
-      let styleTag: string
-      if (bgEnabled && subtitleBackground) {
-        // Box background mode: remove outline, add background colour + alpha
-        const bgColor = subtitleBackground.color === 'white' ? '00FFFFFF' : '000000'
-        const bgAlpha = opacityToAssAlpha(subtitleBackground.opacityPercent)
-        styleTag = [
-          fontTag,
-          `\\fs${e.fontSizePx}`,
-          `\\c${hexToAss(e.textColorHex)}`,
-          `\\bord0`,
-          `\\shad5`,
-          `\\4c&H${bgColor}&`,
-          `\\4a&H${bgAlpha}&`,
-          fadeTag
-        ]
-          .filter(Boolean)
-          .join('')
-      } else {
-        styleTag = [
-          fontTag,
-          `\\fs${e.fontSizePx}`,
-          `\\c${hexToAss(e.textColorHex)}`,
-          `\\3c${hexToAss(e.outlineColorHex)}`,
-          `\\bord${e.outlineThicknessPx}`,
-          fadeTag
-        ]
-          .filter(Boolean)
-          .join('')
+      // Per-row alignment — REQ-20260613-016 Phase 2 §A.  Always emit
+      // explicit `\an<N>` so the libass rendering anchor never depends on
+      // the Style-header default (which is just a fallback constant).
+      const alignmentN = getAlignment(e.horizontalPosition, e.verticalPosition)
+      const alignTag = `\\an${alignmentN}`
+
+      const sizeTag    = `\\fs${e.fontSizePx}`
+      const fillTag    = `\\c${hexToAss(e.textColorHex)}`
+      const outlineTag = `\\3c${hexToAss(e.outlineColorHex)}`
+      const bordTag    = `\\bord${e.outlineThicknessPx}`
+
+      // WithBox-only inline tags — \4c (BackColour) + \4a (BackAlpha) drive
+      // the opaque box paint when the row's Style is BorderStyle=3.  Default
+      // rows skip these; their outline + shadow render normally.
+      let bgFillTag = ''
+      let bgAlphaTag = ''
+      if (rowBgEnabled) {
+        const bgColor = e.subtitleBackground.color === 'white' ? '00FFFFFF' : '000000'
+        const bgAlpha = opacityToAssAlpha(e.subtitleBackground.opacityPercent)
+        bgFillTag  = `\\4c&H${bgColor}&`
+        bgAlphaTag = `\\4a&H${bgAlpha}&`
       }
 
+      const styleTag = [
+        alignTag,
+        fontTag,
+        sizeTag,
+        fillTag,
+        outlineTag,
+        bordTag,
+        bgFillTag,
+        bgAlphaTag,
+        fadeTag,
+      ].filter(Boolean).join('')
+
       const text = `{${styleTag}}${escapeAssText(e.text)}`
-      const dialogueLine = `Dialogue: 0,${formatAssTime(e.startSec)},${formatAssTime(e.endSec)},Default,0,0,0,,${text}`
+
+      // Per-row MarginV — Dialogue's MarginV column overrides the Style-level
+      // default per libass spec.  REQ-20260613-016 Phase 2 §A.
+      // MarginL / MarginR stay 0 (= use Style defaults from the Style header)
+      // because the user-facing controls in v1.2.2 only expose vertical margin.
+      const dialogueLine =
+        `Dialogue: 0,${formatAssTime(e.startSec)},${formatAssTime(e.endSec)},` +
+        `${styleName},0,0,${e.verticalMarginPx},,${text}`
       return dialogueLine
     }),
     ''
   ].join('\n')
 
-  const assContent = [scriptInfo, styles, events].join('\n')
-
-  // Log the Style line and first Dialogue line for diagnostics.
-  const styleLineMatch = assContent.match(/^Style:.*$/m)
-  const dialogueLineMatch = assContent.match(/^Dialogue:.*$/m)
-  log.debug('[ass-generator] Style   :', styleLineMatch?.[0] ?? '(none)')
-  log.debug('[ass-generator] Dialogue:', dialogueLineMatch?.[0] ?? '(none)')
-
-  return assContent
+  return [scriptInfo, styles, events].join('\n')
 }
