@@ -39,3 +39,41 @@ export function findActiveEntryId(
   }
   return null
 }
+
+/**
+ * REQ-20260613-004: return EVERY entry active at `timeSec`, preserving the
+ * input order.  Used by the preview overlay to render simultaneous captions
+ * as a vertical stack so the preview matches the libass burn-in (which
+ * auto-stacks overlapping Dialogue events on export).
+ *
+ * Range semantics match `findActiveEntryId`: **[startSec, endSec) — END
+ * EXCLUSIVE**.  Entries MUST be sorted by `startSec` ascending; the early-
+ * break on `e.startSec > timeSec` then makes the scan O(K) where K is the
+ * number of entries whose `startSec` is ≤ timeSec, not O(N).
+ *
+ * Stack-order contract: the returned ids carry the SAME relative order as
+ * the input array.  Callers (`video-preview-panel.tsx`) feed in
+ * `sortedActiveEntries` whose stable sort by startSec preserves the
+ * original entries-array order for same-startSec rows — that order in turn
+ * matches the ASS Dialogue order in `ass-generator.ts:113-114`
+ * (`entries.filter(!isDeleted)` is also order-preserving), so libass's
+ * "first Dialogue at edge, later Dialogues push away from edge" stacking
+ * aligns one-for-one with the preview.  Returning a sorted-by-id list
+ * would break that alignment for duplicates inserted out of id order.
+ *
+ * Pure function — no React / DOM dependencies — so unit tests cover the
+ * boundary and ordering conditions without having to mount a panel.
+ */
+export function findActiveEntryIds(
+  entries: readonly SubtitleEntry[],
+  timeSec: number,
+): string[] {
+  const ids: string[] = []
+  for (const e of entries) {
+    if (e.startSec > timeSec) break
+    if (timeSec >= e.startSec && timeSec < e.endSec) {
+      ids.push(e.id)
+    }
+  }
+  return ids
+}
