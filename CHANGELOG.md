@@ -76,6 +76,11 @@ and a handful of fixes that landed after v1.2.0 went out.
   before the start), which left it pointing at a time the player
   could never reach.  The playhead now stops at the video's start
   and end no matter where you drag.
+- Dragging a subtitle clip to the far right edge of the timeline
+  could leave its end time one frame past the video's actual end,
+  which raised an "exceeds duration" warning that the user had no
+  way to clear except by undoing the drag.  Clip drags now stop
+  cleanly at the video's end so the warning does not appear.
 
 ---
 
