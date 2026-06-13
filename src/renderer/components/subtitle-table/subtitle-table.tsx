@@ -1,33 +1,29 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Eraser, Trash2, Undo2, FileText, Clock, ChevronUp, ChevronDown, WrapText, AlignJustify, CopyPlus } from 'lucide-react'
+import { FileText, Clock, ChevronUp, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
+import { useSettingsStore } from '@/stores/settings-store'
 import { TimeInput } from '@/components/time-input'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 // REQ-20260614-001 補遺③ — ColorPicker / OutlineThicknessSlider /
 // RowFontSelector / Switch / FontId imports retired alongside the fat
 // Style column.  All those controls live in the always-on right-pane
-// Inspector now.
+// Inspector now.  補遺④ also retired the row-level action handlers
+// (autoLineBreakRow / overflowWrapRow / resetRow / toggleDeleteRow /
+// duplicateRow) — the actions column itself is gone from the row.
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { filterEntries } from '@/lib/subtitle-filter'
-import {
-  autoLineBreakRow as runAutoLineBreakRow,
-  overflowWrapRow as runOverflowWrapRow,
-  resetRow as runResetRow,
-  toggleDeleteRow as runToggleDeleteRow,
-  duplicateRow as runDuplicateRow
-} from '@/lib/entry-row-actions'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
 import { effectiveEntryState, type ClipStatus, type CutList } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
+import { getFontMeta, isFontId } from '../../../shared/fonts'
 
 /** Step amount for the per-row size ↑/↓ buttons (REQ-039 #4). */
 const SIZE_STEP_PX = 10
@@ -43,20 +39,21 @@ const SIZE_STEP_PX = 10
  *   7. badges              (90px)
  *   8. row actions         (76px)
  */
-// REQ-20260614-001 補遺③ — list slimming:
-//   - The fat Style column (220 px, full color pickers / sliders /
-//     switches / selects) is retired in favour of a compact **indicators**
-//     column (56 px) showing only a text-colour swatch + background-on dot.
-//   - The full editing UI for outline / fade / layout / background lives
-//     in the always-on right-pane Inspector now; clicking a row selects
-//     it and the Inspector exposes the rest.
-//   - Per-row font selector is no longer rendered above the text editor.
-//   - Action icons (改行 / 削除 / リセット / 複製) stay in the row for
-//     quick scan-and-act.
+// REQ-20260614-001 補遺④ — final list-view column layout:
+//   - Style cell now hosts a 3-row display-only reference block
+//     (text colour swatch / outline colour swatch / outline width
+//     number).  Clicks bubble to the row → selection.
+//   - Time cell shows start / end / "時間調整" stacked vertically
+//     (the legacy "|" separator was dropped — 3 rows on the dot).
+//   - Text cell shows the per-row font name (read-only) on row 1 and
+//     the editable text on rows 2-3.
+//   - Action icons (改行 / 削除 / リセット / 複製) are **removed** from
+//     the list — those flows live in the always-on right-pane
+//     Inspector.
 //
-// Columns: checkbox 32 | # 36 | time 130 | size 64 | indicators 56 |
-//          text 1fr | actions 144 | state 90
-const TABLE_GRID_COLS = 'grid-cols-[32px_36px_130px_64px_56px_1fr_144px_90px]'
+// Columns: checkbox 32 | # 36 | time 130 | size 64 | style-ref 64 |
+//          text 1fr | state 90  (7 columns total)
+const TABLE_GRID_COLS = 'grid-cols-[32px_36px_130px_64px_64px_1fr_90px]'
 
 /** Fallback when warningsMap is missing an entry (deleted rows; race with stale memo). */
 const NO_WARNINGS: EntryWarnings = {
@@ -251,9 +248,15 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
   const updateEntry = useProjectStore((s) => s.updateEntry)
   const pushHistory = useHistoryStore((s) => s.push)
   // REQ-028: in audio-only mode the size / style / font cells render
-  // empty so the 8-column grid stays in place (col widths unchanged)
-  // but the style controls are visually + functionally suppressed.
+  // empty so the grid stays in place (col widths unchanged) but the
+  // style controls are visually + functionally suppressed.
   const isAudioOnly = useIsAudioOnly()
+  // REQ-20260614-001 補遺④ — read the project-default font so rows
+  // that don't carry a `fontId` override still surface the inherited
+  // family name above the text editor.  Subscribed per-row; activeFontId
+  // changes infrequently (font selection is a global setting) so the
+  // re-render cost is negligible.
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
 
   const [editingText, setEditingText] = useState(false)
   const [sizeWarning, setSizeWarning] = useState(false)
@@ -359,42 +362,18 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
   // `timeline-block-inspector.tsx`).  Size stays here because the row
   // still renders a compact number input for it.
 
-  // Row-level Delete / Reset / AutoLineBreak go through the shared
-  // `entry-row-actions` lib so the timeline-block inspector drives the
-  // exact same history shape, sort behaviour, and side effects.  Labels
-  // are resolved here at the call site because the lib is intentionally
-  // i18n-free (see entry-row-actions.ts docstring).
-  function handleDelete() {
-    runToggleDeleteRow(entry, {
-      delete: t('history.deleteRow'),
-      restore: t('history.restoreRow')
-    })
-  }
+  // REQ-20260614-001 補遺④ — Row-level Delete / Reset / AutoLineBreak /
+  // OverflowWrap / Duplicate handlers were retired from the list view.
+  // The action icon column is gone; those operations now live exclusively
+  // in the always-on right-pane Inspector (which keeps its own handlers
+  // in `timeline-block-inspector.tsx`).
 
-  async function handleAutoLineBreakRow() {
-    await runAutoLineBreakRow(entry, {
-      history: t('history.autoLineBreak'),
-      noChangeToast: t('bulk.autoLineBreakNoChange')
-    })
-  }
-
-  async function handleOverflowWrapRow() {
-    await runOverflowWrapRow(entry, {
-      history: t('history.overflowWrap'),
-      noChangeToast: t('bulk.overflowWrapNoChange')
-    })
-  }
-
-  function handleReset() {
-    runResetRow(entry, { reset: t('history.resetRow') })
-  }
-
-  function handleDuplicate() {
-    runDuplicateRow(entry, {
-      history: t('history.duplicateRow'),
-      successToast: t('toast.rowDuplicated')
-    })
-  }
+  // REQ-20260614-001 補遺④ — font-name display in the text column.
+  // Resolve `entry.fontId ?? activeFontId` then look up the canonical
+  // display name.  `isFontId` is defensive against stale settings (e.g.
+  // a fontId pointing at a removed family).
+  const resolvedFontId = isFontId(entry.fontId) ? entry.fontId : activeFontId
+  const rowFontDisplayName = getFontMeta(resolvedFontId).displayName
 
   // Multi-row selection takes visual priority over warning tints (amber /
   // red row backgrounds) because the user is actively shaping a bulk
@@ -420,14 +399,10 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
     isUserSelected && rowState !== 'edited' && rowState !== 'overflow' && 'bg-zinc-800/50',
     isPlaybackActive && !isUserSelected && rowState !== 'edited' && rowState !== 'overflow' && 'bg-sky-500/[0.04]',
     !isUserSelected && !isPlaybackActive && !isSelected && 'hover:bg-zinc-800/20',
-    // REQ-117 [1] — fade every cell EXCEPT the actions column so the
-    // Restore / Reset buttons that the user CAN click never look like
-    // they are disabled.  Previously `opacity-40` was applied to the
-    // whole row, and CSS opacity cannot be re-set higher on a child,
-    // so the actually-clickable affordances looked muted.  The actions
-    // cell carries `data-row-actions` and is matched out via the
-    // arbitrary `:not()` selector.
-    rowState === 'deleted' && '[&>*:not([data-row-actions])]:opacity-40',
+    // REQ-20260614-001 補遺④ — actions column removed, so the previous
+    // `[&>*:not([data-row-actions])]` exemption is no longer needed.
+    // Every cell now fades together when the row is deleted.
+    rowState === 'deleted' && 'opacity-40',
     // REQ-118 [1] — state tints persist through both selection slices
     // (green / sky) AND through bulk-select.  Same gating rule as before:
     // the multi-row HSL highlight (applied inline below) wants the row
@@ -488,7 +463,12 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
         {displayIndex}
       </div>
 
-      {/* Time */}
+      {/* Time — REQ-20260614-001 補遺④ — vertical 3-row stack:
+              row 1: start time (TimeInput)
+              row 2: end time (TimeInput)
+              row 3: "時間調整" link (opens TimeEditorDialog)
+          The legacy "|" separator between start/end was dropped per
+          補遺④ (3 rows exactly). */}
       <div className="flex flex-col gap-1 py-2 px-1">
         <TimeInput
           value={entry.startSec}
@@ -498,7 +478,6 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
           warning={isStartOverlap || isStartExceedsDuration}
           title={isStartExceedsDuration ? t('warning.exceedsDuration') : undefined}
         />
-        <div className="w-[90px] text-body-sm text-zinc-600 text-center leading-none select-none">|</div>
         <TimeInput
           value={entry.endSec}
           cuts={cuts}
@@ -597,22 +576,17 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
         )}
       </div>
 
-      {/* REQ-20260614-001 補遺③ — slim indicators column.
-          Replaces the legacy 220-px Style column with two visual
-          read-only markers:
-            - Text colour swatch (20×20 rounded square, no picker)
-            - Background ON/OFF dot (12×12 filled when enabled)
-          All editing UI for text/outline colours, outline width, fade,
-          layout (h/v/margin) and background (color/opacity) now lives
-          in the always-on right-pane Inspector.  Audio-only mode
-          renders nothing (the entire style cluster has no effect on
-          text / SRT export). */}
+      {/* REQ-20260614-001 補遺④ — style-reference block, display only.
+          Vertical 3-row stack:
+              row 1: text colour swatch
+              row 2: outline colour swatch
+              row 3: outline width (number, display-only)
+          No event handlers — clicks bubble to the row's onClick →
+          selection.  Editing lives exclusively in the Inspector. */}
       {isAudioOnly ? (
-        <div className="py-3 px-1" />
+        <div className="py-2 px-1" />
       ) : (
-        <div className="flex items-center justify-center gap-1.5 py-3 px-1">
-          {/* Text-colour swatch — display only (no click handler).
-              Picker UI lives in the Inspector. */}
+        <div className="flex flex-col items-center justify-center gap-1 py-2 px-1">
           <span
             title={t('styleCell.textColor')}
             aria-label={t('styleCell.textColor')}
@@ -622,33 +596,47 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
             )}
             style={{ backgroundColor: entry.textColorHex }}
           />
-          {/* Background ON/OFF dot — filled with the chosen bg colour
-              when enabled, hollow grey ring when disabled. */}
           <span
-            title={
-              entry.subtitleBackground.enabled
-                ? t('styleCell.bgEnabled')
-                : t('styleCell.bgEnabled')
-            }
-            aria-label={t('styleCell.bgEnabled')}
+            title={t('styleCell.outlineColor')}
+            aria-label={t('styleCell.outlineColor')}
             className={cn(
-              'inline-block h-3 w-3 rounded-full border',
-              entry.subtitleBackground.enabled
-                ? entry.subtitleBackground.color === 'white'
-                  ? 'bg-zinc-100 border-zinc-300'
-                  : 'bg-zinc-950 border-zinc-600'
-                : 'bg-transparent border-zinc-700',
+              'inline-block h-5 w-5 rounded-sm border border-zinc-700',
               isFrozen && 'opacity-40'
             )}
+            style={{ backgroundColor: entry.outlineColorHex }}
           />
+          <span
+            title={t('styleCell.outlineWidth')}
+            aria-label={t('styleCell.outlineWidth')}
+            className={cn(
+              'text-body-sm tabular-nums text-zinc-300 leading-none',
+              isFrozen && 'opacity-40'
+            )}
+          >
+            {entry.outlineThicknessPx}
+          </span>
         </div>
       )}
 
-      {/* Text column — REQ-20260614-001 補遺③: per-row font selector
-          (RowFontSelector) moved to the right-pane Inspector.  The
-          column is now just the text editor.  flex-col wrapper retained
-          for layout symmetry / future re-stacking. */}
+      {/* Text column — REQ-20260614-001 補遺④:
+            row 1: font name (display only, truncates when long)
+            rows 2-3: editable text (CellEditor on click, otherwise
+                       static span with `line-clamp-3`)
+          The font name resolves entry.fontId → activeFontId fallback so
+          rows that inherit the project default still show the
+          inherited family name.  Click anywhere on the text editor
+          opens edit mode; clicks on the font label propagate up to
+          the row select (no edit affordance — font is changed in the
+          Inspector). */}
       <div className="flex flex-col gap-1 my-1 min-w-0">
+      {!isAudioOnly && (
+        <span
+          title={rowFontDisplayName}
+          className="text-caption text-zinc-500 truncate px-2 leading-none"
+        >
+          {rowFontDisplayName}
+        </span>
+      )}
       <div
         className={cn(
           'flex items-start py-2 px-2 min-w-0 min-h-[36px] cursor-text rounded transition-all duration-150',
@@ -693,148 +681,11 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
       </div>
       </div>
 
-      {/* REQ-20260613-001 §2-1: Actions cell now precedes the State
-          badge cell in DOM order so the icon cluster sits immediately
-          to the right of the text column and the badges land in the
-          rightmost slot (= TABLE_GRID_COLS columns 7 and 8 swapped to
-          match).  The two cells' internal contents are unchanged from
-          before the swap — only their grid positions move. */}
-      {/* Actions — REQ-039 #2 adds the per-row auto-line-break button
-          stacked below the delete/reset icon row.  REQ-041 #2 removes
-          the hover-only opacity gate: actions are now always visible
-          so the user does not have to hunt the mouse over each row to
-          see / target them.  The auto-line-break button is still
-          suppressed in audio mode because there's no burn-in stage
-          that would consume the rewrapped text.
-          REQ-117 [1] — `data-row-actions` exempts this column from the
-          row-level deleted-state opacity fade so the Restore / Reset
-          buttons read as clickable instead of greyed-out. */}
-      {/* REQ-20260612-003 §2 + REQ-20260613-001 §2-2: row actions —
-          single row of icon-only buttons.  Order (left → right):
-          敷き詰め改行 → はみ出し改行 → 削除/復元 → リセット → 複製.
-          Both wrap buttons lead the cluster as a "transform this
-          row's text" unit; delete/reset keep their previous physical
-          position so muscle memory is preserved; duplicate is the
-          last icon (right-most) matching the Inspector's placement
-          (REQ-20260613-001 §2-5).  Duplicate is suppressed for frozen
-          (= manually-deleted OR trim-deleted) rows mirroring the
-          wrap-button gate. */}
-      <div data-row-actions className="flex flex-col gap-1 py-3 px-1">
-        <div className="flex items-center justify-center gap-1">
-          {!isAudioOnly && (
-            <>
-              <button
-                type="button"
-                title={t('action.autoLineBreakRowHelp')}
-                aria-label={t('action.autoLineBreakRowHelp')}
-                onClick={(e) => { e.stopPropagation(); handleAutoLineBreakRow() }}
-                disabled={isFrozen}
-                className={cn(
-                  'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
-                  'hover:bg-zinc-800 hover:text-zinc-200',
-                  'disabled:opacity-30 disabled:pointer-events-none'
-                )}
-              >
-                <AlignJustify className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                title={t('action.overflowWrapRowHelp')}
-                aria-label={t('action.overflowWrapRowHelp')}
-                onClick={(e) => { e.stopPropagation(); handleOverflowWrapRow() }}
-                disabled={isFrozen}
-                className={cn(
-                  'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
-                  'hover:bg-zinc-800 hover:text-zinc-200',
-                  'disabled:opacity-30 disabled:pointer-events-none'
-                )}
-              >
-                <WrapText className="h-3.5 w-3.5" />
-              </button>
-            </>
-          )}
-          {/* REQ-118 [2] — three branches now:
-              · trim-deleted: show the restore glyph in zinc (the user
-                CAN click — they get a hint toast — but the button is
-                NOT the green "ready to undo" affordance because clicking
-                does not restore.  Storage stays untouched, so the
-                trim/manual states never swap roles).
-              · manually-deleted: green restore glyph, click un-deletes.
-              · normal: red-tinted-on-hover delete glyph. */}
-          <button
-            type="button"
-            title={
-              isTrimDeleted
-                ? t('action.trimDeletedHint')
-                : entry.isDeleted
-                  ? t('action.restoreRow')
-                  : t('action.deleteRow')
-            }
-            onClick={(e) => {
-              e.stopPropagation()
-              if (isTrimDeleted) {
-                toast.info(t('toast.trimDeletedRestoreHint'))
-                return
-              }
-              handleDelete()
-            }}
-            className={cn(
-              'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
-              'hover:bg-zinc-800 hover:text-zinc-200',
-              entry.isDeleted && !isTrimDeleted && 'text-green-500 hover:text-green-400'
-            )}
-          >
-            {isTrimDeleted || entry.isDeleted
-              ? <Undo2 className="h-3.5 w-3.5" />
-              : <Trash2 className="h-3.5 w-3.5" />}
-          </button>
-          <button
-            type="button"
-            title={t('action.resetRow')}
-            onClick={(e) => { e.stopPropagation(); handleReset() }}
-            // REQ-119 [2] — Reset is an EDIT, not a revive.  Frozen rows
-            // (= manual delete OR trim delete) only accept the
-            // Restore/Undo button next to it.  `!entry.isEdited` keeps
-            // the original "nothing to reset" gate for live rows.
-            disabled={isFrozen || !entry.isEdited}
-            className={cn(
-              'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
-              'hover:bg-zinc-800 hover:text-zinc-200',
-              'disabled:opacity-30 disabled:pointer-events-none'
-            )}
-          >
-            {/* REQ-047 #2: Eraser instead of the RotateCcw used by the
-                top-right Undo button — visually distinct so the row's
-                "wipe my edits, restore the original transcription"
-                action can't be mistaken for the global "undo last
-                history op" action.  RotateCcw stays as the canonical
-                undo glyph in step2.tsx. */}
-            <Eraser className="h-3.5 w-3.5" />
-          </button>
-          {/* REQ-20260613-001 §2-2: Duplicate button.  CopyPlus icon
-              chosen over plain Copy because the `+` glyph captures
-              the "add a new row that's a copy of this one" semantics
-              and visually distinguishes the action from a hypothetical
-              clipboard-copy in adjacent UI.  Disabled on frozen rows
-              for the same reason as the wrap buttons — the duplicate
-              would arrive at the same start/end as a frozen row and
-              the user has no obvious affordance to recover. */}
-          <button
-            type="button"
-            title={t('action.duplicateRowHelp')}
-            aria-label={t('action.duplicateRowHelp')}
-            onClick={(e) => { e.stopPropagation(); handleDuplicate() }}
-            disabled={isFrozen}
-            className={cn(
-              'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
-              'hover:bg-zinc-800 hover:text-zinc-200',
-              'disabled:opacity-30 disabled:pointer-events-none'
-            )}
-          >
-            <CopyPlus className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
+      {/* REQ-20260614-001 補遺④ — Actions column removed from the list
+          view.  改行 / 削除 / リセット / 複製 are exposed by the
+          always-on right-pane Inspector instead.  The State badges
+          below occupy the rightmost slot directly (TABLE_GRID_COLS has
+          7 columns now, not 8). */}
 
       {/* State — shows all applicable badges simultaneously.
           REQ-103 §C: split the legacy "削除済み" badge into two —
@@ -1168,17 +1019,15 @@ export function SubtitleTable({
         <div className="py-2 px-1 text-callout font-semibold text-zinc-300 text-center">{t('table.colIndex')}</div>
         <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{t('table.colTime')}</div>
         <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{isAudioOnly ? '' : t('table.colSize')}</div>
-        {/* REQ-20260614-001 補遺③ — column 5 used to host the fat
-            "Style" header; the column itself shrank to a 56-px
-            indicators slot (text-colour swatch + background-on dot).
-            No header label — the indicators are purely visual scan aids. */}
+        {/* REQ-20260614-001 補遺④ — column 5: style-reference block
+            (text colour / outline colour / outline width — display
+            only).  No header label since the cell content is purely
+            visual reference. */}
         <div className="py-2 px-1 text-callout font-semibold text-zinc-300"></div>
         <div className="py-2 px-2 text-callout font-semibold text-zinc-300">{t('table.colText')}</div>
-        {/* REQ-20260613-001 §2-1: Actions header (currently empty
-            label, see locales/*.json `table.colActions`) precedes the
-            State header so the header columns align with the swapped
-            row cells below. */}
-        <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{t('table.colActions')}</div>
+        {/* REQ-20260614-001 補遺④ — actions column removed.  Action
+            icons (改行 / 削除 / リセット / 複製) now live exclusively
+            in the right-pane Inspector. */}
         <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{t('table.colState')}</div>
       </div>
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" onScroll={handleScroll}>
