@@ -2,7 +2,7 @@ import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X, HelpCircle,
-  ChevronFirst, ChevronLast, ChevronLeft, ChevronRight
+  ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, LogIn, LogOut
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useProjectStore } from '@/stores/project-store'
@@ -1498,12 +1498,11 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 title={t('timeline.help.button')}
                 aria-label={t('timeline.help.button')}
                 className={cn(
-                  'flex h-7 items-center gap-1 px-2 rounded-md text-zinc-400',
+                  'flex h-7 w-7 items-center justify-center rounded-md text-zinc-400',
                   'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150',
                 )}
               >
                 <HelpCircle className="h-3.5 w-3.5" />
-                <span className="text-body-sm">{t('timeline.help.button')}</span>
               </button>
             </PopoverTrigger>
             <PopoverContent
@@ -1712,56 +1711,46 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               right-hand action button itself names the feature.  Order
               is therefore: 始点 → 終点 → トリミング (left → right matches
               the user's operation flow). */}
-          <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-2 py-0.5">
-            {/* REQ-080 #2 — 始点 / 終点 / トリミング: always look like
-                buttons (base bg + border).  No "−" placeholder when
-                unset — the time chip simply doesn't render until the
-                point is captured.  Set state amber-tints the background
-                AND the border so the "pressed" affordance reads at a
-                glance. */}
+          {/* REQ-20260614-001 補遺⑦ — toolbar trim cluster is icon-only.
+              「始点 / 終点」 ラベルと時刻チップを除去し、設定/解除は LogIn /
+              LogOut アイコン + native title でのみ示す。確定 (トリミング)
+              は Scissors アイコンの green-500 ボタン、保留クリアは従来通り
+              X アイコン。実時刻 (`pendingCutInSec` / `pendingCutOutSec`) の
+              読み取り表示は Inspector 側 (timeline-block-inspector.tsx の
+              §3.5 trim readout) に移管した。pressed state (amber) は
+              そのままなのでツールバー上でも「設定済み」は一目で分かる。 */}
+          <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-1.5 py-0.5">
             <button
               type="button"
               onClick={handleSetIn}
               title={t('timeline.trim.setInTooltip')}
+              aria-label={t('timeline.trim.setIn')}
               aria-pressed={pendingCutInSec !== null}
               className={cn(
-                'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
+                'flex h-7 w-7 items-center justify-center rounded-md',
                 'border transition-colors duration-150',
                 pendingCutInSec !== null
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
                   : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
               )}
             >
-              <span>{t('timeline.trim.setIn')}</span>
-              {pendingCutInSec !== null && (
-                <span className="font-mono tabular-nums text-caption text-amber-300/80">
-                  {/* REQ-115 — pending In is captured as Original (videoCurrent
-                      TimeSec); show it on the Edited axis to match the ruler
-                      the user is scrubbing against. */}
-                  {formatEditedTimecode(pendingCutInSec, cuts)}
-                </span>
-              )}
+              <LogIn className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               onClick={handleSetOut}
               title={t('timeline.trim.setOutTooltip')}
+              aria-label={t('timeline.trim.setOut')}
               aria-pressed={pendingCutOutSec !== null}
               className={cn(
-                'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
+                'flex h-7 w-7 items-center justify-center rounded-md',
                 'border transition-colors duration-150',
                 pendingCutOutSec !== null
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
                   : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
               )}
             >
-              <span>{t('timeline.trim.setOut')}</span>
-              {pendingCutOutSec !== null && (
-                <span className="font-mono tabular-nums text-caption text-amber-300/80">
-                  {/* REQ-115 — Edited-axis display, see setIn comment above. */}
-                  {formatEditedTimecode(pendingCutOutSec, cuts)}
-                </span>
-              )}
+              <LogOut className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
@@ -1771,25 +1760,26 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 pendingCutOutSec === null ||
                 !(pendingCutInSec < pendingCutOutSec)
               }
-              title={t('timeline.trim.confirmCutTooltip')}
+              title={`${t('timeline.trim.confirmCut')} — ${t('timeline.trim.confirmCutTooltip')}`}
+              aria-label={t('timeline.trim.confirmCut')}
               className={cn(
-                'flex h-7 items-center px-3 rounded-md text-body-sm font-semibold',
+                'flex h-7 w-7 items-center justify-center rounded-md',
                 'border transition-colors duration-150',
-                // 3.8 invariant: green-button text MUST be zinc-950
-                // (rgb(9,9,11)) on green-500 (rgb(34,197,94)).  Verified
-                // by green-button-color.spec.ts; the styling here keeps
-                // that pairing across every state.
+                // 3.8 invariant: green-button text MUST be zinc-950 on
+                // green-500.  Same invariant for the icon glyph since
+                // it inherits text colour.
                 'bg-green-500 text-zinc-950 border-green-400 hover:bg-green-400',
                 'disabled:bg-zinc-800 disabled:text-zinc-500 disabled:border-zinc-700 disabled:hover:bg-zinc-800 disabled:cursor-not-allowed'
               )}
             >
-              {t('timeline.trim.confirmCut')}
+              <Scissors className="h-3.5 w-3.5" />
             </button>
             {pendingCutInSec !== null && pendingCutOutSec !== null && (
               <button
                 type="button"
                 onClick={clearPendingCut}
                 title={t('timeline.trim.clearPendingTooltip')}
+                aria-label={t('timeline.trim.clearPending')}
                 className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors duration-150"
               >
                 <X className="h-3.5 w-3.5" />
@@ -1797,15 +1787,17 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
             )}
           </div>
 
-          {/* Snap toggle — unchanged, kept after the trim cluster so its
-              location relative to the right edge of the toolbar stays
-              consistent across sessions. */}
+          {/* Snap toggle — REQ-20260614-001 補遺⑦: 「吸着」ラベルを削除して
+              アイコンのみに統一。`title` 属性で native tooltip により機能名と
+              ヘルプ本文を提供する。pressed state は引き続き bg-zinc-800 で
+              視覚化。 */}
           <button
             type="button"
             onClick={() => setSnapEnabled(!snapEnabled)}
-            title={t('timeline.toolbar.snapHelp')}
+            title={`${t('timeline.toolbar.snap')} — ${t('timeline.toolbar.snapHelp')}`}
+            aria-label={t('timeline.toolbar.snap')}
             className={cn(
-              'flex h-7 items-center gap-1.5 px-2 rounded-md text-body-sm font-medium',
+              'flex h-7 w-7 items-center justify-center rounded-md',
               'transition-colors duration-150',
               snapEnabled
                 ? 'bg-zinc-800 text-zinc-200'
@@ -1813,8 +1805,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
             )}
             aria-pressed={snapEnabled}
           >
-            <Magnet className="h-3 w-3" />
-            {t('timeline.toolbar.snap')}
+            <Magnet className="h-3.5 w-3.5" />
           </button>
       </div>
 
