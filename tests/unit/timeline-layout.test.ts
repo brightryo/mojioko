@@ -260,3 +260,115 @@ describe('layoutEntries — minBlockSec (REQ-088 #2)', () => {
     expect(result.trackCount).toBe(2)
   })
 })
+
+/**
+ * REQ-20260613-002: dragging a clip in the timeline mutates `entry.startSec`
+ * on every pointermove tick.  Without the `greedyTimes` override, the sort
+ * key flips as soon as the dragged entry's live time crosses a neighbour's
+ * — the greedy reassigns tracks and the visual rows swap, even though React
+ * keeps each Block bound to its own id.  The user perceives "the wrong
+ * clip moved."
+ *
+ * The override locks the dragged entry's greedy slot to its snapshot (pre-
+ * drag) times so its trackIndex is stable for the entire drag.  These
+ * tests exercise the same code path the production drag handler invokes.
+ */
+describe('layoutEntries — greedyTimes override (REQ-20260613-002)', () => {
+  it('without override, same-time clips swap tracks when one moves earlier', () => {
+    // Pre-drag: a (id "a") and b (id "b") share startSec.  Id tie-break
+    // puts a on track 0, b on track 1.
+    const before = layoutEntries([entry('a', 10, 15), entry('b', 10, 15)], 20)
+    const beforeTracks = new Map(before.placements.map((p) => [p.entry.id, p.trackIndex]))
+    expect(beforeTracks.get('a')).toBe(0)
+    expect(beforeTracks.get('b')).toBe(1)
+
+    // Mid-drag (b moved left 0.1s): no override → greedy now sorts b
+    // first and assigns it track 0.  This IS the reported bug.
+    const during = layoutEntries([entry('a', 10, 15), entry('b', 9.9, 14.9)], 20)
+    const duringTracks = new Map(during.placements.map((p) => [p.entry.id, p.trackIndex]))
+    expect(duringTracks.get('b')).toBe(0)
+    expect(duringTracks.get('a')).toBe(1)
+  })
+
+  it('with override (snapshot times for the dragged entry) tracks stay pinned', () => {
+    const before = layoutEntries([entry('a', 10, 15), entry('b', 10, 15)], 20)
+    const beforeTracks = new Map(before.placements.map((p) => [p.entry.id, p.trackIndex]))
+    expect(beforeTracks.get('a')).toBe(0)
+    expect(beforeTracks.get('b')).toBe(1)
+
+    // Mid-drag (b moved left 0.1s) WITH the production override —
+    // greedyTimes pins b's sort key to its pre-drag startSec.
+    const during = layoutEntries(
+      [entry('a', 10, 15), entry('b', 9.9, 14.9)],
+      20,
+      0,
+      { greedyTimes: new Map([['b', { startSec: 10, endSec: 15 }]]) },
+    )
+    const duringTracks = new Map(during.placements.map((p) => [p.entry.id, p.trackIndex]))
+    expect(duringTracks.get('a')).toBe(0)
+    expect(duringTracks.get('b')).toBe(1)
+  })
+
+  it('override keeps b pinned even when it drags far right past a', () => {
+    // b dragged so far right that its live interval no longer overlaps a.
+    // Without override, b would merge down to track 0.  With override, b
+    // stays on track 1 (= the row the user grabbed) for the whole drag.
+    const during = layoutEntries(
+      [entry('a', 10, 15), entry('b', 20, 25)],
+      30,
+      0,
+      { greedyTimes: new Map([['b', { startSec: 10, endSec: 15 }]]) },
+    )
+    const tracks = new Map(during.placements.map((p) => [p.entry.id, p.trackIndex]))
+    expect(tracks.get('a')).toBe(0)
+    expect(tracks.get('b')).toBe(1)
+  })
+
+  it('override on a does not affect b when only b is dragging', () => {
+    // Smoke check: the override only acts on the entry whose id is in the
+    // map.  An override for 'a' does not silently freeze 'b' too.
+    const result = layoutEntries(
+      [entry('a', 10, 15), entry('b', 11, 16)],
+      20,
+      0,
+      { greedyTimes: new Map([['a', { startSec: 10, endSec: 15 }]]) },
+    )
+    // a and b overlap → two tracks; a (sorts first by override) → 0, b → 1.
+    const tracks = new Map(result.placements.map((p) => [p.entry.id, p.trackIndex]))
+    expect(tracks.get('a')).toBe(0)
+    expect(tracks.get('b')).toBe(1)
+  })
+
+  it('empty override map → identical behaviour to no override', () => {
+    const withEmpty = layoutEntries(
+      [entry('a', 10, 15), entry('b', 11, 16)],
+      20,
+      0,
+      { greedyTimes: new Map() },
+    )
+    const without = layoutEntries(
+      [entry('a', 10, 15), entry('b', 11, 16)],
+      20,
+    )
+    expect(withEmpty.placements.map((p) => [p.entry.id, p.trackIndex])).toEqual(
+      without.placements.map((p) => [p.entry.id, p.trackIndex]),
+    )
+    expect(withEmpty.trackCount).toBe(without.trackCount)
+  })
+
+  it('three same-time clips: pinning the bottom one keeps the other two stable', () => {
+    // Repro for the "three duplicates" stress case (REQ §5 #4).  c on
+    // track 2.  User drags c left.  Without pin, c would crowd onto a
+    // lower track and reshuffle a / b.  With pin, c stays on track 2.
+    const during = layoutEntries(
+      [entry('a', 10, 15), entry('b', 10, 15), entry('c', 9, 14)],
+      20,
+      0,
+      { greedyTimes: new Map([['c', { startSec: 10, endSec: 15 }]]) },
+    )
+    const tracks = new Map(during.placements.map((p) => [p.entry.id, p.trackIndex]))
+    expect(tracks.get('a')).toBe(0)
+    expect(tracks.get('b')).toBe(1)
+    expect(tracks.get('c')).toBe(2)
+  })
+})

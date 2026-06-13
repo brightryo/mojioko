@@ -659,9 +659,31 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     return Math.max(10, maxEnd * 1.2)
   }, [videoDurationSec, entries])
 
+  // REQ-20260613-002: snapshot the dragged entry's pre-drag startSec /
+  // endSec for the greedy track allocator to use, so that the dragged
+  // entry stays in its starting greedy slot (= same trackIndex) for the
+  // duration of the drag even as its live times diverge from neighbouring
+  // clips.  Set at handleStartDrag (below), cleared at pointerup.  When
+  // null, the layout call below passes `overrides: undefined` and the
+  // legacy single-arg behaviour applies (= existing tests / single-clip
+  // drags unchanged).
+  const [dragGreedyTimes, setDragGreedyTimes] = useState<
+    ReadonlyMap<string, { startSec: number; endSec: number }> | null
+  >(null)
+
   const layout = useMemo(
-    () => layoutEntries(visibleEntries, fallbackDurationSec, LAYOUT_MIN_BLOCK_SEC),
-    [visibleEntries, fallbackDurationSec]
+    () =>
+      layoutEntries(
+        visibleEntries,
+        fallbackDurationSec,
+        LAYOUT_MIN_BLOCK_SEC,
+        // REQ-20260613-002: when a drag is active, the greedy allocator
+        // uses the dragged entry's snapshot times instead of its live
+        // times so the trackIndex stays pinned through every pointermove
+        // tick.  Null override → undefined → legacy single-arg behaviour.
+        dragGreedyTimes !== null ? { greedyTimes: dragGreedyTimes } : undefined,
+      ),
+    [visibleEntries, fallbackDurationSec, dragGreedyTimes]
   )
 
   // Index in the unfiltered, unsorted entries array — used for the human-
@@ -763,6 +785,10 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
 
   const activeDragRef = useRef<ActiveDrag | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  // `dragGreedyTimes` is declared earlier in the component (just before
+  // the `layout` memo) so the memo can read it as a dependency without
+  // a TDZ violation.  See the comment block at that declaration site
+  // for the full REQ-20260613-002 rationale.
 
   // Stable mirrors of the live values that the (mount-once) pointer
   // listeners need to read without re-attaching whenever React state
@@ -807,6 +833,15 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         originClientX: clientX
       }
       setDraggingId(entry.id)
+      // REQ-20260613-002: pin the dragged entry's greedy slot to its
+      // pre-drag times so its trackIndex never changes mid-drag.  This
+      // is the core of the same-time-clip drag-swap fix: without this,
+      // the next render after the user moves the cursor 1 px would
+      // resort and reassign tracks if any other clip shared the
+      // dragged clip's old startSec.
+      setDragGreedyTimes(
+        new Map([[entry.id, { startSec: entry.startSec, endSec: entry.endSec }]])
+      )
       // Close any open inspector so the popover doesn't visually follow the
       // block during a resize or move.
       setOpenInspectorId((cur) => (cur === entry.id ? null : cur))
@@ -936,6 +971,12 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       activeDragRef.current = null
       setDraggingId(null)
       setSnapGuidePx(null)
+      // REQ-20260613-002: release the greedy-time pin so the next
+      // layout pass reflects the final live times.  Block trackIndex
+      // is now allowed to settle to whatever greedy decides given the
+      // committed startSec values — any "snap" the user sees here is
+      // an honest result of the move they just made.
+      setDragGreedyTimes(null)
     }
 
     window.addEventListener('pointermove', onMove)
