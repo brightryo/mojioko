@@ -33,6 +33,7 @@ import { AudioPreviewPanel } from '@/components/audio-preview/audio-preview-pane
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { EditorViewSwitcher } from '@/components/editor-view-switcher/editor-view-switcher'
 import { TimelineView } from '@/components/timeline-view/timeline-view'
+import { TimelineBlockInspector } from '@/components/timeline-view/timeline-block-inspector'
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 import { useRef } from 'react'
 
@@ -820,15 +821,38 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     ? (isAudioOnly ? <AudioPreviewPanel /> : <VideoPreviewPanel />)
     : null
 
-  const inspectorSlot = (
-    // Phase 2 empty-state placeholder.  Phase 4 wires this to the
-    // selected entry id and renders the full TimelineBlockInspector
-    // content.  REQ #1 "未選択時はインスペクタに何も表示しない (空状態)".
+  // REQ-20260614-001 Phase 4 — always-on right-pane Inspector.  Drives
+  // the same `TimelineBlockInspector` content that the legacy popover
+  // used; the popover itself was retired in this phase.
+  //
+  //   selectedEntryId === null                → empty-state placeholder
+  //   selectedEntryId !== null, entry found   → full editor body
+  //   selectedEntryId !== null, entry missing → empty-state (selection
+  //                                              points to a row that no
+  //                                              longer exists — e.g.
+  //                                              after a delete; defensive)
+  const inspectorEmpty = (
     <div className="flex h-full w-full items-center justify-center p-6 text-center">
       <div className="space-y-1 max-w-xs">
         <p className="text-body-sm text-zinc-400">{t('inspector.emptyTitle')}</p>
         <p className="text-caption text-zinc-500">{t('inspector.emptyHint')}</p>
       </div>
+    </div>
+  )
+  const selectedEntry = selectedEntryId === null
+    ? null
+    : entries.find((e) => e.id === selectedEntryId) ?? null
+  const inspectorSlot = selectedEntry === null ? inspectorEmpty : (
+    <div className="h-full w-full overflow-y-auto p-3">
+      <TimelineBlockInspector
+        entry={selectedEntry}
+        warnings={warningsMap.get(selectedEntry.id) ?? null}
+        onAdjustTime={openEditTimeDialog}
+        // × in the inspector header clears the selection so the empty
+        // state returns — matches the popover's "close" affordance but
+        // routed through the new selection slice.
+        onClose={() => setSelectedEntryId(null)}
+      />
     </div>
   )
 
@@ -950,7 +974,6 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
           <TimelineView
             warningsMap={warningsMap}
             videoDurationSec={videoDurationSec}
-            onAdjustTime={openEditTimeDialog}
           />
         )}
       </div>
