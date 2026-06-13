@@ -191,8 +191,20 @@ export function generateAss(
       // Per-row alignment — REQ-20260613-016 Phase 2 §A.  Always emit
       // explicit `\an<N>` so the libass rendering anchor never depends on
       // the Style-header default (which is just a fallback constant).
+      // For pinned rows (\pos, REQ-20260613-016 Phase 6 / 機能B) we ALSO
+      // emit \an so libass knows which corner of the text box to anchor
+      // at the \pos coordinate — \pos overrides MarginV positioning but
+      // not the anchor choice (the REQ補遺 §B-2 "アンカー点は当該行の \an
+      // が示す位置" rule).
       const alignmentN = getAlignment(e.horizontalPosition, e.verticalPosition)
       const alignTag = `\\an${alignmentN}`
+
+      // Free-position pin (\pos, REQ-20260613-016 Phase 6 / 機能B).  Both
+      // posX and posY must be defined for the row to count as pinned —
+      // a half-pair is treated as unset, matching the
+      // `computeFixedStackOffsets` exclusion rule (active-entry.ts).
+      const isPinned = e.posX !== undefined && e.posY !== undefined
+      const posTag = isPinned ? `\\pos(${e.posX},${e.posY})` : ''
 
       const sizeTag    = `\\fs${e.fontSizePx}`
       const fillTag    = `\\c${hexToAss(e.textColorHex)}`
@@ -213,6 +225,7 @@ export function generateAss(
 
       const styleTag = [
         alignTag,
+        posTag,
         fontTag,
         sizeTag,
         fillTag,
@@ -229,9 +242,14 @@ export function generateAss(
       // default per libass spec.  REQ-20260613-016 Phase 2 §A.
       // MarginL / MarginR stay 0 (= use Style defaults from the Style header)
       // because the user-facing controls in v1.2.2 only expose vertical margin.
+      //
+      // Pinned rows (\pos, Phase 6) emit MarginV=0 in the column — libass
+      // ignores MarginV when \pos is present, but writing 0 makes the
+      // intent unambiguous to anyone reading the ASS file directly.
+      const marginVCol = isPinned ? 0 : e.verticalMarginPx
       const dialogueLine =
         `Dialogue: 0,${formatAssTime(e.startSec)},${formatAssTime(e.endSec)},` +
-        `${styleName},0,0,${e.verticalMarginPx},,${text}`
+        `${styleName},0,0,${marginVCol},,${text}`
       return dialogueLine
     }),
     ''

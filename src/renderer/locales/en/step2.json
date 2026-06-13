@@ -39,7 +39,9 @@
     "edited": "Edited",
     "overflow": "Overflow",
     "deleted": "Deleted",
-    "trimDeleted": "Trim-deleted"
+    "trimDeleted": "Trim-deleted",
+    "pinned": "Pinned",
+    "pinnedTitle": "Free position set by preview drag (\\pos). Cleared by Reset."
   },
   "badge": {
     "overflow": "Overflow",
@@ -160,6 +162,7 @@
     "editLayout": "Change layout",
     "editMargin": "Change margin",
     "editBackground": "Change background",
+    "dragPosition": "Drag position",
     "deleteRow": "Delete",
     "restoreRow": "Restore",
     "resetRow": "Reset",
