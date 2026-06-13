@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Eraser, Trash2, Undo2, FileText, Clock, ChevronUp, ChevronDown, WrapText, AlignJustify } from 'lucide-react'
+import { Eraser, Trash2, Undo2, FileText, Clock, ChevronUp, ChevronDown, WrapText, AlignJustify, CopyPlus } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -23,7 +23,8 @@ import {
   autoLineBreakRow as runAutoLineBreakRow,
   overflowWrapRow as runOverflowWrapRow,
   resetRow as runResetRow,
-  toggleDeleteRow as runToggleDeleteRow
+  toggleDeleteRow as runToggleDeleteRow,
+  duplicateRow as runDuplicateRow
 } from '@/lib/entry-row-actions'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
 import { effectiveEntryState, type ClipStatus, type CutList } from '../../../shared/cuts'
@@ -45,7 +46,14 @@ const SIZE_STEP_PX = 10
  */
 // REQ-068 Phase C: time column 110 → 130 to fit the widened TimeInput
 // (w-[110px]) needed after bumping all time text to 13 px (was 12).
-const TABLE_GRID_COLS = 'grid-cols-[32px_36px_130px_64px_220px_1fr_90px_76px]'
+// REQ-20260613-001 §2-1: state column and actions column SWAPPED so the
+// action icons sit immediately right of the text column and the state
+// badges occupy the rightmost slot.  Actions column widened from 76px
+// to 144px to comfortably fit five icon-only buttons (敷き詰め →
+// はみ出し → delete → reset → duplicate, each h-6 w-6 + gap-1 + px-1
+// parent padding ≈ 136 + 8 px).  State column kept at 90px since its
+// badge content is unchanged.
+const TABLE_GRID_COLS = 'grid-cols-[32px_36px_130px_64px_220px_1fr_144px_90px]'
 
 /** Fallback when warningsMap is missing an entry (deleted rows; race with stale memo). */
 const NO_WARNINGS: EntryWarnings = {
@@ -386,6 +394,13 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     runResetRow(entry, { reset: t('history.resetRow') })
   }
 
+  function handleDuplicate() {
+    runDuplicateRow(entry, {
+      history: t('history.duplicateRow'),
+      successToast: t('toast.rowDuplicated')
+    })
+  }
+
   // Multi-row selection takes visual priority over warning tints (amber /
   // red row backgrounds) because the user is actively shaping a bulk
   // operation and needs to see what is targeted.  The focused-row green
@@ -693,67 +708,12 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
       </div>
       </div>
 
-      {/* State — shows all applicable badges simultaneously.
-          REQ-103 §C: split the legacy "削除済み" badge into two —
-          `manuallyDeleted` keeps the old `state.deleted` label, while
-          `trimDeleted` gets its own `state.trimDeleted` label so the
-          user can distinguish a row they intentionally deleted from
-          a row a cut consumed.  Both are still danger-styled and
-          both suppress the per-row warning badges (the warnings are
-          still computed and surfaced in the 警告 tab — they just
-          don't decorate a row that's already gone).
-          The `edited` badge fires for any row that `wasEdited`
-          (= REQ-103 §B cross-cutting `wasEdited` flag), so a row
-          that was manually edited and then manually deleted still
-          shows its `edited` badge alongside the `deleted` one — the
-          user can see at a glance that the row WAS edited before it
-          was removed. */}
-      <div className="flex flex-wrap items-center gap-1 py-3 px-1">
-        {clipStatus === 'manuallyDeleted' && (
-          <Badge variant="danger">{t('state.deleted')}</Badge>
-        )}
-        {clipStatus === 'trimDeleted' && (
-          <Badge variant="danger">{t('state.trimDeleted')}</Badge>
-        )}
-        {(entry.isEdited ||
-          // REQ-103: also surface "edited" badge for rows whose times
-          // were clamped by a head/tail cut (= `clipStatus === 'edited'`
-          // when not deleted, OR `wasEdited` on a deleted row).  We
-          // detect cut-induced edit by reading the precomputed status —
-          // if the row is 'edited' the clamp happened, and for deleted
-          // rows we still want the badge when `entry.isEdited` was true
-          // pre-deletion.
-          clipStatus === 'edited') && (
-          <Badge variant="default">{t('state.edited')}</Badge>
-        )}
-        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.timeInvalid && (
-          <Badge variant="danger">{t('badge.timeInvalid')}</Badge>
-        )}
-        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overlap && (
-          /* warning (amber), not danger — overlap is an intentional pattern
-             for stacked captions (libass renders both simultaneously) and
-             should NOT exclude the row from burn-in.  The amber styling
-             tells the user "this works, but heads-up". */
-          <Badge variant="warning">{t('badge.overlap')}</Badge>
-        )}
-        {/* REQ-121 — overDuration is an error (concat path can't include
-            an out-of-range time); badge promoted to danger. */}
-        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overDuration && (
-          <Badge variant="danger">{t('badge.overDuration')}</Badge>
-        )}
-        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overflow && (
-          <Badge variant="warning">{t('badge.overflow')}</Badge>
-        )}
-        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.emptyText && (
-          <Badge variant="warning">{t('badge.emptyText')}</Badge>
-        )}
-        {/* REQ-121 — invalidSize (fontSizePx ≤ 0) is an error (libass
-            cannot render); badge promoted to danger. */}
-        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.invalidSize && (
-          <Badge variant="danger">{t('badge.invalidSize')}</Badge>
-        )}
-      </div>
-
+      {/* REQ-20260613-001 §2-1: Actions cell now precedes the State
+          badge cell in DOM order so the icon cluster sits immediately
+          to the right of the text column and the badges land in the
+          rightmost slot (= TABLE_GRID_COLS columns 7 and 8 swapped to
+          match).  The two cells' internal contents are unchanged from
+          before the swap — only their grid positions move. */}
       {/* Actions — REQ-039 #2 adds the per-row auto-line-break button
           stacked below the delete/reset icon row.  REQ-041 #2 removes
           the hover-only opacity gate: actions are now always visible
@@ -764,6 +724,16 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           REQ-117 [1] — `data-row-actions` exempts this column from the
           row-level deleted-state opacity fade so the Restore / Reset
           buttons read as clickable instead of greyed-out. */}
+      {/* REQ-20260612-003 §2 + REQ-20260613-001 §2-2: row actions —
+          single row of icon-only buttons.  Order (left → right):
+          敷き詰め改行 → はみ出し改行 → 削除/復元 → リセット → 複製.
+          Both wrap buttons lead the cluster as a "transform this
+          row's text" unit; delete/reset keep their previous physical
+          position so muscle memory is preserved; duplicate is the
+          last icon (right-most) matching the Inspector's placement
+          (REQ-20260613-001 §2-5).  Duplicate is suppressed for frozen
+          (= manually-deleted OR trim-deleted) rows mirroring the
+          wrap-button gate. */}
       <div data-row-actions className="flex flex-col gap-1 py-3 px-1">
         <div className="flex items-center justify-center gap-1">
           {!isAudioOnly && (
@@ -856,7 +826,90 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
                 undo glyph in step2.tsx. */}
             <Eraser className="h-3.5 w-3.5" />
           </button>
+          {/* REQ-20260613-001 §2-2: Duplicate button.  CopyPlus icon
+              chosen over plain Copy because the `+` glyph captures
+              the "add a new row that's a copy of this one" semantics
+              and visually distinguishes the action from a hypothetical
+              clipboard-copy in adjacent UI.  Disabled on frozen rows
+              for the same reason as the wrap buttons — the duplicate
+              would arrive at the same start/end as a frozen row and
+              the user has no obvious affordance to recover. */}
+          <button
+            type="button"
+            title={t('action.duplicateRowHelp')}
+            aria-label={t('action.duplicateRowHelp')}
+            onClick={(e) => { e.stopPropagation(); handleDuplicate() }}
+            disabled={isFrozen}
+            className={cn(
+              'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
+              'hover:bg-zinc-800 hover:text-zinc-200',
+              'disabled:opacity-30 disabled:pointer-events-none'
+            )}
+          >
+            <CopyPlus className="h-3.5 w-3.5" />
+          </button>
         </div>
+      </div>
+
+      {/* State — shows all applicable badges simultaneously.
+          REQ-103 §C: split the legacy "削除済み" badge into two —
+          `manuallyDeleted` keeps the old `state.deleted` label, while
+          `trimDeleted` gets its own `state.trimDeleted` label so the
+          user can distinguish a row they intentionally deleted from
+          a row a cut consumed.  Both are still danger-styled and
+          both suppress the per-row warning badges (the warnings are
+          still computed and surfaced in the 警告 tab — they just
+          don't decorate a row that's already gone).
+          The `edited` badge fires for any row that `wasEdited`
+          (= REQ-103 §B cross-cutting `wasEdited` flag), so a row
+          that was manually edited and then manually deleted still
+          shows its `edited` badge alongside the `deleted` one — the
+          user can see at a glance that the row WAS edited before it
+          was removed. */}
+      <div className="flex flex-wrap items-center gap-1 py-3 px-1">
+        {clipStatus === 'manuallyDeleted' && (
+          <Badge variant="danger">{t('state.deleted')}</Badge>
+        )}
+        {clipStatus === 'trimDeleted' && (
+          <Badge variant="danger">{t('state.trimDeleted')}</Badge>
+        )}
+        {(entry.isEdited ||
+          // REQ-103: also surface "edited" badge for rows whose times
+          // were clamped by a head/tail cut (= `clipStatus === 'edited'`
+          // when not deleted, OR `wasEdited` on a deleted row).  We
+          // detect cut-induced edit by reading the precomputed status —
+          // if the row is 'edited' the clamp happened, and for deleted
+          // rows we still want the badge when `entry.isEdited` was true
+          // pre-deletion.
+          clipStatus === 'edited') && (
+          <Badge variant="default">{t('state.edited')}</Badge>
+        )}
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.timeInvalid && (
+          <Badge variant="danger">{t('badge.timeInvalid')}</Badge>
+        )}
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overlap && (
+          /* warning (amber), not danger — overlap is an intentional pattern
+             for stacked captions (libass renders both simultaneously) and
+             should NOT exclude the row from burn-in.  The amber styling
+             tells the user "this works, but heads-up". */
+          <Badge variant="warning">{t('badge.overlap')}</Badge>
+        )}
+        {/* REQ-121 — overDuration is an error (concat path can't include
+            an out-of-range time); badge promoted to danger. */}
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overDuration && (
+          <Badge variant="danger">{t('badge.overDuration')}</Badge>
+        )}
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overflow && (
+          <Badge variant="warning">{t('badge.overflow')}</Badge>
+        )}
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.emptyText && (
+          <Badge variant="warning">{t('badge.emptyText')}</Badge>
+        )}
+        {/* REQ-121 — invalidSize (fontSizePx ≤ 0) is an error (libass
+            cannot render); badge promoted to danger. */}
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.invalidSize && (
+          <Badge variant="danger">{t('badge.invalidSize')}</Badge>
+        )}
       </div>
     </div>
   )
@@ -1110,8 +1163,12 @@ export function SubtitleTable({
         <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{isAudioOnly ? '' : t('table.colSize')}</div>
         <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{isAudioOnly ? '' : t('table.colStyle')}</div>
         <div className="py-2 px-2 text-callout font-semibold text-zinc-300">{t('table.colText')}</div>
-        <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{t('table.colState')}</div>
+        {/* REQ-20260613-001 §2-1: Actions header (currently empty
+            label, see locales/*.json `table.colActions`) precedes the
+            State header so the header columns align with the swapped
+            row cells below. */}
         <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{t('table.colActions')}</div>
+        <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{t('table.colState')}</div>
       </div>
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" onScroll={handleScroll}>
         {filtered.length === 0 ? (

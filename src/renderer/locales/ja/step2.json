@@ -74,6 +74,8 @@
     "autoLineBreakRowHelp": "敷き詰め改行 — 改行をいったん消して、画面の幅いっぱいに敷き詰め直します",
     "overflowWrapRow": "はみ出し改行",
     "overflowWrapRowHelp": "はみ出し改行 — 手動の改行を保ったまま、画面からはみ出す部分だけ折り返します",
+    "duplicateRow": "複製",
+    "duplicateRowHelp": "複製 — この行を複製して下に追加します",
     "sizeStepUp": "サイズを +{{step}}px (最大 {{max}})",
     "sizeStepDown": "サイズを -{{step}}px (最小 {{min}})"
   },
@@ -117,6 +119,7 @@
   },
   "toast": {
     "rowAdded": "{{index}}番目に追加しました",
+    "rowDuplicated": "行を複製しました",
     "rowDeleted": "削除しました",
     "rowRestored": "復元しました",
     "rowReset": "リセットしました",
@@ -153,7 +156,8 @@
     "resetRow": "リセット",
     "addRow": "追加",
     "autoLineBreak": "敷き詰め改行",
-    "overflowWrap": "はみ出し改行"
+    "overflowWrap": "はみ出し改行",
+    "duplicateRow": "行を複製"
   },
   "bulk": {
     "regionLabel": "一括編集",

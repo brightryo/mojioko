@@ -2,6 +2,7 @@ import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../shared/types'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
+import { useUiStore } from '@/stores/ui-store'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
@@ -205,4 +206,97 @@ export function overflowWrapRow(
   labels: { history: string; noChangeToast: string }
 ): Promise<void> {
   return wrapRow(entry, 'overflow', labels)
+}
+
+/**
+ * 複製 (REQ-20260613-001 §2-3).  Insert a full copy of `entry`
+ * immediately after it in the entries array.  Both rows end up with
+ * identical startSec / endSec — the user is expected to adjust the
+ * times afterwards.  Pattern mirrors the AddRow flow in
+ * `routes/step2.tsx`:
+ *
+ *   - new collision-resistant `id`
+ *   - explicit `isEdited: true` + `isDeleted: false`
+ *   - `original` is a snapshot of the just-copied current state, so
+ *     a later Reset on the duplicate returns to the duplicate's own
+ *     baseline (= what was visible at duplication time) rather than
+ *     to the source row's pre-edit transcript
+ *
+ * Insertion order: `addEntry(duplicate, originalIdx + 1)` keeps the
+ * duplicate directly under the source in the array.  Because
+ * `filterEntries` reads `entries` in array order without re-sorting,
+ * the list view also renders the duplicate directly under the source.
+ * `sortByStartSec` is a stable sort (ES2019+) so even if it runs
+ * later, equal-startSec rows preserve their array order.  In the
+ * timeline view, the greedy track allocator (`timeline-layout.ts`
+ * `compareForLayout`) tie-breaks on lexicographic id; both rows
+ * share the same span so the duplicate lands on a separate track —
+ * intentional, the user can see both clips simultaneously.
+ *
+ * Side effects (mirroring AddRow):
+ *   - `setFocusedRowId(duplicate.id)` so the new row is highlighted
+ *   - `setScrollToRowId(duplicate.id)` so the list scrolls to it
+ *   - success toast acknowledging the operation
+ *
+ * One history op pushed; undo removes the duplicate by id; redo
+ * re-inserts it directly after the original's CURRENT position
+ * (re-looked up at redo time so the row stays correctly placed even
+ * if surrounding rows have been reordered in the meantime).
+ */
+export function duplicateRow(
+  entry: SubtitleEntry,
+  labels: { history: string; successToast: string }
+): void {
+  const projectStore = useProjectStore.getState()
+  const pushHistory = useHistoryStore.getState().push
+  const originalIdx = projectStore.entries.findIndex((e) => e.id === entry.id)
+  if (originalIdx === -1) return
+
+  // REQ-079 #2 / REQ-052 style id — collision-resistant when two
+  // duplicates land within the same millisecond.  `dup-` prefix makes
+  // the origin visible in debug tools and unit-test output.
+  const newId = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+    ? `dup-${crypto.randomUUID()}`
+    : `dup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+  const base = {
+    startSec: entry.startSec,
+    endSec: entry.endSec,
+    text: entry.text,
+    fontSizePx: entry.fontSizePx,
+    textColorHex: entry.textColorHex,
+    outlineColorHex: entry.outlineColorHex,
+    outlineThicknessPx: entry.outlineThicknessPx,
+    fadeEnabled: entry.fadeEnabled,
+    fontId: entry.fontId
+  }
+  const duplicate: SubtitleEntry = {
+    id: newId,
+    ...base,
+    isDeleted: false,
+    isEdited: true,
+    original: { ...base }
+  }
+
+  pushHistory({
+    label: labels.history,
+    undo: () => {
+      const s = useProjectStore.getState()
+      s.setEntries(s.entries.filter((e) => e.id !== newId))
+    },
+    redo: () => {
+      const s = useProjectStore.getState()
+      const idx = s.entries.findIndex((e) => e.id === entry.id)
+      const insertAt = idx === -1 ? s.entries.length : idx + 1
+      s.addEntry(duplicate, insertAt)
+    }
+  })
+
+  projectStore.addEntry(duplicate, originalIdx + 1)
+
+  const ui = useUiStore.getState()
+  ui.setFocusedRowId(newId)
+  ui.setScrollToRowId(newId)
+
+  toast.success(labels.successToast)
 }
