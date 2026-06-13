@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Clock, Trash2, Undo2, Eraser, WrapText, X } from 'lucide-react'
+import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
@@ -14,6 +14,7 @@ import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import {
   autoLineBreakRow as runAutoLineBreakRow,
+  overflowWrapRow as runOverflowWrapRow,
   resetRow as runResetRow,
   toggleDeleteRow as runToggleDeleteRow
 } from '@/lib/entry-row-actions'
@@ -215,6 +216,16 @@ export function TimelineBlockInspector({
     })
   }
 
+  async function handleOverflowWrap() {
+    // Same commit-first pattern as handleAutoLineBreak so the rewrap
+    // sees the committed text rather than a stale draft.
+    commitText(draft)
+    await runOverflowWrapRow(entry, {
+      history: t('history.overflowWrap'),
+      noChangeToast: t('bulk.overflowWrapNoChange')
+    })
+  }
+
   function handleDeleteToggle() {
     runToggleDeleteRow(entry, {
       delete: t('history.deleteRow'),
@@ -268,26 +279,46 @@ export function TimelineBlockInspector({
 
   return (
     <div className="flex flex-col gap-3 w-[320px] text-zinc-100 max-h-[70vh] overflow-y-auto pr-1">
-      {/* § 1 — Action icons + close.  Auto-line-break is suppressed in
-          audio-only mode (no burn-in pipeline consumes the rewrap). */}
+      {/* § 1 — Action icons + close.  REQ-20260612-003 §2 §3:
+          icon-only buttons in order 敷き詰め改行 → はみ出し改行 →
+          削除/復元 → リセット, then the X close on the right.  Both
+          wrap buttons are suppressed in audio-only mode (no burn-in
+          pipeline consumes the rewrap). */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1">
           {!isAudioOnly && (
-            <button
-              type="button"
-              title={t('action.autoLineBreakRowHelp')}
-              aria-label={t('action.autoLineBreakRowHelp')}
-              onClick={handleAutoLineBreak}
-              disabled={isFrozen}
-              className={cn(
-                'flex items-center justify-center h-7 w-7 rounded',
-                'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
-                'transition-colors duration-150',
-                'disabled:opacity-30 disabled:pointer-events-none'
-              )}
-            >
-              <WrapText className="h-3.5 w-3.5" />
-            </button>
+            <>
+              <button
+                type="button"
+                title={t('action.autoLineBreakRowHelp')}
+                aria-label={t('action.autoLineBreakRowHelp')}
+                onClick={handleAutoLineBreak}
+                disabled={isFrozen}
+                className={cn(
+                  'flex items-center justify-center h-7 w-7 rounded',
+                  'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+                  'transition-colors duration-150',
+                  'disabled:opacity-30 disabled:pointer-events-none'
+                )}
+              >
+                <AlignJustify className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                title={t('action.overflowWrapRowHelp')}
+                aria-label={t('action.overflowWrapRowHelp')}
+                onClick={handleOverflowWrap}
+                disabled={isFrozen}
+                className={cn(
+                  'flex items-center justify-center h-7 w-7 rounded',
+                  'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+                  'transition-colors duration-150',
+                  'disabled:opacity-30 disabled:pointer-events-none'
+                )}
+              >
+                <WrapText className="h-3.5 w-3.5" />
+              </button>
+            </>
           )}
           {/* REQ-118 [2] — same three-branch rule as the subtitle-table
               row.  Trim-deleted entries show the restore glyph in

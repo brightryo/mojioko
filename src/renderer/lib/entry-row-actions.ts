@@ -96,11 +96,28 @@ export function resetRow(
 }
 
 /**
- * Re-wrap a single row's text using `applyAutoLineBreak` with the row's
- * current fontSizePx / outlineThicknessPx / fontId (per-row font respected
- * for correct glyph metrics).  Strips any existing `\N` first so the
- * rewrap starts from a single-line string — same contract as the bulk
- * "auto-line-break" button.
+ * Wrap mode used by `wrapRow` / bulk handlers:
+ *   - `'pack'`     : strip every existing `\N` first, then re-wrap.  The
+ *                    entry collapses to one logical line that is packed
+ *                    to the full effective width.  This is the legacy
+ *                    "auto-wrap" behaviour (= REQ-20260612-003 §1 A
+ *                    敷き詰め改行).
+ *   - `'overflow'` : keep existing `\N` exactly where they are, only add
+ *                    new `\N` inside segments that overflow the
+ *                    effective width (REQ-20260612-003 §1 B はみ出し改行).
+ *
+ * Both modes call `applyAutoLineBreak` with identical width / font /
+ * outline arguments, so break positions for any single line are
+ * width-identical between modes — the *only* difference is whether the
+ * existing `\N` are stripped before measurement.
+ */
+export type WrapMode = 'pack' | 'overflow'
+
+/**
+ * Shared row-wrap implementation for both pack and overflow modes.
+ *
+ * - `pack` strips existing `\N` first (REQ-20260612-003 A 敷き詰め改行).
+ * - `overflow` preserves existing `\N` (REQ-20260612-003 B はみ出し改行).
  *
  * When the rewrap result matches the current text (no breaks would
  * change), surfaces an info toast and skips the history push so an
@@ -111,8 +128,9 @@ export function resetRow(
  * ~45 % and breaks land too early.  The font is in the module cache after
  * Step 2 mount so the await typically resolves immediately.
  */
-export async function autoLineBreakRow(
+async function wrapRow(
   entry: SubtitleEntry,
+  mode: WrapMode,
   labels: { history: string; noChangeToast: string }
 ): Promise<void> {
   if (entry.isDeleted) return
@@ -135,9 +153,13 @@ export async function autoLineBreakRow(
   const latest =
     projectStore.entries.find((e) => e.id === entry.id) ?? entry
   if (latest.isDeleted) return
-  const stripped = latest.text.replace(/\\N/g, '')
+  // Only difference between the two modes: pack pre-strips so the wrap
+  // core sees a single long line; overflow passes the text through with
+  // existing `\N` intact (applyAutoLineBreak then splits on `\N` and
+  // measures each segment independently — see auto-line-break.ts:51).
+  const input = mode === 'pack' ? latest.text.replace(/\\N/g, '') : latest.text
   const rewrapped = applyAutoLineBreak(
-    stripped,
+    input,
     latest.fontSizePx,
     latest.outlineThicknessPx,
     videoWidthPx,
@@ -155,4 +177,32 @@ export async function autoLineBreakRow(
     redo: () => projectStore.updateEntry(latest.id, { ...snapshot, text: rewrapped })
   })
   projectStore.updateEntry(latest.id, { text: rewrapped })
+}
+
+/**
+ * 敷き詰め改行 (REQ-20260612-003 §1 A).  Strips every existing `\N` in
+ * the row, then re-wraps the resulting single line to the effective
+ * video width.  Identical to the legacy "auto-wrap" behaviour — name
+ * kept as `autoLineBreakRow` so callers and external references in
+ * other surfaces (bulk bar, timeline inspector) remain stable.
+ */
+export function autoLineBreakRow(
+  entry: SubtitleEntry,
+  labels: { history: string; noChangeToast: string }
+): Promise<void> {
+  return wrapRow(entry, 'pack', labels)
+}
+
+/**
+ * はみ出し改行 (REQ-20260612-003 §1 B).  Preserves every existing `\N`
+ * the user already placed and only inserts additional `\N` inside
+ * segments that overflow the effective video width.  Shares the same
+ * width / font / outline measurement path as `autoLineBreakRow` via
+ * the underlying `applyAutoLineBreak` call (no separate width logic).
+ */
+export function overflowWrapRow(
+  entry: SubtitleEntry,
+  labels: { history: string; noChangeToast: string }
+): Promise<void> {
+  return wrapRow(entry, 'overflow', labels)
 }

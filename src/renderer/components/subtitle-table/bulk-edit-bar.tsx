@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, WrapText, ChevronDown, AlertCircle, RotateCcw } from 'lucide-react'
+import { X, WrapText, AlignJustify, ChevronDown, AlertCircle, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
@@ -277,7 +277,16 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // No-op rows (where rewrap === current text) are excluded so an
   // unchanged row neither bloats the history nor inflates the "applied
   // to N rows" toast count.
-  async function handleAutoLineBreakApply() {
+  // REQ-20260612-003 §1: bulk wrap apply, shared between 敷き詰め改行
+  // (mode='pack') and はみ出し改行 (mode='overflow').  Width / font /
+  // outline measurement passes through the same `applyAutoLineBreak`
+  // call regardless of mode — only the pre-strip step differs, so the
+  // two bulk buttons can never disagree on break positions for a given
+  // single line (= §6 #8 共通幅基準の確認).
+  async function runBulkWrap(
+    mode: 'pack' | 'overflow',
+    labels: { historyKey: 'autoLineBreak' | 'overflowWrap'; noChangeKey: 'autoLineBreakNoChange' | 'overflowWrapNoChange' }
+  ) {
     // Await loadSubtitleFont() so applyAutoLineBreak runs the glyph-
     // accurate path rather than the character-class fallback (which
     // over-estimates wide-glyph widths by ~45 % and lands breaks too
@@ -290,7 +299,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
 
     const all = useProjectStore.getState().entries
     const videoWidthPx = useProjectStore.getState().video?.widthPx ?? 1920
-    // REQ-119 [1] — same freeze filter as `applyBulk` so auto-line-break
+    // REQ-119 [1] — same freeze filter as `applyBulk` so the wrap pass
     // never rewraps a trim-deleted row mid-bulk.
     const cuts = useProjectStore.getState().cuts
 
@@ -301,13 +310,16 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       const e = all.find((x) => x.id === id)
       if (!e || e.isDeleted) continue
       if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
-      const stripped = e.text.replace(/\\N/g, '')
+      // Only difference between the two modes: pack pre-strips so
+      // applyAutoLineBreak sees a single long line; overflow passes
+      // the text through with existing `\N` intact.
+      const input = mode === 'pack' ? e.text.replace(/\\N/g, '') : e.text
       // Per-row fontId (REQ-021): bulk-applied breaks must respect each
       // row's own font, otherwise rows whose fontId differs from the
       // active selection would break at positions that don't match the
       // burned-in result.
       const rewrapped = applyAutoLineBreak(
-        stripped,
+        input,
         e.fontSizePx,
         e.outlineThicknessPx,
         videoWidthPx,
@@ -325,7 +337,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       // user knows their click was acknowledged, but skip the history
       // pressure and the "applied / undo" toast.  Info-level, no
       // action button.
-      toast.info(t('bulk.autoLineBreakNoChange'))
+      toast.info(t(`bulk.${labels.noChangeKey}`))
       return
     }
 
@@ -342,10 +354,24 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       }
     }
 
-    const label = t('bulk.history.autoLineBreak', { count: snapshots.size })
+    const label = t(`bulk.history.${labels.historyKey}`, { count: snapshots.size })
     useHistoryStore.getState().push({ label, undo: revert, redo: apply })
     apply()
     onApplied(snapshots.size, label)
+  }
+
+  function handleAutoLineBreakApply() {
+    return runBulkWrap('pack', {
+      historyKey: 'autoLineBreak',
+      noChangeKey: 'autoLineBreakNoChange'
+    })
+  }
+
+  function handleOverflowWrapApply() {
+    return runBulkWrap('overflow', {
+      historyKey: 'overflowWrap',
+      noChangeKey: 'overflowWrapNoChange'
+    })
   }
 
   // ---------------------------------------------------------------------
@@ -479,39 +505,46 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           <BulkFontPicker onPick={handleFontChange} />
         </label>
 
-        {/* Separator + Auto-wrap action.  Visually distinct from the
-            value-controls above: this one is a single-shot action that
-            recomputes line breaks on the selected rows using each row's
-            current font size + outline thickness.  Pre-existing manual
-            \N are cleared as part of the recompute — undo restores both
-            text and isEdited in one click. */}
+        {/* Separator + Wrap actions.  REQ-20260612-003 §1 / §2:
+            two single-shot wrap buttons that recompute line breaks on
+            the selected rows using each row's own font size +
+            outline thickness.  Both are icon-only square pills with a
+            native title tooltip (= name + description), matching the
+            adjacent row-end action icons in subtitle-table.tsx.
+            Order: 敷き詰め改行 (pack, AlignJustify) →
+            はみ出し改行 (overflow, WrapText). */}
         <div
           className="h-5 w-px flex-shrink-0"
           style={{ backgroundColor: 'hsl(var(--separator) / var(--separator-alpha))' }}
           aria-hidden="true"
         />
-        {/* REQ-039 #3: auto-wrap button restyled to match the
-            BulkFontPicker pill that sits immediately to its left in the
-            same bar (h-7, bg-input, border-border).  The previous
-            variant="secondary" rendered a white-on-dark slab that read
-            as a primary action and visually clashed with every other
-            control in the bar.  Token-based (bg-input / text-foreground
-            / border-border) so the same colour scheme follows the theme
-            if it changes. */}
         <button
           type="button"
           onClick={handleAutoLineBreakApply}
           title={t('bulk.autoLineBreakHelp')}
           aria-label={t('bulk.autoLineBreakHelp')}
           className={cn(
-            'inline-flex items-center justify-center gap-1.5',
-            'h-7 px-2 rounded border bg-input text-body-sm text-foreground',
+            'inline-flex items-center justify-center',
+            'h-7 w-7 rounded border bg-input text-foreground',
+            'border-border hover:border-zinc-700 transition-colors duration-150',
+            'focus:outline-none focus-visible:outline-none'
+          )}
+        >
+          <AlignJustify className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={handleOverflowWrapApply}
+          title={t('bulk.overflowWrapHelp')}
+          aria-label={t('bulk.overflowWrapHelp')}
+          className={cn(
+            'inline-flex items-center justify-center',
+            'h-7 w-7 rounded border bg-input text-foreground',
             'border-border hover:border-zinc-700 transition-colors duration-150',
             'focus:outline-none focus-visible:outline-none'
           )}
         >
           <WrapText className="h-3.5 w-3.5" />
-          {t('bulk.autoLineBreak')}
         </button>
       </div>
     </div>
