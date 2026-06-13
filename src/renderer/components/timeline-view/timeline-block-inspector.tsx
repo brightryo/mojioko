@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Clock, Trash2, Undo2, Eraser, WrapText, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -73,11 +73,39 @@ export function TimelineBlockInspector({
   const [draft, setDraft] = useState(initialDraft)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [sizeOutOfRange, setSizeOutOfRange] = useState(false)
+  // REQ-20260612-004: same dirty / composing pattern as CellEditor in
+  // subtitle-table.tsx.  The Inspector's textarea is always mounted
+  // (unlike CellEditor, which is gated by `editingText`), so without
+  // these guards an external `updateEntry({text})` (e.g. from the
+  // 敷き詰め改行 / はみ出し改行 buttons immediately above this
+  // textarea) writes to the store but never reaches `draft`, the
+  // textarea keeps displaying the pre-wrap text, and the next blur
+  // silently overwrites the wrap with that stale value.  See
+  // RES-20260612-004 §3 for the full root-cause analysis.
+  const dirtyRef = useRef(false)
+  const isComposingRef = useRef(false)
+
+  // Accept external entry.text updates while the inspector is open
+  // and the textarea is mounted, gated by:
+  //   - dirtyRef.current === false → user hasn't typed since the
+  //     last commit, so there's nothing to lose by re-syncing
+  //   - isComposingRef.current === false → mid-IME composition
+  //     would have the candidate window wiped if we touched value
+  useEffect(() => {
+    if (dirtyRef.current) return
+    if (isComposingRef.current) return
+    setDraft(entry.text.replace(/\\N/g, '\n'))
+  }, [entry.text])
 
   function commitText(next: string) {
     // Round-trip newlines back to ASS \N
     const normalized = next.replace(/\n/g, '\\N')
-    if (normalized === entry.text) return
+    if (normalized === entry.text) {
+      // No actual change to commit, but we still clear the dirty flag
+      // so a subsequent external update is allowed to sync into draft.
+      dirtyRef.current = false
+      return
+    }
     const snapshot = { ...entry }
     const patch = { text: normalized, isEdited: true }
     pushHistory({
@@ -86,6 +114,7 @@ export function TimelineBlockInspector({
       redo: () => updateEntry(entry.id, { ...snapshot, ...patch })
     })
     updateEntry(entry.id, patch)
+    dirtyRef.current = false
   }
 
   /**
@@ -144,11 +173,30 @@ export function TimelineBlockInspector({
   // textarea — click elsewhere or close the inspector) commits the
   // text.  The inspector itself closes via its X button.
 
+  // REQ-20260612-004: only commit on blur when the user has actually
+  // typed since the last commit / sync.  Without this, blur would
+  // unconditionally write `draft` (which may be stale relative to a
+  // just-applied wrap on entry.text) back into the store, undoing
+  // the wrap.  The change handler sets dirtyRef on every keystroke;
+  // commitText / the value-sync effect clear it.
   function handleBlur() {
-    // Blur fires when the user clicks any of the inspector's other
-    // controls too — commit so the edit is not lost.  No-op fast path is
-    // inside commitText().
+    if (!dirtyRef.current) return
     commitText(draft)
+  }
+  function handleDraftChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    dirtyRef.current = true
+    setDraft(e.target.value)
+  }
+  function handleCompositionStart() {
+    isComposingRef.current = true
+  }
+  function handleCompositionEnd(e: React.CompositionEvent<HTMLTextAreaElement>) {
+    isComposingRef.current = false
+    // Treat a committed IME composition as a user edit so the next
+    // blur flushes the converted text.  `e.target.value` already
+    // reflects the post-composition value when this fires.
+    dirtyRef.current = true
+    setDraft((e.target as HTMLTextAreaElement).value)
   }
 
   // -------------------------------------------------------------------------
@@ -441,8 +489,10 @@ export function TimelineBlockInspector({
         <textarea
           ref={textareaRef}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={handleDraftChange}
           onBlur={handleBlur}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
           rows={3}
           disabled={isFrozen}
           spellCheck={false}

@@ -68,11 +68,37 @@ interface CellEditorProps {
 function CellEditor({ value, onCommit, multiline }: CellEditorProps) {
   const [draft, setDraft] = useState(value)
   const ref = useRef<HTMLTextAreaElement & HTMLInputElement>(null)
+  // REQ-20260612-004: track whether the user has typed since the last
+  // commit / external sync.  Used by the value-sync effect and the
+  // blur handler so that an external `updateEntry({text})` (e.g. from
+  // a wrap button) propagates into the displayed draft AND is not
+  // silently overwritten on the next blur.  Ref (not state) so the
+  // change handler doesn't trigger a re-render purely to flip it.
+  const dirtyRef = useRef(false)
+  // REQ-20260612-004: skip the value-sync effect while an IME
+  // composition is in progress, since replacing the textarea's value
+  // mid-composition resets the candidate window and corrupts the
+  // partial composition glyphs.
+  const isComposingRef = useRef(false)
 
   useEffect(() => {
     ref.current?.focus()
     ref.current?.select()
   }, [])
+
+  // REQ-20260612-004: accept external value updates while the editor
+  // is mounted, as long as the user hasn't typed into the buffer
+  // since the last commit and is not mid-IME-composition.  Without
+  // this, an `updateEntry({text})` from a sibling control (e.g. the
+  // wrap buttons in this row's action column) writes to the store
+  // but never reaches the displayed `draft`, so the textarea keeps
+  // showing the pre-wrap text and the next blur silently overwrites
+  // the wrap with that stale value.
+  useEffect(() => {
+    if (dirtyRef.current) return
+    if (isComposingRef.current) return
+    setDraft(value)
+  }, [value])
 
   // Auto-resize textarea height: up to 3 visual lines, then scroll
   useEffect(() => {
@@ -92,14 +118,45 @@ function CellEditor({ value, onCommit, multiline }: CellEditorProps) {
     'focus:outline-none'
   )
 
+  // REQ-20260612-004: only commit on blur when the user has actually
+  // typed something — otherwise an externally-driven `value` change
+  // (e.g. a wrap button that updated the store while focus was
+  // elsewhere on the row) would be re-committed as itself the next
+  // time the editor blurs, with no effect.  Worse, when the editor
+  // still holds a stale `draft` because the sync effect was gated
+  // (dirty / composing), an unconditional blur would write that
+  // stale draft back and undo the external update.
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) {
+    dirtyRef.current = true
+    setDraft(e.target.value)
+  }
+  function handleBlur() {
+    if (!dirtyRef.current) return
+    dirtyRef.current = false
+    onCommit(draft)
+  }
+  function handleCompositionStart() {
+    isComposingRef.current = true
+  }
+  function handleCompositionEnd(e: React.CompositionEvent<HTMLTextAreaElement | HTMLInputElement>) {
+    isComposingRef.current = false
+    // Treat a committed IME composition as a user edit so the next
+    // blur flushes the converted text.  `e.target.value` already
+    // reflects the post-composition value when this fires.
+    dirtyRef.current = true
+    setDraft((e.target as HTMLTextAreaElement | HTMLInputElement).value)
+  }
+
   if (multiline) {
     return (
       <textarea
         ref={ref}
         value={draft}
         rows={1}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => onCommit(draft)}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
         className={sharedClass}
       />
     )
@@ -109,8 +166,10 @@ function CellEditor({ value, onCommit, multiline }: CellEditorProps) {
       ref={ref}
       type="text"
       value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => onCommit(draft)}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onCompositionStart={handleCompositionStart}
+      onCompositionEnd={handleCompositionEnd}
       className={sharedClass}
     />
   )
