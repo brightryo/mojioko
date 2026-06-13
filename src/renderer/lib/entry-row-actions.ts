@@ -314,8 +314,13 @@ export function duplicateRow(
 
   projectStore.addEntry(duplicate, originalIdx + 1)
 
+  // REQ-20260614-001 Phase 3 — the freshly-duplicated row becomes the
+  // user's current selection (drives green left-border + inspector
+  // content).  `setFocusedRowId` was the pre-Phase-3 path; the playback
+  // follower stays untouched here so a duplicate during playback does
+  // not yank the playback-active indicator away from the playing entry.
   const ui = useUiStore.getState()
-  ui.setFocusedRowId(newId)
+  ui.setSelectedEntryId(newId)
   ui.setScrollToRowId(newId)
 
   toast.success(labels.successToast)
