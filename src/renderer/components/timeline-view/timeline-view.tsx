@@ -975,21 +975,29 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   // Handlers
   // -------------------------------------------------------------------------
 
+  /**
+   * REQ-20260614-001 — full selection path (confirmed in Phase 6):
+   *
+   *   Block click (here)
+   *     → `setSelectedEntryId(id)` (Phase 3, ui-store slice)
+   *     → `setVideoSeekRequest(startSec)` (preview seeks)
+   *     ↓
+   *   step2.tsx subscribes to `selectedEntryId`
+   *     → `entries.find(...) → selectedEntry`
+   *     → renders `<TimelineBlockInspector entry={selectedEntry} ... />`
+   *       in the right-pane `inspectorSlot` (Phase 4)
+   *
+   * Phase 6 — single-selection only on the timeline (the timeline never
+   * adds the clicked id to `selectedRowIds`; that bulk-select Set is
+   * driven exclusively by the list view's row checkboxes per補遺① §C).
+   * Drags don't write `selectedEntryId` because that would clobber the
+   * user's previous explicit pick mid-drag — pointermove just mutates
+   * positions, never selection.
+   */
   const handleSelectBlock = useCallback((id: string, startSec: number) => {
-    // REQ-20260614-001 Phase 3 — block click is a user action → write
-    // `selectedEntryId` (the user-selection slice).  `focusedRowId`
-    // continues to be the playback follower and is touched only by the
-    // preview panel's `handleTimeUpdate`.
     setSelectedEntryId(id)
     setVideoSeekRequest(startSec)
-    // REQ-20260614-001 Phase 4 — `setOpenInspectorId` retired; selection
-    // alone drives the always-on right-pane Inspector via
-    // `selectedEntryId`.
   }, [setSelectedEntryId, setVideoSeekRequest])
-
-  // REQ-20260614-001 Phase 4 — `handleInspectorOpenChange` retired
-  // alongside the per-Block Popover; nothing in the timeline view needs
-  // to know "open / close" state anymore.
 
   /**
    * REQ-074 1c: Ruler scrub + tracks background click + nav buttons all
@@ -1426,6 +1434,12 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   //                     wheel = vertical even then.  Horizontal scroll
   //                     stays on the bottom scrollbar (and trackpad
   //                     deltaX is left alone).
+  //
+  // REQ-20260614-001 Phase 6 (補遺① 判断 #3) — Ctrl+wheel "ズーム" は
+  // **新規実装しない**ことに決定済み。本ハンドラは page-zoom 抑止のみで、
+  // ズーム動作は toolbar の +/- ボタン + range スライダー経由のまま。
+  // 可変ペイン (ResizablePanel) 内でも `scrollRef` は flex-1 で h-full を
+  // 保つので wheel ルーティングは pane-resize に依存しない。
   //
   // `passive: false` is required so `preventDefault()` actually fires;
   // React's onWheel prop attaches with `passive: true` which silently
@@ -1891,7 +1905,15 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                   (= the reported overlap bug).  z-10 lifts the ruler
                   above the tracks while still leaving room for the
                   scissor markers (z-20) and the playhead (also z-20,
-                  bumped in the same REQ) to layer over the ruler. */}
+                  bumped in the same REQ) to layer over the ruler.
+
+                  REQ-20260614-001 Phase 6 — confirmed working inside
+                  the resizable bottom pane (補遺③ left-vertical inner
+                  group).  `position: sticky` is relative to the nearest
+                  scrolling ancestor, which is still `scrollRef` (a
+                  child of the bottom pane).  Pane resize changes
+                  scrollRef's clientHeight; the ruler stays pinned to
+                  its top regardless. */}
               <div className="sticky top-0 z-10">
                 <Ruler
                   pixelsPerSec={pixelsPerSec}
