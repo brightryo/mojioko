@@ -120,24 +120,39 @@ export async function autoLineBreakRow(
   const pushHistory = useHistoryStore.getState().push
   const font = await loadSubtitleFont().catch(() => null)
   const videoWidthPx = projectStore.video?.widthPx ?? 1920
-  const stripped = entry.text.replace(/\\N/g, '')
+  // REQ-20260612-004: re-read the entry from the store rather than
+  // trusting the closure-captured `entry` argument.  When a sibling
+  // text-input is focused and the user clicks a wrap button, the
+  // browser fires `blur` on the input synchronously before the
+  // button's `click` handler runs.  The blur commits the user's
+  // typed draft via `updateEntry({text: ...})`, but the closure-
+  // captured `entry` was snapshotted at component render time and
+  // still holds the pre-blur text.  Without this refresh, the wrap
+  // would measure the stale text and write back a result that
+  // silently DISCARDS the user's just-typed edit.  Reading from
+  // `getState()` here costs nothing extra (already called above)
+  // and is the same pattern other handlers in this file use.
+  const latest =
+    projectStore.entries.find((e) => e.id === entry.id) ?? entry
+  if (latest.isDeleted) return
+  const stripped = latest.text.replace(/\\N/g, '')
   const rewrapped = applyAutoLineBreak(
     stripped,
-    entry.fontSizePx,
-    entry.outlineThicknessPx,
+    latest.fontSizePx,
+    latest.outlineThicknessPx,
     videoWidthPx,
     font,
-    entry.fontId
+    latest.fontId
   )
-  if (rewrapped === entry.text) {
+  if (rewrapped === latest.text) {
     toast.info(labels.noChangeToast)
     return
   }
-  const snapshot = { ...entry }
+  const snapshot = { ...latest }
   pushHistory({
     label: labels.history,
-    undo: () => projectStore.updateEntry(entry.id, snapshot),
-    redo: () => projectStore.updateEntry(entry.id, { ...snapshot, text: rewrapped })
+    undo: () => projectStore.updateEntry(latest.id, snapshot),
+    redo: () => projectStore.updateEntry(latest.id, { ...snapshot, text: rewrapped })
   })
-  projectStore.updateEntry(entry.id, { text: rewrapped })
+  projectStore.updateEntry(latest.id, { text: rewrapped })
 }
