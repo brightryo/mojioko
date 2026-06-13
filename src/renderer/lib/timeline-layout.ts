@@ -28,16 +28,6 @@ const TIME_EPS_SEC = 1e-3
  */
 export const LAYOUT_MIN_BLOCK_SEC = 0.05
 
-/**
- * Stable tiebreaker for entries that share `startSec`.  Sorting by id keeps
- * the greedy track assignment deterministic across renders so a tiny edit
- * to one row does not reshuffle the lane stacking of unrelated rows.
- */
-function compareForLayout(a: SubtitleEntry, b: SubtitleEntry): number {
-  if (a.startSec !== b.startSec) return a.startSec - b.startSec
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-}
-
 export interface TimelinePlacement {
   entry: SubtitleEntry
   /** 0-based track index. Higher = lower visually. */
@@ -50,6 +40,55 @@ export interface TimelineLayout {
   trackCount: number
   /** Total horizontal duration (seconds) the timeline should span. */
   totalSec: number
+}
+
+/**
+ * Per-entry time overrides used by the greedy track allocator (REQ-20260613-002).
+ *
+ * Background: dragging a clip in the timeline mutates `entry.startSec` /
+ * `entry.endSec` on every pointermove tick.  If the greedy sort relies on
+ * the live values, the sort order between the dragged clip and another
+ * clip at the same time can flip the moment one diverges — greedy then
+ * reassigns the lower track to whichever now sorts earlier, and the
+ * rendered blocks visually swap rows even though React's `key={id}`
+ * reconciliation kept each Block bound to its own entry.  The user
+ * perceives this as "the wrong clip moved."
+ *
+ * By supplying `greedyTimes` for the dragged entry (= its snapshot
+ * startSec / endSec at drag-start), the sort key and the interval-fit
+ * check both see the PRE-DRAG values, so the dragged clip stays in its
+ * starting greedy slot and keeps its trackIndex stable through the
+ * entire drag.  The block's *visual* leftPx / widthPx still derive from
+ * the live entry values in the caller, so the block follows the cursor
+ * laterally — only the vertical row stays pinned.
+ *
+ * Empty or omitted → identity behaviour (= legacy single-arg call sites
+ * are byte-identical).
+ */
+export interface TimelineLayoutOverrides {
+  /** id → times to use for greedy sort + interval check */
+  greedyTimes?: ReadonlyMap<string, { startSec: number; endSec: number }>
+}
+
+/**
+ * Stable tiebreaker for entries that share `startSec`.  Sorting by id keeps
+ * the greedy track assignment deterministic across renders so a tiny edit
+ * to one row does not reshuffle the lane stacking of unrelated rows.
+ *
+ * `greedyTimes` (REQ-20260613-002): when supplied, the override startSec
+ * is used for the primary sort key in place of the live `entry.startSec`.
+ * Keeps the dragged entry pinned to its starting sort position even as
+ * its live startSec diverges from neighbouring clips during a drag.
+ */
+function compareForLayout(
+  a: SubtitleEntry,
+  b: SubtitleEntry,
+  greedyTimes?: ReadonlyMap<string, { startSec: number; endSec: number }>
+): number {
+  const aStart = greedyTimes?.get(a.id)?.startSec ?? a.startSec
+  const bStart = greedyTimes?.get(b.id)?.startSec ?? b.startSec
+  if (aStart !== bStart) return aStart - bStart
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
 /**
@@ -76,12 +115,26 @@ export function layoutEntries(
   entries: readonly SubtitleEntry[],
   fallbackDurationSec: number,
   minBlockSec: number = 0,
+  overrides?: TimelineLayoutOverrides,
 ): TimelineLayout {
   if (entries.length === 0) {
     return { placements: [], trackCount: 0, totalSec: Math.max(1, fallbackDurationSec) }
   }
 
-  const sorted = [...entries].sort(compareForLayout)
+  const greedyTimes = overrides?.greedyTimes
+  // REQ-20260613-002: when an entry has a greedy-time override, the
+  // sort key AND the interval-fit check both use those override values
+  // (= snapshot times for a dragged entry).  Live values are preserved
+  // on the entry itself so the caller's `editedBlockPositions` still
+  // renders the block at its live position; only the trackIndex gets
+  // pinned.
+  function timesFor(e: SubtitleEntry): { startSec: number; endSec: number } {
+    const o = greedyTimes?.get(e.id)
+    if (o !== undefined) return o
+    return { startSec: e.startSec, endSec: e.endSec }
+  }
+
+  const sorted = [...entries].sort((a, b) => compareForLayout(a, b, greedyTimes))
   // trackEndSec[i] = effective endSec of the most recent block placed on
   // track i, where "effective" means max(actualEnd, start + minBlockSec).
   // Reserving `minBlockSec` past actualEnd is what stops the rendered
@@ -91,12 +144,13 @@ export function layoutEntries(
   const trackOf = new Map<string, number>()
 
   for (const e of sorted) {
-    const effectiveEnd = e.endSec > e.startSec + minBlockSec
-      ? e.endSec
-      : e.startSec + minBlockSec
+    const t = timesFor(e)
+    const effectiveEnd = t.endSec > t.startSec + minBlockSec
+      ? t.endSec
+      : t.startSec + minBlockSec
     let assigned = -1
     for (let i = 0; i < trackEndSec.length; i++) {
-      if (trackEndSec[i] <= e.startSec + TIME_EPS_SEC) {
+      if (trackEndSec[i] <= t.startSec + TIME_EPS_SEC) {
         assigned = i
         break
       }
@@ -115,7 +169,12 @@ export function layoutEntries(
     trackIndex: trackOf.get(e.id) ?? 0
   }))
 
-  const maxEntryEnd = sorted.reduce((m, e) => (e.endSec > m ? e.endSec : m), 0)
+  // totalSec is sourced from the LIVE entry endSecs, never the
+  // greedy-time overrides — the visible timeline width must always
+  // accommodate the rightmost block as the user sees it (a drag that
+  // pushes a clip past the previous timeline end should extend the
+  // ruler, not let the block escape it).
+  const maxEntryEnd = entries.reduce((m, e) => (e.endSec > m ? e.endSec : m), 0)
   const totalSec = Math.max(fallbackDurationSec, maxEntryEnd)
 
   return {
