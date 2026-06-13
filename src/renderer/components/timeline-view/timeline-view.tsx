@@ -541,7 +541,16 @@ function PlayheadImpl({ cuts, pixelsPerSec, totalHeightPx }: PlayheadProps) {
   return (
     <div
       aria-hidden
-      className="absolute top-0 pointer-events-none"
+      // REQ-20260613-010 problem 1: z-20 puts the playhead's red
+      // vertical line + arrow-head above the now-z-10 sticky ruler.
+      // Matches the scissor-marker layer (also z-20); both render
+      // their full-height vertical lines through the ruler region so
+      // they need to win the stacking against the ruler.  When both
+      // are on z-20, CSS falls back to DOM order — the playhead is
+      // rendered before the scissor markers, so a scissor passing
+      // through the same column visually sits on top of the playhead
+      // (matches the existing v1.2.0 behaviour).
+      className="absolute top-0 z-20 pointer-events-none"
       style={{
         left: `${leftPx}px`,
         width: '1px',
@@ -1052,12 +1061,29 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   const scrubSeekRafIdRef = useRef<number | null>(null)
   const scrubSeekPendingRef = useRef<number | null>(null)
   const handleSeek = useCallback((editedSec: number) => {
+    // REQ-20260613-010 problem 2: clamp the seek target to the playable
+    // edited-axis range [0, editedDuration(videoDurationSec, cuts)].
+    // Pre-REQ-010, the lower bound was applied via `Math.max(0, ...)`
+    // below but there was no upper bound, so the tracks-area drag
+    // introduced by REQ-20260613-009 could push the playhead past the
+    // video's end (the timeline width allows it because the ruler
+    // intentionally extends past the video to leave headroom for trim
+    // operations).  videoDurationSec lives on the project axis, so
+    // editedDuration projects it onto the edited axis — that value
+    // equals editedTotalSec for the common "video is the dominant
+    // entry" case but is shorter when entries extend past the video.
+    // Infinity (audio-only / no-video sentinels in step2.tsx) collapses
+    // to Infinity through editedDuration, so the clamp degrades to the
+    // pre-REQ-010 lower-bound-only behaviour.
+    const editedVideoMax = editedDuration(videoDurationSec, cuts)
+    const clampedEdited = Math.max(0, Math.min(editedVideoMax, editedSec))
     if (!SCRUB_SEEK_THROTTLE_ENABLED) {
-      // Legacy bit-for-bit path — exactly the behaviour pre-REQ-096.
-      setVideoSeekRequest(editedToOrig(Math.max(0, editedSec), cuts))
+      // Legacy bit-for-bit path — exactly the behaviour pre-REQ-096
+      // (now with the REQ-010 clamp applied).
+      setVideoSeekRequest(editedToOrig(clampedEdited, cuts))
       return
     }
-    const orig = editedToOrig(Math.max(0, editedSec), cuts)
+    const orig = editedToOrig(clampedEdited, cuts)
     // (1) Optimistic playhead update — the Playhead sub-component
     //     (REQ-094 B) subscribes to `videoCurrentTimeSec`, so writing
     //     here lights up exactly that one tiny subtree per call.  No
@@ -1075,7 +1101,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       scrubSeekPendingRef.current = null
       if (v !== null) setVideoSeekRequest(v)
     })
-  }, [setVideoSeekRequest, setVideoCurrentTimeSec, cuts])
+  }, [setVideoSeekRequest, setVideoCurrentTimeSec, cuts, videoDurationSec])
 
   // REQ-096 — invoked from Ruler's pointerup to guarantee the final
   // cursor position commits to the video element exactly, regardless
@@ -1890,18 +1916,26 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                 width: `${widthPx}px`
               }}
             >
-              {/* REQ-20260613-009 §2-1: stick the ruler to the top of
-                  the scroll viewport so the time axis stays visible
-                  when the user scrolls the tracks vertically (3+ track
-                  rows force scroll, which previously hid the ruler
-                  and the playhead's grabbable head with it).
-                  `position: sticky; top: 0` is enough because the
-                  outer `scrollRef` is the only scrolling ancestor.
-                  No z-index: the wrapper sits at z-auto in its
-                  containing block; the scissor markers (z-20) and any
-                  inspector popovers continue to layer above the ruler
-                  exactly as they did before. */}
-              <div className="sticky top-0">
+              {/* REQ-20260613-009 §2-1 + REQ-20260613-010 problem 1:
+                  stick the ruler to the top of the scroll viewport so
+                  the time axis stays visible when the user scrolls
+                  the tracks vertically (3+ track rows force scroll,
+                  which previously hid the ruler and the playhead's
+                  grabbable head with it).  `position: sticky; top: 0`
+                  is enough because the outer `scrollRef` is the only
+                  scrolling ancestor.
+                  z-10 is REQ-20260613-010: without an explicit z, the
+                  sticky wrapper sits at z-auto and CSS uses DOM-order
+                  tiebreak — the tracks-area div (DOM-sibling, also
+                  z-auto, BUT later in DOM) layers above the ruler,
+                  taking every Block inside it along for the ride.
+                  When the user scrolls down, blocks that cross the
+                  pinned ruler's viewport region appear on top of it
+                  (= the reported overlap bug).  z-10 lifts the ruler
+                  above the tracks while still leaving room for the
+                  scissor markers (z-20) and the playhead (also z-20,
+                  bumped in the same REQ) to layer over the ruler. */}
+              <div className="sticky top-0 z-10">
                 <Ruler
                   pixelsPerSec={pixelsPerSec}
                   totalSec={editedTotalSec}
