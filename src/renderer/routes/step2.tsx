@@ -821,21 +821,129 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     </div>
   )
 
+  // REQ-20260614-001 補遺② 修正1 — view switcher + filter tabs + undo/redo
+  // + add row moved INTO the bottom pane so the operations live next to
+  // the list/timeline they affect.
+  const toolbarSlot = (
+    <div className="flex items-center justify-between flex-shrink-0 px-2 py-1.5 border-b border-zinc-800/60">
+      <div className="flex items-center gap-2">
+        <EditorViewSwitcher />
+        <div className="flex items-center gap-1 bg-zinc-900 rounded-lg p-1">
+          {FILTERS.map(({ key, count }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTableFilter(key)}
+              className={cn(
+                'h-7 px-3 rounded-md text-body-sm font-medium transition-colors duration-150',
+                tableFilter === key
+                  ? 'bg-zinc-800 text-zinc-50'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              )}
+            >
+              {t(`tab.${key}`)} · <span className="tabular-nums">{count}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!canUndo}
+              onClick={() => {
+                const label = useHistoryStore.getState().past.at(-1)?.label ?? ''
+                undo()
+                toast.info(t('toast.undo', { label }))
+              }}
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t('tooltip.undo')}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!canRedo}
+              onClick={() => {
+                const label = useHistoryStore.getState().future.at(0)?.label ?? ''
+                redo()
+                toast.info(t('toast.redo', { label }))
+              }}
+            >
+              <RotateCw className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t('tooltip.redo')}</TooltipContent>
+        </Tooltip>
+        <Button variant="ghost" size="md" onClick={openAddRowDialog} data-testid="add-row">
+          <Plus className="h-4 w-4 mr-1" />
+          {t('action.addRow')}
+        </Button>
+      </div>
+    </div>
+  )
+
+  // BulkEditBar slot — same conditional as the previous top-level
+  // rendering, with the AnimatePresence slide-in/out preserved.
+  const bulkBarSlot = (
+    <AnimatePresence initial={false}>
+      {editorViewMode === 'list' && selectedRowIds.size > 0 && !isAudioOnly && (
+        <motion.div
+          key="bulk-edit-bar"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.15, ease: 'easeOut' }}
+          style={{ overflow: 'hidden' }}
+          className="flex-shrink-0"
+        >
+          <BulkEditBar
+            onApplied={(rowCount, label) => {
+              toast.success(t('toast.bulkApplied', { count: rowCount, label }), {
+                action: {
+                  label: t('toast.bulkAppliedUndo'),
+                  onClick: () => {
+                    useHistoryStore.getState().undo()
+                  }
+                }
+              })
+            }}
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+
+  // bottomSlot bundles the toolbar + bulk bar + the actual list/timeline
+  // body so the bottom pane internally splits "controls / scrollable
+  // content" itself.  REQ-20260614-001 補遺② 修正1.
   const bottomSlot = (
-    editorViewMode === 'list' ? (
-      <SubtitleTable
-        overflowMap={overflowMap}
-        warningsMap={warningsMap}
-        videoDurationSec={videoDurationSec}
-        onAdjustTime={openEditTimeDialog}
-      />
-    ) : (
-      <TimelineView
-        warningsMap={warningsMap}
-        videoDurationSec={videoDurationSec}
-        onAdjustTime={openEditTimeDialog}
-      />
-    )
+    <div className="flex h-full w-full flex-col">
+      {toolbarSlot}
+      {bulkBarSlot}
+      <div className="flex-1 min-h-0">
+        {editorViewMode === 'list' ? (
+          <SubtitleTable
+            overflowMap={overflowMap}
+            warningsMap={warningsMap}
+            videoDurationSec={videoDurationSec}
+            onAdjustTime={openEditTimeDialog}
+          />
+        ) : (
+          <TimelineView
+            warningsMap={warningsMap}
+            videoDurationSec={videoDurationSec}
+            onAdjustTime={openEditTimeDialog}
+          />
+        )}
+      </div>
+    </div>
   )
 
   return (
@@ -859,119 +967,11 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
           <p className="text-body-sm text-zinc-400">{t('subtitle')}</p>
         </div>
 
-        {/* View switcher + Filter tabs + Undo/Redo + Add Row.  View switcher
-            is left-anchored next to the filter tabs (REQ-052 Phase 1) so the
-            two pill-group controls visually pair as siblings.  Filter tabs
-            stay visible in both views — they apply the same filterEntries
-            rules to the timeline so a "Ready" tab hides warning blocks too. */}
-        <div className="flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <EditorViewSwitcher />
-            <div className="flex items-center gap-1 bg-zinc-900 rounded-lg p-1">
-              {FILTERS.map(({ key, count }) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setTableFilter(key)}
-                  className={cn(
-                    'h-7 px-3 rounded-md text-body-sm font-medium transition-colors duration-150',
-                    tableFilter === key
-                      ? 'bg-zinc-800 text-zinc-50'
-                      : 'text-zinc-500 hover:text-zinc-300'
-                  )}
-                >
-                  {t(`tab.${key}`)} · <span className="tabular-nums">{count}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Undo / Redo + Add Row — right side of the filter row */}
-          <div className="flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  disabled={!canUndo}
-                  onClick={() => {
-                    const label = useHistoryStore.getState().past.at(-1)?.label ?? ''
-                    undo()
-                    toast.info(t('toast.undo', { label }))
-                  }}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t('tooltip.undo')}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  disabled={!canRedo}
-                  onClick={() => {
-                    const label = useHistoryStore.getState().future.at(0)?.label ?? ''
-                    redo()
-                    toast.info(t('toast.redo', { label }))
-                  }}
-                >
-                  <RotateCw className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{t('tooltip.redo')}</TooltipContent>
-            </Tooltip>
-
-          {/* Add Row button — opens the shared TimeEditorDialog in add mode.
-              `data-testid="add-row"` lets the green-button-color e2e click
-              the button without depending on the localised label ("追加" /
-              "Add"), so the test works under DEFAULT_LANGUAGE='en'. */}
-          <Button variant="ghost" size="md" onClick={openAddRowDialog} data-testid="add-row">
-            <Plus className="h-4 w-4 mr-1" />
-            {t('action.addRow')}
-          </Button>
-          </div>
-        </div>
-
-        {/* Bulk-edit bar — slides in above the table when rows are selected.
-            AnimatePresence keeps the slide-out animation when the user
-            clears the selection so the table doesn't visually jump.
-            REQ-028: hidden entirely in audio-only mode because every
-            control on the bar drives a style field that has no effect
-            on text/SRT export (size, colours, outline, fade, font,
-            auto-line-break).  Selection itself stays available — we
-            just don't surface the bar. */}
-        <AnimatePresence initial={false}>
-          {editorViewMode === 'list' && selectedRowIds.size > 0 && !isAudioOnly && (
-            <motion.div
-              key="bulk-edit-bar"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
-              style={{ overflow: 'hidden' }}
-              className="flex-shrink-0"
-            >
-              <BulkEditBar
-                onApplied={(rowCount, label) => {
-                  // Surface a one-click undo affordance.  Reads the freshest
-                  // history op so even if state changed between render and
-                  // toast click (unlikely but possible), we still undo the
-                  // op we just registered.
-                  toast.success(t('toast.bulkApplied', { count: rowCount, label }), {
-                    action: {
-                      label: t('toast.bulkAppliedUndo'),
-                      onClick: () => {
-                        useHistoryStore.getState().undo()
-                      }
-                    }
-                  })
-                }}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* REQ-20260614-001 補遺② 修正1 — view switcher / filter tabs /
+            undo/redo / add row / BulkEditBar are now rendered INSIDE the
+            bottom pane (see `bottomSlot`), so the toolbar lives next to
+            the list/timeline it operates on instead of detached at the
+            page top. */}
 
         {/* REQ-20260614-001 Phase 2 — variable 3-pane area.
             Outer = vertical PanelGroup (top: preview + inspector / bottom:
