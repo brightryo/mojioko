@@ -8,14 +8,13 @@ import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
 import { TimeInput } from '@/components/time-input'
-import { ColorPicker } from '@/components/color-picker/color-picker'
-import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
-import { RowFontSelector } from '@/components/subtitle-table/row-font-selector'
+// REQ-20260614-001 補遺③ — ColorPicker / OutlineThicknessSlider /
+// RowFontSelector / Switch / FontId imports retired alongside the fat
+// Style column.  All those controls live in the always-on right-pane
+// Inspector now.
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
-import type { FontId } from '../../../shared/fonts'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { filterEntries } from '@/lib/subtitle-filter'
@@ -44,16 +43,20 @@ const SIZE_STEP_PX = 10
  *   7. badges              (90px)
  *   8. row actions         (76px)
  */
-// REQ-068 Phase C: time column 110 → 130 to fit the widened TimeInput
-// (w-[110px]) needed after bumping all time text to 13 px (was 12).
-// REQ-20260613-001 §2-1: state column and actions column SWAPPED so the
-// action icons sit immediately right of the text column and the state
-// badges occupy the rightmost slot.  Actions column widened from 76px
-// to 144px to comfortably fit five icon-only buttons (敷き詰め →
-// はみ出し → delete → reset → duplicate, each h-6 w-6 + gap-1 + px-1
-// parent padding ≈ 136 + 8 px).  State column kept at 90px since its
-// badge content is unchanged.
-const TABLE_GRID_COLS = 'grid-cols-[32px_36px_130px_64px_220px_1fr_144px_90px]'
+// REQ-20260614-001 補遺③ — list slimming:
+//   - The fat Style column (220 px, full color pickers / sliders /
+//     switches / selects) is retired in favour of a compact **indicators**
+//     column (56 px) showing only a text-colour swatch + background-on dot.
+//   - The full editing UI for outline / fade / layout / background lives
+//     in the always-on right-pane Inspector now; clicking a row selects
+//     it and the Inspector exposes the rest.
+//   - Per-row font selector is no longer rendered above the text editor.
+//   - Action icons (改行 / 削除 / リセット / 複製) stay in the row for
+//     quick scan-and-act.
+//
+// Columns: checkbox 32 | # 36 | time 130 | size 64 | indicators 56 |
+//          text 1fr | actions 144 | state 90
+const TABLE_GRID_COLS = 'grid-cols-[32px_36px_130px_64px_56px_1fr_144px_90px]'
 
 /** Fallback when warningsMap is missing an entry (deleted rows; race with stale memo). */
 const NO_WARNINGS: EntryWarnings = {
@@ -348,83 +351,13 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
     withHistory(t('history.editSize'), { fontSizePx: next })
   }
 
-  function handleTextColorChange(hex: string) {
-    withHistory(t('history.editColor'), { textColorHex: hex })
-  }
-
-  // Per-row fontId change (REQ-022 step 1).  `undefined` clears the
-  // override so the row falls back to the project default.  Snapshot via
-  // withHistory writes the entire prior entry, so undo restores the
-  // previous fontId (including back to undefined) and the entry.isEdited
-  // flag also lifts in tandem with the other style edits.
-  //
-  // Mirrors handleReset's explicit `fontId: original.fontId` trick: a
-  // patch object whose `fontId` property is `undefined` is required for
-  // the updateEntry merge to actually clear the key, since a missing
-  // property would leave the previous override in place.
-  function handleFontChange(next: FontId | undefined) {
-    if (next === entry.fontId) return
-    withHistory(t('history.editFont'), { fontId: next })
-  }
-
-  function handleOutlineColorChange(hex: string) {
-    withHistory(t('history.editColor'), { outlineColorHex: hex })
-  }
-
-  function handleFadeChange(checked: boolean) {
-    withHistory(t('history.editFade'), { fadeEnabled: checked })
-  }
-
-  // REQ-20260613-016 Phase 4 — per-row layout handlers (機能A).
-  // Each handler routes through `withHistory` so undo restores both the
-  // changed field AND any auto-derived state (e.g. isEdited).  No-ops
-  // when the new value matches the current one so a re-pick of the same
-  // option does not pollute the undo stack.
-
-  function handleHorizontalPositionChange(v: 'left' | 'center' | 'right') {
-    if (v === entry.horizontalPosition) return
-    withHistory(t('history.editLayout'), { horizontalPosition: v })
-  }
-
-  function handleVerticalPositionChange(v: 'top' | 'bottom') {
-    if (v === entry.verticalPosition) return
-    withHistory(t('history.editLayout'), { verticalPosition: v })
-  }
-
-  function handleVerticalMarginChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = parseInt(e.target.value, 10)
-    if (isNaN(raw)) return
-    // Clamp 0..300 — matches the legacy global panel's input range and is
-    // large enough to cover any sensible vertical offset (300 px on a
-    // 1080p canvas is ~28 % of the frame height).
-    const clamped = Math.max(0, Math.min(300, raw))
-    if (clamped === entry.verticalMarginPx) return
-    withHistory(t('history.editMargin'), { verticalMarginPx: clamped })
-  }
-
-  function handleBackgroundEnabledChange(checked: boolean) {
-    if (checked === entry.subtitleBackground.enabled) return
-    withHistory(t('history.editBackground'), {
-      subtitleBackground: { ...entry.subtitleBackground, enabled: checked },
-    })
-  }
-
-  function handleBackgroundColorChange(color: 'black' | 'white') {
-    if (color === entry.subtitleBackground.color) return
-    withHistory(t('history.editBackground'), {
-      subtitleBackground: { ...entry.subtitleBackground, color },
-    })
-  }
-
-  function handleBackgroundOpacityChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = parseInt(e.target.value, 10)
-    if (isNaN(raw)) return
-    const clamped = Math.max(0, Math.min(100, raw))
-    if (clamped === entry.subtitleBackground.opacityPercent) return
-    withHistory(t('history.editBackground'), {
-      subtitleBackground: { ...entry.subtitleBackground, opacityPercent: clamped },
-    })
-  }
+  // REQ-20260614-001 補遺③ — text-colour / outline-colour / fade /
+  // horizontal-position / vertical-position / margin / background-* /
+  // font-selector handlers were removed from SubtitleRow alongside the
+  // Style column slimming.  All those edits now happen via the always-on
+  // right-pane Inspector (which keeps its own handlers in
+  // `timeline-block-inspector.tsx`).  Size stays here because the row
+  // still renders a compact number input for it.
 
   // Row-level Delete / Reset / AutoLineBreak go through the shared
   // `entry-row-actions` lib so the timeline-block inspector drives the
@@ -664,196 +597,58 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
         )}
       </div>
 
-      {/* Style — empty container in audio mode for the same reason. */}
+      {/* REQ-20260614-001 補遺③ — slim indicators column.
+          Replaces the legacy 220-px Style column with two visual
+          read-only markers:
+            - Text colour swatch (20×20 rounded square, no picker)
+            - Background ON/OFF dot (12×12 filled when enabled)
+          All editing UI for text/outline colours, outline width, fade,
+          layout (h/v/margin) and background (color/opacity) now lives
+          in the always-on right-pane Inspector.  Audio-only mode
+          renders nothing (the entire style cluster has no effect on
+          text / SRT export). */}
       {isAudioOnly ? (
         <div className="py-3 px-1" />
       ) : (
-      <div className="flex flex-col gap-1 py-2 px-1">
-        <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-          <span className="text-micro text-zinc-500 truncate">{t('styleCell.textColor')}</span>
-          <ColorPicker
-            value={entry.textColorHex}
-            onChange={handleTextColorChange}
-            onPairApply={(text, outline) =>
-              withHistory(t('history.editColor'), { textColorHex: text, outlineColorHex: outline })
+        <div className="flex items-center justify-center gap-1.5 py-3 px-1">
+          {/* Text-colour swatch — display only (no click handler).
+              Picker UI lives in the Inspector. */}
+          <span
+            title={t('styleCell.textColor')}
+            aria-label={t('styleCell.textColor')}
+            className={cn(
+              'inline-block h-5 w-5 rounded-sm border border-zinc-700',
+              isFrozen && 'opacity-40'
+            )}
+            style={{ backgroundColor: entry.textColorHex }}
+          />
+          {/* Background ON/OFF dot — filled with the chosen bg colour
+              when enabled, hollow grey ring when disabled. */}
+          <span
+            title={
+              entry.subtitleBackground.enabled
+                ? t('styleCell.bgEnabled')
+                : t('styleCell.bgEnabled')
             }
-            disabled={isFrozen}
-            swatchOnly
-          />
-        </div>
-        <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-          <span className="text-micro text-zinc-500 truncate">{t('styleCell.outlineColor')}</span>
-          <ColorPicker
-            value={entry.outlineColorHex}
-            onChange={handleOutlineColorChange}
-            onPairApply={(text, outline) =>
-              withHistory(t('history.editColor'), { textColorHex: text, outlineColorHex: outline })
-            }
-            disabled={isFrozen}
-            swatchOnly
-          />
-        </div>
-        <div
-          className="grid grid-cols-[80px_1fr] items-center gap-2"
-          // stopPropagation so dragging the slider thumb does not also
-          // trigger the row-level click handler (which would re-focus the
-          // row and seek the video on every onChange frame).
-          onClick={(e) => e.stopPropagation()}
-        >
-          <span className="text-micro text-zinc-500 truncate">{t('styleCell.outlineWidth')}</span>
-          <OutlineThicknessSlider
-            value={entry.outlineThicknessPx}
-            onCommit={(v) => withHistory(t('history.editStroke'), { outlineThicknessPx: v })}
-            disabled={isFrozen}
-            ariaLabel={t('styleCell.outlineWidth')}
-          />
-        </div>
-        <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-          <span className="text-micro text-zinc-500 truncate">{t('styleCell.fade')}</span>
-          <Switch checked={entry.fadeEnabled} onCheckedChange={handleFadeChange} disabled={isFrozen} className="scale-75 origin-left" />
-        </div>
-
-        {/* REQ-20260613-016 Phase 4 / 機能A — per-row layout + background.
-            The legacy global panel in VideoPreviewPanel was retired in the
-            same phase; the user now sets these per row directly.  Layout
-            uses native <select> + number input for compactness inside the
-            220-px style column; background combines a Switch, color
-            radio-group, and opacity number input on one wrapping row. */}
-        <div className="grid grid-cols-[80px_1fr] items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <span className="text-micro text-zinc-500 truncate">{t('styleCell.layoutH')}</span>
-          <select
-            value={entry.horizontalPosition}
-            onChange={(e) => handleHorizontalPositionChange(e.target.value as 'left' | 'center' | 'right')}
-            disabled={isFrozen}
-            className={cn(
-              'h-6 rounded border border-zinc-800 bg-zinc-950 px-1 text-body-sm text-zinc-100',
-              'focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-green-500/30',
-              'disabled:opacity-40 disabled:cursor-not-allowed'
-            )}
-            aria-label={t('subtitlePosition.horizontal')}
-          >
-            <option value="left">{t('subtitlePosition.left')}</option>
-            <option value="center">{t('subtitlePosition.center')}</option>
-            <option value="right">{t('subtitlePosition.right')}</option>
-          </select>
-        </div>
-        <div className="grid grid-cols-[80px_1fr] items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <span className="text-micro text-zinc-500 truncate">{t('styleCell.layoutV')}</span>
-          <select
-            value={entry.verticalPosition}
-            onChange={(e) => handleVerticalPositionChange(e.target.value as 'top' | 'bottom')}
-            disabled={isFrozen}
-            className={cn(
-              'h-6 rounded border border-zinc-800 bg-zinc-950 px-1 text-body-sm text-zinc-100',
-              'focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-green-500/30',
-              'disabled:opacity-40 disabled:cursor-not-allowed'
-            )}
-            aria-label={t('subtitlePosition.vertical')}
-          >
-            <option value="top">{t('subtitlePosition.top')}</option>
-            <option value="bottom">{t('subtitlePosition.bottom')}</option>
-          </select>
-        </div>
-        <div className="grid grid-cols-[80px_1fr] items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <span className="text-micro text-zinc-500 truncate">{t('styleCell.marginV')}</span>
-          <input
-            type="number"
-            min={0}
-            max={300}
-            defaultValue={entry.verticalMarginPx}
-            key={entry.verticalMarginPx}
-            onBlur={handleVerticalMarginChange}
-            disabled={isFrozen}
-            aria-label={t('subtitlePosition.margin')}
-            className={cn(
-              'h-6 w-full rounded border border-zinc-800 bg-zinc-950 px-1 text-center text-body-sm text-zinc-100',
-              'focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-green-500/30',
-              'disabled:opacity-40 disabled:cursor-not-allowed',
-              '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
-            )}
-          />
-        </div>
-        <div className="grid grid-cols-[80px_1fr] items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <span className="text-micro text-zinc-500 truncate">{t('styleCell.bgEnabled')}</span>
-          <Switch
-            checked={entry.subtitleBackground.enabled}
-            onCheckedChange={handleBackgroundEnabledChange}
-            disabled={isFrozen}
-            className="scale-75 origin-left"
             aria-label={t('styleCell.bgEnabled')}
-          />
-        </div>
-        <div
-          className={cn(
-            'grid grid-cols-[80px_1fr] items-center gap-2',
-            !entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none'
-          )}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <span className="text-micro text-zinc-500 truncate">{t('styleCell.bgColor')}</span>
-          <select
-            value={entry.subtitleBackground.color}
-            onChange={(e) => handleBackgroundColorChange(e.target.value as 'black' | 'white')}
-            disabled={isFrozen || !entry.subtitleBackground.enabled}
             className={cn(
-              'h-6 rounded border border-zinc-800 bg-zinc-950 px-1 text-body-sm text-zinc-100',
-              'focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-green-500/30',
-              'disabled:opacity-40 disabled:cursor-not-allowed'
-            )}
-            aria-label={t('styleCell.bgColor')}
-          >
-            <option value="black">{t('background.black')}</option>
-            <option value="white">{t('background.white')}</option>
-          </select>
-        </div>
-        <div
-          className={cn(
-            'grid grid-cols-[80px_1fr] items-center gap-2',
-            !entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none'
-          )}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <span className="text-micro text-zinc-500 truncate">{t('styleCell.bgOpacity')}</span>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            defaultValue={entry.subtitleBackground.opacityPercent}
-            key={`${entry.subtitleBackground.opacityPercent}-${entry.subtitleBackground.enabled}`}
-            onBlur={handleBackgroundOpacityChange}
-            disabled={isFrozen || !entry.subtitleBackground.enabled}
-            aria-label={t('styleCell.bgOpacity')}
-            className={cn(
-              'h-6 w-full rounded border border-zinc-800 bg-zinc-950 px-1 text-center text-body-sm text-zinc-100',
-              'focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-green-500/30',
-              'disabled:opacity-40 disabled:cursor-not-allowed',
-              '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+              'inline-block h-3 w-3 rounded-full border',
+              entry.subtitleBackground.enabled
+                ? entry.subtitleBackground.color === 'white'
+                  ? 'bg-zinc-100 border-zinc-300'
+                  : 'bg-zinc-950 border-zinc-600'
+                : 'bg-transparent border-zinc-700',
+              isFrozen && 'opacity-40'
             )}
           />
         </div>
-      </div>
       )}
 
-      {/* Text column — REQ-022 step 1 stacks the per-row font selector
-          above the editor so the user always sees "this row's font" in
-          context with the text it applies to.  The selector itself
-          stops click propagation so picking a font does not re-focus the
-          row / seek the video.
-          REQ-023: the selector wrapper used to have `px-2` which made
-          the button 16 px narrower than the text editor below (the
-          text editor's px-2 is internal padding on the div whose outer
-          edge is at the full column width).  Wrapper padding removed
-          so both children's outer edges sit at the same column x. */}
+      {/* Text column — REQ-20260614-001 補遺③: per-row font selector
+          (RowFontSelector) moved to the right-pane Inspector.  The
+          column is now just the text editor.  flex-col wrapper retained
+          for layout symmetry / future re-stacking. */}
       <div className="flex flex-col gap-1 my-1 min-w-0">
-      {/* Row font selector — hidden in audio mode (REQ-028): there is
-          no burn-in stage so per-row font choice has no consumer. */}
-      {!isAudioOnly && (
-        <RowFontSelector
-          value={entry.fontId}
-          onChange={handleFontChange}
-          disabled={isFrozen}
-        />
-      )}
       <div
         className={cn(
           'flex items-start py-2 px-2 min-w-0 min-h-[36px] cursor-text rounded transition-all duration-150',
@@ -1373,7 +1168,11 @@ export function SubtitleTable({
         <div className="py-2 px-1 text-callout font-semibold text-zinc-300 text-center">{t('table.colIndex')}</div>
         <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{t('table.colTime')}</div>
         <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{isAudioOnly ? '' : t('table.colSize')}</div>
-        <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{isAudioOnly ? '' : t('table.colStyle')}</div>
+        {/* REQ-20260614-001 補遺③ — column 5 used to host the fat
+            "Style" header; the column itself shrank to a 56-px
+            indicators slot (text-colour swatch + background-on dot).
+            No header label — the indicators are purely visual scan aids. */}
+        <div className="py-2 px-1 text-callout font-semibold text-zinc-300"></div>
         <div className="py-2 px-2 text-callout font-semibold text-zinc-300">{t('table.colText')}</div>
         {/* REQ-20260613-001 §2-1: Actions header (currently empty
             label, see locales/*.json `table.colActions`) precedes the

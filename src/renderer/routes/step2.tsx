@@ -164,15 +164,17 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const [discardOpen, setDiscardOpen] = useState(false)
   const [skipDiscardWarning, setSkipDiscardWarning] = useState(false)
 
-  // REQ-20260614-001 Phase 2 — 3-pane resizable layout state.
-  // `outerLayout` / `topLayout` get fed straight back to the Group's
-  // `defaultLayout` and updated from its `onLayoutChange`.  Container
-  // ResizeObserver drives the small-screen fallback (single-column
-  // stack when too narrow for the 3-pane to be usable).
+  // REQ-20260614-001 補遺③ — 3-pane resizable layout state.  Outer is
+  // **horizontal** (left / right); left inner is **vertical** (preview /
+  // bottom).  Inspector lives in the right column at full height.
+  // `defaultLayout` ↔ `onLayoutChange` round-trip persists the user's
+  // adjustments for the session; ResizeObserver drives the small-screen
+  // fallback (vertical stack when the pane area is too narrow for the
+  // 3-pane to be usable).
   const step2OuterLayout    = useUiStore((s) => s.step2OuterLayout)
-  const step2TopLayout      = useUiStore((s) => s.step2TopLayout)
+  const step2LeftLayout     = useUiStore((s) => s.step2LeftLayout)
   const setStep2OuterLayout = useUiStore((s) => s.setStep2OuterLayout)
-  const setStep2TopLayout   = useUiStore((s) => s.setStep2TopLayout)
+  const setStep2LeftLayout  = useUiStore((s) => s.setStep2LeftLayout)
 
   const paneAreaRef = useRef<HTMLDivElement>(null)
   const [paneAreaWidth, setPaneAreaWidth] = useState(0)
@@ -843,15 +845,14 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     ? null
     : entries.find((e) => e.id === selectedEntryId) ?? null
   const inspectorSlot = selectedEntry === null ? inspectorEmpty : (
+    // REQ-20260614-001 補遺③ — single overflow-y-auto wraps the entire
+    // Inspector content (`TimelineBlockInspector` had its own inner
+    // scroll stripped to avoid the nested-scroll usability problem).
     <div className="h-full w-full overflow-y-auto p-3">
       <TimelineBlockInspector
         entry={selectedEntry}
         warnings={warningsMap.get(selectedEntry.id) ?? null}
         onAdjustTime={openEditTimeDialog}
-        // × in the inspector header clears the selection so the empty
-        // state returns — matches the popover's "close" affordance but
-        // routed through the new selection slice.
-        onClose={() => setSelectedEntryId(null)}
       />
     </div>
   )
@@ -1007,17 +1008,25 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
             the list/timeline it operates on instead of detached at the
             page top. */}
 
-        {/* REQ-20260614-001 Phase 2 — variable 3-pane area.
-            Outer = vertical PanelGroup (top: preview + inspector / bottom:
-            table-or-timeline).  Top = horizontal PanelGroup (left: preview /
-            right: inspector placeholder).  Each pane has a minSize so it
-            can't be collapsed past usability.
+        {/* REQ-20260614-001 補遺③ — variable 3-pane area, restructured:
+            Outer = HORIZONTAL PanelGroup
+              ├── Left (70% default) = VERTICAL PanelGroup
+              │     ├── Preview  (50% default)
+              │     └── Bottom   (50% default) = toolbar + bulk + list/timeline
+              └── Right (30% default) = Inspector full height
 
-            Fallback: when the container is narrower than
-            STEP2_MIN_WIDTH_FOR_3PANE_PX, the layout collapses to a
-            non-resizable vertical stack of preview / inspector / bottom.
-            Avoids "crushed inspector" on small windows or sub-Half-snap
-            workspaces. */}
+            The Inspector becomes a full-height column on the right;
+            preview and the editing surface (list / timeline) stack
+            vertically on the left.  Min sizes guard against crushing
+            (Inspector min 20% so ~280-320 px is preserved at typical
+            windows; left + inner panes min 25%).
+
+            Fallback: when the pane area is narrower than
+            STEP2_MIN_WIDTH_FOR_3PANE_PX, switch to a non-resizable
+            vertical stack ordered preview / bottom / inspector.  Order
+            "edit surface above Inspector" so the user sees the table /
+            timeline they're operating on first; tweak in实机 if
+            needed. */}
         <div ref={paneAreaRef} className="flex-1 min-h-0 overflow-hidden">
           {useStackedFallback ? (
             <div className="flex h-full w-full flex-col gap-2">
@@ -1025,40 +1034,36 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
                 {previewSlot}
               </div>
               <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">
-                {inspectorSlot}
+                {bottomSlot}
               </div>
               <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">
-                {bottomSlot}
+                {inspectorSlot}
               </div>
             </div>
           ) : (
             <ResizablePanelGroup
-              direction="vertical"
+              direction="horizontal"
               defaultLayout={step2OuterLayout}
               onLayoutChange={(layout) => {
-                // Persist the new layout as soon as the user lets go of
-                // the drag handle.  Type-narrow defensively: the Group's
-                // `Layout` type is `{ [id: string]: number }`, but we
-                // only care about our two named ids.
-                const top = layout['step2-pane-top']
-                const bottom = layout['step2-pane-bottom']
-                if (typeof top === 'number' && typeof bottom === 'number') {
-                  setStep2OuterLayout({ 'step2-pane-top': top, 'step2-pane-bottom': bottom })
+                const left  = layout['step2-pane-left']
+                const right = layout['step2-pane-right']
+                if (typeof left === 'number' && typeof right === 'number') {
+                  setStep2OuterLayout({ 'step2-pane-left': left, 'step2-pane-right': right })
                 }
               }}
               className="rounded-lg border border-zinc-800 overflow-hidden"
             >
-              <ResizablePanel id="step2-pane-top" minSize="25%">
+              <ResizablePanel id="step2-pane-left" minSize="40%">
                 <ResizablePanelGroup
-                  direction="horizontal"
-                  defaultLayout={step2TopLayout}
+                  direction="vertical"
+                  defaultLayout={step2LeftLayout}
                   onLayoutChange={(layout) => {
                     const preview = layout['step2-pane-preview']
-                    const inspector = layout['step2-pane-inspector']
-                    if (typeof preview === 'number' && typeof inspector === 'number') {
-                      setStep2TopLayout({
+                    const bottom  = layout['step2-pane-bottom']
+                    if (typeof preview === 'number' && typeof bottom === 'number') {
+                      setStep2LeftLayout({
                         'step2-pane-preview': preview,
-                        'step2-pane-inspector': inspector,
+                        'step2-pane-bottom': bottom,
                       })
                     }
                   }}
@@ -1067,14 +1072,14 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
                     {previewSlot}
                   </ResizablePanel>
                   <ResizableHandle withHandle />
-                  <ResizablePanel id="step2-pane-inspector" minSize="20%">
-                    {inspectorSlot}
+                  <ResizablePanel id="step2-pane-bottom" minSize="25%">
+                    {bottomSlot}
                   </ResizablePanel>
                 </ResizablePanelGroup>
               </ResizablePanel>
               <ResizableHandle withHandle />
-              <ResizablePanel id="step2-pane-bottom" minSize="20%">
-                {bottomSlot}
+              <ResizablePanel id="step2-pane-right" minSize="20%">
+                {inspectorSlot}
               </ResizablePanel>
             </ResizablePanelGroup>
           )}

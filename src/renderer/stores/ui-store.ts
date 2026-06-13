@@ -146,19 +146,21 @@ interface UiStore {
   pendingCutOutSec: number | null
 
   /**
-   * REQ-20260614-001 Phase 2 — STEP 2 resizable 3-pane layout state
-   * (outer vertical: top/bottom; inner horizontal: preview/inspector
-   * inside the top pane).  Numbers are PERCENTAGES of the parent group
-   * (= the `Layout` map react-resizable-panels v4 returns from
-   * `onLayoutChange`).  Session-only for now; later phases may persist
-   * via `localStorage` once the user has lived with the defaults.
+   * REQ-20260614-001 補遺③ — STEP 2 resizable 3-pane layout state
+   * (outer **horizontal**: left/right; left inner **vertical**: preview /
+   * bottom).  Numbers are PERCENTAGES of the parent group (= the
+   * `Layout` map react-resizable-panels v4 returns from
+   * `onLayoutChange`).  Session-only; later phases may persist via
+   * `localStorage` once the user has lived with the defaults.
    *
-   * Keys match the panel `id` props in step2.tsx (`step2-pane-top` /
-   * `step2-pane-bottom` and `step2-pane-preview` / `step2-pane-inspector`)
-   * so we can feed them straight back as Group `defaultLayout`.
+   * Keys match the panel `id` props in step2.tsx so the saved Layout map
+   * can feed straight back into the Group's `defaultLayout`.  The
+   * previous (Phase 2) outer-vertical / inner-horizontal structure was
+   * replaced in REQ補遺③ so the Inspector becomes a full-height right
+   * column.
    */
-  step2OuterLayout: { 'step2-pane-top': number; 'step2-pane-bottom': number }
-  step2TopLayout:   { 'step2-pane-preview': number; 'step2-pane-inspector': number }
+  step2OuterLayout: { 'step2-pane-left': number; 'step2-pane-right': number }
+  step2LeftLayout:  { 'step2-pane-preview': number; 'step2-pane-bottom': number }
 
   setSettingsDialogOpen: (open: boolean) => void
   setAboutDialogOpen: (open: boolean) => void
@@ -194,8 +196,8 @@ interface UiStore {
   setPendingCutIn: (sec: number | null) => void
   setPendingCutOut: (sec: number | null) => void
   clearPendingCut: () => void
-  setStep2OuterLayout: (layout: { 'step2-pane-top': number; 'step2-pane-bottom': number }) => void
-  setStep2TopLayout:   (layout: { 'step2-pane-preview': number; 'step2-pane-inspector': number }) => void
+  setStep2OuterLayout: (layout: { 'step2-pane-left': number; 'step2-pane-right': number }) => void
+  setStep2LeftLayout:  (layout: { 'step2-pane-preview': number; 'step2-pane-bottom': number }) => void
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -219,13 +221,14 @@ export const useUiStore = create<UiStore>((set) => ({
   timelineSnapEnabled: true,
   pendingCutInSec: null,
   pendingCutOutSec: null,
-  // REQ-20260614-001 Phase 2 — defaults split the top half equally
-  // between preview / inspector and the outer half equally between
-  // top (preview+inspector) / bottom (table/timeline).  Owner-tunable
-  // via the resize handles; persisted across navigations within the
-  // session.
-  step2OuterLayout: { 'step2-pane-top': 50, 'step2-pane-bottom': 50 },
-  step2TopLayout:   { 'step2-pane-preview': 60, 'step2-pane-inspector': 40 },
+  // REQ-20260614-001 補遺③ — defaults: outer left=70/right=30 so the
+  // Inspector lives in a comfortable right column (~280-320 px at common
+  // window sizes) without crushing the preview / table.  Left inner is
+  // split 50/50 between preview and the table/timeline body; the user can
+  // adjust via the resize handles.  Persisted across navigations within
+  // the session.
+  step2OuterLayout: { 'step2-pane-left': 70, 'step2-pane-right': 30 },
+  step2LeftLayout:  { 'step2-pane-preview': 50, 'step2-pane-bottom': 50 },
 
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
@@ -304,5 +307,5 @@ export const useUiStore = create<UiStore>((set) => ({
   setPendingCutOut: (sec) => set({ pendingCutOutSec: sec }),
   clearPendingCut: () => set({ pendingCutInSec: null, pendingCutOutSec: null }),
   setStep2OuterLayout: (layout) => set({ step2OuterLayout: layout }),
-  setStep2TopLayout:   (layout) => set({ step2TopLayout: layout }),
+  setStep2LeftLayout:  (layout) => set({ step2LeftLayout: layout }),
 }))
