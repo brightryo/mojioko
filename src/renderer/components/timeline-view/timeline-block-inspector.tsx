@@ -171,6 +171,46 @@ export function TimelineBlockInspector({
     applyStyleEdit(t('history.editFont'), { fontId: next })
   }
 
+  // REQ-20260613-016 Phase 5 — per-row layout / background handlers
+  // mirror subtitle-table.tsx so the inspector and the list view drive
+  // identical history shapes for the new fields (機能A).
+  function handleHorizontalPositionChange(v: 'left' | 'center' | 'right') {
+    if (v === entry.horizontalPosition) return
+    applyStyleEdit(t('history.editLayout'), { horizontalPosition: v })
+  }
+  function handleVerticalPositionChange(v: 'top' | 'bottom') {
+    if (v === entry.verticalPosition) return
+    applyStyleEdit(t('history.editLayout'), { verticalPosition: v })
+  }
+  function handleVerticalMarginBlur(e: React.FocusEvent<HTMLInputElement>) {
+    const raw = parseInt(e.target.value, 10)
+    if (isNaN(raw)) return
+    const clamped = Math.max(0, Math.min(300, raw))
+    if (clamped === entry.verticalMarginPx) return
+    applyStyleEdit(t('history.editMargin'), { verticalMarginPx: clamped })
+  }
+  function handleBackgroundEnabledChange(checked: boolean) {
+    if (checked === entry.subtitleBackground.enabled) return
+    applyStyleEdit(t('history.editBackground'), {
+      subtitleBackground: { ...entry.subtitleBackground, enabled: checked },
+    })
+  }
+  function handleBackgroundColorChange(color: 'black' | 'white') {
+    if (color === entry.subtitleBackground.color) return
+    applyStyleEdit(t('history.editBackground'), {
+      subtitleBackground: { ...entry.subtitleBackground, color },
+    })
+  }
+  function handleBackgroundOpacityBlur(e: React.FocusEvent<HTMLInputElement>) {
+    const raw = parseInt(e.target.value, 10)
+    if (isNaN(raw)) return
+    const clamped = Math.max(0, Math.min(100, raw))
+    if (clamped === entry.subtitleBackground.opacityPercent) return
+    applyStyleEdit(t('history.editBackground'), {
+      subtitleBackground: { ...entry.subtitleBackground, opacityPercent: clamped },
+    })
+  }
+
   // REQ-082: Ctrl+Enter / Esc removed.  handleBlur (= focus leaves the
   // textarea — click elsewhere or close the inspector) commits the
   // text.  The inspector itself closes via its X button.
@@ -527,6 +567,116 @@ export function TimelineBlockInspector({
               onCheckedChange={handleFadeChange}
               disabled={isFrozen}
               className="scale-75 origin-right"
+            />
+          </div>
+
+          {/* REQ-20260613-016 Phase 5 / 機能A — per-row layout + background.
+              Mirrors the subtitle-table Style column but uses the wider
+              320-px inspector panel so controls aren't as cramped. */}
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.layoutH')}</label>
+            <select
+              value={entry.horizontalPosition}
+              onChange={(e) => handleHorizontalPositionChange(e.target.value as 'left' | 'center' | 'right')}
+              disabled={isFrozen}
+              className={cn(
+                'h-7 rounded border border-zinc-700 bg-zinc-950 px-1.5 text-body text-zinc-100',
+                'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30',
+                'disabled:opacity-40 disabled:cursor-not-allowed'
+              )}
+              aria-label={t('subtitlePosition.horizontal')}
+            >
+              <option value="left">{t('subtitlePosition.left')}</option>
+              <option value="center">{t('subtitlePosition.center')}</option>
+              <option value="right">{t('subtitlePosition.right')}</option>
+            </select>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.layoutV')}</label>
+            <select
+              value={entry.verticalPosition}
+              onChange={(e) => handleVerticalPositionChange(e.target.value as 'top' | 'bottom')}
+              disabled={isFrozen}
+              className={cn(
+                'h-7 rounded border border-zinc-700 bg-zinc-950 px-1.5 text-body text-zinc-100',
+                'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30',
+                'disabled:opacity-40 disabled:cursor-not-allowed'
+              )}
+              aria-label={t('subtitlePosition.vertical')}
+            >
+              <option value="top">{t('subtitlePosition.top')}</option>
+              <option value="bottom">{t('subtitlePosition.bottom')}</option>
+            </select>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.marginV')}</label>
+            <input
+              type="number"
+              min={0}
+              max={300}
+              defaultValue={entry.verticalMarginPx}
+              key={entry.verticalMarginPx}
+              onBlur={handleVerticalMarginBlur}
+              disabled={isFrozen}
+              aria-label={t('subtitlePosition.margin')}
+              className={cn(
+                'w-20 h-7 rounded border border-zinc-700 bg-zinc-950 px-1.5 text-center text-body text-zinc-100',
+                'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30',
+                'disabled:opacity-40 disabled:cursor-not-allowed',
+                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+              )}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.bgEnabled')}</label>
+            <Switch
+              checked={entry.subtitleBackground.enabled}
+              onCheckedChange={handleBackgroundEnabledChange}
+              disabled={isFrozen}
+              className="scale-75 origin-right"
+              aria-label={t('styleCell.bgEnabled')}
+            />
+          </div>
+          <div className={cn(
+            'flex items-center justify-between gap-2',
+            !entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none'
+          )}>
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.bgColor')}</label>
+            <select
+              value={entry.subtitleBackground.color}
+              onChange={(e) => handleBackgroundColorChange(e.target.value as 'black' | 'white')}
+              disabled={isFrozen || !entry.subtitleBackground.enabled}
+              className={cn(
+                'h-7 rounded border border-zinc-700 bg-zinc-950 px-1.5 text-body text-zinc-100',
+                'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30',
+                'disabled:opacity-40 disabled:cursor-not-allowed'
+              )}
+              aria-label={t('styleCell.bgColor')}
+            >
+              <option value="black">{t('background.black')}</option>
+              <option value="white">{t('background.white')}</option>
+            </select>
+          </div>
+          <div className={cn(
+            'flex items-center justify-between gap-2',
+            !entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none'
+          )}>
+            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.bgOpacity')}</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              defaultValue={entry.subtitleBackground.opacityPercent}
+              key={`${entry.subtitleBackground.opacityPercent}-${entry.subtitleBackground.enabled}`}
+              onBlur={handleBackgroundOpacityBlur}
+              disabled={isFrozen || !entry.subtitleBackground.enabled}
+              aria-label={t('styleCell.bgOpacity')}
+              className={cn(
+                'w-20 h-7 rounded border border-zinc-700 bg-zinc-950 px-1.5 text-center text-body text-zinc-100',
+                'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30',
+                'disabled:opacity-40 disabled:cursor-not-allowed',
+                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+              )}
             />
           </div>
         </div>

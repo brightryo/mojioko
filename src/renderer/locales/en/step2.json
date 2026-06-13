@@ -193,7 +193,10 @@
       "fade": "Bulk fade change ({{count}} rows)",
       "font": "Bulk font change ({{count}} rows)",
       "autoLineBreak": "Bulk pack-wrap ({{count}} rows)",
-      "overflowWrap": "Bulk overflow-wrap ({{count}} rows)"
+      "overflowWrap": "Bulk overflow-wrap ({{count}} rows)",
+      "layout": "Bulk layout change ({{count}} rows)",
+      "margin": "Bulk margin change ({{count}} rows)",
+      "background": "Bulk background change ({{count}} rows)"
     }
   },
   "videoPreview": {
