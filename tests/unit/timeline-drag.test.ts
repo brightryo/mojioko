@@ -247,4 +247,61 @@ describe('computeDragPatch — clamping invariants', () => {
     expect(patch2!.startSec).toBe(5.38)
     expect((patch2!.startSec * 100) % 1).toBeCloseTo(0, 10)
   })
+
+  /**
+   * REQ-20260613-012: when the video duration falls between two
+   * centisecond boundaries (e.g. ffprobe reports 8.787 s), the pre-fix
+   * pipeline clamped finalEnd to dur=8.787 then `roundToCs` rounded
+   * the value HALF-UP to 8.79.  That 8.79 strictly exceeded dur, which
+   * lit up `overDuration` in entry-warnings even though the user had
+   * only dragged the clip to the apparent right edge of the timeline.
+   *
+   * The fix is to floor `dur` to centiseconds (`Math.floor(dur*100)/100`)
+   * before using it as the clamp ceiling.  Post-clamp ≤ floor-cs(dur),
+   * post-round ≤ floor-cs(dur), so `finalEnd > dur` cannot arise from
+   * a drag.  These three tests pin the invariant for each drag kind.
+   */
+  it('move clamp respects sub-cs video duration — endSec never exceeds dur', () => {
+    const patch = computeDragPatch(baseInput({
+      snapshot: { startSec: 0, endSec: 2 },
+      kind: 'move',
+      dxPx: 1000 * PPS,   // way past the video end
+      dur: 8.787,         // sub-cs duration (= the user's observation)
+      liveEntries: [],
+      snapEnabled: false,
+    }))
+    expect(patch!.endSec).toBeLessThanOrEqual(8.787)
+    // Pre-fix: patch.endSec would be 8.79 (= roundToCs(8.787)).
+    expect(patch!.endSec).toBe(8.78)
+  })
+
+  it('resize-end clamp respects sub-cs video duration', () => {
+    const patch = computeDragPatch(baseInput({
+      snapshot: { startSec: 0, endSec: 2 },
+      kind: 'resize-end',
+      dxPx: 1000 * PPS,
+      dur: 8.787,
+      liveEntries: [],
+      snapEnabled: false,
+    }))
+    expect(patch!.endSec).toBeLessThanOrEqual(8.787)
+    expect(patch!.endSec).toBe(8.78)
+  })
+
+  it('move clamp at exact cs-aligned dur permits endSec == dur', () => {
+    // Regression guard: the floor-to-cs fix must not over-clamp when
+    // dur already sits on a cs boundary (= the most common case).
+    // Dragging a 5-s clip past the end of an 8.00-s video should land
+    // endSec at exactly 8.00, not 7.99.
+    const patch = computeDragPatch(baseInput({
+      snapshot: { startSec: 0, endSec: 5 },
+      kind: 'move',
+      dxPx: 1000 * PPS,
+      dur: 8.00,
+      liveEntries: [],
+      snapEnabled: false,
+    }))
+    expect(patch!.endSec).toBe(8.00)
+    expect(patch!.startSec).toBe(3.00)
+  })
 })

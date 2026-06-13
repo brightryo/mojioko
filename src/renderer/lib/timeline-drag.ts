@@ -89,7 +89,27 @@ export function computeDragPatch(input: DragPatchInputs): DragPatchOutput {
   } = input
 
   const dxSec = dxPx / pps
-  const maxEnd = isFinite(dur) && dur > 0 ? dur : Number.MAX_VALUE
+  // REQ-20260613-012: floor `dur` to centisecond precision before using it
+  // as the upper-bound for the drag clamp.  Without the floor, a video
+  // whose duration is not on a cs boundary (e.g. ffprobe reports 8.787 s)
+  // lets the post-clamp `finalEnd` sit at 8.787; `roundToCs` (applied
+  // below) then rounds HALF-UP to 8.79, which is strictly greater than
+  // the video duration and trips `overDuration` in entry-warnings.  The
+  // existing clamp was correct in spirit — REQ-002 / REQ-009 etc. all
+  // relied on it — but the round-up edge case made the maximum
+  // dragable end-time exceed the video by up to one cs.  Flooring the
+  // ceiling to cs aligns the clamp with the cs precision the round
+  // produces: post-clamp ≤ floor-cs(dur), post-round ≤ floor-cs(dur),
+  // overDuration condition (endSec > dur) cannot fire from a drag.
+  // resize-end + move both run through this `maxEnd`; resize-start uses
+  // `snapshot.endSec - minBlockSec` as its ceiling so it is naturally
+  // safe whenever the snapshot was itself in-range (= the only way
+  // resize-start can violate is if the entry was already out-of-range
+  // before the drag, i.e. via the TimeEditorDialog numeric path that
+  // REQ-20260613-012 §4 補足 deliberately leaves un-clamped).
+  const maxEnd = isFinite(dur) && dur > 0
+    ? Math.floor(dur * 100) / 100
+    : Number.MAX_VALUE
 
   let rawStart = snapshot.startSec
   let rawEnd = snapshot.endSec
