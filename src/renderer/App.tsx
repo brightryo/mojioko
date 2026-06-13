@@ -37,7 +37,28 @@ const PAGE_TRANSITION = { duration: 0.25, ease: 'easeOut' }
 // Space (video/audio play-pause) is the only keyboard binding the app
 // still owns; see {video,audio}-preview-panel.tsx.
 
+// REQ-20260614-001 補遺⑤ (A) — global Tab-focus suppression.  Captured
+// at the document root in the CAPTURE phase so dialogs / popovers /
+// Radix Portals are also covered.  Click-to-focus on input fields keeps
+// working (Tab is the only entry point we kill); future callers needing
+// Tab behaviour can stop the bubbling at their root before this handler
+// fires.
+function useSuppressTabFocus(): void {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      // `e.key === 'Tab'` covers Shift+Tab as well — the key name is
+      // the same regardless of modifier.
+      if (e.key === 'Tab') {
+        e.preventDefault()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+}
+
 function AppInner() {
+  useSuppressTabFocus()
   const [appVersion, setAppVersion] = useState(APP_VERSION)
   const location = useLocation()
   const { i18n } = useTranslation('common')

@@ -24,7 +24,8 @@ import { computeEntryWarnings, hasAnyError, hasAnyWarning, type EntryWarnings } 
 import { applyCutsToEntry, effectiveEntryState, origToEdited } from '../../shared/cuts'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font-metrics'
-import { AnimatePresence, motion } from 'framer-motion'
+// REQ-20260614-001 補遺⑤ — `framer-motion` import retired alongside the
+// transient bulk-edit-bar slide-in/out (the bar moved to the right pane).
 import type { SubtitleEntry } from '../../shared/types'
 import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
 import { NEW_ROW_DURATION_SEC, ENABLE_VIDEO_PREVIEW } from '../../shared/constants'
@@ -823,37 +824,65 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     ? (isAudioOnly ? <AudioPreviewPanel /> : <VideoPreviewPanel />)
     : null
 
-  // REQ-20260614-001 Phase 4 — always-on right-pane Inspector.  Drives
-  // the same `TimelineBlockInspector` content that the legacy popover
-  // used; the popover itself was retired in this phase.
+  // REQ-20260614-001 補遺⑤ — right-pane Inspector now has a fixed
+  // heading bar + 3-state body:
   //
-  //   selectedEntryId === null                → empty-state placeholder
-  //   selectedEntryId !== null, entry found   → full editor body
-  //   selectedEntryId !== null, entry missing → empty-state (selection
-  //                                              points to a row that no
-  //                                              longer exists — e.g.
-  //                                              after a delete; defensive)
-  const inspectorEmpty = (
-    <div className="flex h-full w-full items-center justify-center p-6 text-center">
+  //   • Bulk mode    (selectedRowIds.size > 0)
+  //       Heading "一括編集" + BulkEditBar (relocated from above the
+  //       table to the right pane).
+  //   • Single mode  (selectedRowIds empty AND selectedEntry resolved)
+  //       Heading "インスペクタ" + TimelineBlockInspector (per-row
+  //       full editor, 補遺③/④ content).
+  //   • Empty mode   (no selection at all)
+  //       Heading "インスペクタ" + the empty-state placeholder.
+  //
+  // Priority: bulk > single > empty (per補遺⑤ §C).  Drag commits and
+  // playback-follow do NOT switch the panel because they don't touch
+  // `selectedRowIds` or `selectedEntryId`.
+  const selectedEntry = selectedEntryId === null
+    ? null
+    : entries.find((e) => e.id === selectedEntryId) ?? null
+  const isBulkMode = selectedRowIds.size > 0
+  const inspectorHeading = isBulkMode
+    ? t('inspector.bulkHeading')
+    : t('inspector.heading')
+  const inspectorBody = isBulkMode ? (
+    <BulkEditBar
+      onApplied={(rowCount, label) => {
+        toast.success(t('toast.bulkApplied', { count: rowCount, label }), {
+          action: {
+            label: t('toast.bulkAppliedUndo'),
+            onClick: () => {
+              useHistoryStore.getState().undo()
+            }
+          }
+        })
+      }}
+    />
+  ) : selectedEntry !== null ? (
+    <TimelineBlockInspector
+      entry={selectedEntry}
+      warnings={warningsMap.get(selectedEntry.id) ?? null}
+      onAdjustTime={openEditTimeDialog}
+    />
+  ) : (
+    <div className="flex h-full w-full items-center justify-center p-2 text-center">
       <div className="space-y-1 max-w-xs">
         <p className="text-body-sm text-zinc-400">{t('inspector.emptyTitle')}</p>
         <p className="text-caption text-zinc-500">{t('inspector.emptyHint')}</p>
       </div>
     </div>
   )
-  const selectedEntry = selectedEntryId === null
-    ? null
-    : entries.find((e) => e.id === selectedEntryId) ?? null
-  const inspectorSlot = selectedEntry === null ? inspectorEmpty : (
-    // REQ-20260614-001 補遺③ — single overflow-y-auto wraps the entire
-    // Inspector content (`TimelineBlockInspector` had its own inner
-    // scroll stripped to avoid the nested-scroll usability problem).
-    <div className="h-full w-full overflow-y-auto p-3">
-      <TimelineBlockInspector
-        entry={selectedEntry}
-        warnings={warningsMap.get(selectedEntry.id) ?? null}
-        onAdjustTime={openEditTimeDialog}
-      />
+  const inspectorSlot = (
+    <div className="flex h-full w-full flex-col">
+      <div className="flex-shrink-0 px-3 py-2 border-b border-zinc-800">
+        <h2 className="text-callout font-semibold text-zinc-200">
+          {inspectorHeading}
+        </h2>
+      </div>
+      <div className="flex-1 min-h-0 overflow-y-auto p-3">
+        {inspectorBody}
+      </div>
     </div>
   )
 
@@ -925,44 +954,18 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     </div>
   )
 
-  // BulkEditBar slot — same conditional as the previous top-level
-  // rendering, with the AnimatePresence slide-in/out preserved.
-  const bulkBarSlot = (
-    <AnimatePresence initial={false}>
-      {editorViewMode === 'list' && selectedRowIds.size > 0 && !isAudioOnly && (
-        <motion.div
-          key="bulk-edit-bar"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.15, ease: 'easeOut' }}
-          style={{ overflow: 'hidden' }}
-          className="flex-shrink-0"
-        >
-          <BulkEditBar
-            onApplied={(rowCount, label) => {
-              toast.success(t('toast.bulkApplied', { count: rowCount, label }), {
-                action: {
-                  label: t('toast.bulkAppliedUndo'),
-                  onClick: () => {
-                    useHistoryStore.getState().undo()
-                  }
-                }
-              })
-            }}
-          />
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
+  // REQ-20260614-001 補遺⑤ (C) — `bulkBarSlot` is retired here.  The
+  // bulk-edit controls were relocated into the right-pane Inspector
+  // body (see `inspectorBody` above) — the right pane switches between
+  // "bulk edit" (selectedRowIds.size > 0), "single inspector"
+  // (selectedEntry !== null), and the empty placeholder.  The list view
+  // no longer sprouts a transient horizontal bar above the table.
 
-  // bottomSlot bundles the toolbar + bulk bar + the actual list/timeline
-  // body so the bottom pane internally splits "controls / scrollable
-  // content" itself.  REQ-20260614-001 補遺② 修正1.
+  // bottomSlot bundles the toolbar + the actual list/timeline body
+  // (the bulk-edit bar moved to the right pane in 補遺⑤).
   const bottomSlot = (
     <div className="flex h-full w-full flex-col">
       {toolbarSlot}
-      {bulkBarSlot}
       <div className="flex-1 min-h-0">
         {editorViewMode === 'list' ? (
           <SubtitleTable
