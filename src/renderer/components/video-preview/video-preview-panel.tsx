@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
+import { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
 import { Play, Pause, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
@@ -136,9 +136,17 @@ export function VideoPreviewPanel() {
   const [currentTime, setCurrentTime] = useState(0)
   const [duration,    setDuration]    = useState(0)
   const [hasError,    setHasError]    = useState(false)
-  // Measured rendered width of the video container — fed to SubtitleOverlay so
-  // font/outline sizes scale correctly with the actual on-screen video.
-  const [videoContainerWidth, setVideoContainerWidth] = useState(0)
+  // REQ-20260614-001 補遺② 修正2 — measure the BODY (the flex-1 region
+  // hosting the video frame) so we can compute fit-within-parent width
+  // and height via JS.  Phase 2's CSS `aspect-ratio` approach collapsed
+  // to 0×0 inside a flex column because the container had no intrinsic
+  // content (the <video> is absolute-positioned) and no explicit
+  // width/height — aspect-ratio alone does not size a box when both
+  // dimensions resolve to `auto`.  Reverting to JS-computed pixel sizes
+  // matches the v1.2.1 behaviour with the new ability to react to pane
+  // resize.
+  const previewBodyRef = useRef<HTMLDivElement>(null)
+  const [previewBodySize, setPreviewBodySize] = useState({ w: 0, h: 0 })
   // Ensure the subtitle font is loaded so SubtitleOverlay uses the libass
   // scale (~0.6906 for the active font) instead of the pre-load fallback.
   // A tick state forces a re-render once the load resolves so getLibassScale()
@@ -246,6 +254,25 @@ export function VideoPreviewPanel() {
    * for the analysis.
    */
   const videoWidthPx = video?.widthPx ?? 0
+  const videoHeightPx = video?.heightPx ?? 0
+  // REQ-20260614-001 補遺② 修正2 — compute the visible video-frame box
+  // (largest box that preserves source aspect ratio AND fits in
+  // previewBodySize).  When previewBodySize is still 0×0 (first render
+  // before the layout effect commits) the frame falls back to 0×0, the
+  // overlay map renders empty (early-return below), and the next render
+  // after measurement paints normally.
+  const aspect = videoWidthPx > 0 && videoHeightPx > 0
+    ? videoWidthPx / videoHeightPx
+    : 16 / 9
+  const widthBound = previewBodySize.h * aspect > previewBodySize.w
+  const videoFrameW = Math.max(0, widthBound ? previewBodySize.w : previewBodySize.h * aspect)
+  const videoFrameH = Math.max(0, widthBound ? previewBodySize.w / aspect : previewBodySize.h)
+  // `videoContainerWidth` is now a derived value (matches videoFrameW)
+  // so SubtitleOverlay's px↔ASS scale stays in sync with the frame's
+  // actual pixel size.  Replaces the old separate ResizeObserver on
+  // videoContainerRef.
+  const videoContainerWidth = videoFrameW
+
   const stackOffsetsByEntryId = useMemo(() => {
     if (videoWidthPx <= 0 || videoContainerWidth <= 0) {
       return new Map<string, number>()
@@ -281,14 +308,20 @@ export function VideoPreviewPanel() {
       .catch((err) => console.error('[video-preview] font load failed', err))
   }, [activeFontId])
 
-  // Measure the video container so SubtitleOverlay can scale text/outline to the
-  // actual rendered size (the <video> has w-auto, so width depends on aspect ratio).
-  useEffect(() => {
-    const el = videoContainerRef.current
+  // REQ-20260614-001 補遺② 修正2 — measure the preview body (the flex-1
+  // region that hosts the video frame).  The frame's width/height are
+  // computed below as the largest box that preserves the source aspect
+  // ratio AND fits inside (clientWidth, clientHeight).  useLayoutEffect
+  // so the first paint already sees a real size; ResizeObserver picks up
+  // every pane-resize / window-resize.
+  useLayoutEffect(() => {
+    const el = previewBodyRef.current
     if (!el) return
-    const obs = new ResizeObserver(() => setVideoContainerWidth(el.clientWidth))
+    const obs = new ResizeObserver(() => {
+      setPreviewBodySize({ w: el.clientWidth, h: el.clientHeight })
+    })
     obs.observe(el)
-    setVideoContainerWidth(el.clientWidth)
+    setPreviewBodySize({ w: el.clientWidth, h: el.clientHeight })
     return () => obs.disconnect()
   }, [])
 
@@ -621,21 +654,25 @@ export function VideoPreviewPanel() {
         </button>
       </div>
 
-      {/* Video frame — flex-1 takes available vertical space; CSS
-          aspect-ratio shrinks the container to fit the source ratio
-          within the pane.  ResizeObserver-fed `videoContainerWidth`
-          drives SubtitleOverlay's px↔ASS scale. */}
-      <div className="flex-1 min-h-0 flex items-center justify-center p-2 bg-zinc-950">
+      {/* Video frame area — REQ-20260614-001 補遺② 修正2.
+          `previewBodyRef` is measured (clientWidth × clientHeight) so the
+          frame inside can be sized in JS to the largest box that
+          preserves source aspect ratio AND fits the body.  Explicit
+          pixel sizes avoid the flexbox + `aspect-ratio` collapse that
+          flattened the frame to 0×0 in the original Phase 2 attempt. */}
+      <div
+        ref={previewBodyRef}
+        className="flex-1 min-h-0 flex items-center justify-center p-2 bg-zinc-950"
+      >
         {hasError ? (
           <span className="px-6 text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
-        ) : (
+        ) : videoFrameW > 0 && videoFrameH > 0 ? (
           <div
             ref={videoContainerRef}
             className="relative bg-input rounded overflow-hidden"
             style={{
-              aspectRatio: `${video.widthPx} / ${video.heightPx}`,
-              maxWidth: '100%',
-              maxHeight: '100%',
+              width: `${videoFrameW}px`,
+              height: `${videoFrameH}px`,
             }}
           >
             <video
@@ -664,7 +701,7 @@ export function VideoPreviewPanel() {
               )
             })}
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Seekbar — REQ-20260614-001 §3: moved from the right column to
