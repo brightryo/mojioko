@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, X } from 'lucide-react'
+import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
@@ -30,47 +30,29 @@ interface TimelineBlockInspectorProps {
   warnings: EntryWarnings | null
   /** Open the shared TimeEditorDialog (step2 owns it; we just forward the id). */
   onAdjustTime: (entryId: string) => void
-  /**
-   * Close request from inside the inspector.  In the legacy popover
-   * usage this hid the popover; REQ-20260614-001 Phase 4 wires the
-   * always-on right-pane Inspector to pass a callback that clears
-   * `selectedEntryId` (= reverts the right pane to the empty state).
-   *
-   * Optional so callers that never want a close affordance — e.g. a
-   * future "compact inline" embedding — can omit it.  When omitted the
-   * × button is hidden.
-   */
-  onClose?: () => void
 }
 
 /**
- * Popover body shown when a timeline block is clicked.  The layout
- * (REQ-061 #3) is, top → bottom:
+ * Editor body shown in STEP 2's always-on right-pane Inspector
+ * (REQ-20260614-001 補遺③).  Sections top → bottom:
  *
- *   1. Action icons (auto-line-break / delete-toggle / reset) on the
- *      left, X-close on the right.  All three actions reuse the shared
- *      `entry-row-actions` lib so the inspector and the subtitle-table
- *      drive identical history shapes and side effects.
- *   2. Status badges — `state.edited` plus every active warning, from
- *      the same source-of-truth `warningsMap` the table reads.
- *   3. Style controls (size / textColour / outlineColour / outlineWidth /
- *      fade) — hidden in audio-only mode.
- *   4. Per-row font (RowFontSelector) — same component the table cell uses.
- *   5. Text editor — blur commits the typed value (Ctrl+Enter / Esc
- *      shortcuts removed by REQ-082); `\n` ↔ `\N` round-trip retained.
- *   6. Time row — start / end / duration display plus "Adjust time" CTA
- *      that opens the shared TimeEditorDialog.
+ *   1. Action icons (敷き詰め改行 / はみ出し改行 / 削除-復元 / リセット /
+ *      複製) — × close button retired in 補遺③.
+ *   2. Status badges (`state.edited` / pinned / per-warning).
+ *   3. Time display + Adjust time CTA.
+ *   4. Text editor (3-row textarea, blur to commit).
+ *   5. Font selector (RowFontSelector).
+ *   6.–16. Style cluster (size / text colour / outline colour / outline
+ *      width / fade / horizontal / vertical / margin / background
+ *      enabled / background colour / background opacity).
  *
  * The inspector NEVER auto-focuses the textarea (REQ-061 #2(a)): opening
- * a block highlights it but does not enter edit mode.  The parent
- * PopoverContent passes `onOpenAutoFocus={preventDefault}` so Radix
- * itself does not focus the first child either.
+ * an entry highlights it but does not enter edit mode.
  */
 export function TimelineBlockInspector({
   entry,
   warnings,
   onAdjustTime,
-  onClose
 }: TimelineBlockInspectorProps) {
   const { t } = useTranslation(['step2', 'common', 'step1'])
   const updateEntry = useProjectStore((s) => s.updateEntry)
@@ -302,10 +284,9 @@ export function TimelineBlockInspector({
     // Commit any pending text edit first so blur doesn't race with
     // the dialog opening.
     commitText(draft)
-    // REQ-20260614-001 Phase 4 — `onClose` is now optional; the legacy
-    // popover wanted to disappear when Adjust time was clicked, but the
-    // always-on Inspector usage just stays put while the modal opens.
-    onClose?.()
+    // REQ-20260614-001 補遺③ — `onClose` was retired alongside the ×
+    // button.  Adjust time just opens the dialog while the Inspector
+    // stays put on the same entry (selected).
     onAdjustTime(entry.id)
   }
 
@@ -342,15 +323,18 @@ export function TimelineBlockInspector({
         warnings.invalidSize))
 
   return (
-    <div className="flex flex-col gap-3 w-[320px] text-zinc-100 max-h-[70vh] overflow-y-auto pr-1">
-      {/* § 1 — Action icons + close.  REQ-20260612-003 §2 §3 +
-          REQ-20260613-001 §2-5: icon-only buttons in order
-          敷き詰め改行 → はみ出し改行 → 削除/復元 → リセット → 複製,
-          then the X close on the right (separated by justify-between).
-          Both wrap buttons are suppressed in audio-only mode (no
-          burn-in pipeline consumes the rewrap). */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1">
+    // REQ-20260614-001 補遺③ — single scroll container is the parent
+    // (step2.tsx wraps with `overflow-y-auto`).  This inner div used to
+    // set its own `max-h-[70vh] overflow-y-auto pr-1` for the legacy
+    // popover sizing; both were stripped so the always-on right-pane
+    // Inspector has exactly one scroll axis end-to-end.  `w-full`
+    // replaces the legacy `w-[320px]` popover width.
+    <div className="flex flex-col gap-3 w-full text-zinc-100">
+      {/* § 1 — Action icons.  REQ-20260614-001 補遺③: × close button
+          retired.  Common cluster: 敷き詰め改行 → はみ出し改行 →
+          削除/復元 → リセット → 複製.  Wrap buttons suppressed in
+          audio-only mode. */}
+      <div className="flex items-center gap-1">
           {!isAudioOnly && (
             <>
               <button
@@ -461,28 +445,6 @@ export function TimelineBlockInspector({
           >
             <CopyPlus className="h-3.5 w-3.5" />
           </button>
-        </div>
-        {/* REQ-20260614-001 Phase 4 — onClose is optional now.  When the
-            host passes one (e.g. step2's right-pane inspectorSlot uses it
-            to clear `selectedEntryId`), the × button shows up so the
-            user can dismiss the selection.  When omitted the action
-            cluster ends at the duplicate icon and the entry is
-            considered persistently selected. */}
-        {onClose ? (
-          <button
-            type="button"
-            title={t('common:action.close')}
-            aria-label={t('common:action.close')}
-            onClick={onClose}
-            className={cn(
-              'flex items-center justify-center h-7 w-7 rounded',
-              'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
-              'transition-colors duration-150'
-            )}
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        ) : null}
       </div>
 
       {/* § 2 — Status badges.  `state.edited` first, then warnings in the
@@ -511,8 +473,75 @@ export function TimelineBlockInspector({
         </div>
       )}
 
-      {/* § 3 — Style.  Hidden in audio-only mode (REQ-028) because none
-          of these fields reach text/SRT export. */}
+      {/* § 3 — Time (display + Adjust time CTA).  REQ-20260614-001 補遺③
+          moved this block FROM the bottom of the inspector TO right
+          after badges, matching the new ordering "actions → status →
+          time → content → style". */}
+      <div className="flex flex-col gap-1.5 border-t border-zinc-800 pt-2">
+        <div className="flex items-baseline gap-1 text-body-sm font-mono tabular-nums text-zinc-400">
+          <span>{formatEditedTimecode(entry.startSec, cuts)}</span>
+          <span className="text-zinc-600">→</span>
+          <span>{formatEditedTimecode(entry.endSec, cuts)}</span>
+          <span className="ml-1 text-zinc-500">
+            ({durationSec.toFixed(2)}s)
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleAdjustTime}
+          className={cn(
+            'self-start flex items-center gap-1 h-6 px-2 rounded text-caption text-zinc-400',
+            'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
+          )}
+        >
+          <Clock className="h-3 w-3" />
+          {t('timeline.inspector.adjustTime')}
+        </button>
+      </div>
+
+      {/* § 4 — Text editor.  REQ-20260614-001 補遺③ relocated above the
+          font / style cluster. */}
+      <div className="border-t border-zinc-800 pt-2">
+        <label className="block text-label text-zinc-500 mb-1">
+          {t('timeline.inspector.textLabel')}
+        </label>
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={handleDraftChange}
+          onBlur={handleBlur}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
+          rows={3}
+          disabled={isFrozen}
+          spellCheck={false}
+          className={cn(
+            'w-full rounded-md bg-zinc-950 border border-zinc-700 px-2 py-1.5',
+            'text-body text-zinc-50 leading-snug resize-none',
+            'focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/30',
+            'disabled:opacity-50 disabled:cursor-not-allowed'
+          )}
+        />
+      </div>
+
+      {/* § 5 — Font selector.  REQ-20260614-001 補遺③ placed BEFORE the
+          font-size / colour / style cluster so the user picks the family
+          first, then adjusts size / colours within that family. */}
+      {!isAudioOnly && (
+        <div className="space-y-1 border-t border-zinc-800 pt-2">
+          <label className="text-callout font-semibold text-zinc-300 block">{t('bulkRowFont.label')}</label>
+          <RowFontSelector
+            value={entry.fontId}
+            onChange={handleFontChange}
+            disabled={isFrozen}
+          />
+        </div>
+      )}
+
+      {/* § 6+ — Style.  Items §6..§16 per REQ補遺③ (Font size → Text
+          colour → Outline colour → Outline width → Fade → Horizontal →
+          Vertical → Margin → Background → Background colour → Background
+          opacity).  Hidden in audio-only mode (REQ-028). */}
       {!isAudioOnly && (
         <div className="space-y-2 border-t border-zinc-800 pt-2">
           {/* Size */}
@@ -532,10 +561,6 @@ export function TimelineBlockInspector({
                 max: FONT_SIZE_MAX_PX
               })}
               className={cn(
-                // Phase 3.5: size input bumped to `body` (15) so the numeric
-                // value reads at the same scale as the screen's body content
-                // instead of sitting one tier below the field label
-                // (callout 13/600).
                 'w-20 h-7 rounded border bg-zinc-950 px-1.5 text-center text-body text-zinc-100',
                 'focus:outline-none focus:ring-1',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
@@ -708,84 +733,6 @@ export function TimelineBlockInspector({
         </div>
       )}
 
-      {/* § 4 — Font.  Per-row override via the shared RowFontSelector. */}
-      {!isAudioOnly && (
-        <div className="space-y-1 border-t border-zinc-800 pt-2">
-          <label className="text-callout font-semibold text-zinc-300 block">{t('bulkRowFont.label')}</label>
-          <RowFontSelector
-            value={entry.fontId}
-            onChange={handleFontChange}
-            disabled={isFrozen}
-          />
-        </div>
-      )}
-
-      {/* § 5 — Text editor.  Blur commits the typed value
-          (Ctrl+Enter / Esc shortcuts removed by REQ-082).  No
-          auto-focus on mount — see PopoverContent's
-          `onOpenAutoFocus={preventDefault}` upstream. */}
-      <div className="border-t border-zinc-800 pt-2">
-        <label className="block text-label text-zinc-500 mb-1">
-          {t('timeline.inspector.textLabel')}
-        </label>
-        <textarea
-          ref={textareaRef}
-          value={draft}
-          onChange={handleDraftChange}
-          onBlur={handleBlur}
-          onCompositionStart={handleCompositionStart}
-          onCompositionEnd={handleCompositionEnd}
-          rows={3}
-          disabled={isFrozen}
-          spellCheck={false}
-          className={cn(
-            'w-full rounded-md bg-zinc-950 border border-zinc-700 px-2 py-1.5',
-            'text-body text-zinc-50 leading-snug resize-none',
-            'focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/30',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-        />
-        {/* REQ-082: "Ctrl+Enter to commit · Esc to cancel" hint
-            removed — both shortcuts have been deleted. */}
-      </div>
-
-      {/* § 6 — Time row.  Read-only display + adjust-time CTA at the
-          bottom of the inspector to match the visual hierarchy "act
-          first → see status → tweak content → finally time" agreed for
-          REQ-061.
-          Phase 3.5: the timecode row was lifted 11 → body-sm (13) in
-          Phase 3 and stopped fitting on a single line beside the
-          adjust-time chip inside the 320-px popover (the JP label
-          「時間を調整」 wraps to「時間/を調」at 13-px mono + chip width).
-          Split into two stacked rows: timecodes top, chip bottom-right.
-          flex-col + self-end keeps the chip aligned to the popover's
-          right edge so the affordance still feels "next to" the
-          time it modifies. */}
-      <div className="flex flex-col gap-1.5 border-t border-zinc-800 pt-2">
-        <div className="flex items-baseline gap-1 text-body-sm font-mono tabular-nums text-zinc-400">
-          <span>{formatEditedTimecode(entry.startSec, cuts)}</span>
-          <span className="text-zinc-600">→</span>
-          <span>{formatEditedTimecode(entry.endSec, cuts)}</span>
-          <span className="ml-1 text-zinc-500">
-            ({durationSec.toFixed(2)}s)
-          </span>
-        </div>
-        {/* Phase 3.7-C: button moved self-end -> self-start (left-aligned)
-            per owner directive; trailing ellipsis removed from the locale
-            string because the dialog opens immediately without further
-            confirmation, so the "…" promised more steps than there are. */}
-        <button
-          type="button"
-          onClick={handleAdjustTime}
-          className={cn(
-            'self-start flex items-center gap-1 h-6 px-2 rounded text-caption text-zinc-400',
-            'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
-          )}
-        >
-          <Clock className="h-3 w-3" />
-          {t('timeline.inspector.adjustTime')}
-        </button>
-      </div>
     </div>
   )
 }
