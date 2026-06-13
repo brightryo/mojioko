@@ -222,91 +222,74 @@ export function AudioPreviewPanel() {
   if (!video || !mediaUrl) return null
 
   const filename = getBasename(video.path)
+  const editedTotalSec = editedDuration(duration, cuts)
+  const editedCurrentTime = origToEdited(currentTime, cuts)
 
   return (
-    <div className="flex-shrink-0 rounded-lg border border-border bg-card">
-      {/* Header — same shape as VideoPreviewPanel's collapsed header so the
-          two panels feel like siblings.  No accordion behaviour here; the
-          audio panel is always expanded (its body is short enough that
-          collapsing it gains nothing). */}
-      <div className="flex items-center gap-2 px-3 py-2">
-        <Play className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-        <span className="text-label font-medium uppercase tracking-wider text-muted-foreground flex-shrink-0">
-          {t('videoPreview.play')}
+    // REQ-20260614-001 Phase 2 — sized to fill the top-left resizable
+    // pane (same shape as VideoPreviewPanel's reworked layout).  Outer
+    // card chrome retired; the pane border replaces it.
+    <div className="flex h-full w-full flex-col">
+      {/* Header — filename + open-in-folder shortcut, identical
+          structure to VideoPreviewPanel. */}
+      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border/50 flex-shrink-0 min-w-0">
+        <span className="min-w-0 truncate text-body-sm text-foreground/80" title={video.path}>
+          {filename}
         </span>
-        <div className="flex-1 flex items-center justify-center gap-1.5 min-w-0 px-2">
-          <span className="min-w-0 truncate text-body-sm text-foreground/80" title={video.path}>
-            {filename}
-          </span>
-          <button
-            type="button"
-            onClick={() => { shellShowInFolder(video.path).catch(() => {}) }}
-            title={t('videoPreview.showInFolder')}
-            className={cn(
-              'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
-              'hover:text-foreground hover:bg-accent'
-            )}
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => { shellShowInFolder(video.path).catch(() => {}) }}
+          title={t('videoPreview.showInFolder')}
+          className={cn(
+            'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
+            'hover:text-foreground focus:outline-none focus:text-foreground'
+          )}
+        >
+          <FolderOpen className="h-4 w-4" />
+        </button>
       </div>
 
-      {/* Body — centred play / pause + seek bar.  Same outer height as
-          VideoPreviewPanel's left column (180 px video frame) so the
-          STEP 2 layout below this panel does not shift when toggling
-          between video and audio inputs.
-          REQ-029 #1+#2: button stepped down from h-14 → h-10 (control
-          weight matches the surrounding text-tabular UI better), and
-          the time readout is lifted above the seek bar in its own row
-          so the bar gets the full panel width. */}
-      <div className="flex items-center justify-center px-4 pb-4 pt-2" style={{ minHeight: 180 }}>
+      {/* Body — centred play / pause button takes the flex-1 area. */}
+      <div className="flex-1 min-h-0 flex items-center justify-center p-4 bg-zinc-950">
         {hasError ? (
           <span className="text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
         ) : (
-          <div className="flex flex-col items-center gap-3 w-full max-w-md">
-            <button
-              type="button"
-              onClick={togglePlay}
-              aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
-              className={cn(
-                'flex items-center justify-center rounded-full transition-colors duration-150',
-                'h-10 w-10 bg-primary text-primary-foreground hover:bg-primary/90',
-                'focus:outline-none focus-visible:outline-none'
-              )}
-            >
-              {isPlaying
-                ? <Pause className="h-5 w-5" />
-                : <Play className="h-5 w-5 ml-0.5" />}
-            </button>
-
-            {(() => {
-              // REQ-075 #5 — seek + readout in EDITED coordinates.
-              // Identical to (currentTime, duration) when cuts is empty.
-              const editedTotalSec = editedDuration(duration, cuts)
-              const editedCurrentTime = origToEdited(currentTime, cuts)
-              return (
-                <div className="w-full flex flex-col gap-1">
-                  <span className="text-caption tabular-nums text-muted-foreground text-center">
-                    {formatTime(editedCurrentTime)} / {formatTime(editedTotalSec)}
-                  </span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={editedTotalSec || 0}
-                    step={0.01}
-                    value={editedCurrentTime}
-                    onChange={handleSeekChange}
-                    onPointerDown={() => { isSeeking.current = true }}
-                    onPointerUp={() => { isSeeking.current = false }}
-                    className="w-full accent-primary"
-                    aria-label={t('videoPreview.play')}
-                  />
-                </div>
-              )
-            })()}
-          </div>
+          <button
+            type="button"
+            onClick={togglePlay}
+            aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
+            className={cn(
+              'flex items-center justify-center rounded-full transition-colors duration-150',
+              'h-14 w-14 bg-primary text-primary-foreground hover:bg-primary/90',
+              'focus:outline-none focus-visible:outline-none'
+            )}
+          >
+            {isPlaying
+              ? <Pause className="h-6 w-6" />
+              : <Play className="h-6 w-6 ml-0.5" />}
+          </button>
         )}
+      </div>
+
+      {/* Seekbar + time row — placed where VideoPreviewPanel's seekbar
+          sits so the audio / video panels share the same lower-edge
+          control surface. */}
+      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border/50 flex-shrink-0">
+        <input
+          type="range"
+          min={0}
+          max={editedTotalSec || 0}
+          step={0.01}
+          value={editedCurrentTime}
+          onChange={handleSeekChange}
+          onPointerDown={() => { isSeeking.current = true }}
+          onPointerUp={() => { isSeeking.current = false }}
+          className="flex-1 h-1.5 cursor-pointer accent-primary"
+          aria-label={t('videoPreview.play')}
+        />
+        <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-muted-foreground">
+          {formatTime(editedCurrentTime)}&nbsp;/&nbsp;{formatTime(editedTotalSec)}
+        </span>
       </div>
 
       <audio

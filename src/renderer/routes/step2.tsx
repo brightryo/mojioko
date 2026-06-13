@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useLayoutEffect } from 'react'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -33,6 +33,18 @@ import { AudioPreviewPanel } from '@/components/audio-preview/audio-preview-pane
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { EditorViewSwitcher } from '@/components/editor-view-switcher/editor-view-switcher'
 import { TimelineView } from '@/components/timeline-view/timeline-view'
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
+import { useRef } from 'react'
+
+/**
+ * REQ-20260614-001 Phase 2 — when the available container is narrower
+ * than this, the 3-pane layout falls back to a non-resizable vertical
+ * stack (preview-or-empty-inspector / table-or-timeline) so the panes
+ * don't crush below a usable size.  600 px is chosen so each pane gets
+ * at least ~300 px on horizontal split — below that the inspector
+ * becomes too narrow to expose its controls comfortably.
+ */
+const STEP2_MIN_WIDTH_FOR_3PANE_PX = 600
 
 /**
  * State driving the shared TimeEditorDialog.
@@ -145,6 +157,28 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const [editor, setEditor] = useState<EditorState>({ open: false })
   const [discardOpen, setDiscardOpen] = useState(false)
   const [skipDiscardWarning, setSkipDiscardWarning] = useState(false)
+
+  // REQ-20260614-001 Phase 2 — 3-pane resizable layout state.
+  // `outerLayout` / `topLayout` get fed straight back to the Group's
+  // `defaultLayout` and updated from its `onLayoutChange`.  Container
+  // ResizeObserver drives the small-screen fallback (single-column
+  // stack when too narrow for the 3-pane to be usable).
+  const step2OuterLayout    = useUiStore((s) => s.step2OuterLayout)
+  const step2TopLayout      = useUiStore((s) => s.step2TopLayout)
+  const setStep2OuterLayout = useUiStore((s) => s.setStep2OuterLayout)
+  const setStep2TopLayout   = useUiStore((s) => s.setStep2TopLayout)
+
+  const paneAreaRef = useRef<HTMLDivElement>(null)
+  const [paneAreaWidth, setPaneAreaWidth] = useState(0)
+  useLayoutEffect(() => {
+    const el = paneAreaRef.current
+    if (!el) return
+    const obs = new ResizeObserver(() => setPaneAreaWidth(el.clientWidth))
+    obs.observe(el)
+    setPaneAreaWidth(el.clientWidth)
+    return () => obs.disconnect()
+  }, [])
+  const useStackedFallback = paneAreaWidth > 0 && paneAreaWidth < STEP2_MIN_WIDTH_FOR_3PANE_PX
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   const [subtitleFont, setSubtitleFont] = useState<SubtitleFont | null>(getSubtitleFont)
 
@@ -767,6 +801,43 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     </div>
   )
 
+  // REQ-20260614-001 Phase 2 — JSX helpers.  Preview / Inspector / Bottom
+  // are extracted as small render functions so they can be wired into both
+  // the resizable 3-pane layout and the small-screen stacked fallback
+  // without duplicating their inner structure.
+  const previewSlot = ENABLE_VIDEO_PREVIEW
+    ? (isAudioOnly ? <AudioPreviewPanel /> : <VideoPreviewPanel />)
+    : null
+
+  const inspectorSlot = (
+    // Phase 2 empty-state placeholder.  Phase 4 wires this to the
+    // selected entry id and renders the full TimelineBlockInspector
+    // content.  REQ #1 "未選択時はインスペクタに何も表示しない (空状態)".
+    <div className="flex h-full w-full items-center justify-center p-6 text-center">
+      <div className="space-y-1 max-w-xs">
+        <p className="text-body-sm text-zinc-400">{t('inspector.emptyTitle')}</p>
+        <p className="text-caption text-zinc-500">{t('inspector.emptyHint')}</p>
+      </div>
+    </div>
+  )
+
+  const bottomSlot = (
+    editorViewMode === 'list' ? (
+      <SubtitleTable
+        overflowMap={overflowMap}
+        warningsMap={warningsMap}
+        videoDurationSec={videoDurationSec}
+        onAdjustTime={openEditTimeDialog}
+      />
+    ) : (
+      <TimelineView
+        warningsMap={warningsMap}
+        videoDurationSec={videoDurationSec}
+        onAdjustTime={openEditTimeDialog}
+      />
+    )
+  )
+
   return (
     <AppShell
       currentStep={2}
@@ -775,6 +846,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
       footerCenter={footerCenter}
       footerRight={footerRight}
       noScroll
+      fluid
     >
       <div className="flex flex-col h-full gap-3">
         {/* Page header — REQ-075 #1: title + subtitle laid out on a single
@@ -786,12 +858,6 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
           <h1 className="text-heading font-semibold text-zinc-50">{t('title')}</h1>
           <p className="text-body-sm text-zinc-400">{t('subtitle')}</p>
         </div>
-
-        {/* Preview panel — swaps to a minimal audio player when the
-            input is audio-only (REQ-028).  Same outer card shape +
-            ~180px body so the page layout below this slot does not
-            shift between modes. */}
-        {ENABLE_VIDEO_PREVIEW && (isAudioOnly ? <AudioPreviewPanel /> : <VideoPreviewPanel />)}
 
         {/* View switcher + Filter tabs + Undo/Redo + Add Row.  View switcher
             is left-anchored next to the filter tabs (REQ-052 Phase 1) so the
@@ -907,24 +973,76 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
           )}
         </AnimatePresence>
 
-        {/* Table or Timeline — fills remaining height.  Same `entries` are
-            edited from either view (1-data-2-views, REQ-052).  Phase 1
-            timeline is read-only: clicks focus a row + seek the video, but
-            edit affordances land in Phases 2–5.  See dev-docs/specs/timeline.md. */}
-        <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">
-          {editorViewMode === 'list' ? (
-            <SubtitleTable
-              overflowMap={overflowMap}
-              warningsMap={warningsMap}
-              videoDurationSec={videoDurationSec}
-              onAdjustTime={openEditTimeDialog}
-            />
+        {/* REQ-20260614-001 Phase 2 — variable 3-pane area.
+            Outer = vertical PanelGroup (top: preview + inspector / bottom:
+            table-or-timeline).  Top = horizontal PanelGroup (left: preview /
+            right: inspector placeholder).  Each pane has a minSize so it
+            can't be collapsed past usability.
+
+            Fallback: when the container is narrower than
+            STEP2_MIN_WIDTH_FOR_3PANE_PX, the layout collapses to a
+            non-resizable vertical stack of preview / inspector / bottom.
+            Avoids "crushed inspector" on small windows or sub-Half-snap
+            workspaces. */}
+        <div ref={paneAreaRef} className="flex-1 min-h-0 overflow-hidden">
+          {useStackedFallback ? (
+            <div className="flex h-full w-full flex-col gap-2">
+              <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">
+                {previewSlot}
+              </div>
+              <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">
+                {inspectorSlot}
+              </div>
+              <div className="flex-1 min-h-0 rounded-lg border border-zinc-800 overflow-hidden">
+                {bottomSlot}
+              </div>
+            </div>
           ) : (
-            <TimelineView
-              warningsMap={warningsMap}
-              videoDurationSec={videoDurationSec}
-              onAdjustTime={openEditTimeDialog}
-            />
+            <ResizablePanelGroup
+              direction="vertical"
+              defaultLayout={step2OuterLayout}
+              onLayoutChange={(layout) => {
+                // Persist the new layout as soon as the user lets go of
+                // the drag handle.  Type-narrow defensively: the Group's
+                // `Layout` type is `{ [id: string]: number }`, but we
+                // only care about our two named ids.
+                const top = layout['step2-pane-top']
+                const bottom = layout['step2-pane-bottom']
+                if (typeof top === 'number' && typeof bottom === 'number') {
+                  setStep2OuterLayout({ 'step2-pane-top': top, 'step2-pane-bottom': bottom })
+                }
+              }}
+              className="rounded-lg border border-zinc-800 overflow-hidden"
+            >
+              <ResizablePanel id="step2-pane-top" minSize="25%">
+                <ResizablePanelGroup
+                  direction="horizontal"
+                  defaultLayout={step2TopLayout}
+                  onLayoutChange={(layout) => {
+                    const preview = layout['step2-pane-preview']
+                    const inspector = layout['step2-pane-inspector']
+                    if (typeof preview === 'number' && typeof inspector === 'number') {
+                      setStep2TopLayout({
+                        'step2-pane-preview': preview,
+                        'step2-pane-inspector': inspector,
+                      })
+                    }
+                  }}
+                >
+                  <ResizablePanel id="step2-pane-preview" minSize="25%">
+                    {previewSlot}
+                  </ResizablePanel>
+                  <ResizableHandle withHandle />
+                  <ResizablePanel id="step2-pane-inspector" minSize="20%">
+                    {inspectorSlot}
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel id="step2-pane-bottom" minSize="20%">
+                {bottomSlot}
+              </ResizablePanel>
+            </ResizablePanelGroup>
           )}
         </div>
       </div>

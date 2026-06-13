@@ -1,6 +1,5 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
-import { Play, Pause, FolderOpen, ChevronUp, ChevronDown } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { Play, Pause, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -122,8 +121,11 @@ export function VideoPreviewPanel() {
   // playback so the subtitle table highlights the active row).
   const setFocusedRowId        = useUiStore((s) => s.setFocusedRowId)
   const setVideoCurrentTimeSec = useUiStore((s) => s.setVideoCurrentTimeSec)
-  const isExpanded             = useUiStore((s) => s.videoPreviewExpanded)
-  const setExpanded            = useUiStore((s) => s.setVideoPreviewExpanded)
+  // REQ-20260614-001 Phase 2 — the accordion-style "expanded / collapsed"
+  // state retired here; the user resizes the left-top pane to reclaim
+  // vertical space instead.  `videoPreviewExpanded` slice and its setter
+  // stay in ui-store for now (no other consumer; harmless), to be cleaned
+  // up in a follow-up phase along with the seek / current-time slices.
 
   const videoRef  = useRef<HTMLVideoElement>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
@@ -314,17 +316,10 @@ export function VideoPreviewPanel() {
     }
   }, [])
 
-  // REQ-20260612-001: pause the video when the accordion collapses.
-  // Pairing with the always-mounted body above: the <video> element now
-  // survives collapse cycles (so currentTime / overlayEntry are
-  // preserved), but the user collapsing the panel should still feel
-  // like "stop the preview" — not "minimise to a tray that keeps
-  // playing audio".  Position is preserved; play state is not.
-  useEffect(() => {
-    if (isExpanded) return
-    const el = videoRef.current
-    if (el && !el.paused) el.pause()
-  }, [isExpanded])
+  // REQ-20260614-001 Phase 2 — the "pause-on-collapse" effect retired
+  // alongside the accordion.  Pane resize shrinks the preview area
+  // without unmounting the <video>, so playback is naturally preserved
+  // (and the user keeps explicit control via the play/pause button).
 
   // Space key — play/pause when no text field is focused
   useEffect(() => {
@@ -590,292 +585,137 @@ export function VideoPreviewPanel() {
 
   const filename = getBasename(video.path)
 
-  // REQ-20260613-016 Phase 4 — the local `Segmented` helper used by the
-  // retired global panels was removed alongside them.  Phase 6 may
-  // reintroduce a similar primitive if the drag UI needs a pinned-state
-  // segmented toggle, but until then the component is unreferenced.
+  // REQ-20260614-001 Phase 2 — the panel now lives INSIDE the top-left
+  // resizable pane (see step2.tsx).  Layout:
+  //   1. Filename + open-in-folder header (one row)
+  //   2. Flex-1 video container — sized via CSS aspect-ratio so the
+  //      <video> always fits the pane while preserving the source
+  //      aspect ratio
+  //   3. Seekbar row (play button + range + time)
+  //   4. Warning / approximate-preview note
+  // Outer chrome (rounded border + bg) retired because the resizable
+  // pane itself provides the visual boundary.
+  const editedTotalSec = editedDuration(duration, cuts)
+  const editedCurrentTime = origToEdited(currentTime, cuts)
 
   return (
-    <div className="flex-shrink-0 rounded-lg border border-border bg-card">
-      {/* Accordion header — clickable.  Filename + folder button live
-          here (rather than in the right column's middle row) so:
-            - they stay visible when the panel is collapsed, and
-            - the right column has one fewer block, which helps balance
-              its height against the left column's video element.
-          stopPropagation on the folder button so clicking the icon does
-          not also toggle the accordion. */}
-      {/* REQ-082: Enter / Space keyboard activation removed. */}
-      <div
-        role="button"
-        aria-expanded={isExpanded}
-        tabIndex={0}
-        onClick={() => setExpanded(!isExpanded)}
-        className="flex items-center gap-2 cursor-pointer select-none hover:opacity-90 transition-opacity duration-150 px-3 py-2"
-      >
-        <Play className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-        <span className="text-label font-medium uppercase tracking-wider text-muted-foreground flex-shrink-0">
-          {t('videoPreview.play')}
+    <div className="flex h-full w-full flex-col">
+      {/* Header — filename + open-in-folder button.  Compact; designed
+          to live INSIDE a resizable pane so wraps gracefully when the
+          pane is narrow.  REQ-20260614-001 Phase 2. */}
+      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border/50 flex-shrink-0 min-w-0">
+        <span className="min-w-0 truncate text-body-sm text-foreground/80" title={video.path}>
+          {filename}
         </span>
-
-        {/* Centred filename + folder shortcut.  flex-1 wrapper grabs the
-            remaining horizontal space so the filename sits in the middle
-            of the header regardless of how wide the panel is. */}
-        <div className="flex-1 flex items-center justify-center gap-1.5 min-w-0 px-2">
-          <span className="min-w-0 truncate text-body-sm text-foreground/80" title={video.path}>
-            {filename}
-          </span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              shellShowInFolder(video.path).catch(() => {})
-            }}
-            title={t('videoPreview.showInFolder')}
-            className={cn(
-              'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
-              'hover:text-foreground focus:outline-none focus:text-foreground'
-            )}
-            aria-label={t('videoPreview.showInFolder')}
-          >
-            <FolderOpen className="h-4 w-4" />
-          </button>
-        </div>
-
-        {isExpanded
-          ? <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          : <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-        }
+        <button
+          type="button"
+          onClick={() => shellShowInFolder(video.path).catch(() => {})}
+          title={t('videoPreview.showInFolder')}
+          className={cn(
+            'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
+            'hover:text-foreground focus:outline-none focus:text-foreground'
+          )}
+          aria-label={t('videoPreview.showInFolder')}
+        >
+          <FolderOpen className="h-4 w-4" />
+        </button>
       </div>
 
-      {/* Collapsible body — preview + controls.
-          REQ-20260612-001: kept ALWAYS MOUNTED and animated open/closed
-          via height + opacity rather than wrapped in <AnimatePresence>
-          with a conditional render.  When the body unmounts on close,
-          the inner <video> element is destroyed; re-expanding remounts
-          it fresh, the browser reloads metadata, fires `timeupdate` at
-          currentTime=0, and that 0 propagates back into React state —
-          wiping the active subtitle entry from <SubtitleOverlay>.  By
-          keeping the subtree mounted, currentTime / videoContainerWidth
-          / overlayEntry all survive across collapse cycles and the
-          overlay paints continuously at the right playhead position. */}
-      <motion.div
-        initial={false}
-        animate={isExpanded
-          ? { height: 'auto', opacity: 1 }
-          : { height: 0, opacity: 0 }
-        }
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className="overflow-hidden"
-      >
-            <div className="px-3 pb-2 space-y-1 border-t border-border/50 pt-2">
-              {/* REQ-044 #2: pin the left grid track to the video's
-                  actual rendered width so the videoContainer never
-                  grows wider than the <video> inside.  Before this
-                  fix the `auto` track let the disclaimer's max-content
-                  push the container to ~350px while a vertical
-                  1080×1920 source only renders 101px wide, with the
-                  side-effect that SubtitleOverlay read the container
-                  width (350) as the video width and over-scaled +
-                  mispositioned the subtitle.  `minmax(180px, videoW)`
-                  ensures the disclaimer below still has a readable
-                  wrap width (≥180) even for narrow vertical sources,
-                  while horizontal sources continue to size to the
-                  full videoW (e.g. 320 for 16:9 @ 180h). */}
-              {(() => {
-                // REQ-045 #1: 2-axis envelope replaces the previous
-                // height-only TARGET_H=180.  Vertical sources now use
-                // the available height for a much larger preview while
-                // horizontal stays inside the panel's right column's
-                // own width budget.  Behaviour by ratio:
-                //   - 16:9 → 360×202 (width-bound; +25 % bigger than
-                //            the previous 320×180, still well within
-                //            the panel)
-                //   - 9:16 → 158×280 (height-bound; +143 % area vs the
-                //            previous 101×180 — the main visual win)
-                //   - 1:1  → 280×280
-                // The grid track minimum (180px) is unchanged so the
-                // disclaimer below still has a readable wrap width even
-                // for the narrowest vertical sources.  When the
-                // container width is below the 180px floor (e.g. 158
-                // for 9:16) the videoContainer is horizontally centred
-                // inside the track via mx-auto (REQ-045 #2) — without
-                // this the video would sit flush-left and look
-                // mis-aligned against the disclaimer text below it.
-                const MAX_W = 360
-                const MAX_H = 280
-                const ratio =
-                  video.widthPx > 0 && video.heightPx > 0
-                    ? video.widthPx / video.heightPx
-                    : 16 / 9
-                const widthBound = MAX_H * ratio > MAX_W
-                const videoW = Math.round(widthBound ? MAX_W : MAX_H * ratio)
-                const videoH = Math.round(widthBound ? MAX_W / ratio : MAX_H)
-                return (
-                  <div
-                    className="grid gap-4"
-                    style={{
-                      gridTemplateColumns: `minmax(180px, ${videoW}px) 1fr`
-                    }}
-                  >
+      {/* Video frame — flex-1 takes available vertical space; CSS
+          aspect-ratio shrinks the container to fit the source ratio
+          within the pane.  ResizeObserver-fed `videoContainerWidth`
+          drives SubtitleOverlay's px↔ASS scale. */}
+      <div className="flex-1 min-h-0 flex items-center justify-center p-2 bg-zinc-950">
+        {hasError ? (
+          <span className="px-6 text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
+        ) : (
+          <div
+            ref={videoContainerRef}
+            className="relative bg-input rounded overflow-hidden"
+            style={{
+              aspectRatio: `${video.widthPx} / ${video.heightPx}`,
+              maxWidth: '100%',
+              maxHeight: '100%',
+            }}
+          >
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              preload="metadata"
+              className="absolute inset-0 h-full w-full object-contain"
+              onTimeUpdate={handleTimeUpdate}
+              onLoadedMetadata={handleLoadedMetadata}
+              onPlay={handlePlay}
+              onPause={handlePause}
+              onEnded={handleEnded}
+              onError={handleError}
+            />
+            {videoContainerWidth > 0 && overlayEntries.map((entry) => {
+              const offset = stackOffsetsByEntryId.get(entry.id) ?? 0
+              return (
+                <SubtitleOverlay
+                  key={entry.id}
+                  entry={entry}
+                  videoWidthPx={video.widthPx}
+                  containerWidthPx={videoContainerWidth}
+                  stackOffsetPx={offset}
+                  onPointerDown={handleOverlayPointerDown}
+                />
+              )
+            })}
+          </div>
+        )}
+      </div>
 
-                    {/* ── Left: video + subtitle overlay ─────
-                        REQ-075 #2: the "approximate preview" disclaimer
-                        used to sit directly under the video here; it has
-                        moved to the top of the right column so the space
-                        under the video frame stays free (helps Step 2's
-                        overall vertical budget). */}
-                    <div className="flex flex-col">
-                      <div
-                        ref={videoContainerRef}
-                        className="relative mx-auto flex items-center justify-center overflow-hidden rounded bg-input"
-                        style={{ width: `${videoW}px`, height: `${videoH}px` }}
-                      >
-                        {hasError ? (
-                          <span className="px-6 text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
-                        ) : (
-                          <>
-                            <video
-                              ref={videoRef}
-                              src={videoUrl}
-                              preload="metadata"
-                              className="h-full w-auto object-contain"
-                              onTimeUpdate={handleTimeUpdate}
-                              onLoadedMetadata={handleLoadedMetadata}
-                              onPlay={handlePlay}
-                              onPause={handlePause}
-                              onEnded={handleEnded}
-                              onError={handleError}
-                            />
-                            {/* REQ-20260613-004 + REQ-20260613-006:
-                                render every active caption as its own
-                                SubtitleOverlay.  The vertical offset
-                                comes from the pre-computed
-                                `stackOffsetsByEntryId` map (= libass-
-                                faithful `fix_collisions` positions),
-                                so survivors stay put when a sibling
-                                caption ends and a later caption fills
-                                the freed gap rather than pushing the
-                                survivor down.  Single-active resolves
-                                to one overlay at offset 0 — byte-
-                                identical to the pre-stack render
-                                path. */}
-                            {/* REQ-20260613-016 Phase 3: per-row layout
-                                lives on `entry` itself; SubtitleOverlay
-                                reads horizontalPosition / verticalPosition /
-                                verticalMarginPx / subtitleBackground from
-                                there.  The global `burnin` /
-                                `subtitleBackground` slices are no longer
-                                consumed by overlay rendering (Phase 4 will
-                                also retire the panel UI that wrote them). */}
-                            {videoContainerWidth > 0 && overlayEntries.map((entry) => {
-                              const offset = stackOffsetsByEntryId.get(entry.id) ?? 0
-                              return (
-                                <SubtitleOverlay
-                                  key={entry.id}
-                                  entry={entry}
-                                  videoWidthPx={video.widthPx}
-                                  containerWidthPx={videoContainerWidth}
-                                  stackOffsetPx={offset}
-                                  onPointerDown={handleOverlayPointerDown}
-                                />
-                              )
-                            })}
-                          </>
-                        )}
-                      </div>
-                    </div>
+      {/* Seekbar — REQ-20260614-001 §3: moved from the right column to
+          DIRECTLY below the video frame.  Same play/pause + range +
+          time-readout as the previous layout, just relocated. */}
+      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border/50 flex-shrink-0">
+        <button
+          type="button"
+          onClick={togglePlay}
+          disabled={hasError || duration === 0}
+          className={cn(
+            'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
+            'bg-secondary text-foreground transition-all duration-150',
+            'hover:bg-accent active:scale-95',
+            'focus:outline-none focus-visible:outline-none',
+            'disabled:cursor-not-allowed disabled:opacity-40'
+          )}
+          aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
+        >
+          {isPlaying
+            ? <Pause className="h-5 w-5" />
+            : <Play  className="h-5 w-5 translate-x-0.5" />
+          }
+        </button>
+        <input
+          type="range"
+          min={0}
+          max={editedTotalSec > 0 ? editedTotalSec : 100}
+          step={0.1}
+          value={editedCurrentTime}
+          disabled={duration === 0 || hasError}
+          onMouseDown={handleSeekDown}
+          onChange={handleSeekChange}
+          onMouseUp={handleSeekUp}
+          onTouchStart={handleSeekDown}
+          onTouchEnd={handleSeekUp}
+          style={{
+            accentColor: 'hsl(var(--primary))'
+          }}
+          className="flex-1 h-1.5 cursor-pointer disabled:cursor-default disabled:opacity-40"
+        />
+        <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-muted-foreground">
+          {formatTime(editedCurrentTime)}&nbsp;/&nbsp;{formatTime(editedTotalSec)}
+        </span>
+      </div>
 
-                {/* ── Right: 2-row layout (settings / player) ──────────
-                    The middle "filename + folder" row moved up into the
-                    accordion header so the right column is shorter and
-                    closer to the left column's height. */}
-                <div className="flex flex-col py-1 min-w-0">
-
-                  {/* REQ-075 #2: previewNote moved here (was directly
-                      under the video frame on the left).  Putting it
-                      above the subtitle-layout group keeps the warning
-                      visible without consuming any vertical space below
-                      the video, which is what the left column was
-                      bleeding before. */}
-                  <p className="mb-2 text-body-sm text-muted-foreground">
-                    {t('subtitleLayout.previewNote')}
-                  </p>
-
-                  {/* REQ-20260613-016 Phase 4 — the legacy
-                      "字幕レイアウト" + "文字背景" panels were retired here.
-                      Per-row editing UI lives in SubtitleTable's Style
-                      column (機能A); this space is intentionally left
-                      empty so the player anchors via the flex-1 spacer
-                      below.  Phase 5/6 may reuse this slot for the
-                      inspector-merged UI; the preview note above is kept
-                      because it still applies to the per-row preview. */}
-
-                  {/* flex-1 spacer absorbs whatever vertical slack the
-                      left column's video + disclaimer leaves over so
-                      the player anchors to the bottom and the two
-                      columns visually balance. */}
-                  <div className="flex-1" />
-
-                  {/* Bottom: smaller play/pause + scrub + time.
-                      REQ-075 #5 — seekbar + readout on the EDITED axis.
-                      `editedTotalSec` and `editedCurrentTime` collapse to
-                      `duration` and `currentTime` exactly when cuts is
-                      empty (origToEdited / editedDuration are identity),
-                      so legacy users notice no change. */}
-                  {(() => {
-                    const editedTotalSec = editedDuration(duration, cuts)
-                    const editedCurrentTime = origToEdited(currentTime, cuts)
-                    return (
-                      <div className="flex items-center gap-2 px-1">
-                        <button
-                          type="button"
-                          onClick={togglePlay}
-                          disabled={hasError || duration === 0}
-                          className={cn(
-                            'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
-                            'bg-secondary text-foreground transition-all duration-150',
-                            'hover:bg-accent active:scale-95',
-                            'focus:outline-none focus-visible:outline-none',
-                            'disabled:cursor-not-allowed disabled:opacity-40'
-                          )}
-                          aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
-                        >
-                          {isPlaying
-                            ? <Pause className="h-5 w-5" />
-                            : <Play  className="h-5 w-5 translate-x-0.5" />
-                          }
-                        </button>
-                        <input
-                          type="range"
-                          min={0}
-                          max={editedTotalSec > 0 ? editedTotalSec : 100}
-                          step={0.1}
-                          value={editedCurrentTime}
-                          disabled={duration === 0 || hasError}
-                          onMouseDown={handleSeekDown}
-                          onChange={handleSeekChange}
-                          onMouseUp={handleSeekUp}
-                          onTouchStart={handleSeekDown}
-                          onTouchEnd={handleSeekUp}
-                          style={{
-                            accentColor: 'hsl(var(--primary))'
-                          }}
-                          className="flex-1 h-1.5 cursor-pointer disabled:cursor-default disabled:opacity-40"
-                        />
-                        <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-muted-foreground">
-                          {formatTime(editedCurrentTime)}&nbsp;/&nbsp;{formatTime(editedTotalSec)}
-                        </span>
-                      </div>
-                    )
-                  })()}
-
-                </div>
-
-                  </div>
-                )
-              })()}
-            </div>
-      </motion.div>
+      {/* Warning / approximate-preview note — REQ-20260614-001 §3:
+          relocated below the seekbar. */}
+      <p className="px-3 py-1 text-caption text-muted-foreground flex-shrink-0">
+        {t('subtitleLayout.previewNote')}
+      </p>
     </div>
   )
 }
