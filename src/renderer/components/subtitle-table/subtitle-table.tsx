@@ -364,6 +364,57 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     withHistory(t('history.editFade'), { fadeEnabled: checked })
   }
 
+  // REQ-20260613-016 Phase 4 — per-row layout handlers (機能A).
+  // Each handler routes through `withHistory` so undo restores both the
+  // changed field AND any auto-derived state (e.g. isEdited).  No-ops
+  // when the new value matches the current one so a re-pick of the same
+  // option does not pollute the undo stack.
+
+  function handleHorizontalPositionChange(v: 'left' | 'center' | 'right') {
+    if (v === entry.horizontalPosition) return
+    withHistory(t('history.editLayout'), { horizontalPosition: v })
+  }
+
+  function handleVerticalPositionChange(v: 'top' | 'bottom') {
+    if (v === entry.verticalPosition) return
+    withHistory(t('history.editLayout'), { verticalPosition: v })
+  }
+
+  function handleVerticalMarginChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = parseInt(e.target.value, 10)
+    if (isNaN(raw)) return
+    // Clamp 0..300 — matches the legacy global panel's input range and is
+    // large enough to cover any sensible vertical offset (300 px on a
+    // 1080p canvas is ~28 % of the frame height).
+    const clamped = Math.max(0, Math.min(300, raw))
+    if (clamped === entry.verticalMarginPx) return
+    withHistory(t('history.editMargin'), { verticalMarginPx: clamped })
+  }
+
+  function handleBackgroundEnabledChange(checked: boolean) {
+    if (checked === entry.subtitleBackground.enabled) return
+    withHistory(t('history.editBackground'), {
+      subtitleBackground: { ...entry.subtitleBackground, enabled: checked },
+    })
+  }
+
+  function handleBackgroundColorChange(color: 'black' | 'white') {
+    if (color === entry.subtitleBackground.color) return
+    withHistory(t('history.editBackground'), {
+      subtitleBackground: { ...entry.subtitleBackground, color },
+    })
+  }
+
+  function handleBackgroundOpacityChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = parseInt(e.target.value, 10)
+    if (isNaN(raw)) return
+    const clamped = Math.max(0, Math.min(100, raw))
+    if (clamped === entry.subtitleBackground.opacityPercent) return
+    withHistory(t('history.editBackground'), {
+      subtitleBackground: { ...entry.subtitleBackground, opacityPercent: clamped },
+    })
+  }
+
   // Row-level Delete / Reset / AutoLineBreak go through the shared
   // `entry-row-actions` lib so the timeline-block inspector drives the
   // exact same history shape, sort behaviour, and side effects.  Labels
@@ -640,6 +691,125 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
         <div className="grid grid-cols-[80px_1fr] items-center gap-2">
           <span className="text-micro text-zinc-500 truncate">{t('styleCell.fade')}</span>
           <Switch checked={entry.fadeEnabled} onCheckedChange={handleFadeChange} disabled={isFrozen} className="scale-75 origin-left" />
+        </div>
+
+        {/* REQ-20260613-016 Phase 4 / 機能A — per-row layout + background.
+            The legacy global panel in VideoPreviewPanel was retired in the
+            same phase; the user now sets these per row directly.  Layout
+            uses native <select> + number input for compactness inside the
+            220-px style column; background combines a Switch, color
+            radio-group, and opacity number input on one wrapping row. */}
+        <div className="grid grid-cols-[80px_1fr] items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <span className="text-micro text-zinc-500 truncate">{t('styleCell.layoutH')}</span>
+          <select
+            value={entry.horizontalPosition}
+            onChange={(e) => handleHorizontalPositionChange(e.target.value as 'left' | 'center' | 'right')}
+            disabled={isFrozen}
+            className={cn(
+              'h-6 rounded border border-zinc-800 bg-zinc-950 px-1 text-body-sm text-zinc-100',
+              'focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-green-500/30',
+              'disabled:opacity-40 disabled:cursor-not-allowed'
+            )}
+            aria-label={t('subtitlePosition.horizontal')}
+          >
+            <option value="left">{t('subtitlePosition.left')}</option>
+            <option value="center">{t('subtitlePosition.center')}</option>
+            <option value="right">{t('subtitlePosition.right')}</option>
+          </select>
+        </div>
+        <div className="grid grid-cols-[80px_1fr] items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <span className="text-micro text-zinc-500 truncate">{t('styleCell.layoutV')}</span>
+          <select
+            value={entry.verticalPosition}
+            onChange={(e) => handleVerticalPositionChange(e.target.value as 'top' | 'bottom')}
+            disabled={isFrozen}
+            className={cn(
+              'h-6 rounded border border-zinc-800 bg-zinc-950 px-1 text-body-sm text-zinc-100',
+              'focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-green-500/30',
+              'disabled:opacity-40 disabled:cursor-not-allowed'
+            )}
+            aria-label={t('subtitlePosition.vertical')}
+          >
+            <option value="top">{t('subtitlePosition.top')}</option>
+            <option value="bottom">{t('subtitlePosition.bottom')}</option>
+          </select>
+        </div>
+        <div className="grid grid-cols-[80px_1fr] items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <span className="text-micro text-zinc-500 truncate">{t('styleCell.marginV')}</span>
+          <input
+            type="number"
+            min={0}
+            max={300}
+            defaultValue={entry.verticalMarginPx}
+            key={entry.verticalMarginPx}
+            onBlur={handleVerticalMarginChange}
+            disabled={isFrozen}
+            aria-label={t('subtitlePosition.margin')}
+            className={cn(
+              'h-6 w-full rounded border border-zinc-800 bg-zinc-950 px-1 text-center text-body-sm text-zinc-100',
+              'focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-green-500/30',
+              'disabled:opacity-40 disabled:cursor-not-allowed',
+              '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+            )}
+          />
+        </div>
+        <div className="grid grid-cols-[80px_1fr] items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <span className="text-micro text-zinc-500 truncate">{t('styleCell.bgEnabled')}</span>
+          <Switch
+            checked={entry.subtitleBackground.enabled}
+            onCheckedChange={handleBackgroundEnabledChange}
+            disabled={isFrozen}
+            className="scale-75 origin-left"
+            aria-label={t('styleCell.bgEnabled')}
+          />
+        </div>
+        <div
+          className={cn(
+            'grid grid-cols-[80px_1fr] items-center gap-2',
+            !entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none'
+          )}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="text-micro text-zinc-500 truncate">{t('styleCell.bgColor')}</span>
+          <select
+            value={entry.subtitleBackground.color}
+            onChange={(e) => handleBackgroundColorChange(e.target.value as 'black' | 'white')}
+            disabled={isFrozen || !entry.subtitleBackground.enabled}
+            className={cn(
+              'h-6 rounded border border-zinc-800 bg-zinc-950 px-1 text-body-sm text-zinc-100',
+              'focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-green-500/30',
+              'disabled:opacity-40 disabled:cursor-not-allowed'
+            )}
+            aria-label={t('styleCell.bgColor')}
+          >
+            <option value="black">{t('background.black')}</option>
+            <option value="white">{t('background.white')}</option>
+          </select>
+        </div>
+        <div
+          className={cn(
+            'grid grid-cols-[80px_1fr] items-center gap-2',
+            !entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none'
+          )}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="text-micro text-zinc-500 truncate">{t('styleCell.bgOpacity')}</span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            defaultValue={entry.subtitleBackground.opacityPercent}
+            key={`${entry.subtitleBackground.opacityPercent}-${entry.subtitleBackground.enabled}`}
+            onBlur={handleBackgroundOpacityChange}
+            disabled={isFrozen || !entry.subtitleBackground.enabled}
+            aria-label={t('styleCell.bgOpacity')}
+            className={cn(
+              'h-6 w-full rounded border border-zinc-800 bg-zinc-950 px-1 text-center text-body-sm text-zinc-100',
+              'focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-green-500/30',
+              'disabled:opacity-40 disabled:cursor-not-allowed',
+              '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+            )}
+          />
         </div>
       </div>
       )}

@@ -141,7 +141,13 @@
     "textColor": "文字色",
     "outlineColor": "アウトライン色",
     "outlineWidth": "アウトライン幅",
-    "fade": "フェード"
+    "fade": "フェード",
+    "layoutH": "水平",
+    "layoutV": "垂直",
+    "marginV": "マージン",
+    "bgEnabled": "背景",
+    "bgColor": "背景色",
+    "bgOpacity": "透過率"
   },
   "history": {
     "editText": "テキストを編集",
@@ -151,6 +157,9 @@
     "editStroke": "アウトライン太さを変更",
     "editFade": "フェードを変更",
     "editFont": "フォントを変更",
+    "editLayout": "配置を変更",
+    "editMargin": "マージンを変更",
+    "editBackground": "背景を変更",
     "deleteRow": "削除",
     "restoreRow": "復元",
     "resetRow": "リセット",

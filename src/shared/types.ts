@@ -194,10 +194,16 @@ export interface AppSettings {
   /** When true, \N line breaks are auto-inserted after transcription for lines exceeding video width. */
   autoLineBreak: boolean
   /**
-   * Step 3-only UI state.  Optional because the renderer no longer persists
-   * these fields — they are reset to BURNIN_DEFAULTS on every navigation to
-   * Step 1 and on every app launch.  The main-process `buildDefaults()` still
-   * supplies values for first-launch hydration; subsequent saves omit them.
+   * Step 3 session-only `audioMode`.  Optional because the renderer does
+   * not persist it — reset to BURNIN_DEFAULTS on every navigation to
+   * Step 1 and on every launch.
+   *
+   * REQ-20260613-016 Phase 4 — `burnin` and `subtitleBackground` were
+   * retired from the settings store along with the global panel UI.
+   * Kept as optional dead-weight in the IPC contract so legacy
+   * settings.json files from v1.0–v1.2.1 still hydrate cleanly (the
+   * renderer's hydrate() now ignores both); a follow-up phase may
+   * remove them entirely after the next persisted-settings migration.
    */
   burnin?: BurninPosition
   audioMode?: AudioMode

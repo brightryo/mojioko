@@ -11,7 +11,6 @@ import { shellShowInFolder } from '@/services/dialog'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
 import { SubtitleOverlay, estimateOverlayHeightPx } from '@/components/subtitle-overlay/subtitle-overlay'
-import { Switch } from '@/components/ui/switch'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { findActiveEntryId, findActiveEntryIds, computeFixedStackOffsets } from '@/lib/active-entry'
@@ -101,15 +100,13 @@ export function VideoPreviewPanel() {
   // so existing non-trim users see byte-identical behaviour.
   const cuts = useProjectStore((s) => s.cuts)
 
-  // burnin / subtitleBackground used to live behind the Step 3 form;
-  // in the new layout this panel owns the editing UI so the user can
-  // adjust position / background while watching the same preview that
-  // visualises them.  Reads + writes both share the existing settings-
-  // store slices; no schema change.
-  const burnin             = useSettingsStore((s) => s.burnin)
-  const updateBurnin       = useSettingsStore((s) => s.updateBurnin)
-  const subtitleBackground = useSettingsStore((s) => s.subtitleBackground)
-  const setSubtitleBackground = useSettingsStore((s) => s.setSubtitleBackground)
+  // REQ-20260613-016 Phase 4: the global "字幕レイアウト" + "文字背景"
+  // panels that previously lived in this component were retired — each
+  // SubtitleEntry now carries its own per-row layout / background, edited
+  // from the Style column in SubtitleTable (機能A).  Only `activeFontId`
+  // is still consumed here to feed estimateOverlayHeightPx via the stack
+  // memo below; the global burnin / subtitleBackground store slices were
+  // dropped from settings-store in the same phase.
   const activeFontId       = useSettingsStore((s) => s.activeFontId)
 
   const videoSeekRequestSec    = useUiStore((s) => s.videoSeekRequestSec)
@@ -458,51 +455,10 @@ export function VideoPreviewPanel() {
 
   const filename = getBasename(video.path)
 
-  // Compact segmented-control helper for the settings row.  Local
-  // rather than extracted because the styling is bound to this panel's
-  // vertical budget.  Takes an i18n key prefix so the same component
-  // serves both the position pickers (subtitlePosition.*) and the
-  // background colour picker (background.*) without mis-translating
-  // either — the previous version hardcoded "subtitlePosition" as the
-  // prefix and made the background black/white buttons fall through to
-  // their bare key names ("subtitlePosition.black" / ".white").
-  function Segmented<T extends string>({
-    options,
-    value,
-    onChange,
-    labelKeyPrefix,
-    ariaLabel
-  }: {
-    options: readonly T[]
-    value: T
-    onChange: (v: T) => void
-    labelKeyPrefix: string
-    ariaLabel: string
-  }) {
-    return (
-      <div
-        role="group"
-        aria-label={ariaLabel}
-        className="flex rounded-md overflow-hidden border border-border"
-      >
-        {options.map((opt) => (
-          <button
-            key={opt}
-            type="button"
-            onClick={() => onChange(opt)}
-            className={cn(
-              'px-2.5 py-1 text-caption transition-colors duration-150',
-              value === opt
-                ? 'bg-primary/15 text-primary font-medium'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-            )}
-          >
-            {t(`${labelKeyPrefix}.${opt}`)}
-          </button>
-        ))}
-      </div>
-    )
-  }
+  // REQ-20260613-016 Phase 4 — the local `Segmented` helper used by the
+  // retired global panels was removed alongside them.  Phase 6 may
+  // reintroduce a similar primitive if the drag UI needs a pinned-state
+  // segmented toggle, but until then the component is unreferenced.
 
   return (
     <div className="flex-shrink-0 rounded-lg border border-border bg-card">
@@ -709,125 +665,14 @@ export function VideoPreviewPanel() {
                     {t('subtitleLayout.previewNote')}
                   </p>
 
-                  {/* Top: two boxed groups (Subtitle layout / Subtitle
-                      background).  Each group is a rounded outline with
-                      its title on top and its items on a single
-                      horizontal row beneath (flex-wrap so narrow widths
-                      degrade gracefully).  This trades vertical density
-                      for horizontal density — the right column has
-                      plenty of horizontal space, so packing the items
-                      side-by-side keeps the panel's overall height
-                      compact and matches the visual rhythm of the rest
-                      of the app.
-                      All controls write to the same useSettingsStore
-                      slices SubtitleOverlay reads, so changes here
-                      render immediately on the video on the left. */}
-                  <div className="space-y-2">
-                    {/* ── Group 1: Subtitle layout ─────────────────── */}
-                    <div className="rounded-md border border-border px-3 py-2">
-                      <p className="text-label font-medium uppercase tracking-wider text-foreground/70 mb-1.5">
-                        {t('subtitleLayout.layoutGroup')}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-body-sm text-muted-foreground">
-                        <div className="flex items-center gap-1.5">
-                          <span>{t('subtitleLayout.horizontalShort')}</span>
-                          <Segmented
-                            options={['left', 'center', 'right'] as const}
-                            value={burnin.horizontalPosition}
-                            onChange={(v) => updateBurnin({ horizontalPosition: v })}
-                            labelKeyPrefix="subtitlePosition"
-                            ariaLabel={t('subtitlePosition.horizontal')}
-                          />
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span>{t('subtitleLayout.verticalShort')}</span>
-                          <Segmented
-                            options={['top', 'bottom'] as const}
-                            value={burnin.verticalPosition}
-                            onChange={(v) => updateBurnin({ verticalPosition: v })}
-                            labelKeyPrefix="subtitlePosition"
-                            ariaLabel={t('subtitlePosition.vertical')}
-                          />
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span>{t('subtitlePosition.marginShort')}</span>
-                          <input
-                            type="number"
-                            min={0}
-                            max={300}
-                            value={burnin.verticalMarginPx}
-                            onChange={(e) => updateBurnin({ verticalMarginPx: parseInt(e.target.value, 10) || 0 })}
-                            className="h-7 w-14 rounded border border-border bg-input px-1.5 text-center text-body-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring/30 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* ── Group 2: Subtitle background ─────────────── */}
-                    <div className="rounded-md border border-border px-3 py-2">
-                      <p className="text-label font-medium uppercase tracking-wider text-foreground/70 mb-1.5">
-                        {t('subtitleLayout.backgroundGroup')}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-body-sm text-muted-foreground">
-                        {/* Toggle — label-less because the group title
-                            ("文字背景") already names the switch. */}
-                        <Switch
-                          checked={subtitleBackground.enabled}
-                          onCheckedChange={(checked) => setSubtitleBackground({ ...subtitleBackground, enabled: checked })}
-                          aria-label={t('subtitleLayout.backgroundGroup')}
-                        />
-
-                        {/* Colour — disabled when background is off. */}
-                        <div className={cn(
-                          'flex items-center gap-1.5',
-                          !subtitleBackground.enabled && 'opacity-40 pointer-events-none'
-                        )}>
-                          <span>{t('subtitleLayout.bgColorLabel')}</span>
-                          <Segmented
-                            options={['black', 'white'] as const}
-                            value={subtitleBackground.color}
-                            onChange={(v) => setSubtitleBackground({ ...subtitleBackground, color: v })}
-                            labelKeyPrefix="background"
-                            ariaLabel={t('subtitleLayout.bgColorLabel')}
-                          />
-                        </div>
-
-                        {/* Opacity — same disabled treatment. */}
-                        <div className={cn(
-                          'flex items-center gap-1.5',
-                          !subtitleBackground.enabled && 'opacity-40 pointer-events-none'
-                        )}>
-                          <span>{t('subtitleLayout.bgOpacityLabel')}</span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            step={10}
-                            value={subtitleBackground.opacityPercent}
-                            onChange={(e) => setSubtitleBackground({
-                              ...subtitleBackground,
-                              opacityPercent: parseInt(e.target.value, 10)
-                            })}
-                            style={{ accentColor: 'hsl(var(--primary))' }}
-                            aria-label={t('subtitleLayout.bgOpacityLabel')}
-                            className="w-24 h-1.5 cursor-pointer"
-                          />
-                          <span className="font-mono tabular-nums w-9 text-right">
-                            {subtitleBackground.opacityPercent}%
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Outline-disabled advisory note — only when bg
-                          is on.  Stays inside the background group's box
-                          so the cause/effect link is visually obvious. */}
-                      {subtitleBackground.enabled && (
-                        <p className="mt-1.5 text-body-sm text-[hsl(var(--warning))]">
-                          {t('background.outlineNote')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                  {/* REQ-20260613-016 Phase 4 — the legacy
+                      "字幕レイアウト" + "文字背景" panels were retired here.
+                      Per-row editing UI lives in SubtitleTable's Style
+                      column (機能A); this space is intentionally left
+                      empty so the player anchors via the flex-1 spacer
+                      below.  Phase 5/6 may reuse this slot for the
+                      inspector-merged UI; the preview note above is kept
+                      because it still applies to the per-row preview. */}
 
                   {/* flex-1 spacer absorbs whatever vertical slack the
                       left column's video + disclaimer leaves over so
