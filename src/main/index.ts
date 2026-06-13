@@ -49,10 +49,16 @@ function createWindow(): BrowserWindow {
     // we picked here — leaving the actual UI work area 56px shorter
     // than intended and breaking layout choices keyed to viewport height.
     useContentSize: true,
+    // REQ-20260614-001 補遺⑥ — `minWidth` / `minHeight` are bumped to
+    // match the startup `width` / `height` so the launch size becomes the
+    // hard floor.  Combined with px-based pane minSize in step2 (see
+    // step2.tsx), the user cannot shrink the window below the point where
+    // the 3-pane layout collapses any of its panes below their startup
+    // px size.
     width: 1280,
     height: 820,
-    minWidth: 960,
-    minHeight: 640,
+    minWidth: 1280,
+    minHeight: 820,
     title: APP_DISPLAY,
     backgroundColor: '#09090b',
     // Multi-size .ico ensures Windows picks the right size for the title
