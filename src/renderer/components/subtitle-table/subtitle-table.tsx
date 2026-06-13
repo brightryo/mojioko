@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Eraser, Trash2, Undo2, FileText, Clock, ChevronUp, ChevronDown, WrapText } from 'lucide-react'
+import { Eraser, Trash2, Undo2, FileText, Clock, ChevronUp, ChevronDown, WrapText, AlignJustify } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -19,7 +19,12 @@ import type { FontId } from '../../../shared/fonts'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { filterEntries } from '@/lib/subtitle-filter'
-import { autoLineBreakRow as runAutoLineBreakRow, resetRow as runResetRow, toggleDeleteRow as runToggleDeleteRow } from '@/lib/entry-row-actions'
+import {
+  autoLineBreakRow as runAutoLineBreakRow,
+  overflowWrapRow as runOverflowWrapRow,
+  resetRow as runResetRow,
+  toggleDeleteRow as runToggleDeleteRow
+} from '@/lib/entry-row-actions'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
 import { effectiveEntryState, type ClipStatus, type CutList } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
@@ -367,6 +372,13 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
     await runAutoLineBreakRow(entry, {
       history: t('history.autoLineBreak'),
       noChangeToast: t('bulk.autoLineBreakNoChange')
+    })
+  }
+
+  async function handleOverflowWrapRow() {
+    await runOverflowWrapRow(entry, {
+      history: t('history.overflowWrap'),
+      noChangeToast: t('bulk.overflowWrapNoChange')
     })
   }
 
@@ -754,6 +766,38 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
           buttons read as clickable instead of greyed-out. */}
       <div data-row-actions className="flex flex-col gap-1 py-3 px-1">
         <div className="flex items-center justify-center gap-1">
+          {!isAudioOnly && (
+            <>
+              <button
+                type="button"
+                title={t('action.autoLineBreakRowHelp')}
+                aria-label={t('action.autoLineBreakRowHelp')}
+                onClick={(e) => { e.stopPropagation(); handleAutoLineBreakRow() }}
+                disabled={isFrozen}
+                className={cn(
+                  'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
+                  'hover:bg-zinc-800 hover:text-zinc-200',
+                  'disabled:opacity-30 disabled:pointer-events-none'
+                )}
+              >
+                <AlignJustify className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                title={t('action.overflowWrapRowHelp')}
+                aria-label={t('action.overflowWrapRowHelp')}
+                onClick={(e) => { e.stopPropagation(); handleOverflowWrapRow() }}
+                disabled={isFrozen}
+                className={cn(
+                  'flex items-center justify-center h-6 w-6 rounded text-zinc-500 transition-colors duration-150',
+                  'hover:bg-zinc-800 hover:text-zinc-200',
+                  'disabled:opacity-30 disabled:pointer-events-none'
+                )}
+              >
+                <WrapText className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
           {/* REQ-118 [2] — three branches now:
               · trim-deleted: show the restore glyph in zinc (the user
                 CAN click — they get a hint toast — but the button is
@@ -813,24 +857,6 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isFocused, onFoc
             <Eraser className="h-3.5 w-3.5" />
           </button>
         </div>
-        {!isAudioOnly && (
-          <button
-            type="button"
-            title={t('action.autoLineBreakRowHelp')}
-            aria-label={t('action.autoLineBreakRowHelp')}
-            onClick={(e) => { e.stopPropagation(); handleAutoLineBreakRow() }}
-            disabled={isFrozen}
-            className={cn(
-              'flex items-center justify-center gap-0.5',
-              'h-5 px-1 rounded text-micro text-zinc-500',
-              'hover:bg-zinc-800 hover:text-zinc-200 transition-colors duration-100',
-              'disabled:opacity-30 disabled:pointer-events-none'
-            )}
-          >
-            <WrapText className="h-3 w-3" />
-            {t('action.autoLineBreakRow')}
-          </button>
-        )}
       </div>
     </div>
   )

@@ -70,8 +70,10 @@
     "deleteRow": "削除",
     "restoreRow": "復元",
     "trimDeletedHint": "トリミングで削除されています。 はさみマーカーで取り消してください",
-    "autoLineBreakRow": "自動改行",
-    "autoLineBreakRowHelp": "改行を引き直します",
+    "autoLineBreakRow": "敷き詰め改行",
+    "autoLineBreakRowHelp": "敷き詰め改行 — 改行をいったん消して、画面の幅いっぱいに敷き詰め直します",
+    "overflowWrapRow": "はみ出し改行",
+    "overflowWrapRowHelp": "はみ出し改行 — 手動の改行を保ったまま、画面からはみ出す部分だけ折り返します",
     "sizeStepUp": "サイズを +{{step}}px (最大 {{max}})",
     "sizeStepDown": "サイズを -{{step}}px (最小 {{min}})"
   },
@@ -150,7 +152,8 @@
     "restoreRow": "復元",
     "resetRow": "リセット",
     "addRow": "追加",
-    "autoLineBreak": "自動改行"
+    "autoLineBreak": "敷き詰め改行",
+    "overflowWrap": "はみ出し改行"
   },
   "bulk": {
     "regionLabel": "一括編集",
@@ -162,9 +165,12 @@
     "outlineColor": "アウトライン色",
     "outlineWidth": "アウトライン幅",
     "fade": "フェード",
-    "autoLineBreak": "自動改行",
-    "autoLineBreakHelp": "選択した字幕の改行を引き直します（既存の手動改行はリセット）",
+    "autoLineBreak": "敷き詰め改行",
+    "autoLineBreakHelp": "敷き詰め改行 — 改行をいったん消して、画面の幅いっぱいに敷き詰め直します",
     "autoLineBreakNoChange": "変更が必要な字幕はありませんでした",
+    "overflowWrap": "はみ出し改行",
+    "overflowWrapHelp": "はみ出し改行 — 手動の改行を保ったまま、画面からはみ出す部分だけ折り返します",
+    "overflowWrapNoChange": "はみ出している字幕はありませんでした",
     "history": {
       "size": "サイズを一括変更 ({{count}}件)",
       "textColor": "文字色を一括変更 ({{count}}件)",
@@ -173,7 +179,8 @@
       "outlineWidth": "アウトライン幅を一括変更 ({{count}}件)",
       "fade": "フェードを一括変更 ({{count}}件)",
       "font": "フォントを一括変更 ({{count}}件)",
-      "autoLineBreak": "自動改行を一括適用 ({{count}}件)"
+      "autoLineBreak": "敷き詰め改行を一括適用 ({{count}}件)",
+      "overflowWrap": "はみ出し改行を一括適用 ({{count}}件)"
     }
   },
   "videoPreview": {
