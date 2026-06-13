@@ -506,17 +506,19 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   const countLabel = t('bulk.countLabel', { count: selectedRowIds.size })
 
   return (
+    // REQ-20260614-001 補遺⑤ (C) — BulkEditBar relocated to the right-pane
+    // Inspector area.  Outer chrome changed from horizontal `flex items-
+    // center gap-4 rounded-lg border bg-...` to a vertical `flex flex-col`
+    // stack so the controls fit a ~300-px wide column.  The decorative
+    // tint background was dropped since the inspector pane already
+    // provides chrome.
     <div
       role="region"
       aria-label={t('bulk.regionLabel')}
-      className={cn(
-        'flex items-center gap-4 flex-shrink-0',
-        'rounded-lg border px-3 py-2',
-        'bg-[hsl(var(--row-selected)/0.08)] border-[hsl(var(--row-selected)/0.30)]'
-      )}
+      className="flex flex-col gap-3 w-full"
     >
-      {/* Left: count + clear */}
-      <div className="flex items-center gap-2 flex-shrink-0">
+      {/* Top: count + clear */}
+      <div className="flex items-center justify-between gap-2">
         <span className="text-body-sm font-medium text-foreground tabular-nums">
           {countLabel}
         </span>
@@ -531,20 +533,16 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </button>
       </div>
 
-      <div
-        className="h-5 w-px flex-shrink-0"
-        style={{ backgroundColor: 'hsl(var(--separator) / var(--separator-alpha))' }}
-        aria-hidden="true"
-      />
-
-      {/* Controls cluster */}
-      <div className="flex items-center gap-5 flex-wrap min-w-0">
+      {/* Controls cluster — vertical stack inside the pane.  Each label
+          uses `justify-between` so its control sits flush to the right
+          edge of the pane, matching the per-row Inspector layout. */}
+      <div className="flex flex-col gap-2">
         {/* Font size — REQ-047 #1: controlled input that seeds from the
             first selected row and persists the user's applied value
             after blur.  onFocus selects the existing content so re-
             typing replaces in one keystroke (vs. clicking + manually
             highlighting before typing). */}
-        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.size')}</span>
           <input
             type="number"
@@ -576,7 +574,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             fallback to white is now only the empty-selection safety net
             (BulkEditBar does not render while empty); during normal use
             this branch never runs. */}
-        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.textColor')}</span>
           <ColorPicker
             value={colorDraftText ?? '#FFFFFF'}
@@ -588,7 +586,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </label>
 
         {/* Outline color — same seeding contract as text color above. */}
-        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.outlineColor')}</span>
           <ColorPicker
             value={colorDraftOutline ?? '#000000'}
@@ -603,7 +601,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             OutlineThicknessSlider.  Commit semantics, accent-color
             sourcing, readout width and disabled handling all live in
             that component so the two surfaces cannot drift. */}
-        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.outlineWidth')}</span>
           <OutlineThicknessSlider
             value={outlineSliderDraft}
@@ -613,7 +611,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </label>
 
         {/* Fade */}
-        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulk.fade')}</span>
           <Switch onCheckedChange={handleFadeChange} />
         </label>
@@ -624,7 +622,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             fields commit independently; background commits the full
             object from drafts so toggling enabled mid-edit captures
             the user's intended color + opacity in one step. */}
-        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('styleCell.layoutH')}</span>
           <select
             value={hPosDraft}
@@ -641,7 +639,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             <option value="right">{t('subtitlePosition.right')}</option>
           </select>
         </label>
-        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('styleCell.layoutV')}</span>
           <select
             value={vPosDraft}
@@ -657,7 +655,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             <option value="bottom">{t('subtitlePosition.bottom')}</option>
           </select>
         </label>
-        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('styleCell.marginV')}</span>
           <input
             type="number"
@@ -678,7 +676,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             aria-label={t('subtitlePosition.margin')}
           />
         </label>
-        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('styleCell.bgEnabled')}</span>
           <Switch checked={bgEnabledDraft} onCheckedChange={handleBgEnabledToggle} aria-label={t('styleCell.bgEnabled')} />
         </label>
@@ -734,52 +732,46 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             per-row picker (RowFontSelector) but with a static "フォント"
             trigger label — selection here applies to every row in the
             current bulk selection. */}
-        <label className="flex items-center gap-2 text-callout font-semibold text-muted-foreground">
+        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
           <span>{t('bulkRowFont.label')}</span>
           <BulkFontPicker onPick={handleFontChange} />
         </label>
 
-        {/* Separator + Wrap actions.  REQ-20260612-003 §1 / §2:
-            two single-shot wrap buttons that recompute line breaks on
-            the selected rows using each row's own font size +
-            outline thickness.  Both are icon-only square pills with a
-            native title tooltip (= name + description), matching the
-            adjacent row-end action icons in subtitle-table.tsx.
-            Order: 敷き詰め改行 (pack, AlignJustify) →
-            はみ出し改行 (overflow, WrapText). */}
-        <div
-          className="h-5 w-px flex-shrink-0"
-          style={{ backgroundColor: 'hsl(var(--separator) / var(--separator-alpha))' }}
-          aria-hidden="true"
-        />
-        <button
-          type="button"
-          onClick={handleAutoLineBreakApply}
-          title={t('bulk.autoLineBreakHelp')}
-          aria-label={t('bulk.autoLineBreakHelp')}
-          className={cn(
-            'inline-flex items-center justify-center',
-            'h-7 w-7 rounded border bg-input text-foreground',
-            'border-border hover:border-zinc-700 transition-colors duration-150',
-            'focus:outline-none focus-visible:outline-none'
-          )}
-        >
-          <AlignJustify className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={handleOverflowWrapApply}
-          title={t('bulk.overflowWrapHelp')}
-          aria-label={t('bulk.overflowWrapHelp')}
-          className={cn(
-            'inline-flex items-center justify-center',
-            'h-7 w-7 rounded border bg-input text-foreground',
-            'border-border hover:border-zinc-700 transition-colors duration-150',
-            'focus:outline-none focus-visible:outline-none'
-          )}
-        >
-          <WrapText className="h-3.5 w-3.5" />
-        </button>
+        {/* REQ-20260614-001 補遺⑤ (C) — wrap actions row.  In the legacy
+            horizontal bar the separator was a 1-px vertical bar between
+            font-picker and the wrap buttons; in the new vertical layout
+            we use a top border (border-t pt-2 + label group) so the
+            wrap buttons sit horizontally at the bottom of the panel. */}
+        <div className="flex items-center gap-2 border-t border-border/60 pt-2 mt-1">
+          <button
+            type="button"
+            onClick={handleAutoLineBreakApply}
+            title={t('bulk.autoLineBreakHelp')}
+            aria-label={t('bulk.autoLineBreakHelp')}
+            className={cn(
+              'inline-flex items-center justify-center',
+              'h-7 w-7 rounded border bg-input text-foreground',
+              'border-border hover:border-zinc-700 transition-colors duration-150',
+              'focus:outline-none focus-visible:outline-none'
+            )}
+          >
+            <AlignJustify className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={handleOverflowWrapApply}
+            title={t('bulk.overflowWrapHelp')}
+            aria-label={t('bulk.overflowWrapHelp')}
+            className={cn(
+              'inline-flex items-center justify-center',
+              'h-7 w-7 rounded border bg-input text-foreground',
+              'border-border hover:border-zinc-700 transition-colors duration-150',
+              'focus:outline-none focus-visible:outline-none'
+            )}
+          >
+            <WrapText className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
     </div>
   )

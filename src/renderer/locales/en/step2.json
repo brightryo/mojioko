@@ -2,6 +2,8 @@
   "title": "Edit transcription",
   "subtitle": "Review and correct subtitle text and timing.",
   "inspector": {
+    "heading": "Inspector",
+    "bulkHeading": "Bulk edit",
     "emptyTitle": "No subtitle selected",
     "emptyHint": "Click a row in the list or a block in the timeline below"
   },

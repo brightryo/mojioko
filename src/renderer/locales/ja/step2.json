@@ -2,6 +2,8 @@
   "title": "編集",
   "subtitle": "字幕テキストとタイミングを確認・修正してください。",
   "inspector": {
+    "heading": "インスペクタ",
+    "bulkHeading": "一括編集",
     "emptyTitle": "選択された字幕はありません",
     "emptyHint": "下の一覧またはタイムラインから 1 行クリックしてください"
   },
