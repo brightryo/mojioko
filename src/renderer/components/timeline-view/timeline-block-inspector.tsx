@@ -30,8 +30,17 @@ interface TimelineBlockInspectorProps {
   warnings: EntryWarnings | null
   /** Open the shared TimeEditorDialog (step2 owns it; we just forward the id). */
   onAdjustTime: (entryId: string) => void
-  /** Close request from inside the inspector (e.g. after Adjust time click, X click). */
-  onClose: () => void
+  /**
+   * Close request from inside the inspector.  In the legacy popover
+   * usage this hid the popover; REQ-20260614-001 Phase 4 wires the
+   * always-on right-pane Inspector to pass a callback that clears
+   * `selectedEntryId` (= reverts the right pane to the empty state).
+   *
+   * Optional so callers that never want a close affordance — e.g. a
+   * future "compact inline" embedding — can omit it.  When omitted the
+   * × button is hidden.
+   */
+  onClose?: () => void
 }
 
 /**
@@ -293,7 +302,10 @@ export function TimelineBlockInspector({
     // Commit any pending text edit first so blur doesn't race with
     // the dialog opening.
     commitText(draft)
-    onClose()
+    // REQ-20260614-001 Phase 4 — `onClose` is now optional; the legacy
+    // popover wanted to disappear when Adjust time was clicked, but the
+    // always-on Inspector usage just stays put while the modal opens.
+    onClose?.()
     onAdjustTime(entry.id)
   }
 
@@ -450,19 +462,27 @@ export function TimelineBlockInspector({
             <CopyPlus className="h-3.5 w-3.5" />
           </button>
         </div>
-        <button
-          type="button"
-          title={t('common:action.close')}
-          aria-label={t('common:action.close')}
-          onClick={onClose}
-          className={cn(
-            'flex items-center justify-center h-7 w-7 rounded',
-            'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
-            'transition-colors duration-150'
-          )}
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+        {/* REQ-20260614-001 Phase 4 — onClose is optional now.  When the
+            host passes one (e.g. step2's right-pane inspectorSlot uses it
+            to clear `selectedEntryId`), the × button shows up so the
+            user can dismiss the selection.  When omitted the action
+            cluster ends at the duplicate icon and the entry is
+            considered persistently selected. */}
+        {onClose ? (
+          <button
+            type="button"
+            title={t('common:action.close')}
+            aria-label={t('common:action.close')}
+            onClick={onClose}
+            className={cn(
+              'flex items-center justify-center h-7 w-7 rounded',
+              'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+              'transition-colors duration-150'
+            )}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
       </div>
 
       {/* § 2 — Status badges.  `state.edited` first, then warnings in the

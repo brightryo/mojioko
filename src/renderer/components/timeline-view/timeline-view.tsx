@@ -39,8 +39,13 @@ import {
   findNextBoundary
 } from '@/lib/timeline-boundaries'
 import type { EntryWarnings } from '@/lib/entry-warnings'
+// REQ-20260614-001 Phase 4 — the per-Block Inspector Popover was
+// retired.  `Popover` / `PopoverTrigger` / `PopoverContent` stay imported
+// because the same primitives still power the "How to use" help popover
+// in the toolbar (see ~l.1471).  `TimelineBlockInspector` is now rendered
+// by `step2.tsx`'s `inspectorSlot` (always-on right pane) and no longer
+// imported here.
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { TimelineBlockInspector } from './timeline-block-inspector'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
 import { SCRUB_SEEK_THROTTLE_ENABLED } from '../../../shared/constants'
@@ -238,7 +243,6 @@ type DragKind = 'resize-start' | 'resize-end' | 'move'
 
 interface BlockProps {
   entry: SubtitleEntry
-  warnings: EntryWarnings | null
   leftPx: number
   widthPx: number
   /** Absolute top in pixels (already includes track offset). */
@@ -259,18 +263,18 @@ interface BlockProps {
   isPlaybackActive: boolean
   isOverflow: boolean
   displayIndex: number
-  /** Whether this block's inspector Popover is currently open. */
-  isInspectorOpen: boolean
-  /** True while a drag is in progress for this block — suppresses popover open. */
-  isDragging: boolean
-  /** Click handler — focus the row + seek the video + open the inspector. */
+  /**
+   * REQ-20260614-001 Phase 4 — Block click writes `selectedEntryId` and
+   * seeks the video.  The Inspector Popover that used to anchor on each
+   * Block is retired; selecting a Block now drives the always-on right-
+   * pane Inspector via `selectedEntryId` (the parent route handles the
+   * read).  `isInspectorOpen` / `onInspectorOpenChange` / `isDragging`
+   * props were removed alongside the Popover.  `warnings` /
+   * `onAdjustTime` (used to flow through Block into the popover) are
+   * now consumed only by the right-pane Inspector and no longer
+   * forwarded through Block.
+   */
   onSelect: (id: string, startSec: number) => void
-  /** Note the (id, open) signature — Block calls back with its own id so the
-   *  parent does not need to bake a fresh closure per Block per render.  A
-   *  closure-per-Block defeats React.memo's shallow prop compare and brings
-   *  the playhead-tick stutter back. */
-  onInspectorOpenChange: (id: string, open: boolean) => void
-  onAdjustTime: (entryId: string) => void
   /** Start a drag (resize or move) — TimelineView attaches window listeners. */
   onStartDrag: (kind: DragKind, entry: SubtitleEntry, clientX: number) => void
   /**
@@ -285,7 +289,6 @@ interface BlockProps {
 
 function BlockImpl({
   entry,
-  warnings,
   leftPx,
   widthPx,
   topPx,
@@ -294,11 +297,7 @@ function BlockImpl({
   isPlaybackActive,
   isOverflow,
   displayIndex,
-  isInspectorOpen,
-  isDragging,
   onSelect,
-  onInspectorOpenChange,
-  onAdjustTime,
   onStartDrag,
   cuts,
 }: BlockProps) {
@@ -369,145 +368,102 @@ function BlockImpl({
     onSelect(entry.id, entry.startSec)
   }
 
+  // REQ-20260614-001 Phase 4 — the Block-anchored Inspector Popover was
+  // retired.  Clicks now write `selectedEntryId` and the always-on
+  // right-pane Inspector picks up the entry from there.  The Popover /
+  // PopoverTrigger / PopoverContent wrappers are gone; the Block renders
+  // as a plain absolute-positioned <div> with the body <button> + two
+  // resize handles.
   return (
-    <Popover
-      open={isInspectorOpen && !isDragging}
-      onOpenChange={(open) => {
-        // Radix tries to open the popover on pointerdown by default — when a
-        // drag is in progress we want to suppress that.
-        if (isDragging && open) return
-        onInspectorOpenChange(entry.id, open)
+    <div
+      className="absolute"
+      style={{
+        left: `${leftPx}px`,
+        top: `${topPx}px`,
+        width: `${Math.max(2, widthPx)}px`,
+        height: `${BLOCK_HEIGHT_PX}px`
       }}
     >
-      {/* Outer wrapper sized to the block — left handle / body button /
-          right handle live inside.  Sized exactly to the block so multiple
-          wrappers on the same track never overlap and steal each other's
-          pointer events (the Phase 1 latent bug we fixed in Phase 2). */}
-      <div
-        className="absolute"
-        style={{
-          left: `${leftPx}px`,
-          top: `${topPx}px`,
-          width: `${Math.max(2, widthPx)}px`,
-          height: `${BLOCK_HEIGHT_PX}px`
-        }}
-      >
-        {/* Left edge handle.  z-index lifts it above the body so its 6 px
-            hit area wins over the button when the cursor sits on the edge.
-            Hidden for deleted rows — editing a deleted row's time is a
-            no-op (matches subtitle-table's disabled time inputs). */}
-        {!entry.isDeleted && widthPx > RESIZE_HANDLE_PX * 2 && (
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label={t('timeline.block.resizeStart')}
-            onPointerDown={handleEdgePointerDown('resize-start')}
-            className={cn(
-              'absolute top-0 bottom-0 left-0 z-10 cursor-ew-resize',
-              'hover:bg-green-500/40 transition-colors duration-100'
-            )}
-            style={{ width: `${RESIZE_HANDLE_PX}px` }}
-          />
-        )}
-
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label={ariaLabel}
-            onPointerDown={handleBodyPointerDown}
-            onPointerMove={handleBodyPointerMove}
-            onClick={handleBodyClick}
-            title={displayText}
-            className={cn(
-              'absolute inset-0 flex flex-col justify-center gap-0.5 px-2 py-1 rounded-md text-left',
-              'transition-colors duration-150 select-none overflow-hidden',
-              'focus:outline-none focus-visible:outline-none',
-              'bg-zinc-700/70 text-zinc-100 border border-zinc-600/70',
-              'hover:bg-zinc-700 hover:border-zinc-500',
-              entry.isEdited && !entry.isDeleted && 'bg-amber-400/15 border-amber-400/40 hover:bg-amber-400/25',
-              isOverflow && !entry.isDeleted && 'bg-red-500/15 border-red-500/40 hover:bg-red-500/25',
-              // REQ-20260614-001 Phase 3 — two-tone highlights split from
-              // the pre-Phase-3 `isFocused`:
-              //   user-selection (green)    → ring + border + text bright + body fill (when no state tint)
-              //   playback-active (sky)     → same shape but in sky-500
-              // When both are true the user selection wins on the dominant
-              // ring/border so the inspector context stays visually obvious.
-              isUserSelected && 'ring-2 ring-green-500 border-green-500 text-zinc-50',
-              isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-green-500/15',
-              isPlaybackActive && !isUserSelected && 'ring-2 ring-sky-500 border-sky-500 text-zinc-50',
-              isPlaybackActive && !isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-sky-500/15',
-              entry.isDeleted && 'opacity-40 line-through',
-              !entry.isDeleted && 'cursor-grab active:cursor-grabbing'
-            )}
-          >
-            {/* Row 1 — timecodes.  Rendered only when the block is wide
-                enough to show BOTH ends with at least a 2-char gap
-                between them.  Showing only one end would be ambiguous
-                (the user can't tell whether it's start or end), so we
-                go all-or-nothing.  REQ-061. */}
-            {widthPx >= TIME_ROW_MIN_BLOCK_WIDTH_PX && (
-              <div className="flex w-full items-baseline justify-between text-caption font-mono tabular-nums text-zinc-300/80 leading-none">
-                <span>{formatEditedTimecode(entry.startSec, cuts)}</span>
-                <span>{formatEditedTimecode(entry.endSec, cuts)}</span>
-              </div>
-            )}
-            {/* Row 2 — text (truncated, single line for now to keep the
-                block compact).  Placeholder `·` keeps the block visually
-                anchored when text is empty. */}
-            <span className="block truncate text-body-sm leading-tight">
-              {displayText || '·'}
-            </span>
-          </button>
-        </PopoverTrigger>
-
-        {!entry.isDeleted && widthPx > RESIZE_HANDLE_PX * 2 && (
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label={t('timeline.block.resizeEnd')}
-            onPointerDown={handleEdgePointerDown('resize-end')}
-            className={cn(
-              'absolute top-0 bottom-0 right-0 z-10 cursor-ew-resize',
-              'hover:bg-green-500/40 transition-colors duration-100'
-            )}
-            style={{ width: `${RESIZE_HANDLE_PX}px` }}
-          />
-        )}
-      </div>
-
-      <PopoverContent
-        side="top"
-        align="start"
-        sideOffset={8}
-        className="p-3"
-        // REQ-061 #2(a): suppress Radix's default "focus first focusable
-        // child" so the textarea inside the inspector is NOT auto-focused
-        // / selected on open.  Click-to-edit is now the explicit gesture
-        // — opening a block highlights but does not enter edit mode,
-        // matching the list view's row-click behaviour.
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        // REQ-061 #2(b) / REQ-062: the inspector lives in a Radix
-        // Portal at the DOM level, but React's synthetic events still
-        // bubble up the React tree — clicks inside the popover would
-        // reach the tracks' pointer-scrub handlers (REQ-20260613-009)
-        // and trigger a spurious video seek.  Stop the event in
-        // **bubble** phase (not capture) so the target's own handlers
-        // — X-close, Reset, Delete, AutoLineBreak, ColorPicker,
-        // sliders, etc. — fire first; we only suppress further upward
-        // propagation toward the tracks div.  Capture-phase stops
-        // killed every button inside the inspector silently
-        // (REQ-062 #1 / #2).
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <TimelineBlockInspector
-          entry={entry}
-          warnings={warnings}
-          onAdjustTime={onAdjustTime}
-          onClose={() => onInspectorOpenChange(entry.id, false)}
+      {/* Left edge handle.  z-index lifts it above the body so its 6 px
+          hit area wins over the button when the cursor sits on the edge.
+          Hidden for deleted rows — editing a deleted row's time is a
+          no-op (matches subtitle-table's disabled time inputs). */}
+      {!entry.isDeleted && widthPx > RESIZE_HANDLE_PX * 2 && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t('timeline.block.resizeStart')}
+          onPointerDown={handleEdgePointerDown('resize-start')}
+          className={cn(
+            'absolute top-0 bottom-0 left-0 z-10 cursor-ew-resize',
+            'hover:bg-green-500/40 transition-colors duration-100'
+          )}
+          style={{ width: `${RESIZE_HANDLE_PX}px` }}
         />
-      </PopoverContent>
-    </Popover>
+      )}
+
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        onPointerDown={handleBodyPointerDown}
+        onPointerMove={handleBodyPointerMove}
+        onClick={handleBodyClick}
+        title={displayText}
+        className={cn(
+          'absolute inset-0 flex flex-col justify-center gap-0.5 px-2 py-1 rounded-md text-left',
+          'transition-colors duration-150 select-none overflow-hidden',
+          'focus:outline-none focus-visible:outline-none',
+          'bg-zinc-700/70 text-zinc-100 border border-zinc-600/70',
+          'hover:bg-zinc-700 hover:border-zinc-500',
+          entry.isEdited && !entry.isDeleted && 'bg-amber-400/15 border-amber-400/40 hover:bg-amber-400/25',
+          isOverflow && !entry.isDeleted && 'bg-red-500/15 border-red-500/40 hover:bg-red-500/25',
+          // REQ-20260614-001 Phase 3 — two-tone highlights split from
+          // the pre-Phase-3 `isFocused`:
+          //   user-selection (green)    → ring + border + text bright + body fill (when no state tint)
+          //   playback-active (sky)     → same shape but in sky-500
+          // When both are true the user selection wins on the dominant
+          // ring/border so the inspector context stays visually obvious.
+          isUserSelected && 'ring-2 ring-green-500 border-green-500 text-zinc-50',
+          isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-green-500/15',
+          isPlaybackActive && !isUserSelected && 'ring-2 ring-sky-500 border-sky-500 text-zinc-50',
+          isPlaybackActive && !isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-sky-500/15',
+          entry.isDeleted && 'opacity-40 line-through',
+          !entry.isDeleted && 'cursor-grab active:cursor-grabbing'
+        )}
+      >
+        {/* Row 1 — timecodes.  Rendered only when the block is wide
+            enough to show BOTH ends with at least a 2-char gap
+            between them.  Showing only one end would be ambiguous
+            (the user can't tell whether it's start or end), so we
+            go all-or-nothing.  REQ-061. */}
+        {widthPx >= TIME_ROW_MIN_BLOCK_WIDTH_PX && (
+          <div className="flex w-full items-baseline justify-between text-caption font-mono tabular-nums text-zinc-300/80 leading-none">
+            <span>{formatEditedTimecode(entry.startSec, cuts)}</span>
+            <span>{formatEditedTimecode(entry.endSec, cuts)}</span>
+          </div>
+        )}
+        {/* Row 2 — text (truncated, single line for now to keep the
+            block compact).  Placeholder `·` keeps the block visually
+            anchored when text is empty. */}
+        <span className="block truncate text-body-sm leading-tight">
+          {displayText || '·'}
+        </span>
+      </button>
+
+      {!entry.isDeleted && widthPx > RESIZE_HANDLE_PX * 2 && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t('timeline.block.resizeEnd')}
+          onPointerDown={handleEdgePointerDown('resize-end')}
+          className={cn(
+            'absolute top-0 bottom-0 right-0 z-10 cursor-ew-resize',
+            'hover:bg-green-500/40 transition-colors duration-100'
+          )}
+          style={{ width: `${RESIZE_HANDLE_PX}px` }}
+        />
+      )}
+    </div>
   )
 }
 
@@ -595,12 +551,11 @@ interface TimelineViewProps {
   warningsMap: ReadonlyMap<string, EntryWarnings>
   /** Video duration (seconds); `Infinity` when no video or in audio-only mode. */
   videoDurationSec: number
-  /**
-   * Open the shared TimeEditorDialog in edit mode for the given entry.
-   * Same signature as SubtitleTable's `onAdjustTime` so step2.tsx can pass
-   * a single `openEditTimeDialog` reference to either view.
-   */
-  onAdjustTime: (entryId: string) => void
+  // REQ-20260614-001 Phase 4 — `onAdjustTime` prop retired alongside the
+  // per-Block Popover.  The always-on right-pane Inspector (step2.tsx)
+  // wires the TimeEditorDialog directly from `TimelineBlockInspector`;
+  // the timeline view itself has no time-edit CTA anymore (drag still
+  // commits times through `commitTimeEdit`).
 }
 
 /**
@@ -624,7 +579,7 @@ interface TimelineViewProps {
  * Drag-to-edit interactions land in Phases 3–4, snap in Phase 5.  See
  * `dev-docs/specs/timeline.md`.
  */
-export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: TimelineViewProps) {
+export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProps) {
   bumpRenderCount('TimelineView')
   const { t } = useTranslation(['step2'])
   const entries = useProjectStore((s) => s.entries)
@@ -783,32 +738,22 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   // a single render.  See `src/shared/cuts.ts` for the predicate.
   const removableIds = useMemo(() => removableCutIds(cuts), [cuts])
 
-  // Inspector open-id — single-popover invariant.  Lives as local state
-  // rather than in ui-store because no other component needs to know
-  // which block has its inspector open (and persisting it across navigations
-  // would surface a stale popover when returning to STEP 2).
-  const [openInspectorId, setOpenInspectorId] = useState<string | null>(null)
-
-  // Filter changes can hide the currently-open block; close the inspector
-  // in that case so a stale popover never lingers off-screen.
-  const visibleIds = useMemo(
-    () => new Set(visibleEntries.map((e) => e.id)),
-    [visibleEntries]
-  )
-  useEffect(() => {
-    if (openInspectorId && !visibleIds.has(openInspectorId)) {
-      setOpenInspectorId(null)
-    }
-  }, [openInspectorId, visibleIds])
+  // REQ-20260614-001 Phase 4 — `openInspectorId` / per-Block popover
+  // state retired.  Block selection now writes `selectedEntryId` and the
+  // always-on right-pane Inspector reads it; nothing here needs to know
+  // which Block "has the popover open" because there is no popover.
 
   // -------------------------------------------------------------------------
   // Drag state (Phase 3 onwards)
   //
   // The active drag is held in a ref so the window-level pointermove /
   // pointerup listeners can read the latest values without re-attaching on
-  // every render.  A parallel React state (`draggingId`) only exists so the
-  // Block component can re-render with the "dragging" flag set (used to
-  // suppress popover open during a drag).
+  // every render.
+  //
+  // REQ-20260614-001 Phase 4 — the parallel `draggingId` React state
+  // existed only so the Block could suppress popover open during a drag.
+  // With the popover retired there is no consumer; the ref alone is
+  // enough to drive `applyDragPatch`.
   // -------------------------------------------------------------------------
 
   interface ActiveDrag {
@@ -820,7 +765,6 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
   }
 
   const activeDragRef = useRef<ActiveDrag | null>(null)
-  const [draggingId, setDraggingId] = useState<string | null>(null)
   // `dragGreedyTimes` is declared earlier in the component (just before
   // the `layout` memo) so the memo can read it as a dependency without
   // a TDZ violation.  See the comment block at that declaration site
@@ -868,7 +812,6 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         snapshot: { ...entry, original: { ...entry.original } },
         originClientX: clientX
       }
-      setDraggingId(entry.id)
       // REQ-20260613-002: pin the dragged entry's greedy slot to its
       // pre-drag times so its trackIndex never changes mid-drag.  This
       // is the core of the same-time-clip drag-swap fix: without this,
@@ -878,9 +821,8 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
       setDragGreedyTimes(
         new Map([[entry.id, { startSec: entry.startSec, endSec: entry.endSec }]])
       )
-      // Close any open inspector so the popover doesn't visually follow the
-      // block during a resize or move.
-      setOpenInspectorId((cur) => (cur === entry.id ? null : cur))
+      // REQ-20260614-001 Phase 4 — `setOpenInspectorId` retired with the
+      // popover; nothing to close at drag-start.
     },
     []
   )
@@ -1005,7 +947,6 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
         commitTimeEdit(d.entryId)
       }
       activeDragRef.current = null
-      setDraggingId(null)
       setSnapGuidePx(null)
       // REQ-20260613-002: release the greedy-time pin so the next
       // layout pass reflects the final live times.  Block trackIndex
@@ -1041,22 +982,14 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
     // preview panel's `handleTimeUpdate`.
     setSelectedEntryId(id)
     setVideoSeekRequest(startSec)
-    // TimelineBlockInspector popover continues to fire here until Phase 4
-    // retires it in favour of the always-on right-pane inspector.
-    setOpenInspectorId(id)
+    // REQ-20260614-001 Phase 4 — `setOpenInspectorId` retired; selection
+    // alone drives the always-on right-pane Inspector via
+    // `selectedEntryId`.
   }, [setSelectedEntryId, setVideoSeekRequest])
 
-  // REQ-071 Phase 3.9: signature is (id, open) so the parent can pass a
-  // SINGLE stable callback to every Block (rather than baking a
-  // `(open) => handleInspectorOpenChange(entry.id, open)` closure per row
-  // per render — that defeated React.memo's prop compare and brought back
-  // the all-blocks-re-render-on-playhead-tick stutter).
-  const handleInspectorOpenChange = useCallback((id: string, open: boolean) => {
-    // Guard the close path so a stale event (e.g. another block opened in
-    // the meantime) does not unintentionally clobber the current owner.
-    if (open) setOpenInspectorId(id)
-    else setOpenInspectorId((prev) => (prev === id ? null : prev))
-  }, [])
+  // REQ-20260614-001 Phase 4 — `handleInspectorOpenChange` retired
+  // alongside the per-Block Popover; nothing in the timeline view needs
+  // to know "open / close" state anymore.
 
   /**
    * REQ-074 1c: Ruler scrub + tracks background click + nav buttons all
@@ -2046,7 +1979,6 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                     <Block
                       key={entry.id}
                       entry={entry}
-                      warnings={w}
                       leftPx={leftPx}
                       widthPx={widthBl}
                       topPx={topPx}
@@ -2055,11 +1987,7 @@ export function TimelineView({ warningsMap, videoDurationSec, onAdjustTime }: Ti
                       isPlaybackActive={focusedRowId === entry.id}
                       isOverflow={isOverflow}
                       displayIndex={indexOfEntry.get(entry.id) ?? 0}
-                      isInspectorOpen={openInspectorId === entry.id}
-                      isDragging={draggingId === entry.id}
                       onSelect={handleSelectBlock}
-                      onInspectorOpenChange={handleInspectorOpenChange}
-                      onAdjustTime={onAdjustTime}
                       onStartDrag={handleStartDrag}
                       cuts={cuts}
                     />
