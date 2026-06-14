@@ -25,18 +25,23 @@ const MIN_VISIBLE_OUTLINE_PX = 0.5
  *     reads as visibly "tighter" than the burn-in.  VERIFY-20260613-001
  *     §4 confirmed this empirically (the gap discrepancy compounds with
  *     stack depth).
- *   - 1.5 is a deliberate over-estimate that brings successive captions'
- *     centres into closer alignment with the burn-in output, at the cost
- *     of leaving a touch more empty space between captions than the CSS
- *     box would suggest.  Within the "approximate preview" disclaimer
- *     (RES-20260612-003 §Q3) that trade is the right way round —
- *     under-estimating the gap silently overlapped captions, while
+ *   - An over-estimate brings successive captions' centres into closer
+ *     alignment with the burn-in output, at the cost of leaving a touch
+ *     more empty space between captions than the CSS box would suggest.
+ *     Within the "approximate preview" disclaimer (RES-20260612-003 §Q3)
+ *     that trade is the right way round — under-estimating the gap
+ *     silently overlapped captions (= "ghost" preview), while
  *     slightly over-estimating just spaces them out.
  *
- * REQ-20260613-006 §3: revisit this constant if subsequent VERIFY runs
- * show the stack is still off; it is a knob, not a derivation.
+ * REQ-20260614-001 補遺⑬: 1.6 → 1.8 に引き上げ (補遺⑫ D で確認された
+ * 「複製クリップが部分的に重なるゴースト現象」を軽減するため).  既知の
+ * 候補値は `1.6` (旧、ゴーストあり) / `1.8` (現、補遺⑬ で採用) / `2.0` /
+ * `2.2`.  オーナーが複製・重なりサンプルでプレビューと焼き込みを並べて
+ * 比較し、必要に応じてこの定数を再調整する手順 (RES-20260614-001-
+ * followup13 §2).  REQ-20260613-006 §3 の「knob であり derivation では
+ * ない」原則は不変。
  */
-const STACK_LINE_HEIGHT_RATIO = 1.6
+const STACK_LINE_HEIGHT_RATIO = 1.8
 
 export interface SubtitleOverlayProps {
   entry: SubtitleEntry

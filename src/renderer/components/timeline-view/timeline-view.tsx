@@ -255,13 +255,6 @@ interface BlockProps {
    * selection with the playback follower.
    */
   isUserSelected: boolean
-  /**
-   * REQ-20260614-001 Phase 3 — playback-active follower (sky ring/border).
-   * Distinct from `isUserSelected`: when both are true, green wins on the
-   * dominant indicator and the block shows a small blue accent so the
-   * user can tell the playhead is on this block.
-   */
-  isPlaybackActive: boolean
   isOverflow: boolean
   displayIndex: number
   /**
@@ -295,7 +288,6 @@ function BlockImpl({
   topPx,
   trackIndex,
   isUserSelected,
-  isPlaybackActive,
   isOverflow,
   displayIndex,
   onSelect,
@@ -418,16 +410,13 @@ function BlockImpl({
           'hover:bg-zinc-700 hover:border-zinc-500',
           entry.isEdited && !entry.isDeleted && 'bg-amber-400/15 border-amber-400/40 hover:bg-amber-400/25',
           isOverflow && !entry.isDeleted && 'bg-red-500/15 border-red-500/40 hover:bg-red-500/25',
-          // REQ-20260614-001 Phase 3 — two-tone highlights split from
-          // the pre-Phase-3 `isFocused`:
-          //   user-selection (green)    → ring + border + text bright + body fill (when no state tint)
-          //   playback-active (sky)     → same shape but in sky-500
-          // When both are true the user selection wins on the dominant
-          // ring/border so the inspector context stays visually obvious.
+          // REQ-20260614-001 補遺⑬: 再生アクティブ (sky) ハイライトは
+          // 廃止。`focusedRowId` 自体は再生中の一覧自動スクロール (subtitle-
+          // table.tsx) を駆動するため残してあるが、視覚的な色付けは行わない。
+          // 状態色は白 (通常) / 黄 (編集済み) / 赤 (overflow) / 緑 (ユーザー
+          // 選択) の 4 色のみ。
           isUserSelected && 'ring-2 ring-green-500 border-green-500 text-zinc-50',
           isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-green-500/15',
-          isPlaybackActive && !isUserSelected && 'ring-2 ring-sky-500 border-sky-500 text-zinc-50',
-          isPlaybackActive && !isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-sky-500/15',
           entry.isDeleted && 'opacity-40 line-through',
           !entry.isDeleted && 'cursor-grab active:cursor-grabbing'
         )}
@@ -593,12 +582,11 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   const setPendingCutOut = useUiStore((s) => s.setPendingCutOut)
   const clearPendingCut = useUiStore((s) => s.clearPendingCut)
   const tableFilter = useUiStore((s) => s.tableFilter)
-  // REQ-20260614-001 Phase 3 — read BOTH selection slices so we can
-  // render the user-selection (green) and playback-active (blue)
-  // markers on each Block.
+  // REQ-20260614-001 補遺⑬: playback-active (sky) ハイライト廃止により、
+  // タイムラインビューでは focusedRowId を購読しない。同 slice は
+  // 一覧 (subtitle-table.tsx) 側で自動スクロールに使われ続けている。
   const selectedEntryId = useUiStore((s) => s.selectedEntryId)
   const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
-  const focusedRowId = useUiStore((s) => s.focusedRowId)
   const setVideoSeekRequest = useUiStore((s) => s.setVideoSeekRequest)
   // REQ-094 case B: TimelineView no longer subscribes to
   // `videoCurrentTimeSec`.  The playhead lives in its own memo'd
@@ -2040,7 +2028,6 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                       topPx={topPx}
                       trackIndex={trackIndex}
                       isUserSelected={selectedEntryId === entry.id}
-                      isPlaybackActive={focusedRowId === entry.id}
                       isOverflow={isOverflow}
                       displayIndex={indexOfEntry.get(entry.id) ?? 0}
                       onSelect={handleSelectBlock}
