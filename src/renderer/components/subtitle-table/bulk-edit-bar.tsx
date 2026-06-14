@@ -533,216 +533,207 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </button>
       </div>
 
-      {/* Controls cluster — vertical stack inside the pane.  Each label
-          uses `justify-between` so its control sits flush to the right
-          edge of the pane, matching the per-row Inspector layout. */}
-      <div className="flex flex-col gap-2">
-        {/* Font size — REQ-047 #1: controlled input that seeds from the
-            first selected row and persists the user's applied value
-            after blur.  onFocus selects the existing content so re-
-            typing replaces in one keystroke (vs. clicking + manually
-            highlighting before typing). */}
-        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-          <span>{t('bulk.size')}</span>
-          <input
-            type="number"
-            min={FONT_SIZE_MIN_PX}
-            max={FONT_SIZE_MAX_PX}
-            placeholder={t('bulk.placeholder')}
-            value={sizeDraft}
-            onChange={(e) => setSizeDraft(e.target.value)}
-            onFocus={(e) => e.target.select()}
-            // REQ-034 #3: tooltip surfaces the clamp range so a user
-            // typing 700 sees the cause when the input snaps back to
-            // 600 on blur (cap raised from 200 to 600 in REQ-041).
-            title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
-            onBlur={(e) => {
-              if (e.target.value === '') return
-              handleSizeCommit(e.target.value)
-            }}
-            /* REQ-082: Enter handler removed.  Blur commits the value. */
-            className={cn(
-              'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
-              'focus:outline-none focus:ring-1 focus:ring-ring/30',
-              'border-border',
-              '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
-            )}
-          />
-        </label>
-
-        {/* Text color — seed comes from the first selected row.  The
-            fallback to white is now only the empty-selection safety net
-            (BulkEditBar does not render while empty); during normal use
-            this branch never runs. */}
-        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-          <span>{t('bulk.textColor')}</span>
-          <ColorPicker
-            value={colorDraftText ?? '#FFFFFF'}
-            onChange={setColorDraftText}
-            onCommit={handleTextColorCommit}
-            onPairApply={handleColorPairCommit}
-            swatchOnly
-          />
-        </label>
-
-        {/* Outline color — same seeding contract as text color above. */}
-        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-          <span>{t('bulk.outlineColor')}</span>
-          <ColorPicker
-            value={colorDraftOutline ?? '#000000'}
-            onChange={setColorDraftOutline}
-            onCommit={handleOutlineColorCommit}
-            onPairApply={handleColorPairCommit}
-            swatchOnly
-          />
-        </label>
-
-        {/* Outline thickness — shared with Step 2's per-row slider via
-            OutlineThicknessSlider.  Commit semantics, accent-color
-            sourcing, readout width and disabled handling all live in
-            that component so the two surfaces cannot drift. */}
-        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-          <span>{t('bulk.outlineWidth')}</span>
-          <OutlineThicknessSlider
-            value={outlineSliderDraft}
-            onCommit={handleOutlineWidthCommit}
-            ariaLabel={t('bulk.outlineWidth')}
-          />
-        </label>
-
-        {/* Fade */}
-        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-          <span>{t('bulk.fade')}</span>
-          <Switch onCheckedChange={handleFadeChange} />
-        </label>
-
-        {/* REQ-20260613-016 Phase 5 / 機能A — bulk layout + background.
-            Drafts seeded from the first selected row so the displayed
-            values reflect "what the selection looks like now".  Layout
-            fields commit independently; background commits the full
-            object from drafts so toggling enabled mid-edit captures
-            the user's intended color + opacity in one step. */}
-        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-          <span>{t('styleCell.layoutH')}</span>
-          <select
-            value={hPosDraft}
-            onChange={(e) => handleHPosCommit(e.target.value as 'left' | 'center' | 'right')}
-            className={cn(
-              'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
-              'focus:outline-none focus:ring-1 focus:ring-ring/30',
-              'border-border'
-            )}
-            aria-label={t('subtitlePosition.horizontal')}
-          >
-            <option value="left">{t('subtitlePosition.left')}</option>
-            <option value="center">{t('subtitlePosition.center')}</option>
-            <option value="right">{t('subtitlePosition.right')}</option>
-          </select>
-        </label>
-        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-          <span>{t('styleCell.layoutV')}</span>
-          <select
-            value={vPosDraft}
-            onChange={(e) => handleVPosCommit(e.target.value as 'top' | 'bottom')}
-            className={cn(
-              'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
-              'focus:outline-none focus:ring-1 focus:ring-ring/30',
-              'border-border'
-            )}
-            aria-label={t('subtitlePosition.vertical')}
-          >
-            <option value="top">{t('subtitlePosition.top')}</option>
-            <option value="bottom">{t('subtitlePosition.bottom')}</option>
-          </select>
-        </label>
-        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-          <span>{t('styleCell.marginV')}</span>
-          <input
-            type="number"
-            min={0}
-            max={300}
-            value={marginDraft}
-            onChange={(e) => setMarginDraft(e.target.value)}
-            onBlur={(e) => {
-              if (e.target.value === '') return
-              handleMarginCommit(e.target.value)
-            }}
-            className={cn(
-              'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
-              'focus:outline-none focus:ring-1 focus:ring-ring/30',
-              'border-border',
-              '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
-            )}
-            aria-label={t('subtitlePosition.margin')}
-          />
-        </label>
-        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-          <span>{t('styleCell.bgEnabled')}</span>
-          <Switch checked={bgEnabledDraft} onCheckedChange={handleBgEnabledToggle} aria-label={t('styleCell.bgEnabled')} />
-        </label>
-        <label className={cn(
-          'flex items-center gap-2 text-callout font-semibold text-muted-foreground',
-          !bgEnabledDraft && 'opacity-40'
-        )}>
-          <span>{t('styleCell.bgColor')}</span>
-          <select
-            value={bgColorDraft}
-            onChange={(e) => handleBgColorChange(e.target.value as 'black' | 'white')}
-            disabled={!bgEnabledDraft}
-            className={cn(
-              'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
-              'focus:outline-none focus:ring-1 focus:ring-ring/30',
-              'border-border',
-              'disabled:cursor-not-allowed'
-            )}
-            aria-label={t('styleCell.bgColor')}
-          >
-            <option value="black">{t('background.black')}</option>
-            <option value="white">{t('background.white')}</option>
-          </select>
-        </label>
-        <label className={cn(
-          'flex items-center gap-2 text-callout font-semibold text-muted-foreground',
-          !bgEnabledDraft && 'opacity-40'
-        )}>
-          <span>{t('styleCell.bgOpacity')}</span>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={bgOpacityDraft}
-            disabled={!bgEnabledDraft}
-            onChange={(e) => setBgOpacityDraft(e.target.value)}
-            onBlur={(e) => {
-              if (e.target.value === '') return
-              handleBgOpacityCommit(e.target.value)
-            }}
-            className={cn(
-              'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
-              'focus:outline-none focus:ring-1 focus:ring-ring/30',
-              'border-border',
-              'disabled:cursor-not-allowed',
-              '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
-            )}
-            aria-label={t('styleCell.bgOpacity')}
-          />
-        </label>
-
-        {/* Bulk font (REQ-022 step 2).  Same popover content as the
-            per-row picker (RowFontSelector) but with a static "フォント"
-            trigger label — selection here applies to every row in the
-            current bulk selection. */}
-        <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-          <span>{t('bulkRowFont.label')}</span>
+      {/* Controls cluster — REQ-20260614-001 補遺⑪ で 字幕 / レイアウト /
+          背景色 の 3 セクションにグルーピングし、単一選択 Inspector の
+          並びを bulk 側でも踏襲する。Font picker は補遺⑪ までは下の方に
+          並んでいたが、字幕セクションの先頭に移して Inspector 側と
+          整合させた。各セクションは `border-t border-border/60 pt-2`
+          で区切り線、見出しは `text-body font-semibold text-foreground`
+          で表示。 */}
+      <div className="flex flex-col">
+        {/* § 字幕 — Font, Size, Text colour, Outline colour, Outline
+            width, Fade.  BulkFontPicker のトリガはアフォーダンス上 label
+            兼用なので、ここでは外側 label を出さず picker 単体を置く。 */}
+        <div className="flex flex-col gap-2 border-t border-border/60 pt-2">
+          <div className="text-body font-semibold text-foreground">
+            {t('timeline.inspector.subtitleSection')}
+          </div>
           <BulkFontPicker onPick={handleFontChange} />
-        </label>
+          {/* Font size */}
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('bulk.size')}</span>
+            <input
+              type="number"
+              min={FONT_SIZE_MIN_PX}
+              max={FONT_SIZE_MAX_PX}
+              placeholder={t('bulk.placeholder')}
+              value={sizeDraft}
+              onChange={(e) => setSizeDraft(e.target.value)}
+              onFocus={(e) => e.target.select()}
+              title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
+              onBlur={(e) => {
+                if (e.target.value === '') return
+                handleSizeCommit(e.target.value)
+              }}
+              className={cn(
+                'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
+                'focus:outline-none focus:ring-1 focus:ring-ring/30',
+                'border-border',
+                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+              )}
+            />
+          </label>
+          {/* Text color */}
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('bulk.textColor')}</span>
+            <ColorPicker
+              value={colorDraftText ?? '#FFFFFF'}
+              onChange={setColorDraftText}
+              onCommit={handleTextColorCommit}
+              onPairApply={handleColorPairCommit}
+              swatchOnly
+            />
+          </label>
+          {/* Outline color */}
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('bulk.outlineColor')}</span>
+            <ColorPicker
+              value={colorDraftOutline ?? '#000000'}
+              onChange={setColorDraftOutline}
+              onCommit={handleOutlineColorCommit}
+              onPairApply={handleColorPairCommit}
+              swatchOnly
+            />
+          </label>
+          {/* Outline width */}
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('bulk.outlineWidth')}</span>
+            <OutlineThicknessSlider
+              value={outlineSliderDraft}
+              onCommit={handleOutlineWidthCommit}
+              ariaLabel={t('bulk.outlineWidth')}
+            />
+          </label>
+          {/* Fade */}
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('bulk.fade')}</span>
+            <Switch onCheckedChange={handleFadeChange} />
+          </label>
+        </div>
 
-        {/* REQ-20260614-001 補遺⑤ (C) — wrap actions row.  In the legacy
-            horizontal bar the separator was a 1-px vertical bar between
-            font-picker and the wrap buttons; in the new vertical layout
-            we use a top border (border-t pt-2 + label group) so the
-            wrap buttons sit horizontally at the bottom of the panel. */}
-        <div className="flex items-center gap-2 border-t border-border/60 pt-2 mt-1">
+        {/* § レイアウト — Horizontal, Vertical, Margin. */}
+        <div className="flex flex-col gap-2 border-t border-border/60 pt-2 mt-2">
+          <div className="text-body font-semibold text-foreground">
+            {t('timeline.inspector.layoutSection')}
+          </div>
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('styleCell.layoutH')}</span>
+            <select
+              value={hPosDraft}
+              onChange={(e) => handleHPosCommit(e.target.value as 'left' | 'center' | 'right')}
+              className={cn(
+                'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
+                'focus:outline-none focus:ring-1 focus:ring-ring/30',
+                'border-border'
+              )}
+              aria-label={t('subtitlePosition.horizontal')}
+            >
+              <option value="left">{t('subtitlePosition.left')}</option>
+              <option value="center">{t('subtitlePosition.center')}</option>
+              <option value="right">{t('subtitlePosition.right')}</option>
+            </select>
+          </label>
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('styleCell.layoutV')}</span>
+            <select
+              value={vPosDraft}
+              onChange={(e) => handleVPosCommit(e.target.value as 'top' | 'bottom')}
+              className={cn(
+                'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
+                'focus:outline-none focus:ring-1 focus:ring-ring/30',
+                'border-border'
+              )}
+              aria-label={t('subtitlePosition.vertical')}
+            >
+              <option value="top">{t('subtitlePosition.top')}</option>
+              <option value="bottom">{t('subtitlePosition.bottom')}</option>
+            </select>
+          </label>
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('styleCell.marginV')}</span>
+            <input
+              type="number"
+              min={0}
+              max={300}
+              value={marginDraft}
+              onChange={(e) => setMarginDraft(e.target.value)}
+              onBlur={(e) => {
+                if (e.target.value === '') return
+                handleMarginCommit(e.target.value)
+              }}
+              className={cn(
+                'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
+                'focus:outline-none focus:ring-1 focus:ring-ring/30',
+                'border-border',
+                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+              )}
+              aria-label={t('subtitlePosition.margin')}
+            />
+          </label>
+        </div>
+
+        {/* § 背景色 — Bg ON/OFF, Bg colour, Opacity. */}
+        <div className="flex flex-col gap-2 border-t border-border/60 pt-2 mt-2">
+          <div className="text-body font-semibold text-foreground">
+            {t('timeline.inspector.backgroundSection')}
+          </div>
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('styleCell.bgEnabled')}</span>
+            <Switch checked={bgEnabledDraft} onCheckedChange={handleBgEnabledToggle} aria-label={t('styleCell.bgEnabled')} />
+          </label>
+          <label className={cn(
+            'flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground',
+            !bgEnabledDraft && 'opacity-40'
+          )}>
+            <span>{t('styleCell.bgColor')}</span>
+            <select
+              value={bgColorDraft}
+              onChange={(e) => handleBgColorChange(e.target.value as 'black' | 'white')}
+              disabled={!bgEnabledDraft}
+              className={cn(
+                'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
+                'focus:outline-none focus:ring-1 focus:ring-ring/30',
+                'border-border',
+                'disabled:cursor-not-allowed'
+              )}
+              aria-label={t('styleCell.bgColor')}
+            >
+              <option value="black">{t('background.black')}</option>
+              <option value="white">{t('background.white')}</option>
+            </select>
+          </label>
+          <label className={cn(
+            'flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground',
+            !bgEnabledDraft && 'opacity-40'
+          )}>
+            <span>{t('styleCell.bgOpacity')}</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={bgOpacityDraft}
+              disabled={!bgEnabledDraft}
+              onChange={(e) => setBgOpacityDraft(e.target.value)}
+              onBlur={(e) => {
+                if (e.target.value === '') return
+                handleBgOpacityCommit(e.target.value)
+              }}
+              className={cn(
+                'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
+                'focus:outline-none focus:ring-1 focus:ring-ring/30',
+                'border-border',
+                'disabled:cursor-not-allowed',
+                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+              )}
+              aria-label={t('styleCell.bgOpacity')}
+            />
+          </label>
+        </div>
+
+        {/* Wrap actions — bulk-only operations, kept at the bottom under
+            its own divider so they read as "apply across selection" not
+            tied to any single field. */}
+        <div className="flex items-center gap-2 border-t border-border/60 pt-2 mt-2">
           <button
             type="button"
             onClick={handleAutoLineBreakApply}
