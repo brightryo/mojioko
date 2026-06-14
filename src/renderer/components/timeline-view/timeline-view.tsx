@@ -1,7 +1,7 @@
 import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, HelpCircle,
+  ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X, HelpCircle,
   ChevronFirst, ChevronLast, ChevronLeft, ChevronRight,
   SlidersHorizontal
 } from 'lucide-react'
@@ -1251,11 +1251,6 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   // same position or on the wrong side.  Keeps the user out of states
   // the confirm button could not act on (and replaces the silent
   // disabled-confirm-without-reason UX).
-  // REQ-20260614-001 補遺⑨: REQ-075 #3 の "set-point button TOGGLES"
-  // semantics は撤回された。3 ボタン構成では「再押下 = 現在位置で
-  // 再設定 (上書き)」が新仕様で、明示的なクリア専用ボタンは存在しない。
-  // 上書きされた値は次の入力で再び上書きされるだけなので、ユーザーは
-  // 始点・終点を自由に動かしてから「トリミング」ボタンで確定する。
   // REQ-094 case B: `videoCurrentTimeSec` is read from `getState()`
   // at click time rather than closed over from a TimelineView-level
   // subscription.  That keeps both these callbacks' identities stable
@@ -1263,13 +1258,16 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   // removes the reason for TimelineView to re-render on every tick.
   // The click reads the same store value the subscription would have
   // surfaced, so semantics are unchanged.
-  // REQ-20260614-001 補遺⑨ — トリミングは 3 ボタンに簡素化された。
-  // 始点 / 終点ボタンは「toggle off で解除」ではなく「再押下で現在の
-  // 再生位置に再設定 (上書き)」する。明示的なクリア専用ボタンは設けない
-  // 設計。したがって早期 return ("既に set だったら null に戻す") を
-  // 削除し、常に現在の playhead 値で `setPendingCut*` を呼ぶ。バリデーション
-  // (in == out / in > out) は維持。
+  // REQ-20260614-001 補遺⑩: 補遺⑨で削除した「再押下で解除 (toggle off)」
+  // 挙動を復活。再押下は「現在位置で上書き」ではなく `null` に戻す。
+  // 解除手段は (a) 各ボタンの再押下、(b) Row 2 末尾の X (両点一括解除)
+  // の 2 系統。
   const handleSetIn = useCallback(() => {
+    if (pendingCutInSec !== null) {
+      // Toggle off — clearing is always safe.
+      setPendingCutIn(null)
+      return
+    }
     const candidate = useUiStore.getState().videoCurrentTimeSec
     if (pendingCutOutSec !== null) {
       if (candidate === pendingCutOutSec) {
@@ -1282,8 +1280,12 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       }
     }
     setPendingCutIn(candidate)
-  }, [pendingCutOutSec, setPendingCutIn, t])
+  }, [pendingCutInSec, pendingCutOutSec, setPendingCutIn, t])
   const handleSetOut = useCallback(() => {
+    if (pendingCutOutSec !== null) {
+      setPendingCutOut(null)
+      return
+    }
     const candidate = useUiStore.getState().videoCurrentTimeSec
     if (pendingCutInSec !== null) {
       if (candidate === pendingCutInSec) {
@@ -1296,7 +1298,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       }
     }
     setPendingCutOut(candidate)
-  }, [pendingCutInSec, setPendingCutOut, t])
+  }, [pendingCutInSec, pendingCutOutSec, setPendingCutOut, t])
   const handleConfirmCut = useCallback(() => {
     if (pendingCutInSec === null || pendingCutOutSec === null) return
     if (!(pendingCutInSec < pendingCutOutSec)) {
@@ -1728,21 +1730,41 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
           </button>
       </div>
 
-      {/* Row 2 — REQ-20260614-001 補遺⑨: トリミングを 3 ボタンに簡素化。
-          始点 / 終点ボタンは押下で「現在の再生位置に設定」、再押下で
-          「現在位置で再設定 (上書き)」する。設定済みのときはボタンの
-          ラベル末尾に時刻 (HH:MM:SS.cs) を埋め込む。「解除」「保留クリア」
-          の個別ボタンは廃止 (再押下が上書き = 実質的な再設定なので不要)。
-          トリミングボタン (Scissors + label) は従来の handleConfirmCut
-          を呼ぶ。吸着は Row 2 右側に残す。 */}
+      {/* Row 2 — REQ-20260614-001 補遺⑩: 左から右に
+          [吸着] [トリミング (ラベル) [始点] [終点] [実行] [X (条件付)]]
+          の順に配置。吸着が左端、トリミングのグループは右側にひとまとまり
+          (border-md group)。始点 / 終点ボタンは再押下で解除 (補遺⑨で
+          一旦撤回した toggle off を復活)、X は両点一括解除。実行ボタンの
+          ラベルは「実行」(group label の「トリミング」と区別)。 */}
       {toolsExpanded && (
-        <div className="flex items-center justify-between gap-3 px-3 py-1.5 border-t border-zinc-800/60">
+        <div className="flex items-center gap-3 px-3 py-1.5 border-t border-zinc-800/60">
+          {/* Snap toggle — Row 2 left end (補遺⑩ §修正1). */}
+          <button
+            type="button"
+            onClick={() => setSnapEnabled(!snapEnabled)}
+            title={t('timeline.toolbar.snapHelp')}
+            aria-label={t('timeline.toolbar.snap')}
+            aria-pressed={snapEnabled}
+            className={cn(
+              'flex h-7 items-center gap-1.5 px-2 rounded-md text-body-sm font-medium',
+              'border transition-colors duration-150',
+              snapEnabled
+                ? 'bg-zinc-800 text-zinc-200 border-zinc-700'
+                : 'text-zinc-400 border-zinc-800 hover:text-zinc-200 hover:bg-zinc-800/50'
+            )}
+          >
+            <Magnet className="h-3.5 w-3.5" />
+            <span>{t('timeline.toolbar.snap')}</span>
+          </button>
+
+          {/* Trim cluster — group label + 4 buttons (始点 / 終点 / 実行 /
+              X-clear-both).  X は両点のうち少なくとも片方が set の
+              ときだけ表示。 */}
           <div className="flex items-center gap-2 rounded-md border border-zinc-800 px-2 py-1">
             <span className="text-label text-zinc-500 select-none">
               {t('timeline.trim.toolbarLabel')}
             </span>
-            {/* In: label embeds time when set, plain "始点" when unset.
-                Re-pressing while set overwrites with the current playhead. */}
+            {/* 始点 — 再押下で解除 (toggle off). 設定時は label に時刻チップ。 */}
             <button
               type="button"
               onClick={handleSetIn}
@@ -1764,7 +1786,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 </span>
               )}
             </button>
-            {/* Out: same pattern as In. */}
+            {/* 終点 — 始点と同じパターン。 */}
             <button
               type="button"
               onClick={handleSetOut}
@@ -1786,7 +1808,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 </span>
               )}
             </button>
-            {/* Trim execute — disabled until both points are set with in < out.
+            {/* 実行 — 両 set かつ in < out で有効化。
                 3.8 invariant: green-button text MUST be zinc-950 on green-500. */}
             <button
               type="button"
@@ -1797,7 +1819,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 !(pendingCutInSec < pendingCutOutSec)
               }
               title={t('timeline.trim.confirmCutTooltip')}
-              aria-label={t('timeline.trim.confirmCut')}
+              aria-label={t('timeline.trim.confirmCutRun')}
               className={cn(
                 'flex h-7 items-center gap-1.5 px-3 rounded-md text-body-sm font-semibold',
                 'border transition-colors duration-150',
@@ -1805,29 +1827,27 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 'disabled:bg-zinc-800 disabled:text-zinc-500 disabled:border-zinc-700 disabled:hover:bg-zinc-800 disabled:cursor-not-allowed'
               )}
             >
-              <span>{t('timeline.trim.confirmCut')}</span>
+              <span>{t('timeline.trim.confirmCutRun')}</span>
             </button>
-          </div>
-
-          {/* Snap toggle (Row 2 右側) — ラベル + アイコン。Row 1 から
-              退避させたので余裕あり、ラベルを復活。 */}
-          <button
-            type="button"
-            onClick={() => setSnapEnabled(!snapEnabled)}
-            title={t('timeline.toolbar.snapHelp')}
-            aria-label={t('timeline.toolbar.snap')}
-            aria-pressed={snapEnabled}
-            className={cn(
-              'flex h-7 items-center gap-1.5 px-2 rounded-md text-body-sm font-medium',
-              'border transition-colors duration-150',
-              snapEnabled
-                ? 'bg-zinc-800 text-zinc-200 border-zinc-700'
-                : 'text-zinc-400 border-zinc-800 hover:text-zinc-200 hover:bg-zinc-800/50'
+            {/* X — clear both pending points at once (補遺⑩ §修正3).
+                少なくとも片方が set のときに表示。 */}
+            {(pendingCutInSec !== null || pendingCutOutSec !== null) && (
+              <button
+                type="button"
+                onClick={clearPendingCut}
+                title={t('timeline.trim.clearAllTooltip')}
+                aria-label={t('timeline.trim.clearAll')}
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-md',
+                  'border border-zinc-700 text-zinc-400',
+                  'hover:bg-zinc-800 hover:text-zinc-100 hover:border-zinc-600',
+                  'transition-colors duration-150'
+                )}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             )}
-          >
-            <Magnet className="h-3.5 w-3.5" />
-            <span>{t('timeline.toolbar.snap')}</span>
-          </button>
+          </div>
         </div>
       )}
       </div>
