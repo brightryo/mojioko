@@ -506,12 +506,17 @@ export function TimelineBlockInspector({
         </button>
       </div>
 
-      {/* § 4 — Text editor.  REQ-20260614-001 補遺③ relocated above the
-          font / style cluster. */}
-      <div className="border-t border-zinc-800 pt-2">
-        <label className="block text-label text-zinc-500 mb-1">
-          {t('timeline.inspector.textLabel')}
-        </label>
+      {/* § 4 — 字幕 section (REQ-20260614-001 補遺⑪).
+          補遺⑪で「テキスト」セクションの label を「字幕」に改名し、
+          かつフォントとスタイル一式 (Size / Text colour / Outline colour
+          / Outline width / Fade) を同じ「字幕」セクション内に統合した。
+          フォントの label は削除し、プルダウン本体のみ表示する。
+          audio-only mode (REQ-028) では textarea のみ表示し、font /
+          style 一式は出さない。 */}
+      <div className="space-y-2 border-t border-zinc-800 pt-2">
+        <div className="text-body font-semibold text-zinc-200">
+          {t('timeline.inspector.subtitleSection')}
+        </div>
         <textarea
           ref={textareaRef}
           value={draft}
@@ -522,6 +527,7 @@ export function TimelineBlockInspector({
           rows={3}
           disabled={isFrozen}
           spellCheck={false}
+          aria-label={t('timeline.inspector.textLabel')}
           className={cn(
             'w-full rounded-md bg-zinc-950 border border-zinc-700 px-2 py-1.5',
             'text-body text-zinc-50 leading-snug resize-none',
@@ -529,108 +535,97 @@ export function TimelineBlockInspector({
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         />
-      </div>
-
-      {/* § 5 — Font selector.  REQ-20260614-001 補遺③ placed BEFORE the
-          font-size / colour / style cluster so the user picks the family
-          first, then adjusts size / colours within that family. */}
-      {!isAudioOnly && (
-        <div className="space-y-1 border-t border-zinc-800 pt-2">
-          <label className="text-callout font-semibold text-zinc-300 block">{t('bulkRowFont.label')}</label>
-          <RowFontSelector
-            value={entry.fontId}
-            onChange={handleFontChange}
-            disabled={isFrozen}
-          />
-        </div>
-      )}
-
-      {/* § 6+ — Style.  Items §6..§16 per REQ補遺③ (Font size → Text
-          colour → Outline colour → Outline width → Fade → Horizontal →
-          Vertical → Margin → Background → Background colour → Background
-          opacity).  Hidden in audio-only mode (REQ-028). */}
-      {!isAudioOnly && (
-        <div className="space-y-2 border-t border-zinc-800 pt-2">
-          {/* Size */}
-          <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.size')}</label>
-            <input
-              type="number"
-              min={FONT_SIZE_MIN_PX}
-              max={FONT_SIZE_MAX_PX}
-              defaultValue={entry.fontSizePx}
-              key={entry.fontSizePx}
-              onChange={handleSizeChange}
-              onBlur={handleSizeBlur}
+        {!isAudioOnly && (
+          <>
+            {/* Font dropdown — label 削除 (補遺⑪)、プルダウン本体のみ。
+                aria-label は accessibility のため残す。 */}
+            <RowFontSelector
+              value={entry.fontId}
+              onChange={handleFontChange}
               disabled={isFrozen}
-              title={t('step1:subtitleDefaults.sizeHint', {
-                min: FONT_SIZE_MIN_PX,
-                max: FONT_SIZE_MAX_PX
-              })}
-              className={cn(
-                'w-20 h-7 rounded border bg-zinc-950 px-1.5 text-center text-body text-zinc-100',
-                'focus:outline-none focus:ring-1',
-                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-                'disabled:opacity-40 disabled:cursor-not-allowed',
-                sizeOutOfRange
-                  ? 'border-amber-400/60 focus:ring-amber-400/30'
-                  : 'border-zinc-700 focus:border-zinc-600 focus:ring-green-500/30'
-              )}
             />
-          </div>
-
-          {/* Text colour */}
-          <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.textColor')}</label>
-            <ColorPicker
-              value={entry.textColorHex}
-              onChange={handleTextColorChange}
-              onPairApply={handleColorPairApply}
-              disabled={isFrozen}
-              swatchOnly
-            />
-          </div>
-
-          {/* Outline colour */}
-          <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.outlineColor')}</label>
-            <ColorPicker
-              value={entry.outlineColorHex}
-              onChange={handleOutlineColorChange}
-              onPairApply={handleColorPairApply}
-              disabled={isFrozen}
-              swatchOnly
-            />
-          </div>
-
-          {/* Outline width — shared slider component (same as subtitle-table
-              per-row + bulk-edit-bar). */}
-          <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.outlineWidth')}</label>
-            <div className="w-[160px]" onClick={(e) => e.stopPropagation()}>
-              <OutlineThicknessSlider
-                value={entry.outlineThicknessPx}
-                onCommit={handleOutlineThicknessCommit}
+            {/* Size */}
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-callout font-semibold text-zinc-300">{t('styleCell.size')}</label>
+              <input
+                type="number"
+                min={FONT_SIZE_MIN_PX}
+                max={FONT_SIZE_MAX_PX}
+                defaultValue={entry.fontSizePx}
+                key={entry.fontSizePx}
+                onChange={handleSizeChange}
+                onBlur={handleSizeBlur}
                 disabled={isFrozen}
-                ariaLabel={t('styleCell.outlineWidth')}
+                title={t('step1:subtitleDefaults.sizeHint', {
+                  min: FONT_SIZE_MIN_PX,
+                  max: FONT_SIZE_MAX_PX
+                })}
+                className={cn(
+                  'w-20 h-7 rounded border bg-zinc-950 px-1.5 text-center text-body text-zinc-100',
+                  'focus:outline-none focus:ring-1',
+                  '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
+                  'disabled:opacity-40 disabled:cursor-not-allowed',
+                  sizeOutOfRange
+                    ? 'border-amber-400/60 focus:ring-amber-400/30'
+                    : 'border-zinc-700 focus:border-zinc-600 focus:ring-green-500/30'
+                )}
               />
             </div>
-          </div>
+            {/* Text colour */}
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-callout font-semibold text-zinc-300">{t('styleCell.textColor')}</label>
+              <ColorPicker
+                value={entry.textColorHex}
+                onChange={handleTextColorChange}
+                onPairApply={handleColorPairApply}
+                disabled={isFrozen}
+                swatchOnly
+              />
+            </div>
+            {/* Outline colour */}
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-callout font-semibold text-zinc-300">{t('styleCell.outlineColor')}</label>
+              <ColorPicker
+                value={entry.outlineColorHex}
+                onChange={handleOutlineColorChange}
+                onPairApply={handleColorPairApply}
+                disabled={isFrozen}
+                swatchOnly
+              />
+            </div>
+            {/* Outline width */}
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-callout font-semibold text-zinc-300">{t('styleCell.outlineWidth')}</label>
+              <div className="w-[160px]" onClick={(e) => e.stopPropagation()}>
+                <OutlineThicknessSlider
+                  value={entry.outlineThicknessPx}
+                  onCommit={handleOutlineThicknessCommit}
+                  disabled={isFrozen}
+                  ariaLabel={t('styleCell.outlineWidth')}
+                />
+              </div>
+            </div>
+            {/* Fade */}
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-callout font-semibold text-zinc-300">{t('styleCell.fade')}</label>
+              <Switch
+                checked={entry.fadeEnabled}
+                onCheckedChange={handleFadeChange}
+                disabled={isFrozen}
+                className="scale-75 origin-right"
+              />
+            </div>
+          </>
+        )}
+      </div>
 
-          {/* Fade */}
-          <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.fade')}</label>
-            <Switch
-              checked={entry.fadeEnabled}
-              onCheckedChange={handleFadeChange}
-              disabled={isFrozen}
-              className="scale-75 origin-right"
-            />
+      {/* § 5 — レイアウト section (REQ-20260614-001 補遺⑪).
+          水平 / 垂直 / マージン。audio-only 非表示。 */}
+      {!isAudioOnly && (
+        <div className="space-y-2 border-t border-zinc-800 pt-2">
+          <div className="text-body font-semibold text-zinc-200">
+            {t('timeline.inspector.layoutSection')}
           </div>
-
-          {/* REQ-20260613-016 Phase 5 / 機能A — per-row layout + background.
-              Mirrors the subtitle-table Style column but uses the wider
-              320-px inspector panel so controls aren't as cramped. */}
           <div className="flex items-center justify-between gap-2">
             <label className="text-callout font-semibold text-zinc-300">{t('styleCell.layoutH')}</label>
             <select
@@ -684,6 +679,18 @@ export function TimelineBlockInspector({
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
               )}
             />
+          </div>
+        </div>
+      )}
+
+      {/* § 6 — 背景色 section (REQ-20260614-001 補遺⑪).
+          背景 ON/OFF / 背景色 / 透過率。セクション名「背景色」と
+          フィールド名「背景色」が重なるが、REQ 補遺⑪ で明示的に
+          確認済 (指定どおり「背景色」で実装)。audio-only 非表示。 */}
+      {!isAudioOnly && (
+        <div className="space-y-2 border-t border-zinc-800 pt-2">
+          <div className="text-body font-semibold text-zinc-200">
+            {t('timeline.inspector.backgroundSection')}
           </div>
           <div className="flex items-center justify-between gap-2">
             <label className="text-callout font-semibold text-zinc-300">{t('styleCell.bgEnabled')}</label>

@@ -302,7 +302,10 @@
       "adjustTime": "Adjust time",
       "delete": "Delete",
       "restore": "Restore",
-      "styleLabel": "Style"
+      "styleLabel": "Style",
+      "subtitleSection": "Subtitle",
+      "layoutSection": "Layout",
+      "backgroundSection": "Background"
     },
     "nav": {
       "first": "Jump to start",
