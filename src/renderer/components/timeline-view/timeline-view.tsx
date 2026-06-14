@@ -1,8 +1,8 @@
 import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X, HelpCircle,
-  ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, LogIn, LogOut,
+  ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, HelpCircle,
+  ChevronFirst, ChevronLast, ChevronLeft, ChevronRight,
   SlidersHorizontal
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -1246,16 +1246,16 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   // identical to NLE "set in / set out / extract".  History pushes
   // happen on confirm only — pending In / Out are not undoable.
   //
-  // REQ-075 #3: each set-point button TOGGLES — pressing 始点 again
-  // when it is already set clears that point.  Lets the user retract a
-  // single end without nuking the other one (the Clear-all X stays for
-  // wiping both at once when both are set).
-  //
   // REQ-076 #2: set-time validation.  When the OTHER point is already
   // set, reject the proposed value with a toast if it lands at the
   // same position or on the wrong side.  Keeps the user out of states
   // the confirm button could not act on (and replaces the silent
   // disabled-confirm-without-reason UX).
+  // REQ-20260614-001 補遺⑨: REQ-075 #3 の "set-point button TOGGLES"
+  // semantics は撤回された。3 ボタン構成では「再押下 = 現在位置で
+  // 再設定 (上書き)」が新仕様で、明示的なクリア専用ボタンは存在しない。
+  // 上書きされた値は次の入力で再び上書きされるだけなので、ユーザーは
+  // 始点・終点を自由に動かしてから「トリミング」ボタンで確定する。
   // REQ-094 case B: `videoCurrentTimeSec` is read from `getState()`
   // at click time rather than closed over from a TimelineView-level
   // subscription.  That keeps both these callbacks' identities stable
@@ -1263,12 +1263,13 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   // removes the reason for TimelineView to re-render on every tick.
   // The click reads the same store value the subscription would have
   // surfaced, so semantics are unchanged.
+  // REQ-20260614-001 補遺⑨ — トリミングは 3 ボタンに簡素化された。
+  // 始点 / 終点ボタンは「toggle off で解除」ではなく「再押下で現在の
+  // 再生位置に再設定 (上書き)」する。明示的なクリア専用ボタンは設けない
+  // 設計。したがって早期 return ("既に set だったら null に戻す") を
+  // 削除し、常に現在の playhead 値で `setPendingCut*` を呼ぶ。バリデーション
+  // (in == out / in > out) は維持。
   const handleSetIn = useCallback(() => {
-    if (pendingCutInSec !== null) {
-      // Toggle off — clearing is always safe.
-      setPendingCutIn(null)
-      return
-    }
     const candidate = useUiStore.getState().videoCurrentTimeSec
     if (pendingCutOutSec !== null) {
       if (candidate === pendingCutOutSec) {
@@ -1281,12 +1282,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       }
     }
     setPendingCutIn(candidate)
-  }, [pendingCutInSec, pendingCutOutSec, setPendingCutIn, t])
+  }, [pendingCutOutSec, setPendingCutIn, t])
   const handleSetOut = useCallback(() => {
-    if (pendingCutOutSec !== null) {
-      setPendingCutOut(null)
-      return
-    }
     const candidate = useUiStore.getState().videoCurrentTimeSec
     if (pendingCutInSec !== null) {
       if (candidate === pendingCutInSec) {
@@ -1299,7 +1296,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       }
     }
     setPendingCutOut(candidate)
-  }, [pendingCutInSec, pendingCutOutSec, setPendingCutOut, t])
+  }, [pendingCutInSec, setPendingCutOut, t])
   const handleConfirmCut = useCallback(() => {
     if (pendingCutInSec === null || pendingCutOutSec === null) return
     if (!(pendingCutInSec < pendingCutOutSec)) {
@@ -1731,109 +1728,65 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
           </button>
       </div>
 
-      {/* Row 2 — REQ-20260614-001 補遺⑧: トグルで開閉。トリミング操作
-          (始点 / 終点 / 実行 / クリア) と吸着トグル。Row 1 から退避させた
-          ことで、各操作にラベル + 始点 / 終点の数値読み取り (HH:MM:SS.cs)
-          を載せても余裕がある。トリミングは「タイムライン / 動画レベル」
-          の操作で、per-clip Inspector ではなくここに表示するのが正しい
-          (補遺⑦ の前提誤りを訂正した結果)。 */}
+      {/* Row 2 — REQ-20260614-001 補遺⑨: トリミングを 3 ボタンに簡素化。
+          始点 / 終点ボタンは押下で「現在の再生位置に設定」、再押下で
+          「現在位置で再設定 (上書き)」する。設定済みのときはボタンの
+          ラベル末尾に時刻 (HH:MM:SS.cs) を埋め込む。「解除」「保留クリア」
+          の個別ボタンは廃止 (再押下が上書き = 実質的な再設定なので不要)。
+          トリミングボタン (Scissors + label) は従来の handleConfirmCut
+          を呼ぶ。吸着は Row 2 右側に残す。 */}
       {toolsExpanded && (
         <div className="flex items-center justify-between gap-3 px-3 py-1.5 border-t border-zinc-800/60">
           <div className="flex items-center gap-2 rounded-md border border-zinc-800 px-2 py-1">
             <span className="text-label text-zinc-500 select-none">
               {t('timeline.trim.toolbarLabel')}
             </span>
-            {/* In point: label → readout → state-conditional set/clear button */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-body-sm text-zinc-400 select-none">
-                {t('timeline.trim.inLabel')}
-              </span>
-              <span className={cn(
-                'font-mono tabular-nums text-body-sm w-[88px] text-center select-none',
-                pendingCutInSec !== null ? 'text-amber-300' : 'text-zinc-600'
-              )}>
-                {pendingCutInSec !== null
-                  ? formatEditedTimecode(pendingCutInSec, cuts)
-                  : t('timeline.trim.noPoint')}
-              </span>
-              <button
-                type="button"
-                onClick={handleSetIn}
-                title={pendingCutInSec !== null
-                  ? t('timeline.trim.setInUnset')
-                  : t('timeline.trim.setInSet')}
-                aria-label={pendingCutInSec !== null
-                  ? t('timeline.trim.setInUnset')
-                  : t('timeline.trim.setInSet')}
-                aria-pressed={pendingCutInSec !== null}
-                className={cn(
-                  'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
-                  'border transition-colors duration-150',
-                  pendingCutInSec !== null
-                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
-                    : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
-                )}
-              >
-                {pendingCutInSec !== null ? (
-                  <>
-                    <X className="h-3 w-3" />
-                    <span>{t('timeline.trim.setInUnset')}</span>
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="h-3 w-3" />
-                    <span>{t('timeline.trim.setInSet')}</span>
-                  </>
-                )}
-              </button>
-            </div>
-            <div className="h-5 w-px bg-zinc-800" />
-            {/* Out point */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-body-sm text-zinc-400 select-none">
-                {t('timeline.trim.outLabel')}
-              </span>
-              <span className={cn(
-                'font-mono tabular-nums text-body-sm w-[88px] text-center select-none',
-                pendingCutOutSec !== null ? 'text-amber-300' : 'text-zinc-600'
-              )}>
-                {pendingCutOutSec !== null
-                  ? formatEditedTimecode(pendingCutOutSec, cuts)
-                  : t('timeline.trim.noPoint')}
-              </span>
-              <button
-                type="button"
-                onClick={handleSetOut}
-                title={pendingCutOutSec !== null
-                  ? t('timeline.trim.setOutUnset')
-                  : t('timeline.trim.setOutSet')}
-                aria-label={pendingCutOutSec !== null
-                  ? t('timeline.trim.setOutUnset')
-                  : t('timeline.trim.setOutSet')}
-                aria-pressed={pendingCutOutSec !== null}
-                className={cn(
-                  'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
-                  'border transition-colors duration-150',
-                  pendingCutOutSec !== null
-                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
-                    : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
-                )}
-              >
-                {pendingCutOutSec !== null ? (
-                  <>
-                    <X className="h-3 w-3" />
-                    <span>{t('timeline.trim.setOutUnset')}</span>
-                  </>
-                ) : (
-                  <>
-                    <LogOut className="h-3 w-3" />
-                    <span>{t('timeline.trim.setOutSet')}</span>
-                  </>
-                )}
-              </button>
-            </div>
-            <div className="h-5 w-px bg-zinc-800" />
-            {/* Confirm trim — disabled until both points are set with in < out.
+            {/* In: label embeds time when set, plain "始点" when unset.
+                Re-pressing while set overwrites with the current playhead. */}
+            <button
+              type="button"
+              onClick={handleSetIn}
+              title={t('timeline.trim.setInTooltip')}
+              aria-label={t('timeline.trim.setIn')}
+              aria-pressed={pendingCutInSec !== null}
+              className={cn(
+                'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
+                'border transition-colors duration-150',
+                pendingCutInSec !== null
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+                  : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
+              )}
+            >
+              <span>{t('timeline.trim.setIn')}</span>
+              {pendingCutInSec !== null && (
+                <span className="font-mono tabular-nums text-caption text-amber-300/80">
+                  {formatEditedTimecode(pendingCutInSec, cuts)}
+                </span>
+              )}
+            </button>
+            {/* Out: same pattern as In. */}
+            <button
+              type="button"
+              onClick={handleSetOut}
+              title={t('timeline.trim.setOutTooltip')}
+              aria-label={t('timeline.trim.setOut')}
+              aria-pressed={pendingCutOutSec !== null}
+              className={cn(
+                'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
+                'border transition-colors duration-150',
+                pendingCutOutSec !== null
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+                  : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
+              )}
+            >
+              <span>{t('timeline.trim.setOut')}</span>
+              {pendingCutOutSec !== null && (
+                <span className="font-mono tabular-nums text-caption text-amber-300/80">
+                  {formatEditedTimecode(pendingCutOutSec, cuts)}
+                </span>
+              )}
+            </button>
+            {/* Trim execute — disabled until both points are set with in < out.
                 3.8 invariant: green-button text MUST be zinc-950 on green-500. */}
             <button
               type="button"
@@ -1844,7 +1797,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 !(pendingCutInSec < pendingCutOutSec)
               }
               title={t('timeline.trim.confirmCutTooltip')}
-              aria-label={t('timeline.trim.confirmCutAction')}
+              aria-label={t('timeline.trim.confirmCut')}
               className={cn(
                 'flex h-7 items-center gap-1.5 px-3 rounded-md text-body-sm font-semibold',
                 'border transition-colors duration-150',
@@ -1852,29 +1805,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 'disabled:bg-zinc-800 disabled:text-zinc-500 disabled:border-zinc-700 disabled:hover:bg-zinc-800 disabled:cursor-not-allowed'
               )}
             >
-              <Scissors className="h-3.5 w-3.5" />
-              <span>{t('timeline.trim.confirmCutAction')}</span>
+              <span>{t('timeline.trim.confirmCut')}</span>
             </button>
-            {/* Clear all (visible only when both points are armed).  The
-                per-in / per-out toggle buttons can also unset individually;
-                this is the explicit "両方クリア" shortcut. */}
-            {pendingCutInSec !== null && pendingCutOutSec !== null && (
-              <button
-                type="button"
-                onClick={clearPendingCut}
-                title={t('timeline.trim.clearPendingTooltip')}
-                aria-label={t('timeline.trim.clearPendingAction')}
-                className={cn(
-                  'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm',
-                  'border border-zinc-700 text-zinc-400',
-                  'hover:bg-zinc-800 hover:text-zinc-100 hover:border-zinc-600',
-                  'transition-colors duration-150'
-                )}
-              >
-                <X className="h-3.5 w-3.5" />
-                <span>{t('timeline.trim.clearPendingAction')}</span>
-              </button>
-            )}
           </div>
 
           {/* Snap toggle (Row 2 右側) — ラベル + アイコン。Row 1 から
