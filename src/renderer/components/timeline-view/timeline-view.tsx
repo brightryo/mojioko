@@ -2,7 +2,8 @@ import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X, HelpCircle,
-  ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, LogIn, LogOut
+  ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, LogIn, LogOut,
+  SlidersHorizontal
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useProjectStore } from '@/stores/project-store'
@@ -610,6 +611,10 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   const setPixelsPerSec = useUiStore((s) => s.setTimelinePixelsPerSec)
   const snapEnabled = useUiStore((s) => s.timelineSnapEnabled)
   const setSnapEnabled = useUiStore((s) => s.setTimelineSnapEnabled)
+  // REQ-20260614-001 補遺⑧ — Row 2 (トリミング + 吸着) の表示状態。
+  // 1 行目右端の「ツール」ボタンで toggle。
+  const toolsExpanded = useUiStore((s) => s.step2TimelineToolsExpanded)
+  const toggleTools = useUiStore((s) => s.toggleStep2TimelineTools)
   const scrollToRowId = useUiStore((s) => s.scrollToRowId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
   const isAudioOnly = useIsAudioOnly()
@@ -1482,8 +1487,14 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
 
   return (
     <div className="flex flex-col h-full bg-zinc-950">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 flex-shrink-0 border-b border-zinc-800 bg-zinc-900 px-3 py-1.5">
+      {/* Toolbar — REQ-20260614-001 補遺⑧: 2 行構成。
+          Row 1 は常時表示（使い方 / ズーム / カーソル送り + 右端の
+          「ツール」トグル）。Row 2 はトグルで開閉し、トリミング操作と
+          吸着を含む。Row 1 に詰め込みすぎず、1 行目が最小ペイン幅でも
+          折り返さないようにするのが分割の目的。 */}
+      <div className="flex flex-col flex-shrink-0 border-b border-zinc-800 bg-zinc-900">
+      {/* Row 1 */}
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5">
         <div className="flex items-center gap-2">
           {/* REQ-122 — "How to use" Popover, anchored before the zoom
               cluster.  Documents trimming, the scissor marker undo,
@@ -1696,62 +1707,134 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
             </button>
           </div>
 
-          {/* REQ-077 #1 — trim toolbar.
-              The REQ-076 legend-style label (absolute on the top border)
-              bloated the toolbar vertically and conflicted with REQ-075's
-              vertical-budget goals.  Reverted to an inline left-anchored
-              label inside the bordered group, py-0.5 so the outer height
-              matches the other h-7 toolbar segments (zoom buttons, snap
-              toggle).  The label stays on the LEFT inside the box per
-              the user's "枠の左側に来ること" requirement. */}
-          {/* REQ-126 — drop the standalone "Trim" label (it sat to the
-              left of `始点 終点 カット` and read as a section heading).
-              The bordered frame already groups the three buttons, and
-              `confirmCut` is relabelled to "トリミング" / "Trim" so the
-              right-hand action button itself names the feature.  Order
-              is therefore: 始点 → 終点 → トリミング (left → right matches
-              the user's operation flow). */}
-          {/* REQ-20260614-001 補遺⑦ — toolbar trim cluster is icon-only.
-              「始点 / 終点」 ラベルと時刻チップを除去し、設定/解除は LogIn /
-              LogOut アイコン + native title でのみ示す。確定 (トリミング)
-              は Scissors アイコンの green-500 ボタン、保留クリアは従来通り
-              X アイコン。実時刻 (`pendingCutInSec` / `pendingCutOutSec`) の
-              読み取り表示は Inspector 側 (timeline-block-inspector.tsx の
-              §3.5 trim readout) に移管した。pressed state (amber) は
-              そのままなのでツールバー上でも「設定済み」は一目で分かる。 */}
-          <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 px-1.5 py-0.5">
-            <button
-              type="button"
-              onClick={handleSetIn}
-              title={t('timeline.trim.setInTooltip')}
-              aria-label={t('timeline.trim.setIn')}
-              aria-pressed={pendingCutInSec !== null}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md',
-                'border transition-colors duration-150',
-                pendingCutInSec !== null
-                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
-                  : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
-              )}
-            >
-              <LogIn className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleSetOut}
-              title={t('timeline.trim.setOutTooltip')}
-              aria-label={t('timeline.trim.setOut')}
-              aria-pressed={pendingCutOutSec !== null}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md',
-                'border transition-colors duration-150',
-                pendingCutOutSec !== null
-                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
-                  : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
-              )}
-            >
-              <LogOut className="h-3.5 w-3.5" />
-            </button>
+          {/* REQ-20260614-001 補遺⑧ — Row 1 右端の「ツール」トグル。
+              押下で Row 2 (トリミング + 吸着) を表示/折り畳み。展開状態は
+              ui-store.step2TimelineToolsExpanded (session-only) に保持。
+              pressed state (zinc-800 bg) で開閉状態を視覚化。 */}
+          <button
+            type="button"
+            onClick={toggleTools}
+            title={toolsExpanded
+              ? t('timeline.toolbar.toolsTooltipCollapse')
+              : t('timeline.toolbar.toolsTooltipExpand')}
+            aria-label={t('timeline.toolbar.tools')}
+            aria-expanded={toolsExpanded}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md',
+              'transition-colors duration-150',
+              toolsExpanded
+                ? 'bg-zinc-800 text-zinc-200'
+                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60'
+            )}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+          </button>
+      </div>
+
+      {/* Row 2 — REQ-20260614-001 補遺⑧: トグルで開閉。トリミング操作
+          (始点 / 終点 / 実行 / クリア) と吸着トグル。Row 1 から退避させた
+          ことで、各操作にラベル + 始点 / 終点の数値読み取り (HH:MM:SS.cs)
+          を載せても余裕がある。トリミングは「タイムライン / 動画レベル」
+          の操作で、per-clip Inspector ではなくここに表示するのが正しい
+          (補遺⑦ の前提誤りを訂正した結果)。 */}
+      {toolsExpanded && (
+        <div className="flex items-center justify-between gap-3 px-3 py-1.5 border-t border-zinc-800/60">
+          <div className="flex items-center gap-2 rounded-md border border-zinc-800 px-2 py-1">
+            <span className="text-label text-zinc-500 select-none">
+              {t('timeline.trim.toolbarLabel')}
+            </span>
+            {/* In point: label → readout → state-conditional set/clear button */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-body-sm text-zinc-400 select-none">
+                {t('timeline.trim.inLabel')}
+              </span>
+              <span className={cn(
+                'font-mono tabular-nums text-body-sm w-[88px] text-center select-none',
+                pendingCutInSec !== null ? 'text-amber-300' : 'text-zinc-600'
+              )}>
+                {pendingCutInSec !== null
+                  ? formatEditedTimecode(pendingCutInSec, cuts)
+                  : t('timeline.trim.noPoint')}
+              </span>
+              <button
+                type="button"
+                onClick={handleSetIn}
+                title={pendingCutInSec !== null
+                  ? t('timeline.trim.setInUnset')
+                  : t('timeline.trim.setInSet')}
+                aria-label={pendingCutInSec !== null
+                  ? t('timeline.trim.setInUnset')
+                  : t('timeline.trim.setInSet')}
+                aria-pressed={pendingCutInSec !== null}
+                className={cn(
+                  'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
+                  'border transition-colors duration-150',
+                  pendingCutInSec !== null
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+                    : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
+                )}
+              >
+                {pendingCutInSec !== null ? (
+                  <>
+                    <X className="h-3 w-3" />
+                    <span>{t('timeline.trim.setInUnset')}</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="h-3 w-3" />
+                    <span>{t('timeline.trim.setInSet')}</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="h-5 w-px bg-zinc-800" />
+            {/* Out point */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-body-sm text-zinc-400 select-none">
+                {t('timeline.trim.outLabel')}
+              </span>
+              <span className={cn(
+                'font-mono tabular-nums text-body-sm w-[88px] text-center select-none',
+                pendingCutOutSec !== null ? 'text-amber-300' : 'text-zinc-600'
+              )}>
+                {pendingCutOutSec !== null
+                  ? formatEditedTimecode(pendingCutOutSec, cuts)
+                  : t('timeline.trim.noPoint')}
+              </span>
+              <button
+                type="button"
+                onClick={handleSetOut}
+                title={pendingCutOutSec !== null
+                  ? t('timeline.trim.setOutUnset')
+                  : t('timeline.trim.setOutSet')}
+                aria-label={pendingCutOutSec !== null
+                  ? t('timeline.trim.setOutUnset')
+                  : t('timeline.trim.setOutSet')}
+                aria-pressed={pendingCutOutSec !== null}
+                className={cn(
+                  'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm font-medium',
+                  'border transition-colors duration-150',
+                  pendingCutOutSec !== null
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+                    : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
+                )}
+              >
+                {pendingCutOutSec !== null ? (
+                  <>
+                    <X className="h-3 w-3" />
+                    <span>{t('timeline.trim.setOutUnset')}</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="h-3 w-3" />
+                    <span>{t('timeline.trim.setOutSet')}</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="h-5 w-px bg-zinc-800" />
+            {/* Confirm trim — disabled until both points are set with in < out.
+                3.8 invariant: green-button text MUST be zinc-950 on green-500. */}
             <button
               type="button"
               onClick={handleConfirmCut}
@@ -1760,53 +1843,61 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 pendingCutOutSec === null ||
                 !(pendingCutInSec < pendingCutOutSec)
               }
-              title={`${t('timeline.trim.confirmCut')} — ${t('timeline.trim.confirmCutTooltip')}`}
-              aria-label={t('timeline.trim.confirmCut')}
+              title={t('timeline.trim.confirmCutTooltip')}
+              aria-label={t('timeline.trim.confirmCutAction')}
               className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md',
+                'flex h-7 items-center gap-1.5 px-3 rounded-md text-body-sm font-semibold',
                 'border transition-colors duration-150',
-                // 3.8 invariant: green-button text MUST be zinc-950 on
-                // green-500.  Same invariant for the icon glyph since
-                // it inherits text colour.
                 'bg-green-500 text-zinc-950 border-green-400 hover:bg-green-400',
                 'disabled:bg-zinc-800 disabled:text-zinc-500 disabled:border-zinc-700 disabled:hover:bg-zinc-800 disabled:cursor-not-allowed'
               )}
             >
               <Scissors className="h-3.5 w-3.5" />
+              <span>{t('timeline.trim.confirmCutAction')}</span>
             </button>
+            {/* Clear all (visible only when both points are armed).  The
+                per-in / per-out toggle buttons can also unset individually;
+                this is the explicit "両方クリア" shortcut. */}
             {pendingCutInSec !== null && pendingCutOutSec !== null && (
               <button
                 type="button"
                 onClick={clearPendingCut}
                 title={t('timeline.trim.clearPendingTooltip')}
-                aria-label={t('timeline.trim.clearPending')}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors duration-150"
+                aria-label={t('timeline.trim.clearPendingAction')}
+                className={cn(
+                  'flex h-7 items-center gap-1 px-2 rounded-md text-body-sm',
+                  'border border-zinc-700 text-zinc-400',
+                  'hover:bg-zinc-800 hover:text-zinc-100 hover:border-zinc-600',
+                  'transition-colors duration-150'
+                )}
               >
                 <X className="h-3.5 w-3.5" />
+                <span>{t('timeline.trim.clearPendingAction')}</span>
               </button>
             )}
           </div>
 
-          {/* Snap toggle — REQ-20260614-001 補遺⑦: 「吸着」ラベルを削除して
-              アイコンのみに統一。`title` 属性で native tooltip により機能名と
-              ヘルプ本文を提供する。pressed state は引き続き bg-zinc-800 で
-              視覚化。 */}
+          {/* Snap toggle (Row 2 右側) — ラベル + アイコン。Row 1 から
+              退避させたので余裕あり、ラベルを復活。 */}
           <button
             type="button"
             onClick={() => setSnapEnabled(!snapEnabled)}
-            title={`${t('timeline.toolbar.snap')} — ${t('timeline.toolbar.snapHelp')}`}
+            title={t('timeline.toolbar.snapHelp')}
             aria-label={t('timeline.toolbar.snap')}
-            className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-md',
-              'transition-colors duration-150',
-              snapEnabled
-                ? 'bg-zinc-800 text-zinc-200'
-                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'
-            )}
             aria-pressed={snapEnabled}
+            className={cn(
+              'flex h-7 items-center gap-1.5 px-2 rounded-md text-body-sm font-medium',
+              'border transition-colors duration-150',
+              snapEnabled
+                ? 'bg-zinc-800 text-zinc-200 border-zinc-700'
+                : 'text-zinc-400 border-zinc-800 hover:text-zinc-200 hover:bg-zinc-800/50'
+            )}
           >
             <Magnet className="h-3.5 w-3.5" />
+            <span>{t('timeline.toolbar.snap')}</span>
           </button>
+        </div>
+      )}
       </div>
 
       {/* Scroll container */}

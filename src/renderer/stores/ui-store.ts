@@ -162,6 +162,14 @@ interface UiStore {
   step2OuterLayout: { 'step2-pane-left': number; 'step2-pane-right': number }
   step2LeftLayout:  { 'step2-pane-preview': number; 'step2-pane-bottom': number }
 
+  /**
+   * REQ-20260614-001 補遺⑧ — タイムラインツールバーの 2 行目（トリミング +
+   * 吸着）の表示状態。Row 1 右端の「ツール」ボタンで toggle する。session-
+   * only（ページ遷移をまたいでも保持されるが、アプリ再起動でリセット）。
+   * デフォルト `false`（折り畳み）。
+   */
+  step2TimelineToolsExpanded: boolean
+
   setSettingsDialogOpen: (open: boolean) => void
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
@@ -198,6 +206,7 @@ interface UiStore {
   clearPendingCut: () => void
   setStep2OuterLayout: (layout: { 'step2-pane-left': number; 'step2-pane-right': number }) => void
   setStep2LeftLayout:  (layout: { 'step2-pane-preview': number; 'step2-pane-bottom': number }) => void
+  toggleStep2TimelineTools: () => void
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -229,6 +238,7 @@ export const useUiStore = create<UiStore>((set) => ({
   // the session.
   step2OuterLayout: { 'step2-pane-left': 70, 'step2-pane-right': 30 },
   step2LeftLayout:  { 'step2-pane-preview': 50, 'step2-pane-bottom': 50 },
+  step2TimelineToolsExpanded: false,
 
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
@@ -308,4 +318,6 @@ export const useUiStore = create<UiStore>((set) => ({
   clearPendingCut: () => set({ pendingCutInSec: null, pendingCutOutSec: null }),
   setStep2OuterLayout: (layout) => set({ step2OuterLayout: layout }),
   setStep2LeftLayout:  (layout) => set({ step2LeftLayout: layout }),
+  toggleStep2TimelineTools: () =>
+    set((s) => ({ step2TimelineToolsExpanded: !s.step2TimelineToolsExpanded })),
 }))
