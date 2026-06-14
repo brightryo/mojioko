@@ -197,12 +197,6 @@ interface SubtitleRowProps {
    * left-border highlight + the inspector content via the parent).
    */
   isUserSelected: boolean
-  /**
-   * REQ-20260614-001 Phase 3 — playback-active follower (drives a blue
-   * accent so the user can see which subtitle is currently playing
-   * without losing their explicit selection).
-   */
-  isPlaybackActive: boolean
   /** Click handler for the row body — caller writes `selectedEntryId`. */
   onSelect: (id: string) => void
   /** Full warning bitmap for this entry — drives both badges and the Ready filter. */
@@ -238,7 +232,7 @@ interface SubtitleRowProps {
   cuts: CutList
 }
 
-function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, isPlaybackActive, onSelect, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick, clipStatus, cuts }: SubtitleRowProps) {
+function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, onSelect, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick, clipStatus, cuts }: SubtitleRowProps) {
   const isOverflow = overflowStartIndex !== -1
   const isStartOverlap = warnings.overlap
   // step1 namespace included so the size input's `title` tooltip can
@@ -375,38 +369,29 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
   const resolvedFontId = isFontId(entry.fontId) ? entry.fontId : activeFontId
   const rowFontDisplayName = getFontMeta(resolvedFontId).displayName
 
-  // Multi-row selection takes visual priority over warning tints (amber /
-  // red row backgrounds) because the user is actively shaping a bulk
-  // operation and needs to see what is targeted.  The focused-row green
-  // marker still wins over selection on the left-edge border so single-row
-  // focus is never lost in a sea of selected rows.
-  // REQ-20260614-001 Phase 3 — 4-level left-border priority:
-  //   user-selection (green) > playback-active (sky) > bulk-select (HSL var) > nothing
-  // The bg-zinc-800/50 fill is shared with the green path; playback-only
-  // rows get a faint sky tint so the user can tell at a glance which
-  // subtitle is currently playing without confusing it with their own
-  // selection.
+  // REQ-20260614-001 補遺⑬: sky (再生アクティブ) ハイライトを撤去。残る
+  // 左 border 優先順位は 緑 (ユーザー選択) > HSL var (bulk-select) > 無し。
+  // bg は 緑 (選択) と amber/red (state tint) と HSL var (bulk-select) の
+  // 組み合わせ。再生中の自動スクロール (= focusedRowId 駆動の
+  // scrollIntoView) は別経路で維持されている (本ファイル下部の effect
+  // 参照)。
   const rowBg = cn(
     'group grid items-start gap-0 border-b border-zinc-800/50 transition-colors duration-150',
     TABLE_GRID_COLS,
     isUserSelected
       ? 'border-l-2 border-l-green-500'
-      : isPlaybackActive
-        ? 'border-l-2 border-l-sky-500'
-        : isSelected
-          ? 'border-l-2 border-l-[hsl(var(--row-selected-border))]'
-          : 'border-l-2 border-l-transparent',
+      : isSelected
+        ? 'border-l-2 border-l-[hsl(var(--row-selected-border))]'
+        : 'border-l-2 border-l-transparent',
     isUserSelected && rowState !== 'edited' && rowState !== 'overflow' && 'bg-zinc-800/50',
-    isPlaybackActive && !isUserSelected && rowState !== 'edited' && rowState !== 'overflow' && 'bg-sky-500/[0.04]',
-    !isUserSelected && !isPlaybackActive && !isSelected && 'hover:bg-zinc-800/20',
+    !isUserSelected && !isSelected && 'hover:bg-zinc-800/20',
     // REQ-20260614-001 補遺④ — actions column removed, so the previous
     // `[&>*:not([data-row-actions])]` exemption is no longer needed.
     // Every cell now fades together when the row is deleted.
     rowState === 'deleted' && 'opacity-40',
-    // REQ-118 [1] — state tints persist through both selection slices
-    // (green / sky) AND through bulk-select.  Same gating rule as before:
-    // the multi-row HSL highlight (applied inline below) wants the row
-    // bg cleared so the variable colour shines through.
+    // State tints persist through selection (green) AND bulk-select.
+    // The multi-row HSL highlight (applied inline below) wants the row bg
+    // cleared so the variable colour shines through.
     !isSelected && rowState === 'edited' && 'bg-amber-400/[0.04]',
     !isSelected && rowState === 'overflow' && 'bg-red-500/[0.04]'
   )
@@ -416,10 +401,9 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
       ref={rowDivRef}
       className={rowBg}
       style={
-        // REQ-20260614-001 Phase 3 — bulk-select HSL bg only when no
-        // single-row highlight (green or sky) is also active.  Mirrors
-        // the pre-Phase-3 `isSelected && !isFocused` rule, now split.
-        isSelected && !isUserSelected && !isPlaybackActive
+        // bulk-select HSL bg only when no single-row green highlight is
+        // also active.  (補遺⑬: sky 廃止により isPlaybackActive 条件は除去。)
+        isSelected && !isUserSelected
           ? { backgroundColor: 'hsl(var(--row-selected) / var(--row-selected-alpha))' }
           : undefined
       }
@@ -792,11 +776,12 @@ export function SubtitleTable({
   // subscription wires the live cut list into that filter.
   const cuts = useProjectStore((s) => s.cuts)
   const tableFilter = useUiStore((s) => s.tableFilter)
-  // REQ-20260614-001 Phase 3 — two distinct slices:
+  // Two distinct slices:
   //   selectedEntryId  = user single-selection  → green left border
-  //   focusedRowId      = playback follower      → blue (sky-500) accent
+  //   focusedRowId      = playback follower      → drives auto-scroll only
   // Row click writes selectedEntryId; the preview panel continues to
-  // write focusedRowId from `handleTimeUpdate`.
+  // write focusedRowId from `handleTimeUpdate`.  (補遺⑬: sky 視覚化は撤去、
+  // focusedRowId は下の scrollIntoView effect だけが参照する。)
   const selectedEntryId = useUiStore((s) => s.selectedEntryId)
   const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
   const focusedRowId = useUiStore((s) => s.focusedRowId)
@@ -1056,13 +1041,11 @@ export function SubtitleTable({
                   entry={entry}
                   displayIndex={i + 1}
                   overflowStartIndex={overflowMap.get(entry.id) ?? -1}
-                  // REQ-20260614-001 Phase 3 — split the legacy `isFocused`
-                  // into the two distinct slices: user single-selection
-                  // (green) vs playback follow (blue).  `onFocus` is
-                  // renamed `onSelect` at the prop boundary so the call
-                  // site says "this is the user picking the row".
+                  // user single-selection drives the green left-border + the
+                  // inspector content.  (補遺⑬: sky 廃止により isPlaybackActive
+                  // は撤去。focusedRowId は本ファイル下部の effect が
+                  // 自動スクロール用にのみ参照する。)
                   isUserSelected={selectedEntryId === entry.id}
-                  isPlaybackActive={focusedRowId === entry.id}
                   onSelect={setSelectedEntryId}
                   warnings={warningsMap.get(entry.id) ?? NO_WARNINGS}
                   registerRef={registerRef}
