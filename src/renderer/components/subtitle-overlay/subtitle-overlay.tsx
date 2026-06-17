@@ -13,35 +13,35 @@ import { pinnedAnchorTransform } from '@/lib/preview-coords'
 const MIN_VISIBLE_OUTLINE_PX = 0.5
 
 /**
- * Per-caption line-height ratio used by `estimateOverlayHeightPx` for the
- * stacking gap between successive captions.  Tuned for the libass burn-in,
- * NOT for the CSS box of a single caption:
+ * REQ-20260614-001 補遺⑳ — empirically-derived libass line-height formula.
  *
- *   - The root `<span>` itself paints with Tailwind's `leading-snug`
- *     (= 1.375), so the caption's own visual height is unchanged whatever
- *     value we pick here.  Only the *gap* between stacked captions moves.
- *   - libass adds its own line gap on top of font metrics when it stacks
- *     overlapping events, so a CSS-faithful 1.375 produces a stack that
- *     reads as visibly "tighter" than the burn-in.  VERIFY-20260613-001
- *     §4 confirmed this empirically (the gap discrepancy compounds with
- *     stack depth).
- *   - An over-estimate brings successive captions' centres into closer
- *     alignment with the burn-in output, at the cost of leaving a touch
- *     more empty space between captions than the CSS box would suggest.
- *     Within the "approximate preview" disclaimer (RES-20260612-003 §Q3)
- *     that trade is the right way round — under-estimating the gap
- *     silently overlapped captions (= "ghost" preview), while
- *     slightly over-estimating just spaces them out.
+ * Replaces the prior `STACK_LINE_HEIGHT_RATIO` knob (1.6 → 1.8 history in
+ * 補遺⑬) with values measured directly from ffmpeg/libass burn-ins.
+ * Test-results/metric-probe/{A..D,bord0,bord20,fs100} probed Noto Sans JP
+ * SemiBold at `\fs100` / `\fs150` × `\bord0` / `\bord10` / `\bord20` ×
+ * single / multiline / stack / multi+stack and matched both pitches
+ * exactly:
  *
- * REQ-20260614-001 補遺⑬: 1.6 → 1.8 に引き上げ (補遺⑫ D で確認された
- * 「複製クリップが部分的に重なるゴースト現象」を軽減するため).  既知の
- * 候補値は `1.6` (旧、ゴーストあり) / `1.8` (現、補遺⑬ で採用) / `2.0` /
- * `2.2`.  オーナーが複製・重なりサンプルでプレビューと焼き込みを並べて
- * 比較し、必要に応じてこの定数を再調整する手順 (RES-20260614-001-
- * followup13 §2).  REQ-20260613-006 §3 の「knob であり derivation では
- * ない」原則は不変。
+ *   - within-Dialogue line pitch (= "\N" pitch)
+ *       = entry.fontSizePx        (font-independent for USE_TYPO_METRICS=false
+ *                                  CJK fonts; both Noto/Dela have winAsc=1160
+ *                                  winDesc=288 winHeight=1448 unitsPerEm=1000)
+ *   - between-Dialogue collision gap (= libass fix_collisions padding)
+ *       = 2 × entry.outlineThicknessPx
+ *                                  (the gap collapses to 0 when \bord=0 and
+ *                                  scales linearly with \bord; isolated by
+ *                                  the bord0/bord20 probes)
+ *
+ * Therefore each entry's "collision-aware height" (= push offset for the
+ * next stacking entry) is:
+ *
+ *   heightAss = lineCount × entry.fontSizePx + 2 × entry.outlineThicknessPx
+ *
+ * and the in-line CSS `line-height` for multi-line rendering is `1 /
+ * libassScale` (= winHeight / unitsPerEm ≈ 1.448 for Noto/Dela), set inline
+ * on the root `<span>` so the CSS line-box pitch matches the libass
+ * within-Dialogue pitch one-to-one.
  */
-const STACK_LINE_HEIGHT_RATIO = 1.8
 
 export interface SubtitleOverlayProps {
   entry: SubtitleEntry
@@ -77,32 +77,26 @@ export interface SubtitleOverlayProps {
 }
 
 /**
- * REQ-20260613-004: estimate the rendered pixel height of a SubtitleOverlay
- * for stacking purposes.  Pure function — no DOM measurement — so the
- * caller can compute cumulative offsets synchronously per render.
+ * REQ-20260614-001 補遺⑳ — estimate the rendered CSS-pixel height of an
+ * overlay for collision-stack computation.  Pure function so the caller
+ * can memoise per render.
  *
- *   fontSizePx_rendered = entry.fontSizePx * libassScale * scale
- *   lineCount           = 1 + count of `\N` in entry.text
- *   height              = fontSizePx_rendered * STACK_LINE_HEIGHT_RATIO * lineCount
+ *   heightAss = lineCount × entry.fontSizePx + 2 × entry.outlineThicknessPx
+ *   return    = heightAss × scale          // ASS → CSS preview pixels
  *
- * This is intentionally an approximation:
- *   - It ignores the ascender / descender padding browsers add around the
- *     glyph box, so very tall outlines extend past the estimated bottom.
- *   - It assumes every line is exactly `fontSizePx * line-height` tall,
- *     which holds for Latin glyphs but not perfectly for CJK with mixed
- *     vocal-marker heights.
- *   - It does not account for libass-specific spacing between stacked
- *     captions (libass adds a small gap; we use 0 — captions touch).
+ * Derivation is metric-empirical (see header block above): both terms came
+ * from probing ffmpeg/libass burn-ins of Noto Sans JP at `\fs100` / `\fs150`
+ * with `\bord0` / `\bord10` / `\bord20` and matched the resulting pitches
+ * exactly.  The function is intentionally font-independent — the
+ * dependence on `activeFontId` / `videoWidthPx` is kept in the signature
+ * for API stability and for future per-font calibration (if a future
+ * non-CJK font with USE_TYPO_METRICS=true is added the libass denominator
+ * would shift to typoAsc+typoDesc and the per-line term would change).
  *
- * That said, the formula is exactly what the browser's CSS box height
- * resolves to (font-size * line-height * line-count) for an inline-block
- * with `leading-snug`, so within the "preview is approximate" disclaimer
- * the stacking position is faithful enough that the user can see
- *   (a) HOW MANY captions overlap,
- *   (b) IN WHAT ORDER (= same as the burn-in output), and
- *   (c) ROUGHLY WHERE each one will sit.
- * Pixel-perfect alignment with libass is explicitly out of scope per
- * REQ-20260613-004 §1.
+ * The returned value is the **collision push** used by
+ * `computeFixedStackOffsets` — it is therefore the entry's lineCount-many
+ * line cells PLUS the libass collision gap (`2 × outline`) so that the
+ * next entry's win-box bottom lands exactly where libass would place it.
  */
 export function estimateOverlayHeightPx(
   entry: SubtitleEntry,
@@ -110,13 +104,17 @@ export function estimateOverlayHeightPx(
   videoWidthPx: number,
   containerWidthPx: number,
 ): number {
-  const resolvedFontId = isFontId(entry.fontId) ? entry.fontId : activeFontId
-  const libassScale = getLibassScaleFor(resolvedFontId)
+  // Per-row font override is irrelevant for the height because the line
+  // pitch comes from `\fs` alone (font-independent in libass for the CJK
+  // fonts in our registry), but we reference it once so the signature
+  // stays meaningful and future per-font calibration has a hook.
+  void activeFontId
   const scale = containerWidthPx / videoWidthPx
-  const renderedFontSizePx = entry.fontSizePx * libassScale * scale
   // `\N` is the persisted line-break marker (RES-20260612-002 Q2).
   const lineCount = 1 + (entry.text.match(/\\N/g)?.length ?? 0)
-  return renderedFontSizePx * STACK_LINE_HEIGHT_RATIO * lineCount
+  const heightAss =
+    lineCount * entry.fontSizePx + 2 * entry.outlineThicknessPx
+  return heightAss * scale
 }
 
 /**
@@ -270,12 +268,20 @@ export function SubtitleOverlay({
   // strictly visual.
   const interactive = onPointerDown !== undefined
 
+  // REQ-20260614-001 補遺⑳ — CSS line-height set to `1 / libassScale`
+  // (= winHeight / unitsPerEm ≈ 1.448 for Noto/Dela).  This makes the
+  // browser's line-box pitch match the libass within-Dialogue `\N` pitch
+  // exactly (= fontSize ASS px per line), so multi-line previews stack
+  // their internal lines the same way the burn-in does.  Replaces the
+  // prior `leading-snug` (= 1.375) which left a measurable gap.
+  const lineHeight = libassScale > 0 ? 1 / libassScale : 1.448
+
   return (
     <span
       className={
         interactive
-          ? 'absolute leading-snug pointer-events-auto cursor-move select-none'
-          : 'absolute leading-snug pointer-events-none'
+          ? 'absolute pointer-events-auto cursor-move select-none'
+          : 'absolute pointer-events-none'
       }
       onPointerDown={interactive
         ? (e) => onPointerDown!(e, entry)
@@ -286,6 +292,7 @@ export function SubtitleOverlay({
         fontFamily: `'${fontMeta.cssFontFamily}'`,
         fontWeight: fontMeta.weight,
         fontSize:   `${fontSizePx}px`,
+        lineHeight,
         color:      entry.textColorHex,
         WebkitTextStrokeWidth: showOutline ? `${strokeWidthPx}px` : undefined,
         WebkitTextStrokeColor: showOutline ? entry.outlineColorHex : undefined,
