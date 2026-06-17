@@ -204,13 +204,25 @@ export function SubtitleOverlay({
   // pinned point), implemented via CSS transform.
   const isPinned = entry.posX !== undefined && entry.posY !== undefined
 
-  // REQ-20260613-004 + REQ-20260613-016 Phase 3: `stackOffsetPx` is the
-  // collision offset (in ASS coordinate space) BEYOND `entry.verticalMarginPx`.
-  // The CSS `bottom` / `top` therefore = (entry's own MarginV + collision
-  // offset) * scale.  When undef → 0 → standalone caption sits at its own
-  // MarginV exactly.  Pinned rows skip stack offset entirely (excluded from
+  // REQ-20260614-001 補遺⑲ Phase 1 — `stackOffsetPx` is the collision
+  // offset BEYOND `entry.verticalMarginPx`, in **CSS preview pixels**.
+  //
+  // The value comes from `computeFixedStackOffsets` whose `heightOf` is
+  // `estimateOverlayHeightPx` — which already multiplies by `scale` when
+  // computing `renderedFontSizePx = fontSizePx * libassScale * scale`.
+  // The earlier code multiplied by `scale` a second time here, which
+  // collapsed the stack offset to a fifth of its intended value at the
+  // typical preview scale ≈0.2 and caused stacked captions to overlap
+  // ("ゴースト気味") in the preview while the burn-in (libass) stacked
+  // them correctly.  See RES-20260614-001-followup18 §C-6 for the unit
+  // trace.
+  //
+  // `marginVPx` is the entry's own MarginV converted ASS→CSS (line 189),
+  // so the two terms now share the CSS-pixel space and add directly.
+  // When undef → 0 → standalone caption sits at its own MarginV exactly.
+  // Pinned rows skip stack offset entirely (excluded from
   // computeFixedStackOffsets per Phase 3).
-  const stackOffset = (stackOffsetPx ?? 0) * scale
+  const stackOffset = stackOffsetPx ?? 0
 
   const textAlign = (
     entry.horizontalPosition === 'center' ? 'center' :
