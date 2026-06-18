@@ -8,8 +8,14 @@ import { cn } from '@/lib/utils'
 // previous focus-visible:ring-2 produced.  Inputs keep their focus
 // indication (see ui/input.tsx + time-input.tsx); only button-like
 // elements drop the ring.
+//
+// REQ-20260615-003: density / radius / structure tuned to shadcn "mira"
+// (compact).  Heights, padding, gap, radius, and icon sizing all shrink
+// one notch versus the pre-mira defaults; colour tokens and the 6-variant
+// MOJIOKO set (primary / secondary / ghost / danger / icon / link) are
+// preserved so call sites do not change.
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-1.5 whitespace-nowrap font-medium transition-colors duration-150 focus:outline-none focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40',
+  'inline-flex items-center justify-center gap-1 whitespace-nowrap font-medium transition-colors duration-150 focus:outline-none focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40 [&_svg:not([class*=size-])]:size-3.5',
   {
     variants: {
       variant: {
@@ -21,7 +27,7 @@ const buttonVariants = cva(
          *  (#09090b, near-black neutral) gives AAA contrast (~9.4:1) AND a
          *  neutral hue that snaps off the green — the label now reads as a
          *  dark button label rather than fading into the green plate. */
-        primary: 'bg-primary text-fg-inverse hover:bg-primary-hover active:bg-primary-active rounded-lg',
+        primary: 'bg-primary text-fg-inverse hover:bg-primary-hover active:bg-primary-active rounded-md',
         /** Secondary emphasis — light background. */
         secondary: 'bg-surface-inverse-0 text-fg-inverse hover:bg-surface-inverse-1 active:bg-surface-inverse-2 rounded-md',
         /** Tertiary / ghost — transparent with border. */
@@ -36,11 +42,11 @@ const buttonVariants = cva(
         link: 'bg-transparent text-fg-tertiary hover:text-fg-primary underline-offset-4 hover:underline'
       },
       size: {
-        sm: 'h-7 px-3 py-1.5 text-body-sm',
-        md: 'h-9 px-4 py-2.5 text-body',
-        lg: 'h-11 px-5 py-3 text-body',
+        sm: 'h-6 px-2 text-caption',
+        md: 'h-7 px-2.5 text-body-sm',
+        lg: 'h-9 px-3 text-body-sm',
         /** Square icon button. */
-        icon: 'h-8 w-8 p-0 text-body'
+        icon: 'h-7 w-7 p-0 text-body-sm'
       }
     },
     defaultVariants: {

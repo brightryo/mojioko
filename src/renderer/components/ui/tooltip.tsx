@@ -15,7 +15,8 @@ const TooltipContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-50 max-w-xs overflow-hidden rounded-md border border-line-strong bg-surface-1 px-2.5 py-1.5 text-caption text-fg-secondary shadow-2xl shadow-black/40 animate-in fade-in-0 zoom-in-95',
+        // REQ-20260615-003 mira density: px-2.5 stays, py-1.5 → py-1, gap-1.5 added (for kbd hints).
+        'z-50 inline-flex max-w-xs items-center gap-1.5 overflow-hidden rounded-md border border-line-strong bg-surface-1 px-2.5 py-1 text-caption text-fg-secondary shadow-2xl shadow-black/40 animate-in fade-in-0 zoom-in-95',
         className
       )}
       {...props}

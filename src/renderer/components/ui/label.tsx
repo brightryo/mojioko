@@ -8,6 +8,10 @@ const Label = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <LabelPrimitive.Root
     ref={ref}
+    // REQ-20260615-003: MOJIOKO's uppercase chrome label is preserved (a deliberate brand
+    // decision — mira's plain text-xs/relaxed lowercase label would erase the visual
+    // hierarchy between section labels and inline body copy).  Only `leading-none` (mira
+    // alignment) is retained from the previous version.
     className={cn('text-label font-medium uppercase tracking-wider text-muted-foreground leading-none', className)}
     {...props}
   />

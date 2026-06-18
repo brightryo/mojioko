@@ -17,15 +17,16 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      'flex cursor-default select-none items-center rounded-md px-2 py-1.5 text-body text-fg-primary outline-none',
+      // REQ-20260615-003 mira density: py-1.5 → py-1, text-body → text-body-sm, min-h-7 floor, gap-2.
+      'flex cursor-default select-none items-center gap-2 min-h-7 rounded-md px-2 py-1 text-body-sm text-fg-primary outline-none',
       'focus:bg-surface-2 data-[state=open]:bg-surface-2',
-      inset && 'pl-8',
+      inset && 'pl-7',
       className
     )}
     {...props}
   >
     {children}
-    <ChevronRight className="ml-auto h-4 w-4 opacity-50" />
+    <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-50" />
   </DropdownMenuPrimitive.SubTrigger>
 ))
 DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName
@@ -37,7 +38,8 @@ const DropdownMenuSubContent = React.forwardRef<
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      'z-50 min-w-[8rem] overflow-hidden rounded-md border border-line-strong bg-surface-1 p-1 shadow-2xl shadow-black/40',
+      // REQ-20260615-003 mira density: rounded-md → rounded-lg, min-w-[8rem] → min-w-32.
+      'z-50 min-w-32 overflow-hidden rounded-lg border border-line-strong bg-surface-1 p-1 shadow-2xl shadow-black/40',
       'data-[state=open]:animate-in data-[state=closed]:animate-out',
       'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
       'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -59,7 +61,8 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-50 min-w-[10rem] overflow-hidden rounded-md border border-line-strong bg-surface-1 p-1 shadow-2xl shadow-black/40',
+        // REQ-20260615-003 mira density: rounded-md → rounded-lg, min-w-[10rem] → min-w-32.
+        'z-50 min-w-32 overflow-hidden rounded-lg border border-line-strong bg-surface-1 p-1 shadow-2xl shadow-black/40',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -80,11 +83,12 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center rounded-md px-2 py-1.5 text-body text-fg-primary outline-none',
+      // REQ-20260615-003 mira density: py-1.5 → py-1, text-body → text-body-sm, min-h-7 floor, gap-2.
+      'relative flex cursor-default select-none items-center gap-2 min-h-7 rounded-md px-2 py-1 text-body-sm text-fg-primary outline-none',
       'transition-colors duration-100',
       'focus:bg-surface-2 focus:text-fg-primary',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
-      inset && 'pl-8',
+      inset && 'pl-7',
       className
     )}
     {...props}
@@ -99,7 +103,8 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-body text-fg-primary outline-none',
+      // REQ-20260615-003 mira density: py-1.5 → py-1, pl-8 → pl-7, text-body → text-body-sm, min-h-7.
+      'relative flex cursor-default select-none items-center min-h-7 rounded-md py-1 pl-7 pr-2 text-body-sm text-fg-primary outline-none',
       'transition-colors duration-100',
       'focus:bg-surface-2 focus:text-fg-primary',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
@@ -110,7 +115,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   >
     <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-primary" />
+        <Check className="h-3.5 w-3.5 text-primary" />
       </DropdownMenuPrimitive.ItemIndicator>
     </span>
     {children}
@@ -125,7 +130,8 @@ const DropdownMenuRadioItem = React.forwardRef<
   <DropdownMenuPrimitive.RadioItem
     ref={ref}
     className={cn(
-      'relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-body text-fg-primary outline-none',
+      // REQ-20260615-003 mira density: py-1.5 → py-1, pl-8 → pl-7, text-body → text-body-sm, min-h-7.
+      'relative flex cursor-default select-none items-center min-h-7 rounded-md py-1 pl-7 pr-2 text-body-sm text-fg-primary outline-none',
       'transition-colors duration-100',
       'focus:bg-surface-2 focus:text-fg-primary',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
@@ -149,7 +155,7 @@ const DropdownMenuLabel = React.forwardRef<
 >(({ className, inset, ...props }, ref) => (
   <DropdownMenuPrimitive.Label
     ref={ref}
-    className={cn('px-2 py-1.5 text-caption font-medium text-fg-muted', inset && 'pl-8', className)}
+    className={cn('px-2 py-1.5 text-caption font-medium text-fg-muted', inset && 'pl-7', className)}
     {...props}
   />
 ))
@@ -161,14 +167,16 @@ const DropdownMenuSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Separator
     ref={ref}
-    className={cn('-mx-1 my-1 h-px bg-surface-2', className)}
+    // REQ-20260615-003 mira: bg-surface-2 → bg-line/50 (lighter divider).
+    className={cn('-mx-1 my-1 h-px bg-line/50', className)}
     {...props}
   />
 ))
 DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName
 
 const DropdownMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => (
-  <span className={cn('ml-auto text-caption tracking-widest text-fg-muted', className)} {...props} />
+  // REQ-20260615-003 mira: shortcut text-caption → text-micro (mira uses 10px / 0.625rem).
+  <span className={cn('ml-auto text-micro tracking-widest text-fg-muted', className)} {...props} />
 )
 DropdownMenuShortcut.displayName = 'DropdownMenuShortcut'
 
