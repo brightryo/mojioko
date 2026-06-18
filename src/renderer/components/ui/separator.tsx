@@ -11,7 +11,8 @@ const Separator = React.forwardRef<
     decorative={decorative}
     orientation={orientation}
     className={cn(
-      'shrink-0 bg-surface-2/50',
+      // REQ-20260615-003 mira: bg-surface-2/50 → bg-line (mira uses bg-border, sharper).
+      'shrink-0 bg-line',
       orientation === 'horizontal' ? 'h-px w-full' : 'h-full w-px',
       className
     )}

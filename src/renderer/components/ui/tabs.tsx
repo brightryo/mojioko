@@ -5,15 +5,12 @@ import { cn } from '@/lib/utils'
 const Tabs = TabsPrimitive.Root
 
 /**
- * Underline-style tab strip — the standard "this is a tab bar" pattern.
- * A 1-px zinc-800 baseline under the whole list reads as a tab track even
- * on the dialog's zinc-900 surface (the old rounded-chip style shared the
- * dialog background, so non-selected tabs looked like plain text).
- *
- * Each TabsTrigger renders a 2-px transparent border-bottom that flips to
- * the green accent on the active tab.  -mb-px overlaps the list baseline
- * so the active underline reads as a solid bar instead of two stacked
- * lines.  REQ-019 #2.
+ * REQ-20260615-003: mira "compact pill" tab strip.  The MOJIOKO underline
+ * style (REQ-019 #2) is replaced with mira's segmented-pill default — a
+ * rounded-lg track of bg-surface-2/50 with rounded-md pill triggers; the
+ * active trigger lifts onto bg-surface-0 (matches the dialog surface) for
+ * a Linear / Raycast-style segmented control.  Reverts cleanly with the
+ * mira application commit.
  */
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
@@ -22,7 +19,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      'inline-flex items-center gap-1 border-b border-line w-full',
+      'inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-surface-2/50 p-[3px] text-fg-tertiary',
       className
     )}
     {...props}
@@ -37,13 +34,13 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      'relative inline-flex items-center justify-center whitespace-nowrap',
-      'px-3 py-2 text-body font-medium -mb-px',
-      'border-b-2 border-transparent transition-colors duration-150',
-      'text-fg-tertiary hover:text-fg-primary hover:border-line-strong',
-      'focus:outline-none focus-visible:outline-none rounded-t-sm',
+      'inline-flex items-center justify-center gap-1.5 whitespace-nowrap',
+      'rounded-md border border-transparent px-2 py-0.5 text-body-sm font-medium',
+      'transition-colors duration-150',
+      'hover:text-fg-primary',
+      'focus:outline-none focus-visible:outline-none',
       'disabled:pointer-events-none disabled:opacity-40',
-      'data-[state=active]:text-fg-primary data-[state=active]:border-primary',
+      'data-[state=active]:bg-surface-0 data-[state=active]:text-fg-primary data-[state=active]:border-line',
       className
     )}
     {...props}
@@ -58,7 +55,7 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      'mt-4 focus:outline-none focus-visible:outline-none rounded-md',
+      'mt-3 focus:outline-none focus-visible:outline-none rounded-md',
       className
     )}
     {...props}

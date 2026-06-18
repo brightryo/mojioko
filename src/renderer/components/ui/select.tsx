@@ -14,7 +14,8 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-9 w-full items-center justify-between rounded-md border border-line bg-surface-0 px-3.5 py-2 text-body text-fg-primary transition-colors duration-150',
+      // REQ-20260615-003 mira density: h-9 → h-7, px-3.5 py-2 → px-2, text-body → text-body-sm, gap added.
+      'flex h-7 w-full items-center justify-between gap-1.5 rounded-md border border-line bg-surface-0 px-2 text-body-sm text-fg-primary transition-colors duration-150',
       'placeholder:text-fg-disabled',
       'hover:border-line-strong',
       'focus:outline-none focus:border-line-strong focus:ring-2 focus:ring-primary/30',
@@ -26,7 +27,7 @@ const SelectTrigger = React.forwardRef<
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
+      <ChevronDown className="h-3.5 w-3.5 opacity-50 flex-shrink-0" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ))
@@ -68,7 +69,8 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        'relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-md border border-line-strong bg-surface-1 p-1 shadow-2xl shadow-black/40',
+        // REQ-20260615-003 mira density: rounded-md → rounded-lg, min-w-[8rem] → min-w-32.
+        'relative z-50 max-h-96 min-w-32 overflow-hidden rounded-lg border border-line-strong bg-surface-1 p-1 shadow-2xl shadow-black/40',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -114,7 +116,8 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex w-full cursor-default select-none items-center rounded-md px-3 py-2 text-body text-fg-primary outline-none',
+      // REQ-20260615-003 mira density: px-3 py-2 → px-2 py-1, text-body → text-body-sm, min-h-7 floor.
+      'relative flex w-full min-h-7 cursor-default select-none items-center gap-2 rounded-md px-2 py-1 text-body-sm text-fg-primary outline-none',
       'focus:bg-surface-2 focus:text-fg-primary',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
       className
@@ -123,7 +126,7 @@ const SelectItem = React.forwardRef<
   >
     <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-primary" />
+        <Check className="h-3.5 w-3.5 text-primary" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
@@ -137,7 +140,8 @@ const SelectSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Separator
     ref={ref}
-    className={cn('-mx-1 my-1 h-px bg-surface-2', className)}
+    // REQ-20260615-003 mira: bg-surface-2 → bg-line/50 (lighter divider).
+    className={cn('-mx-1 my-1 h-px bg-line/50', className)}
     {...props}
   />
 ))

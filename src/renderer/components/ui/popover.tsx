@@ -16,7 +16,8 @@ const PopoverContent = React.forwardRef<
       align={align}
       sideOffset={sideOffset}
       className={cn(
-        'z-50 min-w-[8rem] rounded-lg border border-line-strong bg-surface-1 p-2 shadow-2xl shadow-black/40',
+        // REQ-20260615-003 mira density: min-w-[8rem] → min-w-32, p-2 → p-2.5.
+        'z-50 min-w-32 rounded-lg border border-line-strong bg-surface-1 p-2.5 shadow-2xl shadow-black/40',
         'outline-none',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',

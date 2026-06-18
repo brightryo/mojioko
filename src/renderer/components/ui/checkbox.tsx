@@ -22,7 +22,8 @@ const Checkbox = React.forwardRef<
       // --separator-strong is reused here for the unchecked border because
       // --border (= --secondary, faint) is too quiet for a small interactive
       // affordance; the var pairing matches the Step 3 Support button hover.
-      'peer h-4 w-4 shrink-0 rounded-[3px] border border-[hsl(var(--separator-strong))] ring-offset-background',
+      // REQ-20260615-003 mira: size-4 stays, rounded-[3px] → rounded-[4px] (matches mira).
+      'peer size-4 shrink-0 rounded-[4px] border border-[hsl(var(--separator-strong))] ring-offset-background',
       'focus:outline-none focus-visible:outline-none',
       'disabled:cursor-not-allowed disabled:opacity-40',
       'data-[state=checked]:bg-primary data-[state=checked]:border-primary',
@@ -33,10 +34,11 @@ const Checkbox = React.forwardRef<
     {...props}
   >
     <CheckboxPrimitive.Indicator className="flex items-center justify-center text-primary-foreground">
+      {/* REQ-20260615-003 mira: indicator h-3 w-3 → h-3.5 w-3.5. */}
       {props.checked === 'indeterminate' ? (
-        <Minus className="h-3 w-3" strokeWidth={3} />
+        <Minus className="h-3.5 w-3.5" strokeWidth={3} />
       ) : (
-        <Check className="h-3 w-3" strokeWidth={3} />
+        <Check className="h-3.5 w-3.5" strokeWidth={3} />
       )}
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>

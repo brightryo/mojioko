@@ -24,9 +24,10 @@ const ScrollBar = React.forwardRef<
     ref={ref}
     orientation={orientation}
     className={cn(
+      // REQ-20260615-003 mira: scrollbar w-2 → w-2.5, h-2 → h-2.5 to match mira's data-vertical:w-2.5.
       'flex touch-none select-none transition-colors',
-      orientation === 'vertical' && 'h-full w-2 border-l border-l-transparent p-[1px]',
-      orientation === 'horizontal' && 'h-2 flex-col border-t border-t-transparent p-[1px]',
+      orientation === 'vertical' && 'h-full w-2.5 border-l border-l-transparent p-[1px]',
+      orientation === 'horizontal' && 'h-2.5 flex-col border-t border-t-transparent p-[1px]',
       className
     )}
     {...props}
