@@ -26,7 +26,7 @@ export default function SplashRoute() {
 
   return (
     <motion.div
-      className="flex h-full w-full flex-col items-center justify-center bg-zinc-950"
+      className="flex h-full w-full flex-col items-center justify-center bg-surface-0"
       initial={{ opacity: 1 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

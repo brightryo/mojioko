@@ -37,7 +37,7 @@ export function AppShell({
   children
 }: AppShellProps) {
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-zinc-950">
+    <div className="flex h-full flex-col overflow-hidden bg-surface-0">
       <Breadcrumb currentStep={currentStep} appVersion={appVersion} />
       <main className={cn('flex-1', noScroll ? 'overflow-hidden' : 'overflow-y-auto')}>
         <div

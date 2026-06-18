@@ -247,7 +247,7 @@ export function AudioPreviewPanel() {
       </div>
 
       {/* Body — centred play / pause button takes the flex-1 area. */}
-      <div className="flex-1 min-h-0 flex items-center justify-center p-4 bg-zinc-950">
+      <div className="flex-1 min-h-0 flex items-center justify-center p-4 bg-surface-0">
         {hasError ? (
           <span className="text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
         ) : (

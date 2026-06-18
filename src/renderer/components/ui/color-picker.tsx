@@ -180,13 +180,13 @@ export function ColorPicker({
           popover via onInteractOutside, but REQ-033 asks for a visible
           dismiss control. */}
       <div className="flex items-start justify-between">
-        <p className="text-label font-medium uppercase tracking-wider text-zinc-500">
+        <p className="text-label font-medium uppercase tracking-wider text-fg-muted">
           {t('colorPicker.basic')}
         </p>
         <button
           type="button"
           onClick={() => handleOpenChange(false)}
-          className="-mt-0.5 -mr-1 flex h-5 w-5 items-center justify-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition-colors"
+          className="-mt-0.5 -mr-1 flex h-5 w-5 items-center justify-center rounded text-fg-muted hover:bg-surface-2 hover:text-fg-secondary transition-colors"
           aria-label={t('colorPicker.close')}
           title={t('colorPicker.close')}
         >
@@ -212,10 +212,10 @@ export function ColorPicker({
       {onPairApply && (
         <div>
           <div className="mb-1.5 flex items-baseline gap-2">
-            <p className="text-label font-medium uppercase tracking-wider text-zinc-500">
+            <p className="text-label font-medium uppercase tracking-wider text-fg-muted">
               {t('colorPicker.pairs')}
             </p>
-            <span className="text-caption text-zinc-600">{t('colorPicker.pairsHint')}</span>
+            <span className="text-caption text-fg-disabled">{t('colorPicker.pairsHint')}</span>
           </div>
           <div className="grid grid-cols-5 gap-1.5">
             {COLOR_PAIRS.map((p) => (
@@ -233,10 +233,10 @@ export function ColorPicker({
       {/* Group 3: CUD palette (10) */}
       <div>
         <div className="mb-1.5 flex items-baseline gap-2">
-          <p className="text-label font-medium uppercase tracking-wider text-zinc-500">
+          <p className="text-label font-medium uppercase tracking-wider text-fg-muted">
             {t('colorPicker.cud')}
           </p>
-          <span className="text-caption text-zinc-600">{t('colorPicker.cudHint')}</span>
+          <span className="text-caption text-fg-disabled">{t('colorPicker.cudHint')}</span>
         </div>
         <div className="grid grid-cols-10 gap-1.5">
           {CUD_COLORS.map((c) => (
@@ -253,7 +253,7 @@ export function ColorPicker({
       {/* Recent colors (capped to 5 by useUiStore.addRecentColor) */}
       {recentColors.length > 0 && (
         <div>
-          <p className="mb-1.5 text-label font-medium uppercase tracking-wider text-zinc-500">
+          <p className="mb-1.5 text-label font-medium uppercase tracking-wider text-fg-muted">
             {t('colorPicker.recent')}
           </p>
           <div className="flex gap-1.5">
@@ -287,9 +287,9 @@ export function ColorPicker({
         spellCheck={false}
         placeholder="#FFFFFF"
         className={cn(
-          'h-8 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-center',
-          'font-mono text-body-sm text-zinc-100',
-          'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30'
+          'h-8 w-full rounded-md border border-line-strong bg-surface-0 px-2 text-center',
+          'font-mono text-body-sm text-fg-primary',
+          'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30'
         )}
       />
     </PopoverContent>
@@ -307,9 +307,9 @@ export function ColorPicker({
             type="button"
             disabled={disabled}
             className={cn(
-              'h-6 w-6 flex-shrink-0 rounded border border-zinc-700',
+              'h-6 w-6 flex-shrink-0 rounded border border-line-strong',
               'transition-all duration-150',
-              'hover:border-zinc-500 hover:scale-110',
+              'hover:border-fg-muted hover:scale-110',
               'focus:outline-none focus-visible:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-40',
               className
@@ -330,8 +330,8 @@ export function ColorPicker({
           type="button"
           disabled={disabled}
           className={cn(
-            'flex h-9 w-full items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2.5',
-            'transition-colors duration-150 hover:border-zinc-700',
+            'flex h-9 w-full items-center gap-2 rounded-md border border-line bg-surface-0 px-2.5',
+            'transition-colors duration-150 hover:border-line-strong',
             'focus:outline-none focus-visible:outline-none',
             'disabled:cursor-not-allowed disabled:opacity-40',
             className
@@ -339,10 +339,10 @@ export function ColorPicker({
           aria-label={value}
         >
           <span
-            className="h-5 w-5 flex-shrink-0 rounded border border-zinc-700"
+            className="h-5 w-5 flex-shrink-0 rounded border border-line-strong"
             style={{ backgroundColor: value }}
           />
-          <span className="font-mono text-body-sm text-zinc-300">{normalise(value)}</span>
+          <span className="font-mono text-body-sm text-fg-secondary">{normalise(value)}</span>
         </button>
       </PopoverTrigger>
       {pickerContent}
@@ -369,8 +369,8 @@ function ColorSwatch({ color, isSelected, onClick }: ColorSwatchProps) {
         'h-5 w-5 flex-shrink-0 rounded transition-transform duration-100',
         'hover:scale-110 focus:outline-none',
         isSelected
-          ? 'ring-2 ring-green-500 ring-offset-1 ring-offset-zinc-900'
-          : 'ring-1 ring-zinc-700/60'
+          ? 'ring-2 ring-primary ring-offset-1 ring-offset-surface-1'
+          : 'ring-1 ring-line-strong/60'
       )}
       style={{ backgroundColor: color }}
       aria-label={color}
@@ -400,9 +400,9 @@ function PairSwatch({ pair, tooltip, onClick }: PairSwatchProps) {
       title={tooltip}
       aria-label={tooltip}
       className={cn(
-        'relative flex h-8 items-center justify-center rounded ring-1 ring-zinc-700/60',
+        'relative flex h-8 items-center justify-center rounded ring-1 ring-line-strong/60',
         'transition-transform duration-100 hover:scale-105 focus:outline-none',
-        'hover:ring-zinc-500'
+        'hover:ring-fg-muted'
       )}
       style={{ backgroundColor: '#404040' }}
     >

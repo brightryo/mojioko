@@ -742,7 +742,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             className={cn(
               'inline-flex items-center justify-center',
               'h-7 w-7 rounded border bg-input text-foreground',
-              'border-border hover:border-zinc-700 transition-colors duration-150',
+              'border-border hover:border-line-strong transition-colors duration-150',
               'focus:outline-none focus-visible:outline-none'
             )}
           >
@@ -756,7 +756,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             className={cn(
               'inline-flex items-center justify-center',
               'h-7 w-7 rounded border bg-input text-foreground',
-              'border-border hover:border-zinc-700 transition-colors duration-150',
+              'border-border hover:border-line-strong transition-colors duration-150',
               'focus:outline-none focus-visible:outline-none'
             )}
           >
@@ -794,13 +794,13 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
           className={cn(
             'inline-flex items-center justify-between gap-1.5',
             'h-7 px-2 rounded border bg-input text-body-sm text-foreground',
-            'border-border hover:border-zinc-700',
+            'border-border hover:border-line-strong',
             'focus:outline-none focus-visible:outline-none'
           )}
           aria-label={t('bulkRowFont.label')}
         >
           <span>{t('bulkRowFont.label')}</span>
-          <ChevronDown className="h-3 w-3 text-zinc-500" aria-hidden="true" />
+          <ChevronDown className="h-3 w-3 text-fg-muted" aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[260px] p-1">
@@ -808,27 +808,27 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
           <button
             type="button"
             onClick={() => pick(undefined)}
-            className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-zinc-100 hover:bg-accent/40 cursor-pointer"
+            className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-fg-primary hover:bg-accent/40 cursor-pointer"
           >
             <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="flex-1 min-w-0">
               <span className="block leading-tight">{t('bulkRowFont.useDefault')}</span>
-              <span className="block text-caption text-zinc-500 truncate">
+              <span className="block text-caption text-fg-muted truncate">
                 {getFontMeta(activeFontId).displayName}
               </span>
             </span>
           </button>
 
-          <div className="my-1 h-px bg-zinc-800" />
+          <div className="my-1 h-px bg-surface-2" />
 
           {selectable.map((m) => (
             <button
               key={m.id}
               type="button"
               onClick={() => pick(m.id)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-zinc-300 hover:bg-accent/40"
+              className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-fg-secondary hover:bg-accent/40"
             >
-              <span className="h-2 w-2 rounded-full bg-zinc-600 shrink-0" aria-hidden="true" />
+              <span className="h-2 w-2 rounded-full bg-surface-4 shrink-0" aria-hidden="true" />
               <span
                 className="flex-1 min-w-0 truncate"
                 style={{ fontFamily: `'${m.cssFontFamily}'`, fontWeight: m.weight }}
@@ -837,7 +837,7 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
               </span>
               {m.lacksRareKanji && (
                 <span
-                  className="inline-flex items-center shrink-0 text-amber-400/80"
+                  className="inline-flex items-center shrink-0 text-warning-soft/80"
                   title={t('step1:fontPicker.note.missingRareKanjiHelp')}
                 >
                   <AlertCircle className="h-3 w-3" aria-hidden="true" />

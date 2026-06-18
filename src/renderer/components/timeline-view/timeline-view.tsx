@@ -204,14 +204,14 @@ function RulerImpl({ pixelsPerSec, totalSec, onSeek, onScrubEnd }: RulerProps) {
         className="absolute top-0 bottom-0 flex flex-col items-start"
         style={{ left: `${xPx}px` }}
       >
-        <div className="h-full w-px bg-zinc-700/60" />
+        <div className="h-full w-px bg-surface-3/60" />
         {/* REQ-071 Phase 3.6: ruler labels lifted text-micro (10) ->
             text-caption (12) so the tick numbers (0:00, 0:02, ...) are
             actually readable.  chooseRulerStepSec keeps a ~100-px gap
             between ticks; a 12-px "0:00.0" label is ~45 px wide, so labels
             still don't collide at the densest sub-second zoom levels.  No
             change to chooseRulerStepSec was needed. */}
-        <span className="absolute top-1 left-1 text-caption font-mono tabular-nums text-zinc-500 select-none">
+        <span className="absolute top-1 left-1 text-caption font-mono tabular-nums text-fg-muted select-none">
           {formatRulerLabel(sec, stepSec)}
         </span>
       </div>
@@ -225,7 +225,7 @@ function RulerImpl({ pixelsPerSec, totalSec, onSeek, onScrubEnd }: RulerProps) {
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
-      className="relative cursor-ew-resize bg-zinc-900 border-b border-zinc-800 touch-none select-none"
+      className="relative cursor-ew-resize bg-surface-1 border-b border-line touch-none select-none"
       style={{ width: `${widthPx}px`, height: `${RULER_HEIGHT_PX}px` }}
     >
       {ticks}
@@ -389,7 +389,7 @@ function BlockImpl({
           onPointerDown={handleEdgePointerDown('resize-start')}
           className={cn(
             'absolute top-0 bottom-0 left-0 z-10 cursor-ew-resize',
-            'hover:bg-green-500/40 transition-colors duration-100'
+            'hover:bg-primary/40 transition-colors duration-100'
           )}
           style={{ width: `${RESIZE_HANDLE_PX}px` }}
         />
@@ -406,17 +406,17 @@ function BlockImpl({
           'absolute inset-0 flex flex-col justify-center gap-0.5 px-2 py-1 rounded-md text-left',
           'transition-colors duration-150 select-none overflow-hidden',
           'focus:outline-none focus-visible:outline-none',
-          'bg-zinc-700/70 text-zinc-100 border border-zinc-600/70',
-          'hover:bg-zinc-700 hover:border-zinc-500',
-          entry.isEdited && !entry.isDeleted && 'bg-amber-400/15 border-amber-400/40 hover:bg-amber-400/25',
-          isOverflow && !entry.isDeleted && 'bg-red-500/15 border-red-500/40 hover:bg-red-500/25',
+          'bg-surface-3/70 text-fg-primary border border-surface-4/70',
+          'hover:bg-surface-3 hover:border-fg-muted',
+          entry.isEdited && !entry.isDeleted && 'bg-warning-soft/15 border-warning-soft/40 hover:bg-warning-soft/25',
+          isOverflow && !entry.isDeleted && 'bg-destructive/15 border-destructive/40 hover:bg-destructive/25',
           // REQ-20260614-001 補遺⑬: 再生アクティブ (sky) ハイライトは
           // 廃止。`focusedRowId` 自体は再生中の一覧自動スクロール (subtitle-
           // table.tsx) を駆動するため残してあるが、視覚的な色付けは行わない。
           // 状態色は白 (通常) / 黄 (編集済み) / 赤 (overflow) / 緑 (ユーザー
           // 選択) の 4 色のみ。
-          isUserSelected && 'ring-2 ring-green-500 border-green-500 text-zinc-50',
-          isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-green-500/15',
+          isUserSelected && 'ring-2 ring-primary border-primary text-fg-primary',
+          isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-primary/15',
           entry.isDeleted && 'opacity-40 line-through',
           !entry.isDeleted && 'cursor-grab active:cursor-grabbing'
         )}
@@ -427,7 +427,7 @@ function BlockImpl({
             (the user can't tell whether it's start or end), so we
             go all-or-nothing.  REQ-061. */}
         {widthPx >= TIME_ROW_MIN_BLOCK_WIDTH_PX && (
-          <div className="flex w-full items-baseline justify-between text-caption font-mono tabular-nums text-zinc-300/80 leading-none">
+          <div className="flex w-full items-baseline justify-between text-caption font-mono tabular-nums text-fg-secondary/80 leading-none">
             <span>{formatEditedTimecode(entry.startSec, cuts)}</span>
             <span>{formatEditedTimecode(entry.endSec, cuts)}</span>
           </div>
@@ -448,7 +448,7 @@ function BlockImpl({
           onPointerDown={handleEdgePointerDown('resize-end')}
           className={cn(
             'absolute top-0 bottom-0 right-0 z-10 cursor-ew-resize',
-            'hover:bg-green-500/40 transition-colors duration-100'
+            'hover:bg-primary/40 transition-colors duration-100'
           )}
           style={{ width: `${RESIZE_HANDLE_PX}px` }}
         />
@@ -515,7 +515,7 @@ function PlayheadImpl({ cuts, pixelsPerSec, totalHeightPx }: PlayheadProps) {
         left: `${leftPx}px`,
         width: '1px',
         height: `${totalHeightPx}px`,
-        background: 'rgb(239, 68, 68)' // red-500
+        background: 'hsl(var(--playhead))'
       }}
     >
       {/* Top arrow head */}
@@ -524,7 +524,7 @@ function PlayheadImpl({ cuts, pixelsPerSec, totalHeightPx }: PlayheadProps) {
         style={{
           borderLeft: '6px solid transparent',
           borderRight: '6px solid transparent',
-          borderTop: '6px solid rgb(239, 68, 68)'
+          borderTop: '6px solid hsl(var(--playhead))'
         }}
       />
     </div>
@@ -1473,13 +1473,13 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   const hasAnyVisible = visibleEntries.length > 0
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950">
+    <div className="flex flex-col h-full bg-surface-0">
       {/* Toolbar — REQ-20260614-001 補遺⑧: 2 行構成。
           Row 1 は常時表示（使い方 / ズーム / カーソル送り + 右端の
           「ツール」トグル）。Row 2 はトグルで開閉し、トリミング操作と
           吸着を含む。Row 1 に詰め込みすぎず、1 行目が最小ペイン幅でも
           折り返さないようにするのが分割の目的。 */}
-      <div className="flex flex-col flex-shrink-0 border-b border-zinc-800 bg-zinc-900">
+      <div className="flex flex-col flex-shrink-0 border-b border-line bg-surface-1">
       {/* Row 1 */}
       <div className="flex items-center justify-between gap-2 px-3 py-1.5">
         <div className="flex items-center gap-2">
@@ -1496,8 +1496,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 title={t('timeline.help.button')}
                 aria-label={t('timeline.help.button')}
                 className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded-md text-zinc-400',
-                  'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150',
+                  'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+                  'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150',
                 )}
               >
                 <HelpCircle className="h-3.5 w-3.5" />
@@ -1525,9 +1525,9 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               sideOffset={8}
               avoidCollisions
               collisionPadding={12}
-              className="w-[720px] p-4 space-y-3 text-zinc-100 max-h-[calc(100vh-40px)] overflow-y-auto"
+              className="w-[720px] p-4 space-y-3 text-fg-primary max-h-[calc(100vh-40px)] overflow-y-auto"
             >
-              <div className="text-body font-semibold text-zinc-50">
+              <div className="text-body font-semibold text-fg-primary">
                 {t('timeline.help.title')}
               </div>
               {/* REQ-127 — 2x2 grid.  Each cell is one help section; the
@@ -1536,34 +1536,34 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                   the same fold as the rest. */}
               <ul className="grid grid-cols-2 gap-x-5 gap-y-3 text-body-sm leading-relaxed">
                 <li>
-                  <div className="font-semibold text-zinc-200">
+                  <div className="font-semibold text-fg-secondary">
                     {t('timeline.help.trim.title')}
                   </div>
-                  <div className="text-zinc-400">
+                  <div className="text-fg-tertiary">
                     {t('timeline.help.trim.body')}
                   </div>
                 </li>
                 <li>
-                  <div className="font-semibold text-zinc-200">
+                  <div className="font-semibold text-fg-secondary">
                     {t('timeline.help.scissor.title')}
                   </div>
-                  <div className="text-zinc-400">
+                  <div className="text-fg-tertiary">
                     {t('timeline.help.scissor.body')}
                   </div>
                 </li>
                 <li>
-                  <div className="font-semibold text-zinc-200">
+                  <div className="font-semibold text-fg-secondary">
                     {t('timeline.help.zoom.title')}
                   </div>
-                  <div className="text-zinc-400">
+                  <div className="text-fg-tertiary">
                     {t('timeline.help.zoom.body')}
                   </div>
                 </li>
                 <li>
-                  <div className="font-semibold text-amber-300">
+                  <div className="font-semibold text-warning-faint">
                     {t('timeline.help.singleRow.title')}
                   </div>
-                  <div className="text-zinc-300">
+                  <div className="text-fg-secondary">
                     {t('timeline.help.singleRow.body')}
                   </div>
                 </li>
@@ -1577,8 +1577,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
             title={t('timeline.toolbar.zoomOut')}
             aria-label={t('timeline.toolbar.zoomOut')}
             className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-md text-zinc-400',
-              'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150',
+              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150',
               'disabled:opacity-30 disabled:pointer-events-none'
             )}
           >
@@ -1610,8 +1610,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
             title={t('timeline.toolbar.zoomIn')}
             aria-label={t('timeline.toolbar.zoomIn')}
             className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-md text-zinc-400',
-              'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150',
+              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150',
               'disabled:opacity-30 disabled:pointer-events-none'
             )}
           >
@@ -1628,7 +1628,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               below the body text on the rest of the screen.  w-[72px] →
               w-[84px] for the wider 15-px tabular digits ("130 px/秒" was
               previously ~70px, now ~80px). */}
-          <span className="font-mono tabular-nums text-body text-zinc-500 select-none w-[84px] text-center">
+          <span className="font-mono tabular-nums text-body text-fg-muted select-none w-[84px] text-center">
             {t('timeline.toolbar.zoomLevel', { pps: pixelsPerSec })}
           </span>
         </div>
@@ -1650,8 +1650,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               title={t('timeline.nav.first')}
               aria-label={t('timeline.nav.first')}
               className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md text-zinc-400',
-                'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
+                'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+                'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
               )}
             >
               <ChevronFirst className="h-3.5 w-3.5" />
@@ -1662,8 +1662,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               title={t('timeline.nav.prevBoundary')}
               aria-label={t('timeline.nav.prevBoundary')}
               className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md text-zinc-400',
-                'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
+                'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+                'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
               )}
             >
               <ChevronLeft className="h-3.5 w-3.5" />
@@ -1674,8 +1674,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               title={t('timeline.nav.nextBoundary')}
               aria-label={t('timeline.nav.nextBoundary')}
               className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md text-zinc-400',
-                'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
+                'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+                'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
               )}
             >
               <ChevronRight className="h-3.5 w-3.5" />
@@ -1686,8 +1686,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               title={t('timeline.nav.last')}
               aria-label={t('timeline.nav.last')}
               className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md text-zinc-400',
-                'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
+                'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+                'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
               )}
             >
               <ChevronLast className="h-3.5 w-3.5" />
@@ -1710,8 +1710,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               'flex h-7 w-7 items-center justify-center rounded-md',
               'transition-colors duration-150',
               toolsExpanded
-                ? 'bg-zinc-800 text-zinc-200'
-                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/60'
+                ? 'bg-surface-2 text-fg-secondary'
+                : 'text-fg-tertiary hover:text-fg-primary hover:bg-surface-2/60'
             )}
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -1725,7 +1725,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
           一旦撤回した toggle off を復活)、X は両点一括解除。実行ボタンの
           ラベルは「実行」(group label の「トリミング」と区別)。 */}
       {toolsExpanded && (
-        <div className="flex items-center gap-3 px-3 py-1.5 border-t border-zinc-800/60">
+        <div className="flex items-center gap-3 px-3 py-1.5 border-t border-line/60">
           {/* Snap toggle — Row 2 left end (補遺⑩ §修正1). */}
           <button
             type="button"
@@ -1737,8 +1737,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               'flex h-7 items-center gap-1.5 px-2 rounded-md text-body-sm font-medium',
               'border transition-colors duration-150',
               snapEnabled
-                ? 'bg-zinc-800 text-zinc-200 border-zinc-700'
-                : 'text-zinc-400 border-zinc-800 hover:text-zinc-200 hover:bg-zinc-800/50'
+                ? 'bg-surface-2 text-fg-secondary border-line-strong'
+                : 'text-fg-tertiary border-line hover:text-fg-secondary hover:bg-surface-2/50'
             )}
           >
             <Magnet className="h-3.5 w-3.5" />
@@ -1748,8 +1748,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
           {/* Trim cluster — group label + 4 buttons (始点 / 終点 / 実行 /
               X-clear-both).  X は両点のうち少なくとも片方が set の
               ときだけ表示。 */}
-          <div className="flex items-center gap-2 rounded-md border border-zinc-800 px-2 py-1">
-            <span className="text-label text-zinc-500 select-none">
+          <div className="flex items-center gap-2 rounded-md border border-line px-2 py-1">
+            <span className="text-label text-fg-muted select-none">
               {t('timeline.trim.toolbarLabel')}
             </span>
             {/* 始点 — 再押下で解除 (toggle off). 設定時は label に時刻チップ。 */}
@@ -1763,13 +1763,13 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
                 'border transition-colors duration-150',
                 pendingCutInSec !== null
-                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
-                  : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
+                  ? 'bg-warning/15 text-warning-faint border-warning/40 hover:bg-warning/25'
+                  : 'bg-surface-2 text-fg-secondary border-line-strong hover:bg-surface-3 hover:border-surface-4 hover:text-fg-primary'
               )}
             >
               <span>{t('timeline.trim.setIn')}</span>
               {pendingCutInSec !== null && (
-                <span className="font-mono tabular-nums text-caption text-amber-300/80">
+                <span className="font-mono tabular-nums text-caption text-warning-faint/80">
                   {formatEditedTimecode(pendingCutInSec, cuts)}
                 </span>
               )}
@@ -1785,13 +1785,13 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
                 'border transition-colors duration-150',
                 pendingCutOutSec !== null
-                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
-                  : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-100'
+                  ? 'bg-warning/15 text-warning-faint border-warning/40 hover:bg-warning/25'
+                  : 'bg-surface-2 text-fg-secondary border-line-strong hover:bg-surface-3 hover:border-surface-4 hover:text-fg-primary'
               )}
             >
               <span>{t('timeline.trim.setOut')}</span>
               {pendingCutOutSec !== null && (
-                <span className="font-mono tabular-nums text-caption text-amber-300/80">
+                <span className="font-mono tabular-nums text-caption text-warning-faint/80">
                   {formatEditedTimecode(pendingCutOutSec, cuts)}
                 </span>
               )}
@@ -1811,8 +1811,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               className={cn(
                 'flex h-7 items-center gap-1.5 px-3 rounded-md text-body-sm font-semibold',
                 'border transition-colors duration-150',
-                'bg-green-500 text-zinc-950 border-green-400 hover:bg-green-400',
-                'disabled:bg-zinc-800 disabled:text-zinc-500 disabled:border-zinc-700 disabled:hover:bg-zinc-800 disabled:cursor-not-allowed'
+                'bg-primary text-fg-inverse border-primary-soft hover:bg-primary-soft',
+                'disabled:bg-surface-2 disabled:text-fg-muted disabled:border-line-strong disabled:hover:bg-surface-2 disabled:cursor-not-allowed'
               )}
             >
               <span>{t('timeline.trim.confirmCutRun')}</span>
@@ -1827,8 +1827,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 aria-label={t('timeline.trim.clearAll')}
                 className={cn(
                   'flex h-7 w-7 items-center justify-center rounded-md',
-                  'border border-zinc-700 text-zinc-400',
-                  'hover:bg-zinc-800 hover:text-zinc-100 hover:border-zinc-600',
+                  'border border-line-strong text-fg-tertiary',
+                  'hover:bg-surface-2 hover:text-fg-primary hover:border-surface-4',
                   'transition-colors duration-150'
                 )}
               >
@@ -1846,8 +1846,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
         className="flex-1 overflow-auto"
       >
         {!hasAnyVisible ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-zinc-500">
-            <GanttChartSquare className="h-8 w-8 text-zinc-700" />
+          <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-fg-muted">
+            <GanttChartSquare className="h-8 w-8 text-fg-faint" />
             {/* REQ-117 [2] — the timeline can never render deleted
                 entries by design (cuts collapsed their position, manual
                 deletes have no playable slot), so the generic "no entries
@@ -1875,7 +1875,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
             {/* Track-label gutter — sticky to the left so labels stay visible
                 while the user scrolls horizontally. */}
             <div
-              className="absolute top-0 left-0 z-10 bg-zinc-900 border-r border-zinc-800"
+              className="absolute top-0 left-0 z-10 bg-surface-1 border-r border-line"
               style={{
                 width: `${TRACK_GUTTER_LEFT_PX}px`,
                 height: `${RULER_HEIGHT_PX + tracksHeightPx}px`
@@ -1886,7 +1886,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               {Array.from({ length: trackCount }).map((_, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-center border-b border-zinc-800/50"
+                  className="flex items-center justify-center border-b border-line/50"
                   style={{ height: `${TRACK_HEIGHT_PX}px` }}
                 >
                   {/* 1-based labels: video-editing tools conventionally
@@ -1894,7 +1894,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                       The 0-based aria-label in Block stays 0-based for
                       consistency with the placement.trackIndex value the
                       smoke scripts query. */}
-                  <span className="text-caption font-mono text-zinc-500 select-none">
+                  <span className="text-caption font-mono text-fg-muted select-none">
                     {t('timeline.trackLabel', { index: i + 1 })}
                   </span>
                 </div>
@@ -1972,7 +1972,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 {Array.from({ length: trackCount }).map((_, i) => (
                   <div
                     key={i}
-                    className="absolute left-0 right-0 border-b border-zinc-800/50"
+                    className="absolute left-0 right-0 border-b border-line/50"
                     style={{
                       top: `${(i + 1) * TRACK_HEIGHT_PX}px`,
                       height: '0'
@@ -1989,7 +1989,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                     lines.push(
                       <div
                         key={s}
-                        className="absolute top-0 bottom-0 w-px bg-zinc-800/50 pointer-events-none"
+                        className="absolute top-0 bottom-0 w-px bg-surface-2/50 pointer-events-none"
                         style={{ left: `${s * pixelsPerSec}px` }}
                       />
                     )
@@ -2053,7 +2053,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                     - The grid-kind branch rendered zinc-400 which
                       reads as white on the dark timeline background.
                     - green-500 matches the focused block's `ring-2
-                      ring-green-500 border-green-500` highlight in
+                      ring-primary border-primary` highlight in
                       `BlockImpl` so the relationship "the selected
                       block (green ring) is snapping to this line
                       (green)" is immediately readable.
@@ -2069,7 +2069,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                     left: `${snapGuidePx}px`,
                     width: '1px',
                     height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
-                    background: 'rgba(34, 197, 94, 0.9)' // green-500
+                    background: 'hsl(var(--cursor-active) / 0.9)'
                   }}
                 />
               )}
@@ -2116,11 +2116,11 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                         height: `${RULER_HEIGHT_PX + tracksHeightPx}px`
                       }}
                     >
-                      <div className="flex h-4 w-4 items-center justify-center rounded-sm bg-zinc-800 text-amber-300 hover:bg-amber-500/30 hover:text-amber-100 transition-colors duration-150">
+                      <div className="flex h-4 w-4 items-center justify-center rounded-sm bg-surface-2 text-warning-faint hover:bg-warning/30 hover:text-warning-very-faint transition-colors duration-150">
                         <Scissors className="h-3 w-3" />
                       </div>
                       <div
-                        className="w-px bg-amber-400/60 pointer-events-none"
+                        className="w-px bg-warning-soft/60 pointer-events-none"
                         style={{ height: `${RULER_HEIGHT_PX + tracksHeightPx - 16}px` }}
                       />
                     </button>
@@ -2144,7 +2144,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                         pixelsPerSec
                       }px`,
                       height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
-                      background: 'rgba(245, 158, 11, 0.15)' // amber-500/15
+                      background: 'hsl(var(--trim-overlay) / 0.15)'
                     }}
                   />
                 )}
@@ -2156,7 +2156,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                     left: `${origToEdited(pendingCutInSec, cuts) * pixelsPerSec}px`,
                     width: '1px',
                     height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
-                    background: 'rgba(245, 158, 11, 0.9)' // amber-500
+                    background: 'hsl(var(--trim-overlay) / 0.9)'
                   }}
                 />
               )}
@@ -2168,7 +2168,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                     left: `${origToEdited(pendingCutOutSec, cuts) * pixelsPerSec}px`,
                     width: '1px',
                     height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
-                    background: 'rgba(245, 158, 11, 0.9)'
+                    background: 'hsl(var(--trim-overlay) / 0.9)'
                   }}
                 />
               )}

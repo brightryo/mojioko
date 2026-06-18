@@ -241,28 +241,28 @@ export function WhisperModelManager({
   const diskWarnColor =
     state && state.diskFreeBytes > 0
       ? state.diskFreeBytes < 1_000_000_000
-        ? 'text-red-400'
+        ? 'text-destructive-soft'
         : state.diskFreeBytes < 5_000_000_000
-        ? 'text-amber-400'
-        : 'text-zinc-400'
-      : 'text-zinc-600'
+        ? 'text-warning-soft'
+        : 'text-fg-tertiary'
+      : 'text-fg-disabled'
 
   // Header status badge (always visible regardless of open/closed)
   const headerBadge = !state ? null : hasActive ? (
     <div className="flex items-center gap-1.5 flex-shrink-0">
-      <span className="flex items-center gap-1 text-body-sm text-zinc-300">
-        <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+      <span className="flex items-center gap-1 text-body-sm text-fg-secondary">
+        <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />
         <span className="font-mono">{activeModel?.displayName}</span>
       </span>
-      {/* REQ-071 Phase 3.7-A: text-green-950 -> text-zinc-950 — same hue
+      {/* REQ-071 Phase 3.7-A: text-primary-foreground -> text-fg-inverse — same hue
           collision Phase 3.6 fixed on the primary button variant.  Even
           this small pill suffered from green-on-green readability. */}
-      <span className="flex items-center gap-0.5 text-caption font-medium px-2 py-0.5 rounded-full bg-green-500 text-zinc-950 whitespace-nowrap">
+      <span className="flex items-center gap-0.5 text-caption font-medium px-2 py-0.5 rounded-full bg-primary text-fg-inverse whitespace-nowrap">
         {t('model.active')}
       </span>
     </div>
   ) : (
-    <span className="flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 whitespace-nowrap flex-shrink-0">
+    <span className="flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full bg-warning/20 text-warning-soft whitespace-nowrap flex-shrink-0">
       <AlertTriangle className="h-3 w-3 flex-shrink-0" />
       {hasAnyInstalled ? t('model.noActiveBadge') : t('model.notInstalledBadge')}
     </span>
@@ -279,8 +279,8 @@ export function WhisperModelManager({
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 w-full cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
       >
-        <Sparkles className="h-4 w-4 text-zinc-400 flex-shrink-0" />
-        <span className="text-headline font-semibold text-zinc-300 uppercase tracking-wider">
+        <Sparkles className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
+        <span className="text-headline font-semibold text-fg-secondary uppercase tracking-wider">
           {t('whisperModel.label')}
         </span>
         {/* Stop propagation so tooltip interaction doesn't toggle accordion */}
@@ -301,16 +301,16 @@ export function WhisperModelManager({
                              required, now that the accordion no longer
                              auto-expands on first run). */}
         {!isOpen && state && (
-          <span className="text-caption text-zinc-500 flex-shrink-0 ml-1">
+          <span className="text-caption text-fg-muted flex-shrink-0 ml-1">
             {hasActive ? t('model.clickToChange') : t('model.clickToSelect')}
           </span>
         )}
 
         {/* Chevron */}
         {isOpen ? (
-          <ChevronUp className="h-4 w-4 text-zinc-500 flex-shrink-0 ml-1" />
+          <ChevronUp className="h-4 w-4 text-fg-muted flex-shrink-0 ml-1" />
         ) : (
-          <ChevronDown className="h-4 w-4 text-zinc-500 flex-shrink-0 ml-1" />
+          <ChevronDown className="h-4 w-4 text-fg-muted flex-shrink-0 ml-1" />
         )}
       </div>
 
@@ -326,7 +326,7 @@ export function WhisperModelManager({
           >
             <div className="space-y-3 pt-3">
               {/* Long description */}
-              <p className="text-body-sm text-zinc-500 leading-relaxed">
+              <p className="text-body-sm text-fg-muted leading-relaxed">
                 {t('whisperModel.descriptionLong')}
               </p>
 
@@ -351,9 +351,9 @@ export function WhisperModelManager({
               </div>
 
               {/* Bottom status bar */}
-              <div className="rounded-lg border border-zinc-800 px-4 py-2.5 flex items-center justify-between">
+              <div className="rounded-lg border border-line px-4 py-2.5 flex items-center justify-between">
                 <div className="flex items-center gap-5 text-body-sm">
-                  <span className="flex items-center gap-1.5 text-zinc-400">
+                  <span className="flex items-center gap-1.5 text-fg-tertiary">
                     <Database className="h-3.5 w-3.5 flex-shrink-0" />
                     {t('model.totalUsed')}: {state ? formatBytes(state.totalUsedBytes) : '—'}
                   </span>
@@ -368,7 +368,7 @@ export function WhisperModelManager({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-6 px-2 text-caption text-zinc-500 hover:text-zinc-300"
+                      className="h-6 px-2 text-caption text-fg-muted hover:text-fg-secondary"
                       onClick={(e) => {
                         e.stopPropagation()
                         openModelsFolder().catch(() => {})
@@ -378,7 +378,7 @@ export function WhisperModelManager({
                       {t('model.openFolder')}
                     </Button>
                   )}
-                  <span className="flex items-center gap-1.5 text-caption text-green-600">
+                  <span className="flex items-center gap-1.5 text-caption text-primary-hover">
                     <ShieldCheck className="h-3.5 w-3.5" />
                     {t('model.localOnly')}
                   </span>
@@ -395,7 +395,7 @@ export function WhisperModelManager({
           <DialogContent className="max-w-[400px]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-400" />
+                <AlertTriangle className="h-4 w-4 text-warning-soft" />
                 {t('model.diskFull_title')}
               </DialogTitle>
               <DialogDescription>
@@ -426,7 +426,7 @@ export function WhisperModelManager({
                 })}
               </DialogDescription>
             </DialogHeader>
-            <div className="rounded-lg bg-zinc-900/60 border border-zinc-800 px-3 py-2.5 space-y-1.5">
+            <div className="rounded-lg bg-surface-1/60 border border-line px-3 py-2.5 space-y-1.5">
               <InstallInfoRow
                 label={t('model.install_info_developer')}
                 value={t('model.install_developer_value')}
@@ -483,7 +483,7 @@ export function WhisperModelManager({
                 {t('common:action.cancel')}
               </Button>
               <Button
-                className="bg-red-600 hover:bg-red-500 text-white"
+                className="bg-destructive-hover hover:bg-destructive text-white"
                 onClick={() => handleConfirmUninstall(dialog.model)}
               >
                 {t('model.uninstall_confirm_ok')}
@@ -511,9 +511,9 @@ function InstallInfoRow({
 }) {
   return (
     <div className="flex items-start justify-between gap-3 text-body-sm">
-      <span className="text-zinc-500 flex-shrink-0">{label}</span>
+      <span className="text-fg-muted flex-shrink-0">{label}</span>
       <span
-        className={cn('text-zinc-300 text-right min-w-0 break-all', mono && 'font-mono text-body-sm')}
+        className={cn('text-fg-secondary text-right min-w-0 break-all', mono && 'font-mono text-body-sm')}
         title={mono ? value : undefined}
       >
         {value}
@@ -556,16 +556,16 @@ function ModelCard({
     <div
       className={cn(
         'rounded-xl border p-4 flex flex-col gap-3 transition-colors duration-150',
-        isActive ? 'border-green-500 bg-[rgba(34,197,94,0.05)]' : 'border-zinc-800 bg-zinc-950'
+        isActive ? 'border-primary bg-primary/5' : 'border-line bg-surface-0'
       )}
     >
       {/* Top: name + status badge */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-headline font-semibold text-zinc-100 leading-tight">
+          <p className="text-headline font-semibold text-fg-primary leading-tight">
             {model.displayName}
           </p>
-          <p className={cn('text-body-sm mt-0.5', isActive ? 'text-green-600' : 'text-zinc-600')}>
+          <p className={cn('text-body-sm mt-0.5', isActive ? 'text-primary-hover' : 'text-fg-disabled')}>
             {formatBytes(model.expectedSizeBytes)}
           </p>
         </div>
@@ -575,7 +575,7 @@ function ModelCard({
               'flex-shrink-0 flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
               // REQ-071 Phase 3.7-A: green-950 -> zinc-950 on the green
               // active branch — same hue-collision fix.
-              isActive ? 'bg-green-500 text-zinc-950' : 'bg-blue-500/15 text-blue-400'
+              isActive ? 'bg-primary text-fg-inverse' : 'bg-row-selected/15 text-info'
             )}
           >
             <Check className="h-2.5 w-2.5" />
@@ -585,20 +585,20 @@ function ModelCard({
       </div>
 
       {/* Description */}
-      <p className="text-body-sm text-zinc-500 leading-relaxed flex-1">
+      <p className="text-body-sm text-fg-muted leading-relaxed flex-1">
         {t(DESC_KEY[model.id] ?? 'whisperModel.descMedium')}
       </p>
 
       {/* Action area */}
       {isDownloading ? (
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-caption text-zinc-500">
+          <div className="flex items-center justify-between text-caption text-fg-muted">
             <span className="truncate mr-2">{downloadFile || t('model.downloading')}</span>
             <span className="tabular-nums flex-shrink-0">{downloadPercent}%</span>
           </div>
-          <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+          <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
             <div
-              className="h-full bg-green-500 transition-all duration-300 rounded-full"
+              className="h-full bg-primary transition-all duration-300 rounded-full"
               style={{ width: `${downloadPercent}%` }}
             />
           </div>
@@ -616,7 +616,7 @@ function ModelCard({
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 text-green-600 cursor-default hover:text-green-600 hover:bg-transparent"
+            className="flex-1 text-primary-hover cursor-default hover:text-primary-hover hover:bg-transparent"
             disabled
           >
             <Check className="h-3.5 w-3.5 mr-1.5" />
@@ -625,7 +625,7 @@ function ModelCard({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-zinc-600 hover:text-red-400"
+            className="h-8 w-8 text-fg-disabled hover:text-destructive-soft"
             onClick={onUninstall}
             title={t('model.uninstall_confirm_title')}
           >
@@ -641,7 +641,7 @@ function ModelCard({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-zinc-600 hover:text-red-400"
+            className="h-8 w-8 text-fg-disabled hover:text-destructive-soft"
             onClick={onUninstall}
             title={t('model.uninstall_confirm_title')}
           >
@@ -655,10 +655,10 @@ function ModelCard({
 
 function ModelCardSkeleton() {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 space-y-3 animate-pulse">
-      <div className="h-4 w-16 bg-zinc-800 rounded" />
-      <div className="h-3 w-full bg-zinc-800 rounded" />
-      <div className="h-8 w-full bg-zinc-800 rounded-md" />
+    <div className="rounded-xl border border-line bg-surface-0 p-4 space-y-3 animate-pulse">
+      <div className="h-4 w-16 bg-surface-2 rounded" />
+      <div className="h-3 w-full bg-surface-2 rounded" />
+      <div className="h-8 w-full bg-surface-2 rounded-md" />
     </div>
   )
 }

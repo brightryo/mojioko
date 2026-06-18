@@ -19,7 +19,11 @@ const config: Config = {
         },
         primary: {
           DEFAULT: 'hsl(var(--primary))',
-          foreground: 'hsl(var(--primary-foreground))'
+          foreground: 'hsl(var(--primary-foreground))',
+          hover:  'hsl(var(--primary-hover))',
+          active: 'hsl(var(--primary-active))',
+          soft:   'hsl(var(--primary-soft))',
+          faint:  'hsl(var(--primary-faint))'
         },
         secondary: {
           DEFAULT: 'hsl(var(--secondary))',
@@ -35,11 +39,60 @@ const config: Config = {
         },
         destructive: {
           DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))'
+          foreground: 'hsl(var(--destructive-foreground))',
+          hover: 'hsl(var(--destructive-hover))',
+          soft:  'hsl(var(--destructive-soft))'
         },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          foreground: 'hsl(var(--warning-foreground))',
+          soft:       'hsl(var(--warning-soft))',
+          faint:      'hsl(var(--warning-faint))',
+          'very-faint': 'hsl(var(--warning-very-faint))'
+        },
+        info: 'hsl(var(--info))',
+        'accent-soft': 'hsl(var(--accent-soft))',
+        'row-selected': 'hsl(var(--row-selected))',
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))'
+        ring: 'hsl(var(--ring))',
+        // REQ-20260615-002 MOJIOKO depth / text / state tokens.
+        // Mirror Tailwind zinc-* values exactly so direct-class call
+        // sites can switch with no visual change.  Keys are deliberately
+        // short to avoid Tailwind's utility-prefix doubling (eg.
+        // `bg-surface-1`, `text-fg-primary`, `border-line-strong`).
+        surface: {
+          0: 'hsl(var(--surface-0))',
+          1: 'hsl(var(--surface-1))',
+          2: 'hsl(var(--surface-2))',
+          3: 'hsl(var(--surface-3))',
+          4: 'hsl(var(--surface-4))',
+          'inverse-0': 'hsl(var(--surface-inverse-0))',
+          'inverse-1': 'hsl(var(--surface-inverse-1))',
+          'inverse-2': 'hsl(var(--surface-inverse-2))'
+        },
+        fg: {
+          primary:   'hsl(var(--text-primary))',
+          secondary: 'hsl(var(--text-secondary))',
+          tertiary:  'hsl(var(--text-tertiary))',
+          muted:     'hsl(var(--text-muted))',
+          disabled:  'hsl(var(--text-disabled))',
+          faint:     'hsl(var(--text-faint))',
+          inverse:   'hsl(var(--text-inverse))'
+        },
+        line: {
+          DEFAULT: 'hsl(var(--border-default))',
+          strong:  'hsl(var(--border-strong))',
+          subtle:  'hsl(var(--border-subtle))'
+        },
+        row: {
+          edited:  'hsl(var(--row-edited))',
+          error:   'hsl(var(--row-error))',
+          playing: 'hsl(var(--row-playing))'
+        },
+        playhead:       'hsl(var(--playhead))',
+        'trim-overlay': 'hsl(var(--trim-overlay))',
+        'cursor-active': 'hsl(var(--cursor-active))'
       },
       borderRadius: {
         sm: '4px',

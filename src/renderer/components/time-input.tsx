@@ -90,10 +90,10 @@ export function TimeInput({ value, onChange, cuts, className, disabled, error, w
         // (was 13) "HH:MM:SS.cc" tabular timecode without truncating the
         // trailing centiseconds.  text-body-sm kept here — the time
         // column ran out of room in the subtitle-table grid at 14 px.
-        'h-7 w-[110px] rounded border border-zinc-800 bg-zinc-950 px-2 text-center font-mono tabular-nums text-body-sm',
-        error ? 'text-red-500' : warning ? 'text-amber-500' : 'text-zinc-100',
+        'h-7 w-[110px] rounded border border-line bg-surface-0 px-2 text-center font-mono tabular-nums text-body-sm',
+        error ? 'text-destructive' : warning ? 'text-warning' : 'text-fg-primary',
         'transition-colors duration-150',
-        'focus:outline-none focus:border-zinc-700 focus:ring-1 focus:ring-green-500/30',
+        'focus:outline-none focus:border-line-strong focus:ring-1 focus:ring-primary/30',
         'disabled:cursor-not-allowed disabled:opacity-40',
         className
       )}

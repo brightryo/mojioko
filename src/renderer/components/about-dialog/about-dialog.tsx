@@ -36,13 +36,13 @@ export function AboutDialog() {
               to sit next to these lines was removed in v1.0.0.  The Windows
               window icon (build/icon.ico) is the canonical brand mark. */}
           <div>
-            <p className="text-body font-semibold text-zinc-50">{APP_NAME}</p>
-            {/* REQ-067 phase B: was text-zinc-500 (hint tier).  Version is
+            <p className="text-body font-semibold text-fg-primary">{APP_NAME}</p>
+            {/* REQ-067 phase B: was text-fg-muted (hint tier).  Version is
                 meta info that the user reads when filing bug reports — lift
-                to text-zinc-400 (secondary tier, AAA pass). */}
-            <p className="text-body-sm text-zinc-400">{t('settings:about.version')} {APP_VERSION}</p>
+                to text-fg-tertiary (secondary tier, AAA pass). */}
+            <p className="text-body-sm text-fg-tertiary">{t('settings:about.version')} {APP_VERSION}</p>
           </div>
-          <div className="border-t border-zinc-800 pt-3 space-y-2">
+          <div className="border-t border-line pt-3 space-y-2">
             <InfoRow label={t('settings:about.license')} value={t('settings:about.licenseValue')} />
             <InfoRow label="Electron" value={buildInfo?.electronVersion ?? '…'} />
             <InfoRow label="Node.js" value={buildInfo?.nodeVersion ?? '…'} />
@@ -96,8 +96,8 @@ export function AboutDialog() {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-body-sm text-zinc-400">{label}</span>
-      <span className="text-body-sm text-zinc-100 font-mono">{value}</span>
+      <span className="text-body-sm text-fg-tertiary">{label}</span>
+      <span className="text-body-sm text-fg-primary font-mono">{value}</span>
     </div>
   )
 }

@@ -357,17 +357,17 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const audioTracks = video?.audioTracks ?? []
 
   const footerCenter = (
-    /* REQ-067 phase B: status colors lifted from text-zinc-500 to
-       text-zinc-300 so the model-status and privacy line stay legible
+    /* REQ-067 phase B: status colors lifted from text-fg-muted to
+       text-fg-secondary so the model-status and privacy line stay legible
        in the chrome.  Matches the same treatment in step2 / step3. */
     <div className="flex items-center gap-4">
-      <span className="text-body-sm text-zinc-300">
+      <span className="text-body-sm text-fg-secondary">
         {activeModelId
           ? t('footer.modelStatus', { model: activeModelId })
           : t('footer.modelNotDownloaded', { model: '—' })}
       </span>
-      <span className="w-px h-3 bg-zinc-700 flex-shrink-0" />
-      <span className="flex items-center gap-1.5 text-body-sm text-zinc-300">
+      <span className="w-px h-3 bg-surface-3 flex-shrink-0" />
+      <span className="flex items-center gap-1.5 text-body-sm text-fg-secondary">
         <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
         {t('footer.privacyNote')}
       </span>
@@ -560,17 +560,17 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
                   {video?.path ?? t('inputVideo.placeholder')}
                 </span>
               </div>
-              {/* REQ-072 Q4: secondary's `bg-zinc-50` white slab dominated the
+              {/* REQ-072 Q4: secondary's `bg-surface-inverse-0` white slab dominated the
                   STEP 1 input row visually — same pattern bulk-edit-bar already
                   flagged (see comment there).  Pending the full Button variant
                   redesign (REQ-073), this single site is overridden to a tonal
-                  (bg-zinc-800) treatment so Browse reads as a secondary action
+                  (bg-surface-2) treatment so Browse reads as a secondary action
                   in the dark theme without claiming primary emphasis. */}
               <Button
                 variant="secondary"
                 size="md"
                 onClick={handleBrowse}
-                className="bg-zinc-800 text-zinc-100 hover:bg-zinc-700 active:bg-zinc-600"
+                className="bg-surface-2 text-fg-primary hover:bg-surface-3 active:bg-surface-4"
               >
                 <FolderOpen className="h-4 w-4 mr-1.5" />
                 {t('inputVideo.chooseVideo')}
@@ -745,7 +745,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
               {t('dialog.cancelDeny')}
             </Button>
             <Button
-              className="bg-red-600 hover:bg-red-500 text-white"
+              className="bg-destructive-hover hover:bg-destructive text-white"
               onClick={handleConfirmCancel}
             >
               {t('dialog.cancelConfirm')}

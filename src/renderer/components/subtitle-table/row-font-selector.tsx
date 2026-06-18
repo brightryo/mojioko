@@ -63,10 +63,10 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
           className={cn(
             'inline-flex items-center justify-between gap-1.5 w-full',
             'h-6 px-2 rounded-md border text-caption text-left transition-colors duration-150',
-            'border-zinc-800 bg-zinc-950 hover:border-zinc-700',
+            'border-line bg-surface-0 hover:border-line-strong',
             'focus:outline-none focus-visible:outline-none',
             'disabled:opacity-40 disabled:cursor-not-allowed',
-            isOverriding ? 'text-zinc-100' : 'text-zinc-400'
+            isOverriding ? 'text-fg-primary' : 'text-fg-tertiary'
           )}
           title={isOverriding
             ? t('rowFont.tooltipOverride', { name: resolvedMeta.displayName })
@@ -74,7 +74,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
         >
           <span className="flex items-center gap-1.5 min-w-0">
             {!isOverriding && (
-              <span className="text-micro uppercase tracking-wide text-zinc-500 shrink-0">
+              <span className="text-micro uppercase tracking-wide text-fg-muted shrink-0">
                 {t('rowFont.defaultPrefix')}
               </span>
             )}
@@ -82,10 +82,10 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
               {resolvedMeta.displayName}
             </span>
             {resolvedMeta.lacksRareKanji && (
-              <AlertCircle className="h-3 w-3 shrink-0 text-amber-400/80" aria-hidden="true" />
+              <AlertCircle className="h-3 w-3 shrink-0 text-warning-soft/80" aria-hidden="true" />
             )}
           </span>
-          <ChevronDown className="h-3 w-3 shrink-0 text-zinc-500" aria-hidden="true" />
+          <ChevronDown className="h-3 w-3 shrink-0 text-fg-muted" aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -105,20 +105,20 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
             className={cn(
               'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
               isOverriding
-                ? 'hover:bg-accent/40 text-zinc-100 cursor-pointer'
-                : 'text-zinc-500 cursor-default'
+                ? 'hover:bg-accent/40 text-fg-primary cursor-pointer'
+                : 'text-fg-muted cursor-default'
             )}
           >
             <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="flex-1 min-w-0">
               <span className="block leading-tight">{t('rowFont.useDefault')}</span>
-              <span className="block text-caption text-zinc-500 truncate">
+              <span className="block text-caption text-fg-muted truncate">
                 {getFontMeta(activeFontId).displayName}
               </span>
             </span>
           </button>
 
-          <div className="my-1 h-px bg-zinc-800" />
+          <div className="my-1 h-px bg-surface-2" />
 
           {selectable.map((m) => {
             const isCurrent = m.id === (value ?? activeFontId)
@@ -130,13 +130,13 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
                 className={cn(
                   'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
                   'hover:bg-accent/40',
-                  isCurrent ? 'text-zinc-50' : 'text-zinc-300'
+                  isCurrent ? 'text-fg-primary' : 'text-fg-secondary'
                 )}
               >
                 <span
                   className={cn(
                     'h-2 w-2 rounded-full shrink-0',
-                    isCurrent ? 'bg-primary' : 'bg-zinc-600'
+                    isCurrent ? 'bg-primary' : 'bg-surface-4'
                   )}
                   aria-hidden="true"
                 />
@@ -148,7 +148,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
                 </span>
                 {m.lacksRareKanji && (
                   <span
-                    className="inline-flex items-center gap-0.5 shrink-0 text-micro uppercase tracking-wide text-amber-300/80"
+                    className="inline-flex items-center gap-0.5 shrink-0 text-micro uppercase tracking-wide text-warning-faint/80"
                     title={t('step1:fontPicker.note.missingRareKanjiHelp')}
                   >
                     <AlertCircle className="h-2.5 w-2.5" aria-hidden="true" />

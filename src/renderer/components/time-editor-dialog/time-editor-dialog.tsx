@@ -104,9 +104,9 @@ function StepperButton({ label, onStep, ariaLabel }: StepperButtonProps) {
         // same scale as the TimeInput field they drive.  h-9 (36 px) with
         // body line-h 22 still leaves 14 px of vertical breathing room.
         'h-9 px-2.5 rounded-md text-body font-mono tabular-nums select-none',
-        'bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-50',
-        'active:bg-zinc-600 transition-colors duration-100',
-        'border border-zinc-800'
+        'bg-surface-2/60 text-fg-secondary hover:bg-surface-3 hover:text-fg-primary',
+        'active:bg-surface-4 transition-colors duration-100',
+        'border border-line'
       )}
     >
       {label}
@@ -132,21 +132,21 @@ function SnapButton({ icon, label, trailingLabel, onClick }: SnapButtonProps) {
       type="button"
       onClick={onClick}
       className={cn(
-        'flex w-full items-center gap-2 rounded-md border border-zinc-800',
-        'bg-zinc-950/40 px-3 py-1.5 text-left',
-        'hover:bg-zinc-800/40 hover:border-zinc-700',
+        'flex w-full items-center gap-2 rounded-md border border-line',
+        'bg-surface-0/40 px-3 py-1.5 text-left',
+        'hover:bg-surface-2/40 hover:border-line-strong',
         'transition-colors duration-100'
       )}
     >
-      <span className="flex h-3.5 w-3.5 items-center justify-center flex-shrink-0 text-zinc-400">
+      <span className="flex h-3.5 w-3.5 items-center justify-center flex-shrink-0 text-fg-tertiary">
         {icon}
       </span>
-      <span className="text-body-sm text-zinc-200">{label}</span>
+      <span className="text-body-sm text-fg-secondary">{label}</span>
       {/* REQ-071 Phase 3.7-B: trailing timecode lifted text-caption (12) ->
           text-body-sm (13) — these are time *values* the user reads to
           decide whether to snap, not chrome.  Same micro-to-readable
           stance the timeline ruler took in Phase 3.6. */}
-      <span className="ml-auto text-body-sm font-mono tabular-nums text-zinc-400">
+      <span className="ml-auto text-body-sm font-mono tabular-nums text-fg-tertiary">
         {trailingLabel}
       </span>
     </button>
@@ -213,7 +213,7 @@ function TimeField({ labelKey, valueSec, cuts, onDelta, playheadSec, onSetSec, s
           structural divider between the two TimeFields inside the dialog —
           promote from body-sm/medium to body/semibold so it reads as a
           real section heading, not a sub-row label. */}
-      <div className="text-body font-semibold text-zinc-300">
+      <div className="text-body font-semibold text-fg-secondary">
         {t(labelKey)}
       </div>
 
