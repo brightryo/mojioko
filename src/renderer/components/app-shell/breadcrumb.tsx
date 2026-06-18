@@ -31,7 +31,7 @@ export function Breadcrumb({ currentStep, appVersion }: BreadcrumbProps) {
 
   return (
     <nav
-      className="flex h-11 flex-shrink-0 border-b border-zinc-800"
+      className="flex h-11 flex-shrink-0 border-b border-line"
       aria-label="Steps"
     >
       <div className="max-w-[1100px] mx-auto w-full flex items-center px-6">
@@ -39,15 +39,15 @@ export function Breadcrumb({ currentStep, appVersion }: BreadcrumbProps) {
             that used to sit here was removed in v1.0.0; the Windows window
             icon (build/icon.ico) is the canonical brand mark. */}
         <div className="flex items-center gap-2 mr-5 flex-shrink-0">
-          <span className="text-body-sm font-semibold text-zinc-300 select-none">{APP_NAME}</span>
-          {/* REQ-067 phase B: was text-zinc-600 (disabled tier, ~2.5:1
+          <span className="text-body-sm font-semibold text-fg-secondary select-none">{APP_NAME}</span>
+          {/* REQ-067 phase B: was text-fg-disabled (disabled tier, ~2.5:1
               contrast — spec violation for permanently-visible chrome).
-              Lifted to text-zinc-400 (secondary tier ~7.8:1, AAA pass) —
+              Lifted to text-fg-tertiary (secondary tier ~7.8:1, AAA pass) —
               the version is meta info, not a disabled element. */}
-          <span className="text-caption text-zinc-400 select-none tabular-nums">{appVersion}</span>
+          <span className="text-caption text-fg-tertiary select-none tabular-nums">{appVersion}</span>
         </div>
 
-        <div className="h-4 w-px bg-zinc-800 mr-5 flex-shrink-0" aria-hidden="true" />
+        <div className="h-4 w-px bg-surface-2 mr-5 flex-shrink-0" aria-hidden="true" />
 
         {/* Step indicators */}
         <div className="flex items-center gap-1">
@@ -59,7 +59,7 @@ export function Breadcrumb({ currentStep, appVersion }: BreadcrumbProps) {
             return (
               <div key={config.step} className="flex items-center gap-1">
                 {idx > 0 && (
-                  <ChevronRight className="h-3.5 w-3.5 text-zinc-700" aria-hidden="true" />
+                  <ChevronRight className="h-3.5 w-3.5 text-fg-faint" aria-hidden="true" />
                 )}
                 <button
                   onClick={() => isCompleted && navigate(config.route)}
@@ -67,16 +67,16 @@ export function Breadcrumb({ currentStep, appVersion }: BreadcrumbProps) {
                   aria-current={isCurrent ? 'step' : undefined}
                   className={cn(
                     'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-body transition-colors duration-150',
-                    isCurrent && 'bg-green-500/10 font-medium text-green-500',
-                    isCompleted && 'cursor-pointer text-zinc-500 hover:text-zinc-300',
-                    isFuture && 'cursor-not-allowed text-zinc-600'
+                    isCurrent && 'bg-primary/10 font-medium text-primary',
+                    isCompleted && 'cursor-pointer text-fg-muted hover:text-fg-secondary',
+                    isFuture && 'cursor-not-allowed text-fg-disabled'
                   )}
                 >
                   {isCompleted && (
-                    <Check className="h-3 w-3 text-green-500" aria-hidden="true" />
+                    <Check className="h-3 w-3 text-primary" aria-hidden="true" />
                   )}
                   {isCurrent && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-500" aria-hidden="true" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
                   )}
                   {t(config.labelKey)}
                 </button>
@@ -116,7 +116,7 @@ function LanguagePill() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-body-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors duration-150"
+        className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-body-sm text-fg-tertiary hover:text-fg-secondary hover:bg-surface-2/60 transition-colors duration-150"
       >
         {current.label}
         <ChevronDown className="h-3 w-3 opacity-60" />
@@ -124,7 +124,7 @@ function LanguagePill() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 w-28 rounded-lg border border-zinc-800 bg-zinc-900 shadow-xl z-50 py-1 overflow-hidden">
+          <div className="absolute right-0 top-full mt-1 w-28 rounded-lg border border-line bg-surface-1 shadow-xl z-50 py-1 overflow-hidden">
             {options.map((opt) => (
               <button
                 key={opt.value}
@@ -133,8 +133,8 @@ function LanguagePill() {
                 className={cn(
                   'w-full px-3 py-2 text-left text-body-sm transition-colors duration-150',
                   language === opt.value
-                    ? 'text-green-400 bg-green-500/10'
-                    : 'text-zinc-300 hover:bg-zinc-800'
+                    ? 'text-primary-soft bg-primary/10'
+                    : 'text-fg-secondary hover:bg-surface-2'
                 )}
               >
                 {opt.label}

@@ -783,7 +783,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
        (edited / warnings / deleted) stay readable at a glance.  The
        inner "selected" span keeps its `text-foreground` accent so the
        active-selection callout still wins visual priority. */
-    <span className="text-body-sm text-zinc-300">
+    <span className="text-body-sm text-fg-secondary">
       {selectedRowIds.size > 0 && (
         <>
           <span className="text-foreground">
@@ -913,15 +913,15 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   ) : (
     <div className="flex h-full w-full items-center justify-center p-2 text-center">
       <div className="space-y-1 max-w-xs">
-        <p className="text-body-sm text-zinc-400">{t('inspector.emptyTitle')}</p>
-        <p className="text-caption text-zinc-500">{t('inspector.emptyHint')}</p>
+        <p className="text-body-sm text-fg-tertiary">{t('inspector.emptyTitle')}</p>
+        <p className="text-caption text-fg-muted">{t('inspector.emptyHint')}</p>
       </div>
     </div>
   )
   const inspectorSlot = (
     <div className="flex h-full w-full flex-col">
-      <div className="flex-shrink-0 px-3 py-2 border-b border-zinc-800">
-        <h2 className="text-callout font-semibold text-zinc-200">
+      <div className="flex-shrink-0 px-3 py-2 border-b border-line">
+        <h2 className="text-callout font-semibold text-fg-secondary">
           {inspectorHeading}
         </h2>
       </div>
@@ -935,10 +935,10 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   // + add row moved INTO the bottom pane so the operations live next to
   // the list/timeline they affect.
   const toolbarSlot = (
-    <div className="flex items-center justify-between flex-shrink-0 px-2 py-1.5 border-b border-zinc-800/60">
+    <div className="flex items-center justify-between flex-shrink-0 px-2 py-1.5 border-b border-line/60">
       <div className="flex items-center gap-2">
         <EditorViewSwitcher />
-        <div className="flex items-center gap-1 bg-zinc-900 rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-surface-1 rounded-lg p-1">
           {FILTERS.map(({ key, count }) => (
             <button
               key={key}
@@ -947,8 +947,8 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               className={cn(
                 'h-7 px-3 rounded-md text-body-sm font-medium transition-colors duration-150',
                 tableFilter === key
-                  ? 'bg-zinc-800 text-zinc-50'
-                  : 'text-zinc-500 hover:text-zinc-300'
+                  ? 'bg-surface-2 text-fg-primary'
+                  : 'text-fg-muted hover:text-fg-secondary'
               )}
             >
               {t(`tab.${key}`)} · <span className="tabular-nums">{count}</span>
@@ -1046,8 +1046,8 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
             with a baseline alignment and a small inset gap.  REQ-028 still
             governs the export DropdownMenu (footer-right). */}
         <div className="flex items-baseline gap-3 flex-shrink-0">
-          <h1 className="text-heading font-semibold text-zinc-50">{t('title')}</h1>
-          <p className="text-body-sm text-zinc-400">{t('subtitle')}</p>
+          <h1 className="text-heading font-semibold text-fg-primary">{t('title')}</h1>
+          <p className="text-body-sm text-fg-tertiary">{t('subtitle')}</p>
         </div>
 
         {/* REQ-20260614-001 補遺② 修正1 — view switcher / filter tabs /
@@ -1084,7 +1084,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
                 setStep2OuterLayout({ 'step2-pane-left': left, 'step2-pane-right': right })
               }
             }}
-            className="rounded-lg border border-zinc-800 overflow-hidden"
+            className="rounded-lg border border-line overflow-hidden"
           >
             <ResizablePanel
               id="step2-pane-left"
@@ -1163,9 +1163,9 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               id="skip-discard"
               checked={skipDiscardWarning}
               onChange={(e) => setSkipDiscardWarning(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-zinc-600 accent-green-500"
+              className="h-3.5 w-3.5 rounded border-surface-4 accent-primary"
             />
-            <label htmlFor="skip-discard" className="text-body-sm text-zinc-400 cursor-pointer">
+            <label htmlFor="skip-discard" className="text-body-sm text-fg-tertiary cursor-pointer">
               {t('common:dialog.dontAskAgain')}
             </label>
           </div>

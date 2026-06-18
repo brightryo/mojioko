@@ -336,7 +336,7 @@ export function TimelineBlockInspector({
     // popover sizing; both were stripped so the always-on right-pane
     // Inspector has exactly one scroll axis end-to-end.  `w-full`
     // replaces the legacy `w-[320px]` popover width.
-    <div className="flex flex-col gap-3 w-full text-zinc-100">
+    <div className="flex flex-col gap-3 w-full text-fg-primary">
       {/* § 1 — Action icons.  REQ-20260614-001 補遺③: × close button
           retired.  Common cluster: 敷き詰め改行 → はみ出し改行 →
           削除/復元 → リセット → 複製.  Wrap buttons suppressed in
@@ -352,7 +352,7 @@ export function TimelineBlockInspector({
                 disabled={isFrozen}
                 className={cn(
                   'flex items-center justify-center h-7 w-7 rounded',
-                  'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+                  'text-fg-tertiary hover:bg-surface-2 hover:text-fg-primary',
                   'transition-colors duration-150',
                   'disabled:opacity-30 disabled:pointer-events-none'
                 )}
@@ -367,7 +367,7 @@ export function TimelineBlockInspector({
                 disabled={isFrozen}
                 className={cn(
                   'flex items-center justify-center h-7 w-7 rounded',
-                  'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+                  'text-fg-tertiary hover:bg-surface-2 hover:text-fg-primary',
                   'transition-colors duration-150',
                   'disabled:opacity-30 disabled:pointer-events-none'
                 )}
@@ -405,10 +405,10 @@ export function TimelineBlockInspector({
             }}
             className={cn(
               'flex items-center justify-center h-7 w-7 rounded',
-              'transition-colors duration-150 hover:bg-zinc-800',
+              'transition-colors duration-150 hover:bg-surface-2',
               entry.isDeleted && !isTrimDeleted
-                ? 'text-green-400 hover:text-green-300'
-                : 'text-zinc-400 hover:text-zinc-100'
+                ? 'text-primary-soft hover:text-primary-faint'
+                : 'text-fg-tertiary hover:text-fg-primary'
             )}
           >
             {isTrimDeleted || entry.isDeleted
@@ -423,7 +423,7 @@ export function TimelineBlockInspector({
             disabled={!canReset}
             className={cn(
               'flex items-center justify-center h-7 w-7 rounded',
-              'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+              'text-fg-tertiary hover:bg-surface-2 hover:text-fg-primary',
               'transition-colors duration-150',
               'disabled:opacity-30 disabled:pointer-events-none'
             )}
@@ -445,7 +445,7 @@ export function TimelineBlockInspector({
             disabled={isFrozen}
             className={cn(
               'flex items-center justify-center h-7 w-7 rounded',
-              'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100',
+              'text-fg-tertiary hover:bg-surface-2 hover:text-fg-primary',
               'transition-colors duration-150',
               'disabled:opacity-30 disabled:pointer-events-none'
             )}
@@ -484,12 +484,12 @@ export function TimelineBlockInspector({
           moved this block FROM the bottom of the inspector TO right
           after badges, matching the new ordering "actions → status →
           time → content → style". */}
-      <div className="flex flex-col gap-1.5 border-t border-zinc-800 pt-2">
-        <div className="flex items-baseline gap-1 text-body-sm font-mono tabular-nums text-zinc-400">
+      <div className="flex flex-col gap-1.5 border-t border-line pt-2">
+        <div className="flex items-baseline gap-1 text-body-sm font-mono tabular-nums text-fg-tertiary">
           <span>{formatEditedTimecode(entry.startSec, cuts)}</span>
-          <span className="text-zinc-600">→</span>
+          <span className="text-fg-disabled">→</span>
           <span>{formatEditedTimecode(entry.endSec, cuts)}</span>
-          <span className="ml-1 text-zinc-500">
+          <span className="ml-1 text-fg-muted">
             ({durationSec.toFixed(2)}s)
           </span>
         </div>
@@ -497,8 +497,8 @@ export function TimelineBlockInspector({
           type="button"
           onClick={handleAdjustTime}
           className={cn(
-            'self-start flex items-center gap-1 h-6 px-2 rounded text-caption text-zinc-400',
-            'hover:bg-zinc-800 hover:text-zinc-100 transition-colors duration-150'
+            'self-start flex items-center gap-1 h-6 px-2 rounded text-caption text-fg-tertiary',
+            'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
           )}
         >
           <Clock className="h-3 w-3" />
@@ -513,8 +513,8 @@ export function TimelineBlockInspector({
           フォントの label は削除し、プルダウン本体のみ表示する。
           audio-only mode (REQ-028) では textarea のみ表示し、font /
           style 一式は出さない。 */}
-      <div className="space-y-2 border-t border-zinc-800 pt-2">
-        <div className="text-body font-semibold text-zinc-200">
+      <div className="space-y-2 border-t border-line pt-2">
+        <div className="text-body font-semibold text-fg-secondary">
           {t('timeline.inspector.subtitleSection')}
         </div>
         <textarea
@@ -529,9 +529,9 @@ export function TimelineBlockInspector({
           spellCheck={false}
           aria-label={t('timeline.inspector.textLabel')}
           className={cn(
-            'w-full rounded-md bg-zinc-950 border border-zinc-700 px-2 py-1.5',
-            'text-body text-zinc-50 leading-snug resize-none',
-            'focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/30',
+            'w-full rounded-md bg-surface-0 border border-line-strong px-2 py-1.5',
+            'text-body text-fg-primary leading-snug resize-none',
+            'focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         />
@@ -546,7 +546,7 @@ export function TimelineBlockInspector({
             />
             {/* Size */}
             <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-zinc-300">{t('styleCell.size')}</label>
+              <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.size')}</label>
               <input
                 type="number"
                 min={FONT_SIZE_MIN_PX}
@@ -561,19 +561,19 @@ export function TimelineBlockInspector({
                   max: FONT_SIZE_MAX_PX
                 })}
                 className={cn(
-                  'w-20 h-7 rounded border bg-zinc-950 px-1.5 text-center text-body text-zinc-100',
+                  'w-20 h-7 rounded border bg-surface-0 px-1.5 text-center text-body text-fg-primary',
                   'focus:outline-none focus:ring-1',
                   '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
                   'disabled:opacity-40 disabled:cursor-not-allowed',
                   sizeOutOfRange
-                    ? 'border-amber-400/60 focus:ring-amber-400/30'
-                    : 'border-zinc-700 focus:border-zinc-600 focus:ring-green-500/30'
+                    ? 'border-warning-soft/60 focus:ring-warning-soft/30'
+                    : 'border-line-strong focus:border-surface-4 focus:ring-primary/30'
                 )}
               />
             </div>
             {/* Text colour */}
             <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-zinc-300">{t('styleCell.textColor')}</label>
+              <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.textColor')}</label>
               <ColorPicker
                 value={entry.textColorHex}
                 onChange={handleTextColorChange}
@@ -584,7 +584,7 @@ export function TimelineBlockInspector({
             </div>
             {/* Outline colour */}
             <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-zinc-300">{t('styleCell.outlineColor')}</label>
+              <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.outlineColor')}</label>
               <ColorPicker
                 value={entry.outlineColorHex}
                 onChange={handleOutlineColorChange}
@@ -595,7 +595,7 @@ export function TimelineBlockInspector({
             </div>
             {/* Outline width */}
             <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-zinc-300">{t('styleCell.outlineWidth')}</label>
+              <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.outlineWidth')}</label>
               <div className="w-[160px]" onClick={(e) => e.stopPropagation()}>
                 <OutlineThicknessSlider
                   value={entry.outlineThicknessPx}
@@ -607,7 +607,7 @@ export function TimelineBlockInspector({
             </div>
             {/* Fade */}
             <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-zinc-300">{t('styleCell.fade')}</label>
+              <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.fade')}</label>
               <Switch
                 checked={entry.fadeEnabled}
                 onCheckedChange={handleFadeChange}
@@ -622,19 +622,19 @@ export function TimelineBlockInspector({
       {/* § 5 — レイアウト section (REQ-20260614-001 補遺⑪).
           水平 / 垂直 / マージン。audio-only 非表示。 */}
       {!isAudioOnly && (
-        <div className="space-y-2 border-t border-zinc-800 pt-2">
-          <div className="text-body font-semibold text-zinc-200">
+        <div className="space-y-2 border-t border-line pt-2">
+          <div className="text-body font-semibold text-fg-secondary">
             {t('timeline.inspector.layoutSection')}
           </div>
           <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.layoutH')}</label>
+            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.layoutH')}</label>
             <select
               value={entry.horizontalPosition}
               onChange={(e) => handleHorizontalPositionChange(e.target.value as 'left' | 'center' | 'right')}
               disabled={isFrozen}
               className={cn(
-                'h-7 rounded border border-zinc-700 bg-zinc-950 px-1.5 text-body text-zinc-100',
-                'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30',
+                'h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-body text-fg-primary',
+                'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
                 'disabled:opacity-40 disabled:cursor-not-allowed'
               )}
               aria-label={t('subtitlePosition.horizontal')}
@@ -645,14 +645,14 @@ export function TimelineBlockInspector({
             </select>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.layoutV')}</label>
+            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.layoutV')}</label>
             <select
               value={entry.verticalPosition}
               onChange={(e) => handleVerticalPositionChange(e.target.value as 'top' | 'bottom')}
               disabled={isFrozen}
               className={cn(
-                'h-7 rounded border border-zinc-700 bg-zinc-950 px-1.5 text-body text-zinc-100',
-                'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30',
+                'h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-body text-fg-primary',
+                'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
                 'disabled:opacity-40 disabled:cursor-not-allowed'
               )}
               aria-label={t('subtitlePosition.vertical')}
@@ -662,7 +662,7 @@ export function TimelineBlockInspector({
             </select>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.marginV')}</label>
+            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.marginV')}</label>
             <input
               type="number"
               min={0}
@@ -673,8 +673,8 @@ export function TimelineBlockInspector({
               disabled={isFrozen}
               aria-label={t('subtitlePosition.margin')}
               className={cn(
-                'w-20 h-7 rounded border border-zinc-700 bg-zinc-950 px-1.5 text-center text-body text-zinc-100',
-                'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30',
+                'w-20 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
+                'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
               )}
@@ -688,12 +688,12 @@ export function TimelineBlockInspector({
           フィールド名「背景色」が重なるが、REQ 補遺⑪ で明示的に
           確認済 (指定どおり「背景色」で実装)。audio-only 非表示。 */}
       {!isAudioOnly && (
-        <div className="space-y-2 border-t border-zinc-800 pt-2">
-          <div className="text-body font-semibold text-zinc-200">
+        <div className="space-y-2 border-t border-line pt-2">
+          <div className="text-body font-semibold text-fg-secondary">
             {t('timeline.inspector.backgroundSection')}
           </div>
           <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.bgEnabled')}</label>
+            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.bgEnabled')}</label>
             <Switch
               checked={entry.subtitleBackground.enabled}
               onCheckedChange={handleBackgroundEnabledChange}
@@ -706,14 +706,14 @@ export function TimelineBlockInspector({
             'flex items-center justify-between gap-2',
             !entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none'
           )}>
-            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.bgColor')}</label>
+            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.bgColor')}</label>
             <select
               value={entry.subtitleBackground.color}
               onChange={(e) => handleBackgroundColorChange(e.target.value as 'black' | 'white')}
               disabled={isFrozen || !entry.subtitleBackground.enabled}
               className={cn(
-                'h-7 rounded border border-zinc-700 bg-zinc-950 px-1.5 text-body text-zinc-100',
-                'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30',
+                'h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-body text-fg-primary',
+                'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
                 'disabled:opacity-40 disabled:cursor-not-allowed'
               )}
               aria-label={t('styleCell.bgColor')}
@@ -726,7 +726,7 @@ export function TimelineBlockInspector({
             'flex items-center justify-between gap-2',
             !entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none'
           )}>
-            <label className="text-callout font-semibold text-zinc-300">{t('styleCell.bgOpacity')}</label>
+            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.bgOpacity')}</label>
             <input
               type="number"
               min={0}
@@ -737,8 +737,8 @@ export function TimelineBlockInspector({
               disabled={isFrozen || !entry.subtitleBackground.enabled}
               aria-label={t('styleCell.bgOpacity')}
               className={cn(
-                'w-20 h-7 rounded border border-zinc-700 bg-zinc-950 px-1.5 text-center text-body text-zinc-100',
-                'focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-green-500/30',
+                'w-20 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
+                'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
               )}

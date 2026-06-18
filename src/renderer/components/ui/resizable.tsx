@@ -69,10 +69,10 @@ export function ResizableHandle({
         // zinc-800 to fit the dark canvas.  The `after` pseudo extends
         // the grab area to 4 px (horizontal) / 4 px (vertical) without
         // visually thickening the line.
-        'relative flex items-center justify-center bg-zinc-800',
+        'relative flex items-center justify-center bg-surface-2',
         'transition-colors duration-150',
-        'hover:bg-zinc-700 data-[resize-handle-active]:bg-green-500/60',
-        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-green-500/40',
+        'hover:bg-surface-3 data-[resize-handle-active]:bg-primary/60',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40',
         // Horizontal orientation: vertical bar between left/right panels
         'data-[panel-group-direction=horizontal]:w-px',
         'data-[panel-group-direction=horizontal]:cursor-col-resize',
@@ -97,12 +97,12 @@ export function ResizableHandle({
       {withHandle ? (
         <div
           className={cn(
-            'z-10 flex items-center justify-center rounded-sm border border-zinc-700 bg-zinc-900',
+            'z-10 flex items-center justify-center rounded-sm border border-line-strong bg-surface-1',
             'data-[panel-group-direction=horizontal]:h-5 data-[panel-group-direction=horizontal]:w-3',
             'data-[panel-group-direction=vertical]:h-3 data-[panel-group-direction=vertical]:w-5',
           )}
         >
-          <GripVertical className="h-3 w-3 text-zinc-500 data-[panel-group-direction=vertical]:rotate-90" />
+          <GripVertical className="h-3 w-3 text-fg-muted data-[panel-group-direction=vertical]:rotate-90" />
         </div>
       ) : (
         children

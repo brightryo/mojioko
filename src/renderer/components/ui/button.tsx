@@ -16,24 +16,24 @@ const buttonVariants = cva(
         /** Main action per screen — green background.
          *  REQ-071 Phase 3.6: text colour shifted green-950 -> zinc-950.
          *  green-950 (#052e16) is a very dark forest green and shares hue
-         *  with bg-green-500 (#22c55e), so the label visually washed into the
+         *  with bg-primary (#22c55e), so the label visually washed into the
          *  background even though contrast was AA (~6.7:1).  zinc-950
          *  (#09090b, near-black neutral) gives AAA contrast (~9.4:1) AND a
          *  neutral hue that snaps off the green — the label now reads as a
          *  dark button label rather than fading into the green plate. */
-        primary: 'bg-green-500 text-zinc-950 hover:bg-green-600 active:bg-green-700 rounded-lg',
+        primary: 'bg-primary text-fg-inverse hover:bg-primary-hover active:bg-primary-active rounded-lg',
         /** Secondary emphasis — light background. */
-        secondary: 'bg-zinc-50 text-zinc-950 hover:bg-zinc-200 active:bg-zinc-300 rounded-md',
+        secondary: 'bg-surface-inverse-0 text-fg-inverse hover:bg-surface-inverse-1 active:bg-surface-inverse-2 rounded-md',
         /** Tertiary / ghost — transparent with border. */
         ghost:
-          'bg-transparent text-zinc-400 border border-zinc-800 hover:bg-zinc-900 hover:text-zinc-100 active:bg-zinc-800 rounded-md',
+          'bg-transparent text-fg-tertiary border border-line hover:bg-surface-1 hover:text-fg-primary active:bg-surface-2 rounded-md',
         /** Destructive action — red tint. */
         danger:
-          'bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 active:bg-red-500/30 rounded-md',
+          'bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 active:bg-destructive/30 rounded-md',
         /** Icon-only action — transparent with border. */
-        icon: 'bg-transparent text-zinc-500 border border-zinc-800 hover:text-zinc-300 hover:border-zinc-700 active:bg-zinc-800 rounded-md',
+        icon: 'bg-transparent text-fg-muted border border-line hover:text-fg-secondary hover:border-line-strong active:bg-surface-2 rounded-md',
         /** Link-like, no border. */
-        link: 'bg-transparent text-zinc-400 hover:text-zinc-100 underline-offset-4 hover:underline'
+        link: 'bg-transparent text-fg-tertiary hover:text-fg-primary underline-offset-4 hover:underline'
       },
       size: {
         sm: 'h-7 px-3 py-1.5 text-body-sm',

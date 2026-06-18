@@ -112,6 +112,95 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 9%;
 
+    /* -------------------------------------------------------------------
+     * REQ-20260615-002 (v1.3.0 retheme Phase 1) — MOJIOKO surface /
+     * text / state token layer.  Values mirror the Tailwind `zinc-*`
+     * scale so direct-class call-sites can switch to tokens without any
+     * visual change.  Future light theme will override these under a
+     * `:root.light` block.
+     *
+     * Surface depth (4 stops, dark wash):
+     *   --surface-0  zinc-950  app base / inputs
+     *   --surface-1  zinc-900  pane base / header / toolbar
+     *   --surface-2  zinc-800  hover / chip / muted item
+     *   --surface-3  zinc-700  strong item / scroll thumb
+     *
+     * Text scale (5 stops, top → bottom):
+     *   --text-primary    zinc-50    main copy
+     *   --text-secondary  zinc-300   secondary copy / labels
+     *   --text-tertiary   zinc-400   advisory / placeholder
+     *   --text-muted      zinc-500   non-active
+     *   --text-disabled   zinc-600   truly disabled
+     *
+     * Borders:
+     *   --border-default  zinc-800   default rule (alias of --border)
+     *   --border-strong   zinc-700   stronger rule (hover, focus-row)
+     *   --border-subtle   zinc-900   barely-there rule (between rows)
+     *
+     * State row tints (consumed with /xx alpha at the call-site):
+     *   --row-edited   amber-400   modified-from-original row tint
+     *   --row-error    red-500     overflow / error row tint
+     *   --row-playing  sky-500     playback-follower (kept for residual
+     *                              use after 補遺⑬ retired the row tint;
+     *                              still consumed in timeline cursor /
+     *                              inspector legends)
+     *
+     * Specials (timeline overlays):
+     *   --playhead       red-500   timeline playhead vertical line
+     *   --trim-overlay   amber-500 trim-region semi-transparent overlay
+     *   --cursor-active  green-500 playback cursor line (= --primary)
+     * ------------------------------------------------------------------- */
+    --surface-0: 240 10% 3.9%;          /* zinc-950 */
+    --surface-1: 240 5.9% 10%;          /* zinc-900 */
+    --surface-2: 240 3.7% 15.9%;        /* zinc-800 */
+    --surface-3: 240 5.2% 26%;          /* zinc-700 */
+    --surface-4: 240 5% 34%;            /* zinc-600 — emphasis (hover/active strong) */
+
+    /* Inverse surfaces — bright slabs that flip with the theme.  Currently
+       only consumed by the secondary button variant (bright white slab on
+       dark bg in dark mode → dark slab on light bg in light mode). */
+    --surface-inverse-0: 0 0% 98%;       /* zinc-50 */
+    --surface-inverse-1: 240 6% 90%;     /* zinc-200 — hover */
+    --surface-inverse-2: 240 5% 84%;     /* zinc-300 — active */
+
+    --text-primary:   0 0% 98%;          /* zinc-50 (covers zinc-100 too) */
+    --text-secondary: 240 5% 84%;        /* zinc-300 (covers zinc-200 too) */
+    --text-tertiary:  240 5% 65%;        /* zinc-400 */
+    --text-muted:     240 4% 46%;        /* zinc-500 */
+    --text-disabled:  240 5% 34%;        /* zinc-600 */
+    --text-faint:     240 5.2% 26%;      /* zinc-700 — empty-state icons */
+    --text-inverse:   240 10% 3.9%;      /* zinc-950 — on bright/coloured bg */
+
+    --border-default: 240 3.7% 15.9%;    /* zinc-800 — alias of --border */
+    --border-strong:  240 5.2% 26%;      /* zinc-700 */
+    --border-subtle:  240 5.9% 10%;      /* zinc-900 */
+
+    /* Action accent variants (green family) */
+    --primary-hover:  142 76% 36%;       /* green-600  #16a34a */
+    --primary-active: 142 72% 29%;       /* green-700  #15803d */
+    --primary-soft:   142 71% 58%;       /* green-400  #4ade80 */
+    --primary-faint:  141 79% 73%;       /* green-300  #86efac */
+
+    /* Destructive variants (red family) */
+    --destructive-hover: 0 72% 51%;      /* red-600  #dc2626 */
+    --destructive-soft:  0 91% 71%;      /* red-400  #f87171 */
+
+    /* Warning variants (amber family) */
+    --warning-soft:       43 96% 56%;    /* amber-400 #fbbf24 — same hue as --row-edited */
+    --warning-faint:      46 97% 65%;    /* amber-300 #fcd34d */
+    --warning-very-faint: 48 96% 89%;    /* amber-100 #fef3c7 */
+
+    /* Info accent (single-use blue) */
+    --info: 213 94% 68%;                 /* blue-400 */
+
+    --row-edited:  43 96% 56%;           /* amber-400 */
+    --row-error:   0 84% 60%;            /* red-500 */
+    --row-playing: 199 89% 48%;          /* sky-500 — kept for legend / inspector */
+
+    --playhead:      0 84% 60%;          /* red-500 */
+    --trim-overlay: 38 92% 50%;          /* amber-500 */
+    --cursor-active: 142.1 70.6% 45.3%;  /* green-500 / = --primary */
+
     /* shadcn radius — matches our rounded-lg (8px) */
     --radius: 0.5rem;
   }

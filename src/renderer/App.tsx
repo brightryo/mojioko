@@ -212,11 +212,11 @@ function AppInner() {
         toastOptions={{
           classNames: {
             toast:
-              'bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-50 shadow-2xl shadow-black/40',
-            title: 'text-body font-medium text-zinc-50',
-            description: 'text-body-sm text-zinc-400',
-            actionButton: 'bg-zinc-700 text-zinc-50 text-body-sm rounded-md px-2 py-1',
-            cancelButton: 'bg-zinc-800 text-zinc-400 text-body-sm rounded-md px-2 py-1'
+              'bg-surface-1 border border-line rounded-lg text-fg-primary shadow-2xl shadow-black/40',
+            title: 'text-body font-medium text-fg-primary',
+            description: 'text-body-sm text-fg-tertiary',
+            actionButton: 'bg-surface-3 text-fg-primary text-body-sm rounded-md px-2 py-1',
+            cancelButton: 'bg-surface-2 text-fg-tertiary text-body-sm rounded-md px-2 py-1'
           }
         }}
       />

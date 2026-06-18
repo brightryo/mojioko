@@ -389,7 +389,7 @@ function FontRow({
         <span
           className={cn(
             'h-2.5 w-2.5 rounded-full shrink-0 transition-colors',
-            isActive ? 'bg-primary' : 'bg-zinc-600'
+            isActive ? 'bg-primary' : 'bg-surface-4'
           )}
           aria-hidden="true"
         />
@@ -402,7 +402,7 @@ function FontRow({
             without crowding the row. */}
         {meta.lacksRareKanji && (
           <span
-            className="inline-flex items-center gap-1 shrink-0 rounded px-1.5 py-0.5 text-caption uppercase tracking-wide text-amber-300/90 border border-amber-400/30 bg-amber-400/10"
+            className="inline-flex items-center gap-1 shrink-0 rounded px-1.5 py-0.5 text-caption uppercase tracking-wide text-warning-faint/90 border border-warning-soft/30 bg-warning-soft/10"
             title={t('fontPicker.note.missingRareKanjiHelp')}
           >
             <AlertCircle className="h-3 w-3" aria-hidden="true" />

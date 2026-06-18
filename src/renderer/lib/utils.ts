@@ -11,15 +11,15 @@ import { extendTailwindMerge } from 'tailwind-merge'
  * config only recognises the built-in Tailwind font-size names (`xs`,
  * `sm`, `base`, `lg`, `xl`, `2xl`, …).  Our REQ-071 role-based names are
  * unknown to it, so when a component class string contained BOTH a
- * size token (e.g. `text-body`) and a colour token (e.g. `text-zinc-950`)
+ * size token (e.g. `text-body`) and a colour token (e.g. `text-fg-inverse`)
  * the merger fell back to bucketing both into "text-color" and the later
  * one in the string won.  Result: every primary Button silently lost
- * `text-zinc-950` because cva concatenated `variant.primary` BEFORE
- * `size.md`, so `text-body` overrode `text-zinc-950` and the rendered
+ * `text-fg-inverse` because cva concatenated `variant.primary` BEFORE
+ * `size.md`, so `text-body` overrode `text-fg-inverse` and the rendered
  * colour became `rgb(250, 250, 250)` (inherited `text-foreground`).
  *
  * Registering the custom names under the `font-size` group restores the
- * correct classification: `text-body` is a font-size, `text-zinc-950` is
+ * correct classification: `text-body` is a font-size, `text-fg-inverse` is
  * a text-color, the two never conflict, and both survive the merge.
  */
 const twMerge = extendTailwindMerge({

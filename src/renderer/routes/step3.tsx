@@ -280,7 +280,7 @@ export default function Step3Route({ appVersion }: Step3RouteProps) {
   const footerCenter = (
     /* REQ-067 phase B: zinc-500 → zinc-300, same rationale as Step 1/2
        footers — privacy note is permanent chrome, not a hint. */
-    <span className="flex items-center gap-1.5 text-body-sm text-zinc-300">
+    <span className="flex items-center gap-1.5 text-body-sm text-fg-secondary">
       <Shield className="h-3.5 w-3.5" />
       {t('footer.privacyNote')}
     </span>

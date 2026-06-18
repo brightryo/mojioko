@@ -127,7 +127,7 @@ function CellEditor({ value, onCommit, multiline }: CellEditorProps) {
   // Tab away) still commits the typed value.
 
   const sharedClass = cn(
-    'w-full bg-zinc-800 rounded px-2 py-1 text-body text-zinc-50 resize-none',
+    'w-full bg-surface-2 rounded px-2 py-1 text-body text-fg-primary resize-none',
     'focus:outline-none'
   )
 
@@ -376,15 +376,15 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
   // scrollIntoView) は別経路で維持されている (本ファイル下部の effect
   // 参照)。
   const rowBg = cn(
-    'group grid items-start gap-0 border-b border-zinc-800/50 transition-colors duration-150',
+    'group grid items-start gap-0 border-b border-line/50 transition-colors duration-150',
     TABLE_GRID_COLS,
     isUserSelected
-      ? 'border-l-2 border-l-green-500'
+      ? 'border-l-2 border-l-primary'
       : isSelected
         ? 'border-l-2 border-l-[hsl(var(--row-selected-border))]'
         : 'border-l-2 border-l-transparent',
-    isUserSelected && rowState !== 'edited' && rowState !== 'overflow' && 'bg-zinc-800/50',
-    !isUserSelected && !isSelected && 'hover:bg-zinc-800/20',
+    isUserSelected && rowState !== 'edited' && rowState !== 'overflow' && 'bg-surface-2/50',
+    !isUserSelected && !isSelected && 'hover:bg-surface-2/20',
     // REQ-20260614-001 補遺④ — actions column removed, so the previous
     // `[&>*:not([data-row-actions])]` exemption is no longer needed.
     // Every cell now fades together when the row is deleted.
@@ -392,8 +392,8 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
     // State tints persist through selection (green) AND bulk-select.
     // The multi-row HSL highlight (applied inline below) wants the row bg
     // cleared so the variable colour shines through.
-    !isSelected && rowState === 'edited' && 'bg-amber-400/[0.04]',
-    !isSelected && rowState === 'overflow' && 'bg-red-500/[0.04]'
+    !isSelected && rowState === 'edited' && 'bg-warning-soft/[0.04]',
+    !isSelected && rowState === 'overflow' && 'bg-destructive/[0.04]'
   )
 
   return (
@@ -443,7 +443,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
       </div>
 
       {/* # */}
-      <div className="flex items-center justify-center py-3 text-body-sm text-zinc-500 font-mono tabular-nums">
+      <div className="flex items-center justify-center py-3 text-body-sm text-fg-muted font-mono tabular-nums">
         {displayIndex}
       </div>
 
@@ -483,8 +483,8 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
           disabled={isFrozen}
           className={cn(
             'mt-0.5 flex items-center justify-center gap-1 self-center',
-            'h-5 px-1.5 rounded text-micro text-zinc-500',
-            'hover:bg-zinc-800 hover:text-zinc-200 transition-colors duration-100',
+            'h-5 px-1.5 rounded text-micro text-fg-muted',
+            'hover:bg-surface-2 hover:text-fg-secondary transition-colors duration-100',
             'disabled:opacity-30 disabled:pointer-events-none'
           )}
         >
@@ -513,8 +513,8 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
               title={t('action.sizeStepUp', { step: SIZE_STEP_PX, max: FONT_SIZE_MAX_PX })}
               aria-label={t('action.sizeStepUp', { step: SIZE_STEP_PX, max: FONT_SIZE_MAX_PX })}
               className={cn(
-                'flex h-4 items-center justify-center rounded text-zinc-500',
-                'hover:bg-zinc-800 hover:text-zinc-200 transition-colors duration-100',
+                'flex h-4 items-center justify-center rounded text-fg-muted',
+                'hover:bg-surface-2 hover:text-fg-secondary transition-colors duration-100',
                 'disabled:opacity-30 disabled:pointer-events-none'
               )}
             >
@@ -533,13 +533,13 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
               // line, so surface the clamp range as a hover tooltip.
               title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
               className={cn(
-                'w-full h-7 rounded border bg-zinc-950 px-1 text-center text-body-sm text-zinc-100',
+                'w-full h-7 rounded border bg-surface-0 px-1 text-center text-body-sm text-fg-primary',
                 'focus:outline-none focus:ring-1',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
                 sizeWarning
-                  ? 'border-amber-400/60 focus:ring-amber-400/30'
-                  : 'border-zinc-800 focus:border-zinc-700 focus:ring-green-500/30'
+                  ? 'border-warning-soft/60 focus:ring-warning-soft/30'
+                  : 'border-line focus:border-line-strong focus:ring-primary/30'
               )}
             />
             <button
@@ -549,8 +549,8 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
               title={t('action.sizeStepDown', { step: SIZE_STEP_PX, min: FONT_SIZE_MIN_PX })}
               aria-label={t('action.sizeStepDown', { step: SIZE_STEP_PX, min: FONT_SIZE_MIN_PX })}
               className={cn(
-                'flex h-4 items-center justify-center rounded text-zinc-500',
-                'hover:bg-zinc-800 hover:text-zinc-200 transition-colors duration-100',
+                'flex h-4 items-center justify-center rounded text-fg-muted',
+                'hover:bg-surface-2 hover:text-fg-secondary transition-colors duration-100',
                 'disabled:opacity-30 disabled:pointer-events-none'
               )}
             >
@@ -575,7 +575,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
             title={t('styleCell.textColor')}
             aria-label={t('styleCell.textColor')}
             className={cn(
-              'inline-block h-5 w-5 rounded-sm border border-zinc-700',
+              'inline-block h-5 w-5 rounded-sm border border-line-strong',
               isFrozen && 'opacity-40'
             )}
             style={{ backgroundColor: entry.textColorHex }}
@@ -584,7 +584,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
             title={t('styleCell.outlineColor')}
             aria-label={t('styleCell.outlineColor')}
             className={cn(
-              'inline-block h-5 w-5 rounded-sm border border-zinc-700',
+              'inline-block h-5 w-5 rounded-sm border border-line-strong',
               isFrozen && 'opacity-40'
             )}
             style={{ backgroundColor: entry.outlineColorHex }}
@@ -593,7 +593,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
             title={t('styleCell.outlineWidth')}
             aria-label={t('styleCell.outlineWidth')}
             className={cn(
-              'text-body-sm tabular-nums text-zinc-300 leading-none',
+              'text-body-sm tabular-nums text-fg-secondary leading-none',
               isFrozen && 'opacity-40'
             )}
           >
@@ -616,7 +616,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
       {!isAudioOnly && (
         <span
           title={rowFontDisplayName}
-          className="text-caption text-zinc-500 truncate px-2 leading-none"
+          className="text-caption text-fg-muted truncate px-2 leading-none"
         >
           {rowFontDisplayName}
         </span>
@@ -625,11 +625,11 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
         className={cn(
           'flex items-start py-2 px-2 min-w-0 min-h-[36px] cursor-text rounded transition-all duration-150',
           // Non-editing: always show a subtle inset border (no layout shift vs a real border)
-          !editingText && 'shadow-[inset_0_0_0_1px_rgba(63,63,70,0.5)]',
+          !editingText && 'shadow-[inset_0_0_0_1px_hsl(var(--border-strong)/0.5)]',
           // Hover: brighten border + light bg
-          !editingText && !isFrozen && 'hover:shadow-[inset_0_0_0_1px_rgba(113,113,122,0.5)] hover:bg-zinc-800/30',
+          !editingText && !isFrozen && 'hover:shadow-[inset_0_0_0_1px_hsl(var(--text-muted)/0.5)] hover:bg-surface-2/30',
           // Editing: green border + bg
-          editingText && 'shadow-[inset_0_0_0_1px_rgba(34,197,94,0.5)] bg-zinc-800/20'
+          editingText && 'shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.5)] bg-surface-2/20'
         )}
         onClick={(e) => {
           e.stopPropagation()
@@ -649,16 +649,16 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
             multiline
           />
         ) : isFrozen ? (
-          <span className="text-body leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-zinc-500 cursor-text select-text">
+          <span className="text-body leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-fg-muted cursor-text select-text">
             {entry.text.replace(/\\N/g, '\n')}
           </span>
         ) : isOverflow ? (
           <span className="text-body leading-relaxed break-words whitespace-pre-wrap line-clamp-3 cursor-text select-text">
-            <span className="text-zinc-100">{entry.text.replace(/\\N/g, '\n').slice(0, overflowStartIndex)}</span>
-            <span className="text-red-500">{entry.text.replace(/\\N/g, '\n').slice(overflowStartIndex)}</span>
+            <span className="text-fg-primary">{entry.text.replace(/\\N/g, '\n').slice(0, overflowStartIndex)}</span>
+            <span className="text-destructive">{entry.text.replace(/\\N/g, '\n').slice(overflowStartIndex)}</span>
           </span>
         ) : (
-          <span className="text-body leading-relaxed break-words whitespace-pre-wrap line-clamp-3 text-zinc-100 cursor-text select-text">
+          <span className="text-body leading-relaxed break-words whitespace-pre-wrap line-clamp-3 text-fg-primary cursor-text select-text">
             {entry.text.replace(/\\N/g, '\n')}
           </span>
         )}
@@ -899,7 +899,7 @@ export function SubtitleTable({
     'empty.deleted'
 
   const headerCols = cn(
-    'grid border-b border-zinc-800 bg-zinc-900 sticky top-0 z-10',
+    'grid border-b border-line bg-surface-1 sticky top-0 z-10',
     TABLE_GRID_COLS
   )
 
@@ -1001,19 +1001,19 @@ export function SubtitleTable({
             that pair with the cell values below.  Color also lifted from
             zinc-500 to zinc-300 so the headers carry the item-name weight
             of a real label. */}
-        <div className="py-2 px-1 text-callout font-semibold text-zinc-300 text-center">{t('table.colIndex')}</div>
-        <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{t('table.colTime')}</div>
-        <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{isAudioOnly ? '' : t('table.colSize')}</div>
+        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary text-center">{t('table.colIndex')}</div>
+        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary">{t('table.colTime')}</div>
+        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary">{isAudioOnly ? '' : t('table.colSize')}</div>
         {/* REQ-20260614-001 補遺④ — column 5: style-reference block
             (text colour / outline colour / outline width — display
             only).  No header label since the cell content is purely
             visual reference. */}
-        <div className="py-2 px-1 text-callout font-semibold text-zinc-300"></div>
-        <div className="py-2 px-2 text-callout font-semibold text-zinc-300">{t('table.colText')}</div>
+        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary"></div>
+        <div className="py-2 px-2 text-callout font-semibold text-fg-secondary">{t('table.colText')}</div>
         {/* REQ-20260614-001 補遺④ — actions column removed.  Action
             icons (改行 / 削除 / リセット / 複製) now live exclusively
             in the right-pane Inspector. */}
-        <div className="py-2 px-1 text-callout font-semibold text-zinc-300">{t('table.colState')}</div>
+        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary">{t('table.colState')}</div>
       </div>
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" onScroll={handleScroll}>
         {filtered.length === 0 ? (
@@ -1022,8 +1022,8 @@ export function SubtitleTable({
             animate={{ opacity: 1 }}
             className="flex flex-col items-center justify-center gap-3 py-16"
           >
-            <FileText className="h-8 w-8 text-zinc-700" />
-            <p className="text-body font-medium text-zinc-400">{t(emptyKey)}</p>
+            <FileText className="h-8 w-8 text-fg-faint" />
+            <p className="text-body font-medium text-fg-tertiary">{t(emptyKey)}</p>
           </motion.div>
         ) : (
           <AnimatePresence initial={false}>

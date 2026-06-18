@@ -667,7 +667,7 @@ export function VideoPreviewPanel() {
           flattened the frame to 0×0 in the original Phase 2 attempt. */}
       <div
         ref={previewBodyRef}
-        className="flex-1 min-h-0 flex items-center justify-center p-2 bg-zinc-950"
+        className="flex-1 min-h-0 flex items-center justify-center p-2 bg-surface-0"
       >
         {hasError ? (
           <span className="px-6 text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
