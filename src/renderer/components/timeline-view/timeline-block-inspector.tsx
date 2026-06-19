@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus } from 'lucide-react'
+import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
@@ -198,6 +198,12 @@ export function TimelineBlockInspector({
     const clamped = Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, v))
     if (clamped === entry.fontSizePx) return
     applyStyleEdit(t('history.editSize'), { fontSizePx: clamped })
+  }
+  /** REQ-20260615-017: ±10 stepper buttons flanking the size input. */
+  function handleSizeStep(delta: number) {
+    const next = Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, entry.fontSizePx + delta))
+    if (next === entry.fontSizePx) return
+    applyStyleEdit(t('history.editSize'), { fontSizePx: next })
   }
   function handleTextColorChange(hex: string) {
     applyStyleEdit(t('history.editColor'), { textColorHex: hex })
@@ -604,32 +610,65 @@ export function TimelineBlockInspector({
               onChange={handleFontChange}
               disabled={isFrozen}
             />
-            {/* Size */}
+            {/* Size — REQ-20260615-017: ±10 chevron stepper flanks the
+                number input.  Direct typing still works (input keeps its
+                onChange / onBlur), and both the buttons and the typed
+                value clamp to [FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX]. */}
             <div className="flex items-center justify-between gap-2">
               <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.size')}</label>
-              <input
-                type="number"
-                min={FONT_SIZE_MIN_PX}
-                max={FONT_SIZE_MAX_PX}
-                defaultValue={entry.fontSizePx}
-                key={entry.fontSizePx}
-                onChange={handleSizeChange}
-                onBlur={handleSizeBlur}
-                disabled={isFrozen}
-                title={t('step1:subtitleDefaults.sizeHint', {
-                  min: FONT_SIZE_MIN_PX,
-                  max: FONT_SIZE_MAX_PX
-                })}
-                className={cn(
-                  'w-20 h-7 rounded border bg-surface-0 px-1.5 text-center text-body text-fg-primary',
-                  'focus:outline-none focus:ring-1',
-                  '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-                  'disabled:opacity-40 disabled:cursor-not-allowed',
-                  sizeOutOfRange
-                    ? 'border-warning-soft/60 focus:ring-warning-soft/30'
-                    : 'border-line-strong focus:border-surface-4 focus:ring-primary/30'
-                )}
-              />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleSizeStep(-10)}
+                  disabled={isFrozen || entry.fontSizePx <= FONT_SIZE_MIN_PX}
+                  aria-label={t('styleCell.size') + ' −10'}
+                  className={cn(
+                    'h-7 w-6 inline-flex items-center justify-center rounded border border-line-strong bg-surface-0 text-fg-secondary',
+                    'hover:text-fg-primary hover:bg-surface-2 transition-colors duration-150',
+                    'focus:outline-none focus-visible:outline-none',
+                    'disabled:opacity-40 disabled:cursor-not-allowed'
+                  )}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <input
+                  type="number"
+                  min={FONT_SIZE_MIN_PX}
+                  max={FONT_SIZE_MAX_PX}
+                  defaultValue={entry.fontSizePx}
+                  key={entry.fontSizePx}
+                  onChange={handleSizeChange}
+                  onBlur={handleSizeBlur}
+                  disabled={isFrozen}
+                  title={t('step1:subtitleDefaults.sizeHint', {
+                    min: FONT_SIZE_MIN_PX,
+                    max: FONT_SIZE_MAX_PX
+                  })}
+                  className={cn(
+                    'w-14 h-7 rounded border bg-surface-0 px-1.5 text-center text-body text-fg-primary',
+                    'focus:outline-none focus:ring-1',
+                    '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
+                    'disabled:opacity-40 disabled:cursor-not-allowed',
+                    sizeOutOfRange
+                      ? 'border-warning-soft/60 focus:ring-warning-soft/30'
+                      : 'border-line-strong focus:border-surface-4 focus:ring-primary/30'
+                  )}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSizeStep(10)}
+                  disabled={isFrozen || entry.fontSizePx >= FONT_SIZE_MAX_PX}
+                  aria-label={t('styleCell.size') + ' +10'}
+                  className={cn(
+                    'h-7 w-6 inline-flex items-center justify-center rounded border border-line-strong bg-surface-0 text-fg-secondary',
+                    'hover:text-fg-primary hover:bg-surface-2 transition-colors duration-150',
+                    'focus:outline-none focus-visible:outline-none',
+                    'disabled:opacity-40 disabled:cursor-not-allowed'
+                  )}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
             {/* Text colour */}
             <div className="flex items-center justify-between gap-2">
