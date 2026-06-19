@@ -278,10 +278,12 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
     onOpenChange(next)
   }
 
-  function handleCompletionAction(action: () => void) {
-    action()
-    setCompletionOpen(false)
-  }
+  // REQ-20260615-025: completion-dialog action buttons (Play / Open
+  // folder / Send feedback) and the embedded donation cards run their
+  // action WITHOUT closing the dialog so the user can chain
+  // Play → Feedback → Donate in one session.  The only ways to dismiss
+  // the dialog are the title-bar X (Radix DialogClose), the Close
+  // button at the bottom, and clicking outside the dialog.
 
   return (
     <>
@@ -495,7 +497,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               <Button
                 variant="primary"
                 size="md"
-                onClick={() => handleCompletionAction(() => shellOpenPath(completedPath))}
+                onClick={() => { void shellOpenPath(completedPath) }}
               >
                 <Play className="h-4 w-4 mr-1.5" />
                 {t('completion.playVideo')}
@@ -503,7 +505,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               <Button
                 variant="secondary"
                 size="md"
-                onClick={() => handleCompletionAction(() => shellShowInFolder(completedPath))}
+                onClick={() => { void shellShowInFolder(completedPath) }}
               >
                 <FolderOpen className="h-4 w-4 mr-1.5" />
                 {t('completion.showInFolder')}
@@ -514,10 +516,10 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               <Button
                 variant="secondary"
                 size="md"
-                onClick={() => handleCompletionAction(() => {
+                onClick={() => {
                   const lang = i18n.language === 'ja' ? 'ja' : 'en'
                   void shellOpenExternal(GITHUB_PAGES_LOCALIZED[lang].feedback)
-                })}
+                }}
               >
                 <MessageSquare className="h-4 w-4 mr-1.5" />
                 {t('completion.sendFeedback')}
