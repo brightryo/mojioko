@@ -1,4 +1,3 @@
-import * as React from 'react'
 import { GripVertical } from 'lucide-react'
 import {
   Group as RrpGroup,
@@ -11,32 +10,32 @@ import {
 import { cn } from '@/lib/utils'
 
 /**
- * REQ-20260614-001 Phase 2 — shadcn-style wrapper around
- * `react-resizable-panels` v4 (`Group` / `Panel` / `Separator`).
+ * shadcn-style wrapper around `react-resizable-panels` v4.
  *
- * The v4 API replaces v3's `PanelGroup` / `PanelResizeHandle` names, so this
- * primitive can't be the canonical shadcn copy verbatim — it's adapted to
- * the v4 surface (`Group` with `orientation` prop, `Separator` instead of
- * `PanelResizeHandle`) while keeping the shadcn-public surface
- * (`ResizablePanelGroup` / `ResizablePanel` / `ResizableHandle`) so callers
- * read familiar.
+ * REQ-20260615-006: rewritten to mirror shadcn's official Radix Resizable
+ * (apps/v4/registry/new-york-v4/ui/resizable.tsx) — same markup, same
+ * `withHandle` opt-in, same selector strategy (`aria-[orientation=*]:` on
+ * the Separator, which react-resizable-panels sets directly).  Earlier
+ * MOJIOKO-specific data-attribute selectors (`data-[panel-group-direction=*]`)
+ * and the React context grip-direction hack from REQ-20260615-005 are gone.
  *
- * Direction shorthand: `direction="horizontal"|"vertical"` maps to v4's
- * `orientation` prop and writes the matching data attribute so the
- * handle's CSS can branch on it.
- *
- * REQ-20260615-005: the shadcn `withHandle` look is the default — a slim
- * 1-px line plus a small centred grip chip with a GripVertical glyph that
- * rotates 90° on horizontal bars.  Line is `bg-line-strong` (zinc-700)
- * so it stays visible against the zinc-900 panel surfaces (the previous
- * `bg-line` / zinc-800 sank into the background).  6-px transparent hit
- * band kept from REQ-20260615-004.  Direction reaches the grip via a
- * React context — Tailwind's `data-[...]` variant matches the element's
- * own attribute, and react-resizable-panels does not forward the parent
- * Group's data attribute onto descendants of the Separator.
+ * Differences vs. shadcn upstream:
+ *  - The MOJIOKO wrapper keeps its `direction` shorthand on
+ *    `ResizablePanelGroup` so the existing 3-pane STEP2 call sites and their
+ *    layout-percent calculations do not need to change.  Internally the
+ *    direction is forwarded as `orientation` to `RrpGroup`, which is the v4
+ *    API the library expects.
+ *  - The line / chip use `bg-line-strong` (zinc-700) instead of shadcn's
+ *    `bg-border` (zinc-800) so the 1-px line stays visible against the
+ *    zinc-900 panel surfaces — REQ-20260615-005 noted bg-border sank.  The
+ *    grip icon uses `text-fg-tertiary` (zinc-400) so the dots register on
+ *    the zinc-700 chip.
+ *  - Hover / drag-active states added (`hover:bg-surface-4`,
+ *    `data-[resize-handle-active]:bg-primary/60`) for MOJIOKO feel; shadcn
+ *    upstream leaves these to the consumer.
+ *  - Hit band kept at 4 px (`after:w-1` / `after:h-1`) matching shadcn,
+ *    rather than the 6 px from REQ-20260615-004.
  */
-
-const ResizableDirectionContext = React.createContext<'horizontal' | 'vertical'>('horizontal')
 
 export type ResizablePanelGroupProps = Omit<RrpGroupProps, 'orientation'> & {
   direction: 'horizontal' | 'vertical'
@@ -48,77 +47,60 @@ export function ResizablePanelGroup({
   ...props
 }: ResizablePanelGroupProps) {
   return (
-    <ResizableDirectionContext.Provider value={direction}>
-      <RrpGroup
-        orientation={direction}
-        data-panel-group-direction={direction}
-        className={cn(
-          'flex h-full w-full',
-          direction === 'vertical' && 'flex-col',
-          className,
-        )}
-        {...props}
-      />
-    </ResizableDirectionContext.Provider>
+    <RrpGroup
+      data-slot="resizable-panel-group"
+      orientation={direction}
+      className={cn(
+        'flex h-full w-full aria-[orientation=vertical]:flex-col',
+        className,
+      )}
+      {...props}
+    />
   )
 }
 
 export type ResizablePanelProps = RrpPanelProps
-export const ResizablePanel = RrpPanel
+export function ResizablePanel(props: ResizablePanelProps) {
+  return <RrpPanel data-slot="resizable-panel" {...props} />
+}
 
-export type ResizableHandleProps = RrpSeparatorProps
+export type ResizableHandleProps = RrpSeparatorProps & {
+  /** When true, render shadcn's centred grip chip on top of the line. */
+  withHandle?: boolean
+}
 
 export function ResizableHandle({
+  withHandle,
   className,
-  children,
   ...props
 }: ResizableHandleProps) {
-  const direction = React.useContext(ResizableDirectionContext)
   return (
     <RrpSeparator
+      data-slot="resizable-handle"
       className={cn(
-        // Slim 1-px line on the strong border token (zinc-700) so it
-        // contrasts against the zinc-900 panel surfaces; `after` pseudo
-        // extends a transparent 6-px hit band centred on the line.
-        'relative flex items-center justify-center bg-line-strong',
-        'transition-colors duration-150',
-        'hover:bg-surface-4 data-[resize-handle-active]:bg-primary/60',
-        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40',
-        // Horizontal orientation: vertical bar between left/right panels
-        'data-[panel-group-direction=horizontal]:w-px',
-        'data-[panel-group-direction=horizontal]:cursor-col-resize',
-        'data-[panel-group-direction=horizontal]:after:absolute',
-        'data-[panel-group-direction=horizontal]:after:inset-y-0',
-        'data-[panel-group-direction=horizontal]:after:left-1/2',
-        'data-[panel-group-direction=horizontal]:after:w-1.5',
-        'data-[panel-group-direction=horizontal]:after:-translate-x-1/2',
-        // Vertical orientation: horizontal bar between top/bottom panels
-        'data-[panel-group-direction=vertical]:h-px',
-        'data-[panel-group-direction=vertical]:w-full',
-        'data-[panel-group-direction=vertical]:cursor-row-resize',
-        'data-[panel-group-direction=vertical]:after:absolute',
-        'data-[panel-group-direction=vertical]:after:inset-x-0',
-        'data-[panel-group-direction=vertical]:after:top-1/2',
-        'data-[panel-group-direction=vertical]:after:h-1.5',
-        'data-[panel-group-direction=vertical]:after:-translate-y-1/2',
+        // Default = vertical bar (Group direction=horizontal): 1-px line on
+        // bg-line-strong with a 4-px transparent hit band centred on it.
+        'relative flex w-px items-center justify-center bg-line-strong cursor-col-resize',
+        'transition-colors duration-150 hover:bg-surface-4 data-[resize-handle-active]:bg-primary/60',
+        'after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-1',
+        // Horizontal-bar override (Group direction=vertical): flip line + hit band axis.
+        'aria-[orientation=horizontal]:h-px aria-[orientation=horizontal]:w-full',
+        'aria-[orientation=horizontal]:cursor-row-resize',
+        'aria-[orientation=horizontal]:after:left-0 aria-[orientation=horizontal]:after:h-1',
+        'aria-[orientation=horizontal]:after:w-full aria-[orientation=horizontal]:after:translate-x-0',
+        'aria-[orientation=horizontal]:after:-translate-y-1/2',
+        // Rotate the grip chip 90° on horizontal bars so the dots run along the line.
+        '[&[aria-orientation=horizontal]>div]:rotate-90',
         className,
       )}
       {...props}
     >
-      <div
-        className={cn(
-          'z-10 flex items-center justify-center rounded-sm border border-line-strong bg-surface-1',
-          direction === 'horizontal' ? 'h-5 w-3' : 'h-3 w-5',
-        )}
-      >
-        <GripVertical
-          className={cn(
-            'h-3 w-3 text-fg-tertiary',
-            direction === 'vertical' && 'rotate-90',
-          )}
-        />
-      </div>
-      {children}
+      {withHandle && (
+        <div className="z-10 flex h-4 w-3 items-center justify-center rounded-[2px] border border-line-strong bg-line-strong">
+          <GripVertical className="size-2.5 text-fg-tertiary" />
+        </div>
+      )}
     </RrpSeparator>
   )
 }
