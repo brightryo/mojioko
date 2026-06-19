@@ -1,3 +1,5 @@
+import * as React from 'react'
+import { GripVertical } from 'lucide-react'
 import {
   Group as RrpGroup,
   Panel as RrpPanel,
@@ -23,11 +25,18 @@ import { cn } from '@/lib/utils'
  * `orientation` prop and writes the matching data attribute so the
  * handle's CSS can branch on it.
  *
- * REQ-20260615-004: handle redrawn as a slim 1-px line in border-token
- * colour, mirroring the shadcn Radix Resizable docs.  The grip glyph
- * (`withHandle` opt-in) has been removed entirely — the slim line is the
- * only style.  A transparent 6-px hit band keeps the line easy to grab.
+ * REQ-20260615-005: the shadcn `withHandle` look is the default — a slim
+ * 1-px line plus a small centred grip chip with a GripVertical glyph that
+ * rotates 90° on horizontal bars.  Line is `bg-line-strong` (zinc-700)
+ * so it stays visible against the zinc-900 panel surfaces (the previous
+ * `bg-line` / zinc-800 sank into the background).  6-px transparent hit
+ * band kept from REQ-20260615-004.  Direction reaches the grip via a
+ * React context — Tailwind's `data-[...]` variant matches the element's
+ * own attribute, and react-resizable-panels does not forward the parent
+ * Group's data attribute onto descendants of the Separator.
  */
+
+const ResizableDirectionContext = React.createContext<'horizontal' | 'vertical'>('horizontal')
 
 export type ResizablePanelGroupProps = Omit<RrpGroupProps, 'orientation'> & {
   direction: 'horizontal' | 'vertical'
@@ -39,16 +48,18 @@ export function ResizablePanelGroup({
   ...props
 }: ResizablePanelGroupProps) {
   return (
-    <RrpGroup
-      orientation={direction}
-      data-panel-group-direction={direction}
-      className={cn(
-        'flex h-full w-full',
-        direction === 'vertical' && 'flex-col',
-        className,
-      )}
-      {...props}
-    />
+    <ResizableDirectionContext.Provider value={direction}>
+      <RrpGroup
+        orientation={direction}
+        data-panel-group-direction={direction}
+        className={cn(
+          'flex h-full w-full',
+          direction === 'vertical' && 'flex-col',
+          className,
+        )}
+        {...props}
+      />
+    </ResizableDirectionContext.Provider>
   )
 }
 
@@ -62,15 +73,16 @@ export function ResizableHandle({
   children,
   ...props
 }: ResizableHandleProps) {
+  const direction = React.useContext(ResizableDirectionContext)
   return (
     <RrpSeparator
       className={cn(
-        // Slim 1-px line on the border token; `after` pseudo extends a
-        // transparent 6-px hit band centred on the line so it stays easy
-        // to grab without thickening the visible divider.
-        'relative flex items-center justify-center bg-line',
+        // Slim 1-px line on the strong border token (zinc-700) so it
+        // contrasts against the zinc-900 panel surfaces; `after` pseudo
+        // extends a transparent 6-px hit band centred on the line.
+        'relative flex items-center justify-center bg-line-strong',
         'transition-colors duration-150',
-        'hover:bg-line-strong data-[resize-handle-active]:bg-line-strong',
+        'hover:bg-surface-4 data-[resize-handle-active]:bg-primary/60',
         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40',
         // Horizontal orientation: vertical bar between left/right panels
         'data-[panel-group-direction=horizontal]:w-px',
@@ -93,6 +105,19 @@ export function ResizableHandle({
       )}
       {...props}
     >
+      <div
+        className={cn(
+          'z-10 flex items-center justify-center rounded-sm border border-line-strong bg-surface-1',
+          direction === 'horizontal' ? 'h-5 w-3' : 'h-3 w-5',
+        )}
+      >
+        <GripVertical
+          className={cn(
+            'h-3 w-3 text-fg-tertiary',
+            direction === 'vertical' && 'rotate-90',
+          )}
+        />
+      </div>
       {children}
     </RrpSeparator>
   )
