@@ -6,6 +6,16 @@
 
 @layer base {
   :root {
+    /*
+     * REQ-20260615-019: single tunable for the app's window-background
+     * alpha.  `0.85` = 85% opaque black (15% see-through to the desktop).
+     * Flip to `0.15` if the spec meant "85% transparent".  Set to `1`
+     * to restore a fully opaque app.  The BrowserWindow side
+     * (src/main/index.ts) is set `transparent: true` so this alpha is
+     * actually rendered against the desktop.
+     */
+    --window-bg-alpha: 0.85;
+
     /* Background scale */
     --background: 0 0% 3.9%;         /* #0a0a0a — app base */
     --card: 0 0% 7.8%;               /* #141414 — bg-surface */
@@ -227,7 +237,16 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans;
+    /*
+     * REQ-20260615-019: body paints rgba(0,0,0, --window-bg-alpha) instead
+     * of the opaque `bg-background` token so the BrowserWindow's
+     * `transparent: true` actually shows the desktop through the
+     * background.  `bg-card` etc. (used by section cards / dialogs /
+     * popovers) keep their opaque HSL tokens so foreground UI stays
+     * readable; only the bare background between cards is semi-transparent.
+     */
+    @apply text-foreground font-sans;
+    background-color: rgba(0, 0, 0, var(--window-bg-alpha));
     height: 100%;
     overflow: hidden;
     font-feature-settings: 'rlig' 1, 'calt' 1;

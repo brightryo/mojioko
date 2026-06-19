@@ -60,7 +60,14 @@ function createWindow(): BrowserWindow {
     minWidth: 1280,
     minHeight: 820,
     title: APP_DISPLAY,
-    backgroundColor: '#09090b',
+    // REQ-20260615-019 試し: transparent BrowserWindow so the renderer's
+    // semi-transparent body shows the desktop behind it.  `backgroundColor`
+    // is dropped because Electron forces it to transparent when
+    // `transparent: true` is set.  Note: Windows title bar / frame remain
+    // OS-rendered (opaque) because `frame: true` is unchanged — only the
+    // renderer content area participates in the transparency.  Revert this
+    // single commit to restore the opaque #09090b launch.
+    transparent: true,
     // Multi-size .ico ensures Windows picks the right size for the title
     // bar (32×32), the taskbar (16/24×16/24), and Alt-Tab (48×48).  Without
     // this property Electron renders the default Electron logo.
