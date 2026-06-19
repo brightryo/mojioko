@@ -62,6 +62,16 @@ function AppInner() {
   const location = useLocation()
   const { i18n } = useTranslation('common')
 
+  // REQ-20260615-026: keep <html> in sync with the user-selected theme so
+  // the `:root.light { ... }` overrides in globals.css activate.  Default
+  // (no class) leaves the dark mauve values from :root active.
+  const theme = useSettingsStore((s) => s.theme)
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.toggle('light', theme === 'light')
+    root.classList.toggle('dark', theme === 'dark')
+  }, [theme])
+
   useEffect(() => {
     window.electronAPI
       .getVersion()
@@ -140,6 +150,7 @@ function AppInner() {
         const settings: AppSettings = {
           version: 1,
           language: s.language,
+          theme: s.theme,
           transcriptionDefaults: s.transcriptionDefaults,
           transcriptionAdvanced: s.transcriptionAdvanced,
           autoLineBreak: s.autoLineBreak,

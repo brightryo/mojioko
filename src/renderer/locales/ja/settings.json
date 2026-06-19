@@ -10,6 +10,9 @@
     "language": "言語",
     "languageJa": "日本語",
     "languageEn": "English",
+    "theme": "テーマ",
+    "themeDark": "ダーク",
+    "themeLight": "ライト",
     "fadeDuration": "フェード時間（秒）",
     "fadeDurationHint": "0.1〜0.5秒"
   },

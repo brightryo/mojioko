@@ -10,6 +10,9 @@
     "language": "Language",
     "languageJa": "Japanese",
     "languageEn": "English",
+    "theme": "Theme",
+    "themeDark": "Dark",
+    "themeLight": "Light",
     "fadeDuration": "Fade duration (seconds)",
     "fadeDurationHint": "0.1–0.5 sec"
   },
