@@ -47,41 +47,45 @@ import { useRef } from 'react'
  *   height ≈ 628 px   (820 minus breadcrumb 45 + footer 65 + main py-5 40
  *                      + step2 heading row 30 + flex gap-3 12)
  *
- * Splitting those by the startup ratios (outer 70/30, left 50/50) gives:
+ * Each ResizableHandle is 1 px wide, so the panel siblings have:
  *
- *   left pane width   ≈ 862 px
- *   right (inspector) ≈ 370 px
- *   preview height    ≈ 314 px
- *   bottom height     ≈ 314 px
+ *   outer width available  = 1232 - 1 = 1231 px
+ *   inner height available = 628 - 1 = 627 px
  *
- * We trim each value by ~2 px to absorb the 1-px ResizableHandle and
- * cross-platform rendering jitter (Windows scrollbar overlap, browser
- * subpixel rounding) so the px-min sum stays just below the available
- * paneArea size — preventing the library from being asked to fit
- * `sum(min) > container` and producing visual artefacts.  The remaining
- * ~3 px of slack at minimum window is below perception.
+ * REQ-20260615-007: the per-axis sum of pxMin is tuned to exactly equal
+ * that available size so the panels at minimum occupy every remaining
+ * pixel.  The trim margin (~3 px) that補遺⑥ originally left for
+ * "cross-platform rendering jitter" was the same slack the user was
+ * dragging through at startup, so it is removed here.  Combined with the
+ * `Math.ceil` rounding in `paneMinPct` below the handle has no sub-pixel
+ * play left to absorb.
  *
  * Each ResizablePanel below converts its px-min to a percentage via
  * `paneMinPct(MIN_PX, paneAreaSize.w|h)` so the constraint moves with
- * the container (REQ補遺⑥ §実装方針 #2).
+ * the container (補遺⑥ §実装方針 #2).
  */
-const OUTER_LEFT_MIN_PX   = 860
+const OUTER_LEFT_MIN_PX   = 863  // 860 → 863: 863 + 368 = 1231 (= 1232 − 1 handle)
 const OUTER_RIGHT_MIN_PX  = 368
-const LEFT_TOP_MIN_PX     = 312
-const LEFT_BOTTOM_MIN_PX  = 312
+const LEFT_TOP_MIN_PX     = 313  // 312 → 313: 313 + 314 = 627 (= 628 − 1 handle)
+const LEFT_BOTTOM_MIN_PX  = 314  // 312 → 314 (symmetric ±0.5 px from previous)
 
 /**
  * Convert a pixel minimum to a percentage string for ResizablePanel's
  * `minSize` prop.  Falls back to `"0%"` while the container dimension is
  * still 0 (first render before the layout effect commits) so the panes
  * boot at their `defaultLayout` without being clamped against a
- * meaningless divisor.  Caps at 99% so two panels' mins can never sum
- * past 100% even if the math is off by a pixel.
+ * meaningless divisor.
+ *
+ * REQ-20260615-007: `Math.ceil` to 2 decimal places (instead of `toFixed`'s
+ * banker's rounding) so the percentage always rounds in the
+ * sum-towards-100 direction; combined with the bumped pxMin constants
+ * above, this leaves no sub-pixel slack at minimum window.  Cap at 99.99
+ * so a single panel can never demand ≥ 100% on its own.
  */
 function paneMinPct(pxMin: number, containerPx: number): string {
   if (containerPx <= 0) return '0%'
   const pct = (pxMin / containerPx) * 100
-  return `${Math.min(99, pct).toFixed(2)}%`
+  return `${Math.min(99.99, Math.ceil(pct * 100) / 100).toFixed(2)}%`
 }
 
 /**
