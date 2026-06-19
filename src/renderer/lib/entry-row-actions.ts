@@ -78,12 +78,19 @@ export function resetRow(
   const resetPatch = {
     ...original,
     fontId: original.fontId,
+    // REQ-20260615-018 B: posX / posY are optional and the entry creation
+    // paths (fixtures.makeEntry, step1 transcription, step2 add-row) only
+    // call makeEntryLayoutDefaults() which does NOT seed posX/posY at all.
+    // So `original` from those rows has no posX/posY keys, the `...original`
+    // spread does not carry the keys, and `updateEntry({...e, ...patch})`
+    // preserves the live entry's drag-pinned posX/posY — Reset would leave
+    // the row pinned despite clearing every other field.  Same fix pattern
+    // as the `fontId: original.fontId` line above (REQ-022 step 7).
+    posX: original.posX,
+    posY: original.posY,
     // REQ-20260613-016: deep-copy subtitleBackground out of `original` so
     // subsequent edits to the live entry's background don't retroactively
-    // mutate the reset target.  posX/posY come through via the spread
-    // above — when `original.posX/Y` is undefined the spread carries an
-    // explicit `undefined` which the store merge applies (clears any
-    // current pinning, restoring alignment-based layout).
+    // mutate the reset target.
     subtitleBackground: { ...original.subtitleBackground },
     isEdited: false,
     isDeleted: false
