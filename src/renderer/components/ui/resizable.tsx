@@ -1,4 +1,3 @@
-import { GripVertical } from 'lucide-react'
 import {
   Group as RrpGroup,
   Panel as RrpPanel,
@@ -23,6 +22,11 @@ import { cn } from '@/lib/utils'
  * Direction shorthand: `direction="horizontal"|"vertical"` maps to v4's
  * `orientation` prop and writes the matching data attribute so the
  * handle's CSS can branch on it.
+ *
+ * REQ-20260615-004: handle redrawn as a slim 1-px line in border-token
+ * colour, mirroring the shadcn Radix Resizable docs.  The grip glyph
+ * (`withHandle` opt-in) has been removed entirely — the slim line is the
+ * only style.  A transparent 6-px hit band keeps the line easy to grab.
  */
 
 export type ResizablePanelGroupProps = Omit<RrpGroupProps, 'orientation'> & {
@@ -51,13 +55,9 @@ export function ResizablePanelGroup({
 export type ResizablePanelProps = RrpPanelProps
 export const ResizablePanel = RrpPanel
 
-export type ResizableHandleProps = RrpSeparatorProps & {
-  /** When true, render the centered grip glyph. */
-  withHandle?: boolean
-}
+export type ResizableHandleProps = RrpSeparatorProps
 
 export function ResizableHandle({
-  withHandle,
   className,
   children,
   ...props
@@ -65,13 +65,12 @@ export function ResizableHandle({
   return (
     <RrpSeparator
       className={cn(
-        // Base: thin divider with a wider hit area, themed against
-        // zinc-800 to fit the dark canvas.  The `after` pseudo extends
-        // the grab area to 4 px (horizontal) / 4 px (vertical) without
-        // visually thickening the line.
-        'relative flex items-center justify-center bg-surface-2',
+        // Slim 1-px line on the border token; `after` pseudo extends a
+        // transparent 6-px hit band centred on the line so it stays easy
+        // to grab without thickening the visible divider.
+        'relative flex items-center justify-center bg-line',
         'transition-colors duration-150',
-        'hover:bg-surface-3 data-[resize-handle-active]:bg-primary/60',
+        'hover:bg-line-strong data-[resize-handle-active]:bg-line-strong',
         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40',
         // Horizontal orientation: vertical bar between left/right panels
         'data-[panel-group-direction=horizontal]:w-px',
@@ -79,7 +78,7 @@ export function ResizableHandle({
         'data-[panel-group-direction=horizontal]:after:absolute',
         'data-[panel-group-direction=horizontal]:after:inset-y-0',
         'data-[panel-group-direction=horizontal]:after:left-1/2',
-        'data-[panel-group-direction=horizontal]:after:w-2',
+        'data-[panel-group-direction=horizontal]:after:w-1.5',
         'data-[panel-group-direction=horizontal]:after:-translate-x-1/2',
         // Vertical orientation: horizontal bar between top/bottom panels
         'data-[panel-group-direction=vertical]:h-px',
@@ -88,25 +87,13 @@ export function ResizableHandle({
         'data-[panel-group-direction=vertical]:after:absolute',
         'data-[panel-group-direction=vertical]:after:inset-x-0',
         'data-[panel-group-direction=vertical]:after:top-1/2',
-        'data-[panel-group-direction=vertical]:after:h-2',
+        'data-[panel-group-direction=vertical]:after:h-1.5',
         'data-[panel-group-direction=vertical]:after:-translate-y-1/2',
         className,
       )}
       {...props}
     >
-      {withHandle ? (
-        <div
-          className={cn(
-            'z-10 flex items-center justify-center rounded-sm border border-line-strong bg-surface-1',
-            'data-[panel-group-direction=horizontal]:h-5 data-[panel-group-direction=horizontal]:w-3',
-            'data-[panel-group-direction=vertical]:h-3 data-[panel-group-direction=vertical]:w-5',
-          )}
-        >
-          <GripVertical className="h-3 w-3 text-fg-muted data-[panel-group-direction=vertical]:rotate-90" />
-        </div>
-      ) : (
-        children
-      )}
+      {children}
     </RrpSeparator>
   )
 }
