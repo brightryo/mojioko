@@ -451,29 +451,32 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         {/* Whisper model + Advanced (engine) trigger.  Subtitle Style
             does NOT live here — it is unrelated to the Whisper engine
             and sits next to the Start button in the footer instead. */}
+        {/* REQ-20260615-012: outer card is `relative` and the Advanced button
+            is absolutely pinned at the top-right corner so the WhisperModel-
+            Manager (header + accordion body) spans the full inner width of
+            the section card.  This lets the body grid be centred against
+            the full 1018 px inner area rather than the ~911 px flex-1
+            column that previously sat to the left of the button — see
+            RES-20260615-012 for the measured numbers. */}
         <div className={cn(
-          'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
+          'rounded-xl border border-border bg-card p-4 relative transition-opacity duration-200',
           (isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
         )}>
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1 min-w-0">
-              <WhisperModelManager
-                onActiveModelChange={setActiveModelId}
-                disabled={isLoading || isTranscribing}
-                isOpen={openSection === 'whisper'}
-                onOpenChange={(open) => setOpenSection(open ? 'whisper' : 'inputVideo')}
-              />
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAdvancedDialogOpen(true)}
-              className="flex-shrink-0"
-            >
-              <Settings2 className="h-4 w-4 mr-1.5" />
-              {t('advanced.openButton')}
-            </Button>
-          </div>
+          <WhisperModelManager
+            onActiveModelChange={setActiveModelId}
+            disabled={isLoading || isTranscribing}
+            isOpen={openSection === 'whisper'}
+            onOpenChange={(open) => setOpenSection(open ? 'whisper' : 'inputVideo')}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setAdvancedDialogOpen(true)}
+            className="absolute right-4 top-4"
+          >
+            <Settings2 className="h-4 w-4 mr-1.5" />
+            {t('advanced.openButton')}
+          </Button>
         </div>
 
         {/* First-view body — only the must-touch cards remain visible
