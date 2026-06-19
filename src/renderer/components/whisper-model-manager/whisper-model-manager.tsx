@@ -277,7 +277,11 @@ export function WhisperModelManager({
         aria-expanded={isOpen}
         tabIndex={0}
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 w-full cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
+        // REQ-20260615-012: pr-[120px] reserves room on the right for the
+        // step1 Advanced button (which step1 absolutely-positions on top of
+        // this header).  Without the padding the chevron / status badge
+        // would render under the Advanced button.
+        className="flex items-center gap-2 w-full pr-[120px] cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
       >
         <Sparkles className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
         <span className="text-headline font-semibold text-fg-secondary uppercase tracking-wider">
@@ -330,11 +334,14 @@ export function WhisperModelManager({
                 {t('whisperModel.descriptionLong')}
               </p>
 
-              {/* 3-column model grid.  REQ-20260615-011: capped at max-w-5xl
-                  and centred with mx-auto so the cards sit symmetrically
-                  inside the WhisperModelManager column instead of hugging
-                  the left edge under the right-side Advanced button. */}
-              <div className="grid grid-cols-3 gap-3 mx-auto max-w-5xl">
+              {/* 3-column model grid.  REQ-20260615-012: capped at 57rem
+                  (912 px ≈ the un-capped grid width before REQ-20260615-012
+                  pulled the Advanced button out of the flex row).  Combined
+                  with `mx-auto` and the now-1018 px parent (= section card
+                  inner), this yields ~53 px of equal left/right margin
+                  while keeping each card at ~296 px — virtually identical
+                  to the pre-REQ-011 visible size. */}
+              <div className="grid grid-cols-3 gap-3 mx-auto max-w-[57rem]">
                 {state
                   ? state.models.map((model) => (
                       <ModelCard
