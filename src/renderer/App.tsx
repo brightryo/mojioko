@@ -8,7 +8,6 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 // import SplashRoute from '@/routes/splash'
 import Step1Route from '@/routes/step1'
 import Step2Route from '@/routes/step2'
-import Step3Route from '@/routes/step3'
 import { AboutDialog } from '@/components/about-dialog/about-dialog'
 import { SettingsDialog } from '@/components/settings-dialog/settings-dialog'
 import { DonationDialog } from '@/components/donation-dialog/donation-dialog'
@@ -195,7 +194,8 @@ function AppInner() {
             <Route path="/splash" element={<SplashRoute />} /> */}
             <Route path="/step1" element={<Step1Route appVersion={appVersion} />} />
             <Route path="/step2" element={<Step2Route appVersion={appVersion} />} />
-            <Route path="/step3" element={<Step3Route appVersion={appVersion} />} />
+            {/* REQ-20260615-023: /step3 retired; burn-in lives in a
+                right-sliding drawer on STEP2 instead. */}
             <Route path="*" element={<Navigate to="/step1" replace />} />
           </Routes>
         </motion.div>
@@ -234,7 +234,7 @@ export default function App() {
     const p = new URLSearchParams(window.location.search)
     if (p.get('seed') !== 'demo') return '/step1'
     const start = p.get('start')
-    return start === 'step2' || start === 'step3' ? `/${start}` : '/step1'
+    return start === 'step2' ? `/${start}` : '/step1'
   })()
   return (
     <TooltipProvider delayDuration={300}>
