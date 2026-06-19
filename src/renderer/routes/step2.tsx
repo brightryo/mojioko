@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useLayoutEffect } from 'reac
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Plus, RotateCcw, RotateCw, ChevronDown } from 'lucide-react'
+import { Plus, RotateCcw, RotateCw, ChevronDown, FileText, Film } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { TimeEditorDialog } from '@/components/time-editor-dialog/time-editor-dialog'
+import { ExportFrameButton } from '@/components/step2/export-frame-button'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -806,14 +807,18 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
 
   // REQ-028: export DropdownMenu moved from the page header to the
   // footer, and "Continue to render" hidden in audio mode (no burn-in
-  // path).  Audio mode → export is the only footer-right action and
-  // ends up right-aligned naturally because nothing else flanks it.
+  // path).  REQ-20260615-022: regrouped as three icon-labelled exports
+  // — text / image (frame) / video — with primary green reserved for the
+  // video one ("動画出力", previously "書き出しへ").  Audio mode keeps
+  // the text dropdown only since there is no burnable video frame nor
+  // a STEP3 path.
   const footerRight = (
     <div className="flex items-center gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="md">
-            {t('action.export')}
+            <FileText className="h-4 w-4 mr-1.5" />
+            {t('action.exportTextLabel')}
             <ChevronDown className="h-3.5 w-3.5 ml-1.5 opacity-60" />
           </Button>
         </DropdownMenuTrigger>
@@ -826,6 +831,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      {!isAudioOnly && <ExportFrameButton />}
       {!isAudioOnly && (
         // REQ-121 — when the only thing blocking the transition is the
         // errorCount gate, surface a tooltip pointing the user at the
@@ -843,7 +849,8 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
                   disabled
                   onClick={() => navigate('/step3')}
                 >
-                  {t('action.continueToRender')}
+                  <Film className="h-4 w-4 mr-1.5" />
+                  {t('action.exportVideoLabel')}
                 </Button>
               </span>
             </TooltipTrigger>
@@ -858,7 +865,8 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
             disabled={!canContinue}
             onClick={() => navigate('/step3')}
           >
-            {t('action.continueToRender')}
+            <Film className="h-4 w-4 mr-1.5" />
+            {t('action.exportVideoLabel')}
           </Button>
         )
       )}
