@@ -1110,7 +1110,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
                 >
                   {previewSlot}
                 </ResizablePanel>
-                <ResizableHandle />
+                <ResizableHandle withHandle />
                 <ResizablePanel
                   id="step2-pane-bottom"
                   minSize={paneMinPct(LEFT_BOTTOM_MIN_PX, paneAreaSize.h)}
@@ -1119,7 +1119,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
                 </ResizablePanel>
               </ResizablePanelGroup>
             </ResizablePanel>
-            <ResizableHandle />
+            <ResizableHandle withHandle />
             <ResizablePanel
               id="step2-pane-right"
               minSize={paneMinPct(OUTER_RIGHT_MIN_PX, paneAreaSize.w)}
