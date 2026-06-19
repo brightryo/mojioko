@@ -632,8 +632,11 @@ export function TimelineBlockInspector({
               value={entry.horizontalPosition}
               onChange={(e) => handleHorizontalPositionChange(e.target.value as 'left' | 'center' | 'right')}
               disabled={isFrozen}
+              // REQ-20260615-013: native <select> trigger text matched to
+              // the section's labels (text-callout 13px) instead of the
+              // 15px text-body that read oversized next to "水平 / 垂直".
               className={cn(
-                'h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-body text-fg-primary',
+                'h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-body-sm text-fg-primary',
                 'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
                 'disabled:opacity-40 disabled:cursor-not-allowed'
               )}
@@ -650,8 +653,9 @@ export function TimelineBlockInspector({
               value={entry.verticalPosition}
               onChange={(e) => handleVerticalPositionChange(e.target.value as 'top' | 'bottom')}
               disabled={isFrozen}
+              // REQ-20260615-013: text-body -> text-body-sm to match the section.
               className={cn(
-                'h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-body text-fg-primary',
+                'h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-body-sm text-fg-primary',
                 'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
                 'disabled:opacity-40 disabled:cursor-not-allowed'
               )}
@@ -711,8 +715,9 @@ export function TimelineBlockInspector({
               value={entry.subtitleBackground.color}
               onChange={(e) => handleBackgroundColorChange(e.target.value as 'black' | 'white')}
               disabled={isFrozen || !entry.subtitleBackground.enabled}
+              // REQ-20260615-013: text-body -> text-body-sm to match the section.
               className={cn(
-                'h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-body text-fg-primary',
+                'h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-body-sm text-fg-primary',
                 'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
                 'disabled:opacity-40 disabled:cursor-not-allowed'
               )}
