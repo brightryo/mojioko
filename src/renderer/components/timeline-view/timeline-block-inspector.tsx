@@ -653,13 +653,14 @@ export function TimelineBlockInspector({
                 swatchOnly
               />
             </div>
-            {/* Outline width — REQ-20260615-015: slider wraps in a ~70%
-                column so it sits right-aligned next to the label rather
-                than gobbling the whole row.  `fullWidth` on the slider
-                expands the range input within that 70% wrapper. */}
+            {/* Outline width — REQ-20260615-016: slider column narrowed to
+                ~50% so the row's left side has enough breathing room for
+                the "アウトライン幅" label to stay on a single line.  Label
+                gets `whitespace-nowrap` as a belt-and-braces against
+                inspector-pane width changes. */}
             <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.outlineWidth')}</label>
-              <div className="w-[70%]" onClick={(e) => e.stopPropagation()}>
+              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.outlineWidth')}</label>
+              <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
                 <OutlineThicknessSlider
                   value={entry.outlineThicknessPx}
                   onCommit={handleOutlineThicknessCommit}
