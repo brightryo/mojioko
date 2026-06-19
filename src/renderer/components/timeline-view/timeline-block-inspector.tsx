@@ -38,6 +38,11 @@ interface TimelineBlockInspectorProps {
  * the native `<select>` triggers.  Kept local to the inspector since it is
  * the only consumer; mira-style compact (h-7, rounded-md track with
  * rounded-[3px] pills, text-caption labels).
+ *
+ * REQ-20260615-015: target width is ~40% of the row with `min-w-fit` as a
+ * floor so labels like "中央" / "Center" never truncate.  Pills keep
+ * `flex-1` but drop `min-w-0` — without that escape hatch each pill's
+ * content (the label text) sets its own minimum width.
  */
 function SegmentGroup<T extends string>({
   value,
@@ -57,7 +62,7 @@ function SegmentGroup<T extends string>({
       role="radiogroup"
       aria-label={ariaLabel}
       className={cn(
-        'flex flex-1 min-w-0 h-7 items-stretch gap-0.5 rounded-md border border-line-strong bg-surface-0 p-0.5',
+        'flex h-7 w-[40%] min-w-fit items-stretch gap-0.5 rounded-md border border-line-strong bg-surface-0 p-0.5',
         disabled && 'opacity-40 pointer-events-none'
       )}
     >
@@ -72,7 +77,7 @@ function SegmentGroup<T extends string>({
             disabled={disabled}
             onClick={() => onChange(o.value)}
             className={cn(
-              'flex-1 min-w-0 inline-flex items-center justify-center rounded-[3px] px-2 text-caption font-medium transition-colors duration-150',
+              'flex-1 inline-flex items-center justify-center rounded-[3px] px-2 text-caption font-medium transition-colors duration-150',
               'focus:outline-none focus-visible:outline-none',
               selected
                 ? 'bg-primary text-fg-inverse'
@@ -648,13 +653,13 @@ export function TimelineBlockInspector({
                 swatchOnly
               />
             </div>
-            {/* Outline width — REQ-20260615-014 A: the slider stretches to
-                fill the row instead of sitting in a 160 px island next to
-                empty space.  `flex-1 min-w-0` lets the slider claim every
-                pixel between the label and the value readout. */}
+            {/* Outline width — REQ-20260615-015: slider wraps in a ~70%
+                column so it sits right-aligned next to the label rather
+                than gobbling the whole row.  `fullWidth` on the slider
+                expands the range input within that 70% wrapper. */}
             <div className="flex items-center justify-between gap-2">
               <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.outlineWidth')}</label>
-              <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+              <div className="w-[70%]" onClick={(e) => e.stopPropagation()}>
                 <OutlineThicknessSlider
                   value={entry.outlineThicknessPx}
                   onCommit={handleOutlineThicknessCommit}
