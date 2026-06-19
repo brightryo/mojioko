@@ -19,6 +19,7 @@
     "label": "音声トラック",
     "tracksCount": "{{count}}トラック",
     "trackLabel": "トラック {{index}}",
+    "notSelected": "トラック未選択",
     "absent": "なし",
     "transcriptionTarget": "文字起こし対象",
     "defaultTrackMissing": "デフォルトのトラック{{index}}が見つかりません。トラック{{fallback}}を選択しました。",

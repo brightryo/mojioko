@@ -13,7 +13,8 @@ import {
   FolderOpen,
   AlertTriangle,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Settings2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -73,6 +74,14 @@ interface WhisperModelManagerProps {
    */
   isOpen?: boolean
   onOpenChange?: (open: boolean) => void
+  /**
+   * REQ-20260615-020: when provided, the header renders a gear icon
+   * button that calls this on click (with stopPropagation so the
+   * accordion does not toggle).  step1 passes
+   * `() => setAdvancedDialogOpen(true)` here, replacing the previous
+   * absolutely-positioned Advanced text button.
+   */
+  onOpenAdvanced?: () => void
 }
 
 type DialogKind =
@@ -88,7 +97,8 @@ export function WhisperModelManager({
   onActiveModelChange,
   disabled,
   isOpen: controlledIsOpen,
-  onOpenChange
+  onOpenChange,
+  onOpenAdvanced
 }: WhisperModelManagerProps) {
   const { t, i18n } = useTranslation('step1')
 
@@ -234,9 +244,7 @@ export function WhisperModelManager({
   // Render helpers
   // ---------------------------------------------------------------------------
 
-  const hasActive = Boolean(state?.activeModelId)
   const activeModel = state?.models.find((m) => m.id === state?.activeModelId) ?? null
-  const hasAnyInstalled = state?.models.some((m) => m.status !== 'not-installed') ?? false
 
   const diskWarnColor =
     state && state.diskFreeBytes > 0
@@ -247,41 +255,26 @@ export function WhisperModelManager({
         : 'text-fg-tertiary'
       : 'text-fg-disabled'
 
-  // Header status badge (always visible regardless of open/closed)
-  const headerBadge = !state ? null : hasActive ? (
-    <div className="flex items-center gap-1.5 flex-shrink-0">
-      <span className="flex items-center gap-1 text-body-sm text-fg-secondary">
-        <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-        <span className="font-mono">{activeModel?.displayName}</span>
-      </span>
-      {/* REQ-071 Phase 3.7-A: text-primary-foreground -> text-fg-inverse — same hue
-          collision Phase 3.6 fixed on the primary button variant.  Even
-          this small pill suffered from green-on-green readability. */}
-      <span className="flex items-center gap-0.5 text-caption font-medium px-2 py-0.5 rounded-full bg-primary text-fg-inverse whitespace-nowrap">
-        {t('model.active')}
-      </span>
-    </div>
-  ) : (
-    <span className="flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full bg-warning/20 text-warning-soft whitespace-nowrap flex-shrink-0">
-      <AlertTriangle className="h-3 w-3 flex-shrink-0" />
-      {hasAnyInstalled ? t('model.noActiveBadge') : t('model.notInstalledBadge')}
-    </span>
-  )
+  // REQ-20260615-020: the header now reads "model name → gear → green
+  // check → chevron" right-aligned, so the active / not-installed pill
+  // and the "click to change" hint are gone.  Green check shows only
+  // when a model is BOTH downloaded AND selected (= status === 'active').
+  const isModelReady = activeModel?.status === 'active'
 
   return (
     <div className={cn(disabled && 'opacity-50 pointer-events-none')}>
       {/* ---- Accordion Header ---- */}
       {/* REQ-082: Enter / Space keyboard activation removed. */}
+      {/* REQ-20260615-020: right-aligned cluster is "model name → gear
+          → green check (conditional) → chevron".  Gear opens the
+          Advanced dialog via onOpenAdvanced and uses stopPropagation so
+          the click doesn't bubble to the row's toggle handler. */}
       <div
         role="button"
         aria-expanded={isOpen}
         tabIndex={0}
         onClick={() => setIsOpen(!isOpen)}
-        // REQ-20260615-012: pr-[120px] reserves room on the right for the
-        // step1 Advanced button (which step1 absolutely-positions on top of
-        // this header).  Without the padding the chevron / status badge
-        // would render under the Advanced button.
-        className="flex items-center gap-2 w-full pr-[120px] cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
+        className="flex items-center gap-2 w-full cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
       >
         <Sparkles className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
         <span className="text-headline font-semibold text-fg-secondary uppercase tracking-wider">
@@ -294,20 +287,38 @@ export function WhisperModelManager({
 
         <div className="flex-1" />
 
-        {/* Status badge */}
-        {headerBadge}
-
-        {/* Click-to-expand hint.  Shown in two flavours:
-              - hasActive  → "click to change"
-              - !hasActive → "click to select" (paired with the amber
-                             AlertTriangle badge above so the user has
-                             two reinforcing cues that an action is
-                             required, now that the accordion no longer
-                             auto-expands on first run). */}
-        {!isOpen && state && (
-          <span className="text-caption text-fg-muted flex-shrink-0 ml-1">
-            {hasActive ? t('model.clickToChange') : t('model.clickToSelect')}
+        {/* Active model display name */}
+        {activeModel && (
+          <span className="text-body-sm font-mono text-fg-secondary flex-shrink-0">
+            {activeModel.displayName}
           </span>
+        )}
+
+        {/* Gear icon button — opens Advanced dialog without toggling accordion. */}
+        {onOpenAdvanced && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenAdvanced()
+            }}
+            disabled={disabled}
+            aria-label={t('advanced.openButton')}
+            title={t('advanced.openButton')}
+            className={cn(
+              'inline-flex h-7 w-7 items-center justify-center rounded-md border border-line text-fg-muted',
+              'hover:text-fg-secondary hover:border-line-strong hover:bg-surface-1 transition-colors duration-150',
+              'focus:outline-none focus-visible:outline-none',
+              'disabled:opacity-40 disabled:cursor-not-allowed'
+            )}
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+        {/* Green check — only when downloaded AND selected. */}
+        {isModelReady && (
+          <Check className="h-4 w-4 text-primary flex-shrink-0" aria-label={t('model.active')} />
         )}
 
         {/* Chevron */}
