@@ -57,6 +57,36 @@ export interface BurninStartRequest {
   cuts?: Cut[]
 }
 
+/**
+ * REQ-20260615-021: single-frame export request shared by step2's
+ * "save current frame as image" affordance.  Time is expressed on the
+ * SOURCE video's original axis (= the <video> element's `currentTime`),
+ * so callers do not have to convert through `editedToOrig`.
+ */
+export interface ExportFrameRequest {
+  inputPath: string
+  outputPath: string
+  timeSec: number
+  video: VideoInfo
+  /** PNG (lossless, default) or JPG (mjpeg, high quality). */
+  format: 'png' | 'jpg'
+  includeSubtitles: boolean
+  /**
+   * Only consumed when includeSubtitles is true.  Same shape as
+   * BurninStartRequest.entries — burn-in's ass-generator path is
+   * reused verbatim for visual fidelity.
+   */
+  entries?: SubtitleEntry[]
+  fadeDurationSec?: number
+  subtitleBackground?: SubtitleBackground
+  fontId?: FontId
+}
+
+export interface ExportFrameResult {
+  outputPath: string
+  sizeBytes: number
+}
+
 export interface EncoderDetectionResult {
   available: H264Encoder[]
   best: H264Encoder

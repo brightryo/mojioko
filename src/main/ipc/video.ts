@@ -1,8 +1,10 @@
 import { ipcMain } from 'electron'
 import { Channels } from '../../shared/ipc-channels'
 import { probeVideo, extractThumbnail } from '../services/ffprobe'
+import { exportFrame } from '../services/frame-exporter'
 import { allowVideoPath } from '../lib/video-protocol'
 import type { VideoInfo } from '../../shared/types'
+import type { ExportFrameRequest, ExportFrameResult } from '../../shared/ipc-contracts'
 import log from '../lib/logger'
 
 type OkResult<T> = { ok: true; data: T }
@@ -48,6 +50,18 @@ export function registerVideoHandlers(): void {
       return { ok: true, data }
     } catch (err) {
       log.error('[ipc/video] frame error', err)
+      return toErr(err)
+    }
+  })
+
+  // REQ-20260615-021: save the current preview frame (with or without
+  // subtitles) to disk at the source video's resolution.
+  ipcMain.handle(Channels.videoExportFrame, async (_event, req: ExportFrameRequest): Promise<OkResult<ExportFrameResult> | ErrResult> => {
+    try {
+      const data = await exportFrame(req)
+      return { ok: true, data }
+    } catch (err) {
+      log.error('[ipc/video] exportFrame error', err)
       return toErr(err)
     }
   })

@@ -212,7 +212,17 @@
     "play": "再生",
     "pause": "一時停止",
     "error": "ファイルの読み込みに失敗しました",
-    "showInFolder": "フォルダで表示"
+    "showInFolder": "フォルダで表示",
+    "exportFrame": {
+      "iconLabel": "現在のフレームを画像で保存",
+      "title": "現在のフレームを画像で保存",
+      "includeSubtitles": "字幕を含める",
+      "format": "形式",
+      "save": "保存...",
+      "saving": "保存中...",
+      "success": "{{path}} に保存しました",
+      "error": "保存に失敗しました: {{error}}"
+    }
   },
   "warning": {
     "exceedsDuration": "動画の総再生時間を超えています"
