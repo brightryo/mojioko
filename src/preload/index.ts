@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { Channels } from '../shared/ipc-channels'
 import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
-import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult } from '../shared/ipc-contracts'
+import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult } from '../shared/ipc-contracts'
 
 type OkResult<T> = { ok: true; data: T }
 type ErrResult = { ok: false; error: { code: string; message: string } }
@@ -34,6 +34,8 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.videoExtractThumbnail, path, atSec),
   videoExtractFrameForPreview: (path: string, atSec: number): Promise<IpcResult<string>> =>
     ipcRenderer.invoke(Channels.videoExtractFrameForPreview, path, atSec),
+  videoExportFrame: (req: ExportFrameRequest): Promise<IpcResult<ExportFrameResult>> =>
+    ipcRenderer.invoke(Channels.videoExportFrame, req),
 
   // Transcription
   transcriptionCheckModel: (modelId: string): Promise<IpcResult<ModelCheckResult>> =>

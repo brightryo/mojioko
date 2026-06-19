@@ -3,6 +3,13 @@ export const Channels = {
   videoProbe: 'video:probe',
   videoExtractThumbnail: 'video:extractThumbnail',
   videoExtractFrameForPreview: 'video:extractFrameForPreview',
+  /**
+   * REQ-20260615-021: extract a single still at the current preview time
+   * and save it (PNG / JPG) at the original video resolution.  When
+   * subtitles are included the same ASS pipeline as burn-in is reused so
+   * the still matches a future burned video exactly.
+   */
+  videoExportFrame: 'video:exportFrame',
 
   transcriptionCheckModel: 'transcription:checkModel',
   transcriptionStart: 'transcription:start',

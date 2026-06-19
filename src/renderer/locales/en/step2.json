@@ -212,7 +212,17 @@
     "play": "Play",
     "pause": "Pause",
     "error": "Failed to load file",
-    "showInFolder": "Show in Folder"
+    "showInFolder": "Show in Folder",
+    "exportFrame": {
+      "iconLabel": "Save current frame as image",
+      "title": "Save current frame as image",
+      "includeSubtitles": "Include subtitles",
+      "format": "Format",
+      "save": "Save...",
+      "saving": "Saving...",
+      "success": "Saved to {{path}}",
+      "error": "Save failed: {{error}}"
+    }
   },
   "warning": {
     "exceedsDuration": "Exceeds video duration"

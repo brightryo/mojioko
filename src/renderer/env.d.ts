@@ -2,7 +2,7 @@
 
 import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
-import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult } from '../shared/ipc-contracts'
+import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult } from '../shared/ipc-contracts'
 
 type IpcOk<T> = { ok: true; data: T }
 type IpcErr = { ok: false; error: { code: string; message: string } }
@@ -28,6 +28,7 @@ declare global {
       videoProbe: (path: string) => Promise<IpcResult<VideoInfo>>
       videoExtractThumbnail: (path: string, atSec: number) => Promise<IpcResult<string>>
       videoExtractFrameForPreview: (path: string, atSec: number) => Promise<IpcResult<string>>
+      videoExportFrame: (req: ExportFrameRequest) => Promise<IpcResult<ExportFrameResult>>
 
       transcriptionCheckModel: (modelId: string) => Promise<IpcResult<ModelCheckResult>>
       transcriptionStart: (opts: TranscriptionStartRequest) => Promise<IpcResult<{ channelId: string }>>

@@ -1,13 +1,18 @@
 import { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
-import { Play, Pause, FolderOpen } from 'lucide-react'
+import { Play, Pause, FolderOpen, Camera } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore } from '@/stores/ui-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
-import { shellShowInFolder } from '@/services/dialog'
+import { shellShowInFolder, saveFileDialog } from '@/services/dialog'
+import { exportFrame as ipcExportFrame } from '@/services/video'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { Checkbox } from '@/components/ui/checkbox'
+import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
 import { SubtitleOverlay, estimateOverlayHeightPx } from '@/components/subtitle-overlay/subtitle-overlay'
@@ -113,6 +118,9 @@ export function VideoPreviewPanel() {
   // memo below; the global burnin / subtitleBackground store slices were
   // dropped from settings-store in the same phase.
   const activeFontId       = useSettingsStore((s) => s.activeFontId)
+  // REQ-20260615-021: read fadeDurationSec from settings for the ASS pipeline
+  // when exporting a still with subtitles burnt in.
+  const fadeDurationSec    = useSettingsStore((s) => s.fadeDurationSec)
 
   const videoSeekRequestSec    = useUiStore((s) => s.videoSeekRequestSec)
   const setVideoSeekRequest    = useUiStore((s) => s.setVideoSeekRequest)
@@ -156,6 +164,14 @@ export function VideoPreviewPanel() {
   const isSeeking = useRef(false)
   // Track last active entry id so we only write to the store on change.
   const activeEntryIdRef = useRef<string | null>(null)
+
+  // REQ-20260615-021: still-export state.  Local to this component
+  // (popover defaults survive its open/close as long as the panel stays
+  // mounted, which it does for the lifetime of STEP 2).
+  const [exportPopoverOpen, setExportPopoverOpen] = useState(false)
+  const [exportIncludeSubtitles, setExportIncludeSubtitles] = useState(true)
+  const [exportFormat, setExportFormat] = useState<'png' | 'jpg'>('png')
+  const [exportBusy, setExportBusy] = useState(false)
 
   // REQ-20260613-016 Phase 6 — preview drag (機能B).  Captures pointer on
   // overlay pointerdown and tracks moves until pointerup.  The drag
@@ -482,6 +498,66 @@ export function VideoPreviewPanel() {
   }
   function handleError() { setHasError(true) }
 
+  /**
+   * REQ-20260615-021: extract the current preview frame to disk.  Uses the
+   * <video> element's `currentTime` directly (= source / original axis),
+   * so the exact frame the user sees is what gets saved.  When subtitles
+   * are included the main process reuses the burn-in ASS pipeline so the
+   * still matches what a future burned video would render at that instant.
+   */
+  async function handleExportFrame() {
+    if (!video) return
+    const el = videoRef.current
+    if (!el) return
+    if (exportBusy) return
+
+    const timeSec = el.currentTime
+    const stem = video.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'frame'
+    // "0:00:00" → "00-00-00" so the default filename is filesystem-safe.
+    const timecode = formatTime(timeSec).replace(/:/g, '-')
+    const ext = exportFormat === 'jpg' ? 'jpg' : 'png'
+    const defaultName = `${stem}_${timecode}.${ext}`
+
+    const savePath = await saveFileDialog(
+      defaultName,
+      undefined,
+      exportFormat === 'jpg'
+        ? [{ name: 'JPEG image', extensions: ['jpg', 'jpeg'] }, { name: 'All Files', extensions: ['*'] }]
+        : [{ name: 'PNG image', extensions: ['png'] }, { name: 'All Files', extensions: ['*'] }]
+    )
+    if (!savePath) return
+
+    setExportBusy(true)
+    setExportPopoverOpen(false)
+    try {
+      const result = await ipcExportFrame({
+        inputPath: video.path,
+        outputPath: savePath,
+        timeSec,
+        video,
+        format: exportFormat,
+        includeSubtitles: exportIncludeSubtitles,
+        entries: exportIncludeSubtitles ? entries : undefined,
+        fadeDurationSec,
+        subtitleBackground: {
+          enabled: BURNIN_DEFAULTS.subtitleBackground.enabled,
+          color: BURNIN_DEFAULTS.subtitleBackground.color,
+          opacityPercent: BURNIN_DEFAULTS.subtitleBackground.opacityPercent
+        },
+        fontId: activeFontId
+      })
+      if (result.ok) {
+        toast.success(t('videoPreview.exportFrame.success', { path: result.data.outputPath }))
+      } else {
+        toast.error(t('videoPreview.exportFrame.error', { error: result.error.message }))
+      }
+    } catch (err) {
+      toast.error(t('videoPreview.exportFrame.error', { error: String(err) }))
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Seekbar
   // -------------------------------------------------------------------------
@@ -657,6 +733,89 @@ export function VideoPreviewPanel() {
         >
           <FolderOpen className="h-4 w-4" />
         </button>
+        {/* REQ-20260615-021: camera icon → small popover with the export
+            options.  The save dialog (chosen by the user) handles the
+            destination path; the popover only configures the still
+            (subtitles ON/OFF, format). */}
+        <Popover open={exportPopoverOpen} onOpenChange={setExportPopoverOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              disabled={exportBusy || hasError}
+              title={t('videoPreview.exportFrame.iconLabel')}
+              aria-label={t('videoPreview.exportFrame.iconLabel')}
+              className={cn(
+                'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
+                'hover:text-foreground focus:outline-none focus:text-foreground',
+                'disabled:opacity-40 disabled:cursor-not-allowed'
+              )}
+            >
+              <Camera className="h-4 w-4" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" sideOffset={6} className="w-64">
+            <div className="flex flex-col gap-3">
+              <div className="text-body-sm font-semibold text-fg-primary">
+                {t('videoPreview.exportFrame.title')}
+              </div>
+              <label className="flex items-center gap-2 text-body-sm text-fg-secondary cursor-pointer">
+                <Checkbox
+                  checked={exportIncludeSubtitles}
+                  onCheckedChange={(v) => setExportIncludeSubtitles(v === true)}
+                />
+                <span>{t('videoPreview.exportFrame.includeSubtitles')}</span>
+              </label>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-body-sm text-fg-secondary">
+                  {t('videoPreview.exportFrame.format')}
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-label={t('videoPreview.exportFrame.format')}
+                  className="flex h-7 items-stretch gap-0.5 rounded-md border border-line-strong bg-surface-0 p-0.5"
+                >
+                  {(['png', 'jpg'] as const).map((f) => {
+                    const selected = exportFormat === f
+                    return (
+                      <button
+                        key={f}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => setExportFormat(f)}
+                        className={cn(
+                          'inline-flex items-center justify-center rounded-[3px] px-3 text-caption font-medium transition-colors duration-150',
+                          'focus:outline-none focus-visible:outline-none',
+                          selected
+                            ? 'bg-primary text-fg-inverse'
+                            : 'text-fg-secondary hover:text-fg-primary hover:bg-surface-2'
+                        )}
+                      >
+                        {f.toUpperCase()}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleExportFrame}
+                disabled={exportBusy}
+                className={cn(
+                  'h-8 inline-flex items-center justify-center rounded-md px-3 text-body-sm font-medium',
+                  'bg-primary text-fg-inverse hover:bg-primary-hover active:bg-primary-active',
+                  'transition-colors duration-150',
+                  'focus:outline-none focus-visible:outline-none',
+                  'disabled:opacity-40 disabled:cursor-not-allowed'
+                )}
+              >
+                {exportBusy
+                  ? t('videoPreview.exportFrame.saving')
+                  : t('videoPreview.exportFrame.save')}
+              </button>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Video frame area — REQ-20260614-001 補遺② 修正2.
