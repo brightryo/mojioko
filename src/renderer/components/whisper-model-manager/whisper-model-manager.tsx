@@ -330,8 +330,11 @@ export function WhisperModelManager({
                 {t('whisperModel.descriptionLong')}
               </p>
 
-              {/* 3-column model grid */}
-              <div className="grid grid-cols-3 gap-3">
+              {/* 3-column model grid.  REQ-20260615-011: capped at max-w-5xl
+                  and centred with mx-auto so the cards sit symmetrically
+                  inside the WhisperModelManager column instead of hugging
+                  the left edge under the right-side Advanced button. */}
+              <div className="grid grid-cols-3 gap-3 mx-auto max-w-5xl">
                 {state
                   ? state.models.map((model) => (
                       <ModelCard
