@@ -381,19 +381,9 @@ export function TimelineBlockInspector({
   // `entry.isEdited` to have something to reset.
   const canReset = !isFrozen && entry.isEdited
 
-  // Aggregate "any warning visible" so §2 (badge row) only renders when
-  // there's actually something to show.  Empty-text is included because
-  // the table's badge row shows it; matching behaviour keeps both views
-  // consistent for users alternating between them.
-  const hasAnyBadge =
-    entry.isEdited ||
-    (warnings != null &&
-      (warnings.timeInvalid ||
-        warnings.overlap ||
-        warnings.overDuration ||
-        warnings.overflow ||
-        warnings.emptyText ||
-        warnings.invalidSize))
+  // REQ-20260615-018 A: the §2 badge row is always rendered (with min-h-5)
+  // so the layout below doesn't shift when a badge appears mid-edit, so
+  // the previous `hasAnyBadge` gate is gone.
 
   return (
     // REQ-20260614-001 補遺③ — single scroll container is the parent
@@ -523,28 +513,30 @@ export function TimelineBlockInspector({
       {/* § 2 — Status badges.  `state.edited` first, then warnings in the
           same order the table uses (matches user expectations across
           views).  REQ-20260613-016 Phase 6: pin badge surfaces when the
-          row has been free-positioned via preview drag (\pos). */}
-      {(hasAnyBadge || (entry.posX !== undefined && entry.posY !== undefined)) && (
-        <div className="flex flex-wrap gap-1">
-          {entry.posX !== undefined && entry.posY !== undefined && (
-            <Badge variant="default" title={t('state.pinnedTitle')}>
-              {t('state.pinned')}
-            </Badge>
-          )}
-          {entry.isEdited && !entry.isDeleted && (
-            <Badge variant="default">{t('state.edited')}</Badge>
-          )}
-          {/* REQ-121 — errors (timeInvalid / overDuration / invalidSize)
-              wear the danger variant; warnings (overlap / overflow /
-              emptyText) keep the warning amber. */}
-          {warnings?.timeInvalid  && <Badge variant="danger">{t('badge.timeInvalid')}</Badge>}
-          {warnings?.overlap      && <Badge variant="warning">{t('badge.overlap')}</Badge>}
-          {warnings?.overDuration && <Badge variant="danger">{t('badge.overDuration')}</Badge>}
-          {warnings?.overflow     && <Badge variant="warning">{t('badge.overflow')}</Badge>}
-          {warnings?.emptyText    && <Badge variant="warning">{t('badge.emptyText')}</Badge>}
-          {warnings?.invalidSize  && <Badge variant="danger">{t('badge.invalidSize')}</Badge>}
-        </div>
-      )}
+          row has been free-positioned via preview drag (\pos).
+          REQ-20260615-018 A: the wrapper renders unconditionally with
+          `min-h-5` so a freshly-edited row's "編集済み" badge appearing
+          does not shift the rows below it.  Badge primitive itself is
+          h-5 so the placeholder height matches the populated row. */}
+      <div className="flex flex-wrap gap-1 min-h-5">
+        {entry.posX !== undefined && entry.posY !== undefined && (
+          <Badge variant="default" title={t('state.pinnedTitle')}>
+            {t('state.pinned')}
+          </Badge>
+        )}
+        {entry.isEdited && !entry.isDeleted && (
+          <Badge variant="default">{t('state.edited')}</Badge>
+        )}
+        {/* REQ-121 — errors (timeInvalid / overDuration / invalidSize)
+            wear the danger variant; warnings (overlap / overflow /
+            emptyText) keep the warning amber. */}
+        {warnings?.timeInvalid  && <Badge variant="danger">{t('badge.timeInvalid')}</Badge>}
+        {warnings?.overlap      && <Badge variant="warning">{t('badge.overlap')}</Badge>}
+        {warnings?.overDuration && <Badge variant="danger">{t('badge.overDuration')}</Badge>}
+        {warnings?.overflow     && <Badge variant="warning">{t('badge.overflow')}</Badge>}
+        {warnings?.emptyText    && <Badge variant="warning">{t('badge.emptyText')}</Badge>}
+        {warnings?.invalidSize  && <Badge variant="danger">{t('badge.invalidSize')}</Badge>}
+      </div>
 
       {/* § 3 — Time (display + Adjust time CTA).  REQ-20260614-001 補遺③
           moved this block FROM the bottom of the inspector TO right
