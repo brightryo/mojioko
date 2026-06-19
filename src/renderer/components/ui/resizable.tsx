@@ -43,6 +43,14 @@ import { cn } from '@/lib/utils'
  * keyboard focus, and a neutral ring on a 1-px line reads as visual noise);
  * drag-active uses `bg-fg-muted` (zinc-500, one step brighter than the
  * hover state) as the press feedback.
+ *
+ * REQ-20260615-008: `disabled` prop hides the handle and blocks dragging
+ * while leaving the Resizable structure in the React tree so it can be
+ * re-enabled later without touching call sites.  When true: forward
+ * `disabled` to the underlying Separator (the library refuses drag input),
+ * make the visible line transparent, drop the grip chip, kill the
+ * `cursor-col-resize` / `cursor-row-resize` cue, and disable pointer
+ * events on the 4-px hit band.
  */
 
 export type ResizablePanelGroupProps = Omit<RrpGroupProps, 'orientation'> & {
@@ -79,12 +87,14 @@ export type ResizableHandleProps = RrpSeparatorProps & {
 
 export function ResizableHandle({
   withHandle,
+  disabled,
   className,
   ...props
 }: ResizableHandleProps) {
   return (
     <RrpSeparator
       data-slot="resizable-handle"
+      disabled={disabled}
       className={cn(
         // Default = vertical bar (Group direction=horizontal): 1-px line on
         // bg-line-strong with a 4-px transparent hit band centred on it.
@@ -100,11 +110,21 @@ export function ResizableHandle({
         'aria-[orientation=horizontal]:after:-translate-y-1/2',
         // Rotate the grip chip 90° on horizontal bars so the dots run along the line.
         '[&[aria-orientation=horizontal]>div]:rotate-90',
+        // REQ-20260615-008: disabled = invisible 1-px placeholder.  Layout
+        // space is preserved (still w-px / h-px) so the pxMin maths stay
+        // identical to the active case; only the visual cues and pointer
+        // affordance are removed.
+        disabled && [
+          'bg-transparent cursor-default pointer-events-none',
+          'hover:bg-transparent data-[resize-handle-active]:bg-transparent',
+          'after:hidden',
+          'aria-[orientation=horizontal]:cursor-default',
+        ],
         className,
       )}
       {...props}
     >
-      {withHandle && (
+      {withHandle && !disabled && (
         <div className="z-10 flex h-4 w-3 items-center justify-center rounded-[2px] border border-line-strong bg-line-strong">
           <GripVertical className="size-2.5 text-fg-tertiary" />
         </div>
