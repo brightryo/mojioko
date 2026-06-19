@@ -44,13 +44,15 @@ import { cn } from '@/lib/utils'
  * drag-active uses `bg-fg-muted` (zinc-500, one step brighter than the
  * hover state) as the press feedback.
  *
- * REQ-20260615-008: `disabled` prop hides the handle and blocks dragging
+ * REQ-20260615-008: `disabled` prop hides the grip and blocks dragging
  * while leaving the Resizable structure in the React tree so it can be
- * re-enabled later without touching call sites.  When true: forward
- * `disabled` to the underlying Separator (the library refuses drag input),
- * make the visible line transparent, drop the grip chip, kill the
- * `cursor-col-resize` / `cursor-row-resize` cue, and disable pointer
- * events on the 4-px hit band.
+ * re-enabled later without touching call sites.
+ *
+ * REQ-20260615-009 correction: when `disabled`, the 1-px line **stays
+ * visible** as a static divider; only the grip chip, hover / drag colour
+ * shifts, cursor cue, and pointer interactivity are stripped.  Keeping
+ * the line gives the panels a visible boundary even though the user
+ * cannot resize through it.
  */
 
 export type ResizablePanelGroupProps = Omit<RrpGroupProps, 'orientation'> & {
@@ -110,13 +112,14 @@ export function ResizableHandle({
         'aria-[orientation=horizontal]:after:-translate-y-1/2',
         // Rotate the grip chip 90° on horizontal bars so the dots run along the line.
         '[&[aria-orientation=horizontal]>div]:rotate-90',
-        // REQ-20260615-008: disabled = invisible 1-px placeholder.  Layout
-        // space is preserved (still w-px / h-px) so the pxMin maths stay
-        // identical to the active case; only the visual cues and pointer
-        // affordance are removed.
+        // REQ-20260615-008 + REQ-20260615-009: disabled = static visible
+        // divider, no grip, no interactivity.  The 1-px line keeps its
+        // `bg-line-strong` colour so panels still read as separated; only
+        // the hover / drag colour shifts, cursor cue, and pointer events
+        // are stripped.
         disabled && [
-          'bg-transparent cursor-default pointer-events-none',
-          'hover:bg-transparent data-[resize-handle-active]:bg-transparent',
+          'cursor-default pointer-events-none',
+          'hover:bg-line-strong data-[resize-handle-active]:bg-line-strong',
           'after:hidden',
           'aria-[orientation=horizontal]:cursor-default',
         ],
