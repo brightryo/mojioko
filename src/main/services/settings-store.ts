@@ -15,6 +15,10 @@ function buildDefaults(): AppSettings {
   return {
     version: 1,
     language: DEFAULT_LANGUAGE,
+    // REQ-20260615-026: app-wide theme defaults to dark.  When older
+    // settings.json files (pre-026) hydrate they fall through this default
+    // via the spread on load.
+    theme: 'dark',
     transcriptionDefaults: {
       fontSizePx: BURNIN_DEFAULTS.fontSizePx,
       textColorHex: BURNIN_DEFAULTS.textColorHex,

@@ -186,9 +186,18 @@ export type AudioMode = 'simple' | 'preserve'
  */
 export type OutputContainer = 'mp4' | 'sameAsInput'
 
+export type AppTheme = 'dark' | 'light'
+
 export interface AppSettings {
   version: 1
   language: string
+  /**
+   * REQ-20260615-026: app-wide colour theme.  `dark` is the default and
+   * the only value emitted by versions before this REQ shipped; the
+   * field is optional in the persisted struct so old settings.json
+   * files hydrate cleanly (falling back to `dark`).
+   */
+  theme?: AppTheme
   transcriptionDefaults: TranscriptionDefaults
   transcriptionAdvanced: TranscriptionAdvancedParams
   /** When true, \N line breaks are auto-inserted after transcription for lines exceeding video width. */

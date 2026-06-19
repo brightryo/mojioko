@@ -16,15 +16,68 @@
      */
     --window-bg-alpha: 0.85;
 
-    /* Background scale */
-    --background: 0 0% 3.9%;         /* #0a0a0a — app base */
-    --card: 0 0% 7.8%;               /* #141414 — bg-surface */
-    --popover: 0 0% 9%;              /* #171717 — bg-elevated */
+    /* -------------------------------------------------------------------
+     * REQ-20260615-026 — base neutral scale: Radix `mauve` (dark default).
+     *
+     * Values are HSL triplets (no `hsl()` wrapper) so `hsl(var(--mauve-N))`
+     * resolves correctly at call-sites.  The semantic tokens below
+     * (--surface-*, --text-*, --border-*, --background, --card, etc.)
+     * reference these via the `--neutral-N` indirection, so a single
+     * swap (mauve -> zinc / neutral / slate) flips the entire base
+     * palette without touching downstream consumers.
+     *
+     * Radix Colors `mauve` step semantics:
+     *   1-2  ⇒ app / pane backgrounds
+     *   3-5  ⇒ component / hover surfaces
+     *   6-8  ⇒ borders / separators
+     *   9-10 ⇒ solid colours / focus rings
+     *   11   ⇒ secondary text
+     *   12   ⇒ primary text (highest contrast)
+     *
+     * Critically, step 12 is ALWAYS the highest-contrast text colour
+     * against step 1, so the semantic mapping below works identically
+     * for dark (here) and light (:root.light), with only the underlying
+     * --mauve-N values changing.  Source: radix-ui / colors.
+     * ------------------------------------------------------------------- */
+    --mauve-1:  270 5% 7.1%;
+    --mauve-2:  260 6.3% 10.4%;
+    --mauve-3:  280 4.4% 14.3%;
+    --mauve-4:  279 4.7% 17.3%;
+    --mauve-5:  282 4.6% 19.9%;
+    --mauve-6:  275 5.1% 23.1%;
+    --mauve-7:  270 6.4% 27.6%;
+    --mauve-8:  265 5.7% 34.7%;
+    --mauve-9:  252 6% 45.7%;
+    --mauve-10: 252 5% 51.2%;
+    --mauve-11: 253 10% 71%;
+    --mauve-12: 240 7.7% 93.7%;
 
-    /* Foreground */
-    --foreground: 0 0% 98%;          /* #fafafa — zinc-50 */
-    --card-foreground: 0 0% 98%;
-    --popover-foreground: 0 0% 98%;
+    /* `--neutral-N` is the indirection layer: to roll back to zinc /
+     * neutral / slate, point these at `var(--zinc-N)` (defined elsewhere)
+     * or hard-code the legacy values.  Downstream tokens read
+     * `--neutral-N` and never the scale directly. */
+    --neutral-1:  var(--mauve-1);
+    --neutral-2:  var(--mauve-2);
+    --neutral-3:  var(--mauve-3);
+    --neutral-4:  var(--mauve-4);
+    --neutral-5:  var(--mauve-5);
+    --neutral-6:  var(--mauve-6);
+    --neutral-7:  var(--mauve-7);
+    --neutral-8:  var(--mauve-8);
+    --neutral-9:  var(--mauve-9);
+    --neutral-10: var(--mauve-10);
+    --neutral-11: var(--mauve-11);
+    --neutral-12: var(--mauve-12);
+
+    /* Background scale (shadcn semantic — kept for primitive compat) */
+    --background: var(--neutral-1);
+    --card:       var(--neutral-2);
+    --popover:    var(--neutral-3);
+
+    /* Foreground (semantic = step 12, highest-contrast text) */
+    --foreground:         var(--neutral-12);
+    --card-foreground:    var(--neutral-12);
+    --popover-foreground: var(--neutral-12);
 
     /* Primary action: green-500.
        REQ-071 Phase 3.7: --primary-foreground shifted green-950 (dark
@@ -37,11 +90,11 @@
        gives AAA contrast and reads as a real black mark on the green
        surface. */
     --primary: 142.1 70.6% 45.3%;
-    --primary-foreground: 240 5.9% 4%; /* zinc-950 */
+    --primary-foreground: var(--neutral-1); /* darkest neutral, near-black on light + on green */
 
-    /* Secondary: zinc-800 */
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
+    /* Secondary mapped to base surface */
+    --secondary: var(--neutral-4);
+    --secondary-foreground: var(--neutral-12);
 
     /* Muted: zinc-800 bg, zinc-400 fg.  REQ-067 phase A: foreground lifted
        from zinc-500 (#71717a, contrast 4.04:1 against the app background —
@@ -50,21 +103,21 @@
        ColorPicker hint, font-licenses body, audio-preview error, etc.) read
        this single variable and inherit the improved readability without
        requiring per-site edits. */
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5.0% 64.9%;  /* zinc-400 */
+    --muted: var(--neutral-4);
+    --muted-foreground: var(--neutral-11);
 
     /* Accent: same as secondary for shadcn compat */
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
+    --accent: var(--neutral-4);
+    --accent-foreground: var(--neutral-12);
 
     /* Destructive: red-500 */
     --destructive: 0 72.2% 50.6%;
     --destructive-foreground: 0 0% 98%;
 
     /* Borders and inputs */
-    --border: 240 3.7% 15.9%;        /* zinc-800 */
-    --input: 0 0% 3.9%;              /* zinc-950 — inputs use dark bg */
-    --ring: 142.1 70.6% 45.3%;       /* green-500 focus ring */
+    --border: var(--neutral-6);
+    --input:  var(--neutral-1);
+    --ring:   142.1 70.6% 45.3%;     /* green-500 focus ring (accent kept) */
 
     /*
      * Multi-row selection (bulk-edit) — distinct from the green focused-row
@@ -92,9 +145,9 @@
      * paired hover-state value so the outline visibly lifts on
      * pointer-in without jumping to a saturated accent.
      */
-    --separator: 240 5% 30%;              /* dark mode: ~zinc-700 */
+    --separator: var(--neutral-7);
     --separator-alpha: 0.6;
-    --separator-strong: 240 5% 40%;       /* dark mode: ~zinc-600 (hover) */
+    --separator-strong: var(--neutral-8);
 
     /*
      * Single low-saturation warm accent shared by every "support /
@@ -160,30 +213,31 @@
      *   --trim-overlay   amber-500 trim-region semi-transparent overlay
      *   --cursor-active  green-500 playback cursor line (= --primary)
      * ------------------------------------------------------------------- */
-    --surface-0: 240 10% 3.9%;          /* zinc-950 */
-    --surface-1: 240 5.9% 10%;          /* zinc-900 */
-    --surface-2: 240 3.7% 15.9%;        /* zinc-800 */
-    --surface-3: 240 5.2% 26%;          /* zinc-700 */
-    --surface-4: 240 5% 34%;            /* zinc-600 — emphasis (hover/active strong) */
+    /* Surface depth — Radix steps map directly. */
+    --surface-0: var(--neutral-1);
+    --surface-1: var(--neutral-2);
+    --surface-2: var(--neutral-4);
+    --surface-3: var(--neutral-6);
+    --surface-4: var(--neutral-7);
 
-    /* Inverse surfaces — bright slabs that flip with the theme.  Currently
-       only consumed by the secondary button variant (bright white slab on
-       dark bg in dark mode → dark slab on light bg in light mode). */
-    --surface-inverse-0: 0 0% 98%;       /* zinc-50 */
-    --surface-inverse-1: 240 6% 90%;     /* zinc-200 — hover */
-    --surface-inverse-2: 240 5% 84%;     /* zinc-300 — active */
+    /* Inverse surfaces — the high-contrast end of the scale.  In dark mode
+       these read as bright slabs (mauve-12..10); in light mode they auto-
+       invert to dark slabs because the :root.light block remaps mauve-N. */
+    --surface-inverse-0: var(--neutral-12);
+    --surface-inverse-1: var(--neutral-11);
+    --surface-inverse-2: var(--neutral-10);
 
-    --text-primary:   0 0% 98%;          /* zinc-50 (covers zinc-100 too) */
-    --text-secondary: 240 5% 84%;        /* zinc-300 (covers zinc-200 too) */
-    --text-tertiary:  240 5% 65%;        /* zinc-400 */
-    --text-muted:     240 4% 46%;        /* zinc-500 */
-    --text-disabled:  240 5% 34%;        /* zinc-600 */
-    --text-faint:     240 5.2% 26%;      /* zinc-700 — empty-state icons */
-    --text-inverse:   240 10% 3.9%;      /* zinc-950 — on bright/coloured bg */
+    --text-primary:   var(--neutral-12);
+    --text-secondary: var(--neutral-11);
+    --text-tertiary:  var(--neutral-10);
+    --text-muted:     var(--neutral-9);
+    --text-disabled:  var(--neutral-8);
+    --text-faint:     var(--neutral-7);
+    --text-inverse:   var(--neutral-1);
 
-    --border-default: 240 3.7% 15.9%;    /* zinc-800 — alias of --border */
-    --border-strong:  240 5.2% 26%;      /* zinc-700 */
-    --border-subtle:  240 5.9% 10%;      /* zinc-900 */
+    --border-default: var(--neutral-6);
+    --border-strong:  var(--neutral-7);
+    --border-subtle:  var(--neutral-3);
 
     /* Action accent variants (green family) */
     --primary-hover:  142 76% 36%;       /* green-600  #16a34a */
@@ -213,6 +267,64 @@
 
     /* shadcn radius — matches our rounded-lg (8px) */
     --radius: 0.5rem;
+  }
+
+  /* -------------------------------------------------------------------
+   * REQ-20260615-026 — light theme overrides.
+   *
+   * The active theme is selected by toggling `light` on the <html>
+   * element (see App.tsx).  Default (no class / `.dark`) keeps the
+   * dark mauve values defined in :root above.
+   *
+   * Strategy: only redefine the underlying `--mauve-N` scale.  The
+   * semantic tokens (--surface-*, --text-*, --border-*, etc.) keep
+   * their `var(--neutral-N)` mappings unchanged — they auto-invert
+   * because Radix mauve's step semantics (1 = background, 12 = primary
+   * text) hold for both palettes.
+   *
+   * State colours (--row-edited / --row-error / --warning / etc.) are
+   * intentionally NOT overridden here — they read as accent / status
+   * cues independent of the base scale.  Per-theme tuning can be
+   * added later if a colour fails contrast in light mode.
+   * ------------------------------------------------------------------- */
+  :root.light {
+    --mauve-1:  300 20% 99%;
+    --mauve-2:  300 7.7% 97.5%;
+    --mauve-3:  294 5.5% 95.3%;
+    --mauve-4:  289 4.7% 92.9%;
+    --mauve-5:  283 4.4% 91%;
+    --mauve-6:  278 4.1% 88.6%;
+    --mauve-7:  271 3.9% 85.1%;
+    --mauve-8:  255 3.7% 78.8%;
+    --mauve-9:  252 4% 57.3%;
+    --mauve-10: 252 4% 53.9%;
+    --mauve-11: 252 6% 42.5%;
+    --mauve-12: 260 17% 13.5%;
+
+    /* Primary stays green-500 but the on-primary text needs to flip to
+       white (against the green) — same as dark mode's --neutral-1 ↦
+       near-black; here we override to keep "near-white-on-green". */
+    --primary-foreground: 0 0% 100%;
+
+    /* Input background switches from very dark to near-white so text
+       fields read as white slabs on the light page. */
+    --input: 0 0% 100%;
+
+    /* Dark mode's body uses rgba(0,0,0, --window-bg-alpha) to paint a
+       semi-transparent black over the BrowserWindow's transparent
+       surface (REQ-019).  In light mode the same rule would render a
+       transparent black overlay — opposite of the desired white page.
+       Setting alpha to 0 leaves the body transparent; the override
+       below (in the same @layer base) replaces the rule with an
+       opaque light surface so the page reads as solid white. */
+    --window-bg-alpha: 0;
+  }
+
+  /* Light-mode body paint — replace the rgba(0,0,0, alpha) rule with
+   * an opaque surface-0 wash so the page reads as solid white instead
+   * of letting the desktop bleed through. */
+  :root.light body {
+    background-color: hsl(var(--surface-0));
   }
 }
 

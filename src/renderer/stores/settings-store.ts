@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { TranscriptionDefaults, TranscriptionAdvancedParams, AppSettings, EncoderSetting, AudioMode, OutputContainer } from '../../shared/types'
+import type { TranscriptionDefaults, TranscriptionAdvancedParams, AppSettings, AppTheme, EncoderSetting, AudioMode, OutputContainer } from '../../shared/types'
 import { BURNIN_DEFAULTS } from '../../shared/burnin-defaults'
 import { DEFAULT_LANGUAGE } from '../../shared/app-info'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
@@ -8,6 +8,8 @@ import { DEFAULT_FONT_ID, isFontId, type FontId } from '../../shared/fonts'
 
 interface SettingsStore {
   language: string
+  /** REQ-20260615-026: app-wide colour theme.  Default 'dark'. */
+  theme: AppTheme
   transcriptionDefaults: TranscriptionDefaults
   transcriptionAdvanced: TranscriptionAdvancedParams
   autoLineBreak: boolean
@@ -29,6 +31,7 @@ interface SettingsStore {
   activeFontId: FontId
 
   setLanguage: (lang: string) => void
+  setTheme: (t: AppTheme) => void
   updateTranscriptionDefaults: (patch: Partial<TranscriptionDefaults>) => void
   setTranscriptionAdvanced: (patch: Partial<TranscriptionAdvancedParams>) => void
   resetTranscriptionAdvanced: () => void
@@ -50,13 +53,14 @@ interface SettingsStore {
   resetStep3Settings: () => void
 
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
       language: DEFAULT_LANGUAGE,
+      theme: 'dark',
       transcriptionDefaults: {
         fontSizePx: BURNIN_DEFAULTS.fontSizePx,
         textColorHex: BURNIN_DEFAULTS.textColorHex,
@@ -75,6 +79,7 @@ export const useSettingsStore = create<SettingsStore>()(
       activeFontId: DEFAULT_FONT_ID,
 
       setLanguage: (lang) => set({ language: lang }),
+      setTheme: (t) => set({ theme: t }),
       updateTranscriptionDefaults: (patch) =>
         set((s) => ({ transcriptionDefaults: { ...s.transcriptionDefaults, ...patch } })),
       setTranscriptionAdvanced: (patch) =>
@@ -100,6 +105,7 @@ export const useSettingsStore = create<SettingsStore>()(
         const ta = s.transcriptionAdvanced ?? {}
         set({
           language: s.language,
+          theme: s.theme === 'light' ? 'light' : 'dark',
           transcriptionDefaults: {
             ...td,
             fontSizePx: Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, td.fontSizePx ?? 100)),
@@ -126,6 +132,7 @@ export const useSettingsStore = create<SettingsStore>()(
       // reset on every navigation to Step 1.  See `resetStep3Settings`.
       partialize: (state) => ({
         language: state.language,
+        theme: state.theme,
         transcriptionDefaults: state.transcriptionDefaults,
         transcriptionAdvanced: state.transcriptionAdvanced,
         autoLineBreak: state.autoLineBreak,
