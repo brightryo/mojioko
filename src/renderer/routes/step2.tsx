@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { TimeEditorDialog } from '@/components/time-editor-dialog/time-editor-dialog'
 import { ExportFrameButton } from '@/components/step2/export-frame-button'
+import { BurninDrawer } from '@/components/step2/burnin-drawer'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -205,6 +206,8 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const [editor, setEditor] = useState<EditorState>({ open: false })
   const [discardOpen, setDiscardOpen] = useState(false)
   const [skipDiscardWarning, setSkipDiscardWarning] = useState(false)
+  // REQ-20260615-023: right-sliding drawer replaces the retired STEP3 route.
+  const [burninDrawerOpen, setBurninDrawerOpen] = useState(false)
 
   // REQ-20260614-001 補遺③ — 3-pane resizable layout state.  Outer is
   // **horizontal** (left / right); left inner is **vertical** (preview /
@@ -847,7 +850,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
                   variant="primary"
                   size="md"
                   disabled
-                  onClick={() => navigate('/step3')}
+                  onClick={() => setBurninDrawerOpen(true)}
                 >
                   <Film className="h-4 w-4 mr-1.5" />
                   {t('action.exportVideoLabel')}
@@ -863,7 +866,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
             variant="primary"
             size="md"
             disabled={!canContinue}
-            onClick={() => navigate('/step3')}
+            onClick={() => setBurninDrawerOpen(true)}
           >
             <Film className="h-4 w-4 mr-1.5" />
             {t('action.exportVideoLabel')}
@@ -1141,6 +1144,11 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
           </ResizablePanelGroup>
         </div>
       </div>
+
+      {/* REQ-20260615-023: burn-in drawer replaces the retired /step3 route.
+          Slides in from the right; owns its own settings UI, progress /
+          cancel state, and the post-success completion dialog. */}
+      <BurninDrawer open={burninDrawerOpen} onOpenChange={setBurninDrawerOpen} />
 
       {/* Shared time-editor modal — driven by `editor` state. */}
       <TimeEditorDialog

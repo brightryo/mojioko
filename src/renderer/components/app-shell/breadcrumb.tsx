@@ -6,7 +6,9 @@ import { cn } from '@/lib/utils'
 import { APP_NAME } from '../../../shared/app-info'
 import { useSettingsStore } from '@/stores/settings-store'
 
-export type StepNumber = 1 | 2 | 3
+// REQ-20260615-023: STEP3 retired in favour of the burn-in drawer on STEP2,
+// so the breadcrumb now shows two steps only (Transcribe → Edit).
+export type StepNumber = 1 | 2
 
 interface BreadcrumbProps {
   currentStep: StepNumber
@@ -21,8 +23,7 @@ interface StepConfig {
 
 const STEPS: StepConfig[] = [
   { step: 1, labelKey: 'nav.step1', route: '/step1' },
-  { step: 2, labelKey: 'nav.step2', route: '/step2' },
-  { step: 3, labelKey: 'nav.step3', route: '/step3' }
+  { step: 2, labelKey: 'nav.step2', route: '/step2' }
 ]
 
 export function Breadcrumb({ currentStep, appVersion }: BreadcrumbProps) {
