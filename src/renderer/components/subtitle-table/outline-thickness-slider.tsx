@@ -24,6 +24,13 @@ interface OutlineThicknessSliderProps {
    * caller is responsible for providing one for screen readers.
    */
   ariaLabel: string
+  /**
+   * REQ-20260615-014: when true, the range track stretches to fill the
+   * parent flex cell (`flex-1`) instead of the fixed `w-24` baseline used
+   * by bulk-edit-bar / default-style-controls.  The inspector uses this
+   * to consume the empty space between the label and the value readout.
+   */
+  fullWidth?: boolean
 }
 
 /**
@@ -40,7 +47,8 @@ export function OutlineThicknessSlider({
   value,
   onCommit,
   disabled,
-  ariaLabel
+  ariaLabel,
+  fullWidth
 }: OutlineThicknessSliderProps) {
   const [draft, setDraft] = useState(value)
 
@@ -76,6 +84,7 @@ export function OutlineThicknessSlider({
     <div
       className={cn(
         'flex items-center gap-1.5',
+        fullWidth && 'w-full',
         disabled && 'opacity-40 pointer-events-none'
       )}
     >
@@ -90,7 +99,7 @@ export function OutlineThicknessSlider({
         onKeyUp={commit}
         onTouchEnd={commit}
         disabled={disabled}
-        className="w-24"
+        className={cn(fullWidth ? 'flex-1 min-w-0' : 'w-24')}
         // accent-color routes the native thumb/track tint through --primary
         // so the slider stays on-brand under any future theme without
         // hardcoding green-500.
