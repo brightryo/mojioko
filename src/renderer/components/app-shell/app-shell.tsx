@@ -36,8 +36,13 @@ export function AppShell({
   fluid,
   children
 }: AppShellProps) {
+  // REQ-20260615-019: dropped `bg-surface-0` from the outer container so
+  // the body's rgba(0,0,0, --window-bg-alpha) shows through to the
+  // desktop.  Section cards (bg-card) and dialogs / popovers keep their
+  // opaque tokens so the foreground UI remains readable — only the bare
+  // interstitial space between cards is see-through.
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-surface-0">
+    <div className="flex h-full flex-col overflow-hidden">
       <Breadcrumb currentStep={currentStep} appVersion={appVersion} />
       <main className={cn('flex-1', noScroll ? 'overflow-hidden' : 'overflow-y-auto')}>
         <div
