@@ -31,10 +31,18 @@ import { cn } from '@/lib/utils'
  *    grip icon uses `text-fg-tertiary` (zinc-400) so the dots register on
  *    the zinc-700 chip.
  *  - Hover / drag-active states added (`hover:bg-surface-4`,
- *    `data-[resize-handle-active]:bg-primary/60`) for MOJIOKO feel; shadcn
+ *    `data-[resize-handle-active]:bg-fg-muted`) for MOJIOKO feel; shadcn
  *    upstream leaves these to the consumer.
  *  - Hit band kept at 4 px (`after:w-1` / `after:h-1`) matching shadcn,
  *    rather than the 6 px from REQ-20260615-004.
+ *
+ * REQ-20260615-007: every state of the handle (base / hover / drag / focus)
+ * uses border / surface tokens only — primary green is reserved for the
+ * subtitle-selection accent, so the resize handle must never light up in
+ * that colour.  Focus ring removed entirely (a divider seldom carries
+ * keyboard focus, and a neutral ring on a 1-px line reads as visual noise);
+ * drag-active uses `bg-fg-muted` (zinc-500, one step brighter than the
+ * hover state) as the press feedback.
  */
 
 export type ResizablePanelGroupProps = Omit<RrpGroupProps, 'orientation'> & {
@@ -81,9 +89,9 @@ export function ResizableHandle({
         // Default = vertical bar (Group direction=horizontal): 1-px line on
         // bg-line-strong with a 4-px transparent hit band centred on it.
         'relative flex w-px items-center justify-center bg-line-strong cursor-col-resize',
-        'transition-colors duration-150 hover:bg-surface-4 data-[resize-handle-active]:bg-primary/60',
+        'transition-colors duration-150 hover:bg-surface-4 data-[resize-handle-active]:bg-fg-muted',
         'after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2',
-        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-1',
+        'focus:outline-none focus-visible:outline-none',
         // Horizontal-bar override (Group direction=vertical): flip line + hit band axis.
         'aria-[orientation=horizontal]:h-px aria-[orientation=horizontal]:w-full',
         'aria-[orientation=horizontal]:cursor-row-resize',
