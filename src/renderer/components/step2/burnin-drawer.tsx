@@ -11,7 +11,8 @@ import {
   FolderOpen,
   MessageSquare,
   Shield,
-  X
+  X,
+  Film
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -103,12 +104,21 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
 
   // Reset transient drawer state whenever the drawer is closed so a
   // future open starts cleanly from the 'idle' settings view.
+  //
+  // REQ-20260615-024 B.5 fix: `completedPath` / `completedSizeMB` are
+  // INTENTIONALLY left out of this reset.  On success, the drawer hands
+  // off to the completion Dialog by closing itself (`onOpenChange(false)`)
+  // — which fires this effect — and then opening the Dialog in the same
+  // tick.  If we cleared the completed-* state here, the Dialog would
+  // mount with empty values: Play would call `shellOpenPath('')`
+  // (opens an arbitrary folder on Windows), Show in Folder would no-op,
+  // and the size readout would render "0 MB".  Keeping them around is
+  // harmless — they are only consulted when `completionOpen` is true,
+  // and the next successful run overwrites them anyway.
   useEffect(() => {
     if (open) return
     setRenderState('idle')
     setProgress(0)
-    setCompletedPath('')
-    setCompletedSizeMB(0)
     setErrorMessage('')
     setOverwriteCandidate(null)
     burninHandleRef.current = null
@@ -283,18 +293,25 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
           className="max-w-[640px]"
           hideClose={renderState === 'rendering'}
         >
-          <SheetHeader>
+          {/* REQ-20260615-024 A.3: description sits to the RIGHT of the
+              title instead of stacking below it.  The header still uses
+              SheetHeader for the X close-button offset; we just override
+              the inner layout to a single flex row. */}
+          <SheetHeader className="flex-row items-baseline gap-3 pr-10">
             <SheetTitle>{t('title')}</SheetTitle>
-            <SheetDescription>{t('subtitle')}</SheetDescription>
+            <SheetDescription className="flex-1">{t('subtitle')}</SheetDescription>
           </SheetHeader>
 
           <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-4">
             {renderState === 'idle' && (
               <>
-                {/* Summary panel */}
-                <div className="rounded-xl border border-line bg-surface-1 p-4">
-                  <Label>{t('summary.label')}</Label>
-                  <div className="mt-3 flex flex-col divide-y divide-line/50">
+                {/* Summary panel — REQ-20260615-024 A.1/A.2: section header
+                    'Summary' dropped, card padding tightened (p-3), and
+                    SummaryRow rows shrunk to py-1 / min-h-0 so the seven
+                    facts read as a compact table rather than a stretched
+                    column. */}
+                <div className="rounded-xl border border-line bg-surface-1 px-3 py-2">
+                  <div className="flex flex-col divide-y divide-line/50">
                     <SummaryRow label={t('summary.resolution')} value={video ? `${video.widthPx}×${video.heightPx}` : '—'} />
                     <SummaryRow label={t('summary.duration')} value={video ? formatDuration(durationSec) : '—'} />
                     <SummaryRow label={t('summary.format')} value={video ? `${displayContainer} / h264` : '—'} />
@@ -407,13 +424,17 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                 </Button>
               </>
             ) : (
+              // REQ-20260615-024 A.4: execute button mirrors the STEP2
+              // footer's 動画出力 affordance — Film icon + same label +
+              // primary green — so the user reads it as "the same action,
+              // now confirmed".
               <Button
                 variant="primary"
                 size="md"
                 onClick={handleStartRender}
                 disabled={activeEntries.length === 0}
               >
-                <Play className="h-4 w-4 mr-1.5" />
+                <Film className="h-4 w-4 mr-1.5" />
                 {t('step2:action.exportVideoLabel')}
               </Button>
             )}
@@ -487,8 +508,11 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                 <FolderOpen className="h-4 w-4 mr-1.5" />
                 {t('completion.showInFolder')}
               </Button>
+              {/* REQ-20260615-024 B.3: same secondary white treatment as
+                  Show in Folder so the three workflow buttons share a
+                  visual rhythm. */}
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="md"
                 onClick={() => handleCompletionAction(() => {
                   const lang = i18n.language === 'ja' ? 'ja' : 'en'
@@ -512,7 +536,9 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
             </div>
           </div>
 
-          <DialogFooter>
+          {/* REQ-20260615-024 B.4: override DialogFooter's default
+              `justify-end` so Close sits centred. */}
+          <DialogFooter className="justify-center">
             <Button
               variant="ghost"
               size="md"
@@ -581,10 +607,12 @@ function OutputFormatCard({
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
+  // REQ-20260615-024 A.1: tightened from py-2 / min-h-[28px] to py-1 so the
+  // 7-row summary reads as a compact reference table.
   return (
-    <div className="flex items-center justify-between py-2 min-h-[28px]">
+    <div className="flex items-center justify-between py-1">
       <span className="text-callout font-semibold text-fg-tertiary">{label}</span>
-      <span className="text-body text-fg-primary font-mono tabular-nums">{value}</span>
+      <span className="text-body-sm text-fg-primary font-mono tabular-nums">{value}</span>
     </div>
   )
 }
