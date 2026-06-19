@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, Settings2, ChevronUp, ChevronDown, AudioWaveform } from 'lucide-react'
+import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -450,16 +450,12 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
         {/* Whisper model + Advanced (engine) trigger.  Subtitle Style
             does NOT live here — it is unrelated to the Whisper engine
-            and sits next to the Start button in the footer instead. */}
-        {/* REQ-20260615-012: outer card is `relative` and the Advanced button
-            is absolutely pinned at the top-right corner so the WhisperModel-
-            Manager (header + accordion body) spans the full inner width of
-            the section card.  This lets the body grid be centred against
-            the full 1018 px inner area rather than the ~911 px flex-1
-            column that previously sat to the left of the button — see
-            RES-20260615-012 for the measured numbers. */}
+            and sits next to the Start button in the footer instead.
+            REQ-20260615-020: the Advanced button was retired in favour of
+            the gear icon that WhisperModelManager renders inline in its
+            own header; step1 just forwards a callback. */}
         <div className={cn(
-          'rounded-xl border border-border bg-card p-4 relative transition-opacity duration-200',
+          'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
           (isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
         )}>
           <WhisperModelManager
@@ -467,16 +463,8 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             disabled={isLoading || isTranscribing}
             isOpen={openSection === 'whisper'}
             onOpenChange={(open) => setOpenSection(open ? 'whisper' : 'inputVideo')}
+            onOpenAdvanced={() => setAdvancedDialogOpen(true)}
           />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setAdvancedDialogOpen(true)}
-            className="absolute right-4 top-4"
-          >
-            <Settings2 className="h-4 w-4 mr-1.5" />
-            {t('advanced.openButton')}
-          </Button>
         </div>
 
         {/* First-view body — only the must-touch cards remain visible
@@ -506,6 +494,10 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
               expanded panel to 'whisper'; clicking when collapsed
               switches back here.  Either way exactly one panel is open. */}
           {/* REQ-082: Enter / Space keyboard activation removed. */}
+          {/* REQ-20260615-020: header right side now shows the audio track
+              selection state (track name + green check, or grey "未選択")
+              instead of the file-format hint.  The hint moved into the
+              body's first row (see below). */}
           <div
             role="button"
             aria-expanded={openSection === 'inputVideo'}
@@ -525,7 +517,19 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-body-sm text-muted-foreground/60">{t('inputVideo.hint')}</span>
+              {(() => {
+                const trackSelected = audioTracks.some((tr) => tr.index === selectedTrack)
+                return trackSelected ? (
+                  <span className="flex items-center gap-1 text-body-sm text-fg-secondary">
+                    <span>{t('audioTracks.trackLabel', { index: selectedTrack })}</span>
+                    <Check className="h-4 w-4 text-primary flex-shrink-0" aria-hidden="true" />
+                  </span>
+                ) : (
+                  <span className="text-body-sm text-fg-disabled">
+                    {t('audioTracks.notSelected')}
+                  </span>
+                )
+              })()}
               {openSection === 'inputVideo' ? (
                 <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
               ) : (
@@ -547,6 +551,14 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
                 className="overflow-hidden"
               >
                 <div className="space-y-4 pt-3">
+          {/* REQ-20260615-020: supported file-format hint moved here from
+              the header.  Right-aligned, muted, so it reads as a small
+              reference line rather than the primary content. */}
+          <div className="flex justify-end">
+            <span className="text-caption text-fg-muted">
+              {t('inputVideo.hint')}
+            </span>
+          </div>
           {/* Path + Browse */}
           {isLoading ? (
             <div className="flex items-center gap-2.5 h-9 px-1">

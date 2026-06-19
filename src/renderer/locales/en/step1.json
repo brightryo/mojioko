@@ -19,6 +19,7 @@
     "label": "Audio tracks",
     "tracksCount": "{{count}} tracks",
     "trackLabel": "Track {{index}}",
+    "notSelected": "No track selected",
     "absent": "—",
     "transcriptionTarget": "Transcription target",
     "defaultTrackMissing": "Default track {{index}} not found; using track {{fallback}} instead.",
