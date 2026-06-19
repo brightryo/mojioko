@@ -33,6 +33,61 @@ interface TimelineBlockInspectorProps {
 }
 
 /**
+ * REQ-20260615-014 B: inline single-select segmented control used by the
+ * Layout (horizontal / vertical) and Background (colour) rows in place of
+ * the native `<select>` triggers.  Kept local to the inspector since it is
+ * the only consumer; mira-style compact (h-7, rounded-md track with
+ * rounded-[3px] pills, text-caption labels).
+ */
+function SegmentGroup<T extends string>({
+  value,
+  onChange,
+  options,
+  disabled,
+  ariaLabel,
+}: {
+  value: T
+  onChange: (next: T) => void
+  options: ReadonlyArray<{ value: T; label: string }>
+  disabled?: boolean
+  ariaLabel: string
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      className={cn(
+        'flex flex-1 min-w-0 h-7 items-stretch gap-0.5 rounded-md border border-line-strong bg-surface-0 p-0.5',
+        disabled && 'opacity-40 pointer-events-none'
+      )}
+    >
+      {options.map((o) => {
+        const selected = o.value === value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            disabled={disabled}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              'flex-1 min-w-0 inline-flex items-center justify-center rounded-[3px] px-2 text-caption font-medium transition-colors duration-150',
+              'focus:outline-none focus-visible:outline-none',
+              selected
+                ? 'bg-primary text-fg-inverse'
+                : 'text-fg-secondary hover:text-fg-primary hover:bg-surface-2'
+            )}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
  * Editor body shown in STEP 2's always-on right-pane Inspector
  * (REQ-20260614-001 補遺③).  Sections top → bottom:
  *
@@ -593,15 +648,19 @@ export function TimelineBlockInspector({
                 swatchOnly
               />
             </div>
-            {/* Outline width */}
+            {/* Outline width — REQ-20260615-014 A: the slider stretches to
+                fill the row instead of sitting in a 160 px island next to
+                empty space.  `flex-1 min-w-0` lets the slider claim every
+                pixel between the label and the value readout. */}
             <div className="flex items-center justify-between gap-2">
               <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.outlineWidth')}</label>
-              <div className="w-[160px]" onClick={(e) => e.stopPropagation()}>
+              <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
                 <OutlineThicknessSlider
                   value={entry.outlineThicknessPx}
                   onCommit={handleOutlineThicknessCommit}
                   disabled={isFrozen}
                   ariaLabel={t('styleCell.outlineWidth')}
+                  fullWidth
                 />
               </div>
             </div>
@@ -626,44 +685,35 @@ export function TimelineBlockInspector({
           <div className="text-body font-semibold text-fg-secondary">
             {t('timeline.inspector.layoutSection')}
           </div>
+          {/* REQ-20260615-014 B: horizontal / vertical lift from native
+              <select> to a single-select SegmentGroup so all options are
+              visible up-front.  Value bindings are unchanged. */}
           <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.layoutH')}</label>
-            <select
+            <label className="text-callout font-semibold text-fg-secondary shrink-0">{t('styleCell.layoutH')}</label>
+            <SegmentGroup<'left' | 'center' | 'right'>
               value={entry.horizontalPosition}
-              onChange={(e) => handleHorizontalPositionChange(e.target.value as 'left' | 'center' | 'right')}
+              onChange={handleHorizontalPositionChange}
               disabled={isFrozen}
-              // REQ-20260615-013: native <select> trigger text matched to
-              // the section's labels (text-callout 13px) instead of the
-              // 15px text-body that read oversized next to "水平 / 垂直".
-              className={cn(
-                'h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-body-sm text-fg-primary',
-                'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
-                'disabled:opacity-40 disabled:cursor-not-allowed'
-              )}
-              aria-label={t('subtitlePosition.horizontal')}
-            >
-              <option value="left">{t('subtitlePosition.left')}</option>
-              <option value="center">{t('subtitlePosition.center')}</option>
-              <option value="right">{t('subtitlePosition.right')}</option>
-            </select>
+              ariaLabel={t('subtitlePosition.horizontal')}
+              options={[
+                { value: 'left', label: t('subtitlePosition.left') },
+                { value: 'center', label: t('subtitlePosition.center') },
+                { value: 'right', label: t('subtitlePosition.right') },
+              ]}
+            />
           </div>
           <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.layoutV')}</label>
-            <select
+            <label className="text-callout font-semibold text-fg-secondary shrink-0">{t('styleCell.layoutV')}</label>
+            <SegmentGroup<'top' | 'bottom'>
               value={entry.verticalPosition}
-              onChange={(e) => handleVerticalPositionChange(e.target.value as 'top' | 'bottom')}
+              onChange={handleVerticalPositionChange}
               disabled={isFrozen}
-              // REQ-20260615-013: text-body -> text-body-sm to match the section.
-              className={cn(
-                'h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-body-sm text-fg-primary',
-                'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
-                'disabled:opacity-40 disabled:cursor-not-allowed'
-              )}
-              aria-label={t('subtitlePosition.vertical')}
-            >
-              <option value="top">{t('subtitlePosition.top')}</option>
-              <option value="bottom">{t('subtitlePosition.bottom')}</option>
-            </select>
+              ariaLabel={t('subtitlePosition.vertical')}
+              options={[
+                { value: 'top', label: t('subtitlePosition.top') },
+                { value: 'bottom', label: t('subtitlePosition.bottom') },
+              ]}
+            />
           </div>
           <div className="flex items-center justify-between gap-2">
             <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.marginV')}</label>
@@ -710,22 +760,19 @@ export function TimelineBlockInspector({
             'flex items-center justify-between gap-2',
             !entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none'
           )}>
-            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.bgColor')}</label>
-            <select
+            <label className="text-callout font-semibold text-fg-secondary shrink-0">{t('styleCell.bgColor')}</label>
+            {/* REQ-20260615-014 B: black / white SegmentGroup replaces the
+                native <select>.  Value binding unchanged. */}
+            <SegmentGroup<'black' | 'white'>
               value={entry.subtitleBackground.color}
-              onChange={(e) => handleBackgroundColorChange(e.target.value as 'black' | 'white')}
+              onChange={handleBackgroundColorChange}
               disabled={isFrozen || !entry.subtitleBackground.enabled}
-              // REQ-20260615-013: text-body -> text-body-sm to match the section.
-              className={cn(
-                'h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-body-sm text-fg-primary',
-                'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
-                'disabled:opacity-40 disabled:cursor-not-allowed'
-              )}
-              aria-label={t('styleCell.bgColor')}
-            >
-              <option value="black">{t('background.black')}</option>
-              <option value="white">{t('background.white')}</option>
-            </select>
+              ariaLabel={t('styleCell.bgColor')}
+              options={[
+                { value: 'black', label: t('background.black') },
+                { value: 'white', label: t('background.white') },
+              ]}
+            />
           </div>
           <div className={cn(
             'flex items-center justify-between gap-2',
