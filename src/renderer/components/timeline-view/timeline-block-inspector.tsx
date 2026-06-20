@@ -8,6 +8,7 @@ import { useHistoryStore } from '@/stores/history-store'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { ColorPicker } from '@/components/color-picker/color-picker'
+import { HelpIcon } from '@/components/help-icon'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { RowFontSelector } from '@/components/subtitle-table/row-font-selector'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
@@ -666,7 +667,7 @@ export function TimelineBlockInspector({
           className={cn(
             'w-full rounded-md bg-surface-0 border border-line-strong px-2 py-1.5',
             'text-body text-fg-primary leading-snug resize-none',
-            'focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30',
+            'focus:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/30',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         />
@@ -715,12 +716,12 @@ export function TimelineBlockInspector({
                   })}
                   className={cn(
                     'w-14 h-7 rounded border bg-surface-0 px-1.5 text-center text-body text-fg-primary',
-                    'focus:outline-none focus:ring-1',
+                    'focus:outline-none focus-visible:ring-1',
                     '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
                     'disabled:opacity-40 disabled:cursor-not-allowed',
                     sizeOutOfRange
-                      ? 'border-warning-soft/60 focus:ring-warning-soft/30'
-                      : 'border-line-strong focus:border-surface-4 focus:ring-primary/30'
+                      ? 'border-warning-soft/60 focus-visible:ring-warning-soft/30'
+                      : 'border-line-strong focus-visible:border-surface-4 focus-visible:ring-primary/30'
                   )}
                 />
                 <button
@@ -842,7 +843,7 @@ export function TimelineBlockInspector({
               aria-label={t('subtitlePosition.margin')}
               className={cn(
                 'w-20 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
-                'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
+                'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
               )}
@@ -853,12 +854,20 @@ export function TimelineBlockInspector({
               posX=anchor.x+offset, posY=anchor.y+offset.  X=Y=0 unpins
               (clears posX/posY).  Reset button = explicit unpin.  Hidden
               when video has no video stream (audio-only) or is still
-              loading. */}
+              loading.
+
+              REQ-20260615-034 B: the constant-visible pinned-state note
+              is gone; the same content moved into a `?` tooltip next to
+              the "オフセット" label so users can still learn the rule
+              without permanent UI clutter. */}
           {showOffsetRow && (
             <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary shrink-0">
-                {t('styleCell.offset')}
-              </label>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <label className="text-callout font-semibold text-fg-secondary">
+                  {t('styleCell.offset')}
+                </label>
+                <HelpIcon content={t('styleCell.offsetHelp')} />
+              </div>
               <div className="flex items-center gap-1">
                 <span className="text-caption text-fg-tertiary">X</span>
                 <input
@@ -870,7 +879,7 @@ export function TimelineBlockInspector({
                   aria-label={t('styleCell.offsetX')}
                   className={cn(
                     'w-14 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
-                    'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
+                    'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30',
                     'disabled:opacity-40 disabled:cursor-not-allowed',
                     '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
                   )}
@@ -885,7 +894,7 @@ export function TimelineBlockInspector({
                   aria-label={t('styleCell.offsetY')}
                   className={cn(
                     'w-14 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
-                    'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
+                    'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30',
                     'disabled:opacity-40 disabled:cursor-not-allowed',
                     '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
                   )}
@@ -907,11 +916,6 @@ export function TimelineBlockInspector({
                 </button>
               </div>
             </div>
-          )}
-          {showOffsetRow && isPinned && (
-            <p className="text-caption text-fg-muted leading-tight">
-              {t('styleCell.offsetPinnedNote')}
-            </p>
           )}
         </div>
       )}
@@ -969,7 +973,7 @@ export function TimelineBlockInspector({
               aria-label={t('styleCell.bgOpacity')}
               className={cn(
                 'w-20 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
-                'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
+                'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
               )}

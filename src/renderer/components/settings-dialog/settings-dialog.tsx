@@ -200,7 +200,7 @@ export function SettingsDialog() {
                   value={fadeDraft}
                   onChange={handleFadeDraftChange}
                   onBlur={handleFadeBlur}
-                  className="h-9 w-full rounded-md border border-line bg-surface-0 px-3 text-center text-body text-fg-primary focus:outline-none focus:ring-2 focus:ring-primary/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                  className="h-9 w-full rounded-md border border-line bg-surface-0 px-3 text-center text-body text-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <p className="text-body-sm text-fg-muted">{t('general.fadeDurationHint')}</p>
               </div>

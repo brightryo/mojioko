@@ -95,11 +95,11 @@ export function DefaultStyleControls({
           }}
           className={cn(
             'h-9 w-32 rounded-md border bg-input px-2 text-center text-body text-foreground',
-            'focus:outline-none focus:ring-2',
+            'focus:outline-none focus-visible:ring-2',
             '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
             fontSizeOutOfRange
-              ? 'border-[hsl(var(--warning)/0.6)] focus:ring-[hsl(var(--warning)/0.3)]'
-              : 'border-border focus:ring-ring/30'
+              ? 'border-[hsl(var(--warning)/0.6)] focus-visible:ring-[hsl(var(--warning)/0.3)]'
+              : 'border-border focus-visible:ring-ring/30'
           )}
         />
         {/* REQ-034 #3: surface the clamp range so "enter 700 → silently

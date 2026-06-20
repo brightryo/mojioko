@@ -567,7 +567,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               }}
               className={cn(
                 'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
-                'focus:outline-none focus:ring-1 focus:ring-ring/30',
+                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30',
                 'border-border',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
               )}
@@ -623,7 +623,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               onChange={(e) => handleHPosCommit(e.target.value as 'left' | 'center' | 'right')}
               className={cn(
                 'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
-                'focus:outline-none focus:ring-1 focus:ring-ring/30',
+                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30',
                 'border-border'
               )}
               aria-label={t('subtitlePosition.horizontal')}
@@ -640,7 +640,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               onChange={(e) => handleVPosCommit(e.target.value as 'top' | 'bottom')}
               className={cn(
                 'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
-                'focus:outline-none focus:ring-1 focus:ring-ring/30',
+                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30',
                 'border-border'
               )}
               aria-label={t('subtitlePosition.vertical')}
@@ -663,7 +663,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               }}
               className={cn(
                 'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
-                'focus:outline-none focus:ring-1 focus:ring-ring/30',
+                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30',
                 'border-border',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
               )}
@@ -692,7 +692,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               disabled={!bgEnabledDraft}
               className={cn(
                 'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
-                'focus:outline-none focus:ring-1 focus:ring-ring/30',
+                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30',
                 'border-border',
                 'disabled:cursor-not-allowed'
               )}
@@ -720,7 +720,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               }}
               className={cn(
                 'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
-                'focus:outline-none focus:ring-1 focus:ring-ring/30',
+                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30',
                 'border-border',
                 'disabled:cursor-not-allowed',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'

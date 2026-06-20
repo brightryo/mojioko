@@ -534,12 +534,12 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
               title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
               className={cn(
                 'w-full h-7 rounded border bg-surface-0 px-1 text-center text-body-sm text-fg-primary',
-                'focus:outline-none focus:ring-1',
+                'focus:outline-none focus-visible:ring-1',
                 'disabled:opacity-40 disabled:cursor-not-allowed',
                 '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
                 sizeWarning
-                  ? 'border-warning-soft/60 focus:ring-warning-soft/30'
-                  : 'border-line focus:border-line-strong focus:ring-primary/30'
+                  ? 'border-warning-soft/60 focus-visible:ring-warning-soft/30'
+                  : 'border-line focus-visible:border-line-strong focus-visible:ring-primary/30'
               )}
             />
             <button
