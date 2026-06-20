@@ -126,7 +126,12 @@ export function SettingsDialog() {
               </span>
               <div className="flex items-center">
                 <Select value={language} onValueChange={handleLanguageChange}>
-                  <SelectTrigger className="h-9 w-full">
+                  {/* REQ-20260615-028 A: centre the selected value.  The value
+                      lands in the trigger's `[&>span]` slot (line-clamp-1),
+                      so giving that span `flex-1 text-center` keeps the
+                      ChevronDown right-anchored while the value sits
+                      visually centred inside the trigger. */}
+                  <SelectTrigger className="h-9 w-full [&>span]:flex-1 [&>span]:text-center">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -142,7 +147,12 @@ export function SettingsDialog() {
               </span>
               <div className="flex items-center">
                 <Select value={theme} onValueChange={(v) => setTheme(v as 'dark' | 'light')}>
-                  <SelectTrigger className="h-9 w-full">
+                  {/* REQ-20260615-028 A: centre the selected value.  The value
+                      lands in the trigger's `[&>span]` slot (line-clamp-1),
+                      so giving that span `flex-1 text-center` keeps the
+                      ChevronDown right-anchored while the value sits
+                      visually centred inside the trigger. */}
+                  <SelectTrigger className="h-9 w-full [&>span]:flex-1 [&>span]:text-center">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

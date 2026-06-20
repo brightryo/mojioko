@@ -17,68 +17,58 @@
     --window-bg-alpha: 0.85;
 
     /* -------------------------------------------------------------------
-     * REQ-20260615-026 — base neutral scale: Radix `mauve` (dark default).
+     * REQ-20260615-028 — base neutral scale: Tailwind `stone` (warm
+     * grey, dark default).  Replaces the mauve scale used by REQ-026 /
+     * 027.  Stone's hue sits in the 20-33° (warm tan / sand) range
+     * vs mauve's 252-280° (cool purple).
      *
-     * Values are HSL triplets (no `hsl()` wrapper) so `hsl(var(--mauve-N))`
+     * Values are HSL triplets (no `hsl()` wrapper) so `hsl(var(--stone-N))`
      * resolves correctly at call-sites.  The semantic tokens below
      * (--surface-*, --text-*, --border-*, --background, --card, etc.)
      * reference these via the `--neutral-N` indirection, so a single
-     * swap (mauve -> zinc / neutral / slate) flips the entire base
+     * swap (stone -> mauve / zinc / slate) flips the entire base
      * palette without touching downstream consumers.
      *
-     * Radix Colors `mauve` step semantics:
-     *   1-2  ⇒ app / pane backgrounds
-     *   3-5  ⇒ component / hover surfaces
-     *   6-8  ⇒ borders / separators
-     *   9-10 ⇒ solid colours / focus rings
-     *   11   ⇒ secondary text
-     *   12   ⇒ primary text (highest contrast)
+     * Saturation is BOOSTED from Tailwind's official 5-9 % to 10-18 %
+     * on the mid steps so the warm cast is actually visible at the
+     * surface / text steps that drive the UI — same rationale as
+     * REQ-20260615-027's mauve boost.  Hue stays in the 20-33° stone
+     * range; official-saturation comments are kept on each line so a
+     * one-line edit reverts to strict Tailwind stone.
      *
-     * Critically, step 12 is ALWAYS the highest-contrast text colour
-     * against step 1, so the semantic mapping below works identically
-     * for dark (here) and light (:root.light), with only the underlying
-     * --mauve-N values changing.  Source: radix-ui / colors.
+     * Radix-style step semantics (1 darkest / 12 highest-contrast text)
+     * still hold so the semantic mapping below works identically for
+     * dark (here) and light (:root.light).
      * ------------------------------------------------------------------- */
-    /* REQ-20260615-027: canonical Radix Colors v3 `mauve-dark` scale,
-     * mid-step saturation BOOSTED so the purple is actually visible at
-     * the surface / text steps that drive the UI.  The Radix defaults
-     * at 4-6 % S read as "indistinguishable from a slightly-shifted
-     * zinc" in practice (verified by Playwright probe against the
-     * built CSS in REQ-20260615-027 §1) — REQ §「正しく当たっても差は
-     * 控えめかもしれない」allows tuning here.  Hue stays in the 260-280°
-     * mauve range; saturation lifted from ~5-10 % to 12-18 % on the
-     * mid steps so the purple cast registers without entering "vivid
-     * lavender" territory.  To revert to Radix-exact mauve, drop each
-     * S value back to the official figures in the source comment. */
-    --mauve-1:  270 5% 7.1%;     /* #121113 — app base (kept subtle) */
-    --mauve-2:  260 8% 10.4%;    /* official 260 6.3 % */
-    --mauve-3:  280 8% 14.3%;    /* official 280 4.4 % */
-    --mauve-4:  279 10% 17.3%;   /* official 279 4.7 % */
-    --mauve-5:  282 12% 19.9%;   /* official 282 4.6 % */
-    --mauve-6:  275 14% 23.1%;   /* official 275 5.1 % */
-    --mauve-7:  270 16% 27.6%;   /* official 270 6.4 % */
-    --mauve-8:  265 14% 34.7%;   /* official 265 5.7 % */
-    --mauve-9:  252 13% 45.7%;   /* official 252 6 % */
-    --mauve-10: 252 11% 51.2%;   /* official 252 5 % */
-    --mauve-11: 253 18% 71%;     /* official 253 10 % */
-    --mauve-12: 240 9% 93.7%;    /* official 240 7.7 % */
+    --stone-1:  20 14% 4%;    /* stone-950, kept subtle */
+    --stone-2:  24 12% 7%;    /* between stone-950 and stone-900 */
+    --stone-3:  24 12% 10%;   /* stone-900 (official 10% S) */
+    --stone-4:  22 14% 14%;   /* official ≈ 12 6% 15% (stone-800) */
+    --stone-5:  24 16% 18%;   /* between stone-800 and stone-700 */
+    --stone-6:  28 16% 23%;   /* official ≈ 30 6% 25% (stone-700) */
+    --stone-7:  30 16% 28%;   /* between stone-700 and stone-600 */
+    --stone-8:  32 14% 34%;   /* official ≈ 33 5% 32% (stone-600) */
+    --stone-9:  28 12% 46%;   /* official ≈ 25 5% 45% (stone-500) */
+    --stone-10: 26 11% 56%;   /* between stone-500 and stone-400 */
+    --stone-11: 26 14% 72%;   /* between stone-400 and stone-300 */
+    --stone-12: 24 16% 94%;   /* very light warm text */
 
-    /* `--neutral-N` is the indirection layer: to roll back to zinc /
-     * neutral / slate, point these at `var(--zinc-N)` (defined elsewhere)
-     * or hard-code the legacy values.  Downstream tokens read
-     * `--neutral-N` and never the scale directly. */
-    --neutral-1:  var(--mauve-1);
-    --neutral-2:  var(--mauve-2);
-    --neutral-3:  var(--mauve-3);
-    --neutral-4:  var(--mauve-4);
-    --neutral-5:  var(--mauve-5);
-    --neutral-6:  var(--mauve-6);
-    --neutral-7:  var(--mauve-7);
-    --neutral-8:  var(--mauve-8);
-    --neutral-9:  var(--mauve-9);
-    --neutral-10: var(--mauve-10);
-    --neutral-11: var(--mauve-11);
-    --neutral-12: var(--mauve-12);
+    /* `--neutral-N` is the indirection layer: to roll back to mauve /
+     * zinc / slate, point these at `var(--mauve-N)` / `var(--zinc-N)`
+     * (defined elsewhere) or hard-code the legacy values.  Downstream
+     * tokens read `--neutral-N` and never the scale directly. */
+    --neutral-1:  var(--stone-1);
+    --neutral-2:  var(--stone-2);
+    --neutral-3:  var(--stone-3);
+    --neutral-4:  var(--stone-4);
+    --neutral-5:  var(--stone-5);
+    --neutral-6:  var(--stone-6);
+    --neutral-7:  var(--stone-7);
+    --neutral-8:  var(--stone-8);
+    --neutral-9:  var(--stone-9);
+    --neutral-10: var(--stone-10);
+    --neutral-11: var(--stone-11);
+    --neutral-12: var(--stone-12);
 
     /* Background scale (shadcn semantic — kept for primitive compat) */
     --background: var(--neutral-1);
@@ -299,21 +289,21 @@
    * added later if a colour fails contrast in light mode.
    * ------------------------------------------------------------------- */
   :root.light {
-    /* REQ-20260615-027: Radix Colors mauve (light) with mid-step
-     * saturation boosted so the purple is visible on white backgrounds.
-     * Same boost rationale as the dark scale above. */
-    --mauve-1:  300 25% 99%;     /* near-white, faint purple tint  (offical 20 %) */
-    --mauve-2:  300 14% 97.5%;   /* official 7.7 % */
-    --mauve-3:  294 12% 95.3%;   /* official 5.5 % */
-    --mauve-4:  289 12% 92.9%;   /* official 4.7 % */
-    --mauve-5:  283 12% 91%;     /* official 4.4 % */
-    --mauve-6:  278 12% 88.6%;   /* official 4.1 % */
-    --mauve-7:  271 12% 85.1%;   /* official 3.9 % */
-    --mauve-8:  255 12% 78.8%;   /* official 3.7 % */
-    --mauve-9:  252 13% 57.3%;   /* official 4 % */
-    --mauve-10: 252 12% 53.9%;   /* official 4 % */
-    --mauve-11: 252 16% 42.5%;   /* official 6 % */
-    --mauve-12: 260 22% 13.5%;   /* official 17 % */
+    /* REQ-20260615-028: Tailwind stone (light) with mid-step saturation
+     * boosted so the warm cast is visible on white backgrounds.  Same
+     * boost rationale as the dark scale above. */
+    --stone-1:  60 9% 98%;       /* stone-50, near-white */
+    --stone-2:  60 9% 96%;       /* stone-100 (official 5 % S) */
+    --stone-3:  20 12% 92%;      /* boost from stone-200 (official 6 %) */
+    --stone-4:  24 14% 87%;      /* between stone-200 and stone-300 */
+    --stone-5:  24 14% 83%;      /* boost from stone-300 (official 6 %) */
+    --stone-6:  24 14% 75%;      /* between stone-300 and stone-400 */
+    --stone-7:  24 14% 64%;      /* boost from stone-400 (official 5 %) */
+    --stone-8:  25 14% 50%;      /* between stone-400 and stone-500 */
+    --stone-9:  25 12% 45%;      /* boost from stone-500 (official 5 %) */
+    --stone-10: 28 12% 38%;      /* between stone-500 and stone-600 */
+    --stone-11: 30 12% 32%;      /* boost from stone-600 (official 5 %) */
+    --stone-12: 30 14% 12%;      /* dark warm text */
 
     /* Primary stays green-500 but the on-primary text needs to flip to
        white (against the green) — same as dark mode's --neutral-1 ↦
