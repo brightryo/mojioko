@@ -590,18 +590,15 @@ export function TimelineBlockInspector({
 
       {/* § 2 — Status badges.  `state.edited` first, then warnings in the
           same order the table uses (matches user expectations across
-          views).  REQ-20260613-016 Phase 6: pin badge surfaces when the
-          row has been free-positioned via preview drag (\pos).
-          REQ-20260615-018 A: the wrapper renders unconditionally with
-          `min-h-5` so a freshly-edited row's "編集済み" badge appearing
-          does not shift the rows below it.  Badge primitive itself is
-          h-5 so the placeholder height matches the populated row. */}
+          views).  REQ-20260615-018 A: the wrapper renders unconditionally
+          with `min-h-5` so a freshly-edited row's "編集済み" badge
+          appearing does not shift the rows below it.  Badge primitive
+          itself is h-5 so the placeholder height matches the populated
+          row.  REQ-20260615-036: the standalone position-pinned badge
+          was retired — offset changes now surface through the generic
+          "編集済み" badge (driven by isEditedFromOriginal, which already
+          factors in posX/posY). */}
       <div className="flex flex-wrap gap-1 min-h-5">
-        {entry.posX !== undefined && entry.posY !== undefined && (
-          <Badge variant="default" title={t('state.pinnedTitle')}>
-            {t('state.pinned')}
-          </Badge>
-        )}
         {entry.isEdited && !entry.isDeleted && (
           <Badge variant="default">{t('state.edited')}</Badge>
         )}

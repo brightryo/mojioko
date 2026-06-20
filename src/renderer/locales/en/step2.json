@@ -45,9 +45,7 @@
     "edited": "Edited",
     "overflow": "Overflow",
     "deleted": "Deleted",
-    "trimDeleted": "Trim-deleted",
-    "pinned": "Pinned",
-    "pinnedTitle": "Free position set by preview drag (\\pos). Cleared by Reset."
+    "trimDeleted": "Trim-deleted"
   },
   "badge": {
     "overflow": "Overflow",
@@ -160,7 +158,7 @@
     "offsetX": "X offset",
     "offsetY": "Y offset",
     "offsetResetTitle": "Reset position",
-    "offsetHelp": "Drag in the preview or enter X/Y to pin the position. While pinned, Margin is ignored on burn-in (Horizontal/Vertical still set the text-box anchor corner).",
+    "offsetHelp": "Drag in the preview or enter X/Y to apply an offset. While an offset is applied, Margin is ignored on burn-in (Horizontal/Vertical still set the text-box anchor corner).",
     "bgEnabled": "Background",
     "bgColor": "BG color",
     "bgOpacity": "Opacity"
