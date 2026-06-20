@@ -151,6 +151,42 @@ describe('layoutEntries — contact vs overlap', () => {
     const tracks = result.placements.map((p) => p.trackIndex)
     expect(new Set(tracks).size).toBe(2)
   })
+
+  /**
+   * REQ-20260615-031: when the entries-array order is
+   * [original, duplicate] for two same-startSec rows, the original must
+   * keep track 0 and the duplicate must spill onto track 1.  Before this
+   * REQ the tiebreaker was alphabetical on id, and `dup-<UUID>` often
+   * sorted before the original id, so the duplicate would grab track 0
+   * and the original would get pushed to track 1 (a visual row swap with
+   * no underlying data change).
+   *
+   * The two cases below cover both id-ordering directions so the test
+   * catches a regression to ANY id-based tiebreaker, not only
+   * alphabetical.
+   */
+  it('duplicate inserted after original gets the lower track (REQ-031)', () => {
+    // 'd' < 'e', so the alphabetical tiebreaker would have given 'dup-x'
+    // track 0 and 'e-001' track 1 — the bug REQ-031 fixes.
+    const result = layoutEntries(
+      [entry('e-001', 5, 10), entry('dup-x', 5, 10)],
+      10,
+    )
+    const trackOf = new Map(result.placements.map((p) => [p.entry.id, p.trackIndex]))
+    expect(trackOf.get('e-001')).toBe(0)
+    expect(trackOf.get('dup-x')).toBe(1)
+  })
+
+  it('insertion order wins regardless of id alphabetical order (REQ-031)', () => {
+    // 'a' < 'z', but if 'z' is inserted FIRST the array order must win.
+    const result = layoutEntries(
+      [entry('z-first', 5, 10), entry('a-second', 5, 10)],
+      10,
+    )
+    const trackOf = new Map(result.placements.map((p) => [p.entry.id, p.trackIndex]))
+    expect(trackOf.get('z-first')).toBe(0)
+    expect(trackOf.get('a-second')).toBe(1)
+  })
 })
 
 /**

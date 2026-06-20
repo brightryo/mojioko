@@ -71,9 +71,27 @@ export interface TimelineLayoutOverrides {
 }
 
 /**
- * Stable tiebreaker for entries that share `startSec`.  Sorting by id keeps
- * the greedy track assignment deterministic across renders so a tiny edit
- * to one row does not reshuffle the lane stacking of unrelated rows.
+ * Stable tiebreaker for entries that share `startSec`.
+ *
+ * REQ-20260615-031: the tiebreaker used to be `a.id < b.id ? -1 : ...`
+ * (alphabetical on id).  That bit the duplicate-row flow:
+ * `runDuplicateRow` mints the new id as `'dup-' + crypto.randomUUID()`
+ * and inserts it immediately AFTER the original in the entries array,
+ * but `dup-…` often sorts BEFORE the original id (e.g. when the
+ * original is a UUID starting with a hex digit > 'd', or a fixture id
+ * like `e-001`).  The greedy allocator then assigned track 0 to the
+ * duplicate, pushing the original onto track 1 — visually swapping
+ * the rows.
+ *
+ * Fix: return 0 on tie.  `Array.prototype.sort` is stable since ES2019,
+ * so the sort preserves the input order.  The input array always has
+ * a duplicate inserted at `originalIdx + 1` (see runDuplicateRow), so
+ * original keeps track 0 and the duplicate spills onto track 1.
+ *
+ * Cross-render determinism (the reason the alphabetical tiebreaker
+ * existed) is unaffected because `useProjectStore.entries` is itself
+ * stable across renders: `updateEntry` does not reorder, `addEntry`
+ * inserts at a fixed index, and `sortByStartSec` is a stable sort.
  *
  * `greedyTimes` (REQ-20260613-002): when supplied, the override startSec
  * is used for the primary sort key in place of the live `entry.startSec`.
@@ -88,7 +106,7 @@ function compareForLayout(
   const aStart = greedyTimes?.get(a.id)?.startSec ?? a.startSec
   const bStart = greedyTimes?.get(b.id)?.startSec ?? b.startSec
   if (aStart !== bStart) return aStart - bStart
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  return 0
 }
 
 /**
