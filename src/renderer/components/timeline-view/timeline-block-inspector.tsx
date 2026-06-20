@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
@@ -20,6 +20,7 @@ import {
   duplicateRow as runDuplicateRow
 } from '@/lib/entry-row-actions'
 import { formatEditedTimecode, editedDurationOfEntry } from '@/lib/time'
+import { getAnchorAssPosition, clampAssPosition } from '@/lib/preview-coords'
 import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 import type { FontId } from '../../../shared/fonts'
@@ -118,6 +119,34 @@ export function TimelineBlockInspector({
   const updateEntry = useProjectStore((s) => s.updateEntry)
   const pushHistory = useHistoryStore((s) => s.push)
   const isAudioOnly = useIsAudioOnly()
+  // REQ-20260615-033: offset row needs the output video resolution to
+  // compute the alignment-based anchor.  `video` is null while a project
+  // is still loading; the offset row hides itself in that case.
+  const video = useProjectStore((s) => s.video)
+
+  // REQ-20260615-033 — derive the offset row's display values from the
+  // alignment-based anchor.  When `posX`/`posY` are undefined the row
+  // is unpinned and offsets display as 0; entering non-zero values
+  // pins it via `applyOffset` below.  Recomputes whenever the entry
+  // changes (drag, undo/redo) OR a layout field changes (anchor moves),
+  // so the displayed offset always reflects the live distance from the
+  // current anchor (= the home position the row would snap back to on
+  // unpin).
+  const isPinned = entry.posX !== undefined && entry.posY !== undefined
+  const showOffsetRow = !isAudioOnly && !!video && video.hasVideoStream
+  let offsetX = 0
+  let offsetY = 0
+  if (showOffsetRow && video) {
+    const anchor = getAnchorAssPosition(
+      entry.horizontalPosition,
+      entry.verticalPosition,
+      entry.verticalMarginPx,
+      video.widthPx,
+      video.heightPx,
+    )
+    offsetX = isPinned ? Math.round((entry.posX as number) - anchor.x) : 0
+    offsetY = isPinned ? Math.round((entry.posY as number) - anchor.y) : 0
+  }
 
   // Local draft so typing doesn't dispatch on every keystroke.  Initial
   // value uses `\n` so the textarea renders multi-line correctly; we
@@ -245,6 +274,54 @@ export function TimelineBlockInspector({
     const clamped = Math.max(0, Math.min(300, raw))
     if (clamped === entry.verticalMarginPx) return
     applyStyleEdit(t('history.editMargin'), { verticalMarginPx: clamped })
+  }
+
+  // REQ-20260615-033 — Offset X/Y row.
+  //
+  // Storage is absolute (`posX` / `posY` are ASS pixel coords); the UI
+  // surfaces them as `offset = pos - anchor` so the owner's mental model
+  // ("how far from the alignment-based home position") matches what they
+  // see.  Both posX/posY are set together (libass needs both for `\pos`)
+  // and cleared together (unpin → row falls back to alignment-based
+  // layout).  Reset = unpin without touching anything else.
+  function applyOffset(nextOffsetX: number, nextOffsetY: number) {
+    if (!video || !video.hasVideoStream) return
+    if (nextOffsetX === 0 && nextOffsetY === 0) {
+      if (entry.posX === undefined && entry.posY === undefined) return
+      applyStyleEdit(t('history.editOffset'), { posX: undefined, posY: undefined })
+      return
+    }
+    const anchor = getAnchorAssPosition(
+      entry.horizontalPosition,
+      entry.verticalPosition,
+      entry.verticalMarginPx,
+      video.widthPx,
+      video.heightPx,
+    )
+    const clamped = clampAssPosition(
+      anchor.x + nextOffsetX,
+      anchor.y + nextOffsetY,
+      video.widthPx,
+      video.heightPx,
+    )
+    const newPosX = Math.round(clamped.x)
+    const newPosY = Math.round(clamped.y)
+    if (newPosX === entry.posX && newPosY === entry.posY) return
+    applyStyleEdit(t('history.editOffset'), { posX: newPosX, posY: newPosY })
+  }
+  function handleOffsetXBlur(e: React.FocusEvent<HTMLInputElement>) {
+    const raw = parseInt(e.target.value, 10)
+    if (isNaN(raw)) return
+    applyOffset(raw, offsetY)
+  }
+  function handleOffsetYBlur(e: React.FocusEvent<HTMLInputElement>) {
+    const raw = parseInt(e.target.value, 10)
+    if (isNaN(raw)) return
+    applyOffset(offsetX, raw)
+  }
+  function handleResetOffset() {
+    if (entry.posX === undefined && entry.posY === undefined) return
+    applyStyleEdit(t('history.editOffset'), { posX: undefined, posY: undefined })
   }
   function handleBackgroundEnabledChange(checked: boolean) {
     if (checked === entry.subtitleBackground.enabled) return
@@ -771,6 +848,71 @@ export function TimelineBlockInspector({
               )}
             />
           </div>
+          {/* REQ-20260615-033 — オフセット行.  Displays `posX-anchor.x` /
+              `posY-anchor.y`; entering values writes back
+              posX=anchor.x+offset, posY=anchor.y+offset.  X=Y=0 unpins
+              (clears posX/posY).  Reset button = explicit unpin.  Hidden
+              when video has no video stream (audio-only) or is still
+              loading. */}
+          {showOffsetRow && (
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-callout font-semibold text-fg-secondary shrink-0">
+                {t('styleCell.offset')}
+              </label>
+              <div className="flex items-center gap-1">
+                <span className="text-caption text-fg-tertiary">X</span>
+                <input
+                  type="number"
+                  defaultValue={offsetX}
+                  key={`offsetX-${entry.id}-${offsetX}`}
+                  onBlur={handleOffsetXBlur}
+                  disabled={isFrozen}
+                  aria-label={t('styleCell.offsetX')}
+                  className={cn(
+                    'w-14 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
+                    'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
+                    'disabled:opacity-40 disabled:cursor-not-allowed',
+                    '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+                  )}
+                />
+                <span className="text-caption text-fg-tertiary ml-1">Y</span>
+                <input
+                  type="number"
+                  defaultValue={offsetY}
+                  key={`offsetY-${entry.id}-${offsetY}`}
+                  onBlur={handleOffsetYBlur}
+                  disabled={isFrozen}
+                  aria-label={t('styleCell.offsetY')}
+                  className={cn(
+                    'w-14 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
+                    'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30',
+                    'disabled:opacity-40 disabled:cursor-not-allowed',
+                    '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
+                  )}
+                />
+                <button
+                  type="button"
+                  title={t('styleCell.offsetResetTitle')}
+                  aria-label={t('styleCell.offsetResetTitle')}
+                  onClick={handleResetOffset}
+                  disabled={isFrozen || !isPinned}
+                  className={cn(
+                    'flex items-center justify-center h-7 w-7 rounded ml-0.5',
+                    'text-fg-tertiary hover:bg-surface-2 hover:text-fg-primary',
+                    'transition-colors duration-150',
+                    'disabled:opacity-30 disabled:pointer-events-none'
+                  )}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+          {showOffsetRow && isPinned && (
+            <p className="text-caption text-fg-muted leading-tight">
+              {t('styleCell.offsetPinnedNote')}
+            </p>
+          )}
         </div>
       )}
 
