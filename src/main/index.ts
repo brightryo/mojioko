@@ -60,14 +60,16 @@ function createWindow(): BrowserWindow {
     minWidth: 1280,
     minHeight: 820,
     title: APP_DISPLAY,
-    // REQ-20260615-019 試し: transparent BrowserWindow so the renderer's
-    // semi-transparent body shows the desktop behind it.  `backgroundColor`
-    // is dropped because Electron forces it to transparent when
-    // `transparent: true` is set.  Note: Windows title bar / frame remain
-    // OS-rendered (opaque) because `frame: true` is unchanged — only the
-    // renderer content area participates in the transparency.  Revert this
-    // single commit to restore the opaque #09090b launch.
-    transparent: true,
+    // REQ-20260615-030 B: REQ-019 set `transparent: true` to let the
+    // renderer's rgba(0,0,0, --window-bg-alpha) body show the desktop.
+    // On Windows that flag also DISABLES the title-bar maximize button
+    // (documented Electron limitation), which the user wanted back.
+    // Trade-off: drop the see-through-desktop trial, get a working
+    // maximize button.  The body's CSS rule (rgba(0,0,0, alpha))
+    // composes harmlessly over this solid backgroundColor in dark
+    // mode, and the `:root.light body` rule still paints opaque light
+    // in light mode.
+    backgroundColor: '#09090b',
     // Multi-size .ico ensures Windows picks the right size for the title
     // bar (32×32), the taskbar (16/24×16/24), and Alt-Tab (48×48).  Without
     // this property Electron renders the default Electron logo.
