@@ -160,7 +160,7 @@
     "offsetX": "X offset",
     "offsetY": "Y offset",
     "offsetResetTitle": "Reset position",
-    "offsetPinnedNote": "While pinned, X/Y take precedence on burn-in (Margin is ignored).",
+    "offsetHelp": "Drag in the preview or enter X/Y to pin the position. While pinned, Margin is ignored on burn-in (Horizontal/Vertical still set the text-box anchor corner).",
     "bgEnabled": "Background",
     "bgColor": "BG color",
     "bgOpacity": "Opacity"

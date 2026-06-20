@@ -289,7 +289,7 @@ export function ColorPicker({
         className={cn(
           'h-8 w-full rounded-md border border-line-strong bg-surface-0 px-2 text-center',
           'font-mono text-body-sm text-fg-primary',
-          'focus:outline-none focus:border-surface-4 focus:ring-1 focus:ring-primary/30'
+          'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30'
         )}
       />
     </PopoverContent>

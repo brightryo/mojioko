@@ -93,11 +93,11 @@ export function WhisperAdvancedControls({
   function numberInputClass(modified: boolean): string {
     return cn(
       'w-20 h-7 rounded-md border bg-input px-2 text-center text-body',
-      'focus:outline-none focus:ring-2 tabular-nums',
+      'focus:outline-none focus-visible:ring-2 tabular-nums',
       '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
       modified
-        ? 'border-[hsl(var(--warning)/0.6)] text-[hsl(var(--warning))] focus:ring-[hsl(var(--warning)/0.3)]'
-        : 'border-border text-foreground focus:ring-ring/30'
+        ? 'border-[hsl(var(--warning)/0.6)] text-[hsl(var(--warning))] focus-visible:ring-[hsl(var(--warning)/0.3)]'
+        : 'border-border text-foreground focus-visible:ring-ring/30'
     )
   }
 

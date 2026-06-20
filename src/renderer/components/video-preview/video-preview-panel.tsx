@@ -651,7 +651,7 @@ export function VideoPreviewPanel() {
           title={t('videoPreview.showInFolder')}
           className={cn(
             'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
-            'hover:text-foreground focus:outline-none focus:text-foreground'
+            'hover:text-foreground focus:outline-none focus-visible:text-foreground'
           )}
           aria-label={t('videoPreview.showInFolder')}
         >

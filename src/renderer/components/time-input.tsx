@@ -93,7 +93,7 @@ export function TimeInput({ value, onChange, cuts, className, disabled, error, w
         'h-7 w-[110px] rounded border border-line bg-surface-0 px-2 text-center font-mono tabular-nums text-body-sm',
         error ? 'text-destructive' : warning ? 'text-warning' : 'text-fg-primary',
         'transition-colors duration-150',
-        'focus:outline-none focus:border-line-strong focus:ring-1 focus:ring-primary/30',
+        'focus:outline-none focus-visible:border-line-strong focus-visible:ring-1 focus-visible:ring-primary/30',
         'disabled:cursor-not-allowed disabled:opacity-40',
         className
       )}
