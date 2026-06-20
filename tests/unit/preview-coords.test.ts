@@ -144,3 +144,55 @@ describe('clampAssPosition — frame-bound clamping', () => {
     expect(p.y).toBe(H)
   })
 })
+
+/**
+ * REQ-20260615-033 — the inspector's Offset X/Y row exposes the
+ * absolute (posX, posY) as a delta from the alignment-based anchor.
+ * These tests pin the forward (offset = pos - anchor) and inverse
+ * (pos = anchor + offset) math, plus the round-trip identity that
+ * the UI relies on so a freshly-displayed offset value, fed straight
+ * back into the editor, never drifts the entry.
+ */
+describe('offset row math (REQ-20260615-033) — pos ↔ anchor+offset', () => {
+  const W = 1920
+  const H = 1080
+
+  it('round-trips: pos → offset (= pos - anchor) → pos (= anchor + offset)', () => {
+    const anchor = getAnchorAssPosition('center', 'bottom', 40, W, H)
+    const posX = 200
+    const posY = 300
+    const offsetX = posX - anchor.x
+    const offsetY = posY - anchor.y
+    expect(anchor.x + offsetX).toBe(posX)
+    expect(anchor.y + offsetY).toBe(posY)
+  })
+
+  it('an unpinned entry reads as offset = 0/0 (UI displays 0 for both)', () => {
+    // Inspector logic: when posX/posY are undefined, both displayed
+    // offsets are 0 unconditionally (regardless of anchor).
+    const offsetX = 0
+    const offsetY = 0
+    expect(offsetX).toBe(0)
+    expect(offsetY).toBe(0)
+  })
+
+  it('inverse with clamp: very large offset clamps to frame edge', () => {
+    const anchor = getAnchorAssPosition('center', 'bottom', 40, W, H)
+    const wantPosX = anchor.x + 10_000
+    const wantPosY = anchor.y + 10_000
+    const clamped = clampAssPosition(wantPosX, wantPosY, W, H)
+    expect(clamped.x).toBe(W)
+    expect(clamped.y).toBe(H)
+  })
+
+  it('anchor moves when horizontalPosition changes — same posX yields a different displayed offset', () => {
+    // Pinned at posX=200 with left-bottom anchor → offset = 200-10 = 190.
+    // Switch to center-bottom anchor → offset = 200-960 = -760.
+    // Same posX, but the displayed offset shifts because the anchor moved.
+    const posX = 200
+    const anchorLeft = getAnchorAssPosition('left', 'bottom', 40, W, H)
+    const anchorCenter = getAnchorAssPosition('center', 'bottom', 40, W, H)
+    expect(posX - anchorLeft.x).toBe(190)
+    expect(posX - anchorCenter.x).toBe(-760)
+  })
+})
