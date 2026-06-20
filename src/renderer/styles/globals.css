@@ -39,18 +39,29 @@
      * for dark (here) and light (:root.light), with only the underlying
      * --mauve-N values changing.  Source: radix-ui / colors.
      * ------------------------------------------------------------------- */
-    --mauve-1:  270 5% 7.1%;
-    --mauve-2:  260 6.3% 10.4%;
-    --mauve-3:  280 4.4% 14.3%;
-    --mauve-4:  279 4.7% 17.3%;
-    --mauve-5:  282 4.6% 19.9%;
-    --mauve-6:  275 5.1% 23.1%;
-    --mauve-7:  270 6.4% 27.6%;
-    --mauve-8:  265 5.7% 34.7%;
-    --mauve-9:  252 6% 45.7%;
-    --mauve-10: 252 5% 51.2%;
-    --mauve-11: 253 10% 71%;
-    --mauve-12: 240 7.7% 93.7%;
+    /* REQ-20260615-027: canonical Radix Colors v3 `mauve-dark` scale,
+     * mid-step saturation BOOSTED so the purple is actually visible at
+     * the surface / text steps that drive the UI.  The Radix defaults
+     * at 4-6 % S read as "indistinguishable from a slightly-shifted
+     * zinc" in practice (verified by Playwright probe against the
+     * built CSS in REQ-20260615-027 §1) — REQ §「正しく当たっても差は
+     * 控えめかもしれない」allows tuning here.  Hue stays in the 260-280°
+     * mauve range; saturation lifted from ~5-10 % to 12-18 % on the
+     * mid steps so the purple cast registers without entering "vivid
+     * lavender" territory.  To revert to Radix-exact mauve, drop each
+     * S value back to the official figures in the source comment. */
+    --mauve-1:  270 5% 7.1%;     /* #121113 — app base (kept subtle) */
+    --mauve-2:  260 8% 10.4%;    /* official 260 6.3 % */
+    --mauve-3:  280 8% 14.3%;    /* official 280 4.4 % */
+    --mauve-4:  279 10% 17.3%;   /* official 279 4.7 % */
+    --mauve-5:  282 12% 19.9%;   /* official 282 4.6 % */
+    --mauve-6:  275 14% 23.1%;   /* official 275 5.1 % */
+    --mauve-7:  270 16% 27.6%;   /* official 270 6.4 % */
+    --mauve-8:  265 14% 34.7%;   /* official 265 5.7 % */
+    --mauve-9:  252 13% 45.7%;   /* official 252 6 % */
+    --mauve-10: 252 11% 51.2%;   /* official 252 5 % */
+    --mauve-11: 253 18% 71%;     /* official 253 10 % */
+    --mauve-12: 240 9% 93.7%;    /* official 240 7.7 % */
 
     /* `--neutral-N` is the indirection layer: to roll back to zinc /
      * neutral / slate, point these at `var(--zinc-N)` (defined elsewhere)
@@ -288,18 +299,21 @@
    * added later if a colour fails contrast in light mode.
    * ------------------------------------------------------------------- */
   :root.light {
-    --mauve-1:  300 20% 99%;
-    --mauve-2:  300 7.7% 97.5%;
-    --mauve-3:  294 5.5% 95.3%;
-    --mauve-4:  289 4.7% 92.9%;
-    --mauve-5:  283 4.4% 91%;
-    --mauve-6:  278 4.1% 88.6%;
-    --mauve-7:  271 3.9% 85.1%;
-    --mauve-8:  255 3.7% 78.8%;
-    --mauve-9:  252 4% 57.3%;
-    --mauve-10: 252 4% 53.9%;
-    --mauve-11: 252 6% 42.5%;
-    --mauve-12: 260 17% 13.5%;
+    /* REQ-20260615-027: Radix Colors mauve (light) with mid-step
+     * saturation boosted so the purple is visible on white backgrounds.
+     * Same boost rationale as the dark scale above. */
+    --mauve-1:  300 25% 99%;     /* near-white, faint purple tint  (offical 20 %) */
+    --mauve-2:  300 14% 97.5%;   /* official 7.7 % */
+    --mauve-3:  294 12% 95.3%;   /* official 5.5 % */
+    --mauve-4:  289 12% 92.9%;   /* official 4.7 % */
+    --mauve-5:  283 12% 91%;     /* official 4.4 % */
+    --mauve-6:  278 12% 88.6%;   /* official 4.1 % */
+    --mauve-7:  271 12% 85.1%;   /* official 3.9 % */
+    --mauve-8:  255 12% 78.8%;   /* official 3.7 % */
+    --mauve-9:  252 13% 57.3%;   /* official 4 % */
+    --mauve-10: 252 12% 53.9%;   /* official 4 % */
+    --mauve-11: 252 16% 42.5%;   /* official 6 % */
+    --mauve-12: 260 22% 13.5%;   /* official 17 % */
 
     /* Primary stays green-500 but the on-primary text needs to flip to
        white (against the green) — same as dark mode's --neutral-1 ↦
