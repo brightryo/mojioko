@@ -13,6 +13,12 @@
     "theme": "テーマ",
     "themeDark": "ダーク",
     "themeLight": "ライト",
+    "baseColor": "ベースカラー",
+    "baseColorNeutral": "Neutral",
+    "baseColorZinc": "Zinc",
+    "baseColorSlate": "Slate",
+    "baseColorGray": "Gray",
+    "baseColorStone": "Stone",
     "fadeDuration": "フェード時間（秒）",
     "fadeDurationHint": "0.1〜0.5秒"
   },

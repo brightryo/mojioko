@@ -188,6 +188,13 @@ export type OutputContainer = 'mp4' | 'sameAsInput'
 
 export type AppTheme = 'dark' | 'light'
 
+/**
+ * REQ-20260615-029: user-selectable base neutral palette.  Default is
+ * `'neutral'` (zero hue, truest grey).  See globals.css for the per-base
+ * scale definitions.
+ */
+export type BaseColor = 'neutral' | 'zinc' | 'slate' | 'gray' | 'stone'
+
 export interface AppSettings {
   version: 1
   language: string
@@ -198,6 +205,12 @@ export interface AppSettings {
    * files hydrate cleanly (falling back to `dark`).
    */
   theme?: AppTheme
+  /**
+   * REQ-20260615-029: app-wide base neutral palette.  Default
+   * `'neutral'`.  Optional so settings.json files predating this REQ
+   * hydrate cleanly.
+   */
+  baseColor?: BaseColor
   transcriptionDefaults: TranscriptionDefaults
   transcriptionAdvanced: TranscriptionAdvancedParams
   /** When true, \N line breaks are auto-inserted after transcription for lines exceeding video width. */

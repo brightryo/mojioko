@@ -29,6 +29,8 @@ export function SettingsDialog() {
   const setLanguage = useSettingsStore((s) => s.setLanguage)
   const theme = useSettingsStore((s) => s.theme)
   const setTheme = useSettingsStore((s) => s.setTheme)
+  const baseColor = useSettingsStore((s) => s.baseColor)
+  const setBaseColor = useSettingsStore((s) => s.setBaseColor)
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   const setFadeDurationSec = useSettingsStore((s) => s.setFadeDurationSec)
 
@@ -158,6 +160,28 @@ export function SettingsDialog() {
                   <SelectContent>
                     <SelectItem value="dark">{t('general.themeDark')}</SelectItem>
                     <SelectItem value="light">{t('general.themeLight')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* REQ-20260615-029: base color (neutral palette) switcher. */}
+              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
+                {t('general.baseColor')}
+              </span>
+              <div className="flex items-center">
+                <Select
+                  value={baseColor}
+                  onValueChange={(v) => setBaseColor(v as 'neutral' | 'zinc' | 'slate' | 'gray' | 'stone')}
+                >
+                  <SelectTrigger className="h-9 w-full [&>span]:flex-1 [&>span]:text-center">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="neutral">{t('general.baseColorNeutral')}</SelectItem>
+                    <SelectItem value="zinc">{t('general.baseColorZinc')}</SelectItem>
+                    <SelectItem value="slate">{t('general.baseColorSlate')}</SelectItem>
+                    <SelectItem value="gray">{t('general.baseColorGray')}</SelectItem>
+                    <SelectItem value="stone">{t('general.baseColorStone')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
