@@ -687,17 +687,10 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
           user can see at a glance that the row WAS edited before it
           was removed. */}
       <div className="flex flex-wrap items-center gap-1 py-3 px-1">
-        {/* REQ-20260613-016 Phase 6 / 機能B — pin badge for rows whose
-            position has been pinned via drag (`\pos`).  Surfaces the
-            "this row is not part of the stack" state so the user can
-            distinguish it from alignment-anchored rows.  Reset clears
-            posX/posY (entry-row-actions.resetRow) which automatically
-            removes this badge. */}
-        {entry.posX !== undefined && entry.posY !== undefined && (
-          <Badge variant="default" title={t('state.pinnedTitle')}>
-            {t('state.pinned')}
-          </Badge>
-        )}
+        {/* REQ-20260615-036: the standalone "position-pinned" badge
+            was retired — offset edits now surface through the generic
+            "編集済み" badge below (driven by isEditedFromOriginal, which
+            already factors in posX/posY). */}
         {clipStatus === 'manuallyDeleted' && (
           <Badge variant="danger">{t('state.deleted')}</Badge>
         )}
