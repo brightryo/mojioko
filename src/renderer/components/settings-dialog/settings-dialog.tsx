@@ -171,17 +171,18 @@ export function SettingsDialog() {
               <div className="flex items-center">
                 <Select
                   value={baseColor}
-                  onValueChange={(v) => setBaseColor(v as 'neutral' | 'zinc' | 'slate' | 'gray' | 'stone')}
+                  onValueChange={(v) => setBaseColor(v as 'neutral' | 'stone' | 'mauve' | 'olive' | 'mist' | 'taupe')}
                 >
                   <SelectTrigger className="h-9 w-full [&>span]:flex-1 [&>span]:text-center">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="neutral">{t('general.baseColorNeutral')}</SelectItem>
-                    <SelectItem value="zinc">{t('general.baseColorZinc')}</SelectItem>
-                    <SelectItem value="slate">{t('general.baseColorSlate')}</SelectItem>
-                    <SelectItem value="gray">{t('general.baseColorGray')}</SelectItem>
                     <SelectItem value="stone">{t('general.baseColorStone')}</SelectItem>
+                    <SelectItem value="mauve">{t('general.baseColorMauve')}</SelectItem>
+                    <SelectItem value="olive">{t('general.baseColorOlive')}</SelectItem>
+                    <SelectItem value="mist">{t('general.baseColorMist')}</SelectItem>
+                    <SelectItem value="taupe">{t('general.baseColorTaupe')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

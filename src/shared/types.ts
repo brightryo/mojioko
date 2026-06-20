@@ -189,11 +189,13 @@ export type OutputContainer = 'mp4' | 'sameAsInput'
 export type AppTheme = 'dark' | 'light'
 
 /**
- * REQ-20260615-029: user-selectable base neutral palette.  Default is
- * `'neutral'` (zero hue, truest grey).  See globals.css for the per-base
+ * REQ-20260615-029 / 030: user-selectable base neutral palette.  Default
+ * is `'neutral'` (zero hue, truest grey).  REQ-030 swapped the cool /
+ * gray-leaning options (zinc / slate / gray) for hue-distinct ones
+ * (mauve / olive / mist / taupe).  See globals.css for the per-base
  * scale definitions.
  */
-export type BaseColor = 'neutral' | 'zinc' | 'slate' | 'gray' | 'stone'
+export type BaseColor = 'neutral' | 'stone' | 'mauve' | 'olive' | 'mist' | 'taupe'
 
 export interface AppSettings {
   version: 1

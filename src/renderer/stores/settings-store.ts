@@ -111,7 +111,7 @@ export const useSettingsStore = create<SettingsStore>()(
         set({
           language: s.language,
           theme: s.theme === 'light' ? 'light' : 'dark',
-          baseColor: (['neutral', 'zinc', 'slate', 'gray', 'stone'] as const).includes(s.baseColor as BaseColor)
+          baseColor: (['neutral', 'stone', 'mauve', 'olive', 'mist', 'taupe'] as const).includes(s.baseColor as BaseColor)
             ? (s.baseColor as BaseColor)
             : 'neutral',
           transcriptionDefaults: {
