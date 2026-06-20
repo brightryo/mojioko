@@ -19,6 +19,8 @@ function buildDefaults(): AppSettings {
     // settings.json files (pre-026) hydrate they fall through this default
     // via the spread on load.
     theme: 'dark',
+    // REQ-20260615-029: base neutral palette defaults to 'neutral'.
+    baseColor: 'neutral',
     transcriptionDefaults: {
       fontSizePx: BURNIN_DEFAULTS.fontSizePx,
       textColorHex: BURNIN_DEFAULTS.textColorHex,

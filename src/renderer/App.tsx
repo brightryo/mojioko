@@ -64,13 +64,27 @@ function AppInner() {
 
   // REQ-20260615-026: keep <html> in sync with the user-selected theme so
   // the `:root.light { ... }` overrides in globals.css activate.  Default
-  // (no class) leaves the dark mauve values from :root active.
+  // (no class) leaves the dark values from :root active.
   const theme = useSettingsStore((s) => s.theme)
   useEffect(() => {
     const root = document.documentElement
     root.classList.toggle('light', theme === 'light')
     root.classList.toggle('dark', theme === 'dark')
   }, [theme])
+
+  // REQ-20260615-029: mirror baseColor onto <html data-base="...">.  The
+  // `:root[data-base="X"]` blocks in globals.css redirect `--neutral-N`
+  // at the chosen palette.  Default ('neutral') leaves the attribute
+  // absent so the base :root values apply.
+  const baseColor = useSettingsStore((s) => s.baseColor)
+  useEffect(() => {
+    const root = document.documentElement
+    if (baseColor === 'neutral') {
+      root.removeAttribute('data-base')
+    } else {
+      root.setAttribute('data-base', baseColor)
+    }
+  }, [baseColor])
 
   useEffect(() => {
     window.electronAPI
@@ -151,6 +165,7 @@ function AppInner() {
           version: 1,
           language: s.language,
           theme: s.theme,
+          baseColor: s.baseColor,
           transcriptionDefaults: s.transcriptionDefaults,
           transcriptionAdvanced: s.transcriptionAdvanced,
           autoLineBreak: s.autoLineBreak,

@@ -13,6 +13,12 @@
     "theme": "Theme",
     "themeDark": "Dark",
     "themeLight": "Light",
+    "baseColor": "Base color",
+    "baseColorNeutral": "Neutral",
+    "baseColorZinc": "Zinc",
+    "baseColorSlate": "Slate",
+    "baseColorGray": "Gray",
+    "baseColorStone": "Stone",
     "fadeDuration": "Fade duration (seconds)",
     "fadeDurationHint": "0.1–0.5 sec"
   },

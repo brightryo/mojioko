@@ -17,60 +17,54 @@
     --window-bg-alpha: 0.85;
 
     /* -------------------------------------------------------------------
-     * REQ-20260615-028 — base neutral scale: Tailwind `stone` (warm
-     * grey, dark default).  Replaces the mauve scale used by REQ-026 /
-     * 027.  Stone's hue sits in the 20-33° (warm tan / sand) range
-     * vs mauve's 252-280° (cool purple).
+     * REQ-20260615-029 — user-selectable base colour.
      *
-     * Values are HSL triplets (no `hsl()` wrapper) so `hsl(var(--stone-N))`
-     * resolves correctly at call-sites.  The semantic tokens below
-     * (--surface-*, --text-*, --border-*, --background, --card, etc.)
-     * reference these via the `--neutral-N` indirection, so a single
-     * swap (stone -> mauve / zinc / slate) flips the entire base
-     * palette without touching downstream consumers.
+     * Five Tailwind neutral families are available:
+     *   neutral  (default, zero hue — truest grey)
+     *   zinc     (cool grey, faint blue cast)
+     *   slate    (cooler grey with blue tint)
+     *   gray     (balanced cool grey)
+     *   stone    (warm grey, tan / sand cast)
      *
-     * Saturation is BOOSTED from Tailwind's official 5-9 % to 10-18 %
-     * on the mid steps so the warm cast is actually visible at the
-     * surface / text steps that drive the UI — same rationale as
-     * REQ-20260615-027's mauve boost.  Hue stays in the 20-33° stone
-     * range; official-saturation comments are kept on each line so a
-     * one-line edit reverts to strict Tailwind stone.
+     * The active palette is chosen by setting `data-base="<name>"` on the
+     * <html> element (see App.tsx).  When absent, `--neutral-1..12` falls
+     * through to the neutral dark values defined in :root below; the
+     * `:root[data-base="X"]` blocks override `--neutral-N` to redirect
+     * downstream semantic tokens (--surface-*, --text-*, --border-*,
+     * --background, --card, etc.) at the chosen scale.
      *
-     * Radix-style step semantics (1 darkest / 12 highest-contrast text)
-     * still hold so the semantic mapping below works identically for
-     * dark (here) and light (:root.light).
+     * Theme (dark / light) is orthogonal: `:root.light` redefines the
+     * default neutral scale, and each base also has a
+     * `:root.light[data-base="X"]` override.  The two selectors compose
+     * cleanly because they set different variables.
+     *
+     * Values are HSL triplets (no `hsl()` wrapper) so `hsl(var(--neutral-N))`
+     * resolves correctly at call-sites.  Mid-step saturation on the
+     * stone scale is boosted from Tailwind's official 5-9 % to 10-18 %
+     * so the warm cast registers visibly (REQ-20260615-027 / 028
+     * rationale).
      * ------------------------------------------------------------------- */
-    --stone-1:  20 14% 4%;    /* stone-950, kept subtle */
-    --stone-2:  24 12% 7%;    /* between stone-950 and stone-900 */
-    --stone-3:  24 12% 10%;   /* stone-900 (official 10% S) */
-    --stone-4:  22 14% 14%;   /* official ≈ 12 6% 15% (stone-800) */
-    --stone-5:  24 16% 18%;   /* between stone-800 and stone-700 */
-    --stone-6:  28 16% 23%;   /* official ≈ 30 6% 25% (stone-700) */
-    --stone-7:  30 16% 28%;   /* between stone-700 and stone-600 */
-    --stone-8:  32 14% 34%;   /* official ≈ 33 5% 32% (stone-600) */
-    --stone-9:  28 12% 46%;   /* official ≈ 25 5% 45% (stone-500) */
-    --stone-10: 26 11% 56%;   /* between stone-500 and stone-400 */
-    --stone-11: 26 14% 72%;   /* between stone-400 and stone-300 */
-    --stone-12: 24 16% 94%;   /* very light warm text */
 
-    /* `--neutral-N` is the indirection layer: to roll back to mauve /
-     * zinc / slate, point these at `var(--mauve-N)` / `var(--zinc-N)`
-     * (defined elsewhere) or hard-code the legacy values.  Downstream
-     * tokens read `--neutral-N` and never the scale directly. */
-    --neutral-1:  var(--stone-1);
-    --neutral-2:  var(--stone-2);
-    --neutral-3:  var(--stone-3);
-    --neutral-4:  var(--stone-4);
-    --neutral-5:  var(--stone-5);
-    --neutral-6:  var(--stone-6);
-    --neutral-7:  var(--stone-7);
-    --neutral-8:  var(--stone-8);
-    --neutral-9:  var(--stone-9);
-    --neutral-10: var(--stone-10);
-    --neutral-11: var(--stone-11);
-    --neutral-12: var(--stone-12);
+    /* Default = neutral dark.  data-base unset OR data-base="neutral". */
+    --neutral-1:  0 0% 4%;     /* neutral-950 */
+    --neutral-2:  0 0% 7%;
+    --neutral-3:  0 0% 9%;     /* neutral-900 */
+    --neutral-4:  0 0% 15%;    /* neutral-800 */
+    --neutral-5:  0 0% 19%;
+    --neutral-6:  0 0% 25%;    /* neutral-700 */
+    --neutral-7:  0 0% 28%;
+    --neutral-8:  0 0% 32%;    /* neutral-600 */
+    --neutral-9:  0 0% 45%;    /* neutral-500 */
+    --neutral-10: 0 0% 55%;
+    --neutral-11: 0 0% 64%;    /* neutral-400 */
+    --neutral-12: 0 0% 96%;    /* neutral-100 — text-primary */
 
-    /* Background scale (shadcn semantic — kept for primitive compat) */
+    /* Background scale (shadcn semantic — kept for primitive compat)
+     *
+     * NOTE on placement: the per-base override blocks
+     * (`:root[data-base="X"]`) live AFTER this var block — they only
+     * redefine `--neutral-N`, so the semantic tokens below auto-pick
+     * up the chosen scale.  See the bottom of the @layer base block. */
     --background: var(--neutral-1);
     --card:       var(--neutral-2);
     --popover:    var(--neutral-3);
@@ -271,57 +265,164 @@
   }
 
   /* -------------------------------------------------------------------
-   * REQ-20260615-026 — light theme overrides.
-   *
+   * REQ-20260615-029 — per-base DARK overrides.
+   * Each block redirects `--neutral-N` to a different Tailwind palette.
+   * The default (no `data-base`) is `neutral` (defined in `:root` above).
+   * Hue / saturation come straight from Tailwind's HSL values for each
+   * scale; `stone` keeps the REQ-028 saturation boost so the warm cast
+   * is visibly distinct from the other (cool) options.
+   * ------------------------------------------------------------------- */
+  :root[data-base="zinc"] {
+    --neutral-1:  240 10% 4%;     /* zinc-950 */
+    --neutral-2:  240 8% 7%;
+    --neutral-3:  240 6% 10%;     /* zinc-900 */
+    --neutral-4:  240 4% 16%;     /* zinc-800 */
+    --neutral-5:  240 5% 19%;
+    --neutral-6:  240 5% 26%;     /* zinc-700 */
+    --neutral-7:  240 5% 29%;
+    --neutral-8:  240 5% 34%;     /* zinc-600 */
+    --neutral-9:  240 4% 46%;     /* zinc-500 */
+    --neutral-10: 240 5% 56%;
+    --neutral-11: 240 5% 65%;     /* zinc-400 */
+    --neutral-12: 0 0% 98%;       /* zinc-50 */
+  }
+
+  :root[data-base="slate"] {
+    --neutral-1:  222 84% 5%;     /* slate-950 */
+    --neutral-2:  222 47% 11%;    /* slate-900 */
+    --neutral-3:  217 33% 17%;    /* slate-800 */
+    --neutral-4:  215 28% 22%;    /* between slate-800 and slate-700 */
+    --neutral-5:  215 25% 27%;    /* slate-700 */
+    --neutral-6:  215 19% 35%;    /* slate-600 */
+    --neutral-7:  215 18% 40%;
+    --neutral-8:  215 16% 47%;    /* slate-500 */
+    --neutral-9:  215 20% 65%;    /* slate-400 */
+    --neutral-10: 215 22% 72%;
+    --neutral-11: 213 27% 84%;    /* slate-300 */
+    --neutral-12: 210 40% 96%;    /* slate-100 — text-primary */
+  }
+
+  :root[data-base="gray"] {
+    --neutral-1:  224 71% 4%;     /* gray-950 */
+    --neutral-2:  221 39% 10%;
+    --neutral-3:  221 39% 11%;    /* gray-900 */
+    --neutral-4:  215 28% 17%;    /* gray-800 */
+    --neutral-5:  215 24% 22%;
+    --neutral-6:  217 19% 27%;    /* gray-700 */
+    --neutral-7:  217 17% 33%;
+    --neutral-8:  215 14% 34%;    /* gray-600 */
+    --neutral-9:  220 9% 46%;     /* gray-500 */
+    --neutral-10: 218 11% 56%;
+    --neutral-11: 218 11% 65%;    /* gray-400 */
+    --neutral-12: 210 20% 98%;    /* gray-50 */
+  }
+
+  :root[data-base="stone"] {
+    /* REQ-028 saturation boost retained so the warm cast is visible. */
+    --neutral-1:  20 14% 4%;      /* stone-950 */
+    --neutral-2:  24 12% 7%;
+    --neutral-3:  24 12% 10%;     /* stone-900 (boost from 5% S) */
+    --neutral-4:  22 14% 14%;     /* stone-800 (boost from 6%) */
+    --neutral-5:  24 16% 18%;
+    --neutral-6:  28 16% 23%;     /* stone-700 (boost from 6%) */
+    --neutral-7:  30 16% 28%;
+    --neutral-8:  32 14% 34%;     /* stone-600 (boost from 5%) */
+    --neutral-9:  28 12% 46%;     /* stone-500 (boost from 5%) */
+    --neutral-10: 26 11% 56%;
+    --neutral-11: 26 14% 72%;
+    --neutral-12: 24 16% 94%;     /* very light warm text */
+  }
+
+  /* -------------------------------------------------------------------
+   * REQ-20260615-026 / 029 — light theme overrides.
    * The active theme is selected by toggling `light` on the <html>
    * element (see App.tsx).  Default (no class / `.dark`) keeps the
-   * dark mauve values defined in :root above.
+   * dark values defined in :root above.
    *
-   * Strategy: only redefine the underlying `--mauve-N` scale.  The
-   * semantic tokens (--surface-*, --text-*, --border-*, etc.) keep
-   * their `var(--neutral-N)` mappings unchanged — they auto-invert
-   * because Radix mauve's step semantics (1 = background, 12 = primary
-   * text) hold for both palettes.
-   *
-   * State colours (--row-edited / --row-error / --warning / etc.) are
-   * intentionally NOT overridden here — they read as accent / status
-   * cues independent of the base scale.  Per-theme tuning can be
-   * added later if a colour fails contrast in light mode.
+   * Default light = neutral (zero hue).  Per-base light overrides
+   * follow.  Common light-mode mode overrides (--primary-foreground,
+   * --input, --window-bg-alpha) live at the end of this block.
    * ------------------------------------------------------------------- */
   :root.light {
-    /* REQ-20260615-028: Tailwind stone (light) with mid-step saturation
-     * boosted so the warm cast is visible on white backgrounds.  Same
-     * boost rationale as the dark scale above. */
-    --stone-1:  60 9% 98%;       /* stone-50, near-white */
-    --stone-2:  60 9% 96%;       /* stone-100 (official 5 % S) */
-    --stone-3:  20 12% 92%;      /* boost from stone-200 (official 6 %) */
-    --stone-4:  24 14% 87%;      /* between stone-200 and stone-300 */
-    --stone-5:  24 14% 83%;      /* boost from stone-300 (official 6 %) */
-    --stone-6:  24 14% 75%;      /* between stone-300 and stone-400 */
-    --stone-7:  24 14% 64%;      /* boost from stone-400 (official 5 %) */
-    --stone-8:  25 14% 50%;      /* between stone-400 and stone-500 */
-    --stone-9:  25 12% 45%;      /* boost from stone-500 (official 5 %) */
-    --stone-10: 28 12% 38%;      /* between stone-500 and stone-600 */
-    --stone-11: 30 12% 32%;      /* boost from stone-600 (official 5 %) */
-    --stone-12: 30 14% 12%;      /* dark warm text */
+    /* Default = neutral light. */
+    --neutral-1:  0 0% 98%;       /* neutral-50 */
+    --neutral-2:  0 0% 96%;       /* neutral-100 */
+    --neutral-3:  0 0% 92%;
+    --neutral-4:  0 0% 87%;
+    --neutral-5:  0 0% 83%;
+    --neutral-6:  0 0% 75%;
+    --neutral-7:  0 0% 64%;       /* neutral-400 */
+    --neutral-8:  0 0% 50%;
+    --neutral-9:  0 0% 45%;       /* neutral-500 */
+    --neutral-10: 0 0% 38%;
+    --neutral-11: 0 0% 32%;       /* neutral-600 */
+    --neutral-12: 0 0% 9%;        /* neutral-900 — text-primary */
 
-    /* Primary stays green-500 but the on-primary text needs to flip to
-       white (against the green) — same as dark mode's --neutral-1 ↦
-       near-black; here we override to keep "near-white-on-green". */
-    --primary-foreground: 0 0% 100%;
+    /* Common light-mode token overrides (independent of base choice). */
+    --primary-foreground: 0 0% 100%;  /* white on green primary */
+    --input: 0 0% 100%;                /* near-white text-field bg */
+    --window-bg-alpha: 0;              /* disable REQ-019 dark overlay */
+  }
 
-    /* Input background switches from very dark to near-white so text
-       fields read as white slabs on the light page. */
-    --input: 0 0% 100%;
+  :root.light[data-base="zinc"] {
+    --neutral-1:  0 0% 98%;       /* zinc-50 */
+    --neutral-2:  240 5% 96%;     /* zinc-100 */
+    --neutral-3:  240 6% 92%;
+    --neutral-4:  240 6% 87%;
+    --neutral-5:  240 5% 84%;     /* zinc-300 */
+    --neutral-6:  240 5% 75%;
+    --neutral-7:  240 5% 65%;     /* zinc-400 */
+    --neutral-8:  240 4% 50%;
+    --neutral-9:  240 4% 46%;     /* zinc-500 */
+    --neutral-10: 240 5% 38%;
+    --neutral-11: 240 5% 34%;     /* zinc-600 */
+    --neutral-12: 240 6% 10%;     /* zinc-900 */
+  }
 
-    /* Dark mode's body uses rgba(0,0,0, --window-bg-alpha) to paint a
-       semi-transparent black over the BrowserWindow's transparent
-       surface (REQ-019).  In light mode the same rule would render a
-       transparent black overlay — opposite of the desired white page.
-       Setting alpha to 0 leaves the body transparent; the override
-       below (in the same @layer base) replaces the rule with an
-       opaque light surface so the page reads as solid white. */
-    --window-bg-alpha: 0;
+  :root.light[data-base="slate"] {
+    --neutral-1:  210 40% 98%;    /* slate-50 */
+    --neutral-2:  210 40% 96%;    /* slate-100 */
+    --neutral-3:  214 32% 91%;    /* slate-200 */
+    --neutral-4:  213 27% 84%;    /* slate-300 */
+    --neutral-5:  215 22% 78%;
+    --neutral-6:  215 20% 65%;    /* slate-400 */
+    --neutral-7:  215 18% 50%;
+    --neutral-8:  215 16% 47%;    /* slate-500 */
+    --neutral-9:  215 19% 35%;    /* slate-600 */
+    --neutral-10: 215 22% 30%;
+    --neutral-11: 215 25% 27%;    /* slate-700 */
+    --neutral-12: 222 47% 11%;    /* slate-900 */
+  }
+
+  :root.light[data-base="gray"] {
+    --neutral-1:  210 20% 98%;    /* gray-50 */
+    --neutral-2:  220 14% 96%;    /* gray-100 */
+    --neutral-3:  220 13% 91%;    /* gray-200 */
+    --neutral-4:  216 12% 84%;    /* gray-300 */
+    --neutral-5:  218 11% 75%;
+    --neutral-6:  218 11% 65%;    /* gray-400 */
+    --neutral-7:  220 9% 50%;
+    --neutral-8:  220 9% 46%;     /* gray-500 */
+    --neutral-9:  215 14% 34%;    /* gray-600 */
+    --neutral-10: 217 18% 30%;
+    --neutral-11: 217 19% 27%;    /* gray-700 */
+    --neutral-12: 221 39% 11%;    /* gray-900 */
+  }
+
+  :root.light[data-base="stone"] {
+    /* REQ-028 saturation boost retained. */
+    --neutral-1:  60 9% 98%;       /* stone-50 */
+    --neutral-2:  60 9% 96%;       /* stone-100 */
+    --neutral-3:  20 12% 92%;
+    --neutral-4:  24 14% 87%;
+    --neutral-5:  24 14% 83%;
+    --neutral-6:  24 14% 75%;
+    --neutral-7:  24 14% 64%;
+    --neutral-8:  25 14% 50%;
+    --neutral-9:  25 12% 45%;
+    --neutral-10: 28 12% 38%;
+    --neutral-11: 30 12% 32%;
+    --neutral-12: 30 14% 12%;
   }
 
   /* Light-mode body paint — replace the rgba(0,0,0, alpha) rule with
