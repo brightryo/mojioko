@@ -512,6 +512,62 @@
 }
 
 /* -------------------------------------------------------------------------
+ * REQ-20260615-044 — global focus-ring suppression.
+ *
+ * Owner direction: focus rings should never appear, on any input modality
+ * (mouse, keyboard, programmatic).  REQ-20260615-034 A only converted the
+ * authored `focus:` rules to `focus-visible:`, but that change had two
+ * residual leaks:
+ *
+ *   1. Radix DialogContent / SheetContent receive `tabIndex={-1}` +
+ *      element.focus() on open so the focus trap has somewhere to land.
+ *      Chromium-in-Electron treats that programmatic focus as
+ *      "focus-visible"-equivalent, so the browser paints its default
+ *      outline on the container (= the dialog-wide ring in screenshot 1
+ *      of REQ-044).
+ *   2. ~30 component sites still author `focus-visible:ring-*` utilities
+ *      which paint the keyboard ring on the first focusable child of a
+ *      freshly-opened dialog (= the "フォントライセンス" ring in
+ *      screenshot 2).
+ *
+ * The hammer below zeroes both at the user-agent level:
+ *   - `outline: none` on every focus pseudo so the UA default never paints.
+ *   - `--tw-ring-shadow: none` so Tailwind's `ring`/`ring-*` utilities,
+ *     which compose into `box-shadow` via this custom property, expand to
+ *     the no-op value.  The authored colour / width values still resolve
+ *     in the cascade — they just sum to nothing visible.
+ *   - `--tw-ring-color: transparent` belt-and-braces in case a downstream
+ *     style references it directly.
+ *
+ * This is a deliberate accessibility trade-off (no keyboard focus
+ * indicator) requested by the owner.  Re-enabling per-component rings
+ * later just means dropping the override on a targeted selector.
+ *
+ * The block sits OUTSIDE `@layer base` for the same priority reason as
+ * the scrollbar rules below — Tailwind utilities live in a higher-priority
+ * cascade layer than `base`, so authored `focus:outline` rules in
+ * components beat anything we put inside `@layer base`.
+ * ------------------------------------------------------------------------- */
+:focus,
+:focus-visible,
+:focus-within {
+  outline: none !important;
+  outline-offset: 0 !important;
+}
+*:focus,
+*:focus-visible {
+  /* Zero the ring half of Tailwind's box-shadow composition while leaving
+   * `--tw-shadow` (= the `shadow-*` utilities like `shadow-2xl` on
+   * DialogContent) untouched.  Tailwind's ring utilities set
+   *   box-shadow: var(--tw-ring-offset-shadow,...), var(--tw-ring-shadow,...), var(--tw-shadow,...);
+   * so overriding the two ring custom properties with `0 0 #0000` makes
+   * the ring contribution invisible without nuking the shadow tier. */
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-color: transparent !important;
+}
+
+/* -------------------------------------------------------------------------
  * Scrollbar styling — keeps overflow scrollbars on-theme rather than
  * showing Windows' default light-grey track / white thumb against the
  * zinc-950 background.  Driven by shadcn variables so a future light
