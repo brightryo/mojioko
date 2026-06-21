@@ -2,14 +2,14 @@ import { useState, useMemo, useEffect, useCallback, useLayoutEffect } from 'reac
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Plus, RotateCcw, RotateCw, ChevronDown, FileText, Film } from 'lucide-react'
+import { Plus, RotateCcw, RotateCw, Film } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { Button } from '@/components/ui/button'
 import { SubtitleTable } from '@/components/subtitle-table/subtitle-table'
 import { BulkEditBar } from '@/components/subtitle-table/bulk-edit-bar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { ExportTextButton } from '@/components/step2/export-text-button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { TimeEditorDialog } from '@/components/time-editor-dialog/time-editor-dialog'
 import { ExportFrameButton } from '@/components/step2/export-frame-button'
@@ -808,32 +808,18 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     </span>
   )
 
-  // REQ-028: export DropdownMenu moved from the page header to the
-  // footer, and "Continue to render" hidden in audio mode (no burn-in
-  // path).  REQ-20260615-022: regrouped as three icon-labelled exports
-  // — text / image (frame) / video — with primary green reserved for the
-  // video one ("動画出力", previously "書き出しへ").  Audio mode keeps
-  // the text dropdown only since there is no burnable video frame nor
-  // a STEP3 path.
+  // REQ-028: export entry-point moved from the page header to the footer,
+  // and "Continue to render" hidden in audio mode (no burn-in path).
+  // REQ-20260615-022: regrouped as three icon-labelled exports — text /
+  // image (frame) / video — with primary green reserved for the video
+  // one.  REQ-20260615-041 B: the text export is now a popover mirroring
+  // the image one (テキストのみ | SRT形式 toggle + 保存) rather than a
+  // dropdown of two menu items, so the three footer exports share the
+  // same idiom.  Audio mode still surfaces only the text popover (no
+  // burnable frame, no STEP3 path).
   const footerRight = (
     <div className="flex items-center gap-2">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="md">
-            <FileText className="h-4 w-4 mr-1.5" />
-            {t('action.exportTextLabel')}
-            <ChevronDown className="h-3.5 w-3.5 ml-1.5 opacity-60" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleExportText}>
-            {t('action.exportText')}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={handleExportSrt}>
-            {t('action.exportSrt')}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <ExportTextButton onExportText={handleExportText} onExportSrt={handleExportSrt} />
       {!isAudioOnly && <ExportFrameButton />}
       {!isAudioOnly && (
         // REQ-121 — when the only thing blocking the transition is the

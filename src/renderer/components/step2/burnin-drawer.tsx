@@ -405,19 +405,26 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
 
           {/* Drawer footer — primary "Execute video export" button +
               Cancel during a run, or Retry / Close in the error state.
-              REQ-20260615-040 A: idle and error states pair the primary
-              action with a left-adjacent secondary "Close" button; the
-              rendering state continues to expose only Cancel (the
-              "closing while rendering is blocked" rule is unchanged
-              and the X is also hidden via `hideClose`). */}
-          <div className="mt-auto flex items-center justify-end gap-2 px-4 py-3 border-t border-line">
+              REQ-20260615-040 A introduced the Close button; REQ-20260615-041 A
+              moves it to the LEFT (`justify-between`) and switches the
+              variant from `secondary` (white) to `ghost` (grey) so it
+              shares the neutral treatment of STEP2's 戻る / テキスト出力
+              buttons.  Rendering state remains right-aligned with only
+              the danger Cancel button (the "no closing while rendering"
+              rule is unchanged and the X is hidden via `hideClose`). */}
+          <div
+            className={cn(
+              'mt-auto flex items-center gap-2 px-4 py-3 border-t border-line',
+              renderState === 'rendering' ? 'justify-end' : 'justify-between'
+            )}
+          >
             {renderState === 'rendering' ? (
               <Button variant="danger" size="md" onClick={handleCancel}>
                 {t('action.cancel')}
               </Button>
             ) : renderState === 'error' ? (
               <>
-                <Button variant="secondary" size="md" onClick={() => onOpenChange(false)}>
+                <Button variant="ghost" size="md" onClick={() => onOpenChange(false)}>
                   {t('action.close')}
                 </Button>
                 <Button
@@ -436,7 +443,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               // primary green — so the user reads it as "the same action,
               // now confirmed".
               <>
-                <Button variant="secondary" size="md" onClick={() => onOpenChange(false)}>
+                <Button variant="ghost" size="md" onClick={() => onOpenChange(false)}>
                   {t('action.close')}
                 </Button>
                 <Button
