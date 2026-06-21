@@ -11,6 +11,7 @@ import { shellShowInFolder } from '@/services/dialog'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
 import { SubtitleOverlay, estimateOverlayHeightPx } from '@/components/subtitle-overlay/subtitle-overlay'
+import { PositionGuideOverlay } from '@/components/subtitle-overlay/position-guide-overlay'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { findActiveEntryId, findActiveEntryIds, computeFixedStackOffsets } from '@/lib/active-entry'
@@ -121,6 +122,10 @@ export function VideoPreviewPanel() {
   // playback so the subtitle table highlights the active row).
   const setFocusedRowId        = useUiStore((s) => s.setFocusedRowId)
   const setVideoCurrentTimeSec = useUiStore((s) => s.setVideoCurrentTimeSec)
+  // REQ-20260615-038 C — the position guide overlay surfaces on the
+  // inspector-selected row and on the row currently being dragged.  Pull
+  // the selection from ui-store; dragging is tracked locally below.
+  const selectedEntryId = useUiStore((s) => s.selectedEntryId)
   // REQ-20260614-001 Phase 2 — the accordion-style "expanded / collapsed"
   // state retired here; the user resizes the left-top pane to reclaim
   // vertical space instead.  `videoPreviewExpanded` slice and its setter
@@ -174,6 +179,28 @@ export function VideoPreviewPanel() {
     scale: number
     moved: boolean
   } | null>(null)
+
+  // REQ-20260615-038 B/C — span DOM refs per overlay entry id, populated
+  // via callback ref so the PositionGuideOverlay siblings can measure the
+  // rendered subtitle for the inspector-selected / dragging row.  Tracked
+  // in a ref (not state) so registering / unregistering during render does
+  // not loop; the guide component is re-rendered whenever the parent
+  // re-renders (which happens on every drag move via the store update).
+  const overlaySpanRefs = useRef<Map<string, HTMLSpanElement>>(new Map())
+  const setOverlaySpanRef = useCallback(
+    (entryId: string) => (el: HTMLSpanElement | null) => {
+      if (el) {
+        overlaySpanRefs.current.set(entryId, el)
+      } else {
+        overlaySpanRefs.current.delete(entryId)
+      }
+    },
+    [],
+  )
+  // Tracks the entry currently being dragged so the affordance + guide
+  // stay visible while the pointer is held down even if the hover state
+  // changes (e.g. cursor leaves the bbox at fast drag speeds).
+  const [draggingEntryId, setDraggingEntryId] = useState<string | null>(null)
 
   const videoUrl = video ? pathToVideoUrl(video.path) : null
 
@@ -541,6 +568,8 @@ export function VideoPreviewPanel() {
         scale,
         moved: false,
       }
+      // REQ-20260615-038 C — surface the guide for the in-flight drag.
+      setDraggingEntryId(draggedEntry.id)
 
       // Prevent the overlay's pointerdown from also triggering text
       // selection / focus changes on the underlying <video> element.
@@ -585,6 +614,7 @@ export function VideoPreviewPanel() {
     window.removeEventListener('pointermove', handleWindowPointerMove)
     const d = dragRef.current
     dragRef.current = null
+    setDraggingEntryId(null)
     if (!d) return
     if (!d.moved) return // click-without-drag: nothing to commit
 
@@ -694,6 +724,8 @@ export function VideoPreviewPanel() {
             />
             {videoContainerWidth > 0 && overlayEntries.map((entry) => {
               const offset = stackOffsetsByEntryId.get(entry.id) ?? 0
+              const isSelected = entry.id === selectedEntryId
+              const isDragging = entry.id === draggingEntryId
               return (
                 <SubtitleOverlay
                   key={entry.id}
@@ -702,6 +734,32 @@ export function VideoPreviewPanel() {
                   containerWidthPx={videoContainerWidth}
                   stackOffsetPx={offset}
                   onPointerDown={handleOverlayPointerDown}
+                  spanRef={setOverlaySpanRef(entry.id)}
+                  showAffordance={isSelected || isDragging}
+                />
+              )
+            })}
+            {/* REQ-20260615-038 C — OBS-style position guide overlay.
+                Drawn for the inspector-selected row and for the row that
+                is currently being dragged.  The guide measures the
+                rendered subtitle span (via overlaySpanRefs) and renders
+                bbox + four distance rulers + offset X/Y in OUTPUT pixel
+                space.  Pointer-events-none so it never steals the drag
+                pointer. */}
+            {videoContainerWidth > 0 && videoFrameH > 0 && overlayEntries.map((entry) => {
+              const isSelected = entry.id === selectedEntryId
+              const isDragging = entry.id === draggingEntryId
+              if (!isSelected && !isDragging) return null
+              return (
+                <PositionGuideOverlay
+                  key={`guide-${entry.id}`}
+                  entry={entry}
+                  targetEl={overlaySpanRefs.current.get(entry.id) ?? null}
+                  containerEl={videoContainerRef.current}
+                  videoWidthPx={video.widthPx}
+                  videoHeightPx={video.heightPx}
+                  containerWidthPx={videoContainerWidth}
+                  containerHeightPx={videoFrameH}
                 />
               )
             })}

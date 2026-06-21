@@ -1,3 +1,5 @@
+import type { Ref } from 'react'
+import { Move } from 'lucide-react'
 import type { SubtitleEntry } from '../../../shared/types'
 import { ASS_MARGIN_LR_PX } from '../../../shared/constants'
 import { getLibassScaleFor } from '@/lib/font-metrics'
@@ -74,6 +76,19 @@ export interface SubtitleOverlayProps {
    * `pointer-events-none` and never captures clicks.
    */
   onPointerDown?: (e: React.PointerEvent<HTMLSpanElement>, entry: SubtitleEntry) => void
+  /**
+   * REQ-20260615-038 B — when set, the outer span exposes its DOM node so
+   * the parent can measure the rendered bounding box (drives the OBS-style
+   * position guide).  Always paired with `interactive` in practice.
+   */
+  spanRef?: Ref<HTMLSpanElement>
+  /**
+   * REQ-20260615-038 B — when true, the drag-affordance Move icon stays
+   * fully visible regardless of hover state (= the entry is being dragged
+   * or is the selected entry the inspector is editing).  When false the
+   * icon only appears on hover so it doesn't clutter the playback view.
+   */
+  showAffordance?: boolean
 }
 
 /**
@@ -168,6 +183,8 @@ export function SubtitleOverlay({
   containerWidthPx,
   stackOffsetPx,
   onPointerDown,
+  spanRef,
+  showAffordance,
 }: SubtitleOverlayProps) {
   bumpRenderCount('SubtitleOverlay')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
@@ -276,11 +293,22 @@ export function SubtitleOverlay({
   // prior `leading-snug` (= 1.375) which left a measurable gap.
   const lineHeight = libassScale > 0 ? 1 / libassScale : 1.448
 
+  // REQ-20260615-038 B — drag affordance.  An empty-content `<span>` child
+  // positioned `inset: 0` becomes a centered overlay covering the outer
+  // span's box (the parent is `position: absolute` → established containing
+  // block).  Pointer-events-none so it never intercepts the drag pointer
+  // that the outer span already binds; the icon is purely a visual hint.
+  // Default opacity 0; `group-hover` raises to 60% on hover, and
+  // `showAffordance` forces it visible during drag / when the inspector is
+  // editing this row.  Icon size is derived from the rendered font height so
+  // it stays proportionate at every preview scale.
+  const moveIconPx = Math.max(14, Math.min(48, fontSizePx * 0.55))
   return (
     <span
+      ref={spanRef}
       className={
         interactive
-          ? 'absolute pointer-events-auto cursor-move select-none'
+          ? 'absolute pointer-events-auto cursor-move select-none group'
           : 'absolute pointer-events-none'
       }
       onPointerDown={interactive
@@ -317,6 +345,24 @@ export function SubtitleOverlay({
         </span>
       ) : (
         entry.text.replace(/\\N/g, '\n')
+      )}
+      {interactive && (
+        <span
+          aria-hidden="true"
+          className={
+            'absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-150 ' +
+            (showAffordance
+              ? 'opacity-70'
+              : 'opacity-0 group-hover:opacity-60')
+          }
+          style={{
+            color: '#ffffff',
+            textShadow: '0 0 6px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.85)',
+            filter: 'drop-shadow(0 0 4px rgba(0,0,0,0.85))',
+          }}
+        >
+          <Move style={{ width: `${moveIconPx}px`, height: `${moveIconPx}px` }} />
+        </span>
       )}
     </span>
   )
