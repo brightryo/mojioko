@@ -46,7 +46,34 @@ async function maybeSeedFromUrl(): Promise<void> {
   })
 }
 
-maybeSeedFromUrl().finally(() => {
+/**
+ * REQ-20260615-040 B — gate the first React paint on the UI font being
+ * ready, so the app never paints in the system fallback first and then
+ * reflows when Noto Sans JP arrives (= FOUT).  The font is bundled and
+ * served locally so the wait is effectively imperceptible.  The 1500 ms
+ * timeout is a safety net: if the load promise hangs (e.g. corrupted
+ * blob, fontFace API unavailable in a future Electron build), we mount
+ * the app anyway rather than show an indefinitely-blank window.
+ */
+async function awaitUiFontReady(): Promise<void> {
+  if (typeof document === 'undefined' || !document.fonts || !document.fonts.load) return
+  const family = "'Noto Sans JP'"
+  const probes = [
+    document.fonts.load(`400 16px ${family}`),
+    document.fonts.load(`500 16px ${family}`),
+    document.fonts.load(`600 16px ${family}`),
+  ]
+  const timeout = new Promise<void>((resolve) => {
+    setTimeout(resolve, 1500)
+  })
+  try {
+    await Promise.race([Promise.all(probes), timeout])
+  } catch {
+    /* swallow — proceed to mount even if the load API rejected */
+  }
+}
+
+Promise.all([maybeSeedFromUrl(), awaitUiFontReady()]).finally(() => {
   const rootEl = document.getElementById('root')
   if (!rootEl) throw new Error('Root element not found')
 

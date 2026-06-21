@@ -8,7 +8,15 @@
   font-family: 'Noto Sans JP';
   font-style: normal;
   font-weight: 400;
-  font-display: swap;
+  /* REQ-20260615-040 B — was `swap`, which let the browser paint the
+   * first frame in the system fallback and then swap to Noto Sans JP
+   * once bytes arrived, producing a visible FOUT.  `block` keeps the
+   * text invisible until the face loads (capped at 3 s by the spec, but
+   * the bundled TTF resolves in < 100 ms locally), so on-screen text
+   * never displays in the fallback metrics.  `main.tsx` also gates the
+   * first React mount on `document.fonts.load(...)` resolving, so in
+   * practice the block period is never visible. */
+  font-display: block;
   src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-Regular.ttf') format('truetype');
 }
 
@@ -16,7 +24,15 @@
   font-family: 'Noto Sans JP';
   font-style: normal;
   font-weight: 500;
-  font-display: swap;
+  /* REQ-20260615-040 B — was `swap`, which let the browser paint the
+   * first frame in the system fallback and then swap to Noto Sans JP
+   * once bytes arrived, producing a visible FOUT.  `block` keeps the
+   * text invisible until the face loads (capped at 3 s by the spec, but
+   * the bundled TTF resolves in < 100 ms locally), so on-screen text
+   * never displays in the fallback metrics.  `main.tsx` also gates the
+   * first React mount on `document.fonts.load(...)` resolving, so in
+   * practice the block period is never visible. */
+  font-display: block;
   src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-Medium.ttf') format('truetype');
 }
 
@@ -24,6 +40,14 @@
   font-family: 'Noto Sans JP';
   font-style: normal;
   font-weight: 600;
-  font-display: swap;
+  /* REQ-20260615-040 B — was `swap`, which let the browser paint the
+   * first frame in the system fallback and then swap to Noto Sans JP
+   * once bytes arrived, producing a visible FOUT.  `block` keeps the
+   * text invisible until the face loads (capped at 3 s by the spec, but
+   * the bundled TTF resolves in < 100 ms locally), so on-screen text
+   * never displays in the fallback metrics.  `main.tsx` also gates the
+   * first React mount on `document.fonts.load(...)` resolving, so in
+   * practice the block period is never visible. */
+  font-display: block;
   src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-SemiBold.ttf') format('truetype');
 }

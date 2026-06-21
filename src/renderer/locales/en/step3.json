@@ -30,6 +30,7 @@
   "action": {
     "startRender": "Start render",
     "cancel": "Cancel",
+    "close": "Close",
     "openFile": "Open file",
     "showInFolder": "Show in folder",
     "renderAgain": "Render again",
