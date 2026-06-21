@@ -200,3 +200,14 @@ bun.lockb
 # ============================================
 *.zip-output/
 benchmark-results/
+
+# ============================================
+# REQ-20260615-045 F — internal development resources excluded from
+# the public repository.  Kept locally for development (CLAUDE.md is
+# the canonical agent instruction set; dev-docs/ is the spec / design /
+# build / font-validation reference).  Past history on origin/main
+# still contains these files — a separate history-rewrite decision is
+# required to scrub them retroactively.
+# ============================================
+/CLAUDE.md
+/dev-docs/
