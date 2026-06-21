@@ -919,8 +919,16 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
       </div>
     </div>
   )
+  // REQ-20260615-042 — the outer container picks up `bg-surface-0` so the
+  // inspector pane reads as the same base-tinted grey as the timeline view
+  // (`timeline-view.tsx:1476`) and the video preview's frame region
+  // (`video-preview-panel.tsx:700`).  Without it the pane inherits the
+  // semi-transparent body wash (`rgba(0, 0, 0, --window-bg-alpha)` set in
+  // `globals.css` so BrowserWindow `transparent: true` shows the desktop
+  // through bare areas) and paints near-black, breaking palette parity
+  // with the other panes.
   const inspectorSlot = (
-    <div className="flex h-full w-full flex-col">
+    <div className="flex h-full w-full flex-col bg-surface-0">
       <div className="flex-shrink-0 px-3 py-2 border-b border-line">
         <h2 className="text-callout font-semibold text-fg-secondary">
           {inspectorHeading}
