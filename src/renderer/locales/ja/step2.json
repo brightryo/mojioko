@@ -158,7 +158,6 @@
     "offsetX": "X オフセット",
     "offsetY": "Y オフセット",
     "offsetResetTitle": "位置をリセット",
-    "offsetHelp": "プレビューでドラッグした位置、または X/Y 入力でオフセットが適用されます。オフセット適用中はマージンが焼き込みに反映されません（水平/垂直はアンカー隅の決定に作用）。",
     "bgEnabled": "背景 ON/OFF",
     "bgColor": "背景色",
     "bgOpacity": "透過率"

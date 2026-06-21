@@ -8,7 +8,6 @@ import { useHistoryStore } from '@/stores/history-store'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { ColorPicker } from '@/components/color-picker/color-picker'
-import { HelpIcon } from '@/components/help-icon'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { RowFontSelector } from '@/components/subtitle-table/row-font-selector'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
@@ -884,18 +883,16 @@ export function TimelineBlockInspector({
               when video has no video stream (audio-only) or is still
               loading.
 
-              REQ-20260615-034 B: the constant-visible pinned-state note
-              is gone; the same content moved into a `?` tooltip next to
-              the "オフセット" label so users can still learn the rule
-              without permanent UI clutter. */}
+              REQ-20260615-038 A: the `?` help icon next to the
+              "オフセット" label has been retired.  The same information
+              now lives in the preview's position-guide overlay (drag
+              affordance + distance rulers), which is more discoverable
+              than a hover-only tooltip. */}
           {showOffsetRow && (
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 shrink-0">
-                <label className="text-callout font-semibold text-fg-secondary">
-                  {t('styleCell.offset')}
-                </label>
-                <HelpIcon content={t('styleCell.offsetHelp')} />
-              </div>
+              <label className="text-callout font-semibold text-fg-secondary shrink-0">
+                {t('styleCell.offset')}
+              </label>
               <div className="flex items-center gap-1">
                 <span className="text-caption text-fg-tertiary">X</span>
                 <input
