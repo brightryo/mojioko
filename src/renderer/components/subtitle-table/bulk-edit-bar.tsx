@@ -18,6 +18,7 @@ import type { SubtitleEntry } from '../../../shared/types'
 import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 import { FONT_REGISTRY, getFontMeta, type FontId } from '../../../shared/fonts'
+import { recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 
 interface BulkEditBarProps {
   /**
@@ -217,10 +218,40 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     }
     if (snapshots.size === 0) return
 
+    // REQ-20260615-037 — if this bulk op touches horizontal / vertical /
+    // margin, the per-row pinned position (posX/posY) must shift with the
+    // new anchor so the user's offset value stays put.  Layout fields can
+    // be present in the patch in any combination; we compute the recomputed
+    // pos per row and merge it into a per-row patch.  Rows without a pinned
+    // pos and rows whose layout fields didn't change return null from the
+    // helper and fall through to the plain patch.
+    const layoutTouched =
+      'horizontalPosition' in patch ||
+      'verticalPosition' in patch ||
+      'verticalMarginPx' in patch
+    const video = useProjectStore.getState().video
     const apply = () => {
       const s = useProjectStore.getState()
-      for (const id of snapshots.keys()) {
-        s.updateEntry(id, { ...patch, isEdited: true })
+      for (const [id, snap] of snapshots) {
+        let perRowPatch: Partial<SubtitleEntry> = patch
+        if (layoutTouched && video && video.hasVideoStream) {
+          const recomputed = recomputePinnedPosForAnchorChange({
+            currentHorizontalPosition: snap.horizontalPosition,
+            currentVerticalPosition: snap.verticalPosition,
+            currentVerticalMarginPx: snap.verticalMarginPx,
+            currentPosX: snap.posX,
+            currentPosY: snap.posY,
+            nextHorizontalPosition: patch.horizontalPosition,
+            nextVerticalPosition: patch.verticalPosition,
+            nextVerticalMarginPx: patch.verticalMarginPx,
+            videoWidthPx: video.widthPx,
+            videoHeightPx: video.heightPx,
+          })
+          if (recomputed) {
+            perRowPatch = { ...patch, posX: recomputed.posX, posY: recomputed.posY }
+          }
+        }
+        s.updateEntry(id, { ...perRowPatch, isEdited: true })
       }
     }
     const revert = () => {
