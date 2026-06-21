@@ -77,9 +77,21 @@ export interface SubtitleOverlayProps {
    */
   onPointerDown?: (e: React.PointerEvent<HTMLSpanElement>, entry: SubtitleEntry) => void
   /**
-   * REQ-20260615-038 B — when set, the outer span exposes its DOM node so
-   * the parent can measure the rendered bounding box (drives the OBS-style
-   * position guide).  Always paired with `interactive` in practice.
+   * REQ-20260615-038 B / REQ-20260615-039 — exposes the **inner text
+   * wrapper** so the parent can measure the actual rendered text bbox
+   * (drives the OBS-style position guide).  Pointing at the inner wrapper
+   * — not the outer positioned span — keeps the bbox tight around the
+   * glyphs in BOTH layouts:
+   *
+   *   - Unpinned (alignment-based) — outer span is stretched
+   *     `left:margin / right:margin` so `text-align: center` has the
+   *     full container width to centre against, but the rendered text
+   *     itself is only as wide as its glyphs.
+   *   - Pinned (`\pos`) — outer span has no `right`, so it already
+   *     shrinks to the content.
+   *
+   * Measuring the inner span gives the same tight bbox in both cases,
+   * which is what REQ-20260615-039 requires for a stable guide.
    */
   spanRef?: Ref<HTMLSpanElement>
   /**
@@ -303,9 +315,27 @@ export function SubtitleOverlay({
   // editing this row.  Icon size is derived from the rendered font height so
   // it stays proportionate at every preview scale.
   const moveIconPx = Math.max(14, Math.min(48, fontSizePx * 0.55))
+  const renderedText = entry.text.replace(/\\N/g, '\n')
+  // REQ-20260615-039 — always wrap the visible text in this inline span so
+  // the parent's position-guide measurement is consistent across layouts.
+  // The `display: inline` (default) keeps inline flow identical to writing
+  // the text node directly; the wrapper only exists to give the guide a
+  // tight DOM rect that ignores the outer span's full-width text-align
+  // container in the unpinned case.  When the row has a background, the
+  // same wrapper carries the bg styles (per-line clone via
+  // `box-decoration-break: clone`).
+  const textWrapperStyle: React.CSSProperties = bgEnabled
+    ? {
+        display:                  'inline',
+        backgroundColor:          bgColor,
+        padding:                  `${2 * scale}px ${6 * scale}px`,
+        borderRadius:             '2px',
+        boxDecorationBreak:       'clone',
+        WebkitBoxDecorationBreak: 'clone',
+      }
+    : { display: 'inline' }
   return (
     <span
-      ref={spanRef}
       className={
         interactive
           ? 'absolute pointer-events-auto cursor-move select-none group'
@@ -329,23 +359,9 @@ export function SubtitleOverlay({
         transform,
       }}
     >
-      {bgEnabled ? (
-        /* Inner inline span so the background fits the text, not the full block width. */
-        <span
-          style={{
-            display:                'inline',
-            backgroundColor:        bgColor,
-            padding:                `${2 * scale}px ${6 * scale}px`,
-            borderRadius:           '2px',
-            boxDecorationBreak:     'clone',
-            WebkitBoxDecorationBreak: 'clone',
-          } as React.CSSProperties}
-        >
-          {entry.text.replace(/\\N/g, '\n')}
-        </span>
-      ) : (
-        entry.text.replace(/\\N/g, '\n')
-      )}
+      <span ref={spanRef} style={textWrapperStyle}>
+        {renderedText}
+      </span>
       {interactive && (
         <span
           aria-hidden="true"
