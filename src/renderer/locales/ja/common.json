@@ -6,8 +6,7 @@
     "back": "戻る",
     "continue": "次へ",
     "step1": "文字起こし",
-    "step2": "編集",
-    "step3": "書き出し"
+    "step2": "編集"
   },
   "action": {
     "save": "保存",

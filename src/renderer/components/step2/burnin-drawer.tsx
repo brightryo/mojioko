@@ -408,7 +408,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               REQ-20260615-040 A introduced the Close button; REQ-20260615-041 A
               moves it to the LEFT (`justify-between`) and switches the
               variant from `secondary` (white) to `ghost` (grey) so it
-              shares the neutral treatment of STEP2's 戻る / テキスト出力
+              shares the neutral treatment of STEP2's Back / Text-export
               buttons.  Rendering state remains right-aligned with only
               the danger Cancel button (the "no closing while rendering"
               rule is unchanged and the X is hidden via `hideClose`). */}
@@ -439,7 +439,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               </>
             ) : (
               // REQ-20260615-024 A.4: execute button mirrors the STEP2
-              // footer's 動画出力 affordance — Film icon + same label +
+              // footer's video-export affordance — Film icon + same label +
               // primary green — so the user reads it as "the same action,
               // now confirmed".
               <>

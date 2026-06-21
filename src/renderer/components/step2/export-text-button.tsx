@@ -7,19 +7,19 @@ import { cn } from '@/lib/utils'
 
 /**
  * REQ-20260615-041 B — STEP2 footer's "transcript export" entry.  The
- * earlier DropdownMenu (テキスト出力 / SRT形式で出力 → two menu items)
- * is replaced by a popover mirroring `ExportFrameButton` so the three
+ * earlier DropdownMenu (text-export / SRT-export → two menu items) is
+ * replaced by a popover mirroring `ExportFrameButton` so the three
  * footer-right exports (text / image / video) share one popover idiom:
  *
- *   文字起こしデータ出力形式を選択
- *   形式   [ テキストのみ | SRT形式 ]
- *           [ 保存... ]
+ *   <heading: choose transcript export format>
+ *   <label: format>   [ Text only | SRT ]
+ *                     [ Save... ]
  *
  * The TXT vs SRT routing logic is unchanged — the parent passes the
  * existing `onExportText` / `onExportSrt` callbacks (= `handleExportText`
  * / `handleExportSrt` in `step2.tsx`), and this component just decides
  * which one to fire based on the toggle's value.  Default = "txt"
- * (テキストのみ) to match the prior dropdown's first item.
+ * (Text only) to match the prior dropdown's first item.
  */
 type TextFormat = 'txt' | 'srt'
 
