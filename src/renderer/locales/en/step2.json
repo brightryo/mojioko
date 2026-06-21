@@ -228,6 +228,14 @@
       "saving": "Saving...",
       "success": "Saved to {{path}}",
       "error": "Save failed: {{error}}"
+    },
+    "exportText": {
+      "title": "Choose transcript export format",
+      "format": "Format",
+      "formatTxt": "Text only",
+      "formatSrt": "SRT",
+      "save": "Save...",
+      "saving": "Saving..."
     }
   },
   "warning": {

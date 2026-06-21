@@ -228,6 +228,14 @@
       "saving": "保存中...",
       "success": "{{path}} に保存しました",
       "error": "保存に失敗しました: {{error}}"
+    },
+    "exportText": {
+      "title": "文字起こしデータ出力形式を選択",
+      "format": "形式",
+      "formatTxt": "テキストのみ",
+      "formatSrt": "SRT形式",
+      "save": "保存...",
+      "saving": "保存中..."
     }
   },
   "warning": {
