@@ -2,7 +2,7 @@ import { ASS_MARGIN_LR_PX } from '../../shared/constants'
 
 /**
  * REQ-20260613-016 Phase 6 — pure coordinate-conversion helpers for the
- * preview drag / pinning machinery (機能B).  Kept dependency-free so the
+ * preview drag / pinning machinery (feature B).  Kept dependency-free so the
  * unit tests can exercise the math without mounting React.
  *
  * Coordinate spaces:

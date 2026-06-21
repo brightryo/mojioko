@@ -6,8 +6,7 @@
     "back": "Back",
     "continue": "Continue",
     "step1": "Transcribe",
-    "step2": "Edit",
-    "step3": "Render"
+    "step2": "Edit"
   },
   "action": {
     "save": "Save",
