@@ -54,6 +54,12 @@ const SheetContent = React.forwardRef<
       onEscapeKeyDown={(e) => e.preventDefault()}
       className={cn(
         'fixed z-50 flex flex-col gap-4 bg-popover text-fg-primary shadow-2xl shadow-black/60',
+        // REQ-20260615-044 parity with DialogContent: Radix focuses the
+        // content element on open and the browser would otherwise paint
+        // its default outline.  The global suppressor in globals.css
+        // already covers this; the utilities are kept here as a
+        // readable component-layer signal.
+        'outline-none focus:outline-none focus-visible:outline-none',
         'transition ease-in-out',
         'data-[state=closed]:animate-out data-[state=closed]:duration-300',
         'data-[state=open]:animate-in data-[state=open]:duration-300',

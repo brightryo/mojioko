@@ -45,6 +45,12 @@ const DialogContent = React.forwardRef<
       className={cn(
         'fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%]',
         // REQ-20260615-003 mira density: p-6 → p-4, duration-200 → duration-100.
+        // REQ-20260615-044: outline-none + focus:outline-none + focus-visible:outline-none
+        // belt-and-braces — Radix focuses this container on open and the
+        // browser would otherwise paint its default outline.  The global
+        // suppressor in globals.css already covers this; we leave the
+        // utilities here as a readable signal at the component layer.
+        'outline-none focus:outline-none focus-visible:outline-none',
         'w-full max-w-lg rounded-xl border border-line-strong bg-surface-1 p-4 shadow-2xl shadow-black/60',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
