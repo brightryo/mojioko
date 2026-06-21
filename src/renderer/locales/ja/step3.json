@@ -30,6 +30,7 @@
   "action": {
     "startRender": "書き出し開始",
     "cancel": "キャンセル",
+    "close": "閉じる",
     "openFile": "ファイルを開く",
     "showInFolder": "フォルダで表示",
     "renderAgain": "再度書き出す",

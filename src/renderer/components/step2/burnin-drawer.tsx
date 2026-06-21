@@ -404,7 +404,12 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
           </div>
 
           {/* Drawer footer — primary "Execute video export" button +
-              Cancel during a run, or Retry / Close in the error state. */}
+              Cancel during a run, or Retry / Close in the error state.
+              REQ-20260615-040 A: idle and error states pair the primary
+              action with a left-adjacent secondary "Close" button; the
+              rendering state continues to expose only Cancel (the
+              "closing while rendering is blocked" rule is unchanged
+              and the X is also hidden via `hideClose`). */}
           <div className="mt-auto flex items-center justify-end gap-2 px-4 py-3 border-t border-line">
             {renderState === 'rendering' ? (
               <Button variant="danger" size="md" onClick={handleCancel}>
@@ -412,8 +417,8 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               </Button>
             ) : renderState === 'error' ? (
               <>
-                <Button variant="ghost" size="md" onClick={() => onOpenChange(false)}>
-                  {t('action.cancel')}
+                <Button variant="secondary" size="md" onClick={() => onOpenChange(false)}>
+                  {t('action.close')}
                 </Button>
                 <Button
                   variant="primary"
@@ -430,15 +435,20 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               // footer's 動画出力 affordance — Film icon + same label +
               // primary green — so the user reads it as "the same action,
               // now confirmed".
-              <Button
-                variant="primary"
-                size="md"
-                onClick={handleStartRender}
-                disabled={activeEntries.length === 0}
-              >
-                <Film className="h-4 w-4 mr-1.5" />
-                {t('step2:action.exportVideoLabel')}
-              </Button>
+              <>
+                <Button variant="secondary" size="md" onClick={() => onOpenChange(false)}>
+                  {t('action.close')}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={handleStartRender}
+                  disabled={activeEntries.length === 0}
+                >
+                  <Film className="h-4 w-4 mr-1.5" />
+                  {t('step2:action.exportVideoLabel')}
+                </Button>
+              </>
             )}
           </div>
 
