@@ -33,7 +33,7 @@
     "hint": "Whisper engine parameters. The STEP 1 \"Advanced\" dialog edits the same fields — changes on either surface stay in sync."
   },
   "about": {
-    "version": "Version",
+    "developedBy": "This app was developed by BrightRyo.",
     "license": "License",
     "licenseValue": "Proprietary",
     "available": "Available",
