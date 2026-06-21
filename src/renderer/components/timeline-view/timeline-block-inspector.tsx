@@ -21,7 +21,7 @@ import {
   duplicateRow as runDuplicateRow
 } from '@/lib/entry-row-actions'
 import { formatEditedTimecode, editedDurationOfEntry } from '@/lib/time'
-import { getAnchorAssPosition, clampAssPosition } from '@/lib/preview-coords'
+import { getAnchorAssPosition, clampAssPosition, recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 import type { FontId } from '../../../shared/fonts'
@@ -261,20 +261,51 @@ export function TimelineBlockInspector({
   // REQ-20260613-016 Phase 5 — per-row layout / background handlers
   // mirror subtitle-table.tsx so the inspector and the list view drive
   // identical history shapes for the new fields (機能A).
+  //
+  // REQ-20260615-037 — when a row already has a pinned position, the
+  // user expects the offset *value* (visible in the X/Y inputs) to stay
+  // put when they nudge horizontal / vertical / margin: the row should
+  // shift with the anchor, not drift its offset.  Storage is still
+  // absolute (posX/posY), so we recompute it from the new anchor and
+  // merge the new posX/posY into the same patch — that keeps the layout
+  // change and the pinned-pos shift in one undoable atom.
+  function patchWithPreservedOffset(
+    layoutPatch: Partial<Pick<SubtitleEntry,
+      'horizontalPosition' | 'verticalPosition' | 'verticalMarginPx'>>,
+  ): Partial<SubtitleEntry> {
+    if (!video || !video.hasVideoStream) return layoutPatch
+    const recomputed = recomputePinnedPosForAnchorChange({
+      currentHorizontalPosition: entry.horizontalPosition,
+      currentVerticalPosition: entry.verticalPosition,
+      currentVerticalMarginPx: entry.verticalMarginPx,
+      currentPosX: entry.posX,
+      currentPosY: entry.posY,
+      nextHorizontalPosition: layoutPatch.horizontalPosition,
+      nextVerticalPosition: layoutPatch.verticalPosition,
+      nextVerticalMarginPx: layoutPatch.verticalMarginPx,
+      videoWidthPx: video.widthPx,
+      videoHeightPx: video.heightPx,
+    })
+    if (!recomputed) return layoutPatch
+    return { ...layoutPatch, posX: recomputed.posX, posY: recomputed.posY }
+  }
   function handleHorizontalPositionChange(v: 'left' | 'center' | 'right') {
     if (v === entry.horizontalPosition) return
-    applyStyleEdit(t('history.editLayout'), { horizontalPosition: v })
+    applyStyleEdit(t('history.editLayout'),
+      patchWithPreservedOffset({ horizontalPosition: v }))
   }
   function handleVerticalPositionChange(v: 'top' | 'bottom') {
     if (v === entry.verticalPosition) return
-    applyStyleEdit(t('history.editLayout'), { verticalPosition: v })
+    applyStyleEdit(t('history.editLayout'),
+      patchWithPreservedOffset({ verticalPosition: v }))
   }
   function handleVerticalMarginBlur(e: React.FocusEvent<HTMLInputElement>) {
     const raw = parseInt(e.target.value, 10)
     if (isNaN(raw)) return
     const clamped = Math.max(0, Math.min(300, raw))
     if (clamped === entry.verticalMarginPx) return
-    applyStyleEdit(t('history.editMargin'), { verticalMarginPx: clamped })
+    applyStyleEdit(t('history.editMargin'),
+      patchWithPreservedOffset({ verticalMarginPx: clamped }))
   }
 
   // REQ-20260615-033 — Offset X/Y row.

@@ -122,3 +122,84 @@ export function clampAssPosition(
     y: Math.max(0, Math.min(videoHeightPx, y)),
   }
 }
+
+/**
+ * REQ-20260615-037 — recompute a row's absolute pinned position so its
+ * **visible offset** (pos − anchor) is preserved across an
+ * alignment / margin change.
+ *
+ * The inspector surfaces `posX`/`posY` to the user as the pair
+ * `offset = (posX − anchor.x, posY − anchor.y)` so they can read
+ * "how far from the home position" instead of an opaque absolute
+ * pixel.  When the anchor moves (because the user flipped
+ * horizontalPosition / verticalPosition / verticalMarginPx), the
+ * stored `posX`/`posY` must move with it; otherwise the displayed
+ * offset value drifts even though the user did not touch the offset
+ * row.  See REQ-20260615-037 for the worked examples.
+ *
+ * Returns the new `(posX, posY)` clamped into the visible frame, or
+ * `null` when no recomputation is needed (the layout fields didn't
+ * change, or the row has no pinned position to begin with).  Callers
+ * merge the result into the same patch they send to `updateEntry`
+ * so the layout change and the pinned-pos shift land as a single
+ * undoable atom.
+ */
+export function recomputePinnedPosForAnchorChange(args: {
+  currentHorizontalPosition: 'left' | 'center' | 'right'
+  currentVerticalPosition: 'top' | 'bottom'
+  currentVerticalMarginPx: number
+  currentPosX: number | undefined
+  currentPosY: number | undefined
+  nextHorizontalPosition?: 'left' | 'center' | 'right'
+  nextVerticalPosition?: 'top' | 'bottom'
+  nextVerticalMarginPx?: number
+  videoWidthPx: number
+  videoHeightPx: number
+}): { posX: number; posY: number } | null {
+  const {
+    currentHorizontalPosition,
+    currentVerticalPosition,
+    currentVerticalMarginPx,
+    currentPosX,
+    currentPosY,
+    nextHorizontalPosition,
+    nextVerticalPosition,
+    nextVerticalMarginPx,
+    videoWidthPx,
+    videoHeightPx,
+  } = args
+  if (currentPosX === undefined || currentPosY === undefined) return null
+  const nextH = nextHorizontalPosition ?? currentHorizontalPosition
+  const nextV = nextVerticalPosition ?? currentVerticalPosition
+  const nextM = nextVerticalMarginPx ?? currentVerticalMarginPx
+  if (
+    nextH === currentHorizontalPosition &&
+    nextV === currentVerticalPosition &&
+    nextM === currentVerticalMarginPx
+  ) {
+    return null
+  }
+  const oldAnchor = getAnchorAssPosition(
+    currentHorizontalPosition,
+    currentVerticalPosition,
+    currentVerticalMarginPx,
+    videoWidthPx,
+    videoHeightPx,
+  )
+  const newAnchor = getAnchorAssPosition(
+    nextH,
+    nextV,
+    nextM,
+    videoWidthPx,
+    videoHeightPx,
+  )
+  const offsetX = currentPosX - oldAnchor.x
+  const offsetY = currentPosY - oldAnchor.y
+  const clamped = clampAssPosition(
+    newAnchor.x + offsetX,
+    newAnchor.y + offsetY,
+    videoWidthPx,
+    videoHeightPx,
+  )
+  return { posX: Math.round(clamped.x), posY: Math.round(clamped.y) }
+}
