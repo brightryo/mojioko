@@ -152,28 +152,6 @@ export async function startBurnin(
   const assPath = join(tmpdir(), `mojioko-${randomUUID()}.ass`)
   await fs.writeFile(assPath, assContent, 'utf-8')
 
-  // === DIAG-20260614-015 BEGIN — REQ-20260614-001 補遺⑮ 一時計測（REVERT 予定）
-  // 焼き込み位置リグレッションの原因切り分けのため、生成 ASS 全文 / .ass の
-  // パス保全 / ffmpeg コマンド を info ログ + ファイルとして残す。
-  // 原因確定後、補遺⑭・⑮ 起票と同じ要領で revert する。
-  log.info('[diag-15] ===== generated ASS begin =====')
-  for (const line of assContent.split('\n')) {
-    log.info(`[diag-15] ${line}`)
-  }
-  log.info('[diag-15] ===== generated ASS end =====')
-  // 出力動画の隣に <outputPath>.diag.ass を残す。tmpdir の .ass は後段で
-  // unlink されるが、こちらは出力と同じディレクトリにあり、ユーザーが
-  // 出力動画と一緒に拾い上げやすい。
-  const diagAssPath = `${outputPath}.diag.ass`
-  try {
-    await fs.copyFile(assPath, diagAssPath)
-    log.info(`[diag-15] preserved ASS copy at: ${diagAssPath}`)
-  } catch (copyErr) {
-    log.warn(`[diag-15] could not preserve ASS copy at ${diagAssPath}: ${String(copyErr)}`)
-  }
-  log.info(`[diag-15] tmpdir ASS path: ${assPath} (unlink skipped below, see close handler)`)
-  // === DIAG-20260614-015 END
-
   const ffmpeg = getBinPath('ffmpeg')
   const subtitlesFilter = `subtitles='${escapeAssPath(assPath)}':fontsdir='${escapeAssPath(fontsDir)}'`
   log.info(`[ffmpeg-burnin] default font: ${fontMeta.displayName} (${resolvedFontId}); fontsdir=${fontsDir}`)
@@ -269,22 +247,6 @@ export async function startBurnin(
   // logging is enabled, but available for triaging encoder/filter issues.
   log.debug(`[ffmpeg-burnin] argv: ${ffmpeg} ${args.join(' ')}`)
 
-  // === DIAG-20260614-015 BEGIN — REQ-20260614-001 補遺⑮ 一時計測（REVERT 予定）
-  // info-level に argv を出す。空白を含む引数は単一引用符で包んでコピペ可能に
-  // し、subtitles=... のような特殊文字を含むフィルタ式もそのまま再現できる
-  // ようにする。
-  function quoteArg(a: string): string {
-    return /[\s'"\\]|^$/.test(a) ? `'${a.replace(/'/g, `'\\''`)}'` : a
-  }
-  const ffmpegCmd = `${quoteArg(ffmpeg)} ${args.map(quoteArg).join(' ')}`
-  log.info(`[diag-15] ffmpeg invocation: ${ffmpegCmd}`)
-  log.info('[diag-15] argv (one per line for readability):')
-  log.info(`[diag-15]   ${quoteArg(ffmpeg)}`)
-  for (const a of args) {
-    log.info(`[diag-15]   ${quoteArg(a)}`)
-  }
-  // === DIAG-20260614-015 END
-
   await new Promise<void>((resolve, reject) => {
     const proc = spawn(ffmpeg, args)
     // Cleanup of the (potentially partial) output file is centralised in the
@@ -331,17 +293,11 @@ export async function startBurnin(
       // value outside this run.  Best-effort cleanup: a failure here must
       // not bubble up because the user already sees ffmpeg's own status
       // via the events emitted below.
-      // === DIAG-20260614-015 BEGIN — REQ-20260614-001 補遺⑮ 一時計測（REVERT 予定）
-      // 一時計測中は tmpdir の .ass を **削除しない**。残骸として残るが、
-      // オーナーが採取できるようにするため。別途出力動画の隣にも .diag.ass
-      // を残してある (生成直後の copyFile)。
-      log.info(`[diag-15] skipping tmpdir ASS unlink to preserve it: ${assPath}`)
-      // try {
-      //   await fs.unlink(assPath)
-      // } catch {
-      //   // ignore cleanup failure
-      // }
-      // === DIAG-20260614-015 END
+      try {
+        await fs.unlink(assPath)
+      } catch {
+        // ignore cleanup failure
+      }
       try {
         await fs.rm(fontsDir, { recursive: true, force: true })
       } catch (cleanupErr) {
