@@ -33,7 +33,7 @@
     "hint": "Whisperエンジンの動作設定です。STEP 1 の「詳細設定」ボタンと同じ項目を編集します（どちらで変更しても両方に反映）。"
   },
   "about": {
-    "version": "バージョン",
+    "developedBy": "このアプリはBrightRyoによって開発されました",
     "license": "ライセンス",
     "licenseValue": "プロプライエタリ",
     "available": "利用可能",

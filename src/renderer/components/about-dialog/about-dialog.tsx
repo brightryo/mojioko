@@ -32,15 +32,29 @@ export function AboutDialog() {
           <DialogTitle>{t('common:menu.about')}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          {/* App name + version — the CSS-rendered green "M" badge that used
-              to sit next to these lines was removed in v1.0.0.  The Windows
-              window icon (build/icon.ico) is the canonical brand mark. */}
+          {/* App name + version + developer credit.
+              REQ-20260615-043: the two stacked lines (name on top, "バージョン
+              X.Y.Z" below) were collapsed to "MOJIOKO <version>" on one line
+              with a smaller version tail next to the name, and the second
+              line now carries the developer-credit sentence.  APP_VERSION is
+              the JSON-imported `package.json` version (see app-info.ts) so a
+              `npm version` bump flows here automatically.  The CSS-rendered
+              green "M" badge that used to sit next to these lines was
+              removed in v1.0.0; the Windows window icon is the canonical
+              brand mark. */}
           <div>
-            <p className="text-body font-semibold text-fg-primary">{APP_NAME}</p>
-            {/* REQ-067 phase B: was text-fg-muted (hint tier).  Version is
-                meta info that the user reads when filing bug reports — lift
-                to text-fg-tertiary (secondary tier, AAA pass). */}
-            <p className="text-body-sm text-fg-tertiary">{t('settings:about.version')} {APP_VERSION}</p>
+            <p className="text-body font-semibold text-fg-primary">
+              {APP_NAME}
+              {/* Smaller, secondary-tier tail so the name remains primary.
+                  font-mono + tabular-nums so version digits don't shift
+                  the baseline when the dialog opens at different widths. */}
+              <span className="ml-2 text-body-sm font-mono tabular-nums text-fg-tertiary">
+                {APP_VERSION}
+              </span>
+            </p>
+            <p className="text-body-sm text-fg-tertiary">
+              {t('settings:about.developedBy')}
+            </p>
           </div>
           <div className="border-t border-line pt-3 space-y-2">
             <InfoRow label={t('settings:about.license')} value={t('settings:about.licenseValue')} />
