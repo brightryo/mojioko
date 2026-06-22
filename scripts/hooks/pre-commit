@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+# scripts/hooks/pre-commit — PII tripwire (REQ-20260615-047 Phase 3).
+#
+# Runs scripts/pii-scan.mjs over the current staging area before each
+# commit.  Aborts with the hit list if any of the three layers fire
+# (internal-doc path, generic pattern, local dictionary).
+#
+# Enable by running once after clone:
+#   npm run setup:hooks
+# which is equivalent to:
+#   git config core.hooksPath scripts/hooks
+#
+# No PII inside this file.
+
+set -e
+
+node scripts/pii-scan.mjs --staged

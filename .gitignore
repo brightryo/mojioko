@@ -211,3 +211,13 @@ benchmark-results/
 # ============================================
 /CLAUDE.md
 /dev-docs/
+
+# ============================================
+# REQ-20260615-047 Phase 3 — local PII dictionary used by scripts/pii-scan.mjs
+# and the pre-commit / pre-push hooks.  Must never be tracked — contains
+# the actual blocklist words (owner name, personal paths, contact strings).
+# A re-clone has no dictionary yet; the scanner falls back to the
+# generic-pattern path block in that case.  Owner re-creates the file
+# locally per dev-docs/RELEASE_CHECKLIST.md (also gitignored).
+# ============================================
+/.pii-blocklist
