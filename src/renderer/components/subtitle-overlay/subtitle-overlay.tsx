@@ -7,6 +7,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { getFontMeta, isFontId, type FontId } from '../../../shared/fonts'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
+import { computeFadeOpacity } from '@/lib/fade-opacity'
 
 /** Floor (in OUTPUT pixels, not on the scale factor) applied to the visible
  *  outline so the thinnest setting (= 1) remains discernible at small preview
@@ -101,6 +102,16 @@ export interface SubtitleOverlayProps {
    * icon only appears on hover so it doesn't clutter the playback view.
    */
   showAffordance?: boolean
+  /**
+   * REQ-20260615-048 — current playhead time (seconds, same axis as
+   * `entry.startSec`/`endSec`) and the project's fade ramp duration.
+   * Together they drive the CSS opacity ramp that mirrors libass
+   * `\fad(t1,t2)` in the burn-in output.  When either is omitted (or
+   * `entry.fadeEnabled` is false) the overlay renders at full alpha,
+   * matching the pre-REQ behaviour.
+   */
+  currentTimeSec?: number
+  fadeDurationSec?: number
 }
 
 /**
@@ -197,6 +208,8 @@ export function SubtitleOverlay({
   onPointerDown,
   spanRef,
   showAffordance,
+  currentTimeSec,
+  fadeDurationSec,
 }: SubtitleOverlayProps) {
   bumpRenderCount('SubtitleOverlay')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
@@ -305,6 +318,26 @@ export function SubtitleOverlay({
   // prior `leading-snug` (= 1.375) which left a measurable gap.
   const lineHeight = libassScale > 0 ? 1 / libassScale : 1.448
 
+  // REQ-20260615-048 — preview-side fade ramp.  Mirrors the libass
+  // `\fad(t1,t2)` semantics that `ass-generator.ts` writes into the
+  // burn-in output, so the on-screen preview matches what the user gets
+  // in the rendered video (linear in/out across `fadeDurationSec`).
+  // `currentTimeSec` / `fadeDurationSec` are optional props — when the
+  // parent omits them (legacy callers like style-sample-preview) the
+  // helper returns 1 and the row stays at full alpha, identical to the
+  // pre-REQ behaviour.  Pinned rows (\pos) get the same ramp because
+  // libass `\fad` is independent of `\pos`.
+  const fadeOpacity =
+    currentTimeSec !== undefined && fadeDurationSec !== undefined
+      ? computeFadeOpacity({
+          currentTimeSec,
+          startSec: entry.startSec,
+          endSec: entry.endSec,
+          fadeEnabled: entry.fadeEnabled,
+          fadeDurationSec,
+        })
+      : 1
+
   // REQ-20260615-038 B — drag affordance.  An empty-content `<span>` child
   // positioned `inset: 0` becomes a centered overlay covering the outer
   // span's box (the parent is `position: absolute` → established containing
@@ -357,6 +390,7 @@ export function SubtitleOverlay({
         paintOrder: 'stroke fill',
         whiteSpace: 'pre',
         transform,
+        opacity: fadeOpacity,
       }}
     >
       <span ref={spanRef} style={textWrapperStyle}>
