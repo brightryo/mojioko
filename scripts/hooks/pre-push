@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+# scripts/hooks/pre-push — PII tripwire on the way to a remote
+# (REQ-20260615-047 Phase 3).
+#
+# Runs the working-tree scan (no --staged / --history), so commits that
+# slipped past pre-commit but still live in the tree get one last
+# chance to be caught before they reach `origin`.  The history mode is
+# intentionally NOT invoked here — full-history scans belong to manual
+# audits and the filter-repo flow, not to every push.
+#
+# Aborts non-zero if the scanner reports any hit.
+#
+# Enable by running once after clone:
+#   npm run setup:hooks
+# which is equivalent to:
+#   git config core.hooksPath scripts/hooks
+#
+# No PII inside this file.
+
+set -e
+
+node scripts/pii-scan.mjs

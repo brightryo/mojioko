@@ -11,7 +11,9 @@
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --ignore-path .gitignore",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "scan:pii": "node scripts/pii-scan.mjs",
+    "setup:hooks": "git config core.hooksPath scripts/hooks"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.0.4",
