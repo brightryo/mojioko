@@ -114,6 +114,10 @@ export function VideoPreviewPanel() {
   // memo below; the global burnin / subtitleBackground store slices were
   // dropped from settings-store in the same phase.
   const activeFontId       = useSettingsStore((s) => s.activeFontId)
+  // REQ-20260615-048 — preview-side fade ramp duration.  Same value that
+  // ffmpeg-burnin.ts passes into generateAss, so the preview's CSS
+  // opacity ramp matches the burn-in's libass \fad(t1,t2).
+  const fadeDurationSec    = useSettingsStore((s) => s.fadeDurationSec)
 
   const videoSeekRequestSec    = useUiStore((s) => s.videoSeekRequestSec)
   const setVideoSeekRequest    = useUiStore((s) => s.setVideoSeekRequest)
@@ -736,6 +740,8 @@ export function VideoPreviewPanel() {
                   onPointerDown={handleOverlayPointerDown}
                   spanRef={setOverlaySpanRef(entry.id)}
                   showAffordance={isSelected || isDragging}
+                  currentTimeSec={currentTime}
+                  fadeDurationSec={fadeDurationSec}
                 />
               )
             })}
