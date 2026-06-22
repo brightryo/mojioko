@@ -7,7 +7,6 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { getFontMeta, isFontId, type FontId } from '../../../shared/fonts'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
-import { computeFadeOpacity } from '@/lib/fade-opacity'
 
 /** Floor (in OUTPUT pixels, not on the scale factor) applied to the visible
  *  outline so the thinnest setting (= 1) remains discernible at small preview
@@ -103,15 +102,17 @@ export interface SubtitleOverlayProps {
    */
   showAffordance?: boolean
   /**
-   * REQ-20260615-048 — current playhead time (seconds, same axis as
-   * `entry.startSec`/`endSec`) and the project's fade ramp duration.
-   * Together they drive the CSS opacity ramp that mirrors libass
-   * `\fad(t1,t2)` in the burn-in output.  When either is omitted (or
-   * `entry.fadeEnabled` is false) the overlay renders at full alpha,
-   * matching the pre-REQ behaviour.
+   * REQ-20260615-049 — exposes the **outer positioning span** so the
+   * parent's requestAnimationFrame loop can write `style.opacity`
+   * directly without going through React state.  Pairs with `spanRef`
+   * (= inner text wrapper, REQ-20260615-039 measurement target); the
+   * two refs serve different consumers and are populated independently.
+   *
+   * When the parent does not supply this ref the overlay renders at
+   * the browser default opacity (= 1), matching the pre-fade behaviour
+   * — legacy call sites such as `style-sample-preview.tsx` are unaffected.
    */
-  currentTimeSec?: number
-  fadeDurationSec?: number
+  outerSpanRef?: Ref<HTMLSpanElement>
 }
 
 /**
@@ -208,8 +209,7 @@ export function SubtitleOverlay({
   onPointerDown,
   spanRef,
   showAffordance,
-  currentTimeSec,
-  fadeDurationSec,
+  outerSpanRef,
 }: SubtitleOverlayProps) {
   bumpRenderCount('SubtitleOverlay')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
@@ -318,25 +318,15 @@ export function SubtitleOverlay({
   // prior `leading-snug` (= 1.375) which left a measurable gap.
   const lineHeight = libassScale > 0 ? 1 / libassScale : 1.448
 
-  // REQ-20260615-048 — preview-side fade ramp.  Mirrors the libass
-  // `\fad(t1,t2)` semantics that `ass-generator.ts` writes into the
-  // burn-in output, so the on-screen preview matches what the user gets
-  // in the rendered video (linear in/out across `fadeDurationSec`).
-  // `currentTimeSec` / `fadeDurationSec` are optional props — when the
-  // parent omits them (legacy callers like style-sample-preview) the
-  // helper returns 1 and the row stays at full alpha, identical to the
-  // pre-REQ behaviour.  Pinned rows (\pos) get the same ramp because
-  // libass `\fad` is independent of `\pos`.
-  const fadeOpacity =
-    currentTimeSec !== undefined && fadeDurationSec !== undefined
-      ? computeFadeOpacity({
-          currentTimeSec,
-          startSec: entry.startSec,
-          endSec: entry.endSec,
-          fadeEnabled: entry.fadeEnabled,
-          fadeDurationSec,
-        })
-      : 1
+  // REQ-20260615-049 — preview-side fade is no longer computed here.
+  // The parent runs a single requestAnimationFrame loop that reads the
+  // real video element's currentTime and writes `style.opacity` on the
+  // outer span via DOM, decoupling the ramp from React re-renders.
+  // That keeps the animation smooth (vsync-aligned, not timeupdate-
+  // bound), keeps fade-out visible at unmount time, and survives the
+  // resize-cascade re-renders that froze the prior REQ-20260615-048
+  // implementation on maximize.  The outer span exposes itself through
+  // `outerSpanRef`; nothing else is needed in the overlay itself.
 
   // REQ-20260615-038 B — drag affordance.  An empty-content `<span>` child
   // positioned `inset: 0` becomes a centered overlay covering the outer
@@ -369,6 +359,7 @@ export function SubtitleOverlay({
     : { display: 'inline' }
   return (
     <span
+      ref={outerSpanRef}
       className={
         interactive
           ? 'absolute pointer-events-auto cursor-move select-none group'
@@ -390,7 +381,9 @@ export function SubtitleOverlay({
         paintOrder: 'stroke fill',
         whiteSpace: 'pre',
         transform,
-        opacity: fadeOpacity,
+        // `opacity` is intentionally NOT set here — see comment above
+        // the prop list; the parent's rAF loop writes it via DOM API
+        // and React never touches the value.
       }}
     >
       <span ref={spanRef} style={textWrapperStyle}>

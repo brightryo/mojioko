@@ -21,6 +21,7 @@ import {
   clampAssPosition,
 } from '@/lib/preview-coords'
 import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
+import { computeFadeOpacity } from '@/lib/fade-opacity'
 import type { SubtitleEntry } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -206,6 +207,54 @@ export function VideoPreviewPanel() {
   // changes (e.g. cursor leaves the bbox at fast drag speeds).
   const [draggingEntryId, setDraggingEntryId] = useState<string | null>(null)
 
+  // REQ-20260615-049 — outer span DOM refs per entry id, written by a
+  // single requestAnimationFrame loop with the per-entry fade opacity.
+  // Distinct from `overlaySpanRefs` (= inner text wrapper, used by the
+  // position guide) because the two consumers want different elements:
+  // opacity has to wrap the bg panel + the affordance icon too, so it
+  // belongs on the outer positioned span.
+  const overlayOuterRefs = useRef<Map<string, HTMLSpanElement>>(new Map())
+  // Mirror of `overlayEntries` kept in a ref so the rAF loop can read
+  // entry data (`startSec`, `endSec`, `fadeEnabled`) without taking
+  // `overlayEntries` as an effect dep — taking it as a dep would tear
+  // down and re-spawn the rAF every time the active set changed, which
+  // happens at every entry boundary.
+  const activeEntryMapRef = useRef<Map<string, SubtitleEntry>>(new Map())
+  // Same for the project's fade-duration setting — refed so a setting
+  // change does not have to remount the rAF.
+  const fadeDurationSecRef = useRef(fadeDurationSec)
+  useEffect(() => {
+    fadeDurationSecRef.current = fadeDurationSec
+  }, [fadeDurationSec])
+  // Callback ref factory: stores the element in the map AND applies an
+  // immediate opacity write so the first paint after mount is already
+  // at the correct ramp value (callback refs fire during the commit
+  // phase, before the browser paints).  Without this we would see a
+  // single frame at opacity 1 before the next rAF tick wrote 0 — a
+  // visible flash at the start of every fade-in.  Closes over `entry`
+  // so the lookup needs no Map; new closure per render is cheap at
+  // typical overlay counts (< 10 simultaneous captions).
+  const setOverlayOuterRef = useCallback(
+    (entry: SubtitleEntry) => (el: HTMLSpanElement | null) => {
+      if (el) {
+        overlayOuterRefs.current.set(entry.id, el)
+        const t = videoRef.current?.currentTime ?? 0
+        el.style.opacity = String(
+          computeFadeOpacity({
+            currentTimeSec: t,
+            startSec: entry.startSec,
+            endSec: entry.endSec,
+            fadeEnabled: entry.fadeEnabled,
+            fadeDurationSec: fadeDurationSecRef.current,
+          }),
+        )
+      } else {
+        overlayOuterRefs.current.delete(entry.id)
+      }
+    },
+    [],
+  )
+
   const videoUrl = video ? pathToVideoUrl(video.path) : null
 
   /**
@@ -265,6 +314,53 @@ export function VideoPreviewPanel() {
     const idSet = new Set(ids)
     return sortedActiveEntries.filter((e) => idSet.has(e.id))
   }, [currentTime, sortedActiveEntries])
+
+  // REQ-20260615-049 — sync the active-entry table read by the rAF fade
+  // loop.  Kept in a ref so the loop never lists `overlayEntries` as a
+  // dep (which would tear down / re-spawn the loop every entry boundary).
+  useEffect(() => {
+    const m = new Map<string, SubtitleEntry>()
+    for (const e of overlayEntries) m.set(e.id, e)
+    activeEntryMapRef.current = m
+  }, [overlayEntries])
+
+  // REQ-20260615-049 — single requestAnimationFrame loop that drives the
+  // fade opacity for every rendered overlay.  Vsync-aligned (~60 Hz),
+  // independent of the HTMLVideoElement `timeupdate` event (which is
+  // 4–66 Hz, irregular) and of React re-renders (which can stall during
+  // the resize-cascade triggered by window maximize).  Writing
+  // `element.style.opacity` directly via DOM lets the loop survive the
+  // resize storm and produces a smooth ramp at all setting values down
+  // to ~16 ms.  Decoupling from React render also means the entry can
+  // be ramping toward 0 even while React's `currentTime` state lags by
+  // a frame or two, so the fade-out window is never visually skipped.
+  useEffect(() => {
+    let raf = 0
+    const tick = () => {
+      const t = videoRef.current?.currentTime ?? 0
+      const entries = activeEntryMapRef.current
+      const fadeDur = fadeDurationSecRef.current
+      for (const [id, el] of overlayOuterRefs.current) {
+        const entry = entries.get(id)
+        if (!entry) continue
+        const next = String(
+          computeFadeOpacity({
+            currentTimeSec: t,
+            startSec: entry.startSec,
+            endSec: entry.endSec,
+            fadeEnabled: entry.fadeEnabled,
+            fadeDurationSec: fadeDur,
+          }),
+        )
+        // Guard CSSOM writes so a steady-state caption (mid-plateau,
+        // opacity = "1") does not invalidate style every frame.
+        if (el.style.opacity !== next) el.style.opacity = next
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
 
   /**
    * REQ-20260613-006: precomputed stack offset per entry id.  Replaces the
@@ -739,9 +835,8 @@ export function VideoPreviewPanel() {
                   stackOffsetPx={offset}
                   onPointerDown={handleOverlayPointerDown}
                   spanRef={setOverlaySpanRef(entry.id)}
+                  outerSpanRef={setOverlayOuterRef(entry)}
                   showAffordance={isSelected || isDragging}
-                  currentTimeSec={currentTime}
-                  fadeDurationSec={fadeDurationSec}
                 />
               )
             })}
