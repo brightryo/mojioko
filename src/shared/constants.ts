@@ -20,15 +20,25 @@ export const ASS_MARGIN_LR_PX = 10
 export const ASS_MARGIN_V_DEFAULT_PX = 40
 
 /**
- * Default fade-in/out duration in seconds.
+ * Default fade-in/out duration in seconds for newly-created entries
+ * and for fresh installs / hydrated-without-value settings.
  *
  * REQ-20260615-050: the slider exposed in Settings / Inspector / Bulk-edit
  * runs over `[FADE_DURATION_SEC_MIN, FADE_DURATION_SEC_MAX]` in increments
  * of `FADE_DURATION_SEC_STEP`.  A stored value of `0` means **no fade**
  * (the ASS writer skips `\fad`, the preview rAF skips the opacity ramp).
  * Converted to milliseconds when writing the ASS \fad() tag.
+ *
+ * REQ-20260615-057: shipping default lowered to `0` so a freshly-created
+ * subtitle is visible the moment the playhead lands on its start time.
+ * With a positive default, selecting a clip on the timeline jumps the
+ * playhead to the entry's start time and the fade-in ramp begins from
+ * alpha 0 — the overlay shows nothing for the first few hundred
+ * milliseconds.  Existing persisted values are intentionally NOT
+ * touched on hydrate (the user's choice is preserved); only fresh
+ * installs and explicit resets see the new default.
  */
-export const FADE_DURATION_SEC_DEFAULT = 0.2
+export const FADE_DURATION_SEC_DEFAULT = 0
 export const FADE_DURATION_SEC_MIN = 0
 export const FADE_DURATION_SEC_MAX = 0.5
 export const FADE_DURATION_SEC_STEP = 0.1
