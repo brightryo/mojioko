@@ -37,6 +37,7 @@ import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { EditorViewSwitcher } from '@/components/editor-view-switcher/editor-view-switcher'
 import { TimelineView } from '@/components/timeline-view/timeline-view'
 import { TimelineBlockInspector } from '@/components/timeline-view/timeline-block-inspector'
+import { HelpIcon } from '@/components/help-icon'
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 import { useRef } from 'react'
 
@@ -934,8 +935,12 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const inspectorSlot = (
     <div className="flex h-full w-full flex-col bg-surface-0">
       <div className="flex-shrink-0 px-3 py-2 border-b border-line">
-        <h2 className="text-callout font-semibold text-fg-secondary">
-          {inspectorHeading}
+        {/* REQ-20260615-051 A — bulk-mode heading gets a `?` HelpIcon
+            explaining what the list-view checkboxes target.  The single
+            inspector heading keeps its plain label. */}
+        <h2 className="text-callout font-semibold text-fg-secondary flex items-center gap-1.5">
+          <span>{inspectorHeading}</span>
+          {isBulkMode && <HelpIcon content={t('inspector.bulkHelp')} />}
         </h2>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto p-3">

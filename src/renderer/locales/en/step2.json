@@ -4,6 +4,7 @@
   "inspector": {
     "heading": "Inspector",
     "bulkHeading": "Bulk edit",
+    "bulkHelp": "Applies the changes you make here to every subtitle you have checked in the list. Use the list view to pick the targets.",
     "emptyTitle": "No subtitle selected",
     "emptyHint": "Click a row in the list or a block in the timeline below"
   },

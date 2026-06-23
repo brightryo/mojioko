@@ -142,20 +142,30 @@ export function AudioPreviewPanel() {
     }
   }
 
-  // Space key — play/pause when no text field is focused.  Mirrors the
-  // VideoPreviewPanel binding so the user's muscle memory carries over
-  // between modes.
+  // REQ-20260615-051 B — capture-phase Space shortcut, mirroring the
+  // VideoPreviewPanel binding (see that file for the full rationale).
+  // Bubble phase pre-REQ let any focused element either stopPropagation
+  // or run its scroll default before the document handler fired, so
+  // the inspector's `overflow-y: auto` body would scroll instead of
+  // toggling playback.  Capture phase + preventDefault + stopPropagation
+  // guarantees the shortcut wins.  Text-input contexts (input /
+  // textarea / contenteditable) still pass through so the user can
+  // type a literal space.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.code !== 'Space' || e.ctrlKey || e.altKey || e.metaKey) return
       const active = document.activeElement as HTMLElement | null
-      const tag = active?.tagName.toLowerCase()
-      if (tag === 'input' || tag === 'textarea' || active?.isContentEditable) return
+      if (active) {
+        const tag = active.tagName.toLowerCase()
+        if (tag === 'input' || tag === 'textarea') return
+        if (active.isContentEditable) return
+      }
       e.preventDefault()
+      e.stopPropagation()
       togglePlay()
     }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [])
 
   function handleTimeUpdate() {

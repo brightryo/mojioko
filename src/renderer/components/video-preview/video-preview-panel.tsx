@@ -474,18 +474,46 @@ export function VideoPreviewPanel() {
   // without unmounting the <video>, so playback is naturally preserved
   // (and the user keeps explicit control via the play/pause button).
 
-  // Space key — play/pause when no text field is focused
+  // REQ-20260615-051 B — global Space keydown shortcut for play / pause.
+  //
+  // Attached at the **capture phase** of `document` so the handler always
+  // runs BEFORE the focused element's own keydown handler, and BEFORE the
+  // browser dispatches Space's default action (page scroll for the
+  // nearest scroll container with focus inside it, or button activation
+  // for focused buttons).  Pre-REQ this listener was on the bubble phase,
+  // which meant:
+  //
+  //   - An inspector control (segmented radio, slider, etc.) could
+  //     stopPropagation on keydown and the document listener never
+  //     fired, so `preventDefault` was never called and the inspector's
+  //     `overflow-y: auto` body scrolled by the browser default.
+  //   - Even without stopPropagation, the scroll default ran before
+  //     the bubble-phase handler could call `preventDefault`.
+  //
+  // Capture phase + `preventDefault` + `stopPropagation` together
+  // guarantee the shortcut wins regardless of the focused element.
+  //
+  // Exception: when a text-input context is focused (`<input>`,
+  // `<textarea>`, or any element under a `contenteditable` ancestor)
+  // we let Space through so the user can type a literal space.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.code !== 'Space' || e.ctrlKey || e.altKey || e.metaKey) return
       const active = document.activeElement as HTMLElement | null
-      const tag = active?.tagName.toLowerCase()
-      if (tag === 'input' || tag === 'textarea' || active?.isContentEditable) return
+      if (active) {
+        const tag = active.tagName.toLowerCase()
+        if (tag === 'input' || tag === 'textarea') return
+        // `isContentEditable` is true both for the contenteditable root
+        // AND for any descendant that inherits the flag, so this single
+        // check covers focus on a child inside the editable region.
+        if (active.isContentEditable) return
+      }
       e.preventDefault()
+      e.stopPropagation()
       togglePlay()
     }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [togglePlay])
 
   // Reset playback state when the video source changes
