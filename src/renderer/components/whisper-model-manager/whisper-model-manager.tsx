@@ -14,7 +14,6 @@ import {
   AlertTriangle,
   ChevronUp,
   ChevronDown,
-  Settings2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -74,14 +73,10 @@ interface WhisperModelManagerProps {
    */
   isOpen?: boolean
   onOpenChange?: (open: boolean) => void
-  /**
-   * REQ-20260615-020: when provided, the header renders a gear icon
-   * button that calls this on click (with stopPropagation so the
-   * accordion does not toggle).  step1 passes
-   * `() => setAdvancedDialogOpen(true)` here, replacing the previous
-   * absolutely-positioned Advanced text button.
-   */
-  onOpenAdvanced?: () => void
+  // REQ-20260615-055 — `onOpenAdvanced` prop retired.  Whisper Advanced
+  // moved out of an inline gear-icon dialog and into the new
+  // TranscriptionDrawer (step1 route), so this component no longer
+  // surfaces the trigger.
 }
 
 type DialogKind =
@@ -98,7 +93,6 @@ export function WhisperModelManager({
   disabled,
   isOpen: controlledIsOpen,
   onOpenChange,
-  onOpenAdvanced
 }: WhisperModelManagerProps) {
   const { t, i18n } = useTranslation('step1')
 
@@ -294,27 +288,9 @@ export function WhisperModelManager({
           </span>
         )}
 
-        {/* Gear icon button — opens Advanced dialog without toggling accordion. */}
-        {onOpenAdvanced && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onOpenAdvanced()
-            }}
-            disabled={disabled}
-            aria-label={t('advanced.openButton')}
-            title={t('advanced.openButton')}
-            className={cn(
-              'inline-flex h-7 w-7 items-center justify-center rounded-md border border-line text-fg-muted',
-              'hover:text-fg-secondary hover:border-line-strong hover:bg-surface-1 transition-colors duration-150',
-              'focus:outline-none focus-visible:outline-none',
-              'disabled:opacity-40 disabled:cursor-not-allowed'
-            )}
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-          </button>
-        )}
+        {/* REQ-20260615-055 — gear-icon trigger retired here.
+            Advanced settings now live inside the TranscriptionDrawer
+            opened from the footer Start button. */}
 
         {/* Green check — only when downloaded AND selected. */}
         {isModelReady && (
