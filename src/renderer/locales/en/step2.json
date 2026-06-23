@@ -128,6 +128,7 @@
     "selected": "{{count}} selected"
   },
   "toast": {
+    "transcriptionNoSpeech": "No speech was detected.  You can add subtitles manually with \"Add.\"",
     "rowAdded": "Added at position {{index}}",
     "rowDuplicated": "Row duplicated",
     "rowDeleted": "Deleted",

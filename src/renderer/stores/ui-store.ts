@@ -170,6 +170,19 @@ interface UiStore {
    */
   step2TimelineToolsExpanded: boolean
 
+  /**
+   * REQ-20260615-064 A — set to `true` by STEP 1 right before it
+   * navigates to STEP 2 with an empty `entries` array (faster-whisper
+   * returned zero segments because the audio had no detectable
+   * speech).  STEP 2 reads this on mount, surfaces a one-time toast
+   * ("発話を検出できませんでした。「追加」から手動で作成できます"),
+   * and resets the flag back to `false` so the toast does not fire
+   * again on subsequent visits within the same session.  Session-
+   * only; never persisted.  Keeping the signal local to the UI store
+   * avoids changing the `TranscriptionEvent` IPC contract.
+   */
+  lastTranscriptionWasEmpty: boolean
+
   setSettingsDialogOpen: (open: boolean) => void
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
@@ -207,6 +220,8 @@ interface UiStore {
   setStep2OuterLayout: (layout: { 'step2-pane-left': number; 'step2-pane-right': number }) => void
   setStep2LeftLayout:  (layout: { 'step2-pane-preview': number; 'step2-pane-bottom': number }) => void
   toggleStep2TimelineTools: () => void
+  /** REQ-20260615-064 A — see `lastTranscriptionWasEmpty` above. */
+  setLastTranscriptionWasEmpty: (v: boolean) => void
 }
 
 export const useUiStore = create<UiStore>((set) => ({
@@ -239,6 +254,7 @@ export const useUiStore = create<UiStore>((set) => ({
   step2OuterLayout: { 'step2-pane-left': 70, 'step2-pane-right': 30 },
   step2LeftLayout:  { 'step2-pane-preview': 50, 'step2-pane-bottom': 50 },
   step2TimelineToolsExpanded: false,
+  lastTranscriptionWasEmpty: false,
 
   setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
@@ -320,4 +336,5 @@ export const useUiStore = create<UiStore>((set) => ({
   setStep2LeftLayout:  (layout) => set({ step2LeftLayout: layout }),
   toggleStep2TimelineTools: () =>
     set((s) => ({ step2TimelineToolsExpanded: !s.step2TimelineToolsExpanded })),
+  setLastTranscriptionWasEmpty: (v) => set({ lastTranscriptionWasEmpty: v }),
 }))

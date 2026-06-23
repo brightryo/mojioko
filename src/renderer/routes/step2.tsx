@@ -206,6 +206,22 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     const el = inspectorScrollRef.current
     if (el) el.scrollTop = 0
   }, [selectedEntryId])
+
+  // REQ-20260615-064 A — STEP 1 sets `lastTranscriptionWasEmpty` right
+  // before it navigates here with an empty entry list (faster-whisper
+  // returned zero segments — silent track, no detectable speech, etc.).
+  // STEP 2 reads the flag on mount, fires a single-shot informational
+  // toast pointing at the "追加" button, and clears the flag back to
+  // false so revisiting STEP 2 within the same session does not re-fire
+  // it.  Lives next to the editor it talks about, which is why STEP 1
+  // no longer surfaces its own warning.
+  useEffect(() => {
+    const { lastTranscriptionWasEmpty, setLastTranscriptionWasEmpty } = useUiStore.getState()
+    if (lastTranscriptionWasEmpty) {
+      toast.info(t('toast.transcriptionNoSpeech'))
+      setLastTranscriptionWasEmpty(false)
+    }
+  }, [t])
   // REQ-094 case C: `videoCurrentTimeSec` subscription removed.  The
   // route used to hold this slice solely to forward it to
   // TimeEditorDialog as a prop, which made the whole route re-render
