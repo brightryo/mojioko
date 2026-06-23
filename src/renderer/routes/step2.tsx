@@ -194,6 +194,18 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const selectedEntryId = useUiStore((s) => s.selectedEntryId)
   const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
+
+  // REQ-20260615-061 A — when the inspector swaps from one clip to
+  // another, the previous scroll offset stays put and a deeply-scrolled
+  // user lands inside the new inspector at "アウトライン" / "背景色"
+  // rather than the action-icon row at the top.  Reset the scroll
+  // container to 0 every time the active entry id changes so the new
+  // clip's inspector always opens at its top.
+  const inspectorScrollRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = inspectorScrollRef.current
+    if (el) el.scrollTop = 0
+  }, [selectedEntryId])
   // REQ-094 case C: `videoCurrentTimeSec` subscription removed.  The
   // route used to hold this slice solely to forward it to
   // TimeEditorDialog as a prop, which made the whole route re-render
@@ -943,7 +955,10 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
           {isBulkMode && <HelpIcon content={t('inspector.bulkHelp')} />}
         </h2>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto p-3">
+      <div
+        ref={inspectorScrollRef}
+        className="flex-1 min-h-0 overflow-y-auto p-3"
+      >
         {inspectorBody}
       </div>
     </div>

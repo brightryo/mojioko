@@ -106,7 +106,11 @@ export function OutlineThicknessSlider({
         style={{ accentColor: 'hsl(var(--primary))' }}
         aria-label={ariaLabel}
       />
-      <span className="w-6 text-caption text-muted-foreground font-mono tabular-nums">
+      {/* REQ-20260615-061 B — readout column widened from w-6 to w-10
+          and right-aligned so it matches FadeDurationSlider's readout
+          cell exactly.  Same readout footprint = both sliders' bars
+          start and end at the same X within a shared row container. */}
+      <span className="w-10 text-caption text-muted-foreground font-mono tabular-nums text-right">
         {draft}
       </span>
     </div>
