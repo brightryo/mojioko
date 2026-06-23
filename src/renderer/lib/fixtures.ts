@@ -22,7 +22,6 @@ export const sampleDefaults: TranscriptionDefaults = {
   textColorHex: BURNIN_DEFAULTS.textColorHex,
   outlineColorHex: BURNIN_DEFAULTS.outlineColorHex,
   outlineThicknessPx: BURNIN_DEFAULTS.outlineThicknessPx,
-  fadeEnabled: BURNIN_DEFAULTS.fadeEnabled,
   whisperModel: BURNIN_DEFAULTS.whisperModel
 }
 
@@ -41,7 +40,7 @@ function makeEntry(
     textColorHex: sampleDefaults.textColorHex,
     outlineColorHex: sampleDefaults.outlineColorHex,
     outlineThicknessPx: sampleDefaults.outlineThicknessPx,
-    fadeEnabled: sampleDefaults.fadeEnabled,
+    fadeDurationSec: BURNIN_DEFAULTS.fadeDurationSec,
     ...makeEntryLayoutDefaults()
   }
   return {
@@ -69,7 +68,7 @@ export const sampleEntries: SubtitleEntry[] = [
       textColorHex: '#ffffff',
       outlineColorHex: '#000000',
       outlineThicknessPx: 3,
-      fadeEnabled: true,
+      fadeDurationSec: BURNIN_DEFAULTS.fadeDurationSec,
       ...makeEntryLayoutDefaults()
     }
   }),
@@ -86,7 +85,7 @@ export const sampleEntries: SubtitleEntry[] = [
       textColorHex: '#ffffff',
       outlineColorHex: '#000000',
       outlineThicknessPx: 3,
-      fadeEnabled: true,
+      fadeDurationSec: BURNIN_DEFAULTS.fadeDurationSec,
       ...makeEntryLayoutDefaults()
     }
   }),

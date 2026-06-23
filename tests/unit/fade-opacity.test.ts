@@ -14,16 +14,16 @@ describe('computeFadeOpacity', () => {
   const baseEntry = {
     startSec: 1.0,
     endSec: 5.0,
-    fadeEnabled: true,
     fadeDurationSec: 0.2,
   }
 
-  describe('disabled / zero short-circuits', () => {
-    it('returns 1 when fadeEnabled is false', () => {
-      expect(computeFadeOpacity({ ...baseEntry, fadeEnabled: false, currentTimeSec: 1.05 })).toBe(1)
-    })
+  describe('zero / negative duration short-circuits', () => {
+    // REQ-20260615-050 — the legacy `fadeEnabled` boolean was retired in
+    // favour of treating `fadeDurationSec === 0` as "no fade".  The
+    // helper must still short-circuit defensively on negative input in
+    // case a caller forgets to clamp.
 
-    it('returns 1 when fadeDurationSec is 0', () => {
+    it('returns 1 when fadeDurationSec is 0 (= REQ-050 OFF)', () => {
       expect(computeFadeOpacity({ ...baseEntry, fadeDurationSec: 0, currentTimeSec: 1.05 })).toBe(1)
     })
 
@@ -81,7 +81,7 @@ describe('computeFadeOpacity', () => {
   describe('short caption — fade-in and fade-out overlap (duration < 2·N)', () => {
     // Duration = 0.3, fade = 0.2 → ramps overlap and meet at the midpoint (t=1.15).
     // Peak alpha = 0.15 / 0.2 = 0.75.
-    const short = { startSec: 1.0, endSec: 1.3, fadeEnabled: true, fadeDurationSec: 0.2 }
+    const short = { startSec: 1.0, endSec: 1.3, fadeDurationSec: 0.2 }
 
     it('at the midpoint reaches the triangular peak (= duration/2 / fade)', () => {
       expect(computeFadeOpacity({ ...short, currentTimeSec: 1.15 })).toBeCloseTo(0.75, 10)

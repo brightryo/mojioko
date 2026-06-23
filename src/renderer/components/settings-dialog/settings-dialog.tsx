@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -13,11 +12,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { FontPicker } from '@/components/font-picker/font-picker'
 import { DefaultStyleControls } from '@/components/default-style-controls/default-style-controls'
 import { WhisperAdvancedControls } from '@/components/whisper-advanced-controls/whisper-advanced-controls'
+import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 
-/** Allowed fade duration range. */
-const FADE_DURATION_MIN = 0.1
-const FADE_DURATION_MAX = 0.5
-const FADE_DURATION_STEP = 0.1
+// REQ-20260615-050 — fade range constants now live in shared/constants
+// (`FADE_DURATION_SEC_{MIN,MAX,STEP}`), driven by the FadeDurationSlider.
+// The slider itself replaces the legacy number-input in the General tab
+// and is also reused by the inspector and the bulk-edit bar.
 
 export function SettingsDialog() {
   const { t, i18n } = useTranslation('settings')
@@ -48,40 +48,10 @@ export function SettingsDialog() {
   const setTranscriptionAdvanced = useSettingsStore((s) => s.setTranscriptionAdvanced)
   const resetTranscriptionAdvanced = useSettingsStore((s) => s.resetTranscriptionAdvanced)
 
-  /**
-   * Keep a draft string so the input can hold transient values while the user
-   * is typing (e.g. "0." before "0.3" is complete).  Only clamp and commit on
-   * blur or when the arrow-stepper fires a valid value.
-   */
-  const [fadeDraft, setFadeDraft] = useState(() => String(fadeDurationSec))
-
-  // Sync draft when the store value changes from outside (e.g. settings hydration).
-  useEffect(() => {
-    setFadeDraft(String(fadeDurationSec))
-  }, [fadeDurationSec])
-
-  function clampAndCommit(raw: string) {
-    const v = parseFloat(raw)
-    if (!isNaN(v)) {
-      const clamped = +Math.min(FADE_DURATION_MAX, Math.max(FADE_DURATION_MIN, v)).toFixed(1)
-      setFadeDurationSec(clamped)
-      setFadeDraft(String(clamped))
-    } else {
-      // Restore to the last committed value
-      setFadeDraft(String(fadeDurationSec))
-    }
-  }
-
-  function handleFadeDraftChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setFadeDraft(e.target.value)
-  }
-
-  function handleFadeBlur() {
-    clampAndCommit(fadeDraft)
-  }
-
-  // REQ-082: Enter handler removed.  Blur commits the value.
-
+  // REQ-20260615-050 — the General-tab fade input was replaced with the
+  // shared FadeDurationSlider.  No local draft / clamp logic is needed
+  // any more; the slider owns its draft and only invokes onCommit at
+  // the gesture boundary.
   function handleLanguageChange(lang: string) {
     setLanguage(lang)
     void i18n.changeLanguage(lang)
@@ -187,20 +157,19 @@ export function SettingsDialog() {
                 </Select>
               </div>
 
-              {/* Fade duration */}
+              {/* REQ-20260615-050 — fade duration slider.  Replaces the
+                  legacy number input.  0 = OFF, 0.1–0.5 s otherwise.
+                  This setting is the default for new entries; existing
+                  entries keep whatever per-row value they already hold. */}
               <span className="whitespace-nowrap text-body text-fg-secondary self-start leading-none mt-2.5">
                 {t('general.fadeDuration')}
               </span>
-              <div className="space-y-1">
-                <input
-                  type="number"
-                  min={FADE_DURATION_MIN}
-                  max={FADE_DURATION_MAX}
-                  step={FADE_DURATION_STEP}
-                  value={fadeDraft}
-                  onChange={handleFadeDraftChange}
-                  onBlur={handleFadeBlur}
-                  className="h-9 w-full rounded-md border border-line bg-surface-0 px-3 text-center text-body text-fg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+              <div className="space-y-1 flex flex-col">
+                <FadeDurationSlider
+                  value={fadeDurationSec}
+                  onCommit={setFadeDurationSec}
+                  ariaLabel={t('general.fadeDuration')}
+                  fullWidth
                 />
                 <p className="text-body-sm text-fg-muted">{t('general.fadeDurationHint')}</p>
               </div>
@@ -225,7 +194,6 @@ export function SettingsDialog() {
               textColorHex={transcriptionDefaults.textColorHex}
               outlineColorHex={transcriptionDefaults.outlineColorHex}
               outlineThicknessPx={transcriptionDefaults.outlineThicknessPx}
-              fadeEnabled={transcriptionDefaults.fadeEnabled}
               autoLineBreak={autoLineBreak}
               onUpdateDefaults={updateTranscriptionDefaults}
               onSetAutoLineBreak={setAutoLineBreak}

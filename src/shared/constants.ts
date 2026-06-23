@@ -21,10 +21,17 @@ export const ASS_MARGIN_V_DEFAULT_PX = 40
 
 /**
  * Default fade-in/out duration in seconds.
- * Stored as `fadeDurationSec` in AppSettings and configurable via Settings dialog.
+ *
+ * REQ-20260615-050: the slider exposed in Settings / Inspector / Bulk-edit
+ * runs over `[FADE_DURATION_SEC_MIN, FADE_DURATION_SEC_MAX]` in increments
+ * of `FADE_DURATION_SEC_STEP`.  A stored value of `0` means **no fade**
+ * (the ASS writer skips `\fad`, the preview rAF skips the opacity ramp).
  * Converted to milliseconds when writing the ASS \fad() tag.
  */
 export const FADE_DURATION_SEC_DEFAULT = 0.2
+export const FADE_DURATION_SEC_MIN = 0
+export const FADE_DURATION_SEC_MAX = 0.5
+export const FADE_DURATION_SEC_STEP = 0.1
 
 /** Timeout in milliseconds for ffprobe video probe operations. */
 export const FFPROBE_TIMEOUT_MS = 10_000

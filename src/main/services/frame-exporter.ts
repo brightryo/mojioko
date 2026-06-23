@@ -70,7 +70,6 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
     format,
     includeSubtitles,
     entries = [],
-    fadeDurationSec = 0,
     subtitleBackground,
     fontId
   } = req
@@ -104,7 +103,6 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
         // `burnin` (BurninPosition) is vestigial in generateAss — pass any
         // legal value so the signature is satisfied (matches ENTRY_LAYOUT_DEFAULTS).
         { horizontalPosition: 'center', verticalPosition: 'bottom', verticalMarginPx: 40 },
-        fadeDurationSec,
         subtitleBackground,
         fontMeta.assFontName
       )

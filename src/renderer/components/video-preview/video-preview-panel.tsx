@@ -115,10 +115,9 @@ export function VideoPreviewPanel() {
   // memo below; the global burnin / subtitleBackground store slices were
   // dropped from settings-store in the same phase.
   const activeFontId       = useSettingsStore((s) => s.activeFontId)
-  // REQ-20260615-048 — preview-side fade ramp duration.  Same value that
-  // ffmpeg-burnin.ts passes into generateAss, so the preview's CSS
-  // opacity ramp matches the burn-in's libass \fad(t1,t2).
-  const fadeDurationSec    = useSettingsStore((s) => s.fadeDurationSec)
+  // REQ-20260615-050 — fade duration is now per-entry; no global slice
+  // is read here.  The rAF loop below pulls `entry.fadeDurationSec`
+  // from each active SubtitleEntry.
 
   const videoSeekRequestSec    = useUiStore((s) => s.videoSeekRequestSec)
   const setVideoSeekRequest    = useUiStore((s) => s.setVideoSeekRequest)
@@ -220,12 +219,9 @@ export function VideoPreviewPanel() {
   // down and re-spawn the rAF every time the active set changed, which
   // happens at every entry boundary.
   const activeEntryMapRef = useRef<Map<string, SubtitleEntry>>(new Map())
-  // Same for the project's fade-duration setting — refed so a setting
-  // change does not have to remount the rAF.
-  const fadeDurationSecRef = useRef(fadeDurationSec)
-  useEffect(() => {
-    fadeDurationSecRef.current = fadeDurationSec
-  }, [fadeDurationSec])
+  // REQ-20260615-050 — fade duration now lives per-entry, so no global
+  // ref is needed.  The rAF reads `entry.fadeDurationSec` straight from
+  // the `activeEntryMapRef` snapshot.
   // Callback ref factory: stores the element in the map AND applies an
   // immediate opacity write so the first paint after mount is already
   // at the correct ramp value (callback refs fire during the commit
@@ -244,8 +240,7 @@ export function VideoPreviewPanel() {
             currentTimeSec: t,
             startSec: entry.startSec,
             endSec: entry.endSec,
-            fadeEnabled: entry.fadeEnabled,
-            fadeDurationSec: fadeDurationSecRef.current,
+            fadeDurationSec: entry.fadeDurationSec,
           }),
         )
       } else {
@@ -339,7 +334,6 @@ export function VideoPreviewPanel() {
     const tick = () => {
       const t = videoRef.current?.currentTime ?? 0
       const entries = activeEntryMapRef.current
-      const fadeDur = fadeDurationSecRef.current
       for (const [id, el] of overlayOuterRefs.current) {
         const entry = entries.get(id)
         if (!entry) continue
@@ -348,8 +342,7 @@ export function VideoPreviewPanel() {
             currentTimeSec: t,
             startSec: entry.startSec,
             endSec: entry.endSec,
-            fadeEnabled: entry.fadeEnabled,
-            fadeDurationSec: fadeDur,
+            fadeDurationSec: entry.fadeDurationSec,
           }),
         )
         // Guard CSSOM writes so a steady-state caption (mid-plateau,

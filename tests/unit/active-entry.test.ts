@@ -16,7 +16,7 @@ function entry(id: string, startSec: number, endSec: number): SubtitleEntry {
     textColorHex: '#ffffff',
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
-    fadeEnabled: false,
+    fadeDurationSec: 0,
     ...makeEntryLayoutDefaults(),
   }
   return { id, ...base, isDeleted: false, isEdited: false, original: { ...base } }

@@ -12,7 +12,11 @@ export const BURNIN_DEFAULTS = {
   textColorHex: '#FFFFFF',
   outlineColorHex: '#000000',
   outlineThicknessPx: 3,
-  fadeEnabled: true,
+  // REQ-20260615-050 — single per-entry `fadeDurationSec` replaces the
+  // `fadeEnabled` boolean + global duration pair.  `0` means no fade,
+  // `0.1`–`0.5` is the in/out duration in seconds.  This value seeds
+  // both the renderer's `settings.fadeDurationSec` (= default for new
+  // entries) and the live entry field copied at creation time.
   fadeDurationSec: FADE_DURATION_SEC_DEFAULT,
   whisperModel: 'medium' as WhisperModelId,
 

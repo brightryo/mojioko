@@ -242,6 +242,10 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     return () => obs.disconnect()
   }, [])
   const activeFontId = useSettingsStore((s) => s.activeFontId)
+  // REQ-20260615-050 — fade duration lives in the settings store (the
+  // General-tab slider IS the "default for new entries").  Each row
+  // built via the add-row dialog seeds `fadeDurationSec` from here.
+  const settingsFadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   const [subtitleFont, setSubtitleFont] = useState<SubtitleFont | null>(getSubtitleFont)
 
   // Re-load the opentype.js Font whenever the active font selection changes.
@@ -604,7 +608,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         textColorHex: defaults.textColorHex,
         outlineColorHex: defaults.outlineColorHex,
         outlineThicknessPx: defaults.outlineThicknessPx,
-        fadeEnabled: defaults.fadeEnabled,
+        fadeDurationSec: settingsFadeDurationSec,
         // REQ-20260613-016 / v1.2.2 機能A: seed per-row layout + background
         // defaults at creation time.  Same pattern as the transcription
         // segment mapping in step1.tsx.

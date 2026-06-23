@@ -40,7 +40,7 @@ function makeEntry(
     textColorHex: '#ffffff',
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
-    fadeEnabled: false,
+    fadeDurationSec: 0,
     ...makeEntryLayoutDefaults(),
   }
   return {

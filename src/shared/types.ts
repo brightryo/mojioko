@@ -50,7 +50,21 @@ export interface SubtitleEntryOriginal {
   outlineColorHex: string
   /** Integer, 0–5 px. */
   outlineThicknessPx: number
-  fadeEnabled: boolean
+  /**
+   * REQ-20260615-050 — per-entry fade ramp duration in seconds.
+   *
+   * Range: `[0, 0.5]`, step 0.1.  Semantics: **`0` means no fade**
+   * (the ASS writer skips `\fad`, the preview rAF skips the opacity
+   * ramp), `0.1`–`0.5` is the in/out duration applied symmetrically
+   * (same value for fade-in and fade-out, matching libass `\fad(t,t)`).
+   *
+   * Replaces the legacy boolean `fadeEnabled` + global setting pair —
+   * the migration path on store hydrate seeds this from the old
+   * `fadeEnabled ? settings.fadeDurationSec : 0`.  New entries copy
+   * `settings.fadeDurationSec` at creation time so the consolidated
+   * General-tab slider IS the "default for new entries".
+   */
+  fadeDurationSec: number
   /**
    * Optional per-row font override.  When undefined, the row inherits the
    * project default (`useSettingsStore.activeFontId`) — both for preview
@@ -119,7 +133,6 @@ export interface TranscriptionDefaults {
   outlineColorHex: string
   /** Integer, 0–5 px. */
   outlineThicknessPx: number
-  fadeEnabled: boolean
   whisperModel: WhisperModelId
 }
 
@@ -234,7 +247,13 @@ export interface AppSettings {
   subtitleBackground?: SubtitleBackground
   encoder: EncoderSetting
   defaultAudioTrackIndex: number
-  /** Fade-in/out duration in seconds applied to \fad() in ASS output. Default 0.2. */
+  /**
+   * REQ-20260615-050 — default fade ramp duration in seconds applied
+   * when a NEW SubtitleEntry is created (transcription, add-row,
+   * duplicate-row).  Range `[0, 0.5]`, step 0.1; `0` means new entries
+   * default to no fade.  No longer used at burn-in time — each entry
+   * carries its own `fadeDurationSec` after creation.
+   */
   fadeDurationSec: number
   activeModelId: WhisperModelId | null
   /**

@@ -56,7 +56,7 @@ function sameCs(a: number, b: number): boolean {
  *    cs-aligned edit at their cs display — matching what the UI actually
  *    shows.
  *  - **text / fontSizePx / textColorHex / outlineColorHex /
- *    outlineThicknessPx / fadeEnabled / fontId**: strict `!==`.  These
+ *    outlineThicknessPx / fadeDurationSec / fontId**: strict `!==`.  These
  *    fields are either discrete (integers, enums, hex strings, booleans)
  *    or carry no display-precision concept, so no tolerance applies.
  *
@@ -73,7 +73,7 @@ export function isEditedFromOriginal(e: SubtitleEntry): boolean {
     e.textColorHex !== o.textColorHex ||
     e.outlineColorHex !== o.outlineColorHex ||
     e.outlineThicknessPx !== o.outlineThicknessPx ||
-    e.fadeEnabled !== o.fadeEnabled ||
+    e.fadeDurationSec !== o.fadeDurationSec ||
     e.fontId !== o.fontId ||
     // REQ-20260613-016 / v1.2.2 機能A — per-row layout fields.
     // Strict equality for the enums + integer margin; the layout knobs

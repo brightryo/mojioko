@@ -6,6 +6,7 @@ import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
+import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
@@ -146,6 +147,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // current selection session so the slider thumb stays where the user
   // left it (same pattern as colorDraftText/Outline above).
   const [outlineSliderDraft, setOutlineSliderDraft] = useState<number>(0)
+  // REQ-20260615-050 — bulk fade draft.  Same "remember last applied"
+  // semantics as the colour / outline drafts so the slider thumb stays
+  // where the user left it across selection changes.  Initial value
+  // matches the legacy "fade OFF" semantics (= 0 = no fade).
+  const [fadeSliderDraft, setFadeSliderDraft] = useState<number>(0)
 
   // REQ-047 #1: same persist-then-re-seed pattern as the colour drafts.
   // Previously the size input was uncontrolled and cleared on blur
@@ -180,6 +186,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftText(pickFirstSelectedColor(selectedRowIds, 'text'))
     setColorDraftOutline(pickFirstSelectedColor(selectedRowIds, 'outline'))
     setOutlineSliderDraft(0)
+    setFadeSliderDraft(0)
     setSizeDraft(pickFirstSelectedSize(selectedRowIds))
     const layout = pickFirstSelectedLayout(selectedRowIds)
     if (layout !== null) {
@@ -328,9 +335,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     )
   }
 
-  function handleFadeChange(checked: boolean) {
+  function handleFadeDurationCommit(next: number) {
+    setFadeSliderDraft(next)
     applyBulk(
-      { fadeEnabled: checked },
+      { fadeDurationSec: next },
       t('bulk.history.fade', { count: selectedRowIds.size })
     )
   }
@@ -635,10 +643,15 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               ariaLabel={t('bulk.outlineWidth')}
             />
           </label>
-          {/* Fade */}
+          {/* REQ-20260615-050 — fade slider replaces the legacy ON/OFF
+              Switch.  Same visual rhythm as the Outline-width row above. */}
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('bulk.fade')}</span>
-            <Switch onCheckedChange={handleFadeChange} />
+            <FadeDurationSlider
+              value={fadeSliderDraft}
+              onCommit={handleFadeDurationCommit}
+              ariaLabel={t('bulk.fade')}
+            />
           </label>
         </div>
 

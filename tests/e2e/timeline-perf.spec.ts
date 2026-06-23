@@ -215,7 +215,7 @@ test('timeline render volume — zoom slider drag vs playhead tick', async () =>
       const w = window as unknown as {
         __mojioko_test: {
           ui: { setState: (s: unknown) => void; getState: () => { videoSeekRequestSec: number | null; videoCurrentTimeSec: number } }
-          project: { setState: (s: unknown) => void; getState: () => { entries: ReadonlyArray<{ id: string; startSec: number; endSec: number; text: string; fontSizePx: number; textColorHex: string; outlineColorHex: string; outlineThicknessPx: number; fadeEnabled: boolean; isDeleted: boolean; isEdited: boolean; original: unknown }> } }
+          project: { setState: (s: unknown) => void; getState: () => { entries: ReadonlyArray<{ id: string; startSec: number; endSec: number; text: string; fontSizePx: number; textColorHex: string; outlineColorHex: string; outlineThicknessPx: number; fadeDurationSec: number; isDeleted: boolean; isEdited: boolean; original: unknown }> } }
         }
         __mojioko_profile: Record<string, number>
         __mojioko_profile_times?: Record<string, number>

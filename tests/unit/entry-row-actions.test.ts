@@ -27,7 +27,7 @@ function makeEntry(overrides: Partial<SubtitleEntry> = {}): SubtitleEntry {
     textColorHex: '#ffffff',
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
-    fadeEnabled: false,
+    fadeDurationSec: 0,
     fontId: undefined,
     ...makeEntryLayoutDefaults()
   }

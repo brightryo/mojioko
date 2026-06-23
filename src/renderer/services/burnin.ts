@@ -11,7 +11,6 @@ export interface BurninOptions {
   burnin: BurninPosition
   encoderSetting: EncoderSetting
   audioMode: AudioMode
-  fadeDurationSec: number
   subtitleBackground: SubtitleBackground
   outputContainer: OutputContainer
   /** Currently selected subtitle font.  Forwarded to libass via the ASS Style. */
@@ -40,7 +39,6 @@ export async function startBurnin(
     burnin: opts.burnin,
     encoderSetting: opts.encoderSetting,
     audioMode: opts.audioMode,
-    fadeDurationSec: opts.fadeDurationSec,
     subtitleBackground: opts.subtitleBackground,
     outputContainer: opts.outputContainer,
     fontId: opts.fontId,

@@ -31,7 +31,8 @@ export function ExportFrameButton() {
   const video = useProjectStore((s) => s.video)
   const entries = useProjectStore((s) => s.entries)
   const activeFontId = useSettingsStore((s) => s.activeFontId)
-  const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
+  // REQ-20260615-050 — fade lives per-entry; the still uses each entry's
+  // own `fadeDurationSec`, no global slice is read here.
   const currentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
 
   const [open, setOpen] = useState(false)
@@ -79,7 +80,6 @@ export function ExportFrameButton() {
         format,
         includeSubtitles,
         entries: includeSubtitles ? entries : undefined,
-        fadeDurationSec,
         subtitleBackground: {
           enabled: BURNIN_DEFAULTS.subtitleBackground.enabled,
           color: BURNIN_DEFAULTS.subtitleBackground.color,

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
+import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { RowFontSelector } from '@/components/subtitle-table/row-font-selector'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
@@ -249,8 +250,9 @@ export function TimelineBlockInspector({
   function handleOutlineThicknessCommit(v: number) {
     applyStyleEdit(t('history.editStroke'), { outlineThicknessPx: v })
   }
-  function handleFadeChange(checked: boolean) {
-    applyStyleEdit(t('history.editFade'), { fadeEnabled: checked })
+  function handleFadeDurationCommit(next: number) {
+    if (next === entry.fadeDurationSec) return
+    applyStyleEdit(t('history.editFade'), { fadeDurationSec: next })
   }
   function handleFontChange(next: FontId | undefined) {
     if (next === entry.fontId) return
@@ -806,15 +808,21 @@ export function TimelineBlockInspector({
                 />
               </div>
             </div>
-            {/* Fade */}
+            {/* REQ-20260615-050 — fade duration slider (0–0.5 s, 0 = OFF).
+                Same visual rhythm as Outline width above so the two
+                slider rows form a consistent block within the 字幕
+                section. */}
             <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.fade')}</label>
-              <Switch
-                checked={entry.fadeEnabled}
-                onCheckedChange={handleFadeChange}
-                disabled={isFrozen}
-                className="scale-75 origin-right"
-              />
+              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.fade')}</label>
+              <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
+                <FadeDurationSlider
+                  value={entry.fadeDurationSec}
+                  onCommit={handleFadeDurationCommit}
+                  disabled={isFrozen}
+                  ariaLabel={t('styleCell.fade')}
+                  fullWidth
+                />
+              </div>
             </div>
           </>
         )}
