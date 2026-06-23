@@ -375,6 +375,20 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     useHistoryStore.getState().clear()
     resetStep3Settings()
 
+    // REQ-20260615-063 — when the sidecar reports zero segments (audio
+    // had no detectable speech under the current VAD threshold, OR the
+    // selected track is silent / empty), surface the result as a
+    // warning toast and keep the user on STEP 1 with the drawer reset
+    // to idle so they can adjust the track / VAD / language and retry.
+    // Navigating to STEP 2 with an empty entry list would dump them
+    // into an empty editor with no context for what went wrong.
+    if (finalEntries.length === 0) {
+      toast.warning(t('toast.transcriptionNoSpeech'))
+      setDrawerRenderState('idle')
+      setDrawerErrorMessage('')
+      return
+    }
+
     setEntries(finalEntries)
     toast.success(t('toast.transcriptionComplete', { count: finalEntries.length }))
     // REQ-20260615-055 — close the drawer + reset its state before the
