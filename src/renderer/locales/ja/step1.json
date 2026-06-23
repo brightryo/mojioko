@@ -128,7 +128,6 @@
     "videoLoaded": "ファイルを読み込みました",
     "probeError": "ファイルの解析に失敗しました: {{error}}",
     "transcriptionComplete": "文字起こし完了 · {{count}}件",
-    "transcriptionNoSpeech": "音声から発話を検出できませんでした。トラック・言語・VAD 設定を変えて再実行してください。",
     "modelDownloadFailed": "ダウンロードに失敗しました: {{error}}",
     "modelNotInstalled": "モデル {{model}} が未ダウンロードです",
     "transcriptionError": "文字起こしに失敗しました: {{error}}",

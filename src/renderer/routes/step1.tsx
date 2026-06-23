@@ -375,22 +375,23 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     useHistoryStore.getState().clear()
     resetStep3Settings()
 
-    // REQ-20260615-063 — when the sidecar reports zero segments (audio
-    // had no detectable speech under the current VAD threshold, OR the
-    // selected track is silent / empty), surface the result as a
-    // warning toast and keep the user on STEP 1 with the drawer reset
-    // to idle so they can adjust the track / VAD / language and retry.
-    // Navigating to STEP 2 with an empty entry list would dump them
-    // into an empty editor with no context for what went wrong.
-    if (finalEntries.length === 0) {
-      toast.warning(t('toast.transcriptionNoSpeech'))
-      setDrawerRenderState('idle')
-      setDrawerErrorMessage('')
-      return
-    }
-
+    // REQ-20260615-064 A — overrides the REQ-063 keep-on-STEP-1 path.
+    // Zero-segment runs are a normal flow: the user is allowed to
+    // transcribe a silent / no-speech track and then build the
+    // subtitle list manually with the "追加" button.  So treat zero
+    // segments as a successful completion and proceed to STEP 2 with
+    // an empty `entries` array.  The drawer's success toast is
+    // suppressed in that case — STEP 2 surfaces a single-shot
+    // "発話を検出できませんでした" hint on mount instead so the
+    // notification lives next to the editor it is talking about
+    // (`lastTranscriptionWasEmpty` flag in ui-store; STEP 2 reads &
+    // clears it on mount).
     setEntries(finalEntries)
-    toast.success(t('toast.transcriptionComplete', { count: finalEntries.length }))
+    if (finalEntries.length === 0) {
+      useUiStore.getState().setLastTranscriptionWasEmpty(true)
+    } else {
+      toast.success(t('toast.transcriptionComplete', { count: finalEntries.length }))
+    }
     // REQ-20260615-055 — close the drawer + reset its state before the
     // route change so the next time the user lands on STEP1 the drawer
     // opens clean in the `idle` state.
