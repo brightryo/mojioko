@@ -16,6 +16,24 @@ import { scrubState } from '@/lib/scrub-state'
 // boundary semantics.
 
 /**
+ * REQ-20260615-052 — `<input type=...>` values where Space inserts a
+ * literal space character.  Mirrors the same constant in
+ * VideoPreviewPanel (the Space shortcut bails on these, on `<textarea>`,
+ * and on contenteditable; every other input type — range / number /
+ * checkbox / radio / button — falls through to the global play/pause
+ * handler).  See the VideoPreviewPanel definition for the full
+ * rationale.
+ */
+const TEXT_INPUT_TYPES = new Set([
+  'text',
+  'search',
+  'url',
+  'email',
+  'password',
+  'tel',
+])
+
+/**
  * Convert a local file path to a `mojioko-media://` URL served by the
  * custom protocol registered in the main process.  Same scheme used by
  * VideoPreviewPanel — the protocol streams arbitrary local media bytes
@@ -142,23 +160,23 @@ export function AudioPreviewPanel() {
     }
   }
 
-  // REQ-20260615-051 B — capture-phase Space shortcut, mirroring the
-  // VideoPreviewPanel binding (see that file for the full rationale).
-  // Bubble phase pre-REQ let any focused element either stopPropagation
-  // or run its scroll default before the document handler fired, so
-  // the inspector's `overflow-y: auto` body would scroll instead of
-  // toggling playback.  Capture phase + preventDefault + stopPropagation
-  // guarantees the shortcut wins.  Text-input contexts (input /
-  // textarea / contenteditable) still pass through so the user can
-  // type a literal space.
+  // REQ-20260615-051 B / REQ-20260615-052 — capture-phase Space shortcut,
+  // mirroring the VideoPreviewPanel binding (see that file for the full
+  // rationale).  REQ-052 narrowed the input bail to text-like types
+  // only so `<input type="range">` (sliders) and `<input type="number">`
+  // still hand Space over to the play/pause shortcut.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.code !== 'Space' || e.ctrlKey || e.altKey || e.metaKey) return
       const active = document.activeElement as HTMLElement | null
       if (active) {
-        const tag = active.tagName.toLowerCase()
-        if (tag === 'input' || tag === 'textarea') return
         if (active.isContentEditable) return
+        const tag = active.tagName.toLowerCase()
+        if (tag === 'textarea') return
+        if (tag === 'input') {
+          const inputType = ((active as HTMLInputElement).type || 'text').toLowerCase()
+          if (TEXT_INPUT_TYPES.has(inputType)) return
+        }
       }
       e.preventDefault()
       e.stopPropagation()

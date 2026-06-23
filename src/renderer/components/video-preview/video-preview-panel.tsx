@@ -29,6 +29,28 @@ import type { SubtitleEntry } from '../../../shared/types'
 // ---------------------------------------------------------------------------
 
 /**
+ * REQ-20260615-052 — `<input type=...>` values where Space inserts a
+ * literal space character into the field.  The global play/pause
+ * shortcut bails on these (and on `<textarea>` / contenteditable) so
+ * the user can type a space; every other input type (range, number,
+ * checkbox, radio, file, button, etc.) is left to the document
+ * shortcut, where Space's default action would otherwise be either
+ * "scroll the focused scroll container" or "activate the focused
+ * control" — neither of which is what the user wants here.
+ *
+ * `<input>` with empty / missing `type` defaults to `"text"`, so this
+ * set matches both the spec text-input types and the implicit default.
+ */
+const TEXT_INPUT_TYPES = new Set([
+  'text',
+  'search',
+  'url',
+  'email',
+  'password',
+  'tel',
+])
+
+/**
  * Convert a local file path to a `mojioko-media://` URL served by the
  * custom protocol registered in the main process.
  *
@@ -474,39 +496,40 @@ export function VideoPreviewPanel() {
   // without unmounting the <video>, so playback is naturally preserved
   // (and the user keeps explicit control via the play/pause button).
 
-  // REQ-20260615-051 B — global Space keydown shortcut for play / pause.
+  // REQ-20260615-051 B / REQ-20260615-052 — global Space keydown
+  // shortcut for play / pause.
   //
   // Attached at the **capture phase** of `document` so the handler always
   // runs BEFORE the focused element's own keydown handler, and BEFORE the
   // browser dispatches Space's default action (page scroll for the
   // nearest scroll container with focus inside it, or button activation
-  // for focused buttons).  Pre-REQ this listener was on the bubble phase,
-  // which meant:
+  // for focused buttons).  Capture phase + `preventDefault` +
+  // `stopPropagation` together guarantee the shortcut wins regardless
+  // of the focused element.
   //
-  //   - An inspector control (segmented radio, slider, etc.) could
-  //     stopPropagation on keydown and the document listener never
-  //     fired, so `preventDefault` was never called and the inspector's
-  //     `overflow-y: auto` body scrolled by the browser default.
-  //   - Even without stopPropagation, the scroll default ran before
-  //     the bubble-phase handler could call `preventDefault`.
-  //
-  // Capture phase + `preventDefault` + `stopPropagation` together
-  // guarantee the shortcut wins regardless of the focused element.
-  //
-  // Exception: when a text-input context is focused (`<input>`,
-  // `<textarea>`, or any element under a `contenteditable` ancestor)
-  // we let Space through so the user can type a literal space.
+  // Exception: when a focused element is one where Space inserts a
+  // literal space character we let it through.  REQ-052 narrowed this
+  // to the inputs that actually do that — `<textarea>`, contenteditable,
+  // and `<input>` whose `type` is text-like.  REQ-051's first cut
+  // bailed for every `<input>` regardless of type, which roped in
+  // `<input type="range">` (the outline-thickness / fade-duration
+  // sliders) and `<input type="number">` (size).  Range/number/etc. do
+  // NOT insert a space on Space — the browser scrolls instead — so
+  // bailing for them re-introduced the scroll bug the REQ-051 capture
+  // phase was supposed to fix.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.code !== 'Space' || e.ctrlKey || e.altKey || e.metaKey) return
       const active = document.activeElement as HTMLElement | null
       if (active) {
-        const tag = active.tagName.toLowerCase()
-        if (tag === 'input' || tag === 'textarea') return
-        // `isContentEditable` is true both for the contenteditable root
-        // AND for any descendant that inherits the flag, so this single
-        // check covers focus on a child inside the editable region.
         if (active.isContentEditable) return
+        const tag = active.tagName.toLowerCase()
+        if (tag === 'textarea') return
+        if (tag === 'input') {
+          // Empty / missing `type` defaults to "text" per spec.
+          const inputType = ((active as HTMLInputElement).type || 'text').toLowerCase()
+          if (TEXT_INPUT_TYPES.has(inputType)) return
+        }
       }
       e.preventDefault()
       e.stopPropagation()
