@@ -1488,7 +1488,16 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               zoom + snap, and the "keep subtitles in a single row"
               recommendation — the last item is the practical reason
               the popover was added (preview vs. burnin diverge when
-              clips stack into multiple rows). */}
+              clips stack into multiple rows).
+
+              REQ-20260615-058 — the bare HelpCircle icon button was
+              easy to miss in the toolbar's icon strip.  The trigger
+              now wears a 1-px outline + the localised "使い方" /
+              "How to use" label so it reads as a distinct affordance
+              ("the guide to this whole pane") rather than a per-row
+              inline `?` tooltip.  Colour stays neutral grey so the
+              row of inline help icons elsewhere in the app does not
+              start looking inconsistent. */}
           <Popover>
             <PopoverTrigger asChild>
               <button
@@ -1496,11 +1505,12 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 title={t('timeline.help.button')}
                 aria-label={t('timeline.help.button')}
                 className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
-                  'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150',
+                  'inline-flex h-7 items-center gap-1 rounded-md border border-line bg-surface-0 px-2 text-caption text-fg-tertiary',
+                  'hover:bg-surface-2 hover:text-fg-primary hover:border-line-strong transition-colors duration-150',
                 )}
               >
                 <HelpCircle className="h-3.5 w-3.5" />
+                <span>{t('timeline.help.button')}</span>
               </button>
             </PopoverTrigger>
             <PopoverContent
