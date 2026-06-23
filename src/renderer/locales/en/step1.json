@@ -105,6 +105,17 @@
     "transcribingWaiting": "Transcribing…",
     "transcribing": "Transcribing… {{percent}}%"
   },
+  "drawer": {
+    "title": "Start transcription",
+    "subtitle": "Configure Whisper and pick the audio track, then run.",
+    "advancedSection": "Advanced settings",
+    "trackSection": "Audio track",
+    "startRun": "Start",
+    "cancelRun": "Cancel",
+    "close": "Close",
+    "runningLabel": "Transcribing…",
+    "errorTitle": "Transcription failed"
+  },
   "dialog": {
     "cancelTitle": "Cancel transcription?",
     "cancelBody": "The current transcription will be stopped and any partial results will be discarded.",

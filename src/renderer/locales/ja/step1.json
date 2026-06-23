@@ -105,6 +105,17 @@
     "transcribingWaiting": "文字起こし中…",
     "transcribing": "文字起こし中… {{percent}}%"
   },
+  "drawer": {
+    "title": "文字起こしを開始",
+    "subtitle": "Whisper の詳細設定と音声トラックを選んで実行します。",
+    "advancedSection": "詳細設定",
+    "trackSection": "音声トラック",
+    "startRun": "文字起こし開始",
+    "cancelRun": "キャンセル",
+    "close": "閉じる",
+    "runningLabel": "文字起こし中…",
+    "errorTitle": "文字起こし失敗"
+  },
   "dialog": {
     "cancelTitle": "文字起こしをキャンセルしますか？",
     "cancelBody": "現在の処理を中断します。途中結果は破棄されます。",

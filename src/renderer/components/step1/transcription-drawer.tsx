@@ -1,0 +1,272 @@
+import { useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { AlertCircle, Loader2, Mic, Play, Settings2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { HelpIcon } from '@/components/help-icon'
+import { WhisperAdvancedControls } from '@/components/whisper-advanced-controls/whisper-advanced-controls'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet'
+import { cn } from '@/lib/utils'
+import { useSettingsStore } from '@/stores/settings-store'
+import { useProjectStore } from '@/stores/project-store'
+import type { AudioTrack } from '../../../shared/types'
+
+/**
+ * REQ-20260615-055 — STEP1's transcription drawer.
+ *
+ * Mirrors the layout / lifecycle of `step2/burnin-drawer.tsx` so the two
+ * routes feel like siblings: idle → progress (`running`) → success
+ * closes + navigates to STEP2, failure stays in the drawer with an
+ * error panel.  The X close affordance, backdrop click, and Esc are
+ * blocked while running (via `hideClose` + the parent's
+ * `handleSheetOpenChange` guard) so the user has to use the explicit
+ * Cancel button mid-run.
+ *
+ * The advanced-knob form body reuses `WhisperAdvancedControls` —
+ * identical to the form rendered in the Settings dialog's Whisper tab,
+ * so editing on either surface stays in sync via the shared
+ * `settingsStore.transcriptionAdvanced` slice.  REQ-055 retired the
+ * separate `TranscriptionAdvancedDialog`; this drawer is now the only
+ * Step-1 surface that opens the engine knobs.
+ *
+ * Track selection moved here from the main InputVideo card.  The main
+ * card now displays a read-only summary of available tracks; the
+ * drawer's track grid is where the user actually commits the choice.
+ */
+export type TranscriptionRenderState = 'idle' | 'running' | 'error'
+
+export interface TranscriptionDrawerProps {
+  open: boolean
+  onOpenChange: (next: boolean) => void
+  /** Available audio tracks.  Empty when no video is loaded. */
+  audioTracks: AudioTrack[]
+  /** State of the in-flight transcription run; idle when not running. */
+  renderState: TranscriptionRenderState
+  /** 0–100 percent progress while `renderState === 'running'`. */
+  progress: number
+  /** Error message when `renderState === 'error'`. */
+  errorMessage: string
+  /** Whether the start button should be enabled.  Driven by the parent
+   *  (`canStart` = video + track + model + advanced loaded). */
+  canStart: boolean
+  /** Fires when the user presses 文字起こし開始 inside the drawer. */
+  onStart: () => void
+  /** Fires when the user presses キャンセル mid-run; routes through the
+   *  same cancel-confirmation dialog the parent already owned. */
+  onCancel: () => void
+}
+
+export function TranscriptionDrawer({
+  open,
+  onOpenChange,
+  audioTracks,
+  renderState,
+  progress,
+  errorMessage,
+  canStart,
+  onStart,
+  onCancel,
+}: TranscriptionDrawerProps) {
+  const { t } = useTranslation(['step1', 'step3', 'common'])
+
+  const transcriptionAdvanced = useSettingsStore((s) => s.transcriptionAdvanced)
+  const setTranscriptionAdvanced = useSettingsStore((s) => s.setTranscriptionAdvanced)
+  const resetTranscriptionAdvanced = useSettingsStore((s) => s.resetTranscriptionAdvanced)
+  const selectedTrack = useProjectStore((s) => s.selectedTrackIndex)
+  const setSelectedTrack = useProjectStore((s) => s.setSelectedTrackIndex)
+
+  // REQ-20260615-055 — autoselect the first available track on first open
+  // so the user never sees an empty selection state.  Mirrors the
+  // existing main-card heuristic (`handleVideoLoaded` already picks the
+  // first track on load).  We re-assert it here in case the project
+  // store was hydrated without one.
+  const hasValidSelection = useMemo(
+    () => audioTracks.some((tr) => tr.index === selectedTrack),
+    [audioTracks, selectedTrack],
+  )
+  useEffect(() => {
+    if (!open || hasValidSelection || audioTracks.length === 0) return
+    setSelectedTrack(audioTracks[0].index)
+  }, [open, hasValidSelection, audioTracks, setSelectedTrack])
+
+  // Mirrors burnin-drawer's open-state guard — block close while
+  // running so X / backdrop / Esc cannot abandon a live transcription.
+  function handleSheetOpenChange(next: boolean) {
+    if (!next && renderState === 'running') return
+    onOpenChange(next)
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={handleSheetOpenChange}>
+      <SheetContent
+        side="right"
+        className="max-w-[640px]"
+        hideClose={renderState === 'running'}
+      >
+        <SheetHeader className="flex-row items-baseline gap-3 pr-10">
+          <SheetTitle>{t('drawer.title')}</SheetTitle>
+          <SheetDescription className="flex-1">
+            {t('drawer.subtitle')}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-4">
+          {renderState === 'idle' && (
+            <>
+              {/* Whisper Advanced controls — same form bound to the same
+                  settings slice that the Settings dialog edits, so the two
+                  surfaces stay in sync (REQ-019 #1).  Hosted inside an
+                  outlined card to mirror burnin-drawer's section panels. */}
+              <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-3">
+                <div className="flex items-center gap-1.5">
+                  <Settings2 className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
+                  <Label>{t('drawer.advancedSection')}</Label>
+                </div>
+                <WhisperAdvancedControls
+                  transcriptionAdvanced={transcriptionAdvanced}
+                  onUpdate={setTranscriptionAdvanced}
+                  onReset={resetTranscriptionAdvanced}
+                />
+              </div>
+
+              {/* Audio track grid — same visual treatment as the legacy
+                  main-card grid (compact rows with a left-edge dot and
+                  inline transcription-target Badge on selection). */}
+              <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-3">
+                <div className="flex items-center gap-1.5">
+                  <Mic className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
+                  <Label>{t('drawer.trackSection')}</Label>
+                  <HelpIcon content={t('audioTracks.help')} />
+                  {audioTracks.length > 0 && (
+                    <Badge variant="muted" className="ml-1">
+                      {t('audioTracks.tracksCount', { count: audioTracks.length })}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-body-sm text-fg-muted">
+                  {t('audioTracks.description')}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {audioTracks.map((track) => (
+                    <button
+                      key={track.index}
+                      type="button"
+                      onClick={() => setSelectedTrack(track.index)}
+                      className={cn(
+                        'flex items-center gap-2 rounded-md border px-3 py-1.5 text-left transition-colors duration-150',
+                        selectedTrack === track.index
+                          ? 'border-primary/50 bg-primary/5'
+                          : 'border-line hover:bg-surface-2/40',
+                      )}
+                    >
+                      <span className="h-2 w-2 rounded-full flex-shrink-0 bg-primary" />
+                      <span
+                        className={cn(
+                          'text-body font-medium flex-shrink-0',
+                          selectedTrack === track.index
+                            ? 'text-primary'
+                            : 'text-fg-primary',
+                        )}
+                      >
+                        {t('audioTracks.trackLabel', { index: track.index })}
+                      </span>
+                      <span className="text-body-sm text-fg-muted truncate min-w-0">
+                        {`${track.channels} · ${track.sampleRateHz / 1000}kHz · ${track.codec}`}
+                      </span>
+                      {selectedTrack === track.index && (
+                        <Badge variant="success" className="ml-auto flex-shrink-0">
+                          {t('audioTracks.transcriptionTarget')}
+                        </Badge>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {renderState === 'running' && (
+            <div className="flex items-center justify-center py-12">
+              <div className="rounded-xl border border-line bg-surface-1 px-6 py-8 w-full max-w-md space-y-5">
+                <div className="flex items-center justify-center">
+                  <Loader2 className="h-7 w-7 text-primary animate-spin" />
+                </div>
+                <div className="space-y-3">
+                  <div className="h-2 rounded-full bg-surface-2 overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-200 rounded-full"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-body-sm text-fg-tertiary">
+                    <span>{t('drawer.runningLabel')}</span>
+                    <span className="font-mono tabular-nums">{progress}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {renderState === 'error' && (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-6 py-6 space-y-3">
+              <div className="flex items-center gap-2 text-destructive">
+                <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                <p className="text-headline font-semibold">
+                  {t('drawer.errorTitle')}
+                </p>
+              </div>
+              {errorMessage && (
+                <p className="text-body-sm text-fg-tertiary break-all font-mono selectable">
+                  {errorMessage.slice(-400)}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer.  Matches burnin-drawer's pattern: Close on the left
+            (ghost, neutral grey, REQ-20260615-041 trio), primary action
+            on the right.  Running state collapses to right-aligned
+            Cancel only and X is also hidden via `hideClose`. */}
+        <div
+          className={cn(
+            'mt-auto flex items-center gap-2 px-4 py-3 border-t border-line',
+            renderState === 'running' ? 'justify-end' : 'justify-between',
+          )}
+        >
+          {renderState === 'running' ? (
+            <Button variant="danger" size="md" onClick={onCancel}>
+              {t('drawer.cancelRun')}
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={() => onOpenChange(false)}
+              >
+                {t('drawer.close')}
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={onStart}
+                disabled={!canStart}
+              >
+                <Play className="h-4 w-4 mr-1.5" />
+                {t('drawer.startRun')}
+              </Button>
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}

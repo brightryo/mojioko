@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/dialog'
 import { HelpIcon } from '@/components/help-icon'
 import { WhisperModelManager } from '@/components/whisper-model-manager/whisper-model-manager'
-import { TranscriptionAdvancedDialog } from '@/components/step1/transcription-advanced-dialog'
+import { TranscriptionDrawer } from '@/components/step1/transcription-drawer'
 import { SubtitleStyleDialog } from '@/components/step1/subtitle-style-dialog'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -101,8 +101,18 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const [transcribeProgress, setTranscribeProgress] = useState(0)
   const [thumbnail, setThumbnail] = useState<string | null>(null)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
-  const [advancedDialogOpen, setAdvancedDialogOpen] = useState(false)
   const [subtitleStyleDialogOpen, setSubtitleStyleDialogOpen] = useState(false)
+  // REQ-20260615-055 — STEP1 now uses a right-sliding drawer for the
+  // "confirm advanced settings + pick track + run" leg, mirroring
+  // STEP2's burnin-drawer.  Pre-REQ the footer Start button kicked off
+  // `handleStartTranscription` directly; it now opens this drawer and
+  // the drawer's own Start button is the run trigger.
+  const [transcriptionDrawerOpen, setTranscriptionDrawerOpen] = useState(false)
+  // Drawer render state — idle while configuring, running during the
+  // ffmpeg/Whisper pipeline, error if the run failed (cancel returns
+  // to idle so the user can adjust + retry without reopening).
+  const [drawerRenderState, setDrawerRenderState] = useState<'idle' | 'running' | 'error'>('idle')
+  const [drawerErrorMessage, setDrawerErrorMessage] = useState('')
   // Mutually-exclusive accordion section.  Exactly one of the two main
   // panels (Whisper model picker / Input video) is expanded at any time,
   // so the vertical budget stays predictable regardless of state.
@@ -186,6 +196,11 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
     setIsTranscribing(true)
     setTranscribeProgress(0)
+    // REQ-20260615-055 — drive the drawer's render state too so the
+    // body switches from the configuration form to the spinner /
+    // progress bar / error panel as the run progresses.
+    setDrawerRenderState('running')
+    setDrawerErrorMessage('')
     window.electronAPI.menuSetTranscribing(true)
 
     const segments: { startSec: number; endSec: number; text: string }[] = []
@@ -217,6 +232,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     transcriptionRunRef.current = run
 
     let cancelled = false
+    let errorReason: string | null = null
     try {
       await run.promise
     } catch (err) {
@@ -226,6 +242,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         toast.info(t('toast.transcriptionCancelled'))
       } else {
         toast.error(t('toast.transcriptionError', { error: msg }))
+        errorReason = msg
       }
     } finally {
       setIsTranscribing(false)
@@ -233,7 +250,20 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
       window.electronAPI.menuSetTranscribing(false)
     }
 
-    if (cancelled) return
+    if (cancelled) {
+      // Back to idle so the user can adjust the form and re-run without
+      // having to reopen the drawer.
+      setDrawerRenderState('idle')
+      return
+    }
+    if (errorReason !== null) {
+      // Surface the failure inside the drawer's error panel; the toast
+      // already fired above so the user has both surfaces in case the
+      // toast was missed.
+      setDrawerRenderState('error')
+      setDrawerErrorMessage(errorReason)
+      return
+    }
 
     // Capture the active font ID at transcription time so subsequent
     // settings changes do not retroactively repaint already-transcribed rows.
@@ -347,6 +377,12 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
     setEntries(finalEntries)
     toast.success(t('toast.transcriptionComplete', { count: finalEntries.length }))
+    // REQ-20260615-055 — close the drawer + reset its state before the
+    // route change so the next time the user lands on STEP1 the drawer
+    // opens clean in the `idle` state.
+    setTranscriptionDrawerOpen(false)
+    setDrawerRenderState('idle')
+    setDrawerErrorMessage('')
     navigate('/step2')
   }
 
@@ -382,15 +418,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
   // Footer right slot — split-button cluster on the idle path:
   //   [ Start transcription | ▼ ]
-  // Left half is the primary action (kicks off Whisper exactly as before).
-  // Right half opens the Subtitle Style dialog so users have a one-click
-  // path to verify seed style at the moment of decision, without
-  // requiring a separate trigger elsewhere in the layout.  Two adjacent
-  // primary buttons share their background; the inner edges have their
-  // rounded corner removed and a dark hairline divider sits between them
-  // so the boundary is visually unambiguous.  During transcription the
-  // caret is hidden and the main button collapses to a plain rounded
-  // Cancel / Stop button — seed style is locked mid-run.
+  // REQ-20260615-055: the Start half no longer runs Whisper directly.
+  // It now opens the TranscriptionDrawer where the user confirms advanced
+  // settings + audio track and presses the drawer's own Start button.
+  // The caret half still opens the Subtitle Style dialog for one-click
+  // seed-style verification.  During transcription the caret is hidden
+  // and the main button collapses to a plain rounded Cancel button —
+  // seed style is locked mid-run.
   // REQ-028: also hidden in audio-only mode — there is no burn-in step
   // for audio, so the seed-style dialog has no consumer.
   const showStyleCaret = !isTranscribing && !isAudioOnly
@@ -400,7 +434,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         variant="primary"
         size="md"
         disabled={!isTranscribing && !canStart}
-        onClick={isTranscribing ? handleCancelClick : handleStartTranscription}
+        onClick={isTranscribing ? handleCancelClick : () => setTranscriptionDrawerOpen(true)}
         className={cn(showStyleCaret && 'rounded-r-none')}
       >
         {isTranscribing ? (
@@ -464,12 +498,16 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
           (isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
         )}>
+          {/* REQ-20260615-055 — the gear-icon "詳細設定" trigger was
+              retired here.  The advanced controls now live inside the
+              TranscriptionDrawer that opens from the footer Start
+              button, so STEP1's main screen carries only the model
+              picker + input file + read-only track list. */}
           <WhisperModelManager
             onActiveModelChange={setActiveModelId}
             disabled={isLoading || isTranscribing}
             isOpen={openSection === 'whisper'}
             onOpenChange={(open) => setOpenSection(open ? 'whisper' : 'inputVideo')}
-            onOpenAdvanced={() => setAdvancedDialogOpen(true)}
           />
         </div>
 
@@ -694,23 +732,22 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
               )}
             </div>
             <p className="text-body-sm text-muted-foreground">{t('audioTracks.description')}</p>
+            {/* REQ-20260615-055 — the track grid is now a READ-ONLY
+                summary on the main screen.  Selection moved into the
+                TranscriptionDrawer where the user commits the choice
+                immediately before running.  The visual treatment is
+                preserved (dot, label, spec line, "対象" Badge) so the
+                summary reads as a familiar status row — only the
+                pointer affordance was removed. */}
             <div className="grid grid-cols-2 gap-2">
               {audioTracks.map((track) => (
-                <button
+                <div
                   key={track.index}
-                  type="button"
-                  onClick={() => setSelectedTrack(track.index)}
                   className={cn(
-                    // Compact layout — name and spec sit on a single line
-                    // with the indicator dot on the left so 6+ tracks fit
-                    // without the card sprawling.  The "transcription
-                    // target" badge moves inline at the right edge instead
-                    // of absolute-positioned, freeing the row's vertical
-                    // budget.
-                    'flex items-center gap-2 rounded-md border px-3 py-1.5 text-left transition-colors duration-150',
+                    'flex items-center gap-2 rounded-md border px-3 py-1.5',
                     selectedTrack === track.index
                       ? 'border-primary/50 bg-primary/5'
-                      : 'border-border hover:bg-accent/40'
+                      : 'border-border',
                   )}
                 >
                   <span className="h-2 w-2 rounded-full flex-shrink-0 bg-primary" />
@@ -728,7 +765,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
                       {t('audioTracks.transcriptionTarget')}
                     </Badge>
                   )}
-                </button>
+                </div>
               ))}
             </div>
           </div>
@@ -749,9 +786,20 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         onOpenChange={setSubtitleStyleDialogOpen}
         thumbnail={thumbnail}
       />
-      <TranscriptionAdvancedDialog
-        open={advancedDialogOpen}
-        onOpenChange={setAdvancedDialogOpen}
+      {/* REQ-20260615-055 — right-sliding drawer for the run leg.
+          Hosts the Whisper advanced controls + audio-track selection
+          + Start / Cancel.  See `transcription-drawer.tsx` for the
+          lifecycle that mirrors STEP2's burnin-drawer. */}
+      <TranscriptionDrawer
+        open={transcriptionDrawerOpen}
+        onOpenChange={setTranscriptionDrawerOpen}
+        audioTracks={audioTracks}
+        renderState={drawerRenderState}
+        progress={transcribeProgress}
+        errorMessage={drawerErrorMessage}
+        canStart={canStart}
+        onStart={handleStartTranscription}
+        onCancel={handleCancelClick}
       />
 
       {/* Cancel transcription dialog */}
