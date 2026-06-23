@@ -779,24 +779,35 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               swatchOnly
             />
           </label>
-          {/* Outline width */}
+          {/* Outline width — REQ-20260615-061 B: slider now wrapped in
+              a w-[50%] cell + `fullWidth`, matching the inspector's
+              outline / fade rows so the bar's left and right edges
+              line up between this panel and the inspector. */}
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('bulk.outlineWidth')}</span>
-            <OutlineThicknessSlider
-              value={outlineSliderDraft}
-              onCommit={handleOutlineWidthCommit}
-              ariaLabel={t('bulk.outlineWidth')}
-            />
+            <div className="w-[50%]">
+              <OutlineThicknessSlider
+                value={outlineSliderDraft}
+                onCommit={handleOutlineWidthCommit}
+                ariaLabel={t('bulk.outlineWidth')}
+                fullWidth
+              />
+            </div>
           </label>
           {/* REQ-20260615-050 — fade slider replaces the legacy ON/OFF
-              Switch.  Same visual rhythm as the Outline-width row above. */}
+              Switch.  REQ-20260615-061 B: same w-[50%] + fullWidth
+              treatment as Outline width above so the two bars share
+              their start / end X and align with the inspector. */}
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('bulk.fade')}</span>
-            <FadeDurationSlider
-              value={fadeSliderDraft}
-              onCommit={handleFadeDurationCommit}
-              ariaLabel={t('bulk.fade')}
-            />
+            <div className="w-[50%]">
+              <FadeDurationSlider
+                value={fadeSliderDraft}
+                onCommit={handleFadeDurationCommit}
+                ariaLabel={t('bulk.fade')}
+                fullWidth
+              />
+            </div>
           </label>
         </div>
 
