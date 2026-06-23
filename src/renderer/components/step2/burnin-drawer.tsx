@@ -534,18 +534,22 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
           </DialogHeader>
 
           <div className="space-y-3 pt-1">
-            {/* REQ-20260615-053 A — the three action buttons no longer
-                stretch full-width via `grid-cols-1`.  A horizontal row
-                with a fixed-content size makes them read as buttons
-                instead of as informational cards (the full-width
-                treatment visually merged with the donation card
-                below).  Centred so the primary 動画再生 lands under the
-                dialog title; the two secondary buttons flank it. */}
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            {/* REQ-20260615-054 A — the three workflow buttons now sit
+                in an equal-width `grid-cols-3` row.  Each `<Button>`
+                gets `w-full` so the grid cell's stretch propagates to
+                the underlying inline-flex root, giving identical widths
+                regardless of label length (Japanese "動画再生" vs
+                English "Show in Folder" no longer drift apart).  REQ-053
+                already centred the buttons; the grid keeps that
+                horizontal centring AND adds the equal-width guarantee.
+                "フィードバックを送る" was shortened to "フィードバック"
+                / "Feedback" so the column doesn't dominate. */}
+            <div className="grid grid-cols-3 gap-2">
               <Button
                 variant="primary"
                 size="md"
                 onClick={() => { void shellOpenPath(completedPath) }}
+                className="w-full"
               >
                 <Play className="h-4 w-4 mr-1.5" />
                 {t('completion.playVideo')}
@@ -554,6 +558,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                 variant="secondary"
                 size="md"
                 onClick={() => { void shellShowInFolder(completedPath) }}
+                className="w-full"
               >
                 <FolderOpen className="h-4 w-4 mr-1.5" />
                 {t('completion.showInFolder')}
@@ -568,6 +573,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                   const lang = i18n.language === 'ja' ? 'ja' : 'en'
                   void shellOpenExternal(GITHUB_PAGES_LOCALIZED[lang].feedback)
                 }}
+                className="w-full"
               >
                 <MessageSquare className="h-4 w-4 mr-1.5" />
                 {t('completion.sendFeedback')}
@@ -585,31 +591,32 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               <DonationContent />
             </div>
 
-            {/* REQ-20260615-053 B — optional-credit copy section.
-                Lives between the donation card and the Close footer so
-                a user who just finished a render can copy the credit
-                line straight to clipboard before sharing.  Two rows:
-                Japanese on top, English below.  Each row shows the
-                copy button (with a Copy → Check icon flip on success)
-                and the credit text in muted grey so the user can read
-                what they're about to copy.  Strings live in step3
-                locale (`completion.credit*`) so the labels and credit
-                bodies follow the active UI language. */}
+            {/* REQ-20260615-053 B / REQ-20260615-054 B — optional-credit
+                copy section.  Lives between the donation card and the
+                Close footer.  Order: English on top, Japanese on the
+                bottom — most uploads on this app's target platforms
+                (YouTube / X) reach an international audience first, so
+                the English credit gets the primary slot.  Each row
+                shows the copy button (Copy → Check icon flip on
+                success) and the credit text in muted grey so the user
+                can read what they're about to copy.  Strings live in
+                step3 locale (`completion.credit*`) so the labels and
+                credit bodies follow the active UI language. */}
             <div className="rounded-xl border border-line bg-surface-1 p-3 space-y-2.5">
               <p className="text-body-sm font-medium text-fg-secondary px-1">
                 {t('completion.creditHeading')}
               </p>
               <CreditCopyRow
-                buttonLabel={t('completion.creditCopyJa')}
-                creditText={t('completion.creditTextJa')}
-                copied={copiedCreditKey === 'ja'}
-                onCopy={() => copyCredit('ja', t('completion.creditTextJa'))}
-              />
-              <CreditCopyRow
                 buttonLabel={t('completion.creditCopyEn')}
                 creditText={t('completion.creditTextEn')}
                 copied={copiedCreditKey === 'en'}
                 onCopy={() => copyCredit('en', t('completion.creditTextEn'))}
+              />
+              <CreditCopyRow
+                buttonLabel={t('completion.creditCopyJa')}
+                creditText={t('completion.creditTextJa')}
+                copied={copiedCreditKey === 'ja'}
+                onCopy={() => copyCredit('ja', t('completion.creditTextJa'))}
               />
             </div>
           </div>
