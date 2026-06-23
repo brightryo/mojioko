@@ -50,6 +50,13 @@
     "showInFolder": "Open folder",
     "sendFeedback": "Send feedback",
     "supportTitle": "Support MOJIOKO",
+    "creditHeading": "If you'd like to credit MOJIOKO (optional)",
+    "creditCopyJa": "Copy Japanese credit",
+    "creditCopyEn": "Copy English credit",
+    "creditTextJa": "字幕作成：MOJIOKO（https://brightryo.github.io/mojioko）",
+    "creditTextEn": "Subtitles made with MOJIOKO (https://brightryo.github.io/mojioko)",
+    "creditCopied": "Copied to clipboard",
+    "creditCopyFailed": "Failed to copy",
     "close": "Close"
   },
   "error": {

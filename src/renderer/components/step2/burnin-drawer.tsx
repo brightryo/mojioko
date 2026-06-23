@@ -12,7 +12,9 @@ import {
   MessageSquare,
   Shield,
   X,
-  Film
+  Film,
+  Copy,
+  Check
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -88,7 +90,30 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
   const [overwriteCandidate, setOverwriteCandidate] = useState<string | null>(null)
   const [effectiveEncoder, setEffectiveEncoder] = useState<H264Encoder | null>(null)
   const [completionOpen, setCompletionOpen] = useState(false)
+  // REQ-20260615-053 B — tracks which credit row was most recently
+  // copied so the icon can flip to a check for ~1.5 s.  Cleared either
+  // by the timer or by re-opening the dialog.
+  const [copiedCreditKey, setCopiedCreditKey] = useState<'ja' | 'en' | null>(null)
   const burninHandleRef = useRef<BurninHandle | null>(null)
+
+  // REQ-20260615-053 B — copy a credit string to the clipboard and
+  // surface short feedback (icon flip + toast).  `key` identifies
+  // which row was clicked so the icon swap is row-local.  Async
+  // because the Clipboard API resolves a Promise.
+  async function copyCredit(key: 'ja' | 'en', text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedCreditKey(key)
+      toast.success(t('completion.creditCopied'))
+      // Restore the copy icon after a beat so a repeat copy still
+      // animates.
+      window.setTimeout(() => {
+        setCopiedCreditKey((current) => (current === key ? null : current))
+      }, 1500)
+    } catch {
+      toast.error(t('completion.creditCopyFailed'))
+    }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -509,8 +534,14 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
           </DialogHeader>
 
           <div className="space-y-3 pt-1">
-            {/* Action buttons stack — each closes the dialog after firing. */}
-            <div className="grid grid-cols-1 gap-2">
+            {/* REQ-20260615-053 A — the three action buttons no longer
+                stretch full-width via `grid-cols-1`.  A horizontal row
+                with a fixed-content size makes them read as buttons
+                instead of as informational cards (the full-width
+                treatment visually merged with the donation card
+                below).  Centred so the primary 動画再生 lands under the
+                dialog title; the two secondary buttons flank it. */}
+            <div className="flex flex-wrap items-center justify-center gap-2">
               <Button
                 variant="primary"
                 size="md"
@@ -552,6 +583,34 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                 </span>
               </div>
               <DonationContent />
+            </div>
+
+            {/* REQ-20260615-053 B — optional-credit copy section.
+                Lives between the donation card and the Close footer so
+                a user who just finished a render can copy the credit
+                line straight to clipboard before sharing.  Two rows:
+                Japanese on top, English below.  Each row shows the
+                copy button (with a Copy → Check icon flip on success)
+                and the credit text in muted grey so the user can read
+                what they're about to copy.  Strings live in step3
+                locale (`completion.credit*`) so the labels and credit
+                bodies follow the active UI language. */}
+            <div className="rounded-xl border border-line bg-surface-1 p-3 space-y-2.5">
+              <p className="text-body-sm font-medium text-fg-secondary px-1">
+                {t('completion.creditHeading')}
+              </p>
+              <CreditCopyRow
+                buttonLabel={t('completion.creditCopyJa')}
+                creditText={t('completion.creditTextJa')}
+                copied={copiedCreditKey === 'ja'}
+                onCopy={() => copyCredit('ja', t('completion.creditTextJa'))}
+              />
+              <CreditCopyRow
+                buttonLabel={t('completion.creditCopyEn')}
+                creditText={t('completion.creditTextEn')}
+                copied={copiedCreditKey === 'en'}
+                onCopy={() => copyCredit('en', t('completion.creditTextEn'))}
+              />
             </div>
           </div>
 
@@ -632,6 +691,48 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between py-1">
       <span className="text-callout font-semibold text-fg-tertiary">{label}</span>
       <span className="text-body-sm text-fg-primary font-mono tabular-nums">{value}</span>
+    </div>
+  )
+}
+
+/**
+ * REQ-20260615-053 B — single credit-copy block (button + preview).
+ *
+ * Visually a tight stack: secondary ghost button with the Copy icon
+ * on top, then the credit string itself rendered in muted grey so the
+ * user can see exactly what will land on the clipboard.  Icon flips
+ * to a Check for ~1.5 s after a successful copy (driven by the parent's
+ * `copied` prop).  The credit text is selectable; the button just
+ * makes the common "copy whole line" gesture one click.
+ */
+function CreditCopyRow({
+  buttonLabel,
+  creditText,
+  copied,
+  onCopy,
+}: {
+  buttonLabel: string
+  creditText: string
+  copied: boolean
+  onCopy: () => void
+}) {
+  return (
+    <div className="space-y-1">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onCopy}
+        className="px-2"
+        aria-label={buttonLabel}
+      >
+        {copied
+          ? <Check className="h-3.5 w-3.5 mr-1.5 text-primary" />
+          : <Copy className="h-3.5 w-3.5 mr-1.5" />}
+        {buttonLabel}
+      </Button>
+      <p className="text-body-sm text-fg-muted break-all px-2 select-text">
+        {creditText}
+      </p>
     </div>
   )
 }
