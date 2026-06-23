@@ -18,6 +18,8 @@
   "audioTracks": {
     "label": "Audio tracks",
     "tracksCount": "{{count}} tracks",
+    "tracksDetected": "{{count}} tracks detected",
+    "notDetected": "No tracks",
     "trackLabel": "Track {{index}}",
     "notSelected": "No track selected",
     "absent": "—",
@@ -106,9 +108,9 @@
     "transcribing": "Transcribing… {{percent}}%"
   },
   "drawer": {
-    "title": "Start transcription",
-    "subtitle": "Configure Whisper and pick the audio track, then run.",
-    "advancedSection": "Advanced settings",
+    "title": "Transcription",
+    "subtitle": "Review Whisper settings and the audio track, then run.",
+    "advancedSection": "Whisper settings",
     "trackSection": "Audio track",
     "startRun": "Start",
     "cancelRun": "Cancel",

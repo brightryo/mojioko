@@ -18,6 +18,8 @@
   "audioTracks": {
     "label": "音声トラック",
     "tracksCount": "{{count}}トラック",
+    "tracksDetected": "{{count}}トラック検出",
+    "notDetected": "検出無し",
     "trackLabel": "トラック {{index}}",
     "notSelected": "トラック未選択",
     "absent": "なし",
@@ -106,9 +108,9 @@
     "transcribing": "文字起こし中… {{percent}}%"
   },
   "drawer": {
-    "title": "文字起こしを開始",
-    "subtitle": "Whisper の詳細設定と音声トラックを選んで実行します。",
-    "advancedSection": "詳細設定",
+    "title": "文字起こし",
+    "subtitle": "Whisper 設定と音声トラックを確認して実行します。",
+    "advancedSection": "Whisper設定",
     "trackSection": "音声トラック",
     "startRun": "文字起こし開始",
     "cancelRun": "キャンセル",
