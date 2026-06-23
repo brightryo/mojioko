@@ -4,7 +4,7 @@ import { existsSync, rmSync, statfsSync } from 'fs'
 import { join, parse } from 'path'
 import { Channels } from '../../shared/ipc-channels'
 import { transcribe, checkModelInstalled } from '../services/transcription-sidecar'
-import { downloadModel } from '../services/model-downloader'
+import { downloadModel, isModelFormatStale } from '../services/model-downloader'
 import { getModelsDir, getBinPath } from '../lib/paths'
 import { loadSettings, saveSettings } from '../services/settings-store'
 import type { TranscriptionStartRequest } from '../../shared/ipc-contracts'
@@ -18,10 +18,14 @@ type ErrResult = { ok: false; error: { code: string; message: string } }
 // Expected download sizes per model
 // ---------------------------------------------------------------------------
 
+// REQ-20260615-065 S-2 — v1.3.0 ship models.  turbo is listed first
+// so the renderer's natural top-of-list "recommended" treatment puts
+// it where the user's eye lands.  `displayName` carries the
+// user-facing string; the renderer adds the "推奨" / "Recommended"
+// chip itself based on `id === 'large-v3-turbo'`.
 const MODEL_META: Array<{ id: WhisperModelId; displayName: string; expectedSizeBytes: number }> = [
-  { id: 'small',   displayName: 'small',   expectedSizeBytes: 500_000_000 },
-  { id: 'medium',  displayName: 'medium',  expectedSizeBytes: 1_500_000_000 },
-  { id: 'large-v3',displayName: 'large-v3',expectedSizeBytes: 3_000_000_000 }
+  { id: 'large-v3-turbo', displayName: 'large-v3-turbo', expectedSizeBytes: 1_550_000_000 },
+  { id: 'large-v3',       displayName: 'large-v3',       expectedSizeBytes: 3_000_000_000 },
 ]
 
 function getDiskFree(dirPath: string): { freeBytes: number; drive: string } {
@@ -62,6 +66,23 @@ async function buildModelsState(): Promise<ModelsState> {
     const status: ModelStatus = !installed
       ? 'not-installed'
       : activeModelId === meta.id ? 'active' : 'installed'
+
+    // REQ-20260615-065 S-6 — log-only stale-format detection.  Pre-
+    // v1.3.0 downloads lack a meta file and are NOT flagged (Phase 0
+    // confirmed Systran CT2 layout is unchanged from fw 1.0.3).  Only
+    // meta files whose `formatGeneration` is strictly below the
+    // current constant surface here, and only via the main-process
+    // log — there is no UI prompt in v1.3.0.
+    if (installed) {
+      const modelDir = join(modelsDir, meta.id)
+      if (isModelFormatStale(modelDir)) {
+        log.warn(
+          `[ipc/transcription] model ${meta.id} was downloaded under an older format generation. ` +
+          `Consider re-downloading from Settings -> Whisper.`
+        )
+      }
+    }
+
     return {
       id: meta.id,
       displayName: meta.displayName,
@@ -78,8 +99,13 @@ async function buildModelsState(): Promise<ModelsState> {
 // Handler registration
 // ---------------------------------------------------------------------------
 
-/** Allowed Whisper model identifiers. Any other value is rejected at the IPC boundary. */
-const VALID_MODEL_IDS: ReadonlySet<string> = new Set(['small', 'medium', 'large-v3'])
+// REQ-20260615-065 S-2 — the IPC-boundary allowlist is now just the
+// v1.3.0 ship models.  Pre-1.3 IDs ('small' / 'medium') would already
+// have been migrated to 'large-v3-turbo' by the settings-store
+// hydrate pass (REQ-065 S-4) before they reach this point; a stray
+// deprecated ID arriving here is treated as invalid and rejected,
+// which surfaces sooner than letting it flow into a 404 download.
+const VALID_MODEL_IDS: ReadonlySet<string> = new Set(['large-v3', 'large-v3-turbo'])
 
 function assertValidModelId(modelId: unknown): asserts modelId is WhisperModelId {
   if (typeof modelId !== 'string' || !VALID_MODEL_IDS.has(modelId)) {
@@ -205,8 +231,10 @@ export function registerTranscriptionHandlers(): void {
 
       const settings = await loadSettings()
       if (settings.activeModelId === modelId) {
-        // Auto-activate another installed model
-        const PRIORITY: WhisperModelId[] = ['medium', 'small', 'large-v3']
+        // Auto-activate another installed model.  REQ-20260615-065 S-2:
+        // priority order now matches the v1.3.0 ship-model line-up
+        // (turbo = recommended → large-v3 = higher quality).
+        const PRIORITY: WhisperModelId[] = ['large-v3-turbo', 'large-v3']
         let next: WhisperModelId | null = null
         for (const candidate of PRIORITY) {
           if (candidate !== modelId) {

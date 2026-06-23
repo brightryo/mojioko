@@ -42,14 +42,17 @@ import type { ModelInfo, ModelsState, WhisperModelId } from '../../../shared/typ
 // Constants
 // ---------------------------------------------------------------------------
 
+// REQ-20260615-065 S-5 — display strings keyed by the v1.3.0 ship
+// model IDs only.  Pre-1.3 IDs (`small` / `medium`) cannot reach
+// here because the settings hydrate pass migrates them to
+// `large-v3-turbo` before the renderer ever sees the model list.
 const MODEL_INSTALL_TIME: Record<string, Record<string, string>> = {
-  ja: { small: '約2〜10分', medium: '約5〜30分', 'large-v3': '約10〜60分' },
-  en: { small: '~2–10 min', medium: '~5–30 min', 'large-v3': '~10–60 min' }
+  ja: { 'large-v3-turbo': '約5〜30分', 'large-v3': '約10〜60分' },
+  en: { 'large-v3-turbo': '~5–30 min', 'large-v3': '~10–60 min' }
 }
 
 const DESC_KEY: Record<string, string> = {
-  small: 'whisperModel.descSmall',
-  medium: 'whisperModel.descMedium',
+  'large-v3-turbo': 'whisperModel.descLargeV3Turbo',
   'large-v3': 'whisperModel.descLargeV3'
 }
 
@@ -321,14 +324,12 @@ export function WhisperModelManager({
                 {t('whisperModel.descriptionLong')}
               </p>
 
-              {/* 3-column model grid.  REQ-20260615-012: capped at 57rem
-                  (912 px ≈ the un-capped grid width before REQ-20260615-012
-                  pulled the Advanced button out of the flex row).  Combined
-                  with `mx-auto` and the now-1018 px parent (= section card
-                  inner), this yields ~53 px of equal left/right margin
-                  while keeping each card at ~296 px — virtually identical
-                  to the pre-REQ-011 visible size. */}
-              <div className="grid grid-cols-3 gap-3 mx-auto max-w-[57rem]">
+              {/* REQ-20260615-065 S-5 — grid collapses from 3 columns
+                  to 2 (turbo + large-v3 only).  Width cap pulled in
+                  proportionally so each card stays ~296 px wide
+                  matching the pre-S-5 visible size; `mx-auto` keeps
+                  the pair centred within the section card. */}
+              <div className="grid grid-cols-2 gap-3 mx-auto max-w-[38rem]">
                 {state
                   ? state.models.map((model) => (
                       <ModelCard
@@ -344,8 +345,17 @@ export function WhisperModelManager({
                         t={t}
                       />
                     ))
-                  : [0, 1, 2].map((i) => <ModelCardSkeleton key={i} />)}
+                  : [0, 1].map((i) => <ModelCardSkeleton key={i} />)}
               </div>
+
+              {/* REQ-20260615-065 S-5 — standing note explaining that
+                  the model line-up can shift between releases.  Lives
+                  inside the accordion so it appears next to the
+                  picker without using up vertical space in the
+                  collapsed header. */}
+              <p className="text-caption text-fg-muted leading-relaxed text-center">
+                {t('whisperModel.updateNote')}
+              </p>
 
               {/* Bottom status bar */}
               <div className="rounded-lg border border-line px-4 py-2.5 flex items-center justify-between">
@@ -562,9 +572,21 @@ function ModelCard({
           <p className="text-headline font-semibold text-fg-primary leading-tight">
             {model.displayName}
           </p>
-          <p className={cn('text-body-sm mt-0.5', isActive ? 'text-primary-hover' : 'text-fg-disabled')}>
-            {formatBytes(model.expectedSizeBytes)}
-          </p>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <p className={cn('text-body-sm', isActive ? 'text-primary-hover' : 'text-fg-disabled')}>
+              {formatBytes(model.expectedSizeBytes)}
+            </p>
+            {/* REQ-20260615-065 S-5 — "Recommended" / "推奨" chip on
+                turbo only.  Sits next to the size readout so the
+                signal is visible whether the model is installed or
+                not, and it stays out of the status-badge corner
+                used by Active / Installed. */}
+            {model.id === 'large-v3-turbo' && (
+              <span className="flex-shrink-0 inline-flex items-center text-caption font-medium px-1.5 py-0.5 rounded-full bg-primary/15 text-primary-hover whitespace-nowrap">
+                {t('whisperModel.recommended')}
+              </span>
+            )}
+          </div>
         </div>
         {isInstalled && (
           <span
