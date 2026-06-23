@@ -715,58 +715,28 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             </div>
           </div>
 
-          {/* Audio tracks — absorbed into this card.  Internal divider
-              instead of a separate card so the picker reads as part of
-              "the video you've chosen" rather than a parallel concept.
-              Disabled until a video is loaded. */}
+          {/* REQ-20260615-055 / REQ-20260615-056 — main-screen audio
+              tracks card.  Collapsed to a single summary header:
+              `[Mic] 音声トラック   Nトラック検出 (or 検出無し)`.  The
+              description, the per-track list, and the "対象" badge
+              were retired here — the actual selection happens inside
+              the TranscriptionDrawer.  Disabled tone (opacity-50)
+              until a video is loaded; the row sits on a top divider
+              so it still reads as part of the "video you've chosen"
+              card. */}
           <div className={cn(
-            'border-t border-border/50 pt-3 space-y-3 transition-opacity duration-150',
+            'border-t border-border/50 pt-3 transition-opacity duration-150',
             !video && 'opacity-50 pointer-events-none'
           )}>
             <div className="flex items-center gap-1.5">
               <Mic className="h-4 w-4 text-muted-foreground flex-shrink-0" />
               <Label>{t('audioTracks.label')}</Label>
               <HelpIcon content={t('audioTracks.help')} />
-              {audioTracks.length > 0 && (
-                <Badge variant="muted">{t('audioTracks.tracksCount', { count: audioTracks.length })}</Badge>
-              )}
-            </div>
-            <p className="text-body-sm text-muted-foreground">{t('audioTracks.description')}</p>
-            {/* REQ-20260615-055 — the track grid is now a READ-ONLY
-                summary on the main screen.  Selection moved into the
-                TranscriptionDrawer where the user commits the choice
-                immediately before running.  The visual treatment is
-                preserved (dot, label, spec line, "対象" Badge) so the
-                summary reads as a familiar status row — only the
-                pointer affordance was removed. */}
-            <div className="grid grid-cols-2 gap-2">
-              {audioTracks.map((track) => (
-                <div
-                  key={track.index}
-                  className={cn(
-                    'flex items-center gap-2 rounded-md border px-3 py-1.5',
-                    selectedTrack === track.index
-                      ? 'border-primary/50 bg-primary/5'
-                      : 'border-border',
-                  )}
-                >
-                  <span className="h-2 w-2 rounded-full flex-shrink-0 bg-primary" />
-                  <span className={cn(
-                    'text-body font-medium flex-shrink-0',
-                    selectedTrack === track.index ? 'text-primary' : 'text-foreground'
-                  )}>
-                    {t('audioTracks.trackLabel', { index: track.index })}
-                  </span>
-                  <span className="text-body-sm text-muted-foreground truncate min-w-0">
-                    {`${track.channels} · ${track.sampleRateHz / 1000}kHz · ${track.codec}`}
-                  </span>
-                  {selectedTrack === track.index && (
-                    <Badge variant="success" className="ml-auto flex-shrink-0">
-                      {t('audioTracks.transcriptionTarget')}
-                    </Badge>
-                  )}
-                </div>
-              ))}
+              <Badge variant="muted">
+                {audioTracks.length > 0
+                  ? t('audioTracks.tracksDetected', { count: audioTracks.length })
+                  : t('audioTracks.notDetected')}
+              </Badge>
             </div>
           </div>
                 </div>
