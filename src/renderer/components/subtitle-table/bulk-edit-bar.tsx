@@ -872,26 +872,30 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             <span>{t('styleCell.bgEnabled')}</span>
             <Switch checked={bgEnabledDraft} onCheckedChange={handleBgEnabledToggle} aria-label={t('styleCell.bgEnabled')} />
           </label>
+          {/* REQ-20260615-062 — background colour now uses the same
+              segmented control the inspector uses (and the bulk-edit
+              horizontal / vertical rows already use), replacing the
+              lone <select> that was visually inconsistent with the
+              rest of the panel.  Same value bindings: clicking 黒/白
+              applies the choice to every selected entry through the
+              existing `handleBgColorChange` path.  Mixed selections
+              render with no active segment, matching how H / V
+              segments behave when the selection's values disagree. */}
           <label className={cn(
             'flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground',
             !bgEnabledDraft && 'opacity-40'
           )}>
             <span>{t('styleCell.bgColor')}</span>
-            <select
+            <BulkSegmentGroup<'black' | 'white'>
               value={bgColorDraft}
-              onChange={(e) => handleBgColorChange(e.target.value as 'black' | 'white')}
+              onChange={(v) => handleBgColorChange(v)}
               disabled={!bgEnabledDraft}
-              className={cn(
-                'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
-                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30',
-                'border-border',
-                'disabled:cursor-not-allowed'
-              )}
-              aria-label={t('styleCell.bgColor')}
-            >
-              <option value="black">{t('background.black')}</option>
-              <option value="white">{t('background.white')}</option>
-            </select>
+              ariaLabel={t('styleCell.bgColor')}
+              options={[
+                { value: 'black', label: t('background.black') },
+                { value: 'white', label: t('background.white') },
+              ]}
+            />
           </label>
           <label className={cn(
             'flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground',
