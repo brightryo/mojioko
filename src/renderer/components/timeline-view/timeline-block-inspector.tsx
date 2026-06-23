@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
+import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { RowFontSelector } from '@/components/subtitle-table/row-font-selector'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
@@ -300,14 +301,10 @@ export function TimelineBlockInspector({
     applyStyleEdit(t('history.editLayout'),
       patchWithPreservedOffset({ verticalPosition: v }))
   }
-  function handleVerticalMarginBlur(e: React.FocusEvent<HTMLInputElement>) {
-    const raw = parseInt(e.target.value, 10)
-    if (isNaN(raw)) return
-    const clamped = Math.max(0, Math.min(300, raw))
-    if (clamped === entry.verticalMarginPx) return
-    applyStyleEdit(t('history.editMargin'),
-      patchWithPreservedOffset({ verticalMarginPx: clamped }))
-  }
+  // REQ-20260615-059 B — `handleVerticalMarginBlur` retired here.
+  // Margin commits now flow through `NumberStepperInput`'s `onCommit`
+  // (still wrapped with `patchWithPreservedOffset` to preserve the
+  // REQ-20260615-037 pinned-row offset).
 
   // REQ-20260615-033 — Offset X/Y row.
   //
@@ -368,15 +365,9 @@ export function TimelineBlockInspector({
       subtitleBackground: { ...entry.subtitleBackground, color },
     })
   }
-  function handleBackgroundOpacityBlur(e: React.FocusEvent<HTMLInputElement>) {
-    const raw = parseInt(e.target.value, 10)
-    if (isNaN(raw)) return
-    const clamped = Math.max(0, Math.min(100, raw))
-    if (clamped === entry.subtitleBackground.opacityPercent) return
-    applyStyleEdit(t('history.editBackground'), {
-      subtitleBackground: { ...entry.subtitleBackground, opacityPercent: clamped },
-    })
-  }
+  // REQ-20260615-059 B — `handleBackgroundOpacityBlur` retired.
+  // Opacity commits now flow through `NumberStepperInput`'s `onCommit`
+  // inline below.
 
   // REQ-082: Ctrl+Enter / Esc removed.  handleBlur (= focus leaves the
   // textarea — click elsewhere or close the inspector) commits the
@@ -867,21 +858,28 @@ export function TimelineBlockInspector({
           </div>
           <div className="flex items-center justify-between gap-2">
             <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.marginV')}</label>
-            <input
-              type="number"
+            {/* REQ-20260615-059 B — margin gets the ±10 chevron stepper
+                the size row already uses, so the same wrist-flick keeps
+                margin in step with size adjustments.  Range stays
+                [0, 300] (the legacy blur-clamp); the stepper clamps to
+                the same range via NumberStepperInput's own bounds. */}
+            <NumberStepperInput
+              value={entry.verticalMarginPx}
               min={0}
               max={300}
-              defaultValue={entry.verticalMarginPx}
-              key={entry.verticalMarginPx}
-              onBlur={handleVerticalMarginBlur}
+              step={10}
+              onCommit={(next) => {
+                if (next === entry.verticalMarginPx) return
+                // REQ-20260615-037 — preserve the offset across the
+                // anchor change so pinned rows keep their visual
+                // offset.  Mirrors what the legacy
+                // `handleVerticalMarginBlur` used to do (now retired
+                // in favour of NumberStepperInput's onCommit).
+                applyStyleEdit(t('history.editMargin'),
+                  patchWithPreservedOffset({ verticalMarginPx: next }))
+              }}
               disabled={isFrozen}
-              aria-label={t('subtitlePosition.margin')}
-              className={cn(
-                'w-20 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
-                'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30',
-                'disabled:opacity-40 disabled:cursor-not-allowed',
-                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
-              )}
+              ariaLabel={t('subtitlePosition.margin')}
             />
           </div>
           {/* REQ-20260615-033 — オフセット行.  Displays `posX-anchor.x` /
@@ -995,21 +993,23 @@ export function TimelineBlockInspector({
             !entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none'
           )}>
             <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.bgOpacity')}</label>
-            <input
-              type="number"
+            {/* REQ-20260615-059 B — bg opacity gets the same ±10
+                stepper as size / margin so the inspector's three
+                numeric rows share one input shape.  Range stays
+                [0, 100] %. */}
+            <NumberStepperInput
+              value={entry.subtitleBackground.opacityPercent}
               min={0}
               max={100}
-              defaultValue={entry.subtitleBackground.opacityPercent}
-              key={`${entry.subtitleBackground.opacityPercent}-${entry.subtitleBackground.enabled}`}
-              onBlur={handleBackgroundOpacityBlur}
+              step={10}
+              onCommit={(next) => {
+                if (next === entry.subtitleBackground.opacityPercent) return
+                applyStyleEdit(t('history.editBackground'), {
+                  subtitleBackground: { ...entry.subtitleBackground, opacityPercent: next },
+                })
+              }}
               disabled={isFrozen || !entry.subtitleBackground.enabled}
-              aria-label={t('styleCell.bgOpacity')}
-              className={cn(
-                'w-20 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
-                'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30',
-                'disabled:opacity-40 disabled:cursor-not-allowed',
-                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
-              )}
+              ariaLabel={t('styleCell.bgOpacity')}
             />
           </div>
         </div>
