@@ -151,12 +151,19 @@ function BulkSegmentGroup<T extends string>({
   disabled?: boolean
   ariaLabel: string
 }) {
+  // REQ-20260615-060 A — width + per-segment flex match the inspector's
+  // SegmentGroup (`timeline-block-inspector.tsx:50`):
+  //   - container: `w-[40%] min-w-fit` so H ([左][中央][右]) and V
+  //     ([上][下]) share the same total width across the bar row.
+  //   - each segment: `flex-1` so the available width is split equally
+  //     within a group — V's two cells are now wider than H's three
+  //     instead of all four cells shrinking to their text content.
   return (
     <div
       role="radiogroup"
       aria-label={ariaLabel}
       className={cn(
-        'inline-flex h-7 min-w-fit items-stretch gap-0.5 rounded-md border border-line-strong bg-surface-0 p-0.5',
+        'flex h-7 w-[40%] min-w-fit items-stretch gap-0.5 rounded-md border border-line-strong bg-surface-0 p-0.5',
         disabled && 'opacity-40 pointer-events-none',
       )}
     >
@@ -171,7 +178,7 @@ function BulkSegmentGroup<T extends string>({
             disabled={disabled}
             onClick={() => onChange(o.value)}
             className={cn(
-              'inline-flex items-center justify-center rounded-[3px] px-2 text-caption font-medium transition-colors duration-150',
+              'flex-1 inline-flex items-center justify-center rounded-[3px] px-2 text-caption font-medium transition-colors duration-150',
               'focus:outline-none focus-visible:outline-none',
               selected
                 ? 'bg-primary text-fg-inverse'
@@ -670,6 +677,44 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </button>
       </div>
 
+      {/* REQ-20260615-060 B — auto-line-break + overflow-wrap action row.
+          Relocated from the bottom of the panel to the very top, just
+          under the count/clear row, so it mirrors the inspector pattern
+          where action icons sit at the top of the section.  Wrapped
+          with `border-y` so a hairline sits both above and below the
+          icon row, visually marking it as "actions that apply across
+          the selection" before the styled-property sections below. */}
+      <div className="flex items-center gap-2 border-y border-border/60 py-2">
+        <button
+          type="button"
+          onClick={handleAutoLineBreakApply}
+          title={t('bulk.autoLineBreakHelp')}
+          aria-label={t('bulk.autoLineBreakHelp')}
+          className={cn(
+            'inline-flex items-center justify-center',
+            'h-7 w-7 rounded border bg-input text-foreground',
+            'border-border hover:border-line-strong transition-colors duration-150',
+            'focus:outline-none focus-visible:outline-none',
+          )}
+        >
+          <AlignJustify className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={handleOverflowWrapApply}
+          title={t('bulk.overflowWrapHelp')}
+          aria-label={t('bulk.overflowWrapHelp')}
+          className={cn(
+            'inline-flex items-center justify-center',
+            'h-7 w-7 rounded border bg-input text-foreground',
+            'border-border hover:border-line-strong transition-colors duration-150',
+            'focus:outline-none focus-visible:outline-none',
+          )}
+        >
+          <WrapText className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
       {/* Controls cluster — REQ-20260614-001 補遺⑪ で 字幕 / レイアウト /
           背景色 の 3 セクションにグルーピングし、単一選択 Inspector の
           並びを bulk 側でも踏襲する。Font picker は補遺⑪ までは下の方に
@@ -680,8 +725,12 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       <div className="flex flex-col">
         {/* § 字幕 — Font, Size, Text colour, Outline colour, Outline
             width, Fade.  BulkFontPicker のトリガはアフォーダンス上 label
-            兼用なので、ここでは外側 label を出さず picker 単体を置く。 */}
-        <div className="flex flex-col gap-2 border-t border-border/60 pt-2">
+            兼用なので、ここでは外側 label を出さず picker 単体を置く。
+            REQ-20260615-060 B: the leading `border-t` was retired here
+            because the wrap-actions row above us now wears a
+            `border-y`, which would otherwise double up with this top
+            border into a 2-px line. */}
+        <div className="flex flex-col gap-2 pt-2">
           <div className="text-body font-semibold text-foreground">
             {t('timeline.inspector.subtitleSection')}
           </div>
@@ -856,39 +905,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           </label>
         </div>
 
-        {/* Wrap actions — bulk-only operations, kept at the bottom under
-            its own divider so they read as "apply across selection" not
-            tied to any single field. */}
-        <div className="flex items-center gap-2 border-t border-border/60 pt-2 mt-2">
-          <button
-            type="button"
-            onClick={handleAutoLineBreakApply}
-            title={t('bulk.autoLineBreakHelp')}
-            aria-label={t('bulk.autoLineBreakHelp')}
-            className={cn(
-              'inline-flex items-center justify-center',
-              'h-7 w-7 rounded border bg-input text-foreground',
-              'border-border hover:border-line-strong transition-colors duration-150',
-              'focus:outline-none focus-visible:outline-none'
-            )}
-          >
-            <AlignJustify className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={handleOverflowWrapApply}
-            title={t('bulk.overflowWrapHelp')}
-            aria-label={t('bulk.overflowWrapHelp')}
-            className={cn(
-              'inline-flex items-center justify-center',
-              'h-7 w-7 rounded border bg-input text-foreground',
-              'border-border hover:border-line-strong transition-colors duration-150',
-              'focus:outline-none focus-visible:outline-none'
-            )}
-          >
-            <WrapText className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        {/* REQ-20260615-060 B — the bottom wrap-actions cluster was
+            relocated to the top of the panel (just under the
+            count/clear row), matching the inspector's "action icons
+            at the top of the section" pattern.  See the row above
+            the controls cluster. */}
       </div>
     </div>
   )
