@@ -18,7 +18,12 @@ export interface TranscriptionStartRequest {
     textColorHex: string
     outlineColorHex: string
     outlineThicknessPx: number
-    fadeEnabled: boolean
+    /**
+     * REQ-20260615-050 — seeded onto each transcribed SubtitleEntry's
+     * `fadeDurationSec`.  `0` = no fade, `0.1`–`0.5` is the in/out
+     * ramp in seconds.  Replaces the legacy `fadeEnabled` boolean.
+     */
+    fadeDurationSec: number
   }
   advanced: TranscriptionAdvancedParams
 }
@@ -31,8 +36,9 @@ export interface BurninStartRequest {
   burnin: BurninPosition
   encoderSetting: EncoderSetting
   audioMode: AudioMode
-  /** Fade-in/out duration in seconds for \fad() ASS tag. */
-  fadeDurationSec: number
+  // REQ-20260615-050 — global `fadeDurationSec` removed from the burn-in
+  // request.  Each SubtitleEntry now carries its own `fadeDurationSec`
+  // so the ASS writer reads it per-Dialogue.
   subtitleBackground: SubtitleBackground
   /**
    * Output container choice.  When `'mp4'`, ffmpeg is invoked with
@@ -77,7 +83,7 @@ export interface ExportFrameRequest {
    * reused verbatim for visual fidelity.
    */
   entries?: SubtitleEntry[]
-  fadeDurationSec?: number
+  // REQ-20260615-050 — same per-entry consolidation as BurninStartRequest.
   subtitleBackground?: SubtitleBackground
   fontId?: FontId
 }

@@ -34,7 +34,8 @@ export interface TranscriptionOptions {
     textColorHex: string
     outlineColorHex: string
     outlineThicknessPx: number
-    fadeEnabled: boolean
+    /** REQ-20260615-050 — seed for the per-entry fade.  `0` = no fade. */
+    fadeDurationSec: number
   }
   advanced: TranscriptionAdvancedParams
 }

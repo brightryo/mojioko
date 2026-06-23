@@ -95,7 +95,7 @@ export async function startBurnin(
   onEvent: BurninEventCallback,
   signal: AbortSignal
 ): Promise<void> {
-  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, fadeDurationSec, subtitleBackground, outputContainer, fontId, cuts } = request
+  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, subtitleBackground, outputContainer, fontId, cuts } = request
 
   // REQ-074 1d: when cuts is non-empty the ffmpeg run is rebuilt around
   // filter_complex trim+concat (audio + video).  When empty / absent we
@@ -148,7 +148,7 @@ export async function startBurnin(
 
   // Write ASS to temp file (project default goes into Style:, per-row
   // overrides come through as \fn<family> inline tags — see ass-generator).
-  const assContent = generateAss(entriesForAss, video, burnin, fadeDurationSec, subtitleBackground, fontMeta.assFontName)
+  const assContent = generateAss(entriesForAss, video, burnin, subtitleBackground, fontMeta.assFontName)
   const assPath = join(tmpdir(), `mojioko-${randomUUID()}.ass`)
   await fs.writeFile(assPath, assContent, 'utf-8')
 

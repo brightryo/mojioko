@@ -76,6 +76,12 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // copy regardless of subsequent settings edits.
   const setProjectDefaults = useProjectStore((s) => s.setDefaults)
   const transcriptionDefaults = useSettingsStore((s) => s.transcriptionDefaults)
+  // REQ-20260615-050 — fade duration is the only style field that lives
+  // outside `transcriptionDefaults` (it shares the settings-store slot
+  // with the General-tab slider that drives all three surfaces).  Read
+  // it here so the per-entry `fadeDurationSec` seeded onto transcribed
+  // rows comes from the same source the user controls in Settings.
+  const settingsFadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
   // transcriptionAdvanced is needed in handleStartTranscription to feed the
   // Whisper sidecar with the user's tweaked VAD / beam-size / language; the
@@ -194,7 +200,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           textColorHex: runDefaults.textColorHex,
           outlineColorHex: runDefaults.outlineColorHex,
           outlineThicknessPx: runDefaults.outlineThicknessPx,
-          fadeEnabled: runDefaults.fadeEnabled
+          fadeDurationSec: settingsFadeDurationSec,
         },
         advanced: transcriptionAdvanced
       },
@@ -250,7 +256,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         textColorHex: runDefaults.textColorHex,
         outlineColorHex: runDefaults.outlineColorHex,
         outlineThicknessPx: runDefaults.outlineThicknessPx,
-        fadeEnabled: runDefaults.fadeEnabled,
+        fadeDurationSec: settingsFadeDurationSec,
         fontId: runFontId,
         ...makeEntryLayoutDefaults()
       }

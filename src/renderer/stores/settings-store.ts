@@ -70,7 +70,6 @@ export const useSettingsStore = create<SettingsStore>()(
         textColorHex: BURNIN_DEFAULTS.textColorHex,
         outlineColorHex: BURNIN_DEFAULTS.outlineColorHex,
         outlineThicknessPx: BURNIN_DEFAULTS.outlineThicknessPx,
-        fadeEnabled: BURNIN_DEFAULTS.fadeEnabled,
         whisperModel: BURNIN_DEFAULTS.whisperModel
       },
       transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS },
@@ -106,7 +105,30 @@ export const useSettingsStore = create<SettingsStore>()(
         }),
 
       hydrate: (s) => {
+        // REQ-20260615-050 — migration of the legacy fade representation.
+        // Pre-REQ persisted state held two values:
+        //   - `transcriptionDefaults.fadeEnabled: boolean` (default ON/OFF
+        //     for new entries)
+        //   - `fadeDurationSec: number` (global duration, 0.1–0.5)
+        // The new model has a single per-entry / per-setting
+        // `fadeDurationSec ∈ [0, 0.5]` where `0` means no fade.  Migration
+        // rules:
+        //   - explicit `fadeEnabled === false` → settings.fadeDurationSec
+        //     coerced to 0 (user had opted out)
+        //   - any other case (undefined / true) → preserve the stored
+        //     fadeDurationSec, falling back to BURNIN_DEFAULTS.
+        // The legacy `fadeEnabled` field is also stripped from the
+        // `transcriptionDefaults` object so it does not leak forward.
         const td = s.transcriptionDefaults ?? {}
+        const tdLegacy = td as { fadeEnabled?: boolean }
+        const fadeOptedOut = tdLegacy.fadeEnabled === false
+        const migratedFadeDurationSec =
+          fadeOptedOut
+            ? 0
+            : (s.fadeDurationSec ?? BURNIN_DEFAULTS.fadeDurationSec)
+        const tdCleaned: Omit<typeof td, 'fadeEnabled'> & { fadeEnabled?: never } = { ...td }
+        delete (tdCleaned as { fadeEnabled?: boolean }).fadeEnabled
+
         const ta = s.transcriptionAdvanced ?? {}
         set({
           language: s.language,
@@ -115,7 +137,7 @@ export const useSettingsStore = create<SettingsStore>()(
             ? (s.baseColor as BaseColor)
             : 'neutral',
           transcriptionDefaults: {
-            ...td,
+            ...tdCleaned,
             fontSizePx: Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, td.fontSizePx ?? 100)),
             outlineThicknessPx: Math.min(OUTLINE_THICKNESS_MAX_PX, Math.max(0, td.outlineThicknessPx ?? 3))
           },
@@ -128,7 +150,7 @@ export const useSettingsStore = create<SettingsStore>()(
           // Persisted system-wide settings.
           encoder: s.encoder ?? 'auto',
           defaultAudioTrackIndex: s.defaultAudioTrackIndex,
-          fadeDurationSec: s.fadeDurationSec ?? BURNIN_DEFAULTS.fadeDurationSec,
+          fadeDurationSec: migratedFadeDurationSec,
           activeFontId: isFontId(s.activeFontId) ? s.activeFontId : DEFAULT_FONT_ID
         })
       }

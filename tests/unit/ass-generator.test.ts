@@ -58,7 +58,7 @@ function makeEntry(
     textColorHex: '#FFFFFF',
     outlineColorHex: '#000000',
     outlineThicknessPx: 3,
-    fadeEnabled: false,
+    fadeDurationSec: 0,
     ...layoutDefaults,
   }
   return {
@@ -73,7 +73,7 @@ function makeEntry(
 
 describe('generateAss — Style header (REQ-20260613-016 Phase 2)', () => {
   it('emits BOTH Default and WithBox Style rows', () => {
-    const ass = generateAss([], VIDEO, VESTIGIAL_BURNIN, 0.2)
+    const ass = generateAss([], VIDEO, VESTIGIAL_BURNIN)
     const styleLines = ass.split('\n').filter((l) => l.startsWith('Style:'))
     expect(styleLines).toHaveLength(2)
     // Default is BorderStyle=1 (outline+shadow); WithBox is BorderStyle=3 (opaque box).
@@ -84,7 +84,7 @@ describe('generateAss — Style header (REQ-20260613-016 Phase 2)', () => {
   })
 
   it('Style header carries assFontName for both styles', () => {
-    const ass = generateAss([], VIDEO, VESTIGIAL_BURNIN, 0.2, undefined, 'Custom Font Name')
+    const ass = generateAss([], VIDEO, VESTIGIAL_BURNIN, undefined, 'Custom Font Name')
     expect(ass).toMatch(/Style: Default,Custom Font Name,/)
     expect(ass).toMatch(/Style: WithBox,Custom Font Name,/)
   })
@@ -110,7 +110,6 @@ describe('generateAss — per-row alignment (\\an)', () => {
         [makeEntry('e1', 0, 1, 'hi', { horizontalPosition: h, verticalPosition: v })],
         VIDEO,
         VESTIGIAL_BURNIN,
-        0.2,
       )
       const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
       expect(dialogue).toContain(`\\an${expected}`)
@@ -127,7 +126,6 @@ describe('generateAss — per-row MarginV', () => {
       ],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogues = ass.split('\n').filter((l) => l.startsWith('Dialogue:'))
     // Dialogue format: Layer, Start, End, Style, MarginL, MarginR, MarginV, Effect, Text
@@ -142,7 +140,6 @@ describe('generateAss — Style selection (WithBox vs Default)', () => {
       [makeEntry('e1', 0, 1, 'hi')], // default background.enabled=false
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain(',Default,')
@@ -159,7 +156,6 @@ describe('generateAss — Style selection (WithBox vs Default)', () => {
       ],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain(',WithBox,')
@@ -178,7 +174,6 @@ describe('generateAss — Style selection (WithBox vs Default)', () => {
       ],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogues = ass.split('\n').filter((l) => l.startsWith('Dialogue:'))
     expect(dialogues[0]).toContain(',Default,')
@@ -197,7 +192,6 @@ describe('generateAss — \\4c / \\4a color and alpha', () => {
       ],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain('\\4c&H000000&')
@@ -212,7 +206,6 @@ describe('generateAss — \\4c / \\4a color and alpha', () => {
       ],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain('\\4c&H00FFFFFF&')
@@ -227,7 +220,6 @@ describe('generateAss — \\4c / \\4a color and alpha', () => {
       ],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain('\\4a&H00&')
@@ -242,7 +234,6 @@ describe('generateAss — \\4c / \\4a color and alpha', () => {
       ],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain('\\4a&HFF&')
@@ -257,7 +248,6 @@ describe('generateAss — \\4c / \\4a color and alpha', () => {
       ],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     // (1 - 0.5) * 255 = 127.5 → rounds to 128 = 0x80
@@ -278,7 +268,6 @@ describe('generateAss — preserved per-row inline tags', () => {
       ],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain('\\fs64')
@@ -289,23 +278,23 @@ describe('generateAss — preserved per-row inline tags', () => {
     expect(dialogue).toContain('\\bord5')
   })
 
-  it('emits \\fad(durationMs,durationMs) when fadeEnabled=true', () => {
+  // REQ-20260615-050 — fade is per-entry; the writer reads
+  // `entry.fadeDurationSec` directly and emits `\fad` only when > 0.
+  it('emits \\fad(durationMs,durationMs) when entry.fadeDurationSec > 0', () => {
     const ass = generateAss(
-      [makeEntry('e1', 0, 1, 'hi', { fadeEnabled: true })],
+      [makeEntry('e1', 0, 1, 'hi', { fadeDurationSec: 0.3 })],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.3, // 300 ms
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain('\\fad(300,300)')
   })
 
-  it('omits \\fad when fadeEnabled=false', () => {
+  it('omits \\fad when entry.fadeDurationSec is 0 (REQ-050 OFF)', () => {
     const ass = generateAss(
-      [makeEntry('e1', 0, 1, 'hi', { fadeEnabled: false })],
+      [makeEntry('e1', 0, 1, 'hi', { fadeDurationSec: 0 })],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).not.toContain('\\fad')
@@ -319,7 +308,6 @@ describe('generateAss — preserved per-row inline tags', () => {
       ],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogues = ass.split('\n').filter((l) => l.startsWith('Dialogue:'))
     expect(dialogues).toHaveLength(1)
@@ -333,7 +321,6 @@ describe('generateAss — free position \\pos (REQ-20260613-016 Phase 6 / 機能
       [makeEntry('e1', 0, 1, 'pinned', { posX: 100, posY: 200 })],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain('\\pos(100,200)')
@@ -352,7 +339,6 @@ describe('generateAss — free position \\pos (REQ-20260613-016 Phase 6 / 機能
       })],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain('\\an9') // right + top
@@ -370,7 +356,6 @@ describe('generateAss — free position \\pos (REQ-20260613-016 Phase 6 / 機能
       })],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue.split(',').slice(0, 8).join(',')).toMatch(/,0,0,0,/)
@@ -383,7 +368,6 @@ describe('generateAss — free position \\pos (REQ-20260613-016 Phase 6 / 機能
       [makeEntry('e1', 0, 1, 'half', { posX: 100 })],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).not.toContain('\\pos')
@@ -394,7 +378,6 @@ describe('generateAss — free position \\pos (REQ-20260613-016 Phase 6 / 機能
       [makeEntry('e1', 0, 1, 'half', { posY: 200 })],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).not.toContain('\\pos')
@@ -408,7 +391,6 @@ describe('generateAss — free position \\pos (REQ-20260613-016 Phase 6 / 機能
       ],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogues = ass.split('\n').filter((l) => l.startsWith('Dialogue:'))
     expect(dialogues[0]).not.toContain('\\pos')
@@ -426,7 +408,6 @@ describe('generateAss — free position \\pos (REQ-20260613-016 Phase 6 / 機能
       })],
       VIDEO,
       VESTIGIAL_BURNIN,
-      0.2,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain(',WithBox,')

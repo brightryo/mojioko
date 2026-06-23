@@ -95,15 +95,15 @@ export function SubtitleStyleDialog({
           </div>
 
           {/* ── Parameters column ───────────────────────────────────── */}
-          {/* Size / colors / outline / fade / auto line break — shared
-              with the Settings dialog's "Default style" tab via this
-              component, so both surfaces edit identical-looking controls. */}
+          {/* Size / colors / outline / auto line break — shared with the
+              Settings dialog's "Default style" tab via this component.
+              REQ-20260615-050: fade default for new entries moved to the
+              Settings dialog's General-tab FadeDurationSlider. */}
           <DefaultStyleControls
             fontSizePx={defaults.fontSizePx}
             textColorHex={defaults.textColorHex}
             outlineColorHex={defaults.outlineColorHex}
             outlineThicknessPx={defaults.outlineThicknessPx}
-            fadeEnabled={defaults.fadeEnabled}
             autoLineBreak={autoLineBreak}
             onUpdateDefaults={setDefaults}
             onSetAutoLineBreak={setAutoLineBreak}

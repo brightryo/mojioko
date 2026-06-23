@@ -19,7 +19,7 @@ function baseOriginal(): SubtitleEntryOriginal {
     textColorHex: '#ffffff',
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
-    fadeEnabled: false,
+    fadeDurationSec: 0,
     fontId: undefined,
     ...makeEntryLayoutDefaults()
   }
@@ -99,8 +99,11 @@ describe('isEditedFromOriginal — non-time fields use strict equality', () => {
     expect(isEditedFromOriginal(entry({ outlineThicknessPx: 3 }))).toBe(true)
   })
 
-  it('fadeEnabled', () => {
-    expect(isEditedFromOriginal(entry({ fadeEnabled: true }))).toBe(true)
+  it('fadeDurationSec (REQ-20260615-050)', () => {
+    // Default per fixtures = 0 (= no fade); changing to any positive
+    // value flips isEdited true.  Symmetrically a row whose original was
+    // 0.2 and live is 0 is also edited (per-entry value diverges).
+    expect(isEditedFromOriginal(entry({ fadeDurationSec: 0.3 }))).toBe(true)
   })
 
   it('fontId — undefined ↔ undefined is unchanged, undefined → defined is an edit', () => {

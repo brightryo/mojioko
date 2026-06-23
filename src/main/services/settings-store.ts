@@ -26,7 +26,6 @@ function buildDefaults(): AppSettings {
       textColorHex: BURNIN_DEFAULTS.textColorHex,
       outlineColorHex: BURNIN_DEFAULTS.outlineColorHex,
       outlineThicknessPx: BURNIN_DEFAULTS.outlineThicknessPx,
-      fadeEnabled: BURNIN_DEFAULTS.fadeEnabled,
       whisperModel: BURNIN_DEFAULTS.whisperModel
     },
     transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS },

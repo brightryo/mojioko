@@ -74,7 +74,8 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
   const encoderSetting = useSettingsStore((s) => s.encoder)
   const audioMode = useSettingsStore((s) => s.audioMode)
   const setAudioMode = useSettingsStore((s) => s.setAudioMode)
-  const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
+  // REQ-20260615-050 — `fadeDurationSec` is now per-entry and rides inside
+  // every SubtitleEntry, so the drawer no longer reads the global slice.
   const outputContainer = useSettingsStore((s) => s.outputContainer)
   const setOutputContainer = useSettingsStore((s) => s.setOutputContainer)
   const activeFontId = useSettingsStore((s) => s.activeFontId)
@@ -209,7 +210,6 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
       },
       encoderSetting,
       audioMode,
-      fadeDurationSec,
       subtitleBackground: {
         enabled: BURNIN_DEFAULTS.subtitleBackground.enabled,
         color: BURNIN_DEFAULTS.subtitleBackground.color,

@@ -281,7 +281,7 @@ export function duplicateRow(
     textColorHex: entry.textColorHex,
     outlineColorHex: entry.outlineColorHex,
     outlineThicknessPx: entry.outlineThicknessPx,
-    fadeEnabled: entry.fadeEnabled,
+    fadeDurationSec: entry.fadeDurationSec,
     fontId: entry.fontId,
     // REQ-20260613-016 / v1.2.2 機能A+B: copy per-row layout / background /
     // free-position fields from the source row.  subtitleBackground is

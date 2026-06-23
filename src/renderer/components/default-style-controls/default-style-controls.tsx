@@ -13,20 +13,22 @@ interface DefaultStyleControlsProps {
   textColorHex: string
   outlineColorHex: string
   outlineThicknessPx: number
-  fadeEnabled: boolean
   autoLineBreak: boolean
   /**
-   * Updates one or more of the 5 transcription-default style fields.
+   * Updates one or more of the 4 transcription-default style fields.
    * Implementations write these to whichever store owns the defaults
    * (SubtitleStyleDialog currently uses projectStore.defaults; the Settings
    * dialog uses settingsStore.transcriptionDefaults).
+   *
+   * REQ-20260615-050 — `fadeEnabled` was retired; the per-entry fade
+   * duration default lives on `settingsStore.fadeDurationSec` (the
+   * General-tab slider), separate from this style-defaults form.
    */
   onUpdateDefaults: (patch: {
     fontSizePx?: number
     textColorHex?: string
     outlineColorHex?: string
     outlineThicknessPx?: number
-    fadeEnabled?: boolean
   }) => void
   /** autoLineBreak lives on settingsStore directly (not inside transcriptionDefaults). */
   onSetAutoLineBreak: (v: boolean) => void
@@ -53,7 +55,6 @@ export function DefaultStyleControls({
   textColorHex,
   outlineColorHex,
   outlineThicknessPx,
-  fadeEnabled,
   autoLineBreak,
   onUpdateDefaults,
   onSetAutoLineBreak
@@ -162,24 +163,11 @@ export function DefaultStyleControls({
         />
       </div>
 
-      {/* Fade */}
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-1">
-          <Label>{t('subtitleDefaults.fade')}</Label>
-          <HelpIcon content={t('subtitleDefaults.helpFade')} />
-        </div>
-        <div className="flex items-center gap-2 h-9">
-          <Switch
-            checked={fadeEnabled}
-            onCheckedChange={(v) => onUpdateDefaults({ fadeEnabled: v })}
-          />
-          <span className="text-body-sm text-muted-foreground">
-            {fadeEnabled
-              ? t('subtitleDefaults.fadeOn')
-              : t('subtitleDefaults.fadeOff')}
-          </span>
-        </div>
-      </div>
+      {/* REQ-20260615-050 — the legacy fade Switch was retired here.
+          Fade duration default for new entries is now driven by the
+          Settings dialog's General-tab `FadeDurationSlider`
+          (`settingsStore.fadeDurationSec`), separate from this style
+          defaults form. */}
 
       {/* Auto line break — subtitle-formatting decision (post-
           transcription), so it lives here rather than in the engine

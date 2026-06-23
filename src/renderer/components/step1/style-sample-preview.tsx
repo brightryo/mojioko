@@ -181,7 +181,9 @@ export function StyleSamplePreview({
       textColorHex: defaults.textColorHex,
       outlineColorHex: defaults.outlineColorHex,
       outlineThicknessPx: defaults.outlineThicknessPx,
-      fadeEnabled: defaults.fadeEnabled,
+      // REQ-20260615-050 — fade is irrelevant for a static settings
+      // preview (no playhead, no ramp); seed with `0` (= no fade).
+      fadeDurationSec: 0,
       // REQ-20260613-016 / v1.2.2 機能A Phase 3: SubtitleOverlay now reads
       // layout from the entry itself (no `burnin` prop).  Seed the sample
       // entry's layout from PREVIEW_BURNIN so the preview frame keeps its
@@ -206,8 +208,7 @@ export function StyleSamplePreview({
     defaults.fontSizePx,
     defaults.textColorHex,
     defaults.outlineColorHex,
-    defaults.outlineThicknessPx,
-    defaults.fadeEnabled
+    defaults.outlineThicknessPx
   ])
 
   return (

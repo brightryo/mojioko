@@ -1,5 +1,5 @@
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground } from '../../shared/types'
-import { ASS_MARGIN_LR_PX, FADE_DURATION_SEC_DEFAULT } from '../../shared/constants'
+import { ASS_MARGIN_LR_PX } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
 
 /**
@@ -123,7 +123,6 @@ export function generateAss(
   entries: SubtitleEntry[],
   video: VideoInfo,
   burnin: BurninPosition,
-  fadeDurationSec: number = FADE_DURATION_SEC_DEFAULT,
   subtitleBackground?: SubtitleBackground,
   /**
    * ASS `Style:` `Fontname` value — exact family name as libass will look it
@@ -176,8 +175,12 @@ export function generateAss(
       const rowBgEnabled = e.subtitleBackground.enabled
       const styleName = rowBgEnabled ? 'WithBox' : 'Default'
 
-      const fadeDurationMs = Math.round(fadeDurationSec * 1000)
-      const fadeTag = e.fadeEnabled ? `\\fad(${fadeDurationMs},${fadeDurationMs})` : ''
+      // REQ-20260615-050 — read fade duration from the entry itself.
+      // `0` means no fade, and the helper writes no `\fad` tag in that
+      // case (libass renders at constant alpha = no ramp).  `0.1`–`0.5`
+      // emit `\fad(t,t)` symmetric in/out (matches the preview helper).
+      const fadeDurationMs = Math.round(e.fadeDurationSec * 1000)
+      const fadeTag = fadeDurationMs > 0 ? `\\fad(${fadeDurationMs},${fadeDurationMs})` : ''
 
       // Per-row font override (REQ-021).  Emit \fn<family> only when the
       // row carries a fontId AND that font's ASS family name differs from
