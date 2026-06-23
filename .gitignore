@@ -221,3 +221,6 @@ benchmark-results/
 # locally per dev-docs/RELEASE_CHECKLIST.md (also gitignored).
 # ============================================
 /.pii-blocklist
+
+# Playwright runtime output
+/test-results/
