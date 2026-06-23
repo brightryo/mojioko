@@ -18,6 +18,13 @@ export function EditorViewSwitcher() {
   const { t } = useTranslation(['step2'])
   const mode = useUiStore((s) => s.editorViewMode)
   const setMode = useUiStore((s) => s.setEditorViewMode)
+  // REQ-20260615-059 A — switching to the timeline view collapses any
+  // bulk selection so a clip click drives the single-row inspector
+  // instead of leaving the bulk-edit panel up (where the per-row
+  // inspector controls would be hidden).  List view still preserves
+  // selection on the way out so the user can come back to it from the
+  // timeline if they want.
+  const clearRowSelection = useUiStore((s) => s.clearRowSelection)
 
   // REQ-068: timeline first because it is now the default view (REQ-063).
   // Putting the default leftmost matches the user's mental "primary →
@@ -39,7 +46,10 @@ export function EditorViewSwitcher() {
           role="tab"
           aria-selected={mode === key}
           type="button"
-          onClick={() => setMode(key)}
+          onClick={() => {
+            if (key === 'timeline') clearRowSelection()
+            setMode(key)
+          }}
           className={cn(
             'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
             'transition-colors duration-150',

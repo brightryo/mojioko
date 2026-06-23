@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
+import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
@@ -100,6 +101,92 @@ function pickFirstSelectedLayout(selectedIds: ReadonlySet<string>): {
 }
 
 /**
+ * REQ-20260615-059 C — uniform-field detector for the bulk-edit
+ * segmented controls.  Returns the shared value when every selected
+ * row agrees on `horizontalPosition` / `verticalPosition`, or `null`
+ * when the rows disagree (= "mixed" — render no segment highlighted
+ * and treat a click as "apply this value to all").
+ */
+function pickUniformLayoutSegments(selectedIds: ReadonlySet<string>): {
+  horizontalPosition: 'left' | 'center' | 'right' | null
+  verticalPosition: 'top' | 'bottom' | null
+} {
+  if (selectedIds.size === 0) return { horizontalPosition: null, verticalPosition: null }
+  const entries = useProjectStore.getState().entries
+  let hp: 'left' | 'center' | 'right' | null = null
+  let vp: 'top' | 'bottom' | null = null
+  let hpSeen = false
+  let vpSeen = false
+  let hpMixed = false
+  let vpMixed = false
+  for (const e of entries) {
+    if (!selectedIds.has(e.id)) continue
+    if (!hpSeen) { hp = e.horizontalPosition; hpSeen = true } else if (e.horizontalPosition !== hp) hpMixed = true
+    if (!vpSeen) { vp = e.verticalPosition;   vpSeen = true } else if (e.verticalPosition !== vp)   vpMixed = true
+    if (hpMixed && vpMixed) break
+  }
+  return {
+    horizontalPosition: hpMixed ? null : hp,
+    verticalPosition:   vpMixed ? null : vp,
+  }
+}
+
+/**
+ * REQ-20260615-059 C — local segmented control matching the inspector's
+ * shape (see `timeline-block-inspector.tsx:50`) but accepting `null` as
+ * the "no segment selected" state for mixed bulk selections.  Clicking
+ * a segment fires `onChange` with the non-null value; the parent
+ * commits to every selected row and clears the mixed state.
+ */
+function BulkSegmentGroup<T extends string>({
+  value,
+  onChange,
+  options,
+  disabled,
+  ariaLabel,
+}: {
+  value: T | null
+  onChange: (next: T) => void
+  options: ReadonlyArray<{ value: T; label: string }>
+  disabled?: boolean
+  ariaLabel: string
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      className={cn(
+        'inline-flex h-7 min-w-fit items-stretch gap-0.5 rounded-md border border-line-strong bg-surface-0 p-0.5',
+        disabled && 'opacity-40 pointer-events-none',
+      )}
+    >
+      {options.map((o) => {
+        const selected = value === o.value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            disabled={disabled}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              'inline-flex items-center justify-center rounded-[3px] px-2 text-caption font-medium transition-colors duration-150',
+              'focus:outline-none focus-visible:outline-none',
+              selected
+                ? 'bg-primary text-fg-inverse'
+                : 'text-fg-secondary hover:text-fg-primary hover:bg-surface-2',
+            )}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
  * Bulk-edit bar for Step 2.
  *
  * Renders above the subtitle table when any rows are selected.  Each
@@ -171,8 +258,14 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // selection is empty fall back to safe defaults (the bar is hidden
   // while empty so users won't see these).
   const initialLayout = pickFirstSelectedLayout(selectedRowIds)
-  const [hPosDraft,   setHPosDraft]   = useState<'left' | 'center' | 'right'>(initialLayout?.horizontalPosition ?? 'center')
-  const [vPosDraft,   setVPosDraft]   = useState<'top' | 'bottom'>(initialLayout?.verticalPosition ?? 'bottom')
+  const initialSegments = pickUniformLayoutSegments(selectedRowIds)
+  // REQ-20260615-059 C — `null` represents the "selection has mixed
+  // values for this field" state.  The BulkSegmentGroup renders no
+  // segment highlighted in that case; on click the chosen value is
+  // committed to every selected row and the local draft flips to the
+  // non-null value (selection is now uniform).
+  const [hPosDraft,   setHPosDraft]   = useState<'left' | 'center' | 'right' | null>(initialSegments.horizontalPosition)
+  const [vPosDraft,   setVPosDraft]   = useState<'top' | 'bottom' | null>(initialSegments.verticalPosition)
   const [marginDraft, setMarginDraft] = useState<string>(String(initialLayout?.verticalMarginPx ?? 40))
   const [bgEnabledDraft, setBgEnabledDraft]     = useState<boolean>(initialLayout?.bgEnabled ?? false)
   const [bgColorDraft, setBgColorDraft]         = useState<'black' | 'white'>(initialLayout?.bgColor ?? 'black')
@@ -190,8 +283,13 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setSizeDraft(pickFirstSelectedSize(selectedRowIds))
     const layout = pickFirstSelectedLayout(selectedRowIds)
     if (layout !== null) {
-      setHPosDraft(layout.horizontalPosition)
-      setVPosDraft(layout.verticalPosition)
+      // REQ-20260615-059 C — h/v drafts come from the uniformity probe
+      // so a mixed selection lands on `null` (no segment highlighted)
+      // instead of "first row's value" which would have read as
+      // "everyone agrees on this" misleadingly.
+      const seg = pickUniformLayoutSegments(selectedRowIds)
+      setHPosDraft(seg.horizontalPosition)
+      setVPosDraft(seg.verticalPosition)
       setMarginDraft(String(layout.verticalMarginPx))
       setBgEnabledDraft(layout.bgEnabled)
       setBgColorDraft(layout.bgColor)
@@ -591,25 +689,23 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           {/* Font size */}
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('bulk.size')}</span>
-            <input
-              type="number"
+            {/* REQ-20260615-059 B — ±10 chevron stepper.  Numeric draft is
+                seeded from the first selected row at selection-change time
+                (`pickFirstSelectedSize`); the stepper commits-on-blur or
+                chevron-click via the existing `handleSizeCommit` so the
+                bulk-write path is unchanged.  When the seed is empty we
+                fall back to the default size from BURNIN_DEFAULTS. */}
+            <NumberStepperInput
+              value={parseInt(sizeDraft, 10) || 100}
               min={FONT_SIZE_MIN_PX}
               max={FONT_SIZE_MAX_PX}
-              placeholder={t('bulk.placeholder')}
-              value={sizeDraft}
-              onChange={(e) => setSizeDraft(e.target.value)}
-              onFocus={(e) => e.target.select()}
-              title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
-              onBlur={(e) => {
-                if (e.target.value === '') return
-                handleSizeCommit(e.target.value)
+              step={10}
+              onCommit={(next) => {
+                setSizeDraft(String(next))
+                handleSizeCommit(String(next))
               }}
-              className={cn(
-                'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
-                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30',
-                'border-border',
-                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
-              )}
+              ariaLabel={t('bulk.size')}
+              title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
             />
           </label>
           {/* Text color */}
@@ -662,56 +758,47 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           </div>
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('styleCell.layoutH')}</span>
-            <select
+            {/* REQ-20260615-059 C — same segmented control the inspector
+                uses.  `null` value renders nothing highlighted (= mixed
+                selection); a click applies the value to every selected
+                row and flips the draft to the now-uniform value. */}
+            <BulkSegmentGroup<'left' | 'center' | 'right'>
               value={hPosDraft}
-              onChange={(e) => handleHPosCommit(e.target.value as 'left' | 'center' | 'right')}
-              className={cn(
-                'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
-                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30',
-                'border-border'
-              )}
-              aria-label={t('subtitlePosition.horizontal')}
-            >
-              <option value="left">{t('subtitlePosition.left')}</option>
-              <option value="center">{t('subtitlePosition.center')}</option>
-              <option value="right">{t('subtitlePosition.right')}</option>
-            </select>
+              onChange={(v) => handleHPosCommit(v)}
+              ariaLabel={t('subtitlePosition.horizontal')}
+              options={[
+                { value: 'left',   label: t('subtitlePosition.left') },
+                { value: 'center', label: t('subtitlePosition.center') },
+                { value: 'right',  label: t('subtitlePosition.right') },
+              ]}
+            />
           </label>
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('styleCell.layoutV')}</span>
-            <select
+            <BulkSegmentGroup<'top' | 'bottom'>
               value={vPosDraft}
-              onChange={(e) => handleVPosCommit(e.target.value as 'top' | 'bottom')}
-              className={cn(
-                'h-7 rounded border bg-input px-1.5 text-body-sm text-foreground',
-                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30',
-                'border-border'
-              )}
-              aria-label={t('subtitlePosition.vertical')}
-            >
-              <option value="top">{t('subtitlePosition.top')}</option>
-              <option value="bottom">{t('subtitlePosition.bottom')}</option>
-            </select>
+              onChange={(v) => handleVPosCommit(v)}
+              ariaLabel={t('subtitlePosition.vertical')}
+              options={[
+                { value: 'top',    label: t('subtitlePosition.top') },
+                { value: 'bottom', label: t('subtitlePosition.bottom') },
+              ]}
+            />
           </label>
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('styleCell.marginV')}</span>
-            <input
-              type="number"
+            {/* REQ-20260615-059 B — ±10 stepper to keep margin in step
+                with size adjustments.  Range [0, 300] same as before. */}
+            <NumberStepperInput
+              value={parseInt(marginDraft, 10) || 0}
               min={0}
               max={300}
-              value={marginDraft}
-              onChange={(e) => setMarginDraft(e.target.value)}
-              onBlur={(e) => {
-                if (e.target.value === '') return
-                handleMarginCommit(e.target.value)
+              step={10}
+              onCommit={(next) => {
+                setMarginDraft(String(next))
+                handleMarginCommit(String(next))
               }}
-              className={cn(
-                'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
-                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30',
-                'border-border',
-                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
-              )}
-              aria-label={t('subtitlePosition.margin')}
+              ariaLabel={t('subtitlePosition.margin')}
             />
           </label>
         </div>
@@ -751,25 +838,20 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             !bgEnabledDraft && 'opacity-40'
           )}>
             <span>{t('styleCell.bgOpacity')}</span>
-            <input
-              type="number"
+            {/* REQ-20260615-059 B — ±10 stepper for bg opacity %.
+                Disabled when the bulk panel's bgEnabledDraft is off
+                (matches the pre-REQ disabled-input behaviour). */}
+            <NumberStepperInput
+              value={parseInt(bgOpacityDraft, 10) || 0}
               min={0}
               max={100}
-              value={bgOpacityDraft}
-              disabled={!bgEnabledDraft}
-              onChange={(e) => setBgOpacityDraft(e.target.value)}
-              onBlur={(e) => {
-                if (e.target.value === '') return
-                handleBgOpacityCommit(e.target.value)
+              step={10}
+              onCommit={(next) => {
+                setBgOpacityDraft(String(next))
+                handleBgOpacityCommit(String(next))
               }}
-              className={cn(
-                'w-16 h-7 rounded border bg-input px-2 text-center text-body-sm text-foreground',
-                'focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30',
-                'border-border',
-                'disabled:cursor-not-allowed',
-                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none'
-              )}
-              aria-label={t('styleCell.bgOpacity')}
+              disabled={!bgEnabledDraft}
+              ariaLabel={t('styleCell.bgOpacity')}
             />
           </label>
         </div>
