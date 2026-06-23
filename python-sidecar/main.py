@@ -108,27 +108,47 @@ def transcribe(msg: dict) -> None:
                     "min_silence_duration_ms": min_silence_ms,
                 }
 
-            segments_iter, info = model.transcribe(tmp_wav, **transcribe_kwargs)
-            total_duration = info.duration if info.duration else 0.0
-            send({"event": "started", "totalDurationSec": total_duration})
-
             collected = []
-            for i, seg in enumerate(segments_iter):
-                print(f"[debug] segment {i}: start={seg.start:.3f}, end={seg.end:.3f}, text={seg.text.strip()!r}", file=sys.stderr)
-                collected.append(seg)
-                send({
-                    "event": "segment",
-                    "segment": {
-                        "startSec": seg.start,
-                        "endSec": seg.end,
-                        "text": seg.text.strip(),
-                    },
-                })
-                if total_duration > 0:
-                    percent = min(99, int(seg.end / total_duration * 100))
+            try:
+                segments_iter, info = model.transcribe(tmp_wav, **transcribe_kwargs)
+                total_duration = info.duration if info.duration else 0.0
+                send({"event": "started", "totalDurationSec": total_duration})
+
+                for i, seg in enumerate(segments_iter):
+                    print(f"[debug] segment {i}: start={seg.start:.3f}, end={seg.end:.3f}, text={seg.text.strip()!r}", file=sys.stderr)
+                    collected.append(seg)
+                    send({
+                        "event": "segment",
+                        "segment": {
+                            "startSec": seg.start,
+                            "endSec": seg.end,
+                            "text": seg.text.strip(),
+                        },
+                    })
+                    if total_duration > 0:
+                        percent = min(99, int(seg.end / total_duration * 100))
+                    else:
+                        percent = 0
+                    send({"event": "progress", "percent": percent})
+            except ValueError as e:
+                # REQ-20260615-063 — faster-whisper crashes with
+                # "max() arg is an empty sequence" when VAD filters
+                # out every audio chunk AND `language` is "auto" —
+                # the eager language-detection majority vote at
+                # faster_whisper/transcribe.py:419 then runs `max()`
+                # on an empty dict.  In faster-whisper 1.0.3 this
+                # happens INSIDE `model.transcribe()` itself (before
+                # the iterator is even returned), so the catch must
+                # wrap both the call AND the for-loop.  This is not
+                # an engine failure — the audio simply has no
+                # detectable speech.  Treat it as a clean 0-segment
+                # completion so the UI can surface "no speech
+                # detected" instead of the raw internal exception.
+                # Other ValueErrors still propagate.
+                if "empty sequence" in str(e):
+                    print(f"[debug] no speech detected (VAD returned 0 chunks): {e}", file=sys.stderr)
                 else:
-                    percent = 0
-                send({"event": "progress", "percent": percent})
+                    raise
 
             send({"event": "completed", "segmentCount": len(collected)})
 

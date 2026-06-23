@@ -128,6 +128,7 @@
     "videoLoaded": "File loaded",
     "probeError": "Failed to read file: {{error}}",
     "transcriptionComplete": "Transcription complete · {{count}} lines",
+    "transcriptionNoSpeech": "No speech detected.  Try a different audio track, language, or VAD setting and re-run.",
     "modelDownloadFailed": "Download failed: {{error}}",
     "modelNotInstalled": "Model {{model}} is not installed",
     "transcriptionError": "Transcription failed: {{error}}",
