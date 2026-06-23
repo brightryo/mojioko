@@ -116,6 +116,29 @@ export const ENABLE_VIDEO_PREVIEW = true
 export const SCRUB_SEEK_THROTTLE_ENABLED = true
 
 /**
+ * REQ-20260615-065 S-6 — version stamp written into every
+ * downloaded model's sidecar metadata (`model.meta.json`) so a
+ * future model-format break can be detected without the user
+ * having to know what changed.
+ *
+ * v1.3.0 ships generation `1` — faster-whisper 1.2.1 +
+ * ctranslate2 4.8 reading Systran / mobiuslabsgmbh CT2-format
+ * archives.  Phase 0 confirmed the format is unchanged versus
+ * fw 1.0.3, so existing on-disk models (which lack a meta file)
+ * are treated as "unknown generation = current-compatible" by
+ * the reader.  Only meta files whose `formatGeneration` is
+ * STRICTLY less than this constant trigger a re-download
+ * suggestion — and even that suggestion is log-only in v1.3.0,
+ * never an automatic redownload.
+ *
+ * Bump this value when a future ctranslate2 / faster-whisper
+ * release CHANGES the on-disk model file layout in a way the
+ * runtime can't load transparently.  Tests pin the current
+ * value so an accidental bump shows up in CI.
+ */
+export const MODEL_FORMAT_GENERATION = 1
+
+/**
  * Parameters passed to faster-whisper's `model.transcribe()` in the Python sidecar.
  * Displayed read-only in the Step 1 "Advanced settings" accordion.
  *

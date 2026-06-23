@@ -1,7 +1,20 @@
 import type { EncoderSetting, AudioMode, SubtitleBackground } from './types'
 import { FADE_DURATION_SEC_DEFAULT } from './constants'
 
-export type WhisperModelId = 'small' | 'medium' | 'large-v3' | string
+/**
+ * REQ-20260615-065 S-3 — explicit union narrowed to the two
+ * v1.3.0 ship models: `'large-v3-turbo'` (fast, default,
+ * "recommended" in UI) and `'large-v3'` (higher-quality, kept for
+ * users who already have it on disk and prefer it).  Pre-v1.3 IDs
+ * `'small'` / `'medium'` are no longer in the explicit union but
+ * remain assignable through the open `| string` fallback so
+ * already-persisted settings hydrate without type errors; the
+ * settings-store hydrate pass then migrates them to
+ * `'large-v3-turbo'` (REQ-065 S-4).  Disk files for the deprecated
+ * models are deliberately NOT deleted — user can remove them via
+ * the existing "open models folder" link.
+ */
+export type WhisperModelId = 'large-v3-turbo' | 'large-v3' | string
 
 /** Default subtitle styling applied to every transcribed entry. User-overridable via Settings. */
 export const BURNIN_DEFAULTS = {
@@ -18,7 +31,10 @@ export const BURNIN_DEFAULTS = {
   // both the renderer's `settings.fadeDurationSec` (= default for new
   // entries) and the live entry field copied at creation time.
   fadeDurationSec: FADE_DURATION_SEC_DEFAULT,
-  whisperModel: 'medium' as WhisperModelId,
+  // REQ-20260615-065 S-3 — fresh-install default = turbo (= "recommended"
+  // in UI).  large-v3 stays as the second selectable model for users who
+  // prefer the higher-quality path.
+  whisperModel: 'large-v3-turbo' as WhisperModelId,
 
   horizontalPosition: 'center' as const,
   verticalPosition: 'bottom' as const,

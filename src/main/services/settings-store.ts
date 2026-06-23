@@ -5,9 +5,16 @@ import { getModelsDir } from '../lib/paths'
 import { BURNIN_DEFAULTS } from '../../shared/burnin-defaults'
 import { DEFAULT_LANGUAGE } from '../../shared/app-info'
 import { TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
+import { migrateDeprecatedModelIds } from './migrate-model-settings'
 import type { AppSettings } from '../../shared/types'
 import { SettingsCorruptError } from '../../shared/errors'
 import log from '../lib/logger'
+
+// REQ-20260615-065 S-4 — re-export so existing callers that imported
+// the migration from settings-store keep working without a path
+// change; the implementation lives in `./migrate-model-settings`
+// (no electron / logger deps) so vitest can exercise it directly.
+export { migrateDeprecatedModelIds }
 
 const CURRENT_VERSION = 1
 
@@ -55,7 +62,27 @@ export async function loadSettings(): Promise<AppSettings> {
       log.warn('[settings] version mismatch, resetting to defaults')
       return buildDefaults()
     }
-    return { ...buildDefaults(), ...parsed }
+    const hydrated = { ...buildDefaults(), ...parsed }
+    // REQ-20260615-065 S-4 — migrate deprecated model IDs.  Pure
+    // function; returns the same reference when nothing changed,
+    // a new object when at least one field migrated.
+    const migrated = migrateDeprecatedModelIds(hydrated)
+    if (migrated !== hydrated) {
+      log.info(
+        `[settings] REQ-065 S-4 migrated model selection: ` +
+        `activeModelId ${hydrated.activeModelId} -> ${migrated.activeModelId}, ` +
+        `whisperModel ${hydrated.transcriptionDefaults.whisperModel} -> ${migrated.transcriptionDefaults.whisperModel}`
+      )
+      // Best-effort persist so the migration log line does not fire on
+      // every subsequent launch.  A write failure is non-fatal — the
+      // migrated value is still returned in memory.
+      try {
+        await saveSettings(migrated)
+      } catch (writeErr) {
+        log.warn('[settings] REQ-065 S-4 migrated settings could not be persisted', writeErr)
+      }
+    }
+    return migrated
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       return buildDefaults()

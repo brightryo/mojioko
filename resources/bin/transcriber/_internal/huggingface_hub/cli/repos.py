@@ -30,17 +30,22 @@ from typing import Annotated
 import typer
 
 from huggingface_hub import SpaceHardware, SpaceStorage
+from huggingface_hub.cli._cli_utils import SoftChoice
 from huggingface_hub.errors import CLIError, HfHubHTTPError, RepositoryNotFoundError, RevisionNotFoundError
 from huggingface_hub.hf_api import REPO_REGIONS
 
+from ._city_game import run_city_game
 from ._cli_utils import (
+    REPO_LIST_DEFAULT_LIMIT,
     EnvFileOpt,
     EnvOpt,
+    LimitOpt,
     PrivateOpt,
     RepoIdArg,
     RepoType,
     RepoTypeOpt,
     RevisionOpt,
+    SearchOpt,
     SecretsFileOpt,
     SecretsOpt,
     TokenOpt,
@@ -51,7 +56,9 @@ from ._cli_utils import (
     parse_volumes,
     typer_factory,
 )
-from ._output import out
+from ._cp import make_cp
+from ._file_listing import format_size
+from ._output import OutputFormat, out
 
 
 repos_cli = typer_factory(help="Manage repos on the Hub.")
@@ -63,10 +70,11 @@ def _repos_callback(ctx: typer.Context) -> None:
         out.warning("`hf repo` is deprecated in favor of `hf repos`.")
 
 
-tag_cli = typer_factory(help="Manage tags for a repo on the Hub.")
-branch_cli = typer_factory(help="Manage branches for a repo on the Hub.")
-repos_cli.add_typer(tag_cli, name="tag")
-repos_cli.add_typer(branch_cli, name="branch")
+class RepoTypeAll(str, enum.Enum):
+    model = "model"
+    dataset = "dataset"
+    space = "space"
+    bucket = "bucket"
 
 
 class GatedChoices(str, enum.Enum):
@@ -91,10 +99,11 @@ ProtectedOpt = Annotated[
     ),
 ]
 SpaceHardwareOpt = Annotated[
-    SpaceHardware | None,
+    str | None,
     typer.Option(
         "--flavor",
         help="Space hardware flavor (e.g. 'cpu-basic', 't4-medium', 'l4x4'). Only for Spaces.",
+        click_type=SoftChoice(SpaceHardware),
     ),
 ]
 
@@ -113,6 +122,77 @@ SpaceSleepTimeOpt = Annotated[
         help="Seconds of inactivity before the Space is put to sleep. Use -1 to disable. Only for Spaces.",
     ),
 ]
+
+
+tag_cli = typer_factory(help="Manage tags for a repo on the Hub.")
+branch_cli = typer_factory(help="Manage branches for a repo on the Hub.")
+repos_cli.add_typer(tag_cli, name="tag")
+repos_cli.add_typer(branch_cli, name="branch")
+
+
+@repos_cli.command(
+    "list | ls",
+    examples=[
+        "hf repos ls",
+        "hf repos ls --explore",
+        "hf repos ls --namespace my-org --search bert",
+    ],
+)
+def repo_list(
+    namespace: Annotated[
+        str | None,
+        typer.Option(
+            help="Organization name. If not provided, lists repos for the authenticated user.",
+        ),
+    ] = None,
+    repo_type: Annotated[
+        RepoTypeAll | None,
+        typer.Option(
+            "--type",
+            "--repo-type",
+            help="Filter by repository type (model, dataset, space, or bucket).",
+        ),
+    ] = None,
+    search: SearchOpt = None,
+    limit: LimitOpt = REPO_LIST_DEFAULT_LIMIT,
+    explore: Annotated[
+        bool,
+        typer.Option("--explore", help="Explore your repos as an interactive 3D city."),
+    ] = False,
+    token: TokenOpt = None,
+) -> None:
+    """List all repos (models, datasets, spaces, buckets) with storage info."""
+    api = get_hf_api(token=token)
+    repos = list(api.list_user_repos(namespace=namespace))
+    if repo_type is not None:
+        repos = [r for r in repos if r.type == repo_type.value]
+    if search is not None:
+        search_lower = search.lower()
+        repos = [r for r in repos if search_lower in r.id.lower()]
+    total = len(repos)
+
+    if explore:
+        if out.mode == OutputFormat.human:
+            run_city_game(repos)
+            return
+        raise CLIError("Repository exploration is only available in terminal.")
+
+    if limit > 0:
+        repos = repos[:limit]
+    items = [
+        {
+            "id": r.id,
+            "type": r.type,
+            "updated": r.updated_at.strftime("%Y-%m-%d"),
+            "visibility": r.visibility,
+            "storage": format_size(r.storage, human_readable=True),
+            "%_of_total": f"{r.storage_percent:.1f}%",
+        }
+        for r in repos
+    ]
+    out.table(items, id_key="id", alignments={"storage": "right", "%_of_total": "right"})
+    if limit > 0 and total > limit:
+        out.hint(f"Showing {limit} of {total} repos. Use `--limit 0` to list all.")
 
 
 @repos_cli.command(
@@ -373,6 +453,26 @@ def repo_delete_files(
         create_pr=create_pr,
     )
     out.result("Files deleted", repo_id=repo_id, commit_url=url)
+
+
+# `hf repos cp` is an alias for the top-level `hf cp` command (see `cli/_cp.py`).
+repos_cli.command(
+    name="cp",
+    examples=[
+        # Download (repo or bucket -> local / stdout)
+        "hf repos cp hf://username/my-model/config.json config.json",
+        "hf repos cp hf://datasets/username/my-dataset/data.csv data/",
+        "hf repos cp hf://username/my-model/config.json -",
+        # Upload (local / stdin -> repo)
+        "hf repos cp model.safetensors hf://username/my-model/model.safetensors",
+        "hf repos cp config.json hf://username/my-model/logs/",
+        "hf repos cp - hf://username/my-model/config.json",
+        # Remote to remote (repo -> repo)
+        "hf repos cp hf://username/source-model/config.json hf://username/dest-model/config.json",
+        "hf repos cp hf://datasets/username/my-dataset/processed/ hf://datasets/username/dest-dataset/processed/",
+        "hf repos cp hf://username/my-model/logs/ hf://username/archive-model/logs/",
+    ],
+)(make_cp("repos"))
 
 
 @branch_cli.command(

@@ -1,4 +1,6 @@
-faster-whisper==1.0.3
-# requests is not declared in faster-whisper 1.0.3's metadata but is imported by
-# faster_whisper/utils.py at runtime. Pinning here until upstream fixes the packaging.
-requests>=2.28
+# REQ-20260615-065 S-1 — faster-whisper 1.2.1.  The 1.0.3 → 1.2.1
+# bump pulls in ctranslate2 4.8, av 17, onnxruntime 1.27 transitively;
+# no further direct pins are needed (Phase 0 RES dependency table).
+# The 1.0.3-era `requests` runtime-import hack is no longer needed —
+# faster_whisper 1.2.1's metadata declares it correctly.
+faster-whisper==1.2.1
