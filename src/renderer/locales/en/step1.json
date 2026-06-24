@@ -57,8 +57,8 @@
     "label": "Whisper model",
     "tooltip": "The engine that converts audio to text. Larger models are more accurate but slower.",
     "descriptionLong": "Whisper is an engine that converts audio into text. It's an open-source library developed by OpenAI and is free to use. All processing happens entirely on your PC; no data is sent externally.",
-    "descLargeV3Turbo": "Fast, recommended. Accuracy on par with large-v3 at roughly half the download size.",
-    "descLargeV3": "Higher quality. Needs more resources to run.",
+    "descLargeV3Turbo": "Fast and lightweight. Roughly half the download size of large-v3.",
+    "descLargeV3": "Higher quality, recommended. Needs more resources to run.",
     "recommended": "Recommended",
     "updateNote": "App updates may remove older models or add new ones."
   },

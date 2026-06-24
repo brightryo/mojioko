@@ -2,13 +2,22 @@ import type { AppSettings } from '../../shared/types'
 
 /**
  * REQ-20260615-065 S-4 — pure migration step run during settings
- * hydrate.  Pre-v1.3.0 IDs `'small'` / `'medium'` are reassigned to
- * the new default `'large-v3-turbo'`; the v1.3.0 ship models pass
- * through unchanged; any other non-null ID (= corrupted / future-
- * write-from-older-version / hand-edited junk) is dropped to `null`
- * so the renderer falls back to the picker instead of trying to
+ * hydrate.  Pre-v1.3.0 IDs `'small'` / `'medium'` are reassigned
+ * to the new default model; the v1.3.0 ship models pass through
+ * unchanged; any other non-null ID (= corrupted / future-write-
+ * from-older-version / hand-edited junk) is dropped to `null` so
+ * the renderer falls back to the picker instead of trying to
  * load something that doesn't exist.  No toast / no UI prompt —
  * the REQ explicitly forbids surfacing the migration per row.
+ *
+ * REQ-20260615-066: the migration target was `'large-v3-turbo'`
+ * during REQ-065 (a few hours in v1.3.0 prep).  Real-world
+ * Japanese transcription showed turbo producing more spurious /
+ * wrong-character errors than large-v3, so the target moved back
+ * to `'large-v3'`.  Users who had already actively chosen turbo
+ * before this REQ keep their selection — `'large-v3-turbo'` is in
+ * the v1.3.0 known set and passes through unchanged.  Only the
+ * legacy `'small'` / `'medium'` IDs are rewritten.
  *
  * Lives in its own module (no electron / logger imports) so vitest
  * can exercise every branch in `tests/unit/migrate-deprecated-model.test.ts`
@@ -27,13 +36,13 @@ export function migrateDeprecatedModelIds(settings: AppSettings): AppSettings {
   let whisperModel = settings.transcriptionDefaults.whisperModel
 
   if (activeModelId !== null && DEPRECATED_MODEL_IDS.has(activeModelId)) {
-    activeModelId = 'large-v3-turbo'
+    activeModelId = 'large-v3'
   } else if (activeModelId !== null && !KNOWN_V130_MODEL_IDS.has(activeModelId)) {
     activeModelId = null
   }
 
   if (DEPRECATED_MODEL_IDS.has(whisperModel)) {
-    whisperModel = 'large-v3-turbo'
+    whisperModel = 'large-v3'
   }
 
   if (

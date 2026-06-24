@@ -31,10 +31,14 @@ export const BURNIN_DEFAULTS = {
   // both the renderer's `settings.fadeDurationSec` (= default for new
   // entries) and the live entry field copied at creation time.
   fadeDurationSec: FADE_DURATION_SEC_DEFAULT,
-  // REQ-20260615-065 S-3 — fresh-install default = turbo (= "recommended"
-  // in UI).  large-v3 stays as the second selectable model for users who
-  // prefer the higher-quality path.
-  whisperModel: 'large-v3-turbo' as WhisperModelId,
+  // REQ-20260615-066 — fresh-install default flips back to large-v3
+  // (= "recommended" in UI).  REQ-065 had landed on turbo based on
+  // synthetic Phase-0 benchmarks where turbo and large-v3 matched in
+  // quality, but in real-world Japanese transcription turbo produces
+  // more spurious / wrong-character errors than large-v3, so the
+  // recommendation moves back to large-v3.  turbo remains in the
+  // model line-up as a fast-path option, just without the badge.
+  whisperModel: 'large-v3' as WhisperModelId,
 
   horizontalPosition: 'center' as const,
   verticalPosition: 'bottom' as const,

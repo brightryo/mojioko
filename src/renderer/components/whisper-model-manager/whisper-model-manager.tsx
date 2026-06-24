@@ -576,12 +576,16 @@ function ModelCard({
             <p className={cn('text-body-sm', isActive ? 'text-primary-hover' : 'text-fg-disabled')}>
               {formatBytes(model.expectedSizeBytes)}
             </p>
-            {/* REQ-20260615-065 S-5 — "Recommended" / "推奨" chip on
-                turbo only.  Sits next to the size readout so the
-                signal is visible whether the model is installed or
-                not, and it stays out of the status-badge corner
-                used by Active / Installed. */}
-            {model.id === 'large-v3-turbo' && (
+            {/* REQ-20260615-066 — "Recommended" / "推奨" chip moves
+                from turbo to large-v3.  Real-world Japanese
+                transcriptions on turbo had more spurious errors
+                than the synthetic Phase-0 benchmark suggested, so
+                the user-facing recommendation lands on large-v3.
+                turbo stays available as a fast-path option but
+                without the badge.  Same placement as before (next
+                to the size readout, out of the Active / Installed
+                badge corner). */}
+            {model.id === 'large-v3' && (
               <span className="flex-shrink-0 inline-flex items-center text-caption font-medium px-1.5 py-0.5 rounded-full bg-primary/15 text-primary-hover whitespace-nowrap">
                 {t('whisperModel.recommended')}
               </span>
