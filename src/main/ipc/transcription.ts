@@ -231,10 +231,12 @@ export function registerTranscriptionHandlers(): void {
 
       const settings = await loadSettings()
       if (settings.activeModelId === modelId) {
-        // Auto-activate another installed model.  REQ-20260615-065 S-2:
-        // priority order now matches the v1.3.0 ship-model line-up
-        // (turbo = recommended → large-v3 = higher quality).
-        const PRIORITY: WhisperModelId[] = ['large-v3-turbo', 'large-v3']
+        // Auto-activate another installed model.  REQ-20260615-066:
+        // priority order now reads large-v3 → turbo, matching the
+        // user-facing "recommended" mark.  This keeps the auto-
+        // activated next-model consistent with whichever line the
+        // user sees badged in the UI.
+        const PRIORITY: WhisperModelId[] = ['large-v3', 'large-v3-turbo']
         let next: WhisperModelId | null = null
         for (const candidate of PRIORITY) {
           if (candidate !== modelId) {
