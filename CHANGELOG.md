@@ -9,6 +9,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-06-24
+
+Fourth minor-line release: per-subtitle fade with a redesigned
+preview, drawer-style transcription step, polished bulk editing,
+and a unified export UI.
+
+### Added
+
+- **Per-subtitle fade.**  Each row now has its own fade in / out
+  slider running from 0 to 0.5 s, with 0 meaning "no fade".  The
+  slider is exposed in the inspector, the bulk-edit panel, and the
+  default-style settings.  Default is off so a freshly-added clip
+  is fully visible the moment the playhead lands on its start.
+- **"How to use" button on the timeline.**  A help popover lives
+  on the timeline toolbar with concise tips on navigating clips,
+  zooming, and using the inspector.
+- **Credit-text copy buttons on the export-complete dialog.**  The
+  dialog shown after a successful burn-in offers one-click copy of
+  the suggested credit text in English and Japanese, with the
+  dialog's action buttons now equal-width for a tidier footer.
+- **Space plays / pauses the video.**  Pressing Space anywhere
+  outside a text input toggles preview playback in Step 2.
+
+### Changed
+
+- Fade preview redesigned.  The in-app preview ramp now runs on a
+  vsync-aligned rAF instead of React state, so the alpha curve is
+  smooth at all frame rates and matches the burned-in libass
+  output exactly.
+- Step 1 (transcription) re-laid-out as a drawer, matching the
+  drawer pattern Step 2 uses.  Transcription progress and options
+  now live in the same right-side panel shape as Step 2's burn-in
+  drawer, so the two steps read as siblings.
+- Bulk-edit polish.  Switching to the timeline view now clears the
+  bulk selection so a clip click drives the single-row inspector
+  instead of leaving the bulk panel up.  Size, margin, and
+  background-opacity gained a ±10 stepper to match the inspector.
+  The horizontal / vertical / background-colour rows are now
+  segmented buttons (replacing the previous select dropdowns), and
+  the panel's row layout is aligned with the inspector top to
+  bottom.
+- Export UI unified across text, image (JPG frame), and video
+  (burn-in) outputs so the three paths share the same dialog
+  shape and language.
+- Inspector background styling unified with the timeline view and
+  video preview so the three right-pane surfaces share one
+  palette.
+- About dialog wording updated for clarity around what MOJIOKO
+  does and does not collect.
+- Updated the transcription engine to faster-whisper 1.2.1.
+- Reorganized transcription models into turbo (fast) and large-v3
+  (higher quality, recommended).  small and medium are removed.
+
+### Fixed
+
+- Changing a row's horizontal or vertical anchor now preserves any
+  drag-applied offset on the existing axes instead of resetting
+  it; the inspector's offset row also exposes a reset-to-pin
+  shortcut.
+- Unwanted focus outlines no longer surface on mouse interactions
+  — the green focus ring is kept for keyboard navigation only.
+  Lingering rings on settings tabs and inspector sections after a
+  click are gone.
+
+---
+
 ## [1.2.1] - 2026-06-13
 
 Follow-up release on the v1.2 line: small additions around subtitle
