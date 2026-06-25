@@ -3,6 +3,12 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { APP_DATA_FOLDER } from '../../shared/app-info'
 import type { FontMeta } from '../../shared/fonts'
+import {
+  isPackagedAsMsix,
+  getMsixPackageFamilyName,
+  buildMsixVirtualizedAppDataPath,
+  getCurrentProcessContext,
+} from './msix'
 
 const isDev = !app.isPackaged
 
@@ -101,7 +107,40 @@ export function getLogsDir(): string {
   return join(getAppDataPath(), 'logs')
 }
 
+/**
+ * Resolves the **physical** directory where Whisper models live on disk.
+ *
+ * Why this is not just `join(getAppDataPath(), 'models')`:
+ *
+ * Under MSIX the OS transparently redirects writes to `%APPDATA%\MOJIOKO\…`
+ * onto `%LOCALAPPDATA%\Packages\<PFN>\LocalCache\Roaming\MOJIOKO\…`.
+ * Filesystem calls from inside the package see the merged path and work
+ * fine, but call sites that hand the path string to a non-packaged
+ * consumer (most importantly `shell.openPath` → Explorer.exe) see the
+ * *real* logical path, which is empty.  See RES-20260615-070 §3-1.
+ *
+ * To keep every existing caller (`shell.ts`, `transcription.ts`, the
+ * "保存先" row in the install-confirm dialog) working without
+ * environment-aware branching, this function returns the explicit
+ * virtualized path under MSIX and the logical path everywhere else.
+ *
+ * Fallback to the logical path when MSIX is detected but the
+ * PackageFamilyName cannot be parsed from `process.execPath` —
+ * preserves the v1.3.0 behavior rather than crashing.
+ */
 export function getModelsDir(): string {
+  const ctx = getCurrentProcessContext()
+  if (isPackagedAsMsix(ctx)) {
+    const pfn = getMsixPackageFamilyName(ctx.execPath)
+    if (pfn) {
+      return buildMsixVirtualizedAppDataPath(
+        app.getPath('home'),
+        pfn,
+        APP_DATA_FOLDER,
+        'models'
+      )
+    }
+  }
   return join(getAppDataPath(), 'models')
 }
 

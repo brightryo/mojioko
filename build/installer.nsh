@@ -7,7 +7,10 @@
 !macroend
 
 !macro customUnInstall
-  ; Clean up legacy install.json written by previous installer versions
-  ; that performed a Python check. Safe to call when the file is absent.
-  Delete "$APPDATA\MOJIOKO\install.json"
+  ; v1.3.1 (REQ-20260615-071): the legacy install.json cleanup that
+  ; lived here is now subsumed by `deleteAppDataOnUninstall: true` in
+  ; electron-builder.yml — the whole `%APPDATA%\MOJIOKO\` directory
+  ; (install.json, settings.json, models/, logs/, fonts/) is removed
+  ; on user-initiated uninstall.  Macro intentionally left empty;
+  ; electron-builder requires the definition to exist.
 !macroend

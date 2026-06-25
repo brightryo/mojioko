@@ -105,7 +105,16 @@ nsis:
     - en_US
   language: "1041"
   include: build/installer.nsh
-  deleteAppDataOnUninstall: false
+  # v1.3.1 (REQ-20260615-071): aligned with the MSIX uninstall semantic.
+  # MSIX automatically removes `%LOCALAPPDATA%\Packages\<PFN>\…` on
+  # uninstall (opt-out impossible), so the NSIS side does the same for
+  # `%APPDATA%\MOJIOKO\` — models, settings, logs, downloaded fonts all
+  # gone.  This is **only** triggered on a user-initiated uninstall:
+  # electron-builder's upgrade flow passes `--updated` to the old
+  # uninstaller, which the template (`uninstaller.nsh:206`) checks via
+  # `${ifNot} ${isUpdated}` before deleting AppData.  Verified in
+  # node_modules/app-builder-lib/templates/nsis/uninstaller.nsh.
+  deleteAppDataOnUninstall: true
   # End-User License Agreement.
   #
   # electron-builder NSIS convention: when `license` points at
