@@ -125,6 +125,16 @@ export function WhisperModelManager({
     if (result.ok) {
       setState(result.data)
       onActiveModelChange?.(result.data.activeModelId)
+    } else {
+      // REQ-20260615-072 — fire the callback with `null` so STEP1 can
+      // still make its initial-open decision (treat unknown state as
+      // "no model installed" → open the Whisper accordion, which is
+      // the correct action anyway when something is wrong with the
+      // model registry).  Pre-REQ-072 we silently dropped the failure
+      // and the parent never heard back, leaving STEP1's mutual-
+      // exclusion accordion in its null-pending state and both panels
+      // collapsed.
+      onActiveModelChange?.(null)
     }
   }
 

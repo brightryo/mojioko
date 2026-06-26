@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform, Check } from 'lucide-react'
@@ -36,6 +36,7 @@ import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
+import { pickInitialOpenSection } from './step1-initial-open'
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   // REQ-071 Phase 3.5: value bumped to `body` (15) so it physically reads as
@@ -116,10 +117,55 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // Mutually-exclusive accordion section.  Exactly one of the two main
   // panels (Whisper model picker / Input video) is expanded at any time,
   // so the vertical budget stays predictable regardless of state.
-  // Default to 'inputVideo' so the user lands on "pick a video" without
-  // having to click anything; if no Whisper model is active they can
-  // toggle to 'whisper' via the header.
-  const [openSection, setOpenSection] = useState<'whisper' | 'inputVideo'>('inputVideo')
+  //
+  // REQ-20260615-072: initial value is `null` until the first
+  // listModels IPC settles.  The first call to `handleActiveModelChange`
+  // below picks 'whisper' (when no model is installed) or 'inputVideo'
+  // (when a model is already usable) — see `pickInitialOpenSection`.
+  // Both panels render closed during the few-ms IPC roundtrip; this
+  // avoids the flash that a hardcoded 'inputVideo' default would cause
+  // for first-time users we then need to flip to 'whisper'.
+  //
+  // Pre-REQ-072 the default was hardcoded to 'inputVideo', which left
+  // brand-new users with no installed model staring at the input-video
+  // card instead of the model download flow that actually unblocks them.
+  // The amber AlertTriangle on the collapsed Whisper header was the
+  // documented substitute for the old auto-expand-on-no-model behaviour
+  // (see WhisperModelManager:135-149), but in practice it didn't draw
+  // the eye strongly enough — REQ-072 restores the auto-expand for the
+  // no-model case only.  Once a user has any model installed they keep
+  // landing on inputVideo, matching the prior "skip past picker on the
+  // happy path" intent.
+  const [openSection, setOpenSection] = useState<'whisper' | 'inputVideo' | null>(null)
+  // Set on the first `handleActiveModelChange` callback, OR when the
+  // user toggles the accordion header before that callback arrives.
+  // Subsequent listModels-triggered callbacks (after install / uninstall
+  // / activate flows inside WhisperModelManager) MUST NOT clobber a
+  // user-driven open state — the ref guards that.
+  const initialOpenDecidedRef = useRef(false)
+
+  const handleActiveModelChange = useCallback(
+    (modelId: WhisperModelId | null) => {
+      setActiveModelId(modelId)
+      if (!initialOpenDecidedRef.current) {
+        initialOpenDecidedRef.current = true
+        setOpenSection(pickInitialOpenSection(modelId))
+      }
+    },
+    []
+  )
+
+  const handleAccordionToggle = useCallback(
+    (next: 'whisper' | 'inputVideo') => {
+      // Mark the initial decision as taken so a later listModels
+      // callback (post-install/uninstall) can't override what the user
+      // just chose by hand.
+      initialOpenDecidedRef.current = true
+      setOpenSection(next)
+    },
+    []
+  )
+
   const transcriptionRunRef = useRef<TranscriptionRun | null>(null)
 
   // REQ-082: removed Enter-to-start-transcription hotkey.
@@ -519,10 +565,10 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
               button, so STEP1's main screen carries only the model
               picker + input file + read-only track list. */}
           <WhisperModelManager
-            onActiveModelChange={setActiveModelId}
+            onActiveModelChange={handleActiveModelChange}
             disabled={isLoading || isTranscribing}
             isOpen={openSection === 'whisper'}
-            onOpenChange={(open) => setOpenSection(open ? 'whisper' : 'inputVideo')}
+            onOpenChange={(open) => handleAccordionToggle(open ? 'whisper' : 'inputVideo')}
           />
         </div>
 
@@ -562,7 +608,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             aria-expanded={openSection === 'inputVideo'}
             tabIndex={0}
             onClick={() =>
-              setOpenSection(openSection === 'inputVideo' ? 'whisper' : 'inputVideo')
+              handleAccordionToggle(openSection === 'inputVideo' ? 'whisper' : 'inputVideo')
             }
             className="flex items-center justify-between cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
           >
