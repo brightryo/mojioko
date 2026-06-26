@@ -71,14 +71,6 @@
 
           <h4>MOJIOKO 側の設定</h4>
           <p>録画した動画ファイルを MOJIOKO で指定し、文字起こし対象の音声トラックで <strong>「トラック 2」</strong> を選択して文字起こしを実行します。これでマイク音声のみを対象にした高精度な文字起こしが可能になります。</p>
-
-          <h4>補足</h4>
-          <p>文字起こしの精度調整については、MOJIOKO の文字起こし画面最下部にある「詳細設定」で調整できます。</p>
-          <ul class="guide-list">
-            <li>VAD（音声検出）の閾値</li>
-            <li>ビームサイズ</li>
-            <li>言語の指定（自動検出 / 各言語）</li>
-          </ul>
         </div>
       </details>
 
@@ -111,52 +103,45 @@
           <span class="q-text">Whisper モデルはどれをダウンロードして選べばいい？</span>
         </summary>
         <div class="qa-body">
-          <p>アプリ内の「Whisper モデル」画面で 3 つのモデルから選べます。<strong>medium が推奨</strong>です。</p>
+          <p>アプリ内の「Whisper モデル」画面で <strong>2 つのモデル</strong>から選べます。<strong>large-v3 が推奨</strong>です。</p>
 
           <div class="model-card model-card-primary">
-            <h3>medium <span class="badge">★ 推奨（バランス重視）</span></h3>
-            <ul class="model-specs">
-              <li>ファイルサイズ：約 1.5 GB</li>
-              <li>メモリ使用量：中</li>
-              <li>処理速度：中</li>
-              <li>精度：高い</li>
-            </ul>
-            <p class="model-note">まずはこちらを試してください。</p>
-          </div>
-
-          <div class="model-card">
-            <h3>small <span class="badge-light">軽量・高速重視</span></h3>
-            <ul class="model-specs">
-              <li>ファイルサイズ：約 466 MB</li>
-              <li>メモリ使用量：少</li>
-              <li>処理速度：速い</li>
-              <li>精度：標準的</li>
-            </ul>
-            <p class="model-note">medium で「重い」「処理が遅い」と感じた場合の代替。</p>
-          </div>
-
-          <div class="model-card">
-            <h3>large-v3 <span class="badge-light">最高精度</span></h3>
+            <h3>large-v3 <span class="badge">★ 推奨（高精度）</span></h3>
             <ul class="model-specs">
               <li>ファイルサイズ：約 3 GB</li>
-              <li>メモリ使用量：多（メモリ 16 GB 以上推奨）</li>
-              <li>処理速度：遅い</li>
-              <li>精度：最高</li>
+              <li>特徴：高精度</li>
+              <li>動作要件：高いスペックが必要（メモリ 16 GB 以上推奨）</li>
             </ul>
-            <p class="model-note">medium で精度に不満を感じた場合の選択肢。</p>
+            <p class="model-note">まずはこちらを試してください。日本語の文字起こしで安定した認識精度が得られます。</p>
+          </div>
+
+          <div class="model-card">
+            <h3>large-v3-turbo <span class="badge-light">高速・軽量</span></h3>
+            <ul class="model-specs">
+              <li>ファイルサイズ：約 1.5 GB（large-v3 の約半分）</li>
+              <li>特徴：高速・軽量</li>
+              <li>動作要件：large-v3 より軽い</li>
+            </ul>
+            <p class="model-note">large-v3 が「重い」「処理が遅い」と感じた場合や、ダウンロードを軽くしたい場合の選択肢。日本語では large-v3 より誤認識が増える傾向があります。</p>
           </div>
 
           <h4>選び方の目安</h4>
           <ol class="guide-list">
-            <li>まずは medium から</li>
-            <li>「精度に不満」を感じたら → large-v3 にアップグレード</li>
-            <li>「処理が重い・遅い」と感じたら → small にダウングレード</li>
+            <li>まずは <strong>large-v3</strong> から（推奨）</li>
+            <li>「処理が重い・遅い」「ダウンロードを軽くしたい」と感じたら → <strong>large-v3-turbo</strong> へ</li>
           </ol>
+
+          <h4>旧モデル（small / medium）について</h4>
+          <ul class="guide-list">
+            <li>v1.3.0 で <strong>small / medium モデルは廃止</strong>されました。</li>
+            <li>旧バージョンで small / medium を選んでいた設定は、起動時に自動で <strong>large-v3</strong> に引き継がれます（操作不要）。</li>
+            <li>以前ダウンロード済みの small / medium のファイル自体は自動削除されません。不要であれば「Whisper モデル」画面の「モデルフォルダを開く」から手動で削除できます。</li>
+          </ul>
 
           <h4>補足</h4>
           <ul class="guide-list">
             <li>一度ダウンロードしたモデルは保存され、次回以降の起動ですぐ使えます</li>
-            <li>複数モデルを切り替えて使うこともできます</li>
+            <li>2 つのモデルを切り替えて使うこともできます</li>
             <li>アプリ内の「Whisper モデル」選択画面からいつでもダウンロードできます</li>
             <li>ダウンロード中はアプリを閉じずにお待ちください</li>
           </ul>
@@ -167,14 +152,14 @@
       <details class="qa">
         <summary>
           <span class="qa-badge qa-badge-info">解説</span>
-          <span class="q-text">字幕やテキストだけ別ファイルで出力したい（動画書き出し以外の使い方）</span>
+          <span class="q-text">字幕データだけ出力する方法</span>
         </summary>
         <div class="qa-body">
           <p>MOJIOKO では、動画への字幕焼き込み以外にも、字幕ファイルやテキストファイルとして出力できます。</p>
 
           <h4>出力できる形式</h4>
 
-          <h5>■ プレーンテキスト（<code>.txt</code>）</h5>
+          <h5>■ テキスト（<code>.txt</code>）</h5>
           <ul class="guide-list">
             <li>字幕テキストのみを順番に並べた、シンプルなテキストファイル</li>
             <li>時間情報なし、字幕の内容だけ</li>
@@ -189,12 +174,12 @@
           </ul>
 
           <h4>出力方法</h4>
-          <p>文字起こし完了後、編集画面（Step 2）の右上にある「テキスト出力」ボタンから:</p>
+          <p>文字起こし完了後、編集画面（Step 2）の下部（フッター）にある「テキスト出力」ボタンから:</p>
           <ol class="guide-list">
-            <li>編集画面の右上「<strong>テキスト出力</strong>」ボタンをクリック</li>
+            <li>編集画面の下部（フッター）「<strong>テキスト出力</strong>」ボタンをクリック</li>
             <li>プルダウンメニューから出力形式を選択:
               <ul class="guide-list">
-                <li>「<strong>テキスト出力</strong>」を選ぶとプレーンテキスト（<code>.txt</code>）形式で保存</li>
+                <li>「<strong>テキスト出力</strong>」を選ぶとテキスト（<code>.txt</code>）形式で保存</li>
                 <li>「<strong>SRT形式で出力</strong>」を選ぶと SRT 字幕ファイル（<code>.srt</code>）形式で保存</li>
               </ul>
             </li>
@@ -205,7 +190,7 @@
 
           <h5>■ VOICEVOX で AI 音声に置き換える</h5>
           <ol class="guide-list">
-            <li>MOJIOKO で文字起こし → 「テキスト出力」でプレーンテキスト保存</li>
+            <li>MOJIOKO で文字起こし → 「テキスト出力」でテキスト保存</li>
             <li>VOICEVOX に取り込んで、ずんだもんや四国めたんなどのキャラクター音声を生成</li>
             <li>AI 音声で動画を作り直したり、別動画として活用</li>
           </ol>
@@ -236,7 +221,7 @@
 
           <h5>■ ブログ記事や台本として再利用</h5>
           <ol class="guide-list">
-            <li>MOJIOKO で文字起こし → 「テキスト出力」でプレーンテキスト保存</li>
+            <li>MOJIOKO で文字起こし → 「テキスト出力」でテキスト保存</li>
             <li>テキストファイルを編集ソフトで開く</li>
             <li>整形してブログや台本として利用</li>
           </ol>

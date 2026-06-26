@@ -71,14 +71,6 @@
 
           <h4>MOJIOKO Settings</h4>
           <p>Load the recorded video file in MOJIOKO and select <strong>"Track 2"</strong> as the transcription target audio track. This enables high-accuracy transcription focused only on your microphone audio.</p>
-
-          <h4>Additional Notes</h4>
-          <p>Fine-tuning of transcription accuracy can be done in the "Advanced Settings" at the bottom of MOJIOKO's transcription screen:</p>
-          <ul class="guide-list">
-            <li>VAD (Voice Activity Detection) threshold</li>
-            <li>Beam size</li>
-            <li>Language specification (auto-detect / specific language)</li>
-          </ul>
         </div>
       </details>
 
@@ -111,52 +103,45 @@
           <span class="q-text">Which Whisper model should I download and use?</span>
         </summary>
         <div class="qa-body">
-          <p>You can choose from 3 models in the in-app "Whisper Model" screen. <strong>We recommend medium</strong>.</p>
+          <p>You can choose from <strong>2 models</strong> in the in-app "Whisper Model" screen. <strong>We recommend large-v3</strong>.</p>
 
           <div class="model-card model-card-primary">
-            <h3>medium <span class="badge">★ Recommended (Balanced)</span></h3>
-            <ul class="model-specs">
-              <li>File size: ~1.5 GB</li>
-              <li>Memory usage: Medium</li>
-              <li>Processing speed: Medium</li>
-              <li>Accuracy: High</li>
-            </ul>
-            <p class="model-note">Start with this model.</p>
-          </div>
-
-          <div class="model-card">
-            <h3>small <span class="badge-light">Lightweight &amp; Fast</span></h3>
-            <ul class="model-specs">
-              <li>File size: ~466 MB</li>
-              <li>Memory usage: Low</li>
-              <li>Processing speed: Fast</li>
-              <li>Accuracy: Standard</li>
-            </ul>
-            <p class="model-note">Use as alternative if medium feels heavy or slow.</p>
-          </div>
-
-          <div class="model-card">
-            <h3>large-v3 <span class="badge-light">Highest Accuracy</span></h3>
+            <h3>large-v3 <span class="badge">★ Recommended (High Accuracy)</span></h3>
             <ul class="model-specs">
               <li>File size: ~3 GB</li>
-              <li>Memory usage: High (16 GB+ RAM recommended)</li>
-              <li>Processing speed: Slow</li>
-              <li>Accuracy: Best</li>
+              <li>Strength: Highest accuracy</li>
+              <li>Requirements: Needs more system resources (16 GB+ RAM recommended)</li>
             </ul>
-            <p class="model-note">Upgrade if medium's accuracy is not sufficient.</p>
+            <p class="model-note">Start here. Reliable accuracy for Japanese transcription and a wide range of audio.</p>
+          </div>
+
+          <div class="model-card">
+            <h3>large-v3-turbo <span class="badge-light">Fast &amp; Lightweight</span></h3>
+            <ul class="model-specs">
+              <li>File size: ~1.5 GB (about half of large-v3)</li>
+              <li>Strength: Fast and lightweight</li>
+              <li>Requirements: Lighter than large-v3</li>
+            </ul>
+            <p class="model-note">Use when large-v3 feels heavy or slow, or when you want a lighter download. In Japanese transcription, turbo tends to produce more recognition errors than large-v3.</p>
           </div>
 
           <h4>How to Choose</h4>
           <ol class="guide-list">
-            <li>Start with medium</li>
-            <li>If accuracy is not enough → Upgrade to large-v3</li>
-            <li>If processing is slow → Downgrade to small</li>
+            <li>Start with <strong>large-v3</strong> (recommended)</li>
+            <li>If it feels heavy or slow, or you want a lighter download → switch to <strong>large-v3-turbo</strong></li>
           </ol>
+
+          <h4>About the legacy models (small / medium)</h4>
+          <ul class="guide-list">
+            <li>The <strong>small and medium models were discontinued</strong> in v1.3.0.</li>
+            <li>If you previously selected small or medium, your setting is automatically migrated to <strong>large-v3</strong> on launch (no action needed).</li>
+            <li>Any previously downloaded small / medium files are not deleted automatically. You can remove them manually from the "Whisper Model" screen via "Open models folder".</li>
+          </ul>
 
           <h4>Notes</h4>
           <ul class="guide-list">
             <li>Downloaded models are saved and ready to use next time</li>
-            <li>You can switch between multiple models</li>
+            <li>You can switch between the two models</li>
             <li>You can download models anytime from the "Whisper Model" screen</li>
             <li>Keep the app open during download</li>
           </ul>
@@ -167,14 +152,14 @@
       <details class="qa">
         <summary>
           <span class="qa-badge qa-badge-info">Info</span>
-          <span class="q-text">I want to export just the subtitles or text (without rendering the video)</span>
+          <span class="q-text">How to export subtitle data only</span>
         </summary>
         <div class="qa-body">
           <p>In addition to burning subtitles into video, MOJIOKO can export subtitle files and text files separately.</p>
 
           <h4>Available Output Formats</h4>
 
-          <h5>■ Plain Text (<code>.txt</code>)</h5>
+          <h5>■ Text (<code>.txt</code>)</h5>
           <ul class="guide-list">
             <li>A simple text file with subtitle texts listed in order</li>
             <li>No timing information, just the text content</li>
@@ -189,12 +174,12 @@
           </ul>
 
           <h4>How to Export</h4>
-          <p>After transcription, in the editing screen (Step 2), use the "Export text" button at the top right:</p>
+          <p>After transcription, in the editing screen (Step 2), use the "Export text" button at the bottom (footer):</p>
           <ol class="guide-list">
-            <li>Click "<strong>Export text</strong>" at the top right of the editing screen</li>
+            <li>Click "<strong>Export text</strong>" at the bottom (footer) of the editing screen</li>
             <li>Select an output format from the dropdown menu:
               <ul class="guide-list">
-                <li>Choose "<strong>Export as text</strong>" to save as plain text (<code>.txt</code>)</li>
+                <li>Choose "<strong>Export as text</strong>" to save as text (<code>.txt</code>)</li>
                 <li>Choose "<strong>Export as SRT</strong>" to save as SRT subtitle file (<code>.srt</code>)</li>
               </ul>
             </li>
@@ -205,7 +190,7 @@
 
           <h5>■ Generate AI voice with text-to-speech tools</h5>
           <ol class="guide-list">
-            <li>Transcribe in MOJIOKO → "Export as text" to save as plain text</li>
+            <li>Transcribe in MOJIOKO → "Export as text" to save as text</li>
             <li>Import into AI voice synthesis tools (e.g., VOICEVOX, ElevenLabs) to generate character voices</li>
             <li>Replace original audio with AI-generated voice for content creation</li>
           </ol>
@@ -236,7 +221,7 @@
 
           <h5>■ Reuse as a blog article or script</h5>
           <ol class="guide-list">
-            <li>Transcribe in MOJIOKO → "Export as text" to save as plain text</li>
+            <li>Transcribe in MOJIOKO → "Export as text" to save as text</li>
             <li>Open the text file in your editor</li>
             <li>Format and use as a blog article or script</li>
           </ol>
