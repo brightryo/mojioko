@@ -1,8 +1,14 @@
-import { existsSync, readdirSync, statSync, mkdirSync, createWriteStream, unlinkSync } from 'fs'
+import { mkdirSync, createWriteStream, unlinkSync, rmSync } from 'fs'
 import { join } from 'path'
 import type { DownloadModelEvent } from '../../shared/ipc-contracts'
 import { writeModelMeta } from './model-meta'
 import { MODEL_FORMAT_GENERATION } from '../../shared/constants'
+import {
+  checkModelInstalled,
+  isModelDirIncomplete,
+  MODEL_FILES,
+  DEFAULT_MODEL_FILES,
+} from './check-model-installed'
 import log from '../lib/logger'
 
 // REQ-20260615-065 S-6 — re-export the pure meta helpers from
@@ -13,15 +19,12 @@ import log from '../lib/logger'
 export type { ModelMeta } from './model-meta'
 export { readModelMeta, isModelFormatStale } from './model-meta'
 
-export interface ModelInfo {
-  installed: boolean
-  sizeMB: number
-}
-
-const ESTIMATED_SIZES: Record<string, number> = {
-  'large-v3-turbo': 1547,
-  'large-v3':       3100,
-}
+// REQ-20260615-078 — re-export the strict installed-check so existing
+// `checkModel` callers in `model-downloader` keep their import path
+// unchanged.  The actual implementation lives in
+// `check-model-installed.ts`; this file owns the download pipeline.
+export type ModelInfo = { installed: boolean; sizeMB: number }
+export const checkModel = checkModelInstalled
 
 // REQ-20260615-065 S-2 — per-model HuggingFace repo path.  Pre-1.3.0
 // every model lived under `Systran/faster-whisper-${id}`, but Systran
@@ -34,36 +37,6 @@ const ESTIMATED_SIZES: Record<string, number> = {
 const MODEL_REPOS: Record<string, string> = {
   'large-v3':       'Systran/faster-whisper-large-v3',
   'large-v3-turbo': 'mobiuslabsgmbh/faster-whisper-large-v3-turbo',
-}
-
-// File lists per model.  Both ship models converge on the same
-// 5-file CT2 layout (REQ-065 Phase 0 verified parity between
-// Systran/large-v3 and mobiuslabsgmbh/large-v3-turbo), so the map
-// values are identical — kept as a per-model record so adding a
-// model that ships a different file set later is a one-line change.
-const MODEL_FILES: Record<string, string[]> = {
-  'large-v3':       ['config.json', 'model.bin', 'preprocessor_config.json', 'tokenizer.json', 'vocabulary.json'],
-  'large-v3-turbo': ['config.json', 'model.bin', 'preprocessor_config.json', 'tokenizer.json', 'vocabulary.json'],
-}
-const DEFAULT_MODEL_FILES = MODEL_FILES['large-v3']
-
-export function checkModel(modelId: string, modelsDir: string): ModelInfo {
-  const modelDir = join(modelsDir, modelId)
-  if (!existsSync(modelDir)) {
-    return { installed: false, sizeMB: ESTIMATED_SIZES[modelId] ?? 0 }
-  }
-  try {
-    let totalBytes = 0
-    const items = readdirSync(modelDir)
-    for (const item of items) {
-      try {
-        totalBytes += statSync(join(modelDir, item)).size
-      } catch { /* ignore */ }
-    }
-    return { installed: true, sizeMB: Math.round(totalBytes / 1_000_000) }
-  } catch {
-    return { installed: false, sizeMB: ESTIMATED_SIZES[modelId] ?? 0 }
-  }
 }
 
 async function downloadFile(
@@ -120,6 +93,23 @@ export async function downloadModel(
   signal: AbortSignal
 ): Promise<void> {
   const modelDir = join(modelsDir, modelId)
+
+  // REQ-20260615-078 — wipe any prior incomplete directory before
+  // (re)creating it.  A force-killed download in v1.3.1 left a GB-
+  // scale partial `model.bin` plus the small files behind; the next
+  // download attempt would otherwise reuse those leftovers in-place,
+  // and CT2's whole-file layout cannot recover from a mid-file
+  // resume.  A clean slate guarantees the resulting dir matches what
+  // `checkModelInstalled` accepts when the run finishes.  We only
+  // delete when the directory is INCOMPLETE — a fully-installed dir
+  // is left alone so a redundant "install" call (race condition,
+  // double-click) does not wipe a working model.
+  if (isModelDirIncomplete(modelsDir, modelId)) {
+    log.info(`[downloader] wiping incomplete model dir ${modelDir} before re-download (REQ-078)`)
+    try { rmSync(modelDir, { recursive: true, force: true }) } catch (e) {
+      log.warn(`[downloader] could not wipe ${modelDir}`, e)
+    }
+  }
   mkdirSync(modelDir, { recursive: true })
 
   const files = MODEL_FILES[modelId] ?? DEFAULT_MODEL_FILES
@@ -153,10 +143,18 @@ export async function downloadModel(
       downloadedPaths.push(destPath)
     }
   } catch (err) {
-    // Clean up any files already written for this partial download
+    // REQ-20260615-078 — strict cleanup on any abort path.  Previously
+    // we only unlinked the files we'd fully written, leaving the dir
+    // itself in place (which then read as `installed: true` via the
+    // legacy `existsSync` check).  Now we also `rmSync` the dir so a
+    // subsequent `checkModelInstalled` returns `installed: false` even
+    // before the next download attempt runs.  The dir wipe absorbs the
+    // per-file unlinks but we keep them as defence in depth in case
+    // `rmSync` fails partway (locked file, AV scanner).
     for (const p of downloadedPaths) {
       try { unlinkSync(p) } catch { /* ignore */ }
     }
+    try { rmSync(modelDir, { recursive: true, force: true }) } catch { /* ignore */ }
     throw err
   }
 
