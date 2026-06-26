@@ -1,13 +1,19 @@
 import { ChildProcess } from 'child_process'
 import { createInterface } from 'readline'
-import { existsSync, readdirSync, statSync } from 'fs'
-import { join } from 'path'
 import { app } from 'electron'
 import { spawnProcess } from '../lib/child-process'
 import { getPythonSidecarPath, getPythonExecutable, getTranscriberExePath } from '../lib/paths'
 import type { TranscriptionStartRequest, TranscriptionEvent } from '../../shared/ipc-contracts'
 import { TranscriptionError } from '../../shared/errors'
 import log from '../lib/logger'
+
+// REQ-20260615-078 — the installed-check used to live here as a
+// `existsSync(modelDir)` one-liner.  It's now a strict completeness
+// gate (per-file presence + model.bin size floor) in its own pure
+// module; this file re-exports for callsite stability.  Single source
+// of truth — `model-downloader.ts` re-exports the same symbol so the
+// duplicate `checkModel` definition is gone.
+export { checkModelInstalled } from './check-model-installed'
 
 export type TranscriptionEventCallback = (event: TranscriptionEvent) => void
 
@@ -150,19 +156,3 @@ export function terminateSidecar(): void {
   pendingCallback = null
 }
 
-export function checkModelInstalled(modelId: string, modelsDir: string): { installed: boolean; sizeMB: number } {
-  const modelDir = join(modelsDir, modelId)
-  if (!existsSync(modelDir)) return { installed: false, sizeMB: 0 }
-  try {
-    let totalBytes = 0
-    const items = readdirSync(modelDir)
-    for (const item of items) {
-      try {
-        totalBytes += statSync(join(modelDir, item)).size
-      } catch { /* ignore */ }
-    }
-    return { installed: true, sizeMB: Math.round(totalBytes / 1_000_000) }
-  } catch {
-    return { installed: false, sizeMB: 0 }
-  }
-}
