@@ -7,6 +7,7 @@ import { transcribe, checkModelInstalled } from '../services/transcription-sidec
 import { downloadModel, isModelFormatStale } from '../services/model-downloader'
 import { getModelsDir, getBinPath } from '../lib/paths'
 import { loadSettings, saveSettings } from '../services/settings-store'
+import { resolveActiveModelId } from '../services/resolve-active-model'
 import type { TranscriptionStartRequest } from '../../shared/ipc-contracts'
 import type { ModelInfo, ModelStatus, ModelsState, WhisperModelId } from '../../shared/types'
 import log from '../lib/logger'
@@ -43,17 +44,39 @@ function getDiskFree(dirPath: string): { freeBytes: number; drive: string } {
 async function buildModelsState(): Promise<ModelsState> {
   const modelsDir = getModelsDir()
   const settings = await loadSettings()
-  let activeModelId = settings.activeModelId ?? null
 
-  // Migration: if activeModelId not set but whisperModel is installed, use it
-  if (!activeModelId && settings.transcriptionDefaults.whisperModel) {
-    const candidate = settings.transcriptionDefaults.whisperModel
-    const { installed } = checkModelInstalled(candidate, modelsDir)
-    if (installed) {
-      activeModelId = candidate
-      settings.activeModelId = candidate
-      await saveSettings(settings)
-    }
+  // REQ-20260615-077 — reconcile `activeModelId` against the actual model
+  // files on disk before trusting it.  See `resolve-active-model.ts` for
+  // the full decision tree.  Two real-world failures motivate this:
+  //   - MSIX installs where the OS AppData merge surfaces an NSIS
+  //     install's `settings.json` (with `activeModelId='large-v3-turbo'`)
+  //     into the MSIX virtualized environment whose `models/` is empty.
+  //   - NSIS users who delete model files via Explorer rather than the
+  //     in-app uninstall button.
+  // Both end up with an `activeModelId` pointing at a model whose files
+  // are absent, which used to flip REQ-072's auto-open into 'inputVideo'
+  // and let `canStart` lie.  Reverting to null fixes both.
+  const resolved = resolveActiveModelId(
+    settings.activeModelId,
+    settings.transcriptionDefaults.whisperModel,
+    (id) => checkModelInstalled(id, modelsDir).installed,
+  )
+  const activeModelId = resolved.activeModelId
+  if (resolved.source === 'corrected-null') {
+    // Option A — do NOT persist this correction.  In the MSIX +
+    // coexisting NSIS case the settings.json we'd write would clobber
+    // the NSIS install's value on disk via the AppData merge.  The
+    // log line firing each launch is the accepted cost.
+    log.info(
+      `[ipc/transcription] settings.activeModelId="${resolved.correctedFrom}" ` +
+      `but files missing under ${modelsDir} — reverting to null (REQ-077)`,
+    )
+  } else if (resolved.source === 'migrated-from-whisper-model') {
+    // Pre-existing v1.3.0 behavior: synthesize activeModelId from the
+    // legacy `whisperModel` field for users on older settings versions.
+    // Persist so the synthesis only runs once.
+    settings.activeModelId = activeModelId
+    await saveSettings(settings)
   }
 
   const { freeBytes: diskFreeBytes, drive: diskDrive } = getDiskFree(modelsDir)
