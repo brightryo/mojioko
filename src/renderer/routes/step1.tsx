@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform, Check } from 'lucide-react'
+import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -37,6 +37,7 @@ import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { pickInitialOpenSection } from './step1-initial-open'
+import { pickAudioTrackLabel } from '@/lib/audio-track-label'
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   // REQ-071 Phase 3.5: value bumped to `body` (15) so it physically reads as
@@ -599,10 +600,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
               expanded panel to 'whisper'; clicking when collapsed
               switches back here.  Either way exactly one panel is open. */}
           {/* REQ-082: Enter / Space keyboard activation removed. */}
-          {/* REQ-20260615-020: header right side now shows the audio track
-              selection state (track name + green check, or grey "未選択")
-              instead of the file-format hint.  The hint moved into the
-              body's first row (see below). */}
+          {/* REQ-20260615-079: header right side now shows the audio-track
+              **inventory** for the loaded file (count, or "no audio"),
+              not the currently-selected track.  Track selection itself
+              moved into the TranscriptionDrawer per REQ-055/056, so a
+              "selected track" indicator here was stale.  Nothing
+              renders when no file is loaded — the prior "トラック未選択"
+              placeholder was just noise.  See `pickAudioTrackLabel`. */}
           <div
             role="button"
             aria-expanded={openSection === 'inputVideo'}
@@ -623,15 +627,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             </div>
             <div className="flex items-center gap-2">
               {(() => {
-                const trackSelected = audioTracks.some((tr) => tr.index === selectedTrack)
-                return trackSelected ? (
-                  <span className="flex items-center gap-1 text-body-sm text-fg-secondary">
-                    <span>{t('audioTracks.trackLabel', { index: selectedTrack })}</span>
-                    <Check className="h-4 w-4 text-primary flex-shrink-0" aria-hidden="true" />
-                  </span>
-                ) : (
-                  <span className="text-body-sm text-fg-disabled">
-                    {t('audioTracks.notSelected')}
+                const labelState = pickAudioTrackLabel(video ? audioTracks.length : null)
+                if (labelState.kind === 'hidden') return null
+                return (
+                  <span className="text-body-sm text-fg-secondary">
+                    {labelState.kind === 'no-audio'
+                      ? t('audioTracks.noAudioTrack')
+                      : t('audioTracks.audioTrackCount', { count: labelState.count })}
                   </span>
                 )
               })()}
