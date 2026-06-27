@@ -4,7 +4,7 @@ import { existsSync, rmSync, statfsSync } from 'fs'
 import { join, parse } from 'path'
 import { Channels } from '../../shared/ipc-channels'
 import { transcribe, checkModelInstalled } from '../services/transcription-sidecar'
-import { downloadModel, isModelFormatStale } from '../services/model-downloader'
+import { downloadModel, isModelFormatStale, DownloadError } from '../services/model-downloader'
 import { getModelsDir, getBinPath } from '../lib/paths'
 import { loadSettings, saveSettings } from '../services/settings-store'
 import { resolveActiveModelId } from '../services/resolve-active-model'
@@ -214,7 +214,19 @@ export function registerTranscriptionHandlers(): void {
     }, controller.signal).catch((err) => {
       log.error('[ipc/transcription] downloadModel error', err)
       if (!event.sender.isDestroyed()) {
-        event.sender.send(channelId, { event: 'failed', error: String(err) })
+        // REQ-20260615-081 — carry the typed code on the IPC payload so
+        // the renderer can localize without re-parsing the message
+        // string.  Non-DownloadError throws (e.g., unexpected bugs)
+        // surface as `fatal` with the raw message — matches the v1.3.1
+        // toast wording so a regression is visually loud.
+        const errorCode = err instanceof DownloadError ? err.code : 'fatal'
+        const inner = err instanceof DownloadError ? err.inner : err
+        const innerMsg = inner instanceof Error ? inner.message : String(inner)
+        event.sender.send(channelId, {
+          event: 'failed',
+          error: innerMsg,
+          errorCode,
+        })
       }
     }).finally(() => {
       activeDownloads.delete(channelId)

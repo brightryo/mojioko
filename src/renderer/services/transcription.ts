@@ -51,6 +51,22 @@ export interface DownloadRun {
   cancel: () => void
 }
 
+/**
+ * REQ-20260615-081 — error subclass that carries the IPC `errorCode`
+ * so the renderer's toast layer can pick the right locale key without
+ * parsing the message string.  Pre-REQ-081 the renderer wrapped the
+ * raw IPC message in a plain `Error`, which surfaced "Error:
+ * TypeError: terminated" verbatim in the UI on undici drops.
+ */
+export class DownloadFailedError extends Error {
+  readonly errorCode: 'network' | 'fatal' | 'aborted'
+  constructor(errorCode: 'network' | 'fatal' | 'aborted', innerMsg: string) {
+    super(innerMsg)
+    this.name = 'DownloadFailedError'
+    this.errorCode = errorCode
+  }
+}
+
 export function downloadModel(
   modelId: string,
   onEvent: (event: DownloadModelEvent) => void
@@ -72,7 +88,16 @@ export function downloadModel(
           resolve()
         } else if (evt.event === 'failed') {
           unsub?.()
-          reject(new Error(evt.error))
+          // REQ-081 — when the main process attached a code, prefer
+          // the typed DownloadFailedError so the consumer can dispatch
+          // on `err.errorCode` instead of `String(err).includes(...)`.
+          // Older main processes (no code) still produce a plain Error
+          // with the message, matching pre-REQ-081 behaviour.
+          if (evt.errorCode) {
+            reject(new DownloadFailedError(evt.errorCode, evt.error))
+          } else {
+            reject(new Error(evt.error))
+          }
         }
       })
     })
