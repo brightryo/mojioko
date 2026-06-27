@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - MOJIOKO</title>
+  <meta name="description" content="MOJIOKO's privacy policy. Your videos, audio, and subtitles are never sent to any server &mdash; all processing happens locally on your PC. No telemetry, no analytics.">
+  <link rel="icon" type="image/png" href="../../images/icon.png">
+  <link rel="stylesheet" href="../../assets/style.css">
+</head>
+<body>
+  <div class="container">
+
+    <!-- Top Navigation -->
+    <nav class="top-nav">
+      <a href="../index.html" class="brand brand-link">
+        <img src="../../images/icon.png" alt="" class="brand-icon">
+        <span>MOJIOKO</span>
+      </a>
+      <div class="lang-switch">
+        <a href="../../privacy/" data-lang-link="ja">日本語</a>
+        <a href="./" class="active" data-lang-link="en">English</a>
+      </div>
+    </nav>
+
+    <!-- Page Hero -->
+    <section class="guide-hero">
+      <p class="guide-back"><a href="../index.html">&larr; Back to top</a></p>
+      <h1>Privacy Policy</h1>
+      <p class="tagline">How MOJIOKO handles your data</p>
+    </section>
+
+    <!-- Policy body -->
+    <article class="privacy-content">
+
+      <p class="privacy-meta">
+        Last updated: June 27, 2026 &nbsp;/&nbsp; Version 1.0
+      </p>
+
+      <h2>1. Core Principle &mdash; Everything Happens on Your PC</h2>
+      <p>
+        MOJIOKO (the &ldquo;App&rdquo;) is a desktop application that performs all of its work &mdash; transcribing audio from video files, editing subtitles, and burning subtitles into output videos &mdash; <strong>locally on your computer</strong>.
+      </p>
+      <p>
+        The App does <strong>not send, upload, or collect</strong> your video files, audio, generated subtitles, edits, or any other personal data to any external server.
+      </p>
+      <p>
+        The App contains <strong>no telemetry, no analytics, and no crash reporting</strong>. There are no advertising SDKs, no tracking SDKs, and no third-party analytics tools embedded in the App.
+      </p>
+
+      <h2>2. When the App Communicates with the Internet</h2>
+      <p>
+        The App does not automatically contact any server at launch or during use. Network communication occurs <strong>only as a result of an explicit user action</strong>, in the limited cases below.
+      </p>
+
+      <h3>2.1 Downloading Whisper Models (Hugging Face)</h3>
+      <p>
+        Transcription requires an OpenAI Whisper model (such as large-v3 or large-v3-turbo, approximately 1.5&ndash;3 GB). These models are downloaded from <a href="https://huggingface.co/" target="_blank" rel="noopener noreferrer">Hugging Face (huggingface.co)</a> when you choose &ldquo;Download Model&rdquo; inside the App.
+      </p>
+      <p>
+        Only <strong>publicly available model files</strong> are downloaded. None of your videos, audio, or personal data are sent to Hugging Face.
+      </p>
+      <p>
+        Communication with Hugging Face is governed by Hugging Face's own privacy policy (<a href="https://huggingface.co/privacy" target="_blank" rel="noopener noreferrer">https://huggingface.co/privacy</a>).
+      </p>
+
+      <h3>2.2 Downloading Additional Fonts (GitHub Releases)</h3>
+      <p>
+        Additional subtitle fonts (such as Dela Gothic One, Reggae, and Yusei Magic &mdash; all distributed under the SIL Open Font License) are downloaded from the App's <a href="https://github.com/brightryo/mojioko/releases" target="_blank" rel="noopener noreferrer">GitHub Releases page</a> when you choose &ldquo;Download Font&rdquo; inside the App.
+      </p>
+      <p>
+        Only the font files themselves are downloaded; no user data is sent. Communication with GitHub is governed by GitHub's own privacy policy.
+      </p>
+
+      <h3>2.3 Opening External Pages in Your Browser</h3>
+      <p>
+        Menu items such as &ldquo;Open Download Page&rdquo;, &ldquo;Open User Guide&rdquo;, &ldquo;Open Feedback Form&rdquo;, and the donation links (GitHub Sponsors, BOOTH, Buy Me a Coffee) <strong>simply open the corresponding URL in your default browser</strong>. The App itself does not issue HTTP requests for these links; any subsequent communication happens between your browser and the destination site.
+      </p>
+
+      <h3>2.4 No Automatic Update Checks</h3>
+      <p>
+        The App does <strong>not</strong> include an automatic update mechanism (it does not use <code>electron-updater</code> or any equivalent). It never contacts any server at launch or on a schedule to compare versions.
+      </p>
+      <p>
+        To check for a new release, please open the distribution page (GitHub Pages) from the Help menu and review it in your browser.
+      </p>
+
+      <h2>3. Feedback Form (Google Forms)</h2>
+      <p>
+        The App provides a feedback form for bug reports and feature requests. The form itself is hosted on Google Forms and is opened in your default browser from the Help menu or the distribution page.
+      </p>
+      <p>
+        Only the information that <strong>you voluntarily enter or attach</strong> on that form reaches the developer. The App never submits anything to the form in the background.
+      </p>
+      <p>
+        Providing personally identifiable information such as an email address is <strong>not required</strong>. If you attach log files or screenshots, please check that they do not contain your username (PC login name) or other personal information before submitting.
+      </p>
+      <p>
+        Use of Google Forms is governed by Google's privacy policy (<a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">https://policies.google.com/privacy</a>).
+      </p>
+
+      <h2>4. Donation Services</h2>
+      <p>
+        The Help menu contains links to optional donation services (Buy Me a Coffee, BOOTH, GitHub Sponsors). These services handle payment entirely on their own websites in your browser; the App <strong>has no access to and does not collect</strong> your payment information, card details, or address.
+      </p>
+
+      <h2>5. Third-Party Services at a Glance</h2>
+      <ul>
+        <li><strong>Hugging Face</strong> &mdash; distributes Whisper model files (contacted only when you choose &ldquo;Download Model&rdquo;).</li>
+        <li><strong>GitHub</strong> &mdash; distributes the App and additional fonts, hosts the issue tracker and GitHub Sponsors (contacted only when you use the corresponding feature).</li>
+        <li><strong>Google (Google Forms)</strong> &mdash; hosts the feedback form (contacted only when you voluntarily submit the form).</li>
+        <li><strong>Buy Me a Coffee, BOOTH</strong> &mdash; donation payment services (contacted only when you follow the external link).</li>
+      </ul>
+      <p>
+        None of these services are involved in the App's local processing. Communication happens only as a result of an explicit user action.
+      </p>
+
+      <h2>6. Data Stored Locally on Your PC</h2>
+      <p>
+        The App stores the following data only in local storage on your computer. None of it is sent externally.
+      </p>
+      <ul>
+        <li>App settings (theme, language, default subtitle style, etc.) &mdash; under <code>%APPDATA%/MOJIOKO/</code></li>
+        <li>Downloaded Whisper model files &mdash; under <code>%APPDATA%/MOJIOKO/</code></li>
+        <li>Downloaded additional font files &mdash; under <code>%APPDATA%/MOJIOKO/</code></li>
+        <li>Log files (for troubleshooting; attached only if you choose to do so) &mdash; under <code>%APPDATA%/MOJIOKO/logs/</code></li>
+        <li>Subtitle files and output videos you export &mdash; at a <strong>location of your choosing</strong></li>
+      </ul>
+      <p>
+        When uninstalling the App, the <code>%APPDATA%/MOJIOKO/</code> folder (containing settings, models, fonts, and logs) is not automatically removed; please delete it manually if desired.
+      </p>
+
+      <h2>7. Information About Children</h2>
+      <p>
+        The App does not collect personal information from any user, regardless of age. The same applies to children (including those under 13).
+      </p>
+
+      <h2>8. Contact</h2>
+      <p>
+        For questions about this policy or any privacy-related concern about the App, please reach out via one of the following channels.
+      </p>
+      <ul>
+        <li><strong>GitHub Issues</strong> &mdash; <a href="https://github.com/brightryo/mojioko/issues" target="_blank" rel="noopener noreferrer">https://github.com/brightryo/mojioko/issues</a> (a GitHub account is required).</li>
+        <li><strong>Feedback Form</strong> &mdash; via the &ldquo;<a href="../feedback/">Bug Reports &amp; Feature Requests</a>&rdquo; page on the distribution site (no GitHub account required).</li>
+      </ul>
+
+      <h2>9. Changes to This Policy</h2>
+      <p>
+        This policy may be updated to reflect changes in the App's features or applicable law. When it is updated, the &ldquo;Last updated&rdquo; date and the version number at the top of this page will change. Material changes will also be announced on the distribution page.
+      </p>
+
+    </article>
+
+    <!-- Back to top -->
+    <section class="guide-back-cta">
+      <a href="../index.html" class="back-btn">Back to top</a>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <div>&copy; 2026 brightryo</div>
+      <div class="footer-links">
+        <a href="https://github.com/brightryo/mojioko" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/brightryo/mojioko/issues" target="_blank" rel="noopener">Contact</a>
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>
