@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>プライバシーポリシー - MOJIOKO</title>
+  <meta name="description" content="MOJIOKO のプライバシーポリシー。動画・音声・字幕などのユーザーデータは外部に送信されず、すべてローカル PC 内で処理されます。テレメトリ・解析は行いません。">
+  <link rel="icon" type="image/png" href="../images/icon.png">
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+
+    <!-- Top Navigation -->
+    <nav class="top-nav">
+      <a href="../index.html" class="brand brand-link">
+        <img src="../images/icon.png" alt="" class="brand-icon">
+        <span>MOJIOKO</span>
+      </a>
+      <div class="lang-switch">
+        <a href="./" class="active" data-lang-link="ja">日本語</a>
+        <a href="../en/privacy/" data-lang-link="en">English</a>
+      </div>
+    </nav>
+
+    <!-- Page Hero -->
+    <section class="guide-hero">
+      <p class="guide-back"><a href="../index.html">← トップに戻る</a></p>
+      <h1>プライバシーポリシー</h1>
+      <p class="tagline">MOJIOKO におけるユーザーデータの取り扱いについて</p>
+    </section>
+
+    <!-- Policy body -->
+    <article class="privacy-content">
+
+      <p class="privacy-meta">
+        最終更新日: 2026 年 6 月 27 日 ／ バージョン 1.0
+      </p>
+
+      <h2>1. 基本方針 ― すべての処理はローカル PC で完結します</h2>
+      <p>
+        MOJIOKO（以下「本アプリ」）は、動画ファイルからの文字起こし、字幕の編集、字幕の焼き込みといったすべての処理を<strong>ユーザーの PC 内で完結させる</strong>デスクトップアプリケーションです。
+      </p>
+      <p>
+        本アプリは、ユーザーの動画ファイル、音声、生成された字幕、編集内容、その他の個人データを<strong>外部のサーバーに送信・アップロード・収集しません</strong>。
+      </p>
+      <p>
+        本アプリは、利用状況の追跡・解析（テレメトリ／アナリティクス／クラッシュレポート）を<strong>一切行いません</strong>。広告 SDK、トラッキング SDK、第三者の解析ツールは組み込まれていません。
+      </p>
+
+      <h2>2. アプリが外部と通信するケース</h2>
+      <p>
+        本アプリは、起動時や利用中に外部サーバーへ自動的に通信することはありません。<strong>ユーザーの明示的な操作</strong>によって、以下に限り外部通信が発生します。
+      </p>
+
+      <h3>2.1 Whisper モデルのダウンロード（Hugging Face）</h3>
+      <p>
+        文字起こしには OpenAI Whisper モデル（large-v3、large-v3-turbo など、約 1.5〜3 GB）が必要です。これらのモデルは、ユーザーが本アプリ内で「モデルをダウンロード」を選択したときに、<a href="https://huggingface.co/" target="_blank" rel="noopener noreferrer">Hugging Face（huggingface.co）</a>からダウンロードされます。
+      </p>
+      <p>
+        ダウンロードされるのは<strong>公開されているモデルファイルのみ</strong>です。ユーザーの動画・音声・個人データが Hugging Face に送信されることはありません。
+      </p>
+      <p>
+        Hugging Face との通信には、Hugging Face 社のプライバシーポリシー（<a href="https://huggingface.co/privacy" target="_blank" rel="noopener noreferrer">https://huggingface.co/privacy</a>）が適用されます。
+      </p>
+
+      <h3>2.2 追加フォントのダウンロード（GitHub Releases）</h3>
+      <p>
+        字幕に使用する追加フォント（Dela Gothic One、Reggae、Yusei Magic など、いずれも SIL Open Font License のフォント）は、ユーザーが本アプリ内で「フォントをダウンロード」を選択したときに、本アプリの<a href="https://github.com/brightryo/mojioko/releases" target="_blank" rel="noopener noreferrer">GitHub Releases ページ</a>からダウンロードされます。
+      </p>
+      <p>
+        ダウンロードされるのはフォントファイルのみで、ユーザーデータは送信されません。GitHub との通信には GitHub のプライバシーポリシーが適用されます。
+      </p>
+
+      <h3>2.3 配布ページ・ヘルプリンクの外部ブラウザ起動</h3>
+      <p>
+        ヘルプメニューの「ダウンロードページを開く」「使い方ガイドを開く」「フィードバックフォームを開く」「GitHub Sponsors / BOOTH / Buy Me a Coffee」などの項目は、<strong>外部ブラウザで該当 URL を開くだけ</strong>です。本アプリ内から HTTP リクエストを行うわけではなく、その後の通信はブラウザと各サイトの間で完結します。
+      </p>
+
+      <h3>2.4 自動アップデート確認は行いません</h3>
+      <p>
+        本アプリは <code>electron-updater</code> 等の自動アップデート機構を<strong>組み込んでいません</strong>。起動時や定期的にバージョン情報を外部サーバーへ問い合わせることはありません。
+      </p>
+      <p>
+        新しいバージョンの公開状況は、ヘルプメニューから配布ページ（GitHub Pages）をブラウザで開いて確認してください。
+      </p>
+
+      <h2>3. フィードバックフォーム（Google Forms）について</h2>
+      <p>
+        本アプリには、不具合報告・ご要望を受け付けるためのフィードバックフォームがあります。フォームの実体は Google Forms で提供されており、ヘルプメニューまたは配布ページから外部ブラウザで開かれます。
+      </p>
+      <p>
+        フォームを通じて開発者に届くのは、<strong>ユーザーが自発的にフォームに入力・添付した情報のみ</strong>です。本アプリがバックグラウンドで自動送信することはありません。
+      </p>
+      <p>
+        メールアドレスを含む個人を特定する情報の入力は<strong>必須としていません</strong>。ログファイルやスクリーンショットを添付する場合は、ユーザー名（PC のログイン名）や個人情報が映り込んでいないかをご確認のうえ送信してください。
+      </p>
+      <p>
+        Google Forms の利用には、Google のプライバシーポリシー（<a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">https://policies.google.com/privacy</a>）が適用されます。
+      </p>
+
+      <h2>4. 寄付サービスについて</h2>
+      <p>
+        本アプリのヘルプメニューには、開発支援のための寄付サービス（Buy Me a Coffee、BOOTH、GitHub Sponsors）への外部リンクが含まれます。これらは外部ブラウザでの遷移先サービスにおいて決済が行われるものであり、本アプリは<strong>ユーザーの決済情報・カード情報・住所等に一切関与・取得しません</strong>。
+      </p>
+
+      <h2>5. 関与する第三者サービスの一覧</h2>
+      <ul>
+        <li><strong>Hugging Face</strong> ― Whisper モデルファイルの配布元（ユーザーが「モデルをダウンロード」を選択したときのみ通信）</li>
+        <li><strong>GitHub</strong> ― 本アプリ本体および追加フォントの配布、Issues トラッカー、GitHub Sponsors（ユーザーが該当機能を選択したときのみ通信）</li>
+        <li><strong>Google（Google Forms）</strong> ― フィードバックフォームの提供（ユーザーが自発的にフォームへ入力・送信したときのみ）</li>
+        <li><strong>Buy Me a Coffee、BOOTH</strong> ― 寄付の決済サービス（ユーザーが外部リンクを開いた場合のみ）</li>
+      </ul>
+      <p>
+        いずれも本アプリ内で完結する処理には関与せず、ユーザーの明示的な操作によって初めて通信が発生します。
+      </p>
+
+      <h2>6. ローカルに保存されるデータ</h2>
+      <p>
+        本アプリは、以下のデータをユーザーの PC のローカルストレージにのみ保存します。これらは外部に送信されません。
+      </p>
+      <ul>
+        <li>アプリ設定（テーマ、言語、字幕スタイル既定値など）― <code>%APPDATA%/MOJIOKO/</code> 配下</li>
+        <li>ダウンロード済み Whisper モデルファイル ― <code>%APPDATA%/MOJIOKO/</code> 配下</li>
+        <li>ダウンロード済み追加フォントファイル ― <code>%APPDATA%/MOJIOKO/</code> 配下</li>
+        <li>ログファイル（不具合調査用、ユーザーが任意で添付）― <code>%APPDATA%/MOJIOKO/logs/</code> 配下</li>
+        <li>ユーザーが書き出した字幕ファイル・動画ファイル ― <strong>ユーザーが指定した任意の場所</strong></li>
+      </ul>
+      <p>
+        本アプリをアンインストールする場合、ユーザー設定・モデル・フォント・ログのフォルダ（<code>%APPDATA%/MOJIOKO/</code>）は手動で削除してください。
+      </p>
+
+      <h2>7. 子どもからの情報収集について</h2>
+      <p>
+        本アプリは、いかなる年齢層のユーザーからも個人情報を収集しません。これは子ども（13 歳未満を含む）についても同様です。
+      </p>
+
+      <h2>8. お問い合わせ</h2>
+      <p>
+        本ポリシーに関するご質問、本アプリのプライバシーに関するご懸念は、以下のいずれかの方法でお寄せください。
+      </p>
+      <ul>
+        <li><strong>GitHub Issues</strong> ― <a href="https://github.com/brightryo/mojioko/issues" target="_blank" rel="noopener noreferrer">https://github.com/brightryo/mojioko/issues</a>（GitHub アカウントが必要）</li>
+        <li><strong>フィードバックフォーム</strong> ― 配布ページ内「<a href="../feedback/">不具合報告 &amp; ご要望</a>」より（GitHub アカウント不要）</li>
+      </ul>
+
+      <h2>9. ポリシーの改定</h2>
+      <p>
+        本ポリシーは、本アプリの機能変更や法令の変更等に応じて改定されることがあります。改定があった場合は、本ページの「最終更新日」と「バージョン」を更新して公開します。重要な変更がある場合は、配布ページ等で告知します。
+      </p>
+
+    </article>
+
+    <!-- Back to top -->
+    <section class="guide-back-cta">
+      <a href="../index.html" class="back-btn">トップに戻る</a>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <div>&copy; 2026 brightryo</div>
+      <div class="footer-links">
+        <a href="https://github.com/brightryo/mojioko" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/brightryo/mojioko/issues" target="_blank" rel="noopener">お問い合わせ</a>
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>
