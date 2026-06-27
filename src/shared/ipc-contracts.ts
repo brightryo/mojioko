@@ -129,10 +129,29 @@ export type BurninEvent =
   | { event: 'completed'; outputPath: string; sizeMB: number }
   | { event: 'failed'; error: string }
 
+/**
+ * REQ-20260615-081 — IPC contract for model download.  The `failed`
+ * variant carries an OPTIONAL `errorCode` so the renderer can pick
+ * the right localized toast without parsing `error: string`.  The
+ * field is additive — old callers / older renderers that never read
+ * it keep working.  Codes:
+ *
+ *   - `network`: transient connectivity failure (undici terminated,
+ *     DNS, TCP reset).  Renderer suggests "check your connection
+ *     and retry".
+ *   - `fatal`:   server said no (HTTP 4xx/5xx) or unknown shape —
+ *     renderer falls back to the generic "download failed" toast
+ *     with the raw message attached for diagnostics.
+ *   - `aborted`: user clicked Cancel; renderer suppresses the toast.
+ *
+ * `error` (free-form string) stays for log / bug-report breadcrumbs
+ * and as a fallback when `errorCode` is absent (e.g., older v1.3.x
+ * main process feeding a v1.3.2+ renderer).
+ */
 export type DownloadModelEvent =
   | { event: 'progress'; file: string; fileIndex: number; totalFiles: number; percent: number }
   | { event: 'completed' }
-  | { event: 'failed'; error: string }
+  | { event: 'failed'; error: string; errorCode?: 'network' | 'fatal' | 'aborted' }
 
 // ---------------------------------------------------------------------------
 // Settings

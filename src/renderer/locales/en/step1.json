@@ -131,6 +131,7 @@
     "probeError": "Failed to read file: {{error}}",
     "transcriptionComplete": "Transcription complete · {{count}} lines",
     "modelDownloadFailed": "Download failed: {{error}}",
+    "modelDownloadFailedNetwork": "The download stopped because the network connection was lost. Check your connection and try again.",
     "modelNotInstalled": "Model {{model}} is not installed",
     "transcriptionError": "Transcription failed: {{error}}",
     "transcriptionCancelled": "Transcription cancelled"

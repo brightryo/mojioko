@@ -34,7 +34,7 @@ import {
   openModelsFolder,
   downloadModel
 } from '@/services/transcription'
-import type { DownloadRun } from '@/services/transcription'
+import { DownloadFailedError, type DownloadRun } from '@/services/transcription'
 import type { ModelInfo, ModelsState, WhisperModelId } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -193,9 +193,29 @@ export function WhisperModelManager({
       toast.success(t('model.install_success', { modelName: model.displayName }))
       await refresh()
     } catch (err) {
-      const msg = String(err)
-      if (!msg.includes('Cancelled')) {
-        toast.error(t('toast.modelDownloadFailed', { error: msg }))
+      // REQ-20260615-081 — pick the localized toast off the typed
+      // error code carried on `DownloadFailedError`.  `aborted` =
+      // user cancelled → no toast (info-level cancel UX lives on the
+      // Cancel button itself).  `network` = transient connectivity
+      // failure → "ネットワークが切れた…接続を確認して再試行" so the
+      // user knows the cause is recoverable.  Pre-REQ-081 every
+      // failure produced "Error: TypeError: terminated" verbatim.
+      if (err instanceof DownloadFailedError) {
+        if (err.errorCode === 'aborted') {
+          // No toast — Cancel UX is owned by the button.
+        } else if (err.errorCode === 'network') {
+          toast.error(t('toast.modelDownloadFailedNetwork'))
+        } else {
+          toast.error(t('toast.modelDownloadFailed', { error: err.message }))
+        }
+      } else {
+        // Older shapes (no typed code, plain Error) — preserve the
+        // pre-REQ-081 behaviour: filter the "Cancelled" string and
+        // toast the rest generically.
+        const msg = String(err)
+        if (!msg.includes('Cancelled')) {
+          toast.error(t('toast.modelDownloadFailed', { error: msg }))
+        }
       }
     } finally {
       setDownloadingId(null)
