@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.1] - 2026-06-28
+
+### Improved
+
+- The model selector now opens automatically when no Whisper model is installed
+- Model downloads can now resume from where they left off if interrupted
+- The number of audio tracks in the input file is now shown
+
+### Fixed
+
+- Incomplete model downloads are now correctly detected, preventing transcription from starting with a corrupted model
+- Improved the error message shown when a download fails
+
+### Changed
+
+- Downloaded models are now also removed when the app is uninstalled
+
+---
+
 ## [1.3.0] - 2026-06-24
 
 Fourth minor-line release: per-subtitle fade with a redesigned
