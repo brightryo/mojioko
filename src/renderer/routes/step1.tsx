@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform } from 'lucide-react'
+import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -630,11 +630,26 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
                 const labelState = pickAudioTrackLabel(video ? audioTracks.length : null)
                 if (labelState.kind === 'hidden') return null
                 return (
-                  <span className="text-body-sm text-fg-secondary">
-                    {labelState.kind === 'no-audio'
-                      ? t('audioTracks.noAudioTrack')
-                      : t('audioTracks.audioTrackCount', { count: labelState.count })}
-                  </span>
+                  <>
+                    <span className="text-body-sm text-fg-secondary">
+                      {labelState.kind === 'no-audio'
+                        ? t('audioTracks.noAudioTrack')
+                        : t('audioTracks.audioTrackCount', { count: labelState.count })}
+                    </span>
+                    {/* REQ-20260615-080 — positive-detection check.  Shown
+                        only when N ≥ 1 (the "we found usable audio" case),
+                        NOT for 0 / hidden.  Identical Check element +
+                        Tailwind class triple as the Whisper accordion's
+                        active-model check (whisper-model-manager.tsx:309)
+                        so the two greens in this route's two headers
+                        track each other exactly — same icon, same
+                        `text-primary`, same h-4 w-4.  Decorative; the
+                        adjacent text already conveys the count to AT, so
+                        aria-hidden mirrors the pre-REQ-079 treatment. */}
+                    {labelState.kind === 'count' && (
+                      <Check className="h-4 w-4 text-primary flex-shrink-0" aria-hidden="true" />
+                    )}
+                  </>
                 )
               })()}
               {openSection === 'inputVideo' ? (
