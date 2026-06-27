@@ -9,7 +9,6 @@ import {
   Target,
   Database,
   HardDrive,
-  ShieldCheck,
   FolderOpen,
   AlertTriangle,
   ChevronUp,
@@ -395,10 +394,12 @@ export function WhisperModelManager({
                       {t('model.openFolder')}
                     </Button>
                   )}
-                  <span className="flex items-center gap-1.5 text-caption text-primary-hover">
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    {t('model.localOnly')}
-                  </span>
+                  {/* REQ-20260615-079 — the "ローカルのみ・通信なし"
+                      badge was retired here.  It contradicted itself
+                      during model downloads (we ARE talking to HF in
+                      that moment) and the footer privacyNote in
+                      step1.tsx covers the local-only commitment for
+                      the whole route. */}
                 </div>
               </div>
             </div>
