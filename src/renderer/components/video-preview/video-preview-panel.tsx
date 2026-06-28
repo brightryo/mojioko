@@ -5,6 +5,7 @@ import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore } from '@/stores/ui-store'
 import { useHistoryStore } from '@/stores/history-store'
+import { usePreviewMixStore } from '@/stores/preview-mix-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
@@ -160,9 +161,23 @@ export function VideoPreviewPanel() {
 
   const videoRef  = useRef<HTMLVideoElement>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
+  // REQ-086 — hidden <audio> that plays the pre-generated multi-track
+  // amix when the source has >= 2 audio tracks.  `previewMixUrl` is null
+  // for single-track / no-audio sources and during the brief window
+  // between video load and a fresh transcription completing — in both
+  // cases <video> alone drives playback (legacy behaviour, no regression).
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const previewMixUrl = usePreviewMixStore((s) => s.url)
   // REQ-074 1b: while playing, jump past any frame that falls inside a
   // user-confirmed cut (ripple-preview behaviour).  No-op when cuts is empty.
   useCutSkip(videoRef)
+  // REQ-086 — same cut-skip applied to the hidden audio element so the
+  // mixed soundtrack jumps the same cuts as the video.  Both elements
+  // see the same `timeupdate` cadence and the same cuts list, so they
+  // hop together (within a few ms); the rAF drift-correction loop below
+  // tightens any residual gap on the next tick.  No-op when audioRef
+  // is null (= no preview mix) or cuts is empty.
+  useCutSkip(audioRef)
   const [isPlaying,  setIsPlaying]  = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration,    setDuration]    = useState(0)
@@ -353,8 +368,18 @@ export function VideoPreviewPanel() {
   // a frame or two, so the fade-out window is never visually skipped.
   useEffect(() => {
     let raf = 0
+    // REQ-086 — drift threshold between `<video>` (master clock) and the
+    // hidden `<audio>` (slave) before we force-resync.  50 ms is above
+    // typical inter-element jitter (a few ms) but well below the
+    // perceptual threshold for audio-video lag (~80 ms), so the
+    // correction is invisible-but-effective.  When over threshold we
+    // snap the audio to the video's currentTime — Chromium pauses
+    // playback for one frame around the assignment, which is far less
+    // disruptive than letting an audible drift accumulate.
+    const PREVIEW_MIX_DRIFT_THRESHOLD_SEC = 0.05
     const tick = () => {
-      const t = videoRef.current?.currentTime ?? 0
+      const v = videoRef.current
+      const t = v?.currentTime ?? 0
       const entries = activeEntryMapRef.current
       for (const [id, el] of overlayOuterRefs.current) {
         const entry = entries.get(id)
@@ -370,6 +395,17 @@ export function VideoPreviewPanel() {
         // Guard CSSOM writes so a steady-state caption (mid-plateau,
         // opacity = "1") does not invalidate style every frame.
         if (el.style.opacity !== next) el.style.opacity = next
+      }
+      // REQ-086 — audio drift check piggy-backs on the same rAF.  The
+      // guards (no audio element / video paused / video mid-seek) keep
+      // us from poking the audio element during transient states where
+      // a forced rewrite would be visually disruptive.
+      const a = audioRef.current
+      if (v && a && !v.paused && !v.seeking && !a.seeking) {
+        const drift = a.currentTime - v.currentTime
+        if (Math.abs(drift) > PREVIEW_MIX_DRIFT_THRESHOLD_SEC) {
+          a.currentTime = v.currentTime
+        }
       }
       raf = requestAnimationFrame(tick)
     }
@@ -474,6 +510,7 @@ export function VideoPreviewPanel() {
   const togglePlay = useCallback(() => {
     const el = videoRef.current
     if (!el) return
+    const audio = audioRef.current
     if (el.paused) {
       // REQ-079 #1: with handleEnded no longer warping to 0, the
       // playhead may be sitting at the very end when the user presses
@@ -485,9 +522,20 @@ export function VideoPreviewPanel() {
       if (el.duration > 0 && el.currentTime >= el.duration - PLAYBACK_RESET_EPS_SEC) {
         el.currentTime = 0
       }
+      // REQ-086 — align the audio playhead to the video's BEFORE both
+      // start playing.  Without this, the audio would start from
+      // wherever it last paused while the video had moved on (e.g. via
+      // a subtitle-row seek that happened with `<audio>` not yet wired
+      // through that path historically).  Aligning here also covers
+      // the EOF-rewind branch above.
+      if (audio) {
+        audio.currentTime = el.currentTime
+        audio.play().catch(() => {})
+      }
       el.play().catch(() => {})
     } else {
       el.pause()
+      if (audio) audio.pause()
     }
   }, [])
 
@@ -548,6 +596,12 @@ export function VideoPreviewPanel() {
     isSeeking.current = false
     activeEntryIdRef.current = null
     setVideoCurrentTimeSec(0)
+    // REQ-086 — when <video src> changes, also rewind the audio so the
+    // two clocks restart together (Chromium does not reset <audio> on a
+    // sibling element's src change).  Safe when audioRef is null.
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0
+    }
   }, [videoUrl, setVideoCurrentTimeSec])
 
   // -------------------------------------------------------------------------
@@ -569,6 +623,12 @@ export function VideoPreviewPanel() {
         measureSync('VPP.seekEffect.videoSeek', () => {
           el.currentTime = videoSeekRequestSec
         })
+        // REQ-086 — match the hidden audio's playhead in the same tick
+        // so a row-click seek does not cause a perceptible audio/video
+        // delta.  No-op when audioRef is null (single-track / no mix).
+        if (audioRef.current) {
+          audioRef.current.currentTime = videoSeekRequestSec
+        }
         setCurrentTime(videoSeekRequestSec)
         // REQ-096: while a manual ruler scrub is in progress, the
         // optimistic-playhead path in TimelineView's handleSeek has
@@ -787,6 +847,12 @@ export function VideoPreviewPanel() {
     if (videoRef.current) {
       videoRef.current.currentTime = origVal
     }
+    // REQ-086 — keep the audio playhead aligned during seekbar drag so
+    // the user does not hear the prior playback position while watching
+    // the new one.  No-op when audioRef is null.
+    if (audioRef.current) {
+      audioRef.current.currentTime = origVal
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -858,6 +924,12 @@ export function VideoPreviewPanel() {
               ref={videoRef}
               src={videoUrl}
               preload="metadata"
+              // REQ-086 — when a preview-mix audio file is available,
+              // mute the <video> so we only hear the mix.  Otherwise
+              // (single-track / no audio / no transcription yet) keep
+              // <video> audio so the editor still has sound — this is
+              // the legacy single-element behaviour, unchanged.
+              muted={previewMixUrl !== null}
               className="absolute inset-0 h-full w-full object-contain"
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
@@ -866,6 +938,23 @@ export function VideoPreviewPanel() {
               onEnded={handleEnded}
               onError={handleError}
             />
+            {/* REQ-086 — hidden multi-track preview mix.  When mounted
+                (i.e. `previewMixUrl !== null`), this <audio> plays the
+                amixed soundtrack while the <video> above is muted.
+                Drift between the two is corrected in the rAF loop
+                (PREVIEW_MIX_DRIFT_THRESHOLD_SEC = 50 ms).  The URL
+                carries a `?t=<timestamp>` cache buster from the main
+                process so Chromium fetches a freshly-generated mix
+                instead of serving the prior cached body for the same
+                fixed file path. */}
+            {previewMixUrl !== null && (
+              <audio
+                ref={audioRef}
+                src={previewMixUrl}
+                preload="auto"
+                className="hidden"
+              />
+            )}
             {videoContainerWidth > 0 && overlayEntries.map((entry) => {
               const offset = stackOffsetsByEntryId.get(entry.id) ?? 0
               const isSelected = entry.id === selectedEntryId
