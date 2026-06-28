@@ -51,6 +51,14 @@ export interface TranscriptionDrawerProps {
   renderState: TranscriptionRenderState
   /** 0–100 percent progress while `renderState === 'running'`. */
   progress: number
+  /**
+   * REQ-086 — optional override for the running-state label.  Parent
+   * passes a localised string for the preview-mix phase (e.g.
+   * "音声準備中…") so the user sees the run move from "文字起こし中"
+   * → "音声準備中…" → close.  When omitted, the default
+   * `drawer.runningLabel` translation is used.
+   */
+  runningLabelOverride?: string
   /** Error message when `renderState === 'error'`. */
   errorMessage: string
   /** Whether the start button should be enabled.  Driven by the parent
@@ -69,6 +77,7 @@ export function TranscriptionDrawer({
   audioTracks,
   renderState,
   progress,
+  runningLabelOverride,
   errorMessage,
   canStart,
   onStart,
@@ -206,7 +215,7 @@ export function TranscriptionDrawer({
                     />
                   </div>
                   <div className="flex items-center justify-between text-body-sm text-fg-tertiary">
-                    <span>{t('drawer.runningLabel')}</span>
+                    <span>{runningLabelOverride ?? t('drawer.runningLabel')}</span>
                     <span className="font-mono tabular-nums">{progress}%</span>
                   </div>
                 </div>

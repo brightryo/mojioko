@@ -29,6 +29,14 @@ export interface TranscriptionOptions {
   videoPath: string
   trackIndex: number
   modelId: string
+  /**
+   * REQ-086 — total source audio tracks.  When >= 2, main spawns a
+   * preview-mix ffmpeg pass after Whisper completes; the returned
+   * `previewMixUrl` from `runTranscription` then populates the
+   * preview-mix store so `VideoPreviewPanel` can wire a hidden
+   * `<audio>` against the muted `<video>`.
+   */
+  audioTrackCount: number
   defaults: {
     fontSizePx: number
     textColorHex: string
@@ -40,9 +48,20 @@ export interface TranscriptionOptions {
   advanced: TranscriptionAdvancedParams
 }
 
+export interface TranscriptionRunResult {
+  /**
+   * REQ-086 — preview-mix URL when the source had >= 2 audio tracks
+   * and the mix succeeded.  `null` for 0- or 1-track sources (no mix
+   * needed) and for pre-v1.3.2 main processes that do not emit the
+   * field.
+   */
+  previewMixUrl: string | null
+}
+
 export interface TranscriptionRun {
-  /** Resolves when transcription completes; rejects on error or cancel. */
-  promise: Promise<void>
+  /** Resolves with the run's result (incl. preview-mix URL when applicable);
+   *  rejects on error or cancel. */
+  promise: Promise<TranscriptionRunResult>
   cancel: () => void
 }
 
@@ -122,11 +141,12 @@ export function runTranscription(
 ): TranscriptionRun {
   let doCancel = () => {}
 
-  const promise = (async () => {
+  const promise = (async (): Promise<TranscriptionRunResult> => {
     const result = await window.electronAPI.transcriptionStart({
       videoPath: opts.videoPath,
       trackIndex: opts.trackIndex,
       modelId: opts.modelId,
+      audioTrackCount: opts.audioTrackCount,
       modelsDir: '',   // filled in by main process
       ffmpegPath: '',  // filled in by main process
       defaults: opts.defaults,
@@ -137,13 +157,17 @@ export function runTranscription(
 
     const { channelId } = result.data
 
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<TranscriptionRunResult>((resolve, reject) => {
       const unsub = window.electronAPI.subscribeToChannel(channelId, (payload) => {
         const evt = payload as TranscriptionEvent
         onEvent(evt)
         if (evt.event === 'completed') {
           unsub()
-          resolve()
+          // REQ-086 — `previewMixUrl` is on the completed event when the
+          // main process generated a mix (audioTrackCount >= 2).  Older
+          // main processes will not include the field, in which case we
+          // surface `null` (preview falls back to <video>-only audio).
+          resolve({ previewMixUrl: evt.previewMixUrl ?? null })
         } else if (evt.event === 'failed') {
           unsub()
           reject(new Error(evt.error))

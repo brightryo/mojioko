@@ -118,6 +118,7 @@
     "cancelRun": "Cancel",
     "close": "Close",
     "runningLabel": "Transcribing…",
+    "runningLabelPreviewMix": "Preparing preview audio…",
     "errorTitle": "Transcription failed"
   },
   "dialog": {
