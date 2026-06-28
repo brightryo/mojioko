@@ -16,6 +16,8 @@ import { detectAvailableEncoders, getBestEncoder } from './services/encoder-dete
 import { buildMenu, rebuildMenu, setMenuLocked } from './menu'
 import { registerVideoProtocol } from './lib/video-protocol'
 import { registerFontProtocol } from './lib/font-protocol'
+import { registerPreviewMixProtocol } from './lib/preview-mix-protocol'
+import { cleanupStalePreviewMixTmp } from './services/preview-mix'
 import { getResourcesPath } from './lib/paths'
 import type { BuildInfo, EncoderDetectionResult } from '../shared/ipc-contracts'
 import log from './lib/logger'
@@ -198,6 +200,10 @@ app.whenReady().then(() => {
   void logStartupEnvironment()
   registerVideoProtocol()
   registerFontProtocol()
+  registerPreviewMixProtocol()
+  // REQ-086: remove any preview-mix .tmp left behind by a force-quit
+  // during a prior transcription run.  See `preview-mix.ts`.
+  cleanupStalePreviewMixTmp()
   registerIpcHandlers()
   createWindow()
 
