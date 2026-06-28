@@ -530,7 +530,14 @@ export function VideoPreviewPanel() {
       // the EOF-rewind branch above.
       if (audio) {
         audio.currentTime = el.currentTime
-        audio.play().catch(() => {})
+        // Surface failures instead of swallowing them — the original
+        // REQ-086 silent `.catch(() => {})` masked a CSP block on the
+        // `mojioko-preview-mix:` scheme that took a separate triage
+        // pass to track down.  A console.error here would have
+        // shortcut that.
+        audio.play().catch((err) => {
+          console.error('[preview-mix audio] play() rejected', err)
+        })
       }
       el.play().catch(() => {})
     } else {
@@ -953,6 +960,21 @@ export function VideoPreviewPanel() {
                 src={previewMixUrl}
                 preload="auto"
                 className="hidden"
+                onError={(e) => {
+                  // Loud failure mode for any future regression in the
+                  // mix → CSP → protocol → playback chain.  See the
+                  // sibling comment in togglePlay's audio.play() catch
+                  // for the rationale.  MediaError.code values:
+                  //   1 ABORTED, 2 NETWORK, 3 DECODE, 4 SRC_NOT_SUPPORTED
+                  // SRC_NOT_SUPPORTED with a CSP console message above is
+                  // the signature of a missing `media-src` allowlist entry.
+                  const el = e.currentTarget
+                  console.error('[preview-mix audio] error', {
+                    code: el.error?.code,
+                    message: el.error?.message,
+                    src: el.currentSrc,
+                  })
+                }}
               />
             )}
             {videoContainerWidth > 0 && overlayEntries.map((entry) => {
