@@ -52,7 +52,7 @@ describe('useFontCacheVersionStore', () => {
   })
 
   it('subscribers are notified on bump (drives React re-renders)', () => {
-    let observedVersions: number[] = []
+    const observedVersions: number[] = []
     const unsub = useFontCacheVersionStore.subscribe((s) => {
       observedVersions.push(s.version)
     })

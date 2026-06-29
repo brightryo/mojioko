@@ -12,6 +12,8 @@ import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
+import { canSelectFontInTier } from '@/lib/font-tier'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
@@ -960,7 +962,13 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
   const [open, setOpen] = useState(false)
   const installed = useInstalledFontIds()
   const activeFontId = useSettingsStore((s) => s.activeFontId)
-  const selectable = FONT_REGISTRY.filter((m) => installed.has(m.id))
+  // REQ-088 #4 — mirror RowFontSelector: NSIS (free) tier restricts the
+  // bulk picker to the bundled default.  `null` treated as the more
+  // restrictive free tier until the boot-time IPC resolves.
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
+  const selectable = FONT_REGISTRY.filter(
+    (m) => installed.has(m.id) && canSelectFontInTier(isMsix, m.id),
+  )
 
   function pick(next: FontId | undefined) {
     onPick(next)

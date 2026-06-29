@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { ChevronDown, AlertCircle, RotateCcw } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
+import { canSelectFontInTier } from '@/lib/font-tier'
 import { cn } from '@/lib/utils'
 import { FONT_REGISTRY, getFontMeta, type FontId } from '../../../shared/fonts'
 
@@ -38,15 +40,24 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
   const [open, setOpen] = useState(false)
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   const installed = useInstalledFontIds()
+  // REQ-088 #4 — null treated as the more restrictive free tier until
+  // the IPC settles; the popover would otherwise briefly offer paid
+  // entries on the first paint of a free build.
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
 
   const resolvedFontId = value ?? activeFontId
   const resolvedMeta = getFontMeta(resolvedFontId)
   const isOverriding = value !== undefined && value !== activeFontId
 
-  // Selectable list = every registered font that's actually installed.
-  // Uninstalled fonts are hidden so we never set a per-row fontId that
-  // burn-in would reject.  Order follows the registry (Noto first).
-  const selectable = FONT_REGISTRY.filter((m) => installed.has(m.id))
+  // Selectable list = every registered font that's actually installed
+  // AND permitted by the current tier (REQ-088 #4 — free tier limits
+  // selection to the bundled default even if a paid-tier user
+  // downgraded with installed fonts on disk).  Order follows the
+  // registry (Noto first).  Uninstalled fonts are hidden so we never
+  // set a per-row fontId that burn-in would reject.
+  const selectable = FONT_REGISTRY.filter(
+    (m) => installed.has(m.id) && canSelectFontInTier(isMsix, m.id),
+  )
 
   function pick(next: FontId | undefined) {
     onChange(next)

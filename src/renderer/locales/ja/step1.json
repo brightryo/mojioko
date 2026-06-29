@@ -192,7 +192,8 @@
       "cancel": "キャンセル",
       "uninstall": "削除",
       "select": "このフォントを使う",
-      "viewLicense": "ライセンス"
+      "viewLicense": "ライセンス",
+      "lockedPaidOnly": "有料版でのみ利用可能"
     },
     "note": {
       "missingRareKanji": "稀な漢字非対応",

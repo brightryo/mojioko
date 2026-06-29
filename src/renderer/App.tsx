@@ -14,6 +14,7 @@ import { DonationDialog } from '@/components/donation-dialog/donation-dialog'
 import { FontLicensesDialog } from '@/components/font-licenses/font-licenses-dialog'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
 import { loadSettings, saveSettings } from '@/services/settings'
 import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
@@ -104,6 +105,17 @@ function AppInner() {
       }
     }).catch(() => { /* IPC unavailable in dev outside Electron */ })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // REQ-088 #4 — resolve the MSIX/NSIS tier once at app boot.  Downstream
+  // components (font picker, per-row font selector, bulk-edit selector)
+  // subscribe via `useAppEnvStore` and treat `null` (= not-yet-known) as
+  // "don't render tier-gated affordances yet".  The IPC resolves in a
+  // few ms so no user-visible UI ever sees the null state in practice.
+  useEffect(() => {
+    window.electronAPI?.isMsix()
+      .then((value) => useAppEnvStore.getState().setIsMsix(value))
+      .catch(() => useAppEnvStore.getState().setIsMsix(false))
+  }, [])
 
   // Mirror activeFontId into font-metrics so the no-arg legacy callers
   // (loadSubtitleFont, getLibassScale, etc.) target the currently selected

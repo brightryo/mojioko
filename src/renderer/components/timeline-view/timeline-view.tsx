@@ -358,7 +358,26 @@ function BlockImpl({
       bodyMovedRef.current = false
       return
     }
-    onSelect(entry.id, entry.startSec)
+    // REQ-088 #1 — seek to the CLICK POSITION inside the clip rather
+    // than the clip's start.  Workflow: scrub or play to find the
+    // moment a voice ends, click that point in its clip to land the
+    // playhead there and trim from the inspector — pre-REQ-088 the
+    // playhead would yank back to startSec and force the user to
+    // re-locate the spot.  The `<` / `>` nav buttons still jump to
+    // the clip's start / end on their own (see handleNavFirst / Last),
+    // so we keep both gestures distinct: click = put the head where
+    // I clicked; nav arrows = jump to the boundary.
+    //
+    // Self-contained: computed against the button's own bounding rect
+    // so we don't need to thread the timeline's `pixelsPerSec` down
+    // here.  rect.width is guaranteed > 0 in practice (the block
+    // floor is `Math.max(2, widthPx)`), but the >0 guard keeps the
+    // fraction well-defined under any future zoom-out edge case.
+    const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+    const frac = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0
+    const clamped = Math.max(0, Math.min(1, frac))
+    const seekSec = entry.startSec + clamped * (entry.endSec - entry.startSec)
+    onSelect(entry.id, seekSec)
   }
 
   // REQ-20260614-001 Phase 4 — the Block-anchored Inspector Popover was
@@ -987,9 +1006,15 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
    * user's previous explicit pick mid-drag — pointermove just mutates
    * positions, never selection.
    */
-  const handleSelectBlock = useCallback((id: string, startSec: number) => {
+  const handleSelectBlock = useCallback((id: string, seekToSec: number) => {
+    // REQ-088 #1 — `seekToSec` is now the CLICK POSITION inside the
+    // clip computed by `handleBodyClick`, not the clip's `startSec`
+    // (legacy name preserved on the callback for API stability would
+    // have misled future readers, hence the rename).  Drag paths never
+    // reach this callback — they're routed through `onStartDrag` and
+    // never set selection (see comment above).
     setSelectedEntryId(id)
-    setVideoSeekRequest(startSec)
+    setVideoSeekRequest(seekToSec)
   }, [setSelectedEntryId, setVideoSeekRequest])
 
   /**
