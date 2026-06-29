@@ -434,8 +434,21 @@ function BlockImpl({
           // table.tsx) を駆動するため残してあるが、視覚的な色付けは行わない。
           // 状態色は白 (通常) / 黄 (編集済み) / 赤 (overflow) / 緑 (ユーザー
           // 選択) の 4 色のみ。
-          isUserSelected && 'ring-2 ring-primary border-primary text-fg-primary',
-          isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-primary/15',
+          //
+          // REQ-088 #1 fix-up — pin `hover:border-primary` and (for the
+          // plain-active variant) `hover:bg-primary/15` so the base
+          // `hover:border-fg-muted` / `hover:bg-surface-3` declarations
+          // higher up in the class list cannot override the active
+          // green on hover.  Tailwind's `:hover` pseudo always wins
+          // over plain classes regardless of source order, so the
+          // active state must declare its own `hover:` variants to
+          // survive a cursor that's still over the freshly-clicked
+          // block.  Without these, the green border / bg disappeared
+          // while hovering and reappeared only after the cursor left
+          // the clip — confusing right after a click-to-activate
+          // since the user has not moved the cursor yet.  REQ-089.
+          isUserSelected && 'ring-2 ring-primary border-primary hover:border-primary text-fg-primary',
+          isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-primary/15 hover:bg-primary/15',
           entry.isDeleted && 'opacity-40 line-through',
           !entry.isDeleted && 'cursor-grab active:cursor-grabbing'
         )}
