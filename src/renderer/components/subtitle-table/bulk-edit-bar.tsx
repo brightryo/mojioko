@@ -13,13 +13,13 @@ import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
-import { loadSubtitleFont } from '@/lib/font-metrics'
+import { loadSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
 import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
-import { FONT_REGISTRY, getFontMeta, type FontId } from '../../../shared/fonts'
+import { FONT_REGISTRY, getFontMeta, isFontId, type FontId } from '../../../shared/fonts'
 import { recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 
 interface BulkEditBarProps {
@@ -568,6 +568,25 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     // REQ-119 [1] — same freeze filter as `applyBulk` so the wrap pass
     // never rewraps a trim-deleted row mid-bulk.
     const cuts = useProjectStore.getState().cuts
+
+    // REQ-087 — make sure every per-row font referenced by the selection
+    // is in the opentype.js cache before we measure.  `loadSubtitleFont`
+    // above only covers the active font; bulk-applied breaks must respect
+    // each row's own font (e.g. half-width punctuation in Dela Gothic
+    // One vs full-width in Noto), and the fallback path would otherwise
+    // overestimate widths by ~45 % and produce broken break positions
+    // baked into the saved text.  Best-effort: per-font load failures
+    // degrade only that row to the fallback path.
+    const uniqueFontIds = new Set<FontId>()
+    for (const id of ids) {
+      const e = all.find((x) => x.id === id)
+      if (e && isFontId(e.fontId)) uniqueFontIds.add(e.fontId)
+    }
+    await Promise.all(
+      Array.from(uniqueFontIds).map((fid) =>
+        loadSubtitleFontFor(fid).catch(() => null)
+      )
+    )
 
     const snapshots = new Map<string, SubtitleEntry>()
     const patches = new Map<string, string>()

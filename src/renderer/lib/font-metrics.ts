@@ -2,6 +2,7 @@ import { parse } from 'opentype.js'
 import type { Font } from 'opentype.js'
 import { DEFAULT_FONT_ID, getFontMeta, type FontId } from '../../shared/fonts'
 import { ensureFontLoaded } from './font-registry'
+import { bumpFontCacheVersion } from '@/stores/font-cache-version-store'
 
 export type SubtitleFont = Font
 
@@ -13,11 +14,21 @@ export type SubtitleFont = Font
  *   1000 / (1160 + 288) = 1000 / 1448 ≈ 0.6906
  *
  * Every Google Fonts CJK family validated so far (Noto Sans JP, Dela Gothic
- * One) shares the same OS/2 metrics and therefore the same scale.  We keep
- * the per-font calculation in place anyway because the registry will
- * eventually add fonts that diverge.
+ * One, Reggae One, Yusei Magic, Mochiy Pop One, Hachi Maru Pop, Potta One,
+ * DotGothic16, Rampart One — all 9 registry entries) shares the same OS/2
+ * metrics and therefore the same scale.  We keep the per-font calculation
+ * in place anyway because the registry will eventually add fonts that
+ * diverge.
+ *
+ * REQ-087 — exported so the renderer's `overflow-calculator.ts` and
+ * `auto-line-break.ts` can apply this same factor in their character-class
+ * fallback branches.  Without the export, those modules used to estimate
+ * wide-char widths as `fontSizePx × 1.0` (= per-em) and over-counted by
+ * ~45 % vs the real glyph path (= `fontSizePx × libassScale ≈ × 0.69`),
+ * producing spurious overflow + early line breaks for every row whose
+ * per-row font wasn't cached at calc time.
  */
-const FALLBACK_LIBASS_SCALE = 0.6906
+export const FALLBACK_LIBASS_SCALE = 0.6906
 
 interface FontEntry {
   font: Font
@@ -98,6 +109,12 @@ export async function loadSubtitleFontFor(fontId: FontId): Promise<Font> {
       const buf = await fetchFontBytes(fontId)
       const entry = entryFromBytes(buf)
       fontCache.set(fontId, entry)
+      // REQ-087 — notify the React layer that the cache contents changed
+      // so any `useMemo` that depends on per-row font metrics
+      // (notably `overflowMap` in step2.tsx) re-runs the very next
+      // render with the now-cached real glyph metrics instead of the
+      // approximate character-class fallback.
+      bumpFontCacheVersion()
       // Production-visible log so a packaged install can be diagnosed without
       // a dev build — one line per font load.
       console.info(
