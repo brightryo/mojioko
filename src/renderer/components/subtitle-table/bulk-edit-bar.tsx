@@ -8,6 +8,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
+import { HelpIcon } from '@/components/help-icon'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
@@ -885,10 +886,13 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           </label>
         </div>
 
-        {/* § 背景色 — Bg ON/OFF, Bg colour, Opacity. */}
+        {/* § 背景色 — Bg ON/OFF, Bg colour, Opacity.  REQ-0096 attaches a
+            HelpIcon to the section heading explaining the libass-spec rule
+            that enabling BG disables the outline color. */}
         <div className="flex flex-col gap-2 border-t border-border/60 pt-2 mt-2">
-          <div className="text-body font-semibold text-foreground">
-            {t('timeline.inspector.backgroundSection')}
+          <div className="text-body font-semibold text-foreground flex items-center gap-1.5">
+            <span>{t('timeline.inspector.backgroundSection')}</span>
+            <HelpIcon content={t('timeline.inspector.backgroundSectionHelp')} />
           </div>
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('styleCell.bgEnabled')}</span>

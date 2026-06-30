@@ -12,6 +12,7 @@ import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thic
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { RowFontSelector } from '@/components/subtitle-table/row-font-selector'
+import { HelpIcon } from '@/components/help-icon'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import {
@@ -957,8 +958,13 @@ export function TimelineBlockInspector({
           確認済 (指定どおり「背景色」で実装)。audio-only 非表示。 */}
       {!isAudioOnly && (
         <div className="space-y-2 border-t border-line pt-2">
-          <div className="text-body font-semibold text-fg-secondary">
-            {t('timeline.inspector.backgroundSection')}
+          {/* REQ-0096 — section heading carries a HelpIcon explaining that
+              enabling the background disables the outline color.  This is
+              libass-spec behavior (BorderStyle=3 paints the box from
+              OutlineColour, so the outline can't render separately). */}
+          <div className="text-body font-semibold text-fg-secondary flex items-center gap-1.5">
+            <span>{t('timeline.inspector.backgroundSection')}</span>
+            <HelpIcon content={t('timeline.inspector.backgroundSectionHelp')} />
           </div>
           <div className="flex items-center justify-between gap-2">
             <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.bgEnabled')}</label>
