@@ -1,0 +1,96 @@
+# MSIX/AppX investigation config (REQ-20260615-069 Phase 0).
+#
+# Intentionally a separate file from `electron-builder.yml` so the production
+# NSIS pipeline (`npm run build:win`) is unaffected.  Invoke explicitly:
+#
+#   npm run build && npx electron-builder --win appx --config electron-builder-appx.yml
+#
+# The `extraResources` block is duplicated from electron-builder.yml because
+# electron-builder has no native config inheritance.  Keep the two files in
+# sync if either changes; this file should be deleted once Phase 0/1 wraps.
+appId: com.brightryo.mojioko
+productName: MOJIOKO
+copyright: "Copyright © 2026 brightryo"
+
+directories:
+  buildResources: build
+  output: dist-appx
+
+files:
+  - out/**/*
+  - "!out/**/*.map"
+
+extraResources:
+  - from: resources/bin/ffmpeg
+    to: bin/ffmpeg
+    filter:
+      - "ffmpeg.exe"
+      - "ffprobe.exe"
+      - "*.dll"
+  - from: resources/bin/transcriber
+    to: bin/transcriber
+    filter:
+      - "**/*"
+  - from: resources/fonts
+    to: fonts
+    filter:
+      - "**/*.ttf"
+      - "**/OFL.txt"
+      - "**/LICENSE*"
+  - from: python-sidecar
+    to: python-sidecar
+    filter:
+      - "main.py"
+      - "requirements.txt"
+  - from: installer/licenses
+    to: licenses
+  - from: build
+    to: icons
+    filter:
+      - "icon.ico"
+
+win:
+  target:
+    - target: appx
+      arch: x64
+  icon: build/icon.ico
+  # INSTRUCT-MSIX-VERIFY-v1.3.1 STEP1 — self-signed sideload cert.
+  # The PFX is at the path below (gitignored; *.pfx pattern in .gitignore).
+  # Its Subject is "CN=brightryo", which must match the `publisher` field
+  # under `appx:` below exactly.  The owner separately registers the
+  # companion `.cer` into LocalMachine\TrustedPeople in STEP2 (admin).
+  certificateFile: dist-appx/mojioko-msix-dev.pfx
+  certificatePassword: mojioko-dev
+
+# AppX-specific options.
+#
+# Identity / publisher values here are **dev / sideload placeholders** — when
+# Phase 1 begins and a Microsoft Partner Center submission is created, both
+# identityName and publisher must be replaced with the values Partner Center
+# assigns under "App identity" (typically `XXXXX.AppName` and a long
+# `CN=<GUID>` publisher).  See:
+#   https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/app-package-requirements
+#
+# The current publisher `CN=brightryo` is what the self-signed dev cert below
+# must use as its Subject — Identity.Publisher in the manifest must match the
+# cert Subject exactly, otherwise Add-AppxPackage fails with
+# `0x800B0109 / 0x80073CF3`.
+appx:
+  identityName: brightryo.MOJIOKO
+  publisher: CN=brightryo
+  publisherDisplayName: brightryo
+  applicationId: MOJIOKO
+  # REQ-090 — green brand colour to match the tile PNGs in build/appx/.
+  # See electron-builder-appx-store.yml for the full rationale; same
+  # change applied to both files so sideload and Store builds match.
+  backgroundColor: "#23C55E"
+  displayName: MOJIOKO
+  languages:
+    - ja-jp
+    - en-us
+  # Disable the auto-update extension; we'll let the Store handle updates and
+  # the sideload PoC has no AppInstaller manifest anyway.
+  addAutoLaunchExtension: false
+  electronUpdaterAware: false
+
+publish: null
