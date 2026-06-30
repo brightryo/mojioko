@@ -12,6 +12,7 @@ import { AboutDialog } from '@/components/about-dialog/about-dialog'
 import { SettingsDialog } from '@/components/settings-dialog/settings-dialog'
 import { DonationDialog } from '@/components/donation-dialog/donation-dialog'
 import { FontLicensesDialog } from '@/components/font-licenses/font-licenses-dialog'
+import { StoreUpsellDialog } from '@/components/store-upsell-dialog/store-upsell-dialog'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
@@ -243,6 +244,7 @@ function AppInner() {
       <SettingsDialog />
       <DonationDialog />
       <FontLicensesDialog />
+      <StoreUpsellDialog />
 
       <Toaster
         position="bottom-center"

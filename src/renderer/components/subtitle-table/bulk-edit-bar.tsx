@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, WrapText, AlignJustify, ChevronDown, AlertCircle, RotateCcw } from 'lucide-react'
+import { X, WrapText, AlignJustify, ChevronDown, AlertCircle, RotateCcw, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
@@ -13,6 +13,7 @@ import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
+import { useStoreUpsellStore } from '@/stores/store-upsell-store'
 import { canSelectFontInTier } from '@/lib/font-tier'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
@@ -966,9 +967,15 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
   // bulk picker to the bundled default.  `null` treated as the more
   // restrictive free tier until the boot-time IPC resolves.
   const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
+  // REQ-091 — Store upsell trigger.
+  const openUpsell = useStoreUpsellStore((s) => s.openUpsell)
   const selectable = FONT_REGISTRY.filter(
     (m) => installed.has(m.id) && canSelectFontInTier(isMsix, m.id),
   )
+  // REQ-091 — same tier-locked discovery list as RowFontSelector.
+  const tierLocked = !isMsix
+    ? FONT_REGISTRY.filter((m) => !canSelectFontInTier(isMsix, m.id))
+    : []
 
   function pick(next: FontId | undefined) {
     onPick(next)
@@ -1034,6 +1041,31 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
               )}
             </button>
           ))}
+
+          {/* REQ-091 — tier-locked discovery rows, mirror of the same
+              block in row-font-selector.tsx.  Empty in MSIX. */}
+          {tierLocked.length > 0 && (
+            <>
+              <div className="my-1 h-px bg-surface-2" />
+              {tierLocked.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => { openUpsell(); setOpen(false) }}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-fg-muted hover:bg-accent/40"
+                  title={t('step1:fontPicker.action.lockedPaidOnly')}
+                >
+                  <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  <span
+                    className="flex-1 min-w-0 truncate"
+                    style={{ fontFamily: `'${m.cssFontFamily}'`, fontWeight: m.weight }}
+                  >
+                    {m.displayName}
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
         </div>
       </PopoverContent>
     </Popover>
