@@ -198,6 +198,7 @@
             <li>Drag it onto the timeline — subtitles are automatically placed with their start/end timings</li>
           </ol>
           <p>If MOJIOKO's subtitle design doesn't fit your needs, you can freely customize fonts, colors, and animations in DaVinci Resolve. Timing is already handled by MOJIOKO, so you can focus on visual design.</p>
+          <p>Note: If the timing looks off after import, see the section below "Notes for using SRT files in DaVinci Resolve."</p>
 
           <h5>■ Add subtitles to YouTube (without burning in)</h5>
           <ol class="guide-list">
@@ -228,6 +229,26 @@
             <li>Lines excluded from output (marked as deleted) are not included</li>
             <li>Can be combined with video rendering (export both subtitle file and video)</li>
           </ul>
+        </div>
+      </details>
+
+      <!-- 5: DaVinci Resolve SRT import notes (badge: info) -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">Info</span>
+          <span class="q-text">Notes for using SRT files in DaVinci Resolve</span>
+        </summary>
+        <div class="qa-body">
+          <p>MOJIOKO exports SRT files with correct timing, but when you import them into DaVinci Resolve the timing can look "off." This comes from how DaVinci Resolve works — the points below will sort it out.</p>
+
+          <h5>■ 1. Set the timeline start to 00:00:00:00</h5>
+          <p>By default, DaVinci Resolve timelines start at 01:00:00:00 (one hour). With this default, an SRT that starts at 00:00:00 is placed at the "one hour" position, so everything looks shifted by an hour. In the Media Pool, right-click the timeline → "Change Timeline Start Timecode" → set it to 00:00:00:00. The SRT times will then line up with what is shown.</p>
+
+          <h5>■ 2. Match the timeline frame rate to your source video</h5>
+          <p>DaVinci timecode is HH:MM:SS:FF, where the last field is frames, not milliseconds (e.g. at 30fps, 1 second = 30 frames; at 60fps, 1 second = 60 frames). So the SRT's ",900" (milliseconds) and DaVinci's ":54" (frames at 60fps) both refer to the same 0.9 seconds — the numbers look different but point to the same time. Also set the timeline fps to the same fps as the video you transcribed; if they differ, subtitles gradually drift from the video over longer durations.</p>
+
+          <h5>■ 3. Import steps</h5>
+          <p>Import the SRT into the Media Pool, then drag it to the start of a subtitle track (the timeline start). Each subtitle is placed at its start/end time automatically. With steps 1 and 2 set up, the subtitles keep exactly the timing you adjusted in MOJIOKO.</p>
         </div>
       </details>
 
