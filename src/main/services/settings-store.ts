@@ -3,11 +3,12 @@ import { join, dirname } from 'path'
 import { getSettingsPath, getAppDataPath } from '../lib/paths'
 import { getModelsDir } from '../lib/paths'
 import { BURNIN_DEFAULTS } from '../../shared/burnin-defaults'
-import { DEFAULT_LANGUAGE } from '../../shared/app-info'
+import { DEFAULT_LANGUAGE, type SupportedLanguage } from '../../shared/app-info'
 import { TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
 import { migrateDeprecatedModelIds } from './migrate-model-settings'
 import type { AppSettings } from '../../shared/types'
 import { SettingsCorruptError } from '../../shared/errors'
+import { detectOsLanguage } from '../lib/os-language'
 import log from '../lib/logger'
 
 // REQ-20260615-065 S-4 — re-export so existing callers that imported
@@ -18,10 +19,17 @@ export { migrateDeprecatedModelIds }
 
 const CURRENT_VERSION = 1
 
-function buildDefaults(): AppSettings {
+/**
+ * REQ-0101 — `language` is now injectable so first-launch defaults can
+ * carry the OS-detected UI language.  Callers that only want the static
+ * defaults (existing behaviour) pass no argument and get `DEFAULT_LANGUAGE`.
+ * The no-saved-language branches in `loadSettings` pass the detected
+ * value; every other call site remains a no-op.
+ */
+function buildDefaults(language?: SupportedLanguage): AppSettings {
   return {
     version: 1,
-    language: DEFAULT_LANGUAGE,
+    language: language ?? DEFAULT_LANGUAGE,
     // REQ-20260615-026: app-wide theme defaults to dark.  When older
     // settings.json files (pre-026) hydrate they fall through this default
     // via the spread on load.
@@ -55,14 +63,19 @@ function buildDefaults(): AppSettings {
 
 export async function loadSettings(): Promise<AppSettings> {
   const settingsPath = getSettingsPath()
+  // REQ-0101 — the "no saved language" branches (file missing, version
+  // reset, or a settings.json that predates the language field) use this
+  // to seed the initial UI language from the OS.  Reading here (not per
+  // branch) keeps the ordering simple and the call is cheap.
+  const osLanguage = detectOsLanguage()
   try {
     const raw = await fs.readFile(settingsPath, 'utf-8')
     const parsed = JSON.parse(raw) as AppSettings
     if (parsed.version !== CURRENT_VERSION) {
       log.warn('[settings] version mismatch, resetting to defaults')
-      return buildDefaults()
+      return buildDefaults(osLanguage)
     }
-    const hydrated = { ...buildDefaults(), ...parsed }
+    const hydrated = { ...buildDefaults(osLanguage), ...parsed }
     // REQ-20260615-065 S-4 — migrate deprecated model IDs.  Pure
     // function; returns the same reference when nothing changed,
     // a new object when at least one field migrated.
@@ -85,7 +98,7 @@ export async function loadSettings(): Promise<AppSettings> {
     return migrated
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return buildDefaults()
+      return buildDefaults(osLanguage)
     }
     // Corrupt file — move it and return defaults
     log.error('[settings] corrupt settings.json, resetting', err)
