@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed an issue where the subtitle background color was not shown correctly in the exported video when the background was enabled.
 - Fixed incorrect overflow detection and automatic line breaking with certain fonts.
 - Fixed an issue where the active subtitle's frame on the timeline disappeared when hovering over it.
+- Fixed an issue where transcription could fail with "No such file or directory" for input files whose names contain certain characters (pipe `|`, middle dot `·`, emoji, non-ASCII / non-Japanese text).
 
 ### Changed
 
