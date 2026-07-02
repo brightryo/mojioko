@@ -121,7 +121,8 @@ export async function generatePreviewMix(
   log.debug(`[preview-mix] argv: ${ffmpeg} ${args.join(' ')}`)
 
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn(ffmpeg, args)
+    // REQ-0103 — explicit `shell: false` (see ffmpeg-burnin.ts for rationale).
+    const proc = spawn(ffmpeg, args, { shell: false })
     let wasAborted = false
     let stderrAccum = ''
 

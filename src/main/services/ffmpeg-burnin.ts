@@ -253,7 +253,12 @@ export async function startBurnin(
   log.debug(`[ffmpeg-burnin] argv: ${ffmpeg} ${args.join(' ')}`)
 
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn(ffmpeg, args)
+    // REQ-0103 — explicit `shell: false` so a filename containing shell
+    // metacharacters (`|`, `&`, `·`, emoji) is never interpreted by cmd.exe /
+    // powershell.  This is Node's default; making it explicit here is
+    // documentation and a defence against a future refactor that might pass an
+    // `options` object in.
+    const proc = spawn(ffmpeg, args, { shell: false })
     // Cleanup of the (potentially partial) output file is centralised in the
     // 'close' handler — we never unlink from inside the abort listener,
     // because ffmpeg may have already finished and exited cleanly between the
