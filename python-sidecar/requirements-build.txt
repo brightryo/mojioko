@@ -1,0 +1,20 @@
+# REQ-0105 — pinned build-time dependencies for the PyInstaller sidecar
+# rebuild.  Split from requirements.lock.txt so the runtime lock stays clean
+# of build-only tools.
+#
+# PyInstaller version rationale: 6.20.0 is what the .venv had at the time of
+# REQ-0105 and produces a bundle whose _internal/ tree matches the v1.3.1
+# bundle in dist-info layout and hidden-imports set.  The prior packaged
+# builds were produced with an equivalent PyInstaller (bootloader diff not
+# visible at the shipped-tree level).
+#
+# altgraph / pefile / pywin32-ctypes / pyinstaller-hooks-contrib are declared
+# dependencies of pyinstaller itself; pinning them alongside prevents a fresh
+# resolver from picking up a newer hooks-contrib that would change how
+# PyInstaller collects packages under its `--collect-all` semantics.
+
+pyinstaller==6.20.0
+pyinstaller-hooks-contrib==2026.6
+altgraph==0.17.5
+pefile==2024.8.26
+pywin32-ctypes==0.2.3
