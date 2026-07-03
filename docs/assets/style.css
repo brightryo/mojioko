@@ -90,8 +90,13 @@ body {
 }
 
 /* Hero Section */
+/* REQ-0109 — top padding tightened from 80 → 40 so the h1 sits closer to
+   the .top-nav, pulling the walkthrough video and the 2-card CTA into the
+   first viewport on 768px-tall laptop screens.  Bottom padding is left at
+   60 because the next section (screenshots) supplies its own top padding
+   and the transition already reads as a section break. */
 .hero {
-  padding: 80px 0 60px;
+  padding: 40px 0 60px;
   text-align: center;
 }
 
@@ -103,22 +108,27 @@ body {
   line-height: 1;
 }
 
+/* REQ-0109 — tagline → video gap trimmed 40 → 32 in the same first-viewport
+   budget push. */
 .hero .tagline {
   font-size: 20px;
   color: var(--text-secondary);
-  margin-bottom: 40px;
+  margin-bottom: 32px;
 }
 
-/* REQ-0108 — walkthrough video sits between the tagline and the 2-card
-   choice.  Kept intentionally narrow (max-width: 600px) so the two version
-   cards below still fit in the first viewport on typical laptop screens —
-   growing the video pushes the primary CTA below the fold.  Uses a fixed
+/* REQ-0108 (updated by REQ-0109) — walkthrough video sits between the
+   tagline and the 2-card choice.  Kept intentionally narrow so the two
+   version cards below still fit in the first viewport on typical laptop
+   screens — growing the video pushes the primary CTA below the fold.
+   REQ-0109 narrowed max-width 600 → 560 and margin-bottom 40 → 28 to
+   reclaim ~35px of vertical budget; the CTA cards now break the fold on
+   a 1366×768 laptop rather than sitting entirely below.  Uses a fixed
    16:9 aspect-ratio container so the iframe scales with the parent width
    without a JavaScript resize handler.  `youtube-nocookie.com` is chosen
    in the HTML for privacy consistency with MOJIOKO's local-only stance. */
 .hero-video {
-  max-width: 600px;
-  margin: 0 auto 40px;
+  max-width: 560px;
+  margin: 0 auto 28px;
   aspect-ratio: 16 / 9;
   border-radius: 12px;
   overflow: hidden;
@@ -454,8 +464,12 @@ footer a:hover {
 
 /* Responsive */
 @media (max-width: 640px) {
+  /* REQ-0109 — mobile hero top padding pulled down from 50 → 28 so it does
+     not exceed the new desktop 40 top and keeps the h1 close to the nav on
+     narrow phones.  Bottom padding stays at 40; the shorter h1 font-size at
+     this breakpoint already reclaims a couple more px on the vertical axis. */
   .hero {
-    padding: 50px 0 40px;
+    padding: 28px 0 40px;
   }
 
   .hero h1 {
