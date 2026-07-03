@@ -109,6 +109,31 @@ body {
   margin-bottom: 40px;
 }
 
+/* REQ-0108 — walkthrough video sits between the tagline and the 2-card
+   choice.  Kept intentionally narrow (max-width: 600px) so the two version
+   cards below still fit in the first viewport on typical laptop screens —
+   growing the video pushes the primary CTA below the fold.  Uses a fixed
+   16:9 aspect-ratio container so the iframe scales with the parent width
+   without a JavaScript resize handler.  `youtube-nocookie.com` is chosen
+   in the HTML for privacy consistency with MOJIOKO's local-only stance. */
+.hero-video {
+  max-width: 600px;
+  margin: 0 auto 40px;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  background: var(--bg-secondary);
+}
+
+.hero-video iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
 .download-btn {
   display: inline-flex;
   align-items: center;
@@ -229,12 +254,6 @@ body {
 .version-card-btn:hover {
   background: var(--accent-hover);
   transform: translateY(-2px);
-}
-
-.version-card-note {
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--text-tertiary);
 }
 
 /* Subordinate link shown under the main download button — points to the
