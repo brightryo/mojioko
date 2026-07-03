@@ -134,6 +134,19 @@ body {
   color: var(--text-tertiary);
 }
 
+/* REQ-0106 — one-line prose blurb that introduces the Microsoft Store CTA
+   appearing directly beneath it.  Slightly wider than .download-note so the
+   sentence has room to breathe on desktop, and a bit more top margin so the
+   Store button visually reads as its own subsection (not glued to the
+   guide/feedback stack above). */
+.store-note {
+  margin: 32px auto 12px;
+  max-width: 520px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
 /* Subordinate link shown under the main download button — points to the
    Releases page so users who want changelog / older versions can still get
    there. Visually quieter than .download-btn so it doesn't compete. */
@@ -727,6 +740,15 @@ footer a:hover {
   font-size: 15px;
   line-height: 1.75;
   border-top: 1px solid var(--border);
+}
+
+/* REQ-0106 — centred wrapper for the Microsoft Store CTA that sits at the
+   end of the "Free vs Paid" QA panel.  `.guide-btn` is display: inline-flex
+   so a `text-align: center` on the parent is enough to centre it inside the
+   otherwise left-aligned QA body. */
+.qa-store-cta {
+  text-align: center;
+  margin-top: 24px;
 }
 
 .qa-body > * + * {
