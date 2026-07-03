@@ -75,51 +75,88 @@
       </a>
     </section>
 
-    <!-- Screenshots Section -->
-    <section class="screenshots">
-      <h2>3 ステップで字幕付き動画を生成</h2>
+    <!-- Features Section — REQ-0111: what MOJIOKO can do (4 features).
+         Replaces the earlier "3 steps" storytelling.  Image slots are
+         placeholders for now; each has an HTML comment naming the target
+         screenshot so the swap point is obvious. -->
+    <section class="features">
+      <h2>MOJIOKO でできること</h2>
 
-      <div class="screenshot-grid">
+      <!-- 機能1: 高精度な自動文字起こし -->
+      <div class="feature-item">
+        <div>
+          <!-- 機能1: 文字起こし画面のスクショをここに -->
+          <div class="feature-placeholder" role="img" aria-label="画像プレースホルダ（後日差し替え）"></div>
+        </div>
+        <div class="feature-content">
+          <h3>高精度な自動文字起こし</h3>
+          <p>動画や音声から、AIが自動で文字を書き起こします。使っているのは、OpenAI が開発した「Whisper」という高精度な音声認識AI。長い動画でも、話している内容をまとめてテキスト化できます。</p>
+          <p>動画ファイル・音声ファイルのどちらにも対応。複数の音声が入った動画でも、文字起こししたい音声を選べます。</p>
+          <p class="feature-hint"><span class="feature-hint-label">💡 マルチトラック音声とは？</span>ゲーム音とマイク音声など、複数の音が別々に記録された動画のこと。MOJIOKO なら、その中から声だけを選んで文字起こしできます。</p>
+        </div>
+      </div>
 
-        <!-- Step 1 -->
-        <div class="screenshot-item">
-          <div>
-            <img src="images/screenshot-step1.png" alt="文字起こし画面" class="screenshot-image"
-                 onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Step 1 のスクリーンショット<br>(screenshot-step1.png)</div>';">
+      <!-- 機能2: 多彩な字幕編集（2×2グリッド） -->
+      <div class="feature-block">
+        <div class="feature-block-header">
+          <h3>多彩な字幕編集</h3>
+        </div>
+        <div class="feature-grid">
+          <div class="feature-grid-cell">
+            <!-- 機能2-1: テキスト・見た目編集画面のスクショをここに -->
+            <div class="feature-placeholder" role="img" aria-label="画像プレースホルダ（後日差し替え）"></div>
+            <h4>テキストも見た目も自由に編集</h4>
+            <p>書き起こしたテキストの修正はもちろん、フォントの変更（有料版のみ）、文字の大きさ・色、フチの色・太さまで、字幕の見た目を細かく調整できます。</p>
           </div>
-          <div class="screenshot-content">
-            <span class="step-label">Step 1</span>
-            <h3>動画や音声から文字起こし</h3>
-            <p>動画ファイルを選択し、OpenAI社のWhisperを活用して自動文字起こし！マルチトラック動画にも対応し、字幕にしたい音声トラックを選んで文字起こしを行います。</p>
+          <div class="feature-grid-cell">
+            <!-- 機能2-2: タイムライン編集のスクショをここに -->
+            <div class="feature-placeholder" role="img" aria-label="画像プレースホルダ（後日差し替え）"></div>
+            <h4>タイムラインで表示タイミングを調整</h4>
+            <p>字幕が表示される長さを、タイムライン上でドラッグするだけで直感的に変更できます。</p>
+          </div>
+          <div class="feature-grid-cell">
+            <!-- 機能2-3: 一覧表示のスクショをここに -->
+            <div class="feature-placeholder" role="img" aria-label="画像プレースホルダ（後日差し替え）"></div>
+            <h4>一覧表示でまとめて確認・編集</h4>
+            <p>書き起こした字幕を一覧で見渡して、まとめて確認・一括編集ができます。</p>
+          </div>
+          <div class="feature-grid-cell">
+            <!-- 機能2-4: トリミング画面のスクショをここに -->
+            <div class="feature-placeholder" role="img" aria-label="画像プレースホルダ（後日差し替え）"></div>
+            <h4>トリミングで不要な部分を削除</h4>
+            <p>いらない区間をタイムライン上でカットできます。</p>
           </div>
         </div>
+        <p class="feature-hint"><span class="feature-hint-label">💡 タイムラインとは？</span>動画の時間の流れを横棒で表したもの。どの字幕がいつ表示されるかを、視覚的に編集できます。</p>
+      </div>
 
-        <!-- Step 2 -->
-        <div class="screenshot-item reverse">
-          <div>
-            <img src="images/screenshot-step2.png" alt="編集画面" class="screenshot-image"
-                 onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Step 2 のスクリーンショット<br>(screenshot-step2.png)</div>';">
-          </div>
-          <div class="screenshot-content">
-            <span class="step-label">Step 2</span>
-            <h3>字幕を簡単編集</h3>
-            <p>文字起こし結果の字幕を一覧で確認・修正できます！タイムラインを使って字幕の表示時間を簡単に調整でき、動画プレビューで再生しつつ字幕の表示期間を直感的に編集できます。字幕のフォントやサイズ、アウトラインカラーまで編集可能で、一括編集機能でまとめて字幕を編集できます。字幕をテキスト形式、SRT形式で出力でき、他の動画編集ソフトでも再利用できます。</p>
-          </div>
+      <!-- 機能3: テキスト・SRT で書き出し -->
+      <div class="feature-item reverse">
+        <div>
+          <!-- 機能3: 書き出し画面のスクショをここに -->
+          <div class="feature-placeholder" role="img" aria-label="画像プレースホルダ（後日差し替え）"></div>
         </div>
-
-        <!-- Step 3 -->
-        <div class="screenshot-item">
-          <div>
-            <img src="images/screenshot-step3.png" alt="書き出し画面" class="screenshot-image"
-                 onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Step 3 のスクリーンショット<br>(screenshot-step3.png)</div>';">
-          </div>
-          <div class="screenshot-content">
-            <span class="step-label">Step 3</span>
-            <h3>動画への字幕の焼きこみ</h3>
-            <p>編集したテキストを動画に焼き込んで出力可能です！文字起こしから字幕編集、字幕焼きこみまでこのアプリで完結できます。すべての処理はPC内で完結します。</p>
-          </div>
+        <div class="feature-content">
+          <h3>テキスト・SRT で書き出し</h3>
+          <p>書き起こしたテキストを、テキストファイルや SRT 形式で書き出せます。</p>
+          <p>SRT で書き出せば、DaVinci Resolve などの動画編集ソフトに、字幕の開始・終了時間ごと取り込めます。字幕をタイムラインに載せる作業がぐっと楽になります。</p>
+          <p>書き出したテキストは、VOICEVOX などの音声合成ソフトに読み込んで、ずんだもんなどの音声を作る、といった使い方もできます。</p>
+          <p class="feature-hint"><span class="feature-hint-label">💡 SRT形式とは？</span>字幕の「文章」と「表示する時間」をセットで記録した、字幕ファイルの標準形式。多くの動画編集ソフトや動画サイトが対応しています。</p>
         </div>
+      </div>
 
+      <!-- 機能4: 字幕を焼き込んで動画出力 -->
+      <div class="feature-item">
+        <div>
+          <!-- 機能4: 焼き込み動画のスクショをここに -->
+          <div class="feature-placeholder" role="img" aria-label="画像プレースホルダ（後日差し替え）"></div>
+        </div>
+        <div class="feature-content">
+          <h3>字幕を焼き込んで動画出力</h3>
+          <p>編集した字幕を、動画に直接焼き込んで書き出せます。</p>
+          <p>複数の音声を1つにまとめて出力できるので、YouTube などにそのまま投稿できる動画が作れます。</p>
+          <p class="feature-hint"><span class="feature-hint-label">💡 焼き込みとは？</span>字幕を映像の一部として動画に埋め込むこと。焼き込んだ字幕は、どの環境で再生しても必ず表示されます。</p>
+        </div>
       </div>
     </section>
 

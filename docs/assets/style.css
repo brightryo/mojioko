@@ -424,6 +424,148 @@ body {
   line-height: 1.7;
 }
 
+/* =====================================
+   Features Section — REQ-0111
+   =====================================
+   Replaces the 3-step storytelling with a feature-focused layout
+   ("MOJIOKO でできること" / "What you can do with MOJIOKO").  Kept
+   deliberately parallel to the existing .screenshots rhythm — same section
+   padding, same h2 size — so the flow into .shorts below stays visually
+   consistent for readers who arrive expecting the old order. */
+
+.features {
+  padding: 60px 0;
+}
+
+.features h2 {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 48px;
+}
+
+/* Feature 1 / 3 / 4 — a horizontal image + copy row.  Mirrors the
+   .screenshot-item structure (grid 1fr → 1fr 1fr at 900px, reversible with
+   `direction: rtl` toggle) so the alternating left-right rhythm across all
+   image-rich sections keeps a single implementation pattern. */
+.feature-item {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: center;
+  margin-bottom: 64px;
+}
+
+.feature-item:last-child {
+  margin-bottom: 0;
+}
+
+@media (min-width: 900px) {
+  .feature-item {
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+  }
+
+  .feature-item.reverse {
+    direction: rtl;
+  }
+
+  .feature-item.reverse > * {
+    direction: ltr;
+  }
+}
+
+.feature-content h3 {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.feature-content p {
+  font-size: 16px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+
+/* Feature 2 wrapper — centred sub-heading over a 2×2 tile grid.  Broken
+   out from `.feature-item` because tiles here are self-contained (image
+   above title above copy inside each cell) rather than a single image on
+   one side of a paragraph. */
+.feature-block {
+  margin-bottom: 64px;
+}
+
+.feature-block-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.feature-block-header h3 {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 32px;
+}
+
+@media (min-width: 800px) {
+  .feature-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 40px 32px;
+  }
+}
+
+.feature-grid-cell h4 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 14px 0 8px;
+}
+
+.feature-grid-cell p {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  margin: 0;
+}
+
+/* Empty image placeholder — dashed 16:9 frame with no text so the same
+   markup works in JA and EN unchanged.  Each usage carries an HTML comment
+   on the previous line naming which slot it represents so the swap target
+   is obvious when a real screenshot lands. */
+.feature-placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+/* Terminology hint callout — muted aside below each feature's copy that
+   spells out a jargon term (e.g. "SRT形式とは？").  Uses `p.feature-hint`
+   selector so it overrides the `.feature-content p` rule above without
+   `!important`; specificity 0-1-1 in both cases, later declaration wins. */
+p.feature-hint {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  line-height: 1.65;
+  border-left: 2px solid var(--border);
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 0 6px 6px 0;
+  margin-top: 20px;
+  margin-bottom: 0;
+}
+
+.feature-hint-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+  margin-right: 6px;
+}
+
 /* CTA Section */
 .cta {
   padding: 80px 0;

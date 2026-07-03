@@ -76,51 +76,88 @@
       </a>
     </section>
 
-    <!-- Screenshots Section -->
-    <section class="screenshots">
-      <h2>Generate subtitled videos in 3 steps</h2>
+    <!-- Features Section — REQ-0111: what MOJIOKO can do (4 features).
+         Replaces the earlier "3 steps" storytelling.  Image slots are
+         placeholders for now; each has an HTML comment naming the target
+         screenshot so the swap point is obvious. -->
+    <section class="features">
+      <h2>What you can do with MOJIOKO</h2>
 
-      <div class="screenshot-grid">
+      <!-- Feature 1: High-accuracy automatic transcription -->
+      <div class="feature-item">
+        <div>
+          <!-- Feature 1: transcription screen screenshot goes here -->
+          <div class="feature-placeholder" role="img" aria-label="Image placeholder (to be replaced)"></div>
+        </div>
+        <div class="feature-content">
+          <h3>High-accuracy automatic transcription</h3>
+          <p>Automatically transcribe speech from video or audio using Whisper, a high-accuracy speech-recognition AI developed by OpenAI. Even long videos are transcribed into text in one go.</p>
+          <p>Works with both video and audio files. For videos with multiple audio tracks, you can pick which track to transcribe.</p>
+          <p class="feature-hint"><span class="feature-hint-label">💡 Multiple audio tracks?</span>Videos where different sounds — like game audio and mic voice — are recorded separately. MOJIOKO lets you transcribe just the voice.</p>
+        </div>
+      </div>
 
-        <!-- Step 1 -->
-        <div class="screenshot-item">
-          <div>
-            <img src="../images/screenshot-step1-en.png" alt="Transcription screen" class="screenshot-image"
-                 onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Screenshot of Step 1<br>(screenshot-step1-en.png)</div>';">
+      <!-- Feature 2: Flexible subtitle editing (2×2 grid) -->
+      <div class="feature-block">
+        <div class="feature-block-header">
+          <h3>Flexible subtitle editing</h3>
+        </div>
+        <div class="feature-grid">
+          <div class="feature-grid-cell">
+            <!-- Feature 2-1: text / appearance editing screenshot goes here -->
+            <div class="feature-placeholder" role="img" aria-label="Image placeholder (to be replaced)"></div>
+            <h4>Edit text and appearance freely</h4>
+            <p>Fix the transcribed text, and adjust the font (paid version only), size, color, and outline color/thickness.</p>
           </div>
-          <div class="screenshot-content">
-            <span class="step-label">Step 1</span>
-            <h3>Transcribe from video or audio</h3>
-            <p>Select a video or audio file and let OpenAI's Whisper transcribe it for you automatically. Multi-track videos are supported, so you can pick the audio track you want to subtitle.</p>
+          <div class="feature-grid-cell">
+            <!-- Feature 2-2: timeline editing screenshot goes here -->
+            <div class="feature-placeholder" role="img" aria-label="Image placeholder (to be replaced)"></div>
+            <h4>Adjust timing on the timeline</h4>
+            <p>Drag to change how long each subtitle stays on screen.</p>
+          </div>
+          <div class="feature-grid-cell">
+            <!-- Feature 2-3: list-view screenshot goes here -->
+            <div class="feature-placeholder" role="img" aria-label="Image placeholder (to be replaced)"></div>
+            <h4>Review and edit in a list view</h4>
+            <p>See all subtitles at once and edit them in bulk.</p>
+          </div>
+          <div class="feature-grid-cell">
+            <!-- Feature 2-4: trimming screenshot goes here -->
+            <div class="feature-placeholder" role="img" aria-label="Image placeholder (to be replaced)"></div>
+            <h4>Trim out unwanted parts</h4>
+            <p>Cut unneeded sections on the timeline.</p>
           </div>
         </div>
+        <p class="feature-hint"><span class="feature-hint-label">💡 Timeline?</span>A horizontal bar showing the flow of time in your video, so you can edit when each subtitle appears.</p>
+      </div>
 
-        <!-- Step 2 -->
-        <div class="screenshot-item reverse">
-          <div>
-            <img src="../images/screenshot-step2-en.png" alt="Editing screen" class="screenshot-image"
-                 onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Screenshot of Step 2<br>(screenshot-step2-en.png)</div>';">
-          </div>
-          <div class="screenshot-content">
-            <span class="step-label">Step 2</span>
-            <h3>Edit subtitles with ease</h3>
-            <p>Review and refine the transcribed subtitles in a list view. Use the timeline to adjust display timing in just a few clicks, and the live video preview to scrub through playback while fine-tuning when each subtitle appears. Customize fonts, sizes, and outline colors — and use the bulk edit feature to update many subtitles at once. Export your work as text or SRT files for reuse in other video editing software.</p>
-          </div>
+      <!-- Feature 3: Export as text or SRT -->
+      <div class="feature-item reverse">
+        <div>
+          <!-- Feature 3: export screen screenshot goes here -->
+          <div class="feature-placeholder" role="img" aria-label="Image placeholder (to be replaced)"></div>
         </div>
-
-        <!-- Step 3 -->
-        <div class="screenshot-item">
-          <div>
-            <img src="../images/screenshot-step3-en.png" alt="Export screen" class="screenshot-image"
-                 onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Screenshot of Step 3<br>(screenshot-step3-en.png)</div>';">
-          </div>
-          <div class="screenshot-content">
-            <span class="step-label">Step 3</span>
-            <h3>Burn subtitles into your video</h3>
-            <p>Burn your edited subtitles directly into the video. From transcription to subtitle editing to burn-in, the whole workflow stays inside this app — every step runs entirely on your PC.</p>
-          </div>
+        <div class="feature-content">
+          <h3>Export as text or SRT</h3>
+          <p>Export the transcription as a plain text file or in SRT format.</p>
+          <p>With SRT, import subtitles — complete with start/end times — into video editors like DaVinci Resolve.</p>
+          <p>You can also load the exported text into speech tools like VOICEVOX to generate voices.</p>
+          <p class="feature-hint"><span class="feature-hint-label">💡 SRT?</span>The standard subtitle file format, pairing each line of text with its on-screen timing. Supported by most video editors and platforms.</p>
         </div>
+      </div>
 
+      <!-- Feature 4: Burn in subtitles and export video -->
+      <div class="feature-item">
+        <div>
+          <!-- Feature 4: burn-in output video screenshot goes here -->
+          <div class="feature-placeholder" role="img" aria-label="Image placeholder (to be replaced)"></div>
+        </div>
+        <div class="feature-content">
+          <h3>Burn in subtitles and export video</h3>
+          <p>Burn your edited subtitles directly into the video.</p>
+          <p>Merge multiple audio tracks into one, ready to upload to YouTube and more.</p>
+          <p class="feature-hint"><span class="feature-hint-label">💡 Burn-in?</span>Embedding subtitles into the video itself, so they always show on any player.</p>
+        </div>
       </div>
     </section>
 
