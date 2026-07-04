@@ -532,16 +532,19 @@ body {
   margin: 0;
 }
 
-/* Empty image placeholder — dashed 16:9 frame with no text so the same
-   markup works in JA and EN unchanged.  Each usage carries an HTML comment
-   on the previous line naming which slot it represents so the swap target
-   is obvious when a real screenshot lands. */
-.feature-placeholder {
+/* Feature screenshot — width-follows-container with natural aspect ratio
+   (source PNGs ship at 1282×878, roughly 3:2, not 16:9), so we set
+   `height: auto` rather than forcing an aspect-ratio + object-fit that
+   would crop the UI shown in the screenshot.  Radius / border / shadow
+   match `.screenshot-image` above so both image-rich sections read as
+   part of the same visual family. */
+.feature-image {
   width: 100%;
-  aspect-ratio: 16 / 9;
-  background: var(--bg-secondary);
-  border: 1px dashed var(--border);
+  height: auto;
   border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  display: block;
 }
 
 /* Terminology hint callout — muted aside below each feature's copy that
