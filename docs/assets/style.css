@@ -588,6 +588,70 @@ p.feature-hint {
   margin-bottom: 32px;
 }
 
+/* Equal-weight 2-button pair for the bottom CTA (REQ-0113 §2).  Mirrors
+   the hero's `.version-cards` layout — 1 column below 720px, 2 columns
+   at ≥720px — so the "free ↔ store" pairing reads the same top and
+   bottom of the page.  Scoped as its own selector rather than reusing
+   `.version-card-btn` so future tuning of either pair cannot silently
+   drag the other. */
+.cta-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  max-width: 520px;
+  margin: 0 auto 24px;
+}
+
+@media (min-width: 720px) {
+  .cta-actions {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+}
+
+/* Filled green pill matching `.version-card-btn` visually (same padding,
+   radius, weight, hover lift) but declared here so the CTA pair owns its
+   own tuning knobs. */
+.cta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--accent);
+  color: #052e16;
+  padding: 13px 24px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 16px;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.cta-btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-2px);
+}
+
+/* Muted "back to top" link at the very end of the CTA so long pages don't
+   dead-end at the footer.  Same tone as `.release-notes-link` (text-
+   secondary, no underline until hover) so it stays quieter than the
+   primary buttons above it.  Anchor target is `#top` on the top nav —
+   the page's existing `scroll-behavior: smooth` handles the animation. */
+.cta-back-to-top {
+  margin-top: 32px;
+  font-size: 13px;
+}
+
+.cta-back-to-top a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.cta-back-to-top a:hover {
+  color: var(--text-primary);
+}
+
 /* Footer */
 footer {
   padding: 40px 0;
