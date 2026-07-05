@@ -80,6 +80,9 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
   // every SubtitleEntry, so the drawer no longer reads the global slice.
   const outputContainer = useSettingsStore((s) => s.outputContainer)
   const setOutputContainer = useSettingsStore((s) => s.setOutputContainer)
+  // REQ-0121 — user-preferred fixed output folder for the burn-in save
+  // dialog.  `null` = fall through to the OS Videos folder.
+  const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
   const activeFontId = useSettingsStore((s) => s.activeFontId)
 
   const [renderState, setRenderState] = useState<RenderState>('idle')
@@ -206,7 +209,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
     const pad = (n: number) => String(n).padStart(2, '0')
     const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
     const defaultName = `${stem}_subtitled_${ts}.${outExt}`
-    const targetPath = await saveFileDialog(defaultName)
+    const targetPath = await saveFileDialog(defaultName, defaultOutputDir ?? undefined)
     if (!targetPath) return
 
     const exists = await fileExists(targetPath).catch(() => false)

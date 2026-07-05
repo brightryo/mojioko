@@ -26,6 +26,9 @@ const electronAPI = {
     filters?: { name: string; extensions: string[] }[]
   ): Promise<string | null> =>
     ipcRenderer.invoke(Channels.dialogSaveFile, defaultName, defaultDir, filters),
+  // REQ-0121 — folder picker used by Settings > General.
+  openDirectoryDialog: (defaultDir?: string): Promise<string | null> =>
+    ipcRenderer.invoke(Channels.dialogOpenDir, defaultDir),
 
   // Video
   videoProbe: (path: string): Promise<IpcResult<VideoInfo>> =>

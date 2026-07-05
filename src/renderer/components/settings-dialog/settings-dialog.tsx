@@ -13,6 +13,7 @@ import { FontPicker } from '@/components/font-picker/font-picker'
 import { DefaultStyleControls } from '@/components/default-style-controls/default-style-controls'
 import { WhisperAdvancedControls } from '@/components/whisper-advanced-controls/whisper-advanced-controls'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
+import { FolderPathInput } from './folder-path-input'
 
 // REQ-20260615-050 — fade range constants now live in shared/constants
 // (`FADE_DURATION_SEC_{MIN,MAX,STEP}`), driven by the FadeDurationSlider.
@@ -33,6 +34,13 @@ export function SettingsDialog() {
   const setBaseColor = useSettingsStore((s) => s.setBaseColor)
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   const setFadeDurationSec = useSettingsStore((s) => s.setFadeDurationSec)
+  // REQ-0121 — audio track selector + input/output folder inputs.
+  const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
+  const setDefaultAudioTrackIndex = useSettingsStore((s) => s.setDefaultAudioTrackIndex)
+  const defaultInputDir = useSettingsStore((s) => s.defaultInputDir)
+  const setDefaultInputDir = useSettingsStore((s) => s.setDefaultInputDir)
+  const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
+  const setDefaultOutputDir = useSettingsStore((s) => s.setDefaultOutputDir)
 
   // Default style — single source of truth lives on settingsStore.
   // SubtitleStyleDialog reads & writes the same slice via REQ-016 wiring.
@@ -173,6 +181,58 @@ export function SettingsDialog() {
                 />
                 <p className="text-body-sm text-fg-muted">{t('general.fadeDurationHint')}</p>
               </div>
+
+              {/* REQ-0121 — default transcription audio track (1..6).  Fixed
+                  1..6 dropdown regardless of the current video's track count
+                  (OBS supports up to 6).  Runtime fallback lives in
+                  step1-track-pick.ts (preferred → Track 1 → none). */}
+              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
+                {t('general.defaultAudioTrack')}
+              </span>
+              <div className="flex items-center">
+                <Select
+                  value={String(defaultAudioTrackIndex)}
+                  onValueChange={(v) => setDefaultAudioTrackIndex(Number(v))}
+                >
+                  <SelectTrigger className="h-9 w-full [&>span]:flex-1 [&>span]:text-center">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5, 6].map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {t('general.defaultAudioTrackOption', { index: n })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* REQ-0121 — user-preferred fixed default input folder for
+                  the "Choose input video" dialog.  The active session's
+                  MRU (last-opened video's directory) still wins; this
+                  setting is the fallback when no MRU exists yet. */}
+              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
+                {t('general.defaultInputDir')}
+              </span>
+              <FolderPathInput
+                value={defaultInputDir}
+                onChange={setDefaultInputDir}
+                placeholder={t('general.folderPathUsingSystemVideos')}
+                ariaLabel={t('general.defaultInputDir')}
+              />
+
+              {/* REQ-0121 — user-preferred fixed default output folder for
+                  ALL save dialogs (burn-in video, transcription text, SRT
+                  subtitles, exported frame). */}
+              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
+                {t('general.defaultOutputDir')}
+              </span>
+              <FolderPathInput
+                value={defaultOutputDir}
+                onChange={setDefaultOutputDir}
+                placeholder={t('general.folderPathUsingSystemVideos')}
+                ariaLabel={t('general.defaultOutputDir')}
+              />
             </div>
           </TabsContent>
 

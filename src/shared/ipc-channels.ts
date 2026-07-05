@@ -34,6 +34,12 @@ export const Channels = {
 
   dialogOpenVideo: 'dialog:openVideo',
   dialogSaveFile: 'dialog:saveFile',
+  /**
+   * REQ-0121 — folder-picker used by Settings > General to choose the
+   * user-preferred default input / output folders.  `properties:
+   * ['openDirectory']` on top of `showOpenDialog`.
+   */
+  dialogOpenDir: 'dialog:openDir',
 
   shellOpenPath: 'shell:openPath',
   shellShowInFolder: 'shell:showInFolder',

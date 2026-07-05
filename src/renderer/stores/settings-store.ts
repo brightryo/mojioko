@@ -31,6 +31,15 @@ interface SettingsStore {
    * burn-in time.  Persisted alongside other system-wide settings.
    */
   activeFontId: FontId
+  /**
+   * REQ-0121 — user-preferred fixed default folders shown by the input /
+   * output dialogs (Settings > General).  Distinct from the MRU
+   * `lastInputDir` / `lastOutputDir` on the main-side settings-store which
+   * are updated automatically after each open/save.  `null` means "use the
+   * OS Videos folder", which the main-side dialog handler resolves.
+   */
+  defaultInputDir: string | null
+  defaultOutputDir: string | null
 
   setLanguage: (lang: string) => void
   setTheme: (t: AppTheme) => void
@@ -45,6 +54,8 @@ interface SettingsStore {
   setFadeDurationSec: (v: number) => void
   setOutputContainer: (v: OutputContainer) => void
   setActiveFontId: (id: FontId) => void
+  setDefaultInputDir: (path: string | null) => void
+  setDefaultOutputDir: (path: string | null) => void
 
   /**
    * REQ-20260613-016 Phase 4 — `burnin` / `subtitleBackground` were dropped
@@ -56,7 +67,7 @@ interface SettingsStore {
   resetStep3Settings: () => void
 
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -80,6 +91,8 @@ export const useSettingsStore = create<SettingsStore>()(
       fadeDurationSec: BURNIN_DEFAULTS.fadeDurationSec,
       outputContainer: 'mp4',
       activeFontId: DEFAULT_FONT_ID,
+      defaultInputDir: null,
+      defaultOutputDir: null,
 
       setLanguage: (lang) => set({ language: lang }),
       setTheme: (t) => set({ theme: t }),
@@ -97,6 +110,8 @@ export const useSettingsStore = create<SettingsStore>()(
       setFadeDurationSec: (v) => set({ fadeDurationSec: v }),
       setOutputContainer: (v) => set({ outputContainer: v }),
       setActiveFontId: (id) => set({ activeFontId: id }),
+      setDefaultInputDir: (path) => set({ defaultInputDir: path }),
+      setDefaultOutputDir: (path) => set({ defaultOutputDir: path }),
 
       resetStep3Settings: () =>
         set({
@@ -151,7 +166,12 @@ export const useSettingsStore = create<SettingsStore>()(
           encoder: s.encoder ?? 'auto',
           defaultAudioTrackIndex: s.defaultAudioTrackIndex,
           fadeDurationSec: migratedFadeDurationSec,
-          activeFontId: isFontId(s.activeFontId) ? s.activeFontId : DEFAULT_FONT_ID
+          activeFontId: isFontId(s.activeFontId) ? s.activeFontId : DEFAULT_FONT_ID,
+          // REQ-0121 — optional in AppSettings for backward compat with
+          // settings.json files that predate this REQ.  `null` = use the
+          // OS Videos folder (resolved by the main-side dialog handler).
+          defaultInputDir: typeof s.defaultInputDir === 'string' ? s.defaultInputDir : null,
+          defaultOutputDir: typeof s.defaultOutputDir === 'string' ? s.defaultOutputDir : null
         })
       }
     }),
@@ -170,7 +190,9 @@ export const useSettingsStore = create<SettingsStore>()(
         encoder: state.encoder,
         defaultAudioTrackIndex: state.defaultAudioTrackIndex,
         fadeDurationSec: state.fadeDurationSec,
-        activeFontId: state.activeFontId
+        activeFontId: state.activeFontId,
+        defaultInputDir: state.defaultInputDir,
+        defaultOutputDir: state.defaultOutputDir
       })
     }
   )

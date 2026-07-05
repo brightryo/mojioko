@@ -275,6 +275,8 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   // General-tab slider IS the "default for new entries").  Each row
   // built via the add-row dialog seeds `fadeDurationSec` from here.
   const settingsFadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
+  // REQ-0121 — applied to the text / SRT save dialogs below.
+  const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
   const [subtitleFont, setSubtitleFont] = useState<SubtitleFont | null>(getSubtitleFont)
 
   // Re-load the opentype.js Font whenever the active font selection changes.
@@ -761,7 +763,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     const stem = video?.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'transcript'
     const savePath = await saveFileDialog(
       `${stem}_transcript.txt`,
-      undefined,
+      defaultOutputDir ?? undefined,
       [
         { name: 'Text File', extensions: ['txt'] },
         { name: 'All Files', extensions: ['*'] }
@@ -780,7 +782,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     const stem = video?.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'subtitles'
     const savePath = await saveFileDialog(
       `${stem}_subtitles.srt`,
-      undefined,
+      defaultOutputDir ?? undefined,
       [
         { name: 'SRT Subtitle', extensions: ['srt'] },
         { name: 'All Files', extensions: ['*'] }

@@ -37,6 +37,7 @@ import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { pickInitialOpenSection } from './step1-initial-open'
+import { pickTranscriptionTrack } from './step1-track-pick'
 import { pickAudioTrackLabel } from '@/lib/audio-track-label'
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -85,6 +86,10 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // rows comes from the same source the user controls in Settings.
   const settingsFadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
+  // REQ-0121 — user-preferred default input folder used when the current
+  // session has no MRU yet (first browse after launch).  `null` = fall
+  // through to the OS Videos folder, resolved on the main side.
+  const defaultInputDir = useSettingsStore((s) => s.defaultInputDir)
   // transcriptionAdvanced is needed in handleStartTranscription to feed the
   // Whisper sidecar with the user's tweaked VAD / beam-size / language; the
   // dialog owns reads + writes for editing those fields, but step1 still
@@ -191,7 +196,12 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleBrowse() {
-    const lastDir = video?.path ? video.path.replace(/[\\/][^\\/]+$/, '') : undefined
+    // REQ-0121 — MRU wins (same-session continuity when opening video after
+    // video), else fall back to the user-preferred default input folder,
+    // else the main-side handler resolves the OS Videos folder.
+    const lastDir = video?.path
+      ? video.path.replace(/[\\/][^\\/]+$/, '')
+      : (defaultInputDir ?? undefined)
     const filePath = await openVideoDialog(lastDir)
     if (!filePath) return
 
@@ -219,12 +229,20 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     setVideoLoadingState('loaded')
     toast.success(t('toast.videoLoaded'))
 
-    // Auto-select default audio track if available
-    const defaultTrack = info.audioTracks.find((a) => a.index === defaultAudioTrackIndex)
-    if (defaultTrack) {
-      setSelectedTrack(defaultTrack.index)
-    } else if (info.audioTracks.length > 0) {
-      setSelectedTrack(info.audioTracks[0].index)
+    // REQ-0121 — audio-track fallback ladder.  See step1-track-pick.ts.
+    //   preferred exists          → use it, no notice
+    //   preferred missing, T1 ok  → use Track 1, non-blocking toast
+    //   nothing usable            → leave selection empty (existing "no
+    //                               audio track" flow handles it)
+    const picked = pickTranscriptionTrack(info.audioTracks, defaultAudioTrackIndex)
+    if (picked.trackIndex !== null) {
+      setSelectedTrack(picked.trackIndex)
+      if (picked.fallbackUsed) {
+        toast.info(t('audioTracks.defaultTrackMissing', {
+          index: defaultAudioTrackIndex,
+          fallback: picked.trackIndex
+        }))
+      }
     }
   }
 

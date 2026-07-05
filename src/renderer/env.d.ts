@@ -24,6 +24,8 @@ declare global {
         defaultDir?: string,
         filters?: { name: string; extensions: string[] }[]
       ) => Promise<string | null>
+      // REQ-0121 — folder picker used by Settings > General.
+      openDirectoryDialog: (defaultDir?: string) => Promise<string | null>
 
       videoProbe: (path: string) => Promise<IpcResult<VideoInfo>>
       videoExtractThumbnail: (path: string, atSec: number) => Promise<IpcResult<string>>

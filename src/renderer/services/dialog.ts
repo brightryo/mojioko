@@ -10,6 +10,14 @@ export async function saveFileDialog(
   return window.electronAPI.saveFileDialog(defaultName, defaultDir, filters)
 }
 
+/**
+ * REQ-0121 — folder picker used by the Settings > General folder inputs.
+ * Returns the chosen directory or null when the user cancelled.
+ */
+export async function openDirectoryDialog(defaultDir?: string): Promise<string | null> {
+  return window.electronAPI.openDirectoryDialog(defaultDir)
+}
+
 export async function shellOpenPath(path: string): Promise<void> {
   return window.electronAPI.shellOpenPath(path)
 }

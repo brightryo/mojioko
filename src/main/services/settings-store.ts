@@ -49,7 +49,11 @@ function buildDefaults(): AppSettings {
     subtitleBackground: { ...BURNIN_DEFAULTS.subtitleBackground },
     activeModelId: null,
     lastInputDir: null,
-    lastOutputDir: null
+    lastOutputDir: null,
+    // REQ-0121 — user-preferred fixed default folders (Settings > General).
+    // `null` = fall back to the OS Videos folder in the dialog handler.
+    defaultInputDir: null,
+    defaultOutputDir: null
   }
 }
 

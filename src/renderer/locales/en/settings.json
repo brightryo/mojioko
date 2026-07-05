@@ -21,7 +21,14 @@
     "baseColorMist": "Mist",
     "baseColorTaupe": "Taupe",
     "fadeDuration": "Fade duration (seconds)",
-    "fadeDurationHint": "0.1–0.5 sec"
+    "fadeDurationHint": "0.1–0.5 sec",
+    "defaultAudioTrack": "Transcription audio track",
+    "defaultAudioTrackOption": "Track {{index}}",
+    "defaultInputDir": "Input folder",
+    "defaultOutputDir": "Output folder",
+    "folderPathUsingSystemVideos": "System Videos folder",
+    "folderPathBrowse": "Browse…",
+    "folderPathClear": "Clear"
   },
   "fonts": {
     "hint": "Click a font to set it as the default. Download (⬇) or remove (🗑) fonts from the same list — same behaviour as the Subtitle Style dialog."

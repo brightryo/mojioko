@@ -21,7 +21,14 @@
     "baseColorMist": "Mist",
     "baseColorTaupe": "Taupe",
     "fadeDuration": "フェード時間（秒）",
-    "fadeDurationHint": "0.1〜0.5秒"
+    "fadeDurationHint": "0.1〜0.5秒",
+    "defaultAudioTrack": "文字起こし音声トラック",
+    "defaultAudioTrackOption": "トラック{{index}}",
+    "defaultInputDir": "入力フォルダ",
+    "defaultOutputDir": "出力フォルダ",
+    "folderPathUsingSystemVideos": "システムの Videos フォルダ",
+    "folderPathBrowse": "参照…",
+    "folderPathClear": "クリア"
   },
   "fonts": {
     "hint": "フォントをクリックして既定フォントを選択します。必要に応じてダウンロード（⬇）／削除（🗑）も行えます。字幕スタイルダイアログと同じ挙動です。"

@@ -265,6 +265,16 @@ export interface AppSettings {
   activeFontId?: FontId
   lastInputDir: string | null
   lastOutputDir: string | null
+  /**
+   * REQ-0121 — User-preferred fixed default folders shown in the input /
+   * output dialogs.  Distinct from `lastInputDir` / `lastOutputDir` which
+   * are MRU (updated after each open/save).  When `null` the dialog falls
+   * back to `app.getPath('videos')`.  The main-side handler validates the
+   * path on use (`fs.existsSync`) and silently falls back to Videos when
+   * the folder has been removed / moved — no toast to avoid noise.
+   */
+  defaultInputDir?: string | null
+  defaultOutputDir?: string | null
 }
 
 // ---------------------------------------------------------------------------
