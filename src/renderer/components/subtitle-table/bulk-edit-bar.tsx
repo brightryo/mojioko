@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, WrapText, AlignJustify, ChevronDown, AlertCircle, RotateCcw, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -216,6 +216,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // `subtitleDefaults.sizeHint` string defined for STEP 1 (REQ-034 #3).
   const { t } = useTranslation(['step2', 'step1'])
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
+  // REQ-0125 — history-less preview writer used from the color picker's
+  // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
+  const updateEntriesPreview = useProjectStore((s) => s.updateEntriesPreview)
   const clearRowSelection = useUiStore((s) => s.clearRowSelection)
 
   // Local drafts.  Pickers/inputs operate on these so a saturation drag
@@ -312,7 +315,15 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // Core history op — snapshot every selected entry in full, apply patch
   // to all of them with isEdited:true, register one undo/redo pair.
   // ---------------------------------------------------------------------
-  function applyBulk(patch: Partial<SubtitleEntry>, label: string) {
+  function applyBulk(
+    patch: Partial<SubtitleEntry>,
+    label: string,
+    // REQ-0125 — per-entry field snapshots captured BEFORE the color
+    // picker's preview stream mutated the store, so Undo rewinds each
+    // row to its individual pre-drag value.  Not needed for other bulk
+    // paths (font size, layout, etc.) since they don't stream previews.
+    preBeforeSnapshots?: ReadonlyMap<string, Partial<SubtitleEntry>>
+  ) {
     const ids = Array.from(selectedRowIds)
     if (ids.length === 0) return
 
@@ -373,7 +384,12 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     const revert = () => {
       const s = useProjectStore.getState()
       for (const [id, snap] of snapshots) {
-        s.updateEntry(id, snap)
+        // REQ-0125 — when the caller provided pre-drag field snapshots,
+        // override those fields on the naive per-entry snapshot so undo
+        // doesn't restore the after-drag values that the color picker's
+        // preview stream would otherwise have baked in.
+        const beforeOverride = preBeforeSnapshots?.get(id)
+        s.updateEntry(id, beforeOverride ? { ...snap, ...beforeOverride } : snap)
       }
     }
 
@@ -401,10 +417,40 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setSizeDraft(String(clamped))
   }
 
+  // REQ-0125 — refs holding per-entry pre-drag colour values for the
+  // current color-picker session.  Populated on the first onChange fire
+  // (before the preview mutation lands) so applyBulk's undo path can
+  // rewind each row to its own individual pre-drag value.  Cleared on
+  // commit so a fresh session snapshots afresh.
+  const bulkTextColorBeforeRef = useRef<Map<string, string> | null>(null)
+  const bulkOutlineColorBeforeRef = useRef<Map<string, string> | null>(null)
+
+  function handleTextColorPreview(hex: string) {
+    if (bulkTextColorBeforeRef.current === null) {
+      const map = new Map<string, string>()
+      const all = useProjectStore.getState().entries
+      for (const id of selectedRowIds) {
+        const e = all.find((x) => x.id === id)
+        if (e) map.set(id, e.textColorHex)
+      }
+      bulkTextColorBeforeRef.current = map
+    }
+    setColorDraftText(hex)
+    updateEntriesPreview(Array.from(selectedRowIds), { textColorHex: hex })
+  }
+
   function handleTextColorCommit(hex: string) {
+    const beforeMap = bulkTextColorBeforeRef.current
+    bulkTextColorBeforeRef.current = null
+    const preSnapshots = beforeMap
+      ? new Map<string, Partial<SubtitleEntry>>(
+          Array.from(beforeMap.entries()).map(([id, v]) => [id, { textColorHex: v }])
+        )
+      : undefined
     applyBulk(
       { textColorHex: hex },
-      t('bulk.history.textColor', { count: selectedRowIds.size })
+      t('bulk.history.textColor', { count: selectedRowIds.size }),
+      preSnapshots
     )
     // Intentionally do NOT clear the draft here — the swatch should keep
     // showing the colour the user just applied so they have a clear visual
@@ -412,10 +458,32 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftText(hex)
   }
 
+  function handleOutlineColorPreview(hex: string) {
+    if (bulkOutlineColorBeforeRef.current === null) {
+      const map = new Map<string, string>()
+      const all = useProjectStore.getState().entries
+      for (const id of selectedRowIds) {
+        const e = all.find((x) => x.id === id)
+        if (e) map.set(id, e.outlineColorHex)
+      }
+      bulkOutlineColorBeforeRef.current = map
+    }
+    setColorDraftOutline(hex)
+    updateEntriesPreview(Array.from(selectedRowIds), { outlineColorHex: hex })
+  }
+
   function handleOutlineColorCommit(hex: string) {
+    const beforeMap = bulkOutlineColorBeforeRef.current
+    bulkOutlineColorBeforeRef.current = null
+    const preSnapshots = beforeMap
+      ? new Map<string, Partial<SubtitleEntry>>(
+          Array.from(beforeMap.entries()).map(([id, v]) => [id, { outlineColorHex: v }])
+        )
+      : undefined
     applyBulk(
       { outlineColorHex: hex },
-      t('bulk.history.outlineColor', { count: selectedRowIds.size })
+      t('bulk.history.outlineColor', { count: selectedRowIds.size }),
+      preSnapshots
     )
     setColorDraftOutline(hex)
   }
@@ -785,7 +853,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             <span>{t('bulk.textColor')}</span>
             <ColorPicker
               value={colorDraftText ?? '#FFFFFF'}
-              onChange={setColorDraftText}
+              onChange={handleTextColorPreview}
               onCommit={handleTextColorCommit}
               onPairApply={handleColorPairCommit}
               swatchOnly
@@ -796,7 +864,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             <span>{t('bulk.outlineColor')}</span>
             <ColorPicker
               value={colorDraftOutline ?? '#000000'}
-              onChange={setColorDraftOutline}
+              onChange={handleOutlineColorPreview}
               onCommit={handleOutlineColorCommit}
               onPairApply={handleColorPairCommit}
               swatchOnly

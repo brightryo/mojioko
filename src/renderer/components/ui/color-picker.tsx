@@ -27,8 +27,13 @@ interface ColorPickerProps {
    * separately from `onChange` which fires per-pixel during a saturation
    * drag.  Existing per-row usage that wants live history per micro-move
    * simply omits this prop and continues to rely on `onChange`.
+   *
+   * REQ-0125 — the second argument carries the popover's open-time
+   * value ("before"), so callers can hand it into a beforePatch on the
+   * history push and Undo rewinds past any preview mutations from
+   * `onChange` during the drag.
    */
-  onCommit?: (hex: string) => void
+  onCommit?: (hex: string, hexOnOpen: string) => void
   /**
    * Optional pair-apply callback.  When provided, the popover renders
    * the "Suggested pairs" group (REQ-033 §2) — clicking a pair calls
@@ -103,7 +108,12 @@ export function ColorPicker({
       // only when the value moved.  Callers that need it (BulkEditBar) use
       // it to register a single undoable op per popover open/close cycle.
       if (onCommit && valueOnOpen !== null && normalise(value) !== valueOnOpen) {
-        onCommit(normalise(value))
+        // REQ-0125 — pass the open-time value so the caller can build a
+        // beforePatch on its history push (the preview mutations from
+        // onChange have already moved the store past `valueOnOpen`, so
+        // a naive snapshot at commit time would capture the after-value
+        // and Undo would be a no-op).
+        onCommit(normalise(value), valueOnOpen)
       }
       setValueOnOpen(null)
     }
@@ -125,6 +135,11 @@ export function ColorPicker({
     // can hit them quickly.
     addRecentColor(pair.text)
     addRecentColor(pair.outline)
+    // REQ-0125 — the pair-apply path already pushed its own history op
+    // via the caller's `onPairApply` closure, so suppress the coarse
+    // onCommit that handleOpenChange(false) would otherwise fire (it
+    // would double-push under the new preview / commit split).
+    setValueOnOpen(null)
     // Close the popover so the user sees the result immediately — pair
     // clicks are a fully-committed action, not an exploratory pick.
     handleOpenChange(false)

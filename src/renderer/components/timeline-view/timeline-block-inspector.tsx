@@ -120,6 +120,9 @@ export function TimelineBlockInspector({
 }: TimelineBlockInspectorProps) {
   const { t } = useTranslation(['step2', 'common', 'step1'])
   const updateEntry = useProjectStore((s) => s.updateEntry)
+  // REQ-0125 — history-less preview writer used from the color picker's
+  // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
+  const updateEntryPreview = useProjectStore((s) => s.updateEntryPreview)
   const pushHistory = useHistoryStore((s) => s.push)
   const isAudioOnly = useIsAudioOnly()
   // REQ-20260615-033: offset row needs the output video resolution to
@@ -209,11 +212,24 @@ export function TimelineBlockInspector({
    * deliberately NOT supported here — those flow through the dedicated
    * TimeEditorDialog or drag handlers in TimelineView.
    */
-  function applyStyleEdit(label: string, patch: Partial<SubtitleEntry>) {
+  function applyStyleEdit(
+    label: string,
+    patch: Partial<SubtitleEntry>,
+    // REQ-0125 — when the caller (color picker's onCommit) has already
+    // streamed preview mutations into the store during a drag, `entry`
+    // (and therefore `snapshot`) reflects the AFTER value.  A naive
+    // `updateEntry(id, snapshot)` on undo would then restore the after
+    // value = no-op.  Passing `beforePatch` with the fields' pre-drag
+    // values overrides those fields on the undo path so the popover's
+    // coarse-grained history op rewinds all the way past the drag
+    // stream.
+    beforePatch?: Partial<SubtitleEntry>
+  ) {
     const snapshot = { ...entry }
+    const undoState = beforePatch ? { ...snapshot, ...beforePatch } : snapshot
     pushHistory({
       label,
-      undo: () => updateEntry(entry.id, snapshot),
+      undo: () => updateEntry(entry.id, undoState),
       redo: () => updateEntry(entry.id, { ...snapshot, ...patch, isEdited: true })
     })
     updateEntry(entry.id, { ...patch, isEdited: true })
@@ -237,13 +253,35 @@ export function TimelineBlockInspector({
     if (next === entry.fontSizePx) return
     applyStyleEdit(t('history.editSize'), { fontSizePx: next })
   }
-  function handleTextColorChange(hex: string) {
-    applyStyleEdit(t('history.editColor'), { textColorHex: hex })
+  // REQ-0125 — colour picker onChange fires per-frame during S/V drag.
+  // Route those into the history-less preview API so the drag stream
+  // lights up the overlay without spamming Undo.  The single coarse-
+  // grained history op fires from onCommit at popover close.
+  function handleTextColorPreview(hex: string) {
+    updateEntryPreview(entry.id, { textColorHex: hex })
   }
-  function handleOutlineColorChange(hex: string) {
-    applyStyleEdit(t('history.editColor'), { outlineColorHex: hex })
+  function handleTextColorCommit(hex: string, hexOnOpen: string) {
+    applyStyleEdit(
+      t('history.editColor'),
+      { textColorHex: hex },
+      { textColorHex: hexOnOpen }
+    )
+  }
+  function handleOutlineColorPreview(hex: string) {
+    updateEntryPreview(entry.id, { outlineColorHex: hex })
+  }
+  function handleOutlineColorCommit(hex: string, hexOnOpen: string) {
+    applyStyleEdit(
+      t('history.editColor'),
+      { outlineColorHex: hex },
+      { outlineColorHex: hexOnOpen }
+    )
   }
   function handleColorPairApply(text: string, outline: string) {
+    // Pair clicks are a single deterministic action, not a drag, so
+    // they push their history op directly through applyStyleEdit.
+    // ColorPicker.handlePairClick suppresses the subsequent onCommit
+    // fire so we never double-push (REQ-0125).
     applyStyleEdit(t('history.editColor'), {
       textColorHex: text,
       outlineColorHex: outline
@@ -766,7 +804,8 @@ export function TimelineBlockInspector({
               <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.textColor')}</label>
               <ColorPicker
                 value={entry.textColorHex}
-                onChange={handleTextColorChange}
+                onChange={handleTextColorPreview}
+                onCommit={handleTextColorCommit}
                 onPairApply={handleColorPairApply}
                 disabled={isFrozen}
                 swatchOnly
@@ -777,7 +816,8 @@ export function TimelineBlockInspector({
               <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.outlineColor')}</label>
               <ColorPicker
                 value={entry.outlineColorHex}
-                onChange={handleOutlineColorChange}
+                onChange={handleOutlineColorPreview}
+                onCommit={handleOutlineColorCommit}
                 onPairApply={handleColorPairApply}
                 disabled={isFrozen}
                 swatchOnly
