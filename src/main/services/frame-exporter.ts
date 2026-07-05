@@ -139,7 +139,8 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
     log.info(`[frame-exporter] start: ${inputPath} @ ${timeSec.toFixed(3)}s → ${outputPath} (format=${format}, includeSubtitles=${includeSubtitles})`)
 
     await new Promise<void>((resolve, reject) => {
-      const proc = spawn(ffmpeg, args)
+      // REQ-0103 — explicit `shell: false` (see ffmpeg-burnin.ts for rationale).
+      const proc = spawn(ffmpeg, args, { shell: false })
       let stderrAccum = ''
       proc.stderr.on('data', (chunk: Buffer) => {
         stderrAccum += chunk.toString()

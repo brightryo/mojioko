@@ -144,6 +144,45 @@ export function getModelsDir(): string {
   return join(getAppDataPath(), 'models')
 }
 
+/**
+ * REQ-086 — directory holding the pre-generated multi-track preview mix.
+ *
+ * Same MSIX/NSIS rationale as `getModelsDir`: under MSIX the OS redirects
+ * writes to `%APPDATA%\MOJIOKO\…` onto a virtualized package path; using
+ * the explicit physical path here keeps file system semantics consistent
+ * with the rest of the AppData layout.  See REQ-071.
+ */
+export function getPreviewMixDir(): string {
+  const ctx = getCurrentProcessContext()
+  if (isPackagedAsMsix(ctx)) {
+    const pfn = getMsixPackageFamilyName(ctx.execPath)
+    if (pfn) {
+      return buildMsixVirtualizedAppDataPath(
+        app.getPath('home'),
+        pfn,
+        APP_DATA_FOLDER,
+        'preview-mix'
+      )
+    }
+  }
+  return join(getAppDataPath(), 'preview-mix')
+}
+
+/**
+ * Fixed file name for the preview mix — always overwritten in place so
+ * the directory never accumulates one file per loaded video.  Atomic
+ * rename from `<path>.tmp` is performed by `preview-mix.ts` so a half-
+ * written file can never masquerade as a finished one.
+ */
+export function getPreviewMixPath(): string {
+  return join(getPreviewMixDir(), 'preview-mix.m4a')
+}
+
+/** Temporary path ffmpeg writes to before the atomic rename. */
+export function getPreviewMixTmpPath(): string {
+  return join(getPreviewMixDir(), 'preview-mix.m4a.tmp')
+}
+
 export function getPythonSidecarPath(): string {
   return isDev
     ? join(app.getAppPath(), 'python-sidecar', 'main.py')

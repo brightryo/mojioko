@@ -1,9 +1,10 @@
-../../Scripts/hf.exe,sha256=p-7Hc1KDCJLKJva6tzsqIs3m8R9fG11jhowk70g_-TU,108350
-../../Scripts/huggingface-cli.exe,sha256=SKufFMahgOj9Ey_s55vgXx_iUwBWzg8R9rZfV832jGc,108362
-../../Scripts/tiny-agents.exe,sha256=GbvxlT8xEMx9rpNIPrBQQYzRsh9rFU6yLmc62CHSzfE,108360
+../../Scripts/hf.exe,sha256=_Md61eSM8gc16XpbxM0GhcTsbC8zpa-bLMBzsjxaHL8,108355
+../../Scripts/huggingface-cli.exe,sha256=898RaH-i8g33wEaSo9WP95MhdFsV68pUkCFV0Digld0,108367
+../../Scripts/tiny-agents.exe,sha256=sUddece0jg4jujAzXjk5UrNgeuLKMS7bL2rZLZuIKpU,108365
 huggingface_hub-1.20.1.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
 huggingface_hub-1.20.1.dist-info/METADATA,sha256=uiFvbMoeBjbwR0XgGmXCA0Hv6HRo5V-sf3iZH-ufr6k,14065
 huggingface_hub-1.20.1.dist-info/RECORD,,
+huggingface_hub-1.20.1.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
 huggingface_hub-1.20.1.dist-info/WHEEL,sha256=aeYiig01lYGDzBgS8HxWXOg3uV61G9ijOsup-k9o1sk,91
 huggingface_hub-1.20.1.dist-info/entry_points.txt,sha256=zP7F_bBSdircPQFysHQZ9F3Lcn5_dCSOEZxVlGCsG0w,212
 huggingface_hub-1.20.1.dist-info/licenses/LICENSE,sha256=xx0jnfkXJvxRnG63LTGOxlggYnIysveWIZ6H3PNdCrQ,11357

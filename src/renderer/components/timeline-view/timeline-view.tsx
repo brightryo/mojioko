@@ -358,7 +358,26 @@ function BlockImpl({
       bodyMovedRef.current = false
       return
     }
-    onSelect(entry.id, entry.startSec)
+    // REQ-088 #1 — seek to the CLICK POSITION inside the clip rather
+    // than the clip's start.  Workflow: scrub or play to find the
+    // moment a voice ends, click that point in its clip to land the
+    // playhead there and trim from the inspector — pre-REQ-088 the
+    // playhead would yank back to startSec and force the user to
+    // re-locate the spot.  The `<` / `>` nav buttons still jump to
+    // the clip's start / end on their own (see handleNavFirst / Last),
+    // so we keep both gestures distinct: click = put the head where
+    // I clicked; nav arrows = jump to the boundary.
+    //
+    // Self-contained: computed against the button's own bounding rect
+    // so we don't need to thread the timeline's `pixelsPerSec` down
+    // here.  rect.width is guaranteed > 0 in practice (the block
+    // floor is `Math.max(2, widthPx)`), but the >0 guard keeps the
+    // fraction well-defined under any future zoom-out edge case.
+    const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+    const frac = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0
+    const clamped = Math.max(0, Math.min(1, frac))
+    const seekSec = entry.startSec + clamped * (entry.endSec - entry.startSec)
+    onSelect(entry.id, seekSec)
   }
 
   // REQ-20260614-001 Phase 4 — the Block-anchored Inspector Popover was
@@ -415,8 +434,21 @@ function BlockImpl({
           // table.tsx) を駆動するため残してあるが、視覚的な色付けは行わない。
           // 状態色は白 (通常) / 黄 (編集済み) / 赤 (overflow) / 緑 (ユーザー
           // 選択) の 4 色のみ。
-          isUserSelected && 'ring-2 ring-primary border-primary text-fg-primary',
-          isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-primary/15',
+          //
+          // REQ-088 #1 fix-up — pin `hover:border-primary` and (for the
+          // plain-active variant) `hover:bg-primary/15` so the base
+          // `hover:border-fg-muted` / `hover:bg-surface-3` declarations
+          // higher up in the class list cannot override the active
+          // green on hover.  Tailwind's `:hover` pseudo always wins
+          // over plain classes regardless of source order, so the
+          // active state must declare its own `hover:` variants to
+          // survive a cursor that's still over the freshly-clicked
+          // block.  Without these, the green border / bg disappeared
+          // while hovering and reappeared only after the cursor left
+          // the clip — confusing right after a click-to-activate
+          // since the user has not moved the cursor yet.  REQ-089.
+          isUserSelected && 'ring-2 ring-primary border-primary hover:border-primary text-fg-primary',
+          isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-primary/15 hover:bg-primary/15',
           entry.isDeleted && 'opacity-40 line-through',
           !entry.isDeleted && 'cursor-grab active:cursor-grabbing'
         )}
@@ -987,9 +1019,15 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
    * user's previous explicit pick mid-drag — pointermove just mutates
    * positions, never selection.
    */
-  const handleSelectBlock = useCallback((id: string, startSec: number) => {
+  const handleSelectBlock = useCallback((id: string, seekToSec: number) => {
+    // REQ-088 #1 — `seekToSec` is now the CLICK POSITION inside the
+    // clip computed by `handleBodyClick`, not the clip's `startSec`
+    // (legacy name preserved on the callback for API stability would
+    // have misled future readers, hence the rename).  Drag paths never
+    // reach this callback — they're routed through `onStartDrag` and
+    // never set selection (see comment above).
     setSelectedEntryId(id)
-    setVideoSeekRequest(startSec)
+    setVideoSeekRequest(seekToSec)
   }, [setSelectedEntryId, setVideoSeekRequest])
 
   /**

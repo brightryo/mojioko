@@ -1,12 +1,19 @@
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { HelpIcon } from '@/components/help-icon'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
-import { cn } from '@/lib/utils'
+import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
+
+/**
+ * REQ-088 #2 — font-size step for the ± chevron buttons.  10 px matches
+ * the convention requested in REQ-088 and is the same magnitude the
+ * inspector's per-row size stepper uses, so the two surfaces feel
+ * consistent.
+ */
+const FONT_SIZE_STEP_PX = 10
 
 interface DefaultStyleControlsProps {
   fontSizePx: number
@@ -60,60 +67,30 @@ export function DefaultStyleControls({
   onSetAutoLineBreak
 }: DefaultStyleControlsProps) {
   const { t } = useTranslation(['step1'])
-  // Tracks whether the size input currently holds an out-of-range value so
-  // the field can flash --warning during typing.  Resets on blur after the
-  // value is clamped and committed.
-  const [fontSizeOutOfRange, setFontSizeOutOfRange] = useState(false)
 
   return (
     <div className="space-y-3">
-      {/* Font size */}
+      {/* Font size — REQ-088 #2: ± chevron stepper replaces the bare
+          number input so the Settings dialog matches the inspector /
+          bulk-edit field convention.  Step 10 px, clamped to
+          [FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX] by the shared component. */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-1">
           <Label>{t('subtitleDefaults.size')}</Label>
           <HelpIcon content={t('subtitleDefaults.helpSize')} />
         </div>
-        <input
-          key={fontSizePx}
-          type="number"
+        <NumberStepperInput
+          value={fontSizePx}
           min={FONT_SIZE_MIN_PX}
           max={FONT_SIZE_MAX_PX}
-          defaultValue={fontSizePx}
+          step={FONT_SIZE_STEP_PX}
+          onCommit={(v) => onUpdateDefaults({ fontSizePx: v })}
+          ariaLabel={t('subtitleDefaults.size')}
           title={t('subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
-          onChange={(e) => {
-            const v = parseInt(e.target.value, 10)
-            setFontSizeOutOfRange(
-              !isNaN(v) && (v < FONT_SIZE_MIN_PX || v > FONT_SIZE_MAX_PX)
-            )
-          }}
-          onBlur={(e) => {
-            setFontSizeOutOfRange(false)
-            const v = parseInt(e.target.value, 10)
-            if (isNaN(v)) return
-            onUpdateDefaults({
-              fontSizePx: Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, v))
-            })
-          }}
-          className={cn(
-            'h-9 w-32 rounded-md border bg-input px-2 text-center text-body text-foreground',
-            'focus:outline-none focus-visible:ring-2',
-            '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-            fontSizeOutOfRange
-              ? 'border-[hsl(var(--warning)/0.6)] focus-visible:ring-[hsl(var(--warning)/0.3)]'
-              : 'border-border focus-visible:ring-ring/30'
-          )}
         />
-        {/* REQ-034 #3: surface the clamp range so "enter 700 → silently
-            becomes 600" stops being mysterious (cap raised from 200 to
-            600 in REQ-041).  Amber tint while the in-flight value is
-            out of range echoes the input border so the relationship is
-            unambiguous. */}
-        <p
-          className={cn(
-            'text-body-sm transition-colors',
-            fontSizeOutOfRange ? 'text-[hsl(var(--warning))]' : 'text-muted-foreground'
-          )}
-        >
+        {/* REQ-034 #3: surface the clamp range so users know typed values
+            outside [min, max] will snap back. */}
+        <p className="text-body-sm text-muted-foreground">
           {t('subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
         </p>
       </div>

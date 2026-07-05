@@ -7,6 +7,7 @@ import { getBinPath, getFontResolveDir } from '../lib/paths'
 import { generateAss } from './ass-generator'
 import { getBestEncoder, buildEncoderArgs } from './encoder-detector'
 import { buildTrimConcatFilter } from './ffmpeg-trim-filter'
+import { buildAmixAudioFilter } from './preview-mix-filter'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
 import {
   applyCutsToEntry,
@@ -224,17 +225,21 @@ export async function startBurnin(
         outputPath
       ]
     } else {
-      const inputLabels = Array.from({ length: N }, (_, i) => `[0:a:${i}]`).join('')
-      const audioFilter = `${inputLabels}amix=inputs=${N}:duration=longest:normalize=0[aout]`
-      const filterComplex = `[0:v]${subtitlesFilter}[vout];${audioFilter}`
+      // REQ-086 — amix filter shared with the preview-mix pipeline so
+      // the burnin and the preview emit the same audio mix.  Byte-
+      // identical to the pre-REQ-086 inline filter string for every
+      // N >= 1 (single-track uses `amix=inputs=1` as a no-op pass-
+      // through, matching the historical behaviour).
+      const amix = buildAmixAudioFilter(N)
+      const filterComplex = `[0:v]${subtitlesFilter}[vout];${amix.filterComplex}`
       args = [
         '-y',
         '-i', inputPath,
         '-filter_complex', filterComplex,
         '-map', '[vout]',
-        '-map', '[aout]',
+        ...amix.mapArgs,
         ...encoderArgs,
-        '-c:a', 'aac', '-b:a', '192k',
+        ...amix.codecArgs,
         ...containerArgs,
         '-progress', 'pipe:1',
         outputPath
@@ -248,7 +253,12 @@ export async function startBurnin(
   log.debug(`[ffmpeg-burnin] argv: ${ffmpeg} ${args.join(' ')}`)
 
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn(ffmpeg, args)
+    // REQ-0103 — explicit `shell: false` so a filename containing shell
+    // metacharacters (`|`, `&`, `·`, emoji) is never interpreted by cmd.exe /
+    // powershell.  This is Node's default; making it explicit here is
+    // documentation and a defence against a future refactor that might pass an
+    // `options` object in.
+    const proc = spawn(ffmpeg, args, { shell: false })
     // Cleanup of the (potentially partial) output file is centralised in the
     // 'close' handler — we never unlink from inside the abort listener,
     // because ffmpeg may have already finished and exited cleanly between the

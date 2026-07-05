@@ -53,6 +53,7 @@ node_modules/.vite/
 # Python 仮想環境
 # ============================================
 .venv/
+.venv-*/
 venv/
 env/
 

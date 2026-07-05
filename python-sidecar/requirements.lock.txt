@@ -1,0 +1,73 @@
+# REQ-0105 — pinned runtime dependencies for the PyInstaller-built
+# mojioko-transcriber.exe.
+#
+# This file is the "案A: 据え置き＋固定" lock — every version below matches the
+# bundle already shipped with v1.3.1 (commit c41f325) as observed in
+# resources/bin/transcriber/_internal/*.dist-info/METADATA and, for packages
+# whose dist-info the PyInstaller collect step dropped (av, hf_xet,
+# onnxruntime, certifi), from binary fingerprints (av.libs' FFmpeg
+# ProductVersion, onnxruntime.dll FileVersion, huggingface_hub 1.20.1's
+# hf-xet>=1.5.1,<2.0.0 constraint).
+#
+# The rebuild pipeline is:
+#   py -3.11 -m venv .venv-build-0105
+#   .\.venv-build-0105\Scripts\pip install -r python-sidecar\requirements.lock.txt
+#   .\.venv-build-0105\Scripts\pip install -r python-sidecar\requirements-build.txt
+#   .\.venv-build-0105\Scripts\pyinstaller mojioko-transcriber.spec ...
+#
+# The legacy python-sidecar/requirements.txt (a single `faster-whisper==1.2.1`
+# line) is preserved for developers who create their own .venv via `pip install
+# -r requirements.txt` and rely on pip to solve the transitive graph.  That
+# path is NOT reproducible — this lock is.
+#
+# Certifi note: the bundled cacert.pem SHA-256 does not match any release we
+# could bisect (2025.7 through 2026.6.17 all differ); pip's resolver picked
+# 2026.6.17.  Certifi has no functional impact on MOJIOKO because the Python
+# sidecar makes no HTTPS calls at runtime (models are pre-downloaded by the
+# Node-side model-downloader, Silero VAD is bundled inside
+# faster_whisper/assets/).  Documented for reproducibility only.
+#
+# Every primary pin (faster-whisper, ctranslate2, huggingface_hub, tokenizers,
+# onnxruntime, av, tqdm, numpy, click, hf-xet) matches the v1.3.1 bundle
+# exactly.
+
+# Direct dependency and the source of truth for the transitive graph
+faster-whisper==1.2.1
+
+# faster-whisper's declared runtime deps, pinned to bundled versions
+ctranslate2==4.8.0
+huggingface_hub==1.20.1
+tokenizers==0.23.1
+onnxruntime==1.27.0
+av==17.1.0
+tqdm==4.68.3
+
+# Direct constraints from huggingface_hub==1.20.1
+click==8.4.1
+filelock==3.29.4
+fsspec==2026.6.0
+hf-xet==1.5.1
+httpx==0.28.1
+packaging==26.2
+PyYAML==6.0.3
+typer==0.25.1
+typing_extensions==4.16.0
+
+# ctranslate2 / onnxruntime runtime deps
+numpy==2.4.6
+flatbuffers==25.12.19
+protobuf==7.35.1
+
+# httpx / typer transitive graph
+anyio==4.14.1
+annotated-doc==0.0.4
+certifi==2026.6.17
+colorama==0.4.6
+h11==0.16.0
+httpcore==1.0.9
+idna==3.18
+markdown-it-py==4.2.0
+mdurl==0.1.2
+Pygments==2.20.0
+rich==15.0.0
+shellingham==1.5.4

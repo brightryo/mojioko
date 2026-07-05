@@ -3,6 +3,7 @@ import { createInterface } from 'readline'
 import { app } from 'electron'
 import { spawnProcess } from '../lib/child-process'
 import { getPythonSidecarPath, getPythonExecutable, getTranscriberExePath } from '../lib/paths'
+import { normalizeVideoPath } from './normalize-video-path'
 import type { TranscriptionStartRequest, TranscriptionEvent } from '../../shared/ipc-contracts'
 import { TranscriptionError } from '../../shared/errors'
 import log from '../lib/logger'
@@ -117,10 +118,19 @@ export async function transcribe(
       }
     }
 
+    // REQ-0103 — normalize + existence-check the video path before shipping
+    // it to the sidecar.  See `normalize-video-path.ts` for full rationale.
+    const norm = normalizeVideoPath(request.videoPath)
+    if (!norm.ok) {
+      reject(new TranscriptionError(norm.error))
+      return
+    }
+    const videoPath = norm.path
+
     const adv = request.advanced
     const payload = {
       cmd: 'transcribe',
-      videoPath: request.videoPath,
+      videoPath,
       trackIndex: request.trackIndex,
       model: request.modelId,
       modelsDir: request.modelsDir,

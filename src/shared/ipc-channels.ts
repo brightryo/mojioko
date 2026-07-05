@@ -54,6 +54,14 @@ export const Channels = {
   appGetResourcesPath: 'app:getResourcesPath',
   appGetBuildInfo: 'app:getBuildInfo',
   appDetectEncoders: 'app:detectEncoders',
+  /**
+   * REQ-088 #4 — runtime tier signal.  `true` when the running process
+   * was launched from an MSIX/AppX package (= store/paid build),
+   * `false` for the NSIS GitHub free build.  The renderer uses this to
+   * gate access to non-default fonts (font picker, per-row selector,
+   * bulk-edit selector).  Pure read, no side effects.
+   */
+  appIsMsix: 'app:isMsix',
 
   /** Native menu rebuild trigger */
   menuSetLanguage: 'menu:setLanguage',

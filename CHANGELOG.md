@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.2] - 2026-07-01
+
+### Improved
+
+- The display language (Japanese/English) is now chosen automatically on first launch, based on your OS language setting.
+- Preview playback now mixes and plays all audio tracks in the video, so you can check the audio in preview even when the microphone is recorded on a separate track.
+- You can now click on the timeline to move the playback position to that point.
+- Reorganized the items and labels in the settings screen.
+
+### Fixed
+
+- Fixed an issue where the subtitle background color was not shown correctly in the exported video when the background was enabled.
+- Fixed incorrect overflow detection and automatic line breaking with certain fonts.
+- Fixed an issue where the active subtitle's frame on the timeline disappeared when hovering over it.
+- Fixed an issue where transcription could fail with "No such file or directory" for input files whose names contain certain characters (pipe `|`, middle dot `·`, emoji, non-ASCII / non-Japanese text).
+
+### Changed
+
+- The free (GitHub) version now uses the default font (Noto Sans JP) only. Additional fonts are available in the Microsoft Store version.
+
+---
+
 ## [1.3.1] - 2026-06-28
 
 ### Improved

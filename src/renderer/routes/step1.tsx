@@ -25,6 +25,7 @@ import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore } from '@/stores/ui-store'
 import { useHistoryStore } from '@/stores/history-store'
+import { usePreviewMixStore } from '@/stores/preview-mix-store'
 import { probeVideo, extractThumbnail } from '@/services/video'
 import { openVideoDialog } from '@/services/dialog'
 import { runTranscription } from '@/services/transcription'
@@ -106,6 +107,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const [activeModelId, setActiveModelId] = useState<WhisperModelId | null>(null)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [transcribeProgress, setTranscribeProgress] = useState(0)
+  // REQ-086 — drawer phase override.  Whisper run starts at 'whisper';
+  // when the main process emits the `phase: 'preview-mix'` event the
+  // label switches to "音声準備中…" while the amix ffmpeg pass runs.
+  // The progress bar bar stays full (100 %) during the mix step since
+  // it has no per-frame progress events; the loader spinner + new
+  // label communicates that the run is still in flight.
+  const [transcribePhase, setTranscribePhase] = useState<'whisper' | 'preview-mix'>('whisper')
   const [thumbnail, setThumbnail] = useState<string | null>(null)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [subtitleStyleDialogOpen, setSubtitleStyleDialogOpen] = useState(false)
@@ -207,6 +215,12 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
     setVideoLoadingState('loading')
     setThumbnail(null)
+    // REQ-086 — drop any previously-generated preview mix URL the moment
+    // a fresh video is picked.  The mix file on disk still belongs to the
+    // prior source, so until a new transcription run finishes the preview
+    // must fall back to `<video>`-only audio rather than play stale audio
+    // over the new visuals.
+    usePreviewMixStore.getState().clear()
 
     const result = await probeVideo(filePath)
     if (!result.ok) {
@@ -259,8 +273,14 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     // loop below doesn't need to wait for projectStore to re-render.
     const runDefaults = transcriptionDefaults
 
+    // REQ-086 — clear any prior preview-mix URL before the run starts so
+    // a failure mid-run leaves the editor without a stale URL pointing at
+    // whatever video was transcribed before.  The success path below
+    // re-populates it with the freshly-generated mix.
+    usePreviewMixStore.getState().clear()
     setIsTranscribing(true)
     setTranscribeProgress(0)
+    setTranscribePhase('whisper')
     // REQ-20260615-055 — drive the drawer's render state too so the
     // body switches from the configuration form to the spinner /
     // progress bar / error panel as the run progresses.
@@ -269,11 +289,17 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     window.electronAPI.menuSetTranscribing(true)
 
     const segments: { startSec: number; endSec: number; text: string }[] = []
+    let previewMixUrl: string | null = null
 
     const run = runTranscription(
       {
         videoPath: video.path,
         trackIndex: selectedTrack,
+        // REQ-086 — main needs the total track count to decide whether
+        // to spawn the post-Whisper amix pass.  Passing it from here
+        // avoids a re-probe in the main process and keeps the cancel
+        // path symmetrical (renderer initiates; main aborts ffmpeg).
+        audioTrackCount: video.audioTracks.length,
         modelId: activeModelId,
         defaults: {
           fontSizePx: runDefaults.fontSizePx,
@@ -289,6 +315,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           setTranscribeProgress(Math.round(evt.percent))
         } else if (evt.event === 'segment') {
           segments.push(evt.segment)
+        } else if (evt.event === 'phase') {
+          // REQ-086 — Whisper done, preview-mix in flight.  Show the
+          // mix label and pin the progress bar at 100 % so the user
+          // sees the run is still active without a misleading reset
+          // to 0.
+          setTranscribePhase(evt.phase)
+          setTranscribeProgress(100)
         } else if (evt.event === 'needsDownload') {
           toast.warning(t('toast.modelNotInstalled', { model: evt.model }))
         }
@@ -299,7 +332,8 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     let cancelled = false
     let errorReason: string | null = null
     try {
-      await run.promise
+      const runResult = await run.promise
+      previewMixUrl = runResult.previewMixUrl
     } catch (err) {
       const msg = String(err)
       if (msg.includes('Cancelled')) {
@@ -452,6 +486,11 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     // (`lastTranscriptionWasEmpty` flag in ui-store; STEP 2 reads &
     // clears it on mount).
     setEntries(finalEntries)
+    // REQ-086 — surface the preview-mix URL (or null when N<=1 / the
+    // main process didn't generate one) to the panel consumer.  This
+    // must happen BEFORE navigate so VideoPreviewPanel sees the value
+    // on its first mount.
+    usePreviewMixStore.getState().setUrl(previewMixUrl)
     if (finalEntries.length === 0) {
       useUiStore.getState().setLastTranscriptionWasEmpty(true)
     } else {
@@ -463,6 +502,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     setTranscriptionDrawerOpen(false)
     setDrawerRenderState('idle')
     setDrawerErrorMessage('')
+    setTranscribePhase('whisper')
     navigate('/step2')
   }
 
@@ -862,6 +902,11 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         audioTracks={audioTracks}
         renderState={drawerRenderState}
         progress={transcribeProgress}
+        runningLabelOverride={
+          transcribePhase === 'preview-mix'
+            ? t('drawer.runningLabelPreviewMix')
+            : undefined
+        }
         errorMessage={drawerErrorMessage}
         canStart={canStart}
         onStart={handleStartTranscription}

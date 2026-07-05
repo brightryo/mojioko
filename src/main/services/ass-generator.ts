@@ -106,10 +106,16 @@ function opacityToAssAlpha(opacityPercent: number): string {
  *       * Inline `\an<N>` from (horizontalPosition × verticalPosition).
  *       * Inline `\fs` / `\c` / `\3c` / `\bord` / `\fn` / `\fad` continue
  *         per-row as in v1.1.
- *       * WithBox rows additionally emit `\4c<color>` + `\4a<alpha>` (the
- *         BackColour / BackAlpha override that libass binds to the opaque
- *         box paint when BorderStyle=3).  Default rows skip these tags so
- *         their outline / shadow rendering is unaffected.
+ *       * WithBox rows additionally emit `\3c<bg-color>` + `\3a<bg-alpha>`
+ *         + `\shad0` (REQ-0096).  Under BorderStyle=3 libass paints the
+ *         opaque box with OutlineColour (`\3c`), NOT BackColour (`\4c` =
+ *         drop-shadow, which is what v1.3.1 mistakenly used).  The bg `\3c`
+ *         emitted AFTER the per-row outline `\3c` wins on a last-write basis,
+ *         overriding the user's outline color for the box paint — this is
+ *         libass-correct and matches the UX note "BG ON disables outline."
+ *         `\shad0` guarantees no shadow leaks regardless of Style header
+ *         defaults.  Default rows skip all three so their outline / shadow
+ *         rendering is unaffected.
  *
  * **`burnin` and `subtitleBackground` parameters** (kept for ABI continuity
  * with ffmpeg-burnin.ts:151 — see Phase 4 cleanup ticket): both are now
@@ -214,16 +220,24 @@ export function generateAss(
       const outlineTag = `\\3c${hexToAss(e.outlineColorHex)}`
       const bordTag    = `\\bord${e.outlineThicknessPx}`
 
-      // WithBox-only inline tags — \4c (BackColour) + \4a (BackAlpha) drive
-      // the opaque box paint when the row's Style is BorderStyle=3.  Default
-      // rows skip these; their outline + shadow render normally.
-      let bgFillTag = ''
+      // WithBox-only inline tags (REQ-0096 — was a bug fix).
+      // libass paints the BorderStyle=3 opaque box with OutlineColour
+      // (`\3c` / `\3a`), NOT BackColour (`\4c` / `\4a` — that's the drop
+      // shadow).  v1.3.1 wrote the user's bg color into \4c, which is why
+      // the box rendered in the user's outline color and the bg color
+      // only leaked into the (tiny) shadow.  The fix: emit \3c/\3a with
+      // the bg color/alpha AFTER the per-row outline `\3c` so libass's
+      // last-write-wins behavior overrides the outline color for the box
+      // paint.  \shad0 ensures no shadow leaks regardless of style header.
+      let bgFillTag  = ''
       let bgAlphaTag = ''
+      let bgShadTag  = ''
       if (rowBgEnabled) {
         const bgColor = e.subtitleBackground.color === 'white' ? '00FFFFFF' : '000000'
         const bgAlpha = opacityToAssAlpha(e.subtitleBackground.opacityPercent)
-        bgFillTag  = `\\4c&H${bgColor}&`
-        bgAlphaTag = `\\4a&H${bgAlpha}&`
+        bgFillTag  = `\\3c&H${bgColor}&`
+        bgAlphaTag = `\\3a&H${bgAlpha}&`
+        bgShadTag  = '\\shad0'
       }
 
       const styleTag = [
@@ -234,8 +248,11 @@ export function generateAss(
         fillTag,
         outlineTag,
         bordTag,
+        // bg tags MUST come AFTER outlineTag so libass takes the bg color
+        // as the final \3c / \3a value (last-write-wins).
         bgFillTag,
         bgAlphaTag,
+        bgShadTag,
         fadeTag,
       ].filter(Boolean).join('')
 

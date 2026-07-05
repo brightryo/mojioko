@@ -14,6 +14,8 @@ const electronAPI = {
   getResourcesPath: (): Promise<string> => ipcRenderer.invoke(Channels.appGetResourcesPath),
   getBuildInfo: (): Promise<BuildInfo> => ipcRenderer.invoke(Channels.appGetBuildInfo),
   detectEncoders: (): Promise<EncoderDetectionResult> => ipcRenderer.invoke(Channels.appDetectEncoders),
+  /** REQ-088 — true for MSIX/AppX (store) builds, false for NSIS. */
+  isMsix: (): Promise<boolean> => ipcRenderer.invoke(Channels.appIsMsix),
   menuSetLanguage: (lang: string): void => ipcRenderer.send(Channels.menuSetLanguage, lang),
   menuSetTranscribing: (val: boolean): void => ipcRenderer.send(Channels.menuSetTranscribing, val),
 

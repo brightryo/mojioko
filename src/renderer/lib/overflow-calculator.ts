@@ -4,6 +4,7 @@ import {
   getLibassScale,
   getSubtitleFontFor,
   getLibassScaleFor,
+  FALLBACK_LIBASS_SCALE,
   type SubtitleFont
 } from './font-metrics'
 import type { FontId } from '../../shared/fonts'
@@ -129,12 +130,25 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
         byteOffset += codePoints[gi].length
       }
     } else {
-      // Fallback: character-class estimates when the font is not yet loaded.
-      // libassScale is unavailable here; widths are approximate.
+      // Fallback: character-class estimates when the per-row font is not yet
+      // in the opentype.js cache.  REQ-087 — apply FALLBACK_LIBASS_SCALE so
+      // wide chars are estimated as `fontSizePx × ~0.69` (libass-rendered
+      // em-pixels) instead of the raw em (= `fontSizePx × 1.0`).  Without
+      // this factor the fallback over-counted CJK widths by ~45 % vs the
+      // real-font path, producing spurious overflow + early line breaks for
+      // every non-default font whose Font hadn't loaded yet.  The constant
+      // is the same value every Google Fonts CJK family in the registry
+      // computes from its OS/2 table (validated for all 9 entries), so the
+      // approximation lands inside ~1 % of the real measurement for any of
+      // those fonts.  Half-width punctuation specific to some display
+      // faces (e.g. Dela's narrow 「。、) remains a residual diff covered
+      // by 案B's per-font cache wakeup.
       let i = 0
       for (const char of line) {
         const cp = line.codePointAt(i) ?? 0
-        const charWidth = isWide(cp) ? fontSizePx : fontSizePx * 0.55
+        const charWidth = isWide(cp)
+          ? fontSizePx * FALLBACK_LIBASS_SCALE
+          : fontSizePx * 0.55 * FALLBACK_LIBASS_SCALE
         cumulative += charWidth
         if (cumulative > effectivePx) {
           return { overflowStartIndex: charOffset + i, measuredPx: cumulative, effectivePx }

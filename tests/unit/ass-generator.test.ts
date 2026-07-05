@@ -12,7 +12,8 @@ import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
  *   2. picks per-Dialogue Style by `entry.subtitleBackground.enabled`
  *   3. puts `entry.verticalMarginPx` in the Dialogue MarginV column
  *   4. emits inline `\an<N>` from horizontal × vertical
- *   5. emits inline `\4c`/`\4a` ONLY for WithBox rows
+ *   5. emits inline bg-paint tags (`\3c` bg color + `\3a` bg alpha + `\shad0`)
+ *      ONLY for WithBox rows — see REQ-0096 for why \3c not \4c
  *   6. preserves the existing per-row `\fs`/`\c`/`\3c`/`\bord`/`\fad`
  *
  * These tests pin each of those points.  Phase 4-5 will add UI; until then
@@ -135,7 +136,7 @@ describe('generateAss — per-row MarginV', () => {
 })
 
 describe('generateAss — Style selection (WithBox vs Default)', () => {
-  it('background disabled → Style: Default, no \\4c/\\4a tags', () => {
+  it('background disabled → Style: Default, no \\3a/\\shad0 bg-paint tags', () => {
     const ass = generateAss(
       [makeEntry('e1', 0, 1, 'hi')], // default background.enabled=false
       VIDEO,
@@ -143,11 +144,16 @@ describe('generateAss — Style selection (WithBox vs Default)', () => {
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain(',Default,')
+    // BG-off rows must NEVER carry the bg-paint tags introduced for WithBox.
+    // (\3c is allowed — that's the row's outline color, asserted elsewhere.)
+    expect(dialogue).not.toContain('\\3a')
+    expect(dialogue).not.toContain('\\shad0')
+    // Defensive: the broken v1.3.1 \4c/\4a path must not regress, either.
     expect(dialogue).not.toContain('\\4c')
     expect(dialogue).not.toContain('\\4a')
   })
 
-  it('background enabled → Style: WithBox, with \\4c and \\4a tags', () => {
+  it('background enabled → Style: WithBox, with \\3c/\\3a bg tags and \\shad0', () => {
     const ass = generateAss(
       [
         makeEntry('e1', 0, 1, 'hi', {
@@ -159,8 +165,13 @@ describe('generateAss — Style selection (WithBox vs Default)', () => {
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain(',WithBox,')
-    expect(dialogue).toContain('\\4c')
-    expect(dialogue).toContain('\\4a')
+    // libass paints BorderStyle=3 box with OutlineColour (\3c), not \4c.
+    expect(dialogue).toContain('\\3c')
+    expect(dialogue).toContain('\\3a')
+    expect(dialogue).toContain('\\shad0')
+    // REQ-0096 regression guard — bg color must NOT land in \4c/\4a anymore.
+    expect(dialogue).not.toContain('\\4c')
+    expect(dialogue).not.toContain('\\4a')
   })
 
   it('mixed rows pick the correct Style each', () => {
@@ -182,8 +193,12 @@ describe('generateAss — Style selection (WithBox vs Default)', () => {
   })
 })
 
-describe('generateAss — \\4c / \\4a color and alpha', () => {
-  it('black background → \\4c&H000000&', () => {
+// REQ-0096 — bg paint is written into \3c/\3a (OutlineColour/OutlineAlpha)
+// because libass under BorderStyle=3 paints the opaque box from those, not
+// from \4c/\4a (which is the drop-shadow).  v1.3.1 had this wrong; these
+// tests pin the corrected behavior.
+describe('generateAss — \\3c / \\3a bg color and alpha (REQ-0096)', () => {
+  it('black background → \\3c&H000000& (last-write-wins over outline \\3c)', () => {
     const ass = generateAss(
       [
         makeEntry('e1', 0, 1, 'hi', {
@@ -194,10 +209,16 @@ describe('generateAss — \\4c / \\4a color and alpha', () => {
       VESTIGIAL_BURNIN,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
-    expect(dialogue).toContain('\\4c&H000000&')
+    expect(dialogue).toContain('\\3c&H000000&')
+    // Tag order: the per-row outline \3c must appear BEFORE the bg \3c so
+    // libass's last-write-wins behavior gives the box the bg color.
+    const outlineIdx = dialogue.indexOf('\\3c&H00000000&') // default outline
+    const bgIdx = dialogue.indexOf('\\3c&H000000&')
+    expect(outlineIdx).toBeGreaterThanOrEqual(0)
+    expect(bgIdx).toBeGreaterThan(outlineIdx)
   })
 
-  it('white background → \\4c&H00FFFFFF&', () => {
+  it('white background → \\3c&H00FFFFFF&', () => {
     const ass = generateAss(
       [
         makeEntry('e1', 0, 1, 'hi', {
@@ -208,10 +229,10 @@ describe('generateAss — \\4c / \\4a color and alpha', () => {
       VESTIGIAL_BURNIN,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
-    expect(dialogue).toContain('\\4c&H00FFFFFF&')
+    expect(dialogue).toContain('\\3c&H00FFFFFF&')
   })
 
-  it('opacity 100 → alpha 00 (fully opaque)', () => {
+  it('opacity 100 → alpha 00 (fully opaque) on \\3a', () => {
     const ass = generateAss(
       [
         makeEntry('e1', 0, 1, 'hi', {
@@ -222,10 +243,10 @@ describe('generateAss — \\4c / \\4a color and alpha', () => {
       VESTIGIAL_BURNIN,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
-    expect(dialogue).toContain('\\4a&H00&')
+    expect(dialogue).toContain('\\3a&H00&')
   })
 
-  it('opacity 0 → alpha FF (fully transparent)', () => {
+  it('opacity 0 → alpha FF (fully transparent) on \\3a', () => {
     const ass = generateAss(
       [
         makeEntry('e1', 0, 1, 'hi', {
@@ -236,10 +257,10 @@ describe('generateAss — \\4c / \\4a color and alpha', () => {
       VESTIGIAL_BURNIN,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
-    expect(dialogue).toContain('\\4a&HFF&')
+    expect(dialogue).toContain('\\3a&HFF&')
   })
 
-  it('opacity 50 → alpha 80 (halfway)', () => {
+  it('opacity 50 → alpha 80 (halfway) on \\3a', () => {
     const ass = generateAss(
       [
         makeEntry('e1', 0, 1, 'hi', {
@@ -251,7 +272,61 @@ describe('generateAss — \\4c / \\4a color and alpha', () => {
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     // (1 - 0.5) * 255 = 127.5 → rounds to 128 = 0x80
-    expect(dialogue).toContain('\\4a&H80&')
+    expect(dialogue).toContain('\\3a&H80&')
+  })
+
+  it('BG-on row emits \\shad0 to suppress any shadow leak', () => {
+    const ass = generateAss(
+      [
+        makeEntry('e1', 0, 1, 'hi', {
+          subtitleBackground: { enabled: true, color: 'white', opacityPercent: 50 },
+        }),
+      ],
+      VIDEO,
+      VESTIGIAL_BURNIN,
+    )
+    const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
+    expect(dialogue).toContain('\\shad0')
+  })
+
+  it('BG-on row still emits the per-row outline \\3c (it just gets overridden)', () => {
+    // We don't strip the outline tag — we rely on libass's last-write-wins.
+    // Keeping the outline tag preserves any future code that reads it and
+    // makes the override explicit when a human reads the ASS file.
+    const ass = generateAss(
+      [
+        makeEntry('e1', 0, 1, 'hi', {
+          outlineColorHex: '#FF00FF', // user-set magenta outline
+          subtitleBackground: { enabled: true, color: 'white', opacityPercent: 100 },
+        }),
+      ],
+      VIDEO,
+      VESTIGIAL_BURNIN,
+    )
+    const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
+    // outline magenta is present...
+    expect(dialogue).toContain('\\3c&H00FF00FF&')
+    // ...and the bg white comes AFTER it.
+    const outlineIdx = dialogue.indexOf('\\3c&H00FF00FF&')
+    const bgIdx = dialogue.indexOf('\\3c&H00FFFFFF&')
+    expect(bgIdx).toBeGreaterThan(outlineIdx)
+  })
+
+  it('BG-off row keeps \\3c as the user-set outline color (regression guard)', () => {
+    const ass = generateAss(
+      [
+        makeEntry('e1', 0, 1, 'hi', {
+          outlineColorHex: '#FF00FF', // magenta outline, BG off
+        }),
+      ],
+      VIDEO,
+      VESTIGIAL_BURNIN,
+    )
+    const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
+    expect(dialogue).toContain('\\3c&H00FF00FF&')
+    // No bg-paint tags on BG-off rows.
+    expect(dialogue).not.toContain('\\3a')
+    expect(dialogue).not.toContain('\\shad0')
   })
 })
 
@@ -412,7 +487,9 @@ describe('generateAss — free position \\pos (REQ-20260613-016 Phase 6 / 機能
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
     expect(dialogue).toContain(',WithBox,')
     expect(dialogue).toContain('\\pos(100,200)')
-    expect(dialogue).toContain('\\4c')
-    expect(dialogue).toContain('\\4a')
+    // REQ-0096 — bg paint moved from \4c/\4a to \3c/\3a.
+    expect(dialogue).toContain('\\3c&H000000&')
+    expect(dialogue).toContain('\\3a&H80&')
+    expect(dialogue).toContain('\\shad0')
   })
 })

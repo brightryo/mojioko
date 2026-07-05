@@ -5,6 +5,7 @@ import { join, parse } from 'path'
 import { Channels } from '../../shared/ipc-channels'
 import { transcribe, checkModelInstalled } from '../services/transcription-sidecar'
 import { downloadModel, isModelFormatStale, DownloadError } from '../services/model-downloader'
+import { generatePreviewMix } from '../services/preview-mix'
 import { getModelsDir, getBinPath } from '../lib/paths'
 import { loadSettings, saveSettings } from '../services/settings-store'
 import { resolveActiveModelId } from '../services/resolve-active-model'
@@ -136,6 +137,16 @@ function assertValidModelId(modelId: unknown): asserts modelId is WhisperModelId
   }
 }
 
+// REQ-086 — module-scope registry of in-flight transcription runs so the
+// `transcriptionCancel` handler can abort the preview-mix ffmpeg step in
+// addition to terminating the Whisper sidecar.  Only the post-Whisper
+// mix phase is represented here; the Whisper phase cancel still routes
+// through `terminateSidecar()` (signal-based, no controller).
+interface ActiveTranscriptionRun {
+  previewMixAbort: AbortController
+}
+const activeRuns = new Set<ActiveTranscriptionRun>()
+
 export function registerTranscriptionHandlers(): void {
   ipcMain.handle(Channels.transcriptionCheckModel, (_event, modelId: string): OkResult<{ installed: boolean; sizeMB: number }> | ErrResult => {
     try {
@@ -163,28 +174,106 @@ export function registerTranscriptionHandlers(): void {
     const startedAt = Date.now()
     log.info(
       `[ipc/transcription] start: model=${request.modelId} track=${request.trackIndex} ` +
-      `channelId=${channelId}`
+      `audioTrackCount=${request.audioTrackCount ?? 0} channelId=${channelId}`
     )
 
+    // REQ-086 — intercept the Whisper sidecar's `completed` event so it
+    // is held back until the (optional) preview-mix step also finishes.
+    // The renderer therefore stays in its "transcribing" state through
+    // both Whisper and the audio-mix pass, and a failure in either
+    // surfaces as a single `failed` event (no degraded mode).
+    const audioTrackCount = request.audioTrackCount ?? 0
+    const needsPreviewMix = audioTrackCount >= 2
+    let whisperCompletedSegments: number | null = null
+
+    // AbortController for the post-Whisper preview-mix ffmpeg run.
+    // Registered into `activeRuns` so the existing transcriptionCancel
+    // handler can abort the mix as well as the sidecar.
+    const mixAbort = new AbortController()
+    const runHandle: ActiveTranscriptionRun = {
+      previewMixAbort: mixAbort,
+    }
+    activeRuns.add(runHandle)
+
+    const finish = () => {
+      activeRuns.delete(runHandle)
+    }
+
     transcribe(fullRequest, (evt) => {
+      if (evt.event === 'failed') {
+        log.error(`[ipc/transcription] failed (whisper): model=${request.modelId} reason=${evt.error}`)
+      }
       if (evt.event === 'completed') {
-        const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1)
-        log.info(
-          `[ipc/transcription] completed: model=${request.modelId} track=${request.trackIndex} ` +
-          `segments=${evt.segmentCount} elapsed=${elapsedSec}s`
-        )
-      } else if (evt.event === 'failed') {
-        log.error(`[ipc/transcription] failed: model=${request.modelId} reason=${evt.error}`)
+        // Hold the event; emit later after preview-mix is done.
+        whisperCompletedSegments = evt.segmentCount
+        return
       }
       if (!event.sender.isDestroyed()) {
         event.sender.send(channelId, evt)
+      }
+    }).then(async () => {
+      // Whisper succeeded.  If a preview mix is needed, run it now.
+      if (whisperCompletedSegments === null) {
+        // Defensive: transcribe() resolved without a `completed` event
+        // (should not happen, but guard against shape changes in the
+        // sidecar protocol).  Treat as failure.
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(channelId, {
+            event: 'failed',
+            error: 'Sidecar resolved without a completed event',
+          })
+        }
+        return
+      }
+
+      let previewMixUrl: string | null = null
+      if (needsPreviewMix) {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(channelId, { event: 'phase', phase: 'preview-mix' })
+        }
+        try {
+          await generatePreviewMix(
+            { inputPath: request.videoPath, audioTrackCount },
+            mixAbort.signal,
+          )
+          previewMixUrl = `mojioko-preview-mix://current?t=${Date.now()}`
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err)
+          log.error(`[ipc/transcription] failed (preview-mix): model=${request.modelId} reason=${reason}`)
+          if (!event.sender.isDestroyed()) {
+            // Cancelled mid-mix surfaces the same sentinel string the
+            // sidecar uses for user-initiated cancels, so the renderer's
+            // existing `String(err).includes('Cancelled')` check fires.
+            const isCancel = reason === 'Cancelled'
+            event.sender.send(channelId, {
+              event: 'failed',
+              error: isCancel
+                ? 'Cancelled'
+                : `Preview audio generation failed: ${reason}`,
+            })
+          }
+          return
+        }
+      }
+
+      const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1)
+      log.info(
+        `[ipc/transcription] completed: model=${request.modelId} track=${request.trackIndex} ` +
+        `segments=${whisperCompletedSegments} previewMix=${previewMixUrl !== null} elapsed=${elapsedSec}s`
+      )
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(channelId, {
+          event: 'completed',
+          segmentCount: whisperCompletedSegments,
+          previewMixUrl,
+        })
       }
     }).catch((err) => {
       log.error('[ipc/transcription] error', err)
       if (!event.sender.isDestroyed()) {
         event.sender.send(channelId, { event: 'failed', error: String(err) })
       }
-    })
+    }).finally(finish)
 
     return { ok: true, data: { channelId } }
   })
@@ -192,6 +281,13 @@ export function registerTranscriptionHandlers(): void {
   ipcMain.handle(Channels.transcriptionCancel, async (): Promise<void> => {
     const { terminateSidecar } = await import('../services/transcription-sidecar')
     terminateSidecar()
+    // REQ-086 — also abort any in-flight preview-mix ffmpeg run.  The
+    // mix runs AFTER the Whisper sidecar exits, so a user pressing
+    // Cancel during the audio-mix phase needs this second signal too;
+    // `terminateSidecar` alone would leave ffmpeg running.
+    for (const run of activeRuns) {
+      run.previewMixAbort.abort()
+    }
   })
 
   const activeDownloads = new Map<string, AbortController>()

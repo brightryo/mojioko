@@ -3,7 +3,7 @@
   "tabs": {
     "general": "General",
     "fonts": "Fonts",
-    "defaultStyle": "Default style",
+    "defaultStyle": "Subtitle Style",
     "whisper": "Whisper"
   },
   "general": {
@@ -31,13 +31,13 @@
     "folderPathClear": "Clear"
   },
   "fonts": {
-    "hint": "Click a font to set it as the default. Download (⬇) or remove (🗑) fonts from the same list — same behaviour as the Subtitle Style dialog."
+    "hint": "Click a font to set it as the default. Adding and downloading fonts is a paid-version feature."
   },
   "defaultStyle": {
-    "hint": "These values are applied to new transcriptions. The subtitle style dialog reflects the same settings — editing here or there updates both."
+    "hint": "Sets the default subtitle style. These values are applied at transcription time."
   },
   "whisper": {
-    "hint": "Whisper engine parameters. The STEP 1 \"Advanced\" dialog edits the same fields — changes on either surface stay in sync."
+    "hint": "Default settings for Whisper."
   },
   "about": {
     "developedBy": "This app was developed by BrightRyo.",

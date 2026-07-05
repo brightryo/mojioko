@@ -331,7 +331,8 @@
       "styleLabel": "スタイル",
       "subtitleSection": "字幕",
       "layoutSection": "レイアウト",
-      "backgroundSection": "背景色"
+      "backgroundSection": "背景色",
+      "backgroundSectionHelp": "背景色を有効にすると、アウトライン色は無効になります。"
     },
     "nav": {
       "first": "先頭へ",
