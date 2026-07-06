@@ -4,6 +4,7 @@ import { dirname } from 'path'
 import { spawn } from 'child_process'
 import { getBinPath, getPreviewMixDir, getPreviewMixPath, getPreviewMixTmpPath } from '../lib/paths'
 import { buildAmixAudioFilter } from './preview-mix-filter'
+import { renameWithRetryInternal, defaultWait } from './rename-with-retry'
 import { FfmpegError } from '../../shared/errors'
 import log from '../lib/logger'
 
@@ -162,23 +163,51 @@ export async function generatePreviewMix(
     })
   })
 
-  // Atomic rename — if this throws, the final file is untouched.  The
-  // .tmp at that point is the only valid finished output, which is the
-  // unusual case (filesystem rename failures are very rare); we still
-  // log clearly so a user-submitted log file shows the situation.
-  try {
-    await fs.rename(tmpPath, outputPath)
-  } catch (err) {
-    log.error(`[preview-mix] rename ${tmpPath} → ${outputPath} failed: ${String(err)}`)
-    try { rmSync(tmpPath, { force: true }) } catch { /* ignore */ }
-    throw new FfmpegError(`Failed to finalise preview mix: ${String(err)}`)
-  }
+  // REQ-0129 Phase 1 — atomic rename with EPERM / EACCES backoff retry.
+  //
+  // Symptom (RES-0119 §1): on MSIX Windows, multi-track transcription
+  // occasionally fails at this exact rename with EPERM.  App restart
+  // clears it, which points at a lingering file handle — either ffmpeg
+  // has not fully released `.tmp` when `close` fires (kernel-level
+  // handle drop lags the stdio close event on Windows), or the
+  // renderer's hidden `<audio>` element is still holding the previous
+  // `preview-mix.m4a` open when rename tries to overwrite it.
+  //
+  // The renderer side already loads via a cache-busting query string
+  // (`mojioko-preview-mix://?t=<timestamp>`, per RES-0102) so Chromium
+  // is nudged to release the old handle when a new URL lands.  But
+  // both windows leave a small race, so we belt-and-braces here with
+  // an exponential backoff: 100ms → 200ms → 400ms.  Kernel handle
+  // release on Windows is typically < 300ms.
+  await renameWithRetry(tmpPath, outputPath)
 
   const stat = await fs.stat(outputPath)
   log.info(
     `[preview-mix] completed: ${outputPath} (${(stat.size / 1_000_000).toFixed(1)} MB)`,
   )
   return { outputPath, sizeBytes: stat.size }
+}
+
+/**
+ * REQ-0129 Phase 1 — thin wrapper around the pure `renameWithRetryInternal`
+ * that plugs in `fs.rename`, the default setTimeout-based waiter, and
+ * routes retry attempts into the app logger.  See `rename-with-retry.ts`
+ * for the retry-ladder rationale and the retry-worthy code set.
+ */
+async function renameWithRetry(src: string, dst: string): Promise<void> {
+  try {
+    await renameWithRetryInternal(src, dst, fs.rename, defaultWait, (attempt, delayMs, err) => {
+      const code = (err as NodeJS.ErrnoException | undefined)?.code ?? 'UNKNOWN'
+      log.warn(
+        `[preview-mix] rename ${src} → ${dst} attempt ${attempt} hit ${code}; ` +
+        `retrying after ${delayMs}ms`,
+      )
+    })
+  } catch (err) {
+    log.error(`[preview-mix] rename ${src} → ${dst} failed after retries: ${String(err)}`)
+    try { rmSync(src, { force: true }) } catch { /* ignore */ }
+    throw new FfmpegError(`Failed to finalise preview mix: ${String(err)}`)
+  }
 }
 
 /**

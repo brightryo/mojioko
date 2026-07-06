@@ -28,6 +28,31 @@ import { commitTimeEdit } from '@/lib/commit-time-edit'
  */
 
 /**
+ * REQ-0129 Phase 2 — delete the entry that currently owns the timeline
+ * selection.  Thin wrapper around `toggleDeleteRow` that looks up the
+ * entry from the project store, so the DEL / Backspace keyboard binding
+ * in timeline-view.tsx stays a one-liner.  Returns `true` when a delete
+ * fired, `false` when nothing was selected or the id didn't resolve —
+ * used by the caller to swallow the keystroke conditionally.
+ *
+ * Reuses `toggleDeleteRow` so DEL delete goes through the same soft-
+ * delete + history pipe as the inspector's trash-icon click.  Pressing
+ * DEL again on the same (now-deleted) row calls `toggleDeleteRow` a
+ * second time and restores it — matches the "toggle" semantics of the
+ * inspector button.
+ */
+export function deleteEntryById(
+  entryId: string | null | undefined,
+  labels: { delete: string; restore: string }
+): boolean {
+  if (!entryId) return false
+  const entry = useProjectStore.getState().entries.find((e) => e.id === entryId)
+  if (!entry) return false
+  toggleDeleteRow(entry, labels)
+  return true
+}
+
+/**
  * Toggle a row between active and soft-deleted.  Pushes a single
  * history op labelled with `labels.delete` (when actively deleting) or
  * `labels.restore` (when undeleting), so undo / redo cycle the row back

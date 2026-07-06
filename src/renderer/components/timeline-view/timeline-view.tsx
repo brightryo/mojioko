@@ -1,5 +1,6 @@
 import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useHotkeys } from 'react-hotkeys-hook'
 import {
   ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X, HelpCircle,
   ChevronFirst, ChevronLast, ChevronLeft, ChevronRight,
@@ -17,6 +18,7 @@ import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { cn } from '@/lib/utils'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
+import { deleteEntryById } from '@/lib/entry-row-actions'
 import { formatEditedTimecode } from '@/lib/time'
 import {
   layoutEntries,
@@ -619,6 +621,32 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   // 一覧 (subtitle-table.tsx) 側で自動スクロールに使われ続けている。
   const selectedEntryId = useUiStore((s) => s.selectedEntryId)
   const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
+
+  // REQ-0129 Phase 2 — Delete / Backspace on the timeline soft-deletes
+  // the currently-selected clip via the same `toggleDeleteRow` path the
+  // inspector's trash-icon click uses.  History op is pushed as usual
+  // (undo restores; a second Delete on the now-deleted row un-deletes,
+  // matching the inspector's toggle semantic).  `enableOnFormTags:
+  // false` (the react-hotkeys-hook default) keeps the shortcut out of
+  // the way when focus sits in a text/number input or textarea (row
+  // text cells, the inspector textarea, the colour picker's hex input,
+  // and every REQ-0128 numeric field) — DEL there is a normal
+  // character-delete.
+  //
+  // `preventDefault: true` stops the browser's own Delete behaviour
+  // from bubbling further; harmless in Electron but keeps the semantic
+  // explicit.
+  useHotkeys(
+    'delete, backspace',
+    () => {
+      deleteEntryById(selectedEntryId, {
+        delete: t('history.deleteRow'),
+        restore: t('history.restoreRow'),
+      })
+    },
+    { preventDefault: true },
+    [selectedEntryId, t],
+  )
   const setVideoSeekRequest = useUiStore((s) => s.setVideoSeekRequest)
   // REQ-094 case B: TimelineView no longer subscribes to
   // `videoCurrentTimeSec`.  The playhead lives in its own memo'd
