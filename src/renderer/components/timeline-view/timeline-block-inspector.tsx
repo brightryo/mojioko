@@ -172,6 +172,11 @@ export function TimelineBlockInspector({
   // RES-20260612-004 §3 for the full root-cause analysis.
   const dirtyRef = useRef(false)
   const isComposingRef = useRef(false)
+  // REQ-0127 Phase 1 — snapshot of `entry.text` when the textarea
+  // gained focus.  Populated in onFocus and cleared in onBlur; used
+  // as the beforePatch on the commit-time history push so Undo
+  // rewinds past every preview keystroke to the pre-focus text.
+  const textFocusValueRef = useRef<string | null>(null)
 
   // Accept external entry.text updates while the inspector is open
   // and the textarea is mounted, gated by:
@@ -192,13 +197,23 @@ export function TimelineBlockInspector({
       // No actual change to commit, but we still clear the dirty flag
       // so a subsequent external update is allowed to sync into draft.
       dirtyRef.current = false
+      textFocusValueRef.current = null
       return
     }
     const snapshot = { ...entry }
+    // REQ-0127 Phase 1 — undoState uses the pre-focus text as the
+    // override so Undo rewinds past every onChange preview keystroke.
+    // Falls back to the naive snapshot when focus wasn't tracked (e.g.
+    // programmatic commit paths).
+    const focusText = textFocusValueRef.current
+    textFocusValueRef.current = null
+    const undoState = focusText !== null
+      ? { ...snapshot, text: focusText }
+      : snapshot
     const patch = { text: normalized, isEdited: true }
     pushHistory({
       label: t('history.editText'),
-      undo: () => updateEntry(entry.id, snapshot),
+      undo: () => updateEntry(entry.id, undoState),
       redo: () => updateEntry(entry.id, { ...snapshot, ...patch })
     })
     updateEntry(entry.id, patch)
@@ -392,6 +407,20 @@ export function TimelineBlockInspector({
     if (entry.posX === undefined && entry.posY === undefined) return
     applyStyleEdit(t('history.editOffset'), { posX: undefined, posY: undefined })
   }
+  /**
+   * REQ-0127 Phase 2 — Enter on any of the inline numeric inputs
+   * (font size / offsetX / offsetY) commits the typed value via the
+   * existing onBlur path.  Blurring the input triggers the handler
+   * with `e.target.value` still holding the typed string, matching
+   * the click-away gesture and preserving the `key={entry.field}`
+   * remount that snaps back an out-of-range typed value.
+   */
+  function handleNumericInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.currentTarget.blur()
+    }
+  }
   function handleBackgroundEnabledChange(checked: boolean) {
     if (checked === entry.subtitleBackground.enabled) return
     applyStyleEdit(t('history.editBackground'), {
@@ -422,9 +451,25 @@ export function TimelineBlockInspector({
     if (!dirtyRef.current) return
     commitText(draft)
   }
+  // REQ-0127 Phase 1 — capture the store's current text at focus time
+  // so commitText can use it as the beforePatch for Undo.  We snapshot
+  // `entry.text` (the store value) rather than `draft` because an
+  // out-of-band external update (敷き詰め改行 etc.) can have moved
+  // the store past the last render's draft, and we want Undo to
+  // rewind to what the user was actually looking at.
+  function handleTextFocus() {
+    textFocusValueRef.current = entry.text
+  }
   function handleDraftChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     dirtyRef.current = true
-    setDraft(e.target.value)
+    const next = e.target.value
+    setDraft(next)
+    // REQ-0127 Phase 1 — stream every keystroke into the store via the
+    // history-less preview writer.  Skip while an IME composition is
+    // in progress; the composition-end handler flushes the final value.
+    if (!isComposingRef.current) {
+      updateEntryPreview(entry.id, { text: next.replace(/\n/g, '\\N') })
+    }
   }
   function handleCompositionStart() {
     isComposingRef.current = true
@@ -435,7 +480,10 @@ export function TimelineBlockInspector({
     // blur flushes the converted text.  `e.target.value` already
     // reflects the post-composition value when this fires.
     dirtyRef.current = true
-    setDraft((e.target as HTMLTextAreaElement).value)
+    const next = (e.target as HTMLTextAreaElement).value
+    setDraft(next)
+    // REQ-0127 Phase 1 — flush the IME-committed value into preview.
+    updateEntryPreview(entry.id, { text: next.replace(/\n/g, '\\N') })
   }
 
   // -------------------------------------------------------------------------
@@ -715,6 +763,7 @@ export function TimelineBlockInspector({
         <textarea
           ref={textareaRef}
           value={draft}
+          onFocus={handleTextFocus}
           onChange={handleDraftChange}
           onBlur={handleBlur}
           onCompositionStart={handleCompositionStart}
@@ -768,6 +817,7 @@ export function TimelineBlockInspector({
                   key={entry.fontSizePx}
                   onChange={handleSizeChange}
                   onBlur={handleSizeBlur}
+                  onKeyDown={handleNumericInputKeyDown}
                   disabled={isFrozen}
                   title={t('step1:subtitleDefaults.sizeHint', {
                     min: FONT_SIZE_MIN_PX,
@@ -809,6 +859,7 @@ export function TimelineBlockInspector({
                 onPairApply={handleColorPairApply}
                 disabled={isFrozen}
                 swatchOnly
+                heading={t('common:colorPicker.headingText')}
               />
             </div>
             {/* Outline colour */}
@@ -821,6 +872,7 @@ export function TimelineBlockInspector({
                 onPairApply={handleColorPairApply}
                 disabled={isFrozen}
                 swatchOnly
+                heading={t('common:colorPicker.headingOutline')}
               />
             </div>
             {/* Outline width — REQ-20260615-016: slider column narrowed to
@@ -947,6 +999,7 @@ export function TimelineBlockInspector({
                   defaultValue={offsetX}
                   key={`offsetX-${entry.id}-${offsetX}`}
                   onBlur={handleOffsetXBlur}
+                  onKeyDown={handleNumericInputKeyDown}
                   disabled={isFrozen}
                   aria-label={t('styleCell.offsetX')}
                   className={cn(
@@ -962,6 +1015,7 @@ export function TimelineBlockInspector({
                   defaultValue={offsetY}
                   key={`offsetY-${entry.id}-${offsetY}`}
                   onBlur={handleOffsetYBlur}
+                  onKeyDown={handleNumericInputKeyDown}
                   disabled={isFrozen}
                   aria-label={t('styleCell.offsetY')}
                   className={cn(

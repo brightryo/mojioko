@@ -67,7 +67,11 @@
     "cud": "色弱向け",
     "cudHint": "Color Universal Design 推奨配色",
     "close": "閉じる",
-    "pairTooltip": "文字色 {{text}} × アウトライン {{outline}}"
+    "pairTooltip": "文字色 {{text}} × アウトライン {{outline}}",
+    "ok": "OK",
+    "cancel": "キャンセル",
+    "headingText": "フォントカラー選択",
+    "headingOutline": "アウトラインカラー選択"
   },
   "fontLicenses": {
     "title": "フォントライセンス",

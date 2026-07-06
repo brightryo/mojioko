@@ -82,6 +82,23 @@ export function NumberStepperInput({
     }
     onCommit(next)
   }
+  /**
+   * REQ-0127 Phase 2 — Enter commits the typed value.  We reuse
+   * `handleBlur`'s clamp + commit logic by blurring the input; the
+   * blur event fires with `e.target.value` still holding the typed
+   * text, so the existing path runs unchanged.  Rationale for going
+   * through blur rather than a direct commit call: it preserves the
+   * `key={value}` re-mount + `defaultValue` restoration for edge
+   * cases (out-of-range typed values that clamp back visually),
+   * matching the mouse-away-and-click gesture the user already
+   * knows.
+   */
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.currentTarget.blur()
+    }
+  }
 
   return (
     <div className="flex items-center gap-1">
@@ -110,6 +127,7 @@ export function NumberStepperInput({
         key={value}
         defaultValue={value}
         onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
         disabled={disabled}
         title={title}
         aria-label={ariaLabel}

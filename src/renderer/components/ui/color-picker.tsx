@@ -20,6 +20,16 @@ interface ColorPickerProps {
    */
   swatchOnly?: boolean
   /**
+   * REQ-0127 Phase 3 — heading shown at the top of the popover (e.g.
+   * "フォントカラー選択" / "アウトラインカラー選択") so the modal picker
+   * communicates which colour the user is editing.  Callers pass the
+   * pre-translated string; `common.colorPicker.headingText` /
+   * `.headingOutline` are the canonical i18n keys.  When omitted the
+   * heading row is hidden (back-compat for future call sites that
+   * don't want a heading).
+   */
+  heading?: string
+  /**
    * Optional "commit" callback fired on popover close, once, with the
    * final value — only when the value actually changed since the popover
    * opened.  Use this from contexts that need a single coarse-grained
@@ -57,7 +67,8 @@ export function ColorPicker({
   disabled,
   swatchOnly,
   onCommit,
-  onPairApply
+  onPairApply,
+  heading
 }: ColorPickerProps) {
   const { t } = useTranslation('common')
   const recentColors = useUiStore((s) => s.recentColors)
@@ -120,6 +131,31 @@ export function ColorPicker({
     setOpen(next)
   }
 
+  // REQ-0127 Phase 3 — explicit OK / Cancel buttons replace the outside-
+  // click-to-commit affordance.  OK re-uses handleOpenChange(false)'s
+  // commit path (value has moved via onChange during the session, so the
+  // usual "value !== valueOnOpen" check fires onCommit as before).
+  // Cancel rewinds the store to `valueOnOpen` via `onChange` (which
+  // callers wire to the history-less updateEntryPreview / draft setter,
+  // matching REQ-0125's preview stream), then suppresses the onCommit
+  // fire by clearing `valueOnOpen` before closing — same trick as
+  // handlePairClick.
+  function handleConfirm() {
+    handleOpenChange(false)
+  }
+  function handleCancel() {
+    if (valueOnOpen !== null && normalise(value) !== valueOnOpen) {
+      // Rewind preview state to the open-time value.  Bulk callers wire
+      // onChange to setColorDraft + updateEntriesPreview, so this
+      // restores both the picker's own displayed value and every
+      // selected entry's store value.  Inspector callers wire onChange
+      // to updateEntryPreview directly.
+      onChange(valueOnOpen)
+    }
+    setValueOnOpen(null)
+    setOpen(false)
+  }
+
   function handlePickerChange(hex: string) {
     applyColor(hex)
   }
@@ -175,38 +211,60 @@ export function ColorPicker({
 
   const pickerContent = (
     <PopoverContent
-      // REQ-035: 3-group palette + saturation/hue picker + recent row +
-      // hex input is ~530 px tall — exceeds Settings dialog's modest
-      // height when the trigger sits near the dialog's middle, causing
-      // top/bottom clipping.  Radix already flips side to avoid the
-      // viewport edge; we additionally cap max-height to the *available*
-      // vertical space exposed by Radix (`--radix-popover-content-
-      // available-height`) and let the body scroll inside the popover
-      // when content doesn't fit.  Generous PopoverContent positions
-      // (字幕スタイルダイアログ, STEP 2 行) still render without a
-      // scrollbar because available-height covers the full popover.
-      className="w-[280px] p-3 space-y-3 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+      // REQ-0127 Phase 3 — the picker is now a proper modal (Popover
+      // `modal={true}` on Root + explicit OK/Cancel buttons at the
+      // bottom).  Backdrop clicks no longer close the popover
+      // (`onInteractOutside={e => e.preventDefault()}`).  Height cap
+      // removed so the palette + saturation picker + hex input fit
+      // without a scrollbar in the normal case; `overflow-y-auto` is
+      // kept as a safety net for constrained viewports.
+      className="w-[300px] p-3 space-y-3 max-h-[calc(100vh-64px)] overflow-y-auto"
       align="start"
       sideOffset={8}
       collisionPadding={12}
-      onInteractOutside={() => handleOpenChange(false)}
+      onInteractOutside={(e) => e.preventDefault()}
+      onEscapeKeyDown={(e) => {
+        // Esc = Cancel, per REQ-0127 §3 modal semantics.
+        e.preventDefault()
+        handleCancel()
+      }}
     >
-      {/* Close X — explicit affordance.  Outside-click also closes the
-          popover via onInteractOutside, but REQ-033 asks for a visible
-          dismiss control. */}
+      {/* REQ-0127 Phase 3 — heading row.  Shows which colour is being
+          edited (e.g. "フォントカラー選択" / "アウトラインカラー選択")
+          + X close button that maps to Cancel (revert + no commit). */}
+      {heading && (
+        <div className="flex items-center justify-between border-b border-line pb-2 -mb-1">
+          <p className="text-body font-semibold text-fg-primary">{heading}</p>
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="-mr-1 flex h-6 w-6 items-center justify-center rounded text-fg-muted hover:bg-surface-2 hover:text-fg-secondary transition-colors"
+            aria-label={t('colorPicker.close')}
+            title={t('colorPicker.close')}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+      {/* "Basic colours" group label + X close button.  When `heading`
+          is set, the top-right X was rendered by the heading row above;
+          the label here loses the paired X to avoid duplicate close
+          affordances but is otherwise unchanged. */}
       <div className="flex items-start justify-between">
         <p className="text-label font-medium uppercase tracking-wider text-fg-muted">
           {t('colorPicker.basic')}
         </p>
-        <button
-          type="button"
-          onClick={() => handleOpenChange(false)}
-          className="-mt-0.5 -mr-1 flex h-5 w-5 items-center justify-center rounded text-fg-muted hover:bg-surface-2 hover:text-fg-secondary transition-colors"
-          aria-label={t('colorPicker.close')}
-          title={t('colorPicker.close')}
-        >
-          <X className="h-3 w-3" />
-        </button>
+        {!heading && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="-mt-0.5 -mr-1 flex h-5 w-5 items-center justify-center rounded text-fg-muted hover:bg-surface-2 hover:text-fg-secondary transition-colors"
+            aria-label={t('colorPicker.close')}
+            title={t('colorPicker.close')}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
       </div>
 
       {/* Group 1: Basic colours (10) */}
@@ -307,6 +365,39 @@ export function ColorPicker({
           'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30'
         )}
       />
+
+      {/* REQ-0127 Phase 3 — OK / Cancel footer.  OK confirms via the
+          usual handleOpenChange(false) commit path (fires onCommit with
+          the after value).  Cancel rewinds the preview stream to
+          `valueOnOpen` via onChange(valueOnOpen) then closes without
+          firing onCommit.  Aligned right so the primary action (OK)
+          sits under the user's mouse in a common closing gesture. */}
+      <div className="flex items-center justify-end gap-2 border-t border-line pt-2 -mb-1">
+        <button
+          type="button"
+          onClick={handleCancel}
+          className={cn(
+            'inline-flex items-center justify-center h-8 px-3 rounded-md text-body-sm',
+            'bg-transparent text-fg-secondary border border-line',
+            'hover:bg-surface-1 hover:text-fg-primary',
+            'transition-colors duration-150 focus:outline-none'
+          )}
+        >
+          {t('colorPicker.cancel')}
+        </button>
+        <button
+          type="button"
+          onClick={handleConfirm}
+          className={cn(
+            'inline-flex items-center justify-center h-8 px-3 rounded-md text-body-sm font-medium',
+            'bg-primary text-fg-inverse',
+            'hover:bg-primary-hover active:bg-primary-active',
+            'transition-colors duration-150 focus:outline-none'
+          )}
+        >
+          {t('colorPicker.ok')}
+        </button>
+      </div>
     </PopoverContent>
   )
 
@@ -316,7 +407,7 @@ export function ColorPicker({
 
   if (swatchOnly) {
     return (
-      <Popover open={open} onOpenChange={handleOpenChange}>
+      <Popover open={open} onOpenChange={handleOpenChange} modal>
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -339,7 +430,7 @@ export function ColorPicker({
   }
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={handleOpenChange} modal>
       <PopoverTrigger asChild>
         <button
           type="button"

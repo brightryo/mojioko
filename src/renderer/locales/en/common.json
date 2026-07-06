@@ -67,7 +67,11 @@
     "cud": "Colour-blind friendly",
     "cudHint": "Color Universal Design recommended palette",
     "close": "Close",
-    "pairTooltip": "Text {{text}} × Outline {{outline}}"
+    "pairTooltip": "Text {{text}} × Outline {{outline}}",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "headingText": "Text colour",
+    "headingOutline": "Outline colour"
   },
   "fontLicenses": {
     "title": "Font licenses",

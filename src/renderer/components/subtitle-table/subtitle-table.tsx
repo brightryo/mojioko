@@ -74,13 +74,33 @@ function getRowState(entry: SubtitleEntry, isOverflow: boolean): RowState {
 
 interface CellEditorProps {
   value: string
-  onCommit: (v: string) => void
+  /**
+   * REQ-0127 Phase 1 — `textOnFocus` is captured at the moment the
+   * editor mounts (= gains focus in the table row flow, since the
+   * editor is gated by an outer `editingText` state).  Callers hand
+   * it into a `beforePatch` on their history push so the resulting
+   * Undo target is the pre-focus text — regardless of how many
+   * onPreview fires happened in between.
+   */
+  onCommit: (v: string, textOnFocus: string) => void
+  /**
+   * REQ-0127 Phase 1 — fires per-keystroke with the current typed
+   * value.  Callers wire this to `projectStore.updateEntryPreview`
+   * (history-less writer) so the preview overlay reflects typing
+   * live without polluting Undo.
+   */
+  onPreview?: (v: string) => void
   multiline?: boolean
 }
 
-function CellEditor({ value, onCommit, multiline }: CellEditorProps) {
+function CellEditor({ value, onCommit, onPreview, multiline }: CellEditorProps) {
   const [draft, setDraft] = useState(value)
   const ref = useRef<HTMLTextAreaElement & HTMLInputElement>(null)
+  // REQ-0127 Phase 1 — snapshot of the pre-focus value; the editor
+  // remounts on every `editingText → true`, so the constructor of this
+  // component IS the focus event, and `value` at construction time IS
+  // the pre-focus value we want Undo to rewind to.
+  const focusValueRef = useRef(value)
   // REQ-20260612-004: track whether the user has typed since the last
   // commit / external sync.  Used by the value-sync effect and the
   // blur handler so that an external `updateEntry({text})` (e.g. from
@@ -141,12 +161,21 @@ function CellEditor({ value, onCommit, multiline }: CellEditorProps) {
   // stale draft back and undo the external update.
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) {
     dirtyRef.current = true
-    setDraft(e.target.value)
+    const next = e.target.value
+    setDraft(next)
+    // REQ-0127 Phase 1 — stream the typed value into the store via
+    // the history-less preview writer so the overlay lights up live.
+    // Skip while an IME composition is in progress; the composition-
+    // end handler flushes the final value into draft and re-runs
+    // preview from there.
+    if (!isComposingRef.current) {
+      onPreview?.(next)
+    }
   }
   function handleBlur() {
     if (!dirtyRef.current) return
     dirtyRef.current = false
-    onCommit(draft)
+    onCommit(draft, focusValueRef.current)
   }
   function handleCompositionStart() {
     isComposingRef.current = true
@@ -157,7 +186,11 @@ function CellEditor({ value, onCommit, multiline }: CellEditorProps) {
     // blur flushes the converted text.  `e.target.value` already
     // reflects the post-composition value when this fires.
     dirtyRef.current = true
-    setDraft((e.target as HTMLTextAreaElement | HTMLInputElement).value)
+    const next = (e.target as HTMLTextAreaElement | HTMLInputElement).value
+    setDraft(next)
+    // REQ-0127 Phase 1 — flush the IME-committed value into the
+    // preview stream so the overlay reflects the final composed text.
+    onPreview?.(next)
   }
 
   if (multiline) {
@@ -240,6 +273,9 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
   // Subtitle Style dialog (REQ-034 #3).
   const { t } = useTranslation(['step2', 'step1'])
   const updateEntry = useProjectStore((s) => s.updateEntry)
+  // REQ-0127 Phase 1 — history-less preview writer used from CellEditor's
+  // onPreview so typing lights up the video overlay live.
+  const updateEntryPreview = useProjectStore((s) => s.updateEntryPreview)
   const pushHistory = useHistoryStore((s) => s.push)
   // REQ-028: in audio-only mode the size / style / font cells render
   // empty so the grid stays in place (col widths unchanged) but the
@@ -276,8 +312,19 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
     updateEntry(entry.id, { ...patch, isEdited: true })
   }
 
-  function withHistory(label: string, patch: Partial<SubtitleEntry>) {
+  function withHistory(
+    label: string,
+    patch: Partial<SubtitleEntry>,
+    // REQ-0127 Phase 1 — like the inspector's applyStyleEdit(beforePatch),
+    // this override tells `undo` which fields to restore to which values
+    // instead of using the naive current-entry snapshot.  The text-cell
+    // path uses it because the preview stream has moved the store past
+    // the pre-focus value, so a naive snapshot would capture the typed
+    // text and Undo would be a no-op.
+    beforePatch?: Partial<SubtitleEntry>
+  ) {
     const snapshot = { ...entry }
+    const undoState = beforePatch ? { ...snapshot, ...beforePatch } : snapshot
     // Time-affecting patches (startSec / endSec) need a re-sort on undo /
     // redo as well so the row visually lands at the position that matches
     // its restored or re-applied time value.  Non-time patches (text, size,
@@ -286,7 +333,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
     pushHistory({
       label,
       undo: () => {
-        updateEntry(entry.id, snapshot)
+        updateEntry(entry.id, undoState)
         if (affectsTime) useProjectStore.getState().sortByStartSec()
       },
       redo: () => {
@@ -297,12 +344,21 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
     applyPatch(patch)
   }
 
-  function handleTextCommit(text: string) {
+  function handleTextCommit(text: string, textOnFocus: string) {
     setEditingText(false)
     // CellEditor uses real newlines internally; convert back to ASS \N on save.
     const normalized = text.replace(/\n/g, '\\N')
     if (normalized === entry.text) return
-    withHistory(t('history.editText'), { text: normalized })
+    // REQ-0127 Phase 1 — beforePatch carries the pre-focus text so
+    // Undo rewinds past every onPreview keystroke back to what was on
+    // screen before the editor opened.  Handles both the direct-typed
+    // path and the IME composition path (both stream through onPreview).
+    const normalizedOnFocus = textOnFocus.replace(/\n/g, '\\N')
+    withHistory(
+      t('history.editText'),
+      { text: normalized },
+      { text: normalizedOnFocus }
+    )
   }
 
   function handleStartChange(v: number) {
@@ -646,6 +702,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
           <CellEditor
             value={entry.text.replace(/\\N/g, '\n')}
             onCommit={handleTextCommit}
+            onPreview={(text) => updateEntryPreview(entry.id, { text: text.replace(/\n/g, '\\N') })}
             multiline
           />
         ) : isFrozen ? (

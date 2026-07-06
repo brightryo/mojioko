@@ -214,7 +214,7 @@ function BulkSegmentGroup<T extends string>({
 export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // step1 included so the size input's `title` tooltip can reuse the
   // `subtitleDefaults.sizeHint` string defined for STEP 1 (REQ-034 #3).
-  const { t } = useTranslation(['step2', 'step1'])
+  const { t } = useTranslation(['step2', 'step1', 'common'])
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
   // REQ-0125 — history-less preview writer used from the color picker's
   // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
@@ -857,6 +857,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               onCommit={handleTextColorCommit}
               onPairApply={handleColorPairCommit}
               swatchOnly
+              heading={t('common:colorPicker.headingText')}
             />
           </label>
           {/* Outline color */}
@@ -868,6 +869,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               onCommit={handleOutlineColorCommit}
               onPairApply={handleColorPairCommit}
               swatchOnly
+              heading={t('common:colorPicker.headingOutline')}
             />
           </label>
           {/* Outline width — REQ-20260615-061 B: slider now wrapped in
@@ -1031,7 +1033,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
 // fonts + font-registry filter logic without giving any new abstraction.
 // ---------------------------------------------------------------------------
 function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void }) {
-  const { t } = useTranslation(['step2', 'step1'])
+  const { t } = useTranslation(['step2', 'step1', 'common'])
   const [open, setOpen] = useState(false)
   const installed = useInstalledFontIds()
   const activeFontId = useSettingsStore((s) => s.activeFontId)
