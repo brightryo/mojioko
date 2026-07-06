@@ -56,10 +56,19 @@ export function TimeInput({ value, onChange, cuts, className, disabled, error, w
     commit()
   }
 
-  // REQ-082: Enter/Esc handlers removed.  blur (= click elsewhere or
-  // Tab away) still commits the typed value.  There is no longer a
-  // "cancel the draft" affordance — the user types over their change
-  // to revert, or relies on history undo.
+  // REQ-0128 Phase 1 — Enter commits the typed value, matching REQ-
+  // 0127's DaVinci-style commit contract for every numeric input.
+  // We route through blur so the existing parse + editedToOrig +
+  // onChange path runs unchanged; the row-cell / TimeEditorDialog
+  // callers rely on that path for their validation and history hooks.
+  // REQ-082 previously removed the Enter handler; REQ-0128 reinstates
+  // it in the "confirm the field, don't submit the dialog" flavour.
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.currentTarget.blur()
+    }
+  }
 
   function commit() {
     const parsed = parseTimecode(draft)
@@ -83,6 +92,7 @@ export function TimeInput({ value, onChange, cuts, className, disabled, error, w
       onChange={(e) => setDraft(e.target.value)}
       onFocus={handleFocus}
       onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
       spellCheck={false}
       title={title}
       className={cn(

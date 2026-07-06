@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/stores/ui-store'
 import { BASIC_COLORS, COLOR_PAIRS, CUD_COLORS, type ColorPair } from '@/lib/color-palette'
@@ -211,17 +211,21 @@ export function ColorPicker({
 
   const pickerContent = (
     <PopoverContent
-      // REQ-0127 Phase 3 — the picker is now a proper modal (Popover
-      // `modal={true}` on Root + explicit OK/Cancel buttons at the
-      // bottom).  Backdrop clicks no longer close the popover
-      // (`onInteractOutside={e => e.preventDefault()}`).  Height cap
-      // removed so the palette + saturation picker + hex input fit
-      // without a scrollbar in the normal case; `overflow-y-auto` is
-      // kept as a safety net for constrained viewports.
-      className="w-[300px] p-3 space-y-3 max-h-[calc(100vh-64px)] overflow-y-auto"
-      align="start"
-      sideOffset={8}
-      collisionPadding={12}
+      // REQ-0127 Phase 3 — modal via `<Popover modal>` on Root.
+      // Backdrop clicks disabled via onInteractOutside.
+      // REQ-0128 Phase 2 — the popover is anchored to a fixed viewport
+      // position (see PopoverAnchor below) rather than the trigger,
+      // so it always fits regardless of where the color swatch sits.
+      // The content is a flex column: a scrollable body (rare fallback
+      // for constrained viewports) plus a sticky OK/Cancel footer.
+      // `align="end"` + `side="bottom"` + `avoidCollisions={false}`
+      // keeps Radix from flipping/shifting the popover away from the
+      // fixed anchor, so the OK button is guaranteed reachable.
+      className="w-[300px] p-0 flex flex-col max-h-[calc(100vh-56px)]"
+      align="end"
+      side="bottom"
+      sideOffset={0}
+      avoidCollisions={false}
       onInteractOutside={(e) => e.preventDefault()}
       onEscapeKeyDown={(e) => {
         // Esc = Cancel, per REQ-0127 §3 modal semantics.
@@ -229,6 +233,10 @@ export function ColorPicker({
         handleCancel()
       }}
     >
+      {/* Scrollable body — grows to fill remaining vertical space, and
+          scrolls internally in the rare case the palette is taller than
+          the viewport allowance.  The sticky footer below stays pinned. */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
       {/* REQ-0127 Phase 3 — heading row.  Shows which colour is being
           edited (e.g. "フォントカラー選択" / "アウトラインカラー選択")
           + X close button that maps to Cancel (revert + no commit). */}
@@ -366,13 +374,19 @@ export function ColorPicker({
         )}
       />
 
-      {/* REQ-0127 Phase 3 — OK / Cancel footer.  OK confirms via the
-          usual handleOpenChange(false) commit path (fires onCommit with
-          the after value).  Cancel rewinds the preview stream to
-          `valueOnOpen` via onChange(valueOnOpen) then closes without
-          firing onCommit.  Aligned right so the primary action (OK)
-          sits under the user's mouse in a common closing gesture. */}
-      <div className="flex items-center justify-end gap-2 border-t border-line pt-2 -mb-1">
+      </div>{/* /scrollable body */}
+
+      {/* REQ-0127 Phase 3 + REQ-0128 Phase 2 — footer sits OUTSIDE the
+          scroll area, so OK / Cancel are guaranteed visible regardless
+          of viewport height.  If the body overflows the popover's
+          max-height, only the body scrolls; the footer stays pinned.
+          OK confirms via the usual handleOpenChange(false) commit path
+          (fires onCommit with the after value).  Cancel rewinds the
+          preview stream to `valueOnOpen` via onChange(valueOnOpen)
+          then closes without firing onCommit.  Aligned right so the
+          primary action (OK) sits under the user's mouse in a common
+          closing gesture. */}
+      <div className="flex items-center justify-end gap-2 border-t border-line px-3 py-2 flex-shrink-0 bg-surface-1">
         <button
           type="button"
           onClick={handleCancel}
@@ -405,6 +419,34 @@ export function ColorPicker({
   // Render — compact swatch or full-width button
   // -------------------------------------------------------------------------
 
+  // REQ-0128 Phase 2 — a fixed-viewport anchor point so the popover
+  // renders in a predictable region (top-right of viewport, at a
+  // vertical offset that leaves room for the app's top nav +
+  // breadcrumb) regardless of where the color-swatch trigger sits.
+  // Without this, a trigger placed near the bottom of the viewport
+  // gave Radix nowhere to render a ~500 px popover — the OK button
+  // would fall below the viewport edge with no way to reach it.  The
+  // anchor is a zero-size, pointer-events-none div at fixed
+  // `top: 56px right: 12px` — approximately the inspector's top-right
+  // corner in the Step 2 layout — and PopoverContent uses
+  // `align="end"` `side="bottom"` `avoidCollisions={false}` above so
+  // Radix doesn't flip/shift away from it.
+  const anchorEl = (
+    <PopoverAnchor asChild>
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed',
+          top: 56,
+          right: 12,
+          width: 0,
+          height: 0,
+          pointerEvents: 'none',
+        }}
+      />
+    </PopoverAnchor>
+  )
+
   if (swatchOnly) {
     return (
       <Popover open={open} onOpenChange={handleOpenChange} modal>
@@ -424,6 +466,7 @@ export function ColorPicker({
             aria-label={value}
           />
         </PopoverTrigger>
+        {anchorEl}
         {pickerContent}
       </Popover>
     )
@@ -451,6 +494,7 @@ export function ColorPicker({
           <span className="font-mono text-body-sm text-fg-secondary">{normalise(value)}</span>
         </button>
       </PopoverTrigger>
+      {anchorEl}
       {pickerContent}
     </Popover>
   )

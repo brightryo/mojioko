@@ -584,6 +584,9 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
               key={entry.fontSizePx}
               onChange={handleSizeChange}
               onBlur={handleSizeBlur}
+              // REQ-0128 Phase 1 — Enter commits via blur, matching
+              // REQ-0127's DaVinci contract for every numeric input.
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
               disabled={isFrozen}
               // REQ-034 #3: 64 px column has no room for an inline hint
               // line, so surface the clamp range as a hover tooltip.

@@ -144,6 +144,8 @@ export function WhisperAdvancedControls({
               max={1}
               step={0.05}
               defaultValue={transcriptionAdvanced.vadThreshold}
+              // REQ-0128 Phase 1 — Enter commits via blur (DaVinci-style).
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
               onBlur={(e) => {
                 const v = parseFloat(e.target.value)
                 if (isNaN(v)) return
@@ -171,6 +173,7 @@ export function WhisperAdvancedControls({
               max={1000}
               step={50}
               defaultValue={transcriptionAdvanced.minSpeechDurationMs}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
               onBlur={(e) => {
                 const v = parseInt(e.target.value, 10)
                 if (isNaN(v)) return
@@ -199,6 +202,7 @@ export function WhisperAdvancedControls({
               max={5000}
               step={100}
               defaultValue={transcriptionAdvanced.minSilenceDurationMs}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
               onBlur={(e) => {
                 const v = parseInt(e.target.value, 10)
                 if (isNaN(v)) return
@@ -232,6 +236,7 @@ export function WhisperAdvancedControls({
             max={20}
             step={1}
             defaultValue={transcriptionAdvanced.beamSize}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
             onBlur={(e) => {
               const v = parseInt(e.target.value, 10)
               if (isNaN(v)) return
