@@ -28,6 +28,35 @@ import { commitTimeEdit } from '@/lib/commit-time-edit'
  */
 
 /**
+ * REQ-0130 — pure predicate for the timeline's DEL / Backspace guard.
+ * Extracted so unit tests can pin the "typing = character-delete" rule
+ * without spinning up a React render.  Returns `true` when the keydown
+ * should trigger a timeline clip delete, `false` otherwise.
+ *
+ * Rules:
+ *   - Only bare Delete / Backspace fires.  Any modifier (Ctrl / Alt /
+ *     Meta / Shift) bails so keyboard shortcuts and browser gestures
+ *     stay untouched.
+ *   - Focus on a form tag (`input` / `textarea` / `select`) or a
+ *     `contentEditable` region bails — the user is typing, DEL is a
+ *     character-delete.  Mirrors the guard in audio-preview-panel's
+ *     Space binding so the app's keyboard shortcuts feel consistent.
+ */
+export function shouldTimelineDeleteFire(
+  key: string,
+  modifiers: { ctrl: boolean; alt: boolean; meta: boolean; shift: boolean },
+  activeTagName: string | null,
+  isContentEditable: boolean,
+): boolean {
+  if (key !== 'Delete' && key !== 'Backspace') return false
+  if (modifiers.ctrl || modifiers.alt || modifiers.meta || modifiers.shift) return false
+  if (isContentEditable) return false
+  const tag = (activeTagName ?? '').toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return false
+  return true
+}
+
+/**
  * REQ-0129 Phase 2 — delete the entry that currently owns the timeline
  * selection.  Thin wrapper around `toggleDeleteRow` that looks up the
  * entry from the project store, so the DEL / Backspace keyboard binding
