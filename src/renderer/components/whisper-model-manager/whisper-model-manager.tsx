@@ -512,8 +512,9 @@ export function WhisperModelManager({
         <Dialog open onOpenChange={() => setDialog(null)}>
           <DialogContent
             className="max-w-[400px]"
-            // REQ-0138 §2.1 — Enter fires the danger confirm.
-            onEnterConfirm={() => handleConfirmUninstall(dialog.model)}
+            // REQ-0139 §3 — REQ-0138's `onEnterConfirm` was removed
+            // because this is a destructive confirmation (removes
+            // multi-GB Whisper model from disk).  Owner must click.
           >
             <DialogHeader>
               <DialogTitle>{t('model.uninstall_confirm_title')}</DialogTitle>

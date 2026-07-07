@@ -93,25 +93,35 @@ function createWindow(): BrowserWindow {
     }
   })
 
-  // REQ-0132 §3 — Ctrl+R is now the "reset selected clip" shortcut
-  // (renderer's `useGlobalShortcuts`).  Chromium and Electron would
-  // otherwise route Ctrl+R / Ctrl+Shift+R / F5 / Ctrl+F5 to
-  // `webContents.reload()`, wiping the user's in-progress edit
-  // session.  `before-input-event` runs on the main process BEFORE
-  // Chromium's accelerator layer, so preventing the input here stops
-  // the reload regardless of whether the renderer's capture-phase
-  // handler also fired.  In dev mode we still want the developer to
-  // be able to reload via the DevTools; the DevTools' own keyboard
-  // shortcuts are dispatched separately and are not intercepted here.
+  // REQ-0132 §3 / REQ-0139 fix — Ctrl+R is the "reset selected clip"
+  // shortcut (renderer's `useGlobalShortcuts`).  REQ-0132 had
+  // preventDefaulted Ctrl+R here on the (wrong) assumption that
+  // Chromium would otherwise reload the page.  `event.preventDefault()`
+  // in `before-input-event` blocks the accelerator AND the DOM
+  // keydown from ever reaching the renderer, so the reset never
+  // fired — REQ-0139's owner-reported bug (Ctrl+R "does nothing"
+  // while the inspector's Reset button worked).
+  //
+  // Our custom application menu (see `menu.ts`) has no Reload item,
+  // so there is no accelerator to eat: an unmodified Ctrl+R already
+  // flows through Chromium unchanged and lands in the renderer as a
+  // plain DOM keydown.  Let it through; the renderer's capture-phase
+  // handler calls `preventDefault` + `stopPropagation` after firing
+  // the reset.
+  //
+  // Ctrl+Shift+R / F5 / Ctrl+F5 have no in-app behaviour, so we keep
+  // preventDefault-ing them as belt-and-braces against a future
+  // Electron/Chromium version that might introduce a default
+  // accelerator.  This safeguards the user's edit session from a
+  // stray "hard reload" keystroke.
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return
     const key = input.key.toLowerCase()
-    const isReload =
-      (input.control && key === 'r') ||
+    const isNonResetReload =
       (input.control && input.shift && key === 'r') ||
       key === 'f5' ||
       (input.control && key === 'f5')
-    if (isReload) event.preventDefault()
+    if (isNonResetReload) event.preventDefault()
   })
 
   if (isDev) {

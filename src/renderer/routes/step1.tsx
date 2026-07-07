@@ -913,13 +913,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         onCancel={handleCancelClick}
       />
 
-      {/* Cancel transcription dialog */}
+      {/* Cancel transcription dialog.
+          REQ-0139 §3 — REQ-0138's `onEnterConfirm={handleConfirmCancel}`
+          was removed because this is a destructive confirmation
+          (aborts an in-flight Whisper run).  Owner must click; Esc
+          closes safely without cancelling. */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-        <DialogContent
-          className="max-w-[400px]"
-          // REQ-0138 §2.1 — Enter fires the danger confirm.
-          onEnterConfirm={handleConfirmCancel}
-        >
+        <DialogContent className="max-w-[400px]">
           <DialogHeader>
             <DialogTitle>{t('dialog.cancelTitle')}</DialogTitle>
             <DialogDescription>{t('dialog.cancelBody')}</DialogDescription>

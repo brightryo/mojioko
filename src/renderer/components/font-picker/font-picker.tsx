@@ -331,8 +331,9 @@ export function FontPicker({ onChange }: FontPickerProps) {
       >
         <DialogContent
           className="max-w-[480px]"
-          // REQ-0138 §2.1 — Enter fires the danger confirm.
-          onEnterConfirm={() => { void confirmPendingUninstall() }}
+          // REQ-0139 §3 — REQ-0138's `onEnterConfirm` was removed
+          // because this is a destructive confirmation (removes the
+          // font's TTF from disk).  Owner must click.
         >
           <DialogHeader>
             <DialogTitle>

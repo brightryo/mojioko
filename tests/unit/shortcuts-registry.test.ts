@@ -100,15 +100,27 @@ describe('REQ-0131 — SHORTCUTS registry', () => {
     expect(shortcutHint('nope' as ShortcutId)).toBe('')
   })
 
-  it('redo advertises both Ctrl+Shift+Z and Ctrl+Y (REQ-0131 §1.3)', () => {
+  it('REQ-0139 §2 — redo has exactly one key: Ctrl+Shift+Z (Ctrl+Y removed)', () => {
     const redo = SHORTCUTS.find((s) => s.id === 'redo')
     expect(redo).toBeDefined()
-    expect(redo!.keys).toEqual(['Ctrl+Shift+Z', 'Ctrl+Y'])
+    expect(redo!.keys).toEqual(['Ctrl+Shift+Z'])
   })
 
-  it('delete advertises both Delete and Backspace (REQ-0129 / §1.4)', () => {
+  it('REQ-0139 §2 — delete has exactly one key: Delete (Backspace removed)', () => {
     const del = SHORTCUTS.find((s) => s.id === 'delete')
     expect(del).toBeDefined()
-    expect(del!.keys).toEqual(['Delete', 'Backspace'])
+    expect(del!.keys).toEqual(['Delete'])
+  })
+
+  it('REQ-0139 §2 — no shortcut anywhere in the registry advertises Backspace or Ctrl+Y', () => {
+    // Guard against silent regressions that add these back for a
+    // different id.  If a future REQ genuinely wants them, this test
+    // is the tripwire that forces a spec update alongside the change.
+    for (const s of SHORTCUTS) {
+      for (const k of s.keys) {
+        expect(k, `${s.id} has forbidden key ${k}`).not.toBe('Backspace')
+        expect(k, `${s.id} has forbidden key ${k}`).not.toBe('Ctrl+Y')
+      }
+    }
   })
 })

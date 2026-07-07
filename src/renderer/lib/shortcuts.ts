@@ -56,8 +56,13 @@ export const SHORTCUTS: readonly ShortcutSpec[] = [
   // Context B — editor screen, no overlay, focus outside any input.
   { id: 'playPause',   keys: ['Space'],                       labelKey: 'shortcuts.playPause',   context: 'editor' },
   { id: 'undo',        keys: ['Ctrl+Z'],                      labelKey: 'shortcuts.undo',        context: 'editor' },
-  { id: 'redo',        keys: ['Ctrl+Shift+Z', 'Ctrl+Y'],      labelKey: 'shortcuts.redo',        context: 'editor' },
-  { id: 'delete',      keys: ['Delete', 'Backspace'],         labelKey: 'shortcuts.delete',      context: 'editor' },
+  // REQ-0139 §2 — one operation, one key.  REQ-0132 listed Ctrl+Y as
+  // a Windows-native Redo alias and Backspace as a Delete alias; the
+  // Settings tab renders each entry as "Ctrl+Shift+Z / Ctrl+Y", which
+  // the owner reported reading as a chorded key.  Ctrl+Shift+Z matches
+  // DaVinci Resolve; Delete matches the surrounding delete affordances.
+  { id: 'redo',        keys: ['Ctrl+Shift+Z'],                labelKey: 'shortcuts.redo',        context: 'editor' },
+  { id: 'delete',      keys: ['Delete'],                      labelKey: 'shortcuts.delete',      context: 'editor' },
   { id: 'duplicate',   keys: ['Ctrl+D'],                      labelKey: 'shortcuts.duplicate',   context: 'editor' },
   { id: 'reset',       keys: ['Ctrl+R'],                      labelKey: 'shortcuts.reset',       context: 'editor' },
   { id: 'selectAll',   keys: ['Ctrl+A'],                      labelKey: 'shortcuts.selectAll',   context: 'editor' },

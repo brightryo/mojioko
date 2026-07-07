@@ -1219,16 +1219,14 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         onCancel={closeEditor}
       />
 
-      {/* Discard changes dialog */}
+      {/* Discard changes dialog.
+          REQ-0139 §3 — `onEnterConfirm` was set by REQ-0138 §2.1 but
+          rolled back here because this is a destructive confirmation
+          (discards the user's edits and navigates back to Step 1).
+          Owner must click the OK button; Esc still closes on the
+          cancel side (no navigation). */}
       <Dialog open={discardOpen} onOpenChange={setDiscardOpen}>
-        <DialogContent
-          className="max-w-[400px]"
-          // REQ-0138 §2.1 — Enter fires the primary (OK/danger) action.
-          onEnterConfirm={() => {
-            setDiscardOpen(false)
-            navigate('/step1')
-          }}
-        >
+        <DialogContent className="max-w-[400px]">
           <DialogHeader>
             <DialogTitle>{t('common:dialog.discardChanges')}</DialogTitle>
             <DialogDescription>{t('common:dialog.discardChangesDesc')}</DialogDescription>

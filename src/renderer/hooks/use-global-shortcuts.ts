@@ -75,13 +75,15 @@ export function useGlobalShortcuts(): void {
         return
       }
 
-      // Redo: Ctrl+Shift+Z OR Ctrl+Y.  Two bindings, one branch — Ctrl+Y
-      // is the Windows-native default the owner asked for (REQ-0131 §1.3).
+      // REQ-0139 §2 — Redo is Ctrl+Shift+Z only.  REQ-0132 also matched
+      // Ctrl+Y as a Windows-native alias; owner rolled back that
+      // duplication to keep "one operation = one key" in the Settings
+      // Shortcuts tab.
       if (
         (ctrlKey || metaKey) &&
         !altKey &&
-        ((shiftKey && (key === 'z' || key === 'Z')) ||
-          (!shiftKey && (key === 'y' || key === 'Y')))
+        shiftKey &&
+        (key === 'z' || key === 'Z')
       ) {
         useHistoryStore.getState().redo()
         e.preventDefault()
@@ -146,12 +148,14 @@ export function useGlobalShortcuts(): void {
         return
       }
 
-      // Delete / Backspace — REQ-0138 delete-only.  Undeleted row →
-      // soft-delete + one history op.  Already-deleted row → no-op
-      // (`deleteEntryById` returns false).  Restore stays available on
-      // the inspector's restore button and via Ctrl+Z, but a second
-      // DEL press on the same row will not silently un-delete it.
-      if (!ctrlKey && !altKey && !metaKey && !shiftKey && (key === 'Delete' || key === 'Backspace')) {
+      // REQ-0138 delete-only + REQ-0139 §2 Delete-only (not Backspace).
+      // Undeleted row → soft-delete + one history op.  Already-deleted
+      // row → no-op (`deleteEntryById` returns false).  Restore stays
+      // available on the inspector's restore button and via Ctrl+Z.
+      // REQ-0132 also matched Backspace as a delete alias; owner
+      // rolled back the duplication so Backspace is now purely a
+      // character-delete in text inputs.
+      if (!ctrlKey && !altKey && !metaKey && !shiftKey && key === 'Delete') {
         const currentSelection = useUiStore.getState().selectedEntryId
         if (currentSelection) {
           const fired = deleteEntryById(currentSelection, {
