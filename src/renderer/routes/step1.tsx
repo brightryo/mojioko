@@ -141,6 +141,14 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const elapsedSec = transcribeStartMs !== null
     ? Math.max(0, Math.floor((Math.max(nowTick, Date.now()) - transcribeStartMs) / 1000))
     : 0
+  // REQ-0145 — device info from the sidecar's `deviceInfo` event.
+  // `null` until the sidecar reports which device the WhisperModel
+  // constructor actually used (cuda vs cpu, and whether it fell back
+  // from a failed cuda attempt).  Owner uses this to verify GPU
+  // engagement without needing to open the dev-terminal.
+  const [deviceInfo, setDeviceInfo] = useState<
+    { device: 'cuda' | 'cpu'; computeType: string; fellBack: boolean } | null
+  >(null)
   const [thumbnail, setThumbnail] = useState<string | null>(null)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [subtitleStyleDialogOpen, setSubtitleStyleDialogOpen] = useState(false)
@@ -315,6 +323,9 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     // ticks.
     setPreparingPhase('extractAudio')
     setTranscribeStartMs(Date.now())
+    // REQ-0145 — clear the previous run's device chip so a fresh Start
+    // never carries stale info across runs.
+    setDeviceInfo(null)
     // REQ-20260615-055 — drive the drawer's render state too so the
     // body switches from the configuration form to the spinner /
     // progress bar / error panel as the run progresses.
@@ -371,6 +382,21 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           }
         } else if (evt.event === 'needsDownload') {
           toast.warning(t('toast.modelNotInstalled', { model: evt.model }))
+        } else if (evt.event === 'deviceInfo') {
+          // REQ-0145 §3 — surface the sidecar's device choice so the
+          // owner can verify GPU engagement.  Duplicated to
+          // `console.log` (visible in DevTools console) AND stored in
+          // React state so the drawer chip can render it live.  The
+          // main-process `[sidecar stderr]` log covers the third
+          // channel (dev terminal) via the print(...) in main.py.
+          console.log(
+            `[REQ-0145 deviceInfo] device=${evt.device} computeType=${evt.computeType} fellBack=${evt.fellBack}`,
+          )
+          setDeviceInfo({
+            device: evt.device,
+            computeType: evt.computeType,
+            fellBack: evt.fellBack,
+          })
         }
       }
     )
@@ -961,6 +987,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         }
         preparingPhase={preparingPhase}
         elapsedSec={elapsedSec}
+        deviceInfo={deviceInfo}
         errorMessage={drawerErrorMessage}
         canStart={canStart}
         onStart={handleStartTranscription}

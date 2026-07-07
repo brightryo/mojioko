@@ -93,6 +93,20 @@ export interface TranscriptionDrawerProps {
    * the sidecar does not need to emit its own tick events.
    */
   elapsedSec?: number
+  /**
+   * REQ-0145 Step 1 — the sidecar's device choice, reported once per
+   * run via the `deviceInfo` IPC event (see `ipc-contracts.ts`).
+   * `null` while the loadModel phase has not yet resolved (the chip
+   * simply is not rendered).  Rendered as a small monospace chip
+   * inside the running block so the owner can visually confirm GPU
+   * engagement without opening the DevTools console.  Step 2 will
+   * replace this debug chip with a proper Settings-driven toggle.
+   */
+  deviceInfo?: {
+    device: 'cuda' | 'cpu'
+    computeType: string
+    fellBack: boolean
+  } | null
   /** Error message when `renderState === 'error'`. */
   errorMessage: string
   /** Whether the start button should be enabled.  Driven by the parent
@@ -114,6 +128,7 @@ export function TranscriptionDrawer({
   runningLabelOverride,
   preparingPhase,
   elapsedSec,
+  deviceInfo,
   errorMessage,
   canStart,
   onStart,
@@ -252,10 +267,37 @@ export function TranscriptionDrawer({
                     label + 100 % bar carry the state visibly enough for
                     the short mix step. */}
                 {!runningLabelOverride && (
-                  <div className="flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-1.5">
                     <span className="font-mono tabular-nums text-title text-fg-primary">
                       {formatElapsed(elapsedSec ?? 0)}
                     </span>
+                    {/* REQ-0145 §3 — device chip.  Only rendered once
+                        the sidecar has reported its device choice;
+                        stays invisible during the pre-`loadModel`
+                        window so the layout does not jump.  The
+                        `fellBack` variant explicitly calls out the
+                        CUDA→CPU fallback so the owner knows the
+                        speedup they expected did not happen. */}
+                    {deviceInfo && (
+                      <span
+                        className={cn(
+                          'font-mono tabular-nums text-label',
+                          'rounded-full border px-2 py-0.5',
+                          deviceInfo.device === 'cuda'
+                            ? 'border-primary/40 bg-primary/10 text-primary'
+                            : deviceInfo.fellBack
+                              ? 'border-warning/40 bg-warning/10 text-warning'
+                              : 'border-line bg-surface-2 text-fg-tertiary',
+                        )}
+                        title={`compute_type=${deviceInfo.computeType}${deviceInfo.fellBack ? ' (CUDA fell back to CPU)' : ''}`}
+                      >
+                        {deviceInfo.device === 'cuda'
+                          ? 'GPU · CUDA'
+                          : deviceInfo.fellBack
+                            ? 'CPU (CUDA fallback)'
+                            : 'CPU'}
+                      </span>
+                    )}
                   </div>
                 )}
                 <div className="space-y-3">

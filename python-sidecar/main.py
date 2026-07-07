@@ -124,11 +124,80 @@ def transcribe(msg: dict) -> None:
             send({"event": "failed", "error": "faster-whisper is not installed"})
             return
 
+        # REQ-0145 — CUDA-first + CPU fallback.  RES-0144 confirmed the
+        # shipped ctranslate2.dll is a CUDA build (imports cublas64_12,
+        # nvcuda, cudnn64_9; ships CUDA kernels), but main.py had held
+        # `device="cpu"` since v1.0.0.  Owner has NVIDIA + CUDA Toolkit
+        # installed and asked us to prove GPU actually engages before
+        # committing to a distribution overhaul in Step 2 (cudnn redist,
+        # cpu/gpu toggle UI, installer size).
+        #
+        # Compute-type choice:
+        #   - GPU: `int8_float16` — the on-disk model is already int8-
+        #     quantized, so int8_float16 keeps the small weights but
+        #     runs activations in fp16 for higher precision.
+        #     faster-whisper's own README recommends this combination
+        #     for GPU inference with int8 models.  Pure `float16` would
+        #     upcast the weights (larger memory, slower); pure `int8`
+        #     on GPU is fastest but slightly lower quality.
+        #   - CPU: `int8` (unchanged from pre-REQ-0145 — the fastest
+        #     path on modern x86 SIMD int8).
+        def _select_device() -> tuple[str, str]:
+            try:
+                import ctranslate2  # type: ignore[import]
+                if ctranslate2.get_cuda_device_count() > 0:
+                    return "cuda", "int8_float16"
+            except Exception as probe_err:
+                # ctranslate2 unavailable or CUDA driver probe threw —
+                # treat as "no GPU" and continue with CPU.
+                print(f"[device] CUDA probe failed: {type(probe_err).__name__}: {probe_err}",
+                      file=sys.stderr)
+            return "cpu", "int8"
+
+        requested_device, requested_compute = _select_device()
+        actual_device: str = requested_device
+        actual_compute: str = requested_compute
+        fell_back: bool = False
         try:
-            model = WhisperModel(str(model_dir), device="cpu", compute_type="int8")
+            model = WhisperModel(str(model_dir), device=requested_device, compute_type=requested_compute)
         except Exception as e:
-            send({"event": "failed", "error": f"Failed to load model: {e}"})
-            return
+            # REQ-0145 §2 — if the CUDA path was chosen but Model init
+            # failed (missing cuDNN redist on the user's machine, driver
+            # mismatch, out-of-memory, etc.) fall back to CPU rather
+            # than aborting the run.  Owner's UX is "transcription
+            # completes", not "transcription errors out because the GPU
+            # attempt failed."
+            if requested_device != "cpu":
+                print(f"[device] CUDA WhisperModel init failed ({type(e).__name__}: {e}); "
+                      f"falling back to device=cpu compute_type=int8",
+                      file=sys.stderr)
+                try:
+                    model = WhisperModel(str(model_dir), device="cpu", compute_type="int8")
+                    actual_device = "cpu"
+                    actual_compute = "int8"
+                    fell_back = True
+                except Exception as e2:
+                    send({"event": "failed", "error": f"Failed to load model: {e2}"})
+                    return
+            else:
+                send({"event": "failed", "error": f"Failed to load model: {e}"})
+                return
+
+        # REQ-0145 §3 — surface the actual device to (a) the sidecar
+        # stderr log so `[sidecar stderr]` in the main-process log shows
+        # it, and (b) the renderer via a new `deviceInfo` IPC event so
+        # a chip in the drawer can display it live.  Both channels
+        # cover the "how does the owner check which device fired?"
+        # question in REQ §3.
+        print(f"[device] using device={actual_device} compute_type={actual_compute} "
+              f"fell_back={fell_back}",
+              file=sys.stderr)
+        send({
+            "event": "deviceInfo",
+            "device": actual_device,
+            "computeType": actual_compute,
+            "fellBack": fell_back,
+        })
 
         # REQ-0142 §3.1 — the VAD + language-detection prepass runs inside
         # `model.transcribe(...)` BEFORE the iterator is returned.  Emit

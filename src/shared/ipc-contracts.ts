@@ -157,6 +157,18 @@ export type TranscriptionEvent =
    */
   | { event: 'phase'; phase: 'extractAudio' | 'loadModel' | 'prepass' | 'preview-mix' }
   /**
+   * REQ-0145 — the sidecar reports the actual inference device after
+   * `WhisperModel(...)` succeeds.  Emitted exactly once per run,
+   * between the `loadModel` and `prepass` phase events (see
+   * `python-sidecar/main.py`).  `device: 'cuda'` = the CUDA build's
+   * GPU path is live; `'cpu'` = we're running on the pre-REQ-0145
+   * fallback path.  `fellBack: true` means we asked for CUDA but the
+   * WhisperModel constructor threw and we retried on CPU (missing
+   * cuDNN redist / driver mismatch / OOM — see the sidecar stderr
+   * log for the underlying error).
+   */
+  | { event: 'deviceInfo'; device: 'cuda' | 'cpu'; computeType: string; fellBack: boolean }
+  /**
    * REQ-086 — `previewMixUrl` carries the `mojioko-preview-mix://` URL
    * (with a cache-buster query) when a multi-track preview audio file
    * was generated.  `null` for 0- or 1-track sources where no mix is
