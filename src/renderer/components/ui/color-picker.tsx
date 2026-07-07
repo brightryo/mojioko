@@ -1,14 +1,26 @@
-import * as React from 'react'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/stores/ui-store'
+import { useOverlayRegistration } from '@/hooks/use-overlay-registration'
 import { BASIC_COLORS, COLOR_PAIRS, CUD_COLORS, type ColorPair } from '@/lib/color-palette'
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
+
+/**
+ * REQ-0137 fix — internal component that lives inside `<PopoverContent>`
+ * so its mount lifecycle tracks Radix Popover's Presence gate.  When
+ * the picker is open the child mounts and `useOverlayRegistration`
+ * registers a unique id; when closed the child unmounts and the id is
+ * released.  Same pattern the shared Dialog / Sheet primitives use.
+ */
+function OverlayRegistrar(): null {
+  useOverlayRegistration()
+  return null
+}
 
 interface ColorPickerProps {
   value: string
@@ -74,16 +86,6 @@ export function ColorPicker({
   const { t } = useTranslation('common')
   const recentColors = useUiStore((s) => s.recentColors)
   const addRecentColor = useUiStore((s) => s.addRecentColor)
-  // REQ-0132 §2.1 — the ColorPicker Popover uses `modal` mode but
-  // Radix Popover's Content mount lifecycle can outlive the `open`
-  // flag, so we drive the overlay counter directly from
-  // `handleOpenChange` rather than the shared `useOverlayRegistration`
-  // hook (which every Dialog / Sheet uses).  Same registry; different
-  // wiring.  Ref tracking prevents a decrement-on-unmount from a
-  // closed popover from double-decrementing.
-  const incrementOverlay = useUiStore((s) => s.incrementOverlay)
-  const decrementOverlay = useUiStore((s) => s.decrementOverlay)
-  const overlayRegisteredRef = React.useRef(false)
 
   const [open, setOpen] = useState(false)
   const [hexDraft, setHexDraft] = useState(value)
@@ -140,33 +142,14 @@ export function ColorPicker({
       setValueOnOpen(null)
     }
     setOpen(next)
-    // REQ-0132 §2.1 — increment/decrement the shared overlay counter
-    // so `isAnyOverlayOpen` sees the picker in exactly the same way it
-    // sees every Dialog / Sheet.  Ref-guarded so calling
-    // handleOpenChange twice with the same value cannot double-count
-    // (defensive: Radix Popover normally does not, but Cancel path
-    // calls setValueOnOpen(null) then setOpen(false) independently).
-    if (next && !overlayRegisteredRef.current) {
-      incrementOverlay()
-      overlayRegisteredRef.current = true
-    } else if (!next && overlayRegisteredRef.current) {
-      decrementOverlay()
-      overlayRegisteredRef.current = false
-    }
+    // REQ-0137 fix — overlay registration is now driven by the
+    // `<OverlayRegistrar />` child inside `<PopoverContent>` (see
+    // `pickerContent` below).  Radix Popover's Presence mounts
+    // Content's children only when the picker is open, so add/remove
+    // to `overlayIds` happens automatically and cannot leak.  The
+    // previous manual increment/decrement + ref (REQ-0132) has been
+    // removed alongside its safety-net cleanup effect.
   }
-
-  // REQ-0132 §2.1 — final safety net: if the ColorPicker component
-  // unmounts while its popover is still registered as open (e.g. the
-  // parent row was deleted mid-pick), decrement the counter so the
-  // overlay guard doesn't get pinned "open" forever.
-  useEffect(() => {
-    return () => {
-      if (overlayRegisteredRef.current) {
-        decrementOverlay()
-        overlayRegisteredRef.current = false
-      }
-    }
-  }, [decrementOverlay])
 
   // REQ-0127 Phase 3 — explicit OK / Cancel buttons replace the outside-
   // click-to-commit affordance.  Cancel rewinds the store to
@@ -200,10 +183,6 @@ export function ColorPicker({
     }
     setValueOnOpen(null)
     setOpen(false)
-    if (overlayRegisteredRef.current) {
-      decrementOverlay()
-      overlayRegisteredRef.current = false
-    }
   }
   function handleCancel() {
     if (valueOnOpen !== null && normalise(value) !== valueOnOpen) {
@@ -216,10 +195,6 @@ export function ColorPicker({
     }
     setValueOnOpen(null)
     setOpen(false)
-    if (overlayRegisteredRef.current) {
-      decrementOverlay()
-      overlayRegisteredRef.current = false
-    }
   }
 
   function handlePickerChange(hex: string) {
@@ -318,6 +293,12 @@ export function ColorPicker({
         handleConfirm()
       }}
     >
+      {/* REQ-0137 fix — child of Radix PopoverContent.  Presence
+          mounts this only when the popover is open, so overlay
+          registration tracks the picker's visibility exactly.
+          Replaces the REQ-0132 manual increment/decrement in
+          `handleOpenChange`. */}
+      <OverlayRegistrar />
       {/* Scrollable body — grows to fill remaining vertical space, and
           scrolls internally in the rare case the palette is taller than
           the viewport allowance.  The sticky footer below stays pinned. */}

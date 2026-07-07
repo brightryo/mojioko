@@ -24,20 +24,28 @@ interface UiStore {
   isDonationDialogOpen: boolean
   isFontLicensesDialogOpen: boolean
   /**
-   * REQ-0132 §2.1 — app-wide count of currently-open overlays
-   * (Dialogs / Sheets / the modal Popover used by the color picker).
-   * Every overlay increments on mount and decrements on unmount via
-   * `useOverlayRegistration` (see `src/renderer/hooks/…`), which
-   * replaces REQ-0131's flag-OR `isAnyModalOpen` approach.  The
-   * counter is accurate the moment a new overlay is added because
-   * registration is a single shared hook call — no consumer needs to
-   * remember to flip a boolean.
+   * REQ-0137 fix — id-keyed set of currently-open overlays.  Replaces
+   * REQ-0132's `overlayOpenCount: number` for two reasons the Set
+   * solves:
    *
-   * Two overlays can be open at once (e.g. Settings + a nested color
-   * picker); a counter handles that cleanly where a boolean would
-   * race.  `isAnyOverlayOpen(state)` reads `overlayOpenCount > 0`.
+   *   1. **Idempotency under any repeated mount.**  React StrictMode
+   *      dev double-invokes effects (setup → cleanup → setup) and a
+   *      counter is only correct if inc/dec are perfectly paired.  A
+   *      Set with `add(id)` + `delete(id)` is trivially idempotent:
+   *      re-add of the same id leaves one entry; delete of an unknown
+   *      id is a no-op.
+   *   2. **Debuggability.**  `overlayIds` names which overlays are
+   *      open at any moment — useful when triaging a "shortcuts don't
+   *      fire" report; inspect the Set to see what is still registered.
+   *
+   * Each overlay picks its id via `useId()` inside
+   * `useOverlayRegistration`.  `useId()` is stable per component
+   * instance so the same overlay always uses the same id across
+   * StrictMode double-invokes / re-renders.
+   *
+   * `isAnyOverlayOpen(state)` reads `overlayIds.size > 0`.
    */
-  overlayOpenCount: number
+  overlayIds: ReadonlySet<string>
   tableFilter: TableFilter
   /**
    * REQ-20260614-001 Phase 3 — **playback-active entry id**.  Set by the
@@ -202,9 +210,9 @@ interface UiStore {
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
   setFontLicensesDialogOpen: (open: boolean) => void
-  /** REQ-0132 §2.1 — register / unregister an overlay with the counter. */
-  incrementOverlay: () => void
-  decrementOverlay: () => void
+  /** REQ-0137 — id-keyed overlay registration.  Idempotent add / delete. */
+  addOverlay: (id: string) => void
+  removeOverlay: (id: string) => void
   setTableFilter: (f: TableFilter) => void
   setFocusedRowId: (id: string | null) => void
   setSelectedEntryId: (id: string | null) => void
@@ -247,7 +255,7 @@ export const useUiStore = create<UiStore>((set) => ({
   isAboutDialogOpen: false,
   isDonationDialogOpen: false,
   isFontLicensesDialogOpen: false,
-  overlayOpenCount: 0,
+  overlayIds: new Set<string>(),
   tableFilter: 'all',
   focusedRowId: null,
   selectedEntryId: null,
@@ -279,12 +287,28 @@ export const useUiStore = create<UiStore>((set) => ({
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
   setDonationDialogOpen: (open) => set({ isDonationDialogOpen: open }),
   setFontLicensesDialogOpen: (open) => set({ isFontLicensesDialogOpen: open }),
-  incrementOverlay: () =>
-    set((s) => ({ overlayOpenCount: s.overlayOpenCount + 1 })),
-  decrementOverlay: () =>
-    // clamp at 0 so a mistimed cleanup can never take the counter
-    // negative (paranoia — Radix's mount/unmount pairing is reliable).
-    set((s) => ({ overlayOpenCount: Math.max(0, s.overlayOpenCount - 1) })),
+  addOverlay: (id) =>
+    set((s) => {
+      // Idempotent: re-adding an existing id is a no-op.  StrictMode's
+      // double-invoke of effects (setup → cleanup → setup) can add the
+      // same id twice in a row; treating it as a no-op keeps the Set
+      // truthful ("this overlay is open") without double-counting.
+      if (s.overlayIds.has(id)) return {}
+      const next = new Set(s.overlayIds)
+      next.add(id)
+      return { overlayIds: next }
+    }),
+  removeOverlay: (id) =>
+    set((s) => {
+      // Idempotent: removing an unknown id is a no-op.  Same StrictMode
+      // reason — the initial cleanup of a double-invoked effect removes
+      // before the re-setup adds; a stale cleanup after that would find
+      // nothing to remove and correctly leave the Set alone.
+      if (!s.overlayIds.has(id)) return {}
+      const next = new Set(s.overlayIds)
+      next.delete(id)
+      return { overlayIds: next }
+    }),
   setTableFilter: (f) => set({ tableFilter: f }),
   setFocusedRowId: (id) => set({ focusedRowId: id }),
   setSelectedEntryId: (id) => set({ selectedEntryId: id }),
@@ -365,16 +389,21 @@ export const useUiStore = create<UiStore>((set) => ({
 }))
 
 /**
- * REQ-0132 §2.1 — derived selector reading the overlay counter that
- * every Dialog / Sheet / modal Popover writes to via
+ * REQ-0132 §2.1 / REQ-0137 fix — derived selector reading the overlay
+ * id set that every Dialog / Sheet / modal Popover writes to via
  * `useOverlayRegistration`.  Both the shared shortcut handler and the
  * preview panels' Space bindings consume this so context A (any
- * overlay open) is judged the same way everywhere — no more
- * flag-OR drift as new overlays ship.  Replaces REQ-0131's
- * `isAnyModalOpen(state)` which read 5 hand-maintained booleans and
- * missed the add-row / time-editor / burn-in / transcription drawer
- * overlays (RES-0131 §9.2 → the very bug this REQ fixes).
+ * overlay open) is judged the same way everywhere.
+ *
+ * Migrated from a counter to a Set in REQ-0137 after the counter
+ * approach shipped as "true from app boot" — the previous
+ * implementation called `useOverlayRegistration()` from the wrapper's
+ * function body, so it fired at wrapper-mount (= app boot for every
+ * always-rendered Dialog) rather than at Radix Content open.  The new
+ * implementation registers inside `<DialogPrimitive.Content>` so it
+ * only fires when Radix's Presence actually mounts the Content — i.e.
+ * when the dialog is open.
  */
-export function isAnyOverlayOpen(s: { overlayOpenCount: number }): boolean {
-  return s.overlayOpenCount > 0
+export function isAnyOverlayOpen(s: { overlayIds: ReadonlySet<string> }): boolean {
+  return s.overlayIds.size > 0
 }

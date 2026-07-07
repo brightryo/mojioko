@@ -29,19 +29,25 @@ const DialogOverlay = React.forwardRef<
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
+/**
+ * REQ-0137 fix — internal component that lives INSIDE the Radix
+ * Dialog Content subtree.  Radix's `Presence` mounts Content's
+ * children only when the Root is `open` (or during a close
+ * animation), so this component's mount ⇔ dialog visible.  Placing
+ * `useOverlayRegistration()` here (instead of at the wrapper's
+ * top-level) fixes the REQ-0132 regression where every Dialog
+ * inflated the overlay counter at app boot and blocked every editor
+ * shortcut.
+ */
+function OverlayRegistrar(): null {
+  useOverlayRegistration()
+  return null
+}
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { hideClose?: boolean }
->(({ className, children, hideClose, ...props }, ref) => {
-  // REQ-0132 §2.1 — every Radix Dialog auto-registers with the overlay
-  // registry via the mount/unmount of this Portal-rendered Content
-  // element.  Radix only mounts Content when the Dialog is open, so
-  // mount = open and unmount = close.  This is the single line that
-  // makes `isAnyOverlayOpen` accurate for every Dialog in the app,
-  // regardless of which flag (or lack of one) the consumer uses to
-  // hold `open`.
-  useOverlayRegistration()
-  return (
+>(({ className, children, hideClose, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -54,10 +60,10 @@ const DialogContent = React.forwardRef<
       // restores Radix's built-in behaviour: pressing Esc fires
       // `onOpenChange(false)` on the Root, which closes the dialog
       // through the existing state channel.  The overlay registry
-      // (see `useOverlayRegistration` above) unregisters via the
-      // Content unmount that follows.  Owner-facing symptom of the
-      // pre-fix state: Settings / About / Time-editor / etc. did not
-      // close on Esc despite being visible (RES-0131 §1.1 mis-claim).
+      // (see `<OverlayRegistrar />` below) unregisters via the
+      // Content-child unmount that follows.  Owner-facing symptom of
+      // the pre-fix state (REQ-0132): Settings / About / Time-editor /
+      // etc. did not close on Esc despite being visible.
       className={cn(
         'fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%]',
         // REQ-20260615-003 mira density: p-6 → p-4, duration-200 → duration-100.
@@ -78,6 +84,10 @@ const DialogContent = React.forwardRef<
       )}
       {...props}
     >
+      {/* REQ-0137 fix — placed inside Radix Content so it only mounts
+          when the dialog is open (Radix Presence gate).  See
+          `OverlayRegistrar` above for why. */}
+      <OverlayRegistrar />
       {children}
       {!hideClose && (
         // REQ-20260615-003 mira: close at top-2 right-2 (closer to corner).
@@ -88,8 +98,7 @@ const DialogContent = React.forwardRef<
       )}
     </DialogPrimitive.Content>
   </DialogPortal>
-  )
-})
+))
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
 // REQ-20260615-003 mira density: header gap 1.5→1, mb 5→3; footer mt 6→4.

@@ -38,17 +38,24 @@ SheetOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 type SheetSide = 'top' | 'right' | 'bottom' | 'left'
 
+/**
+ * REQ-0137 fix — same OverlayRegistrar pattern Dialog uses; see
+ * dialog.tsx for the rationale.  Placed inside Radix Content so the
+ * mount lifecycle tracks the Root's `open` state, not our wrapper's
+ * unconditional render.
+ */
+function OverlayRegistrar(): null {
+  useOverlayRegistration()
+  return null
+}
+
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     side?: SheetSide
     hideClose?: boolean
   }
->(({ className, children, side = 'right', hideClose, ...props }, ref) => {
-  // REQ-0132 §2.1 — every Sheet auto-registers with the overlay
-  // registry.  Same mount = open contract Dialog uses.
-  useOverlayRegistration()
-  return (
+>(({ className, children, side = 'right', hideClose, ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
     <DialogPrimitive.Content
@@ -81,6 +88,8 @@ const SheetContent = React.forwardRef<
       )}
       {...props}
     >
+      {/* REQ-0137 fix — child of Radix Content, gated by Presence. */}
+      <OverlayRegistrar />
       {children}
       {!hideClose && (
         <SheetClose className="absolute right-3 top-3 rounded-md p-1 text-fg-muted transition-colors hover:text-fg-secondary focus:outline-none focus-visible:outline-none">
@@ -90,8 +99,7 @@ const SheetContent = React.forwardRef<
       )}
     </DialogPrimitive.Content>
   </SheetPortal>
-  )
-})
+))
 SheetContent.displayName = DialogPrimitive.Content.displayName
 
 const SheetHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
