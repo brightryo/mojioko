@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertCircle, Loader2, Mic, Play, Settings2 } from 'lucide-react'
+import { AlertCircle, Mic, Play, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -240,9 +240,24 @@ export function TranscriptionDrawer({
           {renderState === 'running' && (
             <div className="flex items-center justify-center py-12">
               <div className="rounded-xl border border-line bg-surface-1 px-6 py-8 w-full max-w-md space-y-5">
-                <div className="flex items-center justify-center">
-                  <Loader2 className="h-7 w-7 text-primary animate-spin" />
-                </div>
+                {/* REQ-0143 — the REQ-0142 `Loader2` green spinner was
+                    removed.  Owner rationale: the elapsed timer is
+                    always moving, so a separate "still alive" affordance
+                    is redundant.  In its place — but only while the run
+                    is still in prep or Whisper — the top slot now
+                    surfaces the elapsed timer `mm:ss` at title-size so
+                    it is the visual center of the drawer.  During REQ-086
+                    preview-mix (`runningLabelOverride` set) the elapsed
+                    top slot is hidden to preserve the REQ-086 look; the
+                    label + 100 % bar carry the state visibly enough for
+                    the short mix step. */}
+                {!runningLabelOverride && (
+                  <div className="flex items-center justify-center">
+                    <span className="font-mono tabular-nums text-title text-fg-primary">
+                      {formatElapsed(elapsedSec ?? 0)}
+                    </span>
+                  </div>
+                )}
                 <div className="space-y-3">
                   {/* REQ-0142 — during the pre-Whisper preparing region
                       (`preparingPhase != null`) the determinate bar is
@@ -271,12 +286,13 @@ export function TranscriptionDrawer({
                         ? t(`drawer.preparingLabel.${preparingPhase}`)
                         : (runningLabelOverride ?? t('drawer.runningLabel'))}
                     </span>
-                    {/* REQ-0142 — while preparing, right-side chip shows
-                        elapsed instead of a bogus `0%`.  Once real
-                        progress starts the chip flips back to `NN%`. */}
-                    {preparingPhase ? (
-                      <span className="font-mono tabular-nums">{formatElapsed(elapsedSec ?? 0)}</span>
-                    ) : (
+                    {/* REQ-0143 — the right-side percent chip now shows
+                        ONLY while a real percentage exists (= Whisper
+                        inference or preview-mix pinned at 100 %).  In
+                        the prep region no accurate percent is available
+                        so the chip is intentionally blank; the elapsed
+                        moved up top (see above) covers "is it moving?". */}
+                    {!preparingPhase && (
                       <span className="font-mono tabular-nums">{progress}%</span>
                     )}
                   </div>
