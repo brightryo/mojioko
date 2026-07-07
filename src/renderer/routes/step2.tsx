@@ -1221,7 +1221,14 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
 
       {/* Discard changes dialog */}
       <Dialog open={discardOpen} onOpenChange={setDiscardOpen}>
-        <DialogContent className="max-w-[400px]">
+        <DialogContent
+          className="max-w-[400px]"
+          // REQ-0138 §2.1 — Enter fires the primary (OK/danger) action.
+          onEnterConfirm={() => {
+            setDiscardOpen(false)
+            navigate('/step1')
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{t('common:dialog.discardChanges')}</DialogTitle>
             <DialogDescription>{t('common:dialog.discardChangesDesc')}</DialogDescription>

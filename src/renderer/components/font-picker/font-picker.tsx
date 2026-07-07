@@ -329,7 +329,11 @@ export function FontPicker({ onChange }: FontPickerProps) {
         open={pendingUninstall !== null}
         onOpenChange={(o) => { if (!o) cancelPendingUninstall() }}
       >
-        <DialogContent className="max-w-[480px]">
+        <DialogContent
+          className="max-w-[480px]"
+          // REQ-0138 §2.1 — Enter fires the danger confirm.
+          onEnterConfirm={() => { void confirmPendingUninstall() }}
+        >
           <DialogHeader>
             <DialogTitle>
               {t('fontPicker.uninstallConfirm.title', {

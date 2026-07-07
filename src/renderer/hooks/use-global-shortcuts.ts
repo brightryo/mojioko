@@ -146,15 +146,16 @@ export function useGlobalShortcuts(): void {
         return
       }
 
-      // Delete / Backspace — same soft-delete + history toggle path
-      // REQ-0129 / REQ-0130 wired at the timeline surface.  Now works
-      // from any screen where a row is selected.
+      // Delete / Backspace — REQ-0138 delete-only.  Undeleted row →
+      // soft-delete + one history op.  Already-deleted row → no-op
+      // (`deleteEntryById` returns false).  Restore stays available on
+      // the inspector's restore button and via Ctrl+Z, but a second
+      // DEL press on the same row will not silently un-delete it.
       if (!ctrlKey && !altKey && !metaKey && !shiftKey && (key === 'Delete' || key === 'Backspace')) {
         const currentSelection = useUiStore.getState().selectedEntryId
         if (currentSelection) {
           const fired = deleteEntryById(currentSelection, {
             delete: t('history.deleteRow', { ns: 'step2' }),
-            restore: t('history.restoreRow', { ns: 'step2' }),
           })
           if (fired) {
             e.preventDefault()

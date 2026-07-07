@@ -44,14 +44,80 @@ function OverlayRegistrar(): null {
   return null
 }
 
+/**
+ * REQ-0138 §2.2 — pure predicate for the shared dialog Enter=confirm
+ * handler.  Extracted so unit tests can pin the "modifiers bail /
+ * textarea bail" rules without spinning up a Radix Dialog.  Returns
+ * `true` when Enter is allowed to fire the dialog's primary confirm
+ * action, `false` when it should fall through (native newline in a
+ * textarea, ignored on Ctrl/Alt/Meta/Shift+Enter, etc.).
+ */
+export function shouldFireDialogEnterConfirm(
+  key: string,
+  modifiers: { ctrl: boolean; alt: boolean; meta: boolean; shift: boolean },
+  activeTagName: string | null,
+): boolean {
+  if (key !== 'Enter') return false
+  if (modifiers.ctrl || modifiers.alt || modifiers.meta || modifiers.shift) return false
+  const tag = (activeTagName ?? '').toLowerCase()
+  if (tag === 'textarea') return false                   // §2.2 rule 2
+  return true
+}
+
+interface DialogContentExtraProps {
+  hideClose?: boolean
+  /**
+   * REQ-0138 §2 — when set, Enter (unmodified, not in a `<textarea>`)
+   * commits the focused field via `blur()` (fires any REQ-0128 onBlur
+   * handlers so numeric drafts commit) and then, after a setTimeout(0)
+   * to let React flush the setState from that blur, invokes
+   * `onEnterConfirm()`.  Callers whose confirm action reads local
+   * React state should pass `onEnterConfirm={() => confirmRef.current?.click()}`
+   * with `<Button ref={confirmRef}>` — the DOM click triggers the
+   * button's onClick against the latest-render closure, sidestepping
+   * the "callback closure captured pre-flush" staleness a direct
+   * `onEnterConfirm={handleConfirm}` would run into.  Callers whose
+   * confirm reads Zustand can pass the handler directly.
+   *
+   * `stopPropagation()` on the Enter keydown keeps nested dialogs from
+   * firing the outer one's confirm.
+   */
+  onEnterConfirm?: () => void
+}
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { hideClose?: boolean }
->(({ className, children, hideClose, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & DialogContentExtraProps
+>(({ className, children, hideClose, onEnterConfirm, onKeyDown, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
+      onKeyDown={(e) => {
+        // Preserve any consumer-supplied onKeyDown first so it can
+        // preventDefault + skip our Enter handling if it wants to.
+        onKeyDown?.(e)
+        if (e.defaultPrevented) return
+        if (!onEnterConfirm) return
+        const target = e.target as HTMLElement | null
+        if (
+          !shouldFireDialogEnterConfirm(
+            e.key,
+            { ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey },
+            target?.tagName ?? null,
+          )
+        ) return
+        e.preventDefault()
+        e.stopPropagation()
+        if (target && target !== document.body && typeof target.blur === 'function') {
+          target.blur()
+        }
+        // Defer to the next macrotask so React flushes any setState
+        // queued by the blur's onBlur handler before we invoke the
+        // confirm.  With the ref-click pattern documented on
+        // `onEnterConfirm`, the click then reads fresh local state.
+        setTimeout(() => onEnterConfirm(), 0)
+      }}
       // REQ-0132 §2.2 root-cause fix — REQ-082 had suppressed Radix's
       // Esc-to-close on the assumption that "Esc is no longer a
       // keyboard shortcut anywhere in the app."  That is no longer

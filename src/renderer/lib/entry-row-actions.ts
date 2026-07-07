@@ -79,28 +79,61 @@ export function shouldTimelineDeleteFire(
 }
 
 /**
- * REQ-0129 Phase 2 — delete the entry that currently owns the timeline
- * selection.  Thin wrapper around `toggleDeleteRow` that looks up the
- * entry from the project store, so the DEL / Backspace keyboard binding
- * in timeline-view.tsx stays a one-liner.  Returns `true` when a delete
- * fired, `false` when nothing was selected or the id didn't resolve —
- * used by the caller to swallow the keystroke conditionally.
+ * REQ-0138 — delete-only keyboard binding for DEL / Backspace.  Looks
+ * up the selected entry and, if it is not already deleted, soft-deletes
+ * it via a single history op.  Returns `true` when a delete actually
+ * fired so the caller (`use-global-shortcuts.ts`) can decide whether to
+ * swallow the keystroke.
  *
- * Reuses `toggleDeleteRow` so DEL delete goes through the same soft-
- * delete + history pipe as the inspector's trash-icon click.  Pressing
- * DEL again on the same (now-deleted) row calls `toggleDeleteRow` a
- * second time and restores it — matches the "toggle" semantics of the
- * inspector button.
+ * Semantics (REQ-0138 §1.1):
+ *   - Undeleted row → soft-delete + history push.
+ *   - Already-deleted row → **no-op**.  Returns `false` so the keystroke
+ *     is not swallowed and the user does not perceive anything happening.
+ *   - Unknown / no selection → `false`.
+ *
+ * Rationale: REQ-0129 / REQ-0130 originally routed DEL through
+ * `toggleDeleteRow`, which flipped `isDeleted` in either direction.
+ * Owner feedback (REQ-0138 §0-1): pressing DEL on a deleted row
+ * silently restored it, which felt like "the delete didn't stick."
+ * Restore is now keyboard-inaccessible for DEL; users restore via the
+ * inspector's restore button (which still calls `toggleDeleteRow`) or
+ * via `Ctrl+Z` on the delete op.
  */
 export function deleteEntryById(
   entryId: string | null | undefined,
-  labels: { delete: string; restore: string }
+  labels: { delete: string }
 ): boolean {
   if (!entryId) return false
   const entry = useProjectStore.getState().entries.find((e) => e.id === entryId)
   if (!entry) return false
-  toggleDeleteRow(entry, labels)
+  if (entry.isDeleted) return false
+  softDeleteRow(entry, labels)
   return true
+}
+
+/**
+ * REQ-0138 — soft-delete without the "restore" branch that
+ * `toggleDeleteRow` has.  Pushes one history op labelled with
+ * `labels.delete`.  Callers that need the toggle semantic (the
+ * inspector's delete/restore button) keep using `toggleDeleteRow`;
+ * callers that only want "delete" (the DEL/BS keyboard binding) use
+ * this so a re-press on an already-deleted row is a no-op rather than
+ * a silent restore.
+ */
+export function softDeleteRow(
+  entry: SubtitleEntry,
+  labels: { delete: string }
+): void {
+  if (entry.isDeleted) return
+  const projectStore = useProjectStore.getState()
+  const pushHistory = useHistoryStore.getState().push
+  const snapshot = { ...entry }
+  pushHistory({
+    label: labels.delete,
+    undo: () => projectStore.updateEntry(entry.id, snapshot),
+    redo: () => projectStore.updateEntry(entry.id, { ...snapshot, isDeleted: true })
+  })
+  projectStore.updateEntry(entry.id, { isDeleted: true })
 }
 
 /**

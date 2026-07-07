@@ -454,7 +454,11 @@ export function WhisperModelManager({
 
       {dialog?.kind === 'install-confirm' && (
         <Dialog open onOpenChange={() => setDialog(null)}>
-          <DialogContent className="max-w-[460px]">
+          <DialogContent
+            className="max-w-[460px]"
+            // REQ-0138 §2.1 — Enter starts the install.
+            onEnterConfirm={() => handleConfirmInstall(dialog.model)}
+          >
             <DialogHeader>
               <DialogTitle>{t('model.install_confirm_title')}</DialogTitle>
               <DialogDescription>
@@ -506,7 +510,11 @@ export function WhisperModelManager({
 
       {dialog?.kind === 'uninstall-confirm' && (
         <Dialog open onOpenChange={() => setDialog(null)}>
-          <DialogContent className="max-w-[400px]">
+          <DialogContent
+            className="max-w-[400px]"
+            // REQ-0138 §2.1 — Enter fires the danger confirm.
+            onEnterConfirm={() => handleConfirmUninstall(dialog.model)}
+          >
             <DialogHeader>
               <DialogTitle>{t('model.uninstall_confirm_title')}</DialogTitle>
               <DialogDescription>

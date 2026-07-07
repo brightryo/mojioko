@@ -915,7 +915,11 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
       {/* Cancel transcription dialog */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
-        <DialogContent className="max-w-[400px]">
+        <DialogContent
+          className="max-w-[400px]"
+          // REQ-0138 §2.1 — Enter fires the danger confirm.
+          onEnterConfirm={handleConfirmCancel}
+        >
           <DialogHeader>
             <DialogTitle>{t('dialog.cancelTitle')}</DialogTitle>
             <DialogDescription>{t('dialog.cancelBody')}</DialogDescription>

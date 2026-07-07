@@ -627,18 +627,23 @@ export function TimelineBlockInspector({
               state never toggles. */}
           <button
             type="button"
+            // REQ-0138 §1.3 — the delete/restore icon toggles labels
+            // (Delete when live, Restore when deleted).  The DEL/BS
+            // shortcut suffix is shown only on the Delete label because
+            // REQ-0138 §1.1 made DEL/BS delete-only; showing a
+            // shortcut hint next to "Restore" would be a lie.
             title={
               isTrimDeleted
                 ? t('action.trimDeletedHint')
                 : entry.isDeleted
-                  ? t('action.restoreRow') + shortcutHint('delete')
+                  ? t('action.restoreRow')
                   : t('action.deleteRow') + shortcutHint('delete')
             }
             aria-label={
               isTrimDeleted
                 ? t('action.trimDeletedHint')
                 : entry.isDeleted
-                  ? t('action.restoreRow') + shortcutHint('delete')
+                  ? t('action.restoreRow')
                   : t('action.deleteRow') + shortcutHint('delete')
             }
             onClick={() => {

@@ -487,7 +487,12 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
             )}
           </div>
 
-          {/* In-drawer overwrite confirmation. */}
+          {/* In-drawer overwrite confirmation.
+              REQ-0138 §2.4 — `onEnterConfirm` intentionally NOT set.
+              The confirm button here starts the burn-in encode with an
+              overwrite, which is exactly the "heavy operation" §2.4
+              wants to guard against firing on a stray Enter.  User must
+              click the button. */}
           <Dialog
             open={overwriteCandidate !== null}
             onOpenChange={(o) => { if (!o) setOverwriteCandidate(null) }}

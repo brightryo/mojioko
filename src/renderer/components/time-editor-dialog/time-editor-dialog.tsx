@@ -444,12 +444,22 @@ export function TimeEditorDialog({
     ? 'dialog.timeEditor.add'
     : 'dialog.timeEditor.apply'
 
+  // REQ-0138 §2 — ref on the primary confirm button so the shared
+  // DialogContent Enter handler can click it after the blur-triggered
+  // setState from any focused TimeField input has been flushed by
+  // React.  A direct callback like `onEnterConfirm={() => onConfirm(...)}`
+  // would close over the stale `startSec` from the pre-blur render.
+  const confirmButtonRef = useRef<HTMLButtonElement>(null)
+
   return (
     <Dialog
       open={open}
       onOpenChange={(o) => { if (!o) onCancel() }}
     >
-      <DialogContent className="max-w-[480px]">
+      <DialogContent
+        className="max-w-[480px]"
+        onEnterConfirm={() => confirmButtonRef.current?.click()}
+      >
         <DialogHeader>
           <DialogTitle>{t(titleKey)}</DialogTitle>
         </DialogHeader>
@@ -480,6 +490,7 @@ export function TimeEditorDialog({
             {t('dialog.timeEditor.cancel')}
           </Button>
           <Button
+            ref={confirmButtonRef}
             variant="primary"
             size="md"
             onClick={() => onConfirm(roundCs(startSec), roundCs(endSec))}
