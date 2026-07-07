@@ -105,12 +105,19 @@ def transcribe(msg: dict) -> None:
 
     tmp_wav = os.path.join(tempfile.gettempdir(), f"mojioko_audio_{os.getpid()}.wav")
     try:
+        # REQ-0142 §3.1 — phase notifications inserted at each prep boundary.
+        # These are pure observation points: the existing extract / import /
+        # model-load / transcribe calls below are byte-identical to
+        # pre-REQ-0142.  Any tampering with those calls is out of scope
+        # (`REQ-0142 §1 excludes' 既存ロジックへの変更`).
+        send({"event": "phase", "phase": "extractAudio"})
         try:
             extract_audio(video_path, track_index, tmp_wav, ffmpeg)
         except Exception as e:
             send({"event": "failed", "error": f"Audio extraction failed: {e}"})
             return
 
+        send({"event": "phase", "phase": "loadModel"})
         try:
             from faster_whisper import WhisperModel  # type: ignore[import]
         except ImportError:
@@ -122,6 +129,12 @@ def transcribe(msg: dict) -> None:
         except Exception as e:
             send({"event": "failed", "error": f"Failed to load model: {e}"})
             return
+
+        # REQ-0142 §3.1 — the VAD + language-detection prepass runs inside
+        # `model.transcribe(...)` BEFORE the iterator is returned.  Emit
+        # this phase name right before that call so the renderer swaps
+        # its label from "loadModel" to "prepass" at the correct instant.
+        send({"event": "phase", "phase": "prepass"})
 
         try:
             beam_size: int = int(msg.get("beamSize", 5))

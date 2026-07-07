@@ -19,6 +19,18 @@ import { useProjectStore } from '@/stores/project-store'
 import type { AudioTrack } from '../../../shared/types'
 
 /**
+ * REQ-0142 — format elapsed seconds as `mm:ss`.  Renderer-only
+ * (sidecar does not emit tick events).  Zero-padded so the width stays
+ * stable and the layout does not shift as digits roll over.
+ */
+function formatElapsed(sec: number): string {
+  const s = Math.max(0, Math.floor(sec))
+  const mm = Math.floor(s / 60).toString().padStart(2, '0')
+  const ss = (s % 60).toString().padStart(2, '0')
+  return `${mm}:${ss}`
+}
+
+/**
  * REQ-20260615-055 — STEP1's transcription drawer.
  *
  * Mirrors the layout / lifecycle of `step2/burnin-drawer.tsx` so the two
@@ -59,6 +71,28 @@ export interface TranscriptionDrawerProps {
    * `drawer.runningLabel` translation is used.
    */
   runningLabelOverride?: string
+  /**
+   * REQ-0142 — pre-Whisper preparation phase, or `null` when Whisper
+   * inference has begun (= at least one `progress` event received) or
+   * the run is not active.  When non-null, the drawer replaces the
+   * determinate `progress%` bar with an indeterminate flowing
+   * animation + the phase-specific label + `elapsedSec`, so the user
+   * sees the "10-second 0%" region as live activity instead of a
+   * frozen 0%.
+   *
+   *   - `'extractAudio'` — ffmpeg mono-16kHz WAV extract (sidecar main.py)
+   *   - `'loadModel'`    — `WhisperModel(...)` construction
+   *   - `'prepass'`      — Silero VAD + language-detection majority-vote
+   *                        prepass inside `model.transcribe(...)`
+   */
+  preparingPhase?: 'extractAudio' | 'loadModel' | 'prepass' | null
+  /**
+   * REQ-0142 — elapsed seconds since the user pressed Start.  Rendered
+   * next to the phase label during the preparing region so a still
+   * screen is impossible.  Driven by the parent (renderer timer), so
+   * the sidecar does not need to emit its own tick events.
+   */
+  elapsedSec?: number
   /** Error message when `renderState === 'error'`. */
   errorMessage: string
   /** Whether the start button should be enabled.  Driven by the parent
@@ -78,6 +112,8 @@ export function TranscriptionDrawer({
   renderState,
   progress,
   runningLabelOverride,
+  preparingPhase,
+  elapsedSec,
   errorMessage,
   canStart,
   onStart,
@@ -208,15 +244,41 @@ export function TranscriptionDrawer({
                   <Loader2 className="h-7 w-7 text-primary animate-spin" />
                 </div>
                 <div className="space-y-3">
-                  <div className="h-2 rounded-full bg-surface-2 overflow-hidden">
-                    <div
-                      className="h-full bg-primary transition-all duration-200 rounded-full"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
+                  {/* REQ-0142 — during the pre-Whisper preparing region
+                      (`preparingPhase != null`) the determinate bar is
+                      swapped for an indeterminate stripe: RES-0141
+                      confirmed no accurate percentage exists until the
+                      first `progress` event, and the previous "stuck
+                      at 0%" bar read as a freeze.  Once Whisper starts
+                      emitting `progress` events (or the parent moves
+                      to preview-mix which pins at 100 %) the bar is
+                      determinate again. */}
+                  {preparingPhase ? (
+                    <div className="h-2 rounded-full bg-surface-2 overflow-hidden">
+                      <div className="h-full w-1/3 bg-primary rounded-full animate-progress-indeterminate" />
+                    </div>
+                  ) : (
+                    <div className="h-2 rounded-full bg-surface-2 overflow-hidden">
+                      <div
+                        className="h-full bg-primary transition-all duration-200 rounded-full"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  )}
                   <div className="flex items-center justify-between text-body-sm text-fg-tertiary">
-                    <span>{runningLabelOverride ?? t('drawer.runningLabel')}</span>
-                    <span className="font-mono tabular-nums">{progress}%</span>
+                    <span>
+                      {preparingPhase
+                        ? t(`drawer.preparingLabel.${preparingPhase}`)
+                        : (runningLabelOverride ?? t('drawer.runningLabel'))}
+                    </span>
+                    {/* REQ-0142 — while preparing, right-side chip shows
+                        elapsed instead of a bogus `0%`.  Once real
+                        progress starts the chip flips back to `NN%`. */}
+                    {preparingPhase ? (
+                      <span className="font-mono tabular-nums">{formatElapsed(elapsedSec ?? 0)}</span>
+                    ) : (
+                      <span className="font-mono tabular-nums">{progress}%</span>
+                    )}
                   </div>
                 </div>
               </div>

@@ -114,6 +114,33 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // it has no per-frame progress events; the loader spinner + new
   // label communicates that the run is still in flight.
   const [transcribePhase, setTranscribePhase] = useState<'whisper' | 'preview-mix'>('whisper')
+  // REQ-0142 — pre-Whisper preparation phase from the sidecar (RES-0141
+  // §1 phases 3, 5, 6).  Null while Whisper inference is producing
+  // real progress events, or when the run is not active.  The drawer
+  // uses this to render an indeterminate bar + phase-specific label
+  // + elapsed timer, replacing the pre-REQ-0142 stuck "0%" bar.
+  const [preparingPhase, setPreparingPhase] = useState<
+    'extractAudio' | 'loadModel' | 'prepass' | null
+  >(null)
+  // REQ-0142 — Start-click timestamp (ms) and a live tick that drives
+  // the drawer's elapsed display.  Rendered as `mm:ss` inside the
+  // drawer; the timer runs entirely renderer-side so no sidecar
+  // change is needed to keep the display moving during the prep
+  // region.  Reset back to `null` when the run finishes / fails /
+  // cancels so an idle drawer never shows leftover elapsed digits.
+  const [transcribeStartMs, setTranscribeStartMs] = useState<number | null>(null)
+  const [nowTick, setNowTick] = useState<number>(0)
+  useEffect(() => {
+    if (transcribeStartMs === null) return
+    // Half-second tick keeps the seconds field visually smooth without
+    // burning a full RAF budget.  The renderer subscribes to
+    // `nowTick` implicitly via the `elapsedSec` calc below.
+    const id = window.setInterval(() => setNowTick(Date.now()), 500)
+    return () => window.clearInterval(id)
+  }, [transcribeStartMs])
+  const elapsedSec = transcribeStartMs !== null
+    ? Math.max(0, Math.floor((Math.max(nowTick, Date.now()) - transcribeStartMs) / 1000))
+    : 0
   const [thumbnail, setThumbnail] = useState<string | null>(null)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [subtitleStyleDialogOpen, setSubtitleStyleDialogOpen] = useState(false)
@@ -281,6 +308,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     setIsTranscribing(true)
     setTranscribeProgress(0)
     setTranscribePhase('whisper')
+    // REQ-0142 — pin the initial prep label so the drawer never shows
+    // an empty state during the ~50-ms gap between Start click and
+    // the first sidecar `phase: 'extractAudio'` event.  Also start the
+    // elapsed timer here (renderer-side) — the sidecar does not emit
+    // ticks.
+    setPreparingPhase('extractAudio')
+    setTranscribeStartMs(Date.now())
     // REQ-20260615-055 — drive the drawer's render state too so the
     // body switches from the configuration form to the spinner /
     // progress bar / error panel as the run progresses.
@@ -312,16 +346,29 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
       },
       (evt) => {
         if (evt.event === 'progress') {
+          // REQ-0142 — first real progress event ends the prep region.
+          // Clearing `preparingPhase` swaps the drawer back to the
+          // determinate bar (already the pre-REQ-0142 look).
+          setPreparingPhase(null)
           setTranscribeProgress(Math.round(evt.percent))
         } else if (evt.event === 'segment') {
           segments.push(evt.segment)
         } else if (evt.event === 'phase') {
-          // REQ-086 — Whisper done, preview-mix in flight.  Show the
-          // mix label and pin the progress bar at 100 % so the user
-          // sees the run is still active without a misleading reset
-          // to 0.
-          setTranscribePhase(evt.phase)
-          setTranscribeProgress(100)
+          if (evt.phase === 'preview-mix') {
+            // REQ-086 — Whisper done, preview-mix in flight.  Show the
+            // mix label and pin the progress bar at 100 % so the user
+            // sees the run is still active without a misleading reset
+            // to 0.
+            setTranscribePhase('preview-mix')
+            setTranscribeProgress(100)
+            setPreparingPhase(null)
+          } else {
+            // REQ-0142 — pre-Whisper prep phases (extractAudio /
+            // loadModel / prepass) from the sidecar.  The drawer
+            // shows an indeterminate bar + phase-specific label +
+            // elapsed timer while these are in flight.
+            setPreparingPhase(evt.phase)
+          }
         } else if (evt.event === 'needsDownload') {
           toast.warning(t('toast.modelNotInstalled', { model: evt.model }))
         }
@@ -345,6 +392,11 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
       }
     } finally {
       setIsTranscribing(false)
+      // REQ-0142 — stop the elapsed timer and clear the prep phase so
+      // a fresh drawer open never carries leftover state from the
+      // previous run.
+      setTranscribeStartMs(null)
+      setPreparingPhase(null)
       transcriptionRunRef.current = null
       window.electronAPI.menuSetTranscribing(false)
     }
@@ -907,6 +959,8 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             ? t('drawer.runningLabelPreviewMix')
             : undefined
         }
+        preparingPhase={preparingPhase}
+        elapsedSec={elapsedSec}
         errorMessage={drawerErrorMessage}
         canStart={canStart}
         onStart={handleStartTranscription}

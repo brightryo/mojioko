@@ -133,13 +133,29 @@ export type TranscriptionEvent =
   | { event: 'segment'; segment: { startSec: number; endSec: number; text: string } }
   | { event: 'progress'; percent: number }
   /**
-   * REQ-086 — phase change.  Emitted by the main process between Whisper
-   * completion and preview-mix generation so the renderer can update
-   * the drawer label (e.g. "音声準備中…").  No-op when the source has
-   * fewer than 2 audio tracks; in that case the run goes Whisper →
-   * `completed` directly without a `phase` event.
+   * REQ-086 / REQ-0142 — phase change.  Two distinct sources share this
+   * event shape:
+   *
+   *   - **Pre-Whisper prep (sidecar, REQ-0142)** — emitted from
+   *     `python-sidecar/main.py` at each preparation boundary so the
+   *     renderer can label the "10-second 0%" region (RES-0141 §1).
+   *     Values: `'extractAudio'` (ffmpeg audio extract), `'loadModel'`
+   *     (`WhisperModel(...)` construction), `'prepass'` (Silero VAD +
+   *     language detection majority-vote inside `model.transcribe`).
+   *     These fire strictly before the first `progress` event and
+   *     before `started`.
+   *
+   *   - **Post-Whisper preview-mix (main process, REQ-086)** — emitted
+   *     between Whisper `completed` and preview-mix `completed` when
+   *     the source has ≥2 audio tracks so the drawer label can flip
+   *     to "音声準備中…".  Single-track sources go Whisper →
+   *     `completed` directly without a `phase` event.
+   *
+   * The renderer distinguishes purely by the `phase` value; the two
+   * sources cannot both be in-flight simultaneously so there is no
+   * ordering ambiguity.
    */
-  | { event: 'phase'; phase: 'preview-mix' }
+  | { event: 'phase'; phase: 'extractAudio' | 'loadModel' | 'prepass' | 'preview-mix' }
   /**
    * REQ-086 — `previewMixUrl` carries the `mojioko-preview-mix://` URL
    * (with a cache-buster query) when a multi-track preview audio file

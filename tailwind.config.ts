@@ -149,6 +149,22 @@ const config: Config = {
         title:        ['16px', { lineHeight: '24px' }],
         heading:      ['20px', { lineHeight: '28px' }],
         display:      ['24px', { lineHeight: '32px' }]
+      },
+      // REQ-0142 — indeterminate progress bar used in the transcription
+      // drawer while the sidecar is in its pre-Whisper prep region
+      // (extract / model-load / prepass).  A 33 %-wide stripe slides
+      // left → right on a 1.5-second loop, matching the density and
+      // pace of the Loader2 spinner sitting above the bar.  Kept in
+      // Tailwind config (not globals.css) so the class name is
+      // discoverable via the standard Tailwind toolchain.
+      keyframes: {
+        'progress-indeterminate': {
+          '0%':   { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(300%)' },
+        },
+      },
+      animation: {
+        'progress-indeterminate': 'progress-indeterminate 1.5s ease-in-out infinite',
       }
     }
   },

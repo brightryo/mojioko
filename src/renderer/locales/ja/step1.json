@@ -118,6 +118,11 @@
     "close": "閉じる",
     "runningLabel": "文字起こし中…",
     "runningLabelPreviewMix": "プレビュー音声を準備中…",
+    "preparingLabel": {
+      "extractAudio": "音声を抽出しています…",
+      "loadModel": "モデルを読み込んでいます…",
+      "prepass": "音声を解析しています…"
+    },
     "errorTitle": "文字起こし失敗"
   },
   "dialog": {

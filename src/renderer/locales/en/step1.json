@@ -119,6 +119,11 @@
     "close": "Close",
     "runningLabel": "Transcribing…",
     "runningLabelPreviewMix": "Preparing preview audio…",
+    "preparingLabel": {
+      "extractAudio": "Extracting audio…",
+      "loadModel": "Loading model…",
+      "prepass": "Analyzing audio…"
+    },
     "errorTitle": "Transcription failed"
   },
   "dialog": {
