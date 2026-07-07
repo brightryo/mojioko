@@ -81,7 +81,7 @@ function pickFirstSelectedSize(selectedIds: ReadonlySet<string>): string {
  */
 function pickFirstSelectedLayout(selectedIds: ReadonlySet<string>): {
   horizontalPosition: 'left' | 'center' | 'right'
-  verticalPosition: 'top' | 'bottom'
+  verticalPosition: 'top' | 'center' | 'bottom'
   verticalMarginPx: number
   bgEnabled: boolean
   bgColor: 'black' | 'white'
@@ -113,12 +113,12 @@ function pickFirstSelectedLayout(selectedIds: ReadonlySet<string>): {
  */
 function pickUniformLayoutSegments(selectedIds: ReadonlySet<string>): {
   horizontalPosition: 'left' | 'center' | 'right' | null
-  verticalPosition: 'top' | 'bottom' | null
+  verticalPosition: 'top' | 'center' | 'bottom' | null
 } {
   if (selectedIds.size === 0) return { horizontalPosition: null, verticalPosition: null }
   const entries = useProjectStore.getState().entries
   let hp: 'left' | 'center' | 'right' | null = null
-  let vp: 'top' | 'bottom' | null = null
+  let vp: 'top' | 'center' | 'bottom' | null = null
   let hpSeen = false
   let vpSeen = false
   let hpMixed = false
@@ -279,7 +279,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // committed to every selected row and the local draft flips to the
   // non-null value (selection is now uniform).
   const [hPosDraft,   setHPosDraft]   = useState<'left' | 'center' | 'right' | null>(initialSegments.horizontalPosition)
-  const [vPosDraft,   setVPosDraft]   = useState<'top' | 'bottom' | null>(initialSegments.verticalPosition)
+  const [vPosDraft,   setVPosDraft]   = useState<'top' | 'center' | 'bottom' | null>(initialSegments.verticalPosition)
   const [marginDraft, setMarginDraft] = useState<string>(String(initialLayout?.verticalMarginPx ?? 40))
   const [bgEnabledDraft, setBgEnabledDraft]     = useState<boolean>(initialLayout?.bgEnabled ?? false)
   const [bgColorDraft, setBgColorDraft]         = useState<'black' | 'white'>(initialLayout?.bgColor ?? 'black')
@@ -534,7 +534,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       t('bulk.history.layout', { count: selectedRowIds.size })
     )
   }
-  function handleVPosCommit(v: 'top' | 'bottom') {
+  function handleVPosCommit(v: 'top' | 'center' | 'bottom') {
     setVPosDraft(v)
     applyBulk(
       { verticalPosition: v },
@@ -928,17 +928,31 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           </label>
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('styleCell.layoutV')}</span>
-            <BulkSegmentGroup<'top' | 'bottom'>
+            <BulkSegmentGroup<'top' | 'center' | 'bottom'>
               value={vPosDraft}
               onChange={(v) => handleVPosCommit(v)}
               ariaLabel={t('subtitlePosition.vertical')}
               options={[
                 { value: 'top',    label: t('subtitlePosition.top') },
+                { value: 'center', label: t('subtitlePosition.center') },
                 { value: 'bottom', label: t('subtitlePosition.bottom') },
               ]}
             />
           </label>
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+          {/* REQ-0140 — disable the bulk margin stepper when the
+              uniform vertical draft is `'center'`.  When the selection
+              is mixed (vPosDraft === null) the stepper stays enabled;
+              committing a value applies it to every selected row but
+              only affects the top/bottom-aligned ones (center-aligned
+              rows keep the value in storage but ignore it at render). */}
+          <label
+            className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground"
+            title={
+              vPosDraft === 'center'
+                ? t('subtitlePosition.marginDisabledCenter')
+                : undefined
+            }
+          >
             <span>{t('styleCell.marginV')}</span>
             {/* REQ-20260615-059 B — ±10 stepper to keep margin in step
                 with size adjustments.  Range [0, 300] same as before. */}
@@ -951,6 +965,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                 setMarginDraft(String(next))
                 handleMarginCommit(String(next))
               }}
+              disabled={vPosDraft === 'center'}
               ariaLabel={t('subtitlePosition.margin')}
             />
           </label>

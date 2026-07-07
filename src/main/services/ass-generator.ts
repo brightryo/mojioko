@@ -11,12 +11,13 @@ import { getFontMeta, isFontId } from '../../shared/fonts'
  */
 
 type HorizontalPos = 'left' | 'center' | 'right'
-type VerticalPos = 'top' | 'bottom'
+type VerticalPos = 'top' | 'center' | 'bottom'
 
 /**
  * Map (horizontal × vertical) to the libass numpad alignment value (1–9).
  *
  *   top    : left=7  center=8  right=9
+ *   center : left=4  center=5  right=6   (REQ-0140)
  *   bottom : left=1  center=2  right=3
  *
  * Used for both:
@@ -25,6 +26,11 @@ type VerticalPos = 'top' | 'bottom'
  *     overrides still anchor correctly), and
  *   - each Dialogue's inline `\an<N>` tag (REQ-20260613-016 Phase 2 §A).
  *
+ * For `\an4/5/6` libass anchors the text block at the vertical middle
+ * of PlayResY and IGNORES the Dialogue MarginV (there is no edge to
+ * measure the margin from).  REQ-0140 §3.2 mirrors this in the UI by
+ * disabling the margin input when the row is center-aligned.
+ *
  * Pure mapping; safe to call per-entry inside the row loop.
  */
 function getAlignment(h: HorizontalPos, v: VerticalPos): number {
@@ -32,6 +38,10 @@ function getAlignment(h: HorizontalPos, v: VerticalPos): number {
     if (h === 'left') return 1
     if (h === 'center') return 2
     return 3
+  } else if (v === 'center') {
+    if (h === 'left') return 4
+    if (h === 'center') return 5
+    return 6
   } else {
     if (h === 'left') return 7
     if (h === 'center') return 8

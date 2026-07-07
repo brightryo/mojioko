@@ -513,3 +513,93 @@ describe('computeFixedStackOffsets — pinned entries excluded (Phase 3 / 機能
     expect(result.get('b')).toBe(10)
   })
 })
+
+/**
+ * REQ-0140 — center-aligned rows form their own alignment group and
+ * anchor at the vertical middle (libass `\an4/5/6`).  Verify:
+ *   - center rows do NOT collide with top/bottom rows (separate groups)
+ *   - center rows use `0` as the stacking base regardless of their
+ *     `verticalMarginPx` value (margin is ignored for center per REQ §3.2)
+ *   - two same-time center rows stack cleanly like the top/bottom cases
+ */
+describe('computeFixedStackOffsets — REQ-0140 center alignment group', () => {
+  const h = () => 10
+
+  function entryCenter(id: string, startSec: number, endSec: number, marginVPx = 40): SubtitleEntry {
+    const base = {
+      startSec,
+      endSec,
+      text: id,
+      fontSizePx: 64,
+      textColorHex: '#ffffff',
+      outlineColorHex: '#000000',
+      outlineThicknessPx: 2,
+      fadeDurationSec: 0,
+      ...makeEntryLayoutDefaults(),
+      verticalPosition: 'center' as const,
+      verticalMarginPx: marginVPx,
+    }
+    return { id, ...base, isDeleted: false, isEdited: false, original: { ...base } }
+  }
+
+  it('a single center row → offset 0 (base treated as 0, margin ignored)', () => {
+    const result = computeFixedStackOffsets([entryCenter('a', 0, 10)], h)
+    expect(result.get('a')).toBe(0)
+  })
+
+  it('two same-time center rows stack in input order (10 → 10 delta)', () => {
+    const result = computeFixedStackOffsets(
+      [entryCenter('a', 0, 10), entryCenter('b', 0, 10)],
+      h,
+    )
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(10)
+  })
+
+  it('center row DOES NOT collide with a bottom row at the same time (separate groups)', () => {
+    // bottom-aligned default row `a`; center-aligned row `b`.
+    // Even though they overlap in time, libass puts them in different
+    // alignment groups so both get offset 0.
+    const result = computeFixedStackOffsets(
+      [entry('a', 0, 10), entryCenter('b', 0, 10)],
+      h,
+    )
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(0)
+  })
+
+  it('center row ignores verticalMarginPx when computing its base', () => {
+    // Even with a big margin (100), the center row starts at base 0.
+    // The follow-up row stacks at 10 (= previous height) regardless of
+    // the huge margin value on either row.
+    const result = computeFixedStackOffsets(
+      [entryCenter('a', 0, 10, 100), entryCenter('b', 0, 10, 250)],
+      h,
+    )
+    expect(result.get('a')).toBe(0)
+    expect(result.get('b')).toBe(10)
+  })
+
+  it('center row is independent from an overlapping top row', () => {
+    // top-aligned prior `t` at margin 40; center-aligned `c` overlapping.
+    // Different alignment groups → both are offset 0.
+    const topEntry = (() => {
+      const base = {
+        startSec: 0,
+        endSec: 10,
+        text: 't',
+        fontSizePx: 64,
+        textColorHex: '#ffffff',
+        outlineColorHex: '#000000',
+        outlineThicknessPx: 2,
+        fadeDurationSec: 0,
+        ...makeEntryLayoutDefaults(),
+        verticalPosition: 'top' as const,
+      }
+      return { id: 't', ...base, isDeleted: false, isEdited: false, original: { ...base } }
+    })()
+    const result = computeFixedStackOffsets([topEntry, entryCenter('c', 0, 10)], h)
+    expect(result.get('t')).toBe(0)
+    expect(result.get('c')).toBe(0)
+  })
+})

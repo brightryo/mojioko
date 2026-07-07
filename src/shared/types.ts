@@ -84,7 +84,15 @@ export interface SubtitleEntryOriginal {
    * `shared/burnin-defaults.ts`.
    */
   horizontalPosition: 'left' | 'center' | 'right'
-  verticalPosition: 'top' | 'bottom'
+  /**
+   * REQ-0140 — widened from `'top' | 'bottom'` (CLAUDE.md §21 protected
+   * `SubtitleEntry` field, owner-approved 2026-07-08).  When `'center'`
+   * the entry ignores `verticalMarginPx` (libass `\an4/5/6` anchors at
+   * the vertical middle regardless of MarginV), and the inspector /
+   * bulk-edit margin input is disabled with an explanatory tooltip.
+   * `'top'` / `'bottom'` retain their pre-REQ-0140 semantics.
+   */
+  verticalPosition: 'top' | 'center' | 'bottom'
   verticalMarginPx: number
   /**
    * Per-row subtitle background (REQ-20260613-016 / v1.2.2 機能A).
@@ -172,7 +180,7 @@ export interface TranscriptionAdvancedParams {
 
 export interface BurninPosition {
   horizontalPosition: 'left' | 'center' | 'right'
-  verticalPosition: 'top' | 'bottom'
+  verticalPosition: 'top' | 'center' | 'bottom'
   verticalMarginPx: number
 }
 

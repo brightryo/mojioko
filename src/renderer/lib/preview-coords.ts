@@ -19,13 +19,20 @@ import { ASS_MARGIN_LR_PX } from '../../shared/constants'
  * Map (horizontal × vertical) to the libass numpad alignment value (1–9).
  * Re-implemented here (not imported from ass-generator) so the renderer
  * can compute it without dragging in main-process types.
+ *
+ * REQ-0140 — center row (`\an4/5/6`) added.  libass anchors the text
+ * block at the vertical middle of PlayResY when the alignment is
+ * 4/5/6 and ignores the Dialogue MarginV.
  */
 export function getAlignmentNumpad(
   h: 'left' | 'center' | 'right',
-  v: 'top' | 'bottom',
+  v: 'top' | 'center' | 'bottom',
 ): number {
   if (v === 'bottom') {
     return h === 'left' ? 1 : h === 'center' ? 2 : 3
+  }
+  if (v === 'center') {
+    return h === 'left' ? 4 : h === 'center' ? 5 : 6
   }
   return h === 'left' ? 7 : h === 'center' ? 8 : 9
 }
@@ -49,16 +56,17 @@ export function previewPxToAss(previewPx: number, scale: number): number {
  *
  * The anchor follows libass's numpad convention:
  *   - 7/8/9 (top): y = marginV (distance from top)
+ *   - 4/5/6 (center, REQ-0140): y = videoHeight / 2 (marginV ignored)
  *   - 1/2/3 (bottom): y = videoHeight - marginV (distance from bottom)
- *   - left (1, 7): x = ASS_MARGIN_LR_PX
+ *   - left (1, 4, 7): x = ASS_MARGIN_LR_PX
  *   - center (2, 5, 8): x = videoWidth / 2
- *   - right (3, 9): x = videoWidth - ASS_MARGIN_LR_PX
+ *   - right (3, 6, 9): x = videoWidth - ASS_MARGIN_LR_PX
  *
  * Pure math; safe to call per pointer-down.
  */
 export function getAnchorAssPosition(
   horizontalPosition: 'left' | 'center' | 'right',
-  verticalPosition: 'top' | 'bottom',
+  verticalPosition: 'top' | 'center' | 'bottom',
   verticalMarginPx: number,
   videoWidthPx: number,
   videoHeightPx: number,
@@ -67,10 +75,15 @@ export function getAnchorAssPosition(
   if (horizontalPosition === 'left') x = ASS_MARGIN_LR_PX
   else if (horizontalPosition === 'right') x = videoWidthPx - ASS_MARGIN_LR_PX
   else x = videoWidthPx / 2
+  // REQ-0140 — center-aligned rows anchor at the vertical middle and
+  // ignore verticalMarginPx (mirrors libass's `\an4/5/6` behaviour and
+  // the UI's disabled margin input for center).
   const y =
     verticalPosition === 'top'
       ? verticalMarginPx
-      : videoHeightPx - verticalMarginPx
+      : verticalPosition === 'center'
+        ? videoHeightPx / 2
+        : videoHeightPx - verticalMarginPx
   return { x, y }
 }
 
@@ -84,6 +97,7 @@ export function getAnchorAssPosition(
  *   - 7 (top-left): anchor = top-left of the text box → no translation
  *   - 8 (top-center): anchor = top-center → translate-x by -50%
  *   - 9 (top-right): anchor = top-right → translate-x by -100%
+ *   - 4/5/6 (middle-left/center/right, REQ-0140): translate-y by -50%
  *   - 1 (bottom-left): anchor = bottom-left → translate-y by -100%
  *   - 2 (bottom-center): anchor = bottom-center → translate(-50%, -100%)
  *   - 3 (bottom-right): anchor = bottom-right → translate(-100%, -100%)
@@ -93,13 +107,16 @@ export function getAnchorAssPosition(
  */
 export function pinnedAnchorTransform(
   horizontalPosition: 'left' | 'center' | 'right',
-  verticalPosition: 'top' | 'bottom',
+  verticalPosition: 'top' | 'center' | 'bottom',
 ): string {
   const tx =
     horizontalPosition === 'left' ? '0'
     : horizontalPosition === 'center' ? '-50%'
     : '-100%'
-  const ty = verticalPosition === 'top' ? '0' : '-100%'
+  const ty =
+    verticalPosition === 'top' ? '0'
+    : verticalPosition === 'center' ? '-50%'
+    : '-100%'
   return `translate(${tx}, ${ty})`
 }
 
@@ -146,12 +163,12 @@ export function clampAssPosition(
  */
 export function recomputePinnedPosForAnchorChange(args: {
   currentHorizontalPosition: 'left' | 'center' | 'right'
-  currentVerticalPosition: 'top' | 'bottom'
+  currentVerticalPosition: 'top' | 'center' | 'bottom'
   currentVerticalMarginPx: number
   currentPosX: number | undefined
   currentPosY: number | undefined
   nextHorizontalPosition?: 'left' | 'center' | 'right'
-  nextVerticalPosition?: 'top' | 'bottom'
+  nextVerticalPosition?: 'top' | 'center' | 'bottom'
   nextVerticalMarginPx?: number
   videoWidthPx: number
   videoHeightPx: number

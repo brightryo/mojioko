@@ -259,6 +259,7 @@
     "vertical": "Vertical",
     "margin": "Vertical margin (px)",
     "marginShort": "Margin",
+    "marginDisabledCenter": "Vertical margin is not used when the row is centered.",
     "left": "Left",
     "center": "Center",
     "right": "Right",

@@ -281,11 +281,23 @@ export function SubtitleOverlay({
     hStyle = { left: `${(entry.posX ?? 0) * scale}px`, textAlign }
     transform = pinnedAnchorTransform(entry.horizontalPosition, entry.verticalPosition)
   } else {
-    vStyle = entry.verticalPosition === 'bottom'
-      ? { bottom: `${marginVPx + stackOffset}px` }
-      : { top:    `${marginVPx + stackOffset}px` }
+    if (entry.verticalPosition === 'bottom') {
+      vStyle = { bottom: `${marginVPx + stackOffset}px` }
+      transform = undefined
+    } else if (entry.verticalPosition === 'center') {
+      // REQ-0140 — center-aligned rows anchor at the viewport middle
+      // and ignore verticalMarginPx (mirrors libass `\an4/5/6` which
+      // has no MarginV reference edge).  Stack offsets shift the anchor
+      // downward from centre for later same-group simultaneous entries;
+      // `computeFixedStackOffsets` returns a relative offset that is 0
+      // for the first entry in a centre group.
+      vStyle = { top: '50%' }
+      transform = `translateY(calc(-50% + ${stackOffset}px))`
+    } else {
+      vStyle = { top: `${marginVPx + stackOffset}px` }
+      transform = undefined
+    }
     hStyle = { left: `${marginHPx}px`, right: `${marginHPx}px`, textAlign }
-    transform = undefined
   }
 
   // CSS background approximation for the subtitle preview — entry's own

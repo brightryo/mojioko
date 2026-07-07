@@ -351,8 +351,13 @@ export function TimelineBlockInspector({
     applyStyleEdit(t('history.editLayout'),
       patchWithPreservedOffset({ horizontalPosition: v }))
   }
-  function handleVerticalPositionChange(v: 'top' | 'bottom') {
+  function handleVerticalPositionChange(v: 'top' | 'center' | 'bottom') {
     if (v === entry.verticalPosition) return
+    // REQ-0140 — do NOT reset verticalMarginPx when flipping to/from
+    // `'center'`.  The margin value is preserved so switching center →
+    // top/bottom restores the user's last margin (REQ §3.2 last
+    // bullet).  The margin input is only visually disabled while the
+    // row is centred; the underlying value survives.
     applyStyleEdit(t('history.editLayout'),
       patchWithPreservedOffset({ verticalPosition: v }))
   }
@@ -944,18 +949,33 @@ export function TimelineBlockInspector({
           </div>
           <div className="flex items-center justify-between gap-2">
             <label className="text-callout font-semibold text-fg-secondary shrink-0">{t('styleCell.layoutV')}</label>
-            <SegmentGroup<'top' | 'bottom'>
+            <SegmentGroup<'top' | 'center' | 'bottom'>
               value={entry.verticalPosition}
               onChange={handleVerticalPositionChange}
               disabled={isFrozen}
               ariaLabel={t('subtitlePosition.vertical')}
               options={[
                 { value: 'top', label: t('subtitlePosition.top') },
+                { value: 'center', label: t('subtitlePosition.center') },
                 { value: 'bottom', label: t('subtitlePosition.bottom') },
               ]}
             />
           </div>
-          <div className="flex items-center justify-between gap-2">
+          {/* REQ-0140 — when the row is center-aligned the margin has no
+              effect (libass `\an4/5/6` ignores MarginV; §3.2).  Keep
+              the input in the layout (§3.2 "隠さず disabled") and
+              surface the reason via a title tooltip.  The stored
+              verticalMarginPx value is preserved across the flip so
+              switching back to top/bottom restores the user's last
+              margin. */}
+          <div
+            className="flex items-center justify-between gap-2"
+            title={
+              entry.verticalPosition === 'center'
+                ? t('subtitlePosition.marginDisabledCenter')
+                : undefined
+            }
+          >
             <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.marginV')}</label>
             {/* REQ-20260615-059 B — margin gets the ±10 chevron stepper
                 the size row already uses, so the same wrist-flick keeps
@@ -977,7 +997,7 @@ export function TimelineBlockInspector({
                 applyStyleEdit(t('history.editMargin'),
                   patchWithPreservedOffset({ verticalMarginPx: next }))
               }}
-              disabled={isFrozen}
+              disabled={isFrozen || entry.verticalPosition === 'center'}
               ariaLabel={t('subtitlePosition.margin')}
             />
           </div>

@@ -259,6 +259,7 @@
     "vertical": "垂直位置",
     "margin": "縦マージン (px)",
     "marginShort": "マージン",
+    "marginDisabledCenter": "中央配置では上下マージンは無効です",
     "left": "左",
     "center": "中央",
     "right": "右",

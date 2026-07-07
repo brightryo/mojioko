@@ -165,7 +165,12 @@ export function computeFixedStackOffsets(
     if (isPinned(e)) continue
 
     const heightE = heightOf(e)
-    const marginVe = e.verticalMarginPx
+    // REQ-0140 — center-aligned rows anchor at the viewport middle
+    // and ignore verticalMarginPx (mirrors libass `\an4/5/6`).  Treat
+    // their base as 0 so a `centre` group stacks around the middle,
+    // not around some MarginV-shifted point.  For `top` / `bottom`
+    // the pre-REQ-0140 semantics stay: base = the row's own MarginV.
+    const marginVe = e.verticalPosition === 'center' ? 0 : e.verticalMarginPx
     const keyE = groupKey(e)
     heights.set(e.id, heightE)
 
@@ -181,7 +186,10 @@ export function computeFixedStackOffsets(
       if (groupKey(p) !== keyE) continue
       if (p.startSec <= e.startSec && p.endSec > e.startSec) {
         const priorOffset = positions.get(p.id) ?? 0
-        const priorBase = p.verticalMarginPx + priorOffset
+        // Same REQ-0140 rule applied to priors — for a centre group
+        // (only same-group priors reach this branch) MarginV is 0.
+        const priorMargin = p.verticalPosition === 'center' ? 0 : p.verticalMarginPx
+        const priorBase = priorMargin + priorOffset
         activePriors.push({
           base: priorBase,
           height: heights.get(p.id) ?? 0,
