@@ -43,6 +43,12 @@
     "discardChangesDesc": "編集済みの字幕がありますが、このまま戻りますか？",
     "dontAskAgain": "今後このセッションでは確認しない"
   },
+  "storeUpsell": {
+    "title": "このフォントは Microsoft Store 版でご利用いただけます",
+    "body": "無料版で使えるのはデフォルトフォントのみです。\nMicrosoft Store 版では、追加のフォントが使えます。",
+    "openStore": "Microsoft Store で見る",
+    "close": "閉じる"
+  },
   "error": {
     "unknown": "不明なエラーが発生しました"
   },

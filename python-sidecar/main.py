@@ -8,6 +8,13 @@ import tempfile
 import shutil
 from pathlib import Path
 
+# REQ-0103 — stdin must be reconfigured to UTF-8 as well.  Electron writes the
+# transcription request as UTF-8 JSON; if this process inherits a non-UTF-8
+# system locale (e.g. cp1252 on English Windows, Shift_JIS on Japanese Windows
+# without PYTHONUTF8 propagation), decoding stdin with the locale codec
+# mangles non-ASCII bytes in `videoPath` (paths containing emoji, middle
+# dot, CJK, etc.) and the reconstructed path fails to open.
+sys.stdin.reconfigure(encoding='utf-8')
 sys.stdout.reconfigure(encoding='utf-8')
 sys.stderr.reconfigure(encoding='utf-8')
 
@@ -28,17 +35,46 @@ def find_ffmpeg(ffmpeg_path: str) -> str:
 
 
 def extract_audio(video_path: str, track_index: int, output_wav: str, ffmpeg: str) -> None:
-    """Extract audio track to mono 16kHz WAV for Whisper."""
+    """Extract audio track to mono 16kHz WAV for Whisper.
+
+    REQ-0103 — defensive path handling.  A Store certification tester reported
+    ``Error opening input: No such file or directory`` for input paths that
+    contain shell metacharacters (``|``), the middle dot (``·``), emoji and
+    non-ASCII CJK/latin-extended.  The most likely cause is not our own shell
+    invocation (we already spawn ffmpeg via ``subprocess.run([...])`` — no
+    shell) but the combination of (a) stdin locale mismatch corrupting the
+    incoming JSON payload before it ever reaches ffmpeg, and (b) missing
+    absolute-path normalization / existence check that would surface the
+    problem sooner and with a clearer message.  Fixes:
+
+    - Normalize ``video_path`` to an absolute path so ffmpeg is not resolving
+      against the sidecar's arbitrary cwd.
+    - Pre-check file existence with the actual filesystem so a clearly-worded
+      Python-side error is raised instead of ffmpeg's terse ``No such file``.
+    - ``subprocess.run(cmd, ...)`` is already argv-based (no ``shell=True``);
+      Python builds the command line with CreateProcessW natively, so pipe /
+      middle-dot / emoji in the filename are passed to ffmpeg unmolested.
+    """
+    if not video_path:
+        raise RuntimeError("Audio extraction failed: empty input path")
+
+    abs_video_path = os.path.abspath(video_path)
+    if not os.path.exists(abs_video_path):
+        raise RuntimeError(
+            f"Audio extraction failed: input file does not exist at {abs_video_path}"
+        )
+
     audio_map = f"0:a:{track_index - 1}" if track_index >= 1 else "0:a:0"
     cmd = [
         ffmpeg, "-y",
-        "-i", video_path,
+        "-i", abs_video_path,
         "-map", audio_map,
         "-ac", "1",
         "-ar", "16000",
         "-vn",
         output_wav,
     ]
+    print(f"[debug] ffmpeg extract argv: {cmd!r}", file=sys.stderr)
     result = subprocess.run(cmd, capture_output=True)
     if result.returncode != 0:
         stderr = result.stderr.decode("utf-8", errors="replace")

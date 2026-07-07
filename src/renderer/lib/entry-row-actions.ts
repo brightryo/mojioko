@@ -4,7 +4,8 @@ import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
-import { loadSubtitleFont } from '@/lib/font-metrics'
+import { loadSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
+import { isFontId } from '../../shared/fonts'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 
 /**
@@ -168,6 +169,17 @@ async function wrapRow(
   const latest =
     projectStore.entries.find((e) => e.id === entry.id) ?? entry
   if (latest.isDeleted) return
+  // REQ-087 — when the row carries a per-row font override that is NOT
+  // the currently-active font, the `await loadSubtitleFont()` above only
+  // guarantees the ACTIVE font's metrics are cached.  Without this
+  // extra wait, `applyAutoLineBreak` would fall through `getSubtitleFontFor`
+  // to the character-class fallback and break the row at the wrong
+  // glyph (visible as e.g. "ゃ" alone on the next line for Dela Gothic
+  // One rows transcribed before the cache populated).  Best-effort:
+  // a font load failure here just degrades back to the fallback path.
+  if (isFontId(latest.fontId)) {
+    await loadSubtitleFontFor(latest.fontId).catch(() => null)
+  }
   // Only difference between the two modes: pack pre-strips so the wrap
   // core sees a single long line; overflow passes the text through with
   // existing `\N` intact (applyAutoLineBreak then splits on `\N` and

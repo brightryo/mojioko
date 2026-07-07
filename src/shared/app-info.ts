@@ -56,6 +56,28 @@ export const DOCUMENTATION_URLS = {
 } as const
 
 /**
+ * REQ-091 — Microsoft Store product ID assigned by Partner Center for the
+ * MSIX (paid) build of MOJIOKO.  Used by the free-tier upsell dialog to
+ * deep-link the user from the NSIS build into the Store listing when they
+ * click a tier-locked (non-default) font.
+ *
+ * Two URL forms are kept side by side:
+ *
+ *   - `MS_STORE_APP_URL` — `ms-windows-store://` protocol that the Store
+ *     app on every Windows 10/11 install registers as a handler for.
+ *     `shell.openExternal` routes to it directly without a browser hop,
+ *     which is the canonical Microsoft-recommended deep link and the
+ *     one the upsell dialog actually invokes.
+ *   - `MS_STORE_WEB_URL` — public `apps.microsoft.com` page.  Kept as a
+ *     fallback constant for the (rare) environment where the Store
+ *     protocol handler is absent.  Both forms are added to the
+ *     openExternal allowlist below.
+ */
+export const MS_STORE_PRODUCT_ID = '9N03JMH9LF6M'
+export const MS_STORE_APP_URL = `ms-windows-store://pdp/?productid=${MS_STORE_PRODUCT_ID}`
+export const MS_STORE_WEB_URL = `https://apps.microsoft.com/detail/${MS_STORE_PRODUCT_ID}`
+
+/**
  * Locale-aware GitHub Pages URLs.  Used by the Help menu so each entry opens
  * the page in the same language as the app's UI.  All keys are guaranteed
  * to share the `GITHUB_PAGES_URL` prefix, so the existing allowlist entry
@@ -83,6 +105,12 @@ export const ALLOWED_EXTERNAL_URLS: readonly string[] = [
   GITHUB_REPO_URL,
   GITHUB_ISSUES_URL,
   GITHUB_PAGES_URL,
+  // REQ-091 — both Store deep-link forms.  See MS_STORE_APP_URL /
+  // MS_STORE_WEB_URL comments above for the why.  Listed as exact
+  // strings (not prefix patterns) so the allowlist is precise and a
+  // future product-ID change has to come through here.
+  MS_STORE_APP_URL,
+  MS_STORE_WEB_URL,
 ]
 
 /** Locale codes supported by the app. The Settings dialog discovers them from this list. */

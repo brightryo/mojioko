@@ -118,6 +118,7 @@
     "cancelRun": "Cancel",
     "close": "Close",
     "runningLabel": "Transcribing…",
+    "runningLabelPreviewMix": "Preparing preview audio…",
     "errorTitle": "Transcription failed"
   },
   "dialog": {
@@ -192,7 +193,8 @@
       "cancel": "Cancel",
       "uninstall": "Uninstall",
       "select": "Use this font",
-      "viewLicense": "View license"
+      "viewLicense": "View license",
+      "lockedPaidOnly": "Paid-version only"
     },
     "note": {
       "missingRareKanji": "Rare kanji unsupported",

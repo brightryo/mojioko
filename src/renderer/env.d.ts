@@ -15,6 +15,7 @@ declare global {
       getResourcesPath: () => Promise<string>
       getBuildInfo: () => Promise<BuildInfo>
       detectEncoders: () => Promise<EncoderDetectionResult>
+      isMsix: () => Promise<boolean>
       menuSetLanguage: (lang: string) => void
       menuSetTranscribing: (val: boolean) => void
 

@@ -331,7 +331,8 @@
       "styleLabel": "Style",
       "subtitleSection": "Subtitle",
       "layoutSection": "Layout",
-      "backgroundSection": "Background"
+      "backgroundSection": "Background",
+      "backgroundSectionHelp": "Enabling the background disables the outline color."
     },
     "nav": {
       "first": "Jump to start",

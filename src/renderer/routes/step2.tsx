@@ -18,6 +18,7 @@ import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore, type TableFilter } from '@/stores/ui-store'
+import { useFontCacheVersionStore } from '@/stores/font-cache-version-store'
 import { cn } from '@/lib/utils'
 import { saveFileDialog, writeTextFile } from '@/services/dialog'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
@@ -304,6 +305,12 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   //     false.  This also suppresses the per-row TimeInput red border
   //     (isStartExceedsDuration / isEndExceedsDuration in the table).
   // Video mode keeps the original checks intact.
+  // REQ-087 — subscribe to the font cache version so this memo re-runs
+  // the moment any per-row font finishes loading.  Without this dep,
+  // a row whose fontId points at a font that wasn't cached at first
+  // render kept its (approximate) fallback-path overflow result even
+  // after the real glyph metrics became available a few frames later.
+  const fontCacheVersion = useFontCacheVersionStore((s) => s.version)
   const overflowMap = useMemo(() => {
     const map = new Map<string, number>()
     if (isAudioOnly) return map
@@ -323,7 +330,12 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
       if (r.overflowStartIndex !== -1) map.set(e.id, r.overflowStartIndex)
     }
     return map
-  }, [entries, videoWidthPx, subtitleFont, isAudioOnly])
+    // `fontCacheVersion` is the explicit re-run signal — `computeOverflowSync`
+    // reads the per-row Font through the font-metrics module cache, which the
+    // memo can't see directly, so the lint rule's "unnecessary dep" warning
+    // is exactly wrong here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, videoWidthPx, subtitleFont, isAudioOnly, fontCacheVersion])
 
   const videoDurationSec = isAudioOnly ? Infinity : (video?.durationSec ?? Infinity)
 

@@ -13,6 +13,18 @@ export interface TranscriptionStartRequest {
   modelId: string
   modelsDir: string
   ffmpegPath: string
+  /**
+   * REQ-086 — total count of audio tracks the source file carries
+   * (NOT the index of the transcribed track).  When this is >= 2 the
+   * main process runs a preview-mix amix pass after Whisper completes
+   * so the editor's `<video muted>` + hidden `<audio>` pair can play
+   * every track at once.  When the source has 0 or 1 audio tracks the
+   * mix step is skipped and `completed.previewMixUrl` is `null`.
+   *
+   * Optional so legacy callers (e.g. older renderers) keep working —
+   * the main process treats `undefined` as 0 (= mix is skipped).
+   */
+  audioTrackCount?: number
   defaults: {
     fontSizePx: number
     textColorHex: string
@@ -120,7 +132,22 @@ export type TranscriptionEvent =
   | { event: 'started'; totalDurationSec: number }
   | { event: 'segment'; segment: { startSec: number; endSec: number; text: string } }
   | { event: 'progress'; percent: number }
-  | { event: 'completed'; segmentCount: number }
+  /**
+   * REQ-086 — phase change.  Emitted by the main process between Whisper
+   * completion and preview-mix generation so the renderer can update
+   * the drawer label (e.g. "音声準備中…").  No-op when the source has
+   * fewer than 2 audio tracks; in that case the run goes Whisper →
+   * `completed` directly without a `phase` event.
+   */
+  | { event: 'phase'; phase: 'preview-mix' }
+  /**
+   * REQ-086 — `previewMixUrl` carries the `mojioko-preview-mix://` URL
+   * (with a cache-buster query) when a multi-track preview audio file
+   * was generated.  `null` for 0- or 1-track sources where no mix is
+   * needed.  Always present on this event for callers built against
+   * the v1.3.2+ contract; pre-v1.3.2 renderers ignore unknown fields.
+   */
+  | { event: 'completed'; segmentCount: number; previewMixUrl: string | null }
   | { event: 'failed'; error: string }
   | { event: 'needsDownload'; model: string }
 

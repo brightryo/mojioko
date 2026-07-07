@@ -16,6 +16,9 @@ import { detectAvailableEncoders, getBestEncoder } from './services/encoder-dete
 import { buildMenu, rebuildMenu, setMenuLocked } from './menu'
 import { registerVideoProtocol } from './lib/video-protocol'
 import { registerFontProtocol } from './lib/font-protocol'
+import { registerPreviewMixProtocol } from './lib/preview-mix-protocol'
+import { cleanupStalePreviewMixTmp } from './services/preview-mix'
+import { isPackagedAsMsix, getCurrentProcessContext } from './lib/msix'
 import { getResourcesPath } from './lib/paths'
 import type { BuildInfo, EncoderDetectionResult } from '../shared/ipc-contracts'
 import log from './lib/logger'
@@ -118,6 +121,13 @@ async function checkPythonAvailable(): Promise<boolean> {
 function registerIpcHandlers(): void {
   ipcMain.handle(Channels.appGetVersion, () => app.getVersion())
   ipcMain.handle(Channels.appGetResourcesPath, () => getResourcesPath())
+  // REQ-088 #4 — surface the MSIX/NSIS distinction to the renderer
+  // so the font picker UI can gate paid-tier features (download +
+  // non-default selection).  Pure read of the existing msix.ts helper;
+  // no settings, no side effects.
+  ipcMain.handle(Channels.appIsMsix, (): boolean => {
+    return isPackagedAsMsix(getCurrentProcessContext())
+  })
 
   ipcMain.handle(Channels.appGetBuildInfo, async (): Promise<BuildInfo> => {
     const pythonAvailable = await checkPythonAvailable()
@@ -198,6 +208,10 @@ app.whenReady().then(() => {
   void logStartupEnvironment()
   registerVideoProtocol()
   registerFontProtocol()
+  registerPreviewMixProtocol()
+  // REQ-086: remove any preview-mix .tmp left behind by a force-quit
+  // during a prior transcription run.  See `preview-mix.ts`.
+  cleanupStalePreviewMixTmp()
   registerIpcHandlers()
   createWindow()
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, WrapText, AlignJustify, ChevronDown, AlertCircle, RotateCcw } from 'lucide-react'
+import { X, WrapText, AlignJustify, ChevronDown, AlertCircle, RotateCcw, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
@@ -8,18 +8,22 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
+import { HelpIcon } from '@/components/help-icon'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
+import { useStoreUpsellStore } from '@/stores/store-upsell-store'
+import { canSelectFontInTier } from '@/lib/font-tier'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
-import { loadSubtitleFont } from '@/lib/font-metrics'
+import { loadSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
 import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
-import { FONT_REGISTRY, getFontMeta, type FontId } from '../../../shared/fonts'
+import { FONT_REGISTRY, getFontMeta, isFontId, type FontId } from '../../../shared/fonts'
 import { recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 
 interface BulkEditBarProps {
@@ -569,6 +573,25 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     // never rewraps a trim-deleted row mid-bulk.
     const cuts = useProjectStore.getState().cuts
 
+    // REQ-087 — make sure every per-row font referenced by the selection
+    // is in the opentype.js cache before we measure.  `loadSubtitleFont`
+    // above only covers the active font; bulk-applied breaks must respect
+    // each row's own font (e.g. half-width punctuation in Dela Gothic
+    // One vs full-width in Noto), and the fallback path would otherwise
+    // overestimate widths by ~45 % and produce broken break positions
+    // baked into the saved text.  Best-effort: per-font load failures
+    // degrade only that row to the fallback path.
+    const uniqueFontIds = new Set<FontId>()
+    for (const id of ids) {
+      const e = all.find((x) => x.id === id)
+      if (e && isFontId(e.fontId)) uniqueFontIds.add(e.fontId)
+    }
+    await Promise.all(
+      Array.from(uniqueFontIds).map((fid) =>
+        loadSubtitleFontFor(fid).catch(() => null)
+      )
+    )
+
     const snapshots = new Map<string, SubtitleEntry>()
     const patches = new Map<string, string>()
 
@@ -863,10 +886,13 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           </label>
         </div>
 
-        {/* § 背景色 — Bg ON/OFF, Bg colour, Opacity. */}
+        {/* § 背景色 — Bg ON/OFF, Bg colour, Opacity.  REQ-0096 attaches a
+            HelpIcon to the section heading explaining the libass-spec rule
+            that enabling BG disables the outline color. */}
         <div className="flex flex-col gap-2 border-t border-border/60 pt-2 mt-2">
-          <div className="text-body font-semibold text-foreground">
-            {t('timeline.inspector.backgroundSection')}
+          <div className="text-body font-semibold text-foreground flex items-center gap-1.5">
+            <span>{t('timeline.inspector.backgroundSection')}</span>
+            <HelpIcon content={t('timeline.inspector.backgroundSectionHelp')} />
           </div>
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('styleCell.bgEnabled')}</span>
@@ -941,7 +967,19 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
   const [open, setOpen] = useState(false)
   const installed = useInstalledFontIds()
   const activeFontId = useSettingsStore((s) => s.activeFontId)
-  const selectable = FONT_REGISTRY.filter((m) => installed.has(m.id))
+  // REQ-088 #4 — mirror RowFontSelector: NSIS (free) tier restricts the
+  // bulk picker to the bundled default.  `null` treated as the more
+  // restrictive free tier until the boot-time IPC resolves.
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
+  // REQ-091 — Store upsell trigger.
+  const openUpsell = useStoreUpsellStore((s) => s.openUpsell)
+  const selectable = FONT_REGISTRY.filter(
+    (m) => installed.has(m.id) && canSelectFontInTier(isMsix, m.id),
+  )
+  // REQ-091 — same tier-locked discovery list as RowFontSelector.
+  const tierLocked = !isMsix
+    ? FONT_REGISTRY.filter((m) => !canSelectFontInTier(isMsix, m.id))
+    : []
 
   function pick(next: FontId | undefined) {
     onPick(next)
@@ -1007,6 +1045,31 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
               )}
             </button>
           ))}
+
+          {/* REQ-091 — tier-locked discovery rows, mirror of the same
+              block in row-font-selector.tsx.  Empty in MSIX. */}
+          {tierLocked.length > 0 && (
+            <>
+              <div className="my-1 h-px bg-surface-2" />
+              {tierLocked.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => { openUpsell(); setOpen(false) }}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-fg-muted hover:bg-accent/40"
+                  title={t('step1:fontPicker.action.lockedPaidOnly')}
+                >
+                  <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  <span
+                    className="flex-1 min-w-0 truncate"
+                    style={{ fontFamily: `'${m.cssFontFamily}'`, fontWeight: m.weight }}
+                  >
+                    {m.displayName}
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
         </div>
       </PopoverContent>
     </Popover>

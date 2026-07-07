@@ -3,7 +3,8 @@ import {
   getSubtitleFont,
   getLibassScale,
   getSubtitleFontFor,
-  getLibassScaleFor
+  getLibassScaleFor,
+  FALLBACK_LIBASS_SCALE
 } from './font-metrics'
 import type { SubtitleFont } from './font-metrics'
 import type { FontId } from '../../shared/fonts'
@@ -118,13 +119,22 @@ function findBreakIndex(
       byteOffset += codePoints[gi].length
     }
   } else {
-    // Fallback: wide / narrow character-class estimates when the font is not loaded.
-    // libassScale is unavailable; widths are approximate (same fallback as overflow-calculator.ts).
+    // Fallback: wide / narrow character-class estimates when the per-row font
+    // is not yet in the opentype.js cache.  REQ-087 — apply
+    // FALLBACK_LIBASS_SCALE so this fallback lands within ~1 % of the real
+    // per-glyph measurement for every Google Fonts CJK family in the
+    // registry (they all share `unitsPerEm / winHeight ≈ 0.6906`).  Without
+    // it, the fallback overestimated wide chars by ~45 % and broke far
+    // earlier than the burn-in would render — e.g. splitting the
+    // sutegana cluster "しゃ" between "し" and "ゃ".  Mirror of the same
+    // change in `overflow-calculator.ts`.
     let cumulative = 0
     let i          = 0
     for (const char of seg) {
       const cp        = seg.codePointAt(i) ?? 0
-      const charWidth = isWideCp(cp) ? fontSizePx : fontSizePx * 0.55
+      const charWidth = isWideCp(cp)
+        ? fontSizePx * FALLBACK_LIBASS_SCALE
+        : fontSizePx * 0.55 * FALLBACK_LIBASS_SCALE
       cumulative += charWidth
       if (cumulative > effectivePx) {
         return i  // break BEFORE this character

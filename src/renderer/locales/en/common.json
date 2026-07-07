@@ -43,6 +43,12 @@
     "discardChangesDesc": "You have unsaved edits. Navigate back anyway?",
     "dontAskAgain": "Don't ask again this session"
   },
+  "storeUpsell": {
+    "title": "This font is available in the Microsoft Store version",
+    "body": "The free version includes the default font only.\nThe Microsoft Store version unlocks additional fonts.",
+    "openStore": "View in Microsoft Store",
+    "close": "Close"
+  },
   "error": {
     "unknown": "An unknown error occurred"
   },

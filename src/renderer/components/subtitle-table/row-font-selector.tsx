@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, AlertCircle, RotateCcw } from 'lucide-react'
+import { ChevronDown, AlertCircle, RotateCcw, Lock } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
+import { useStoreUpsellStore } from '@/stores/store-upsell-store'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
+import { canSelectFontInTier } from '@/lib/font-tier'
 import { cn } from '@/lib/utils'
 import { FONT_REGISTRY, getFontMeta, type FontId } from '../../../shared/fonts'
 
@@ -38,15 +41,35 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
   const [open, setOpen] = useState(false)
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   const installed = useInstalledFontIds()
+  // REQ-088 #4 — null treated as the more restrictive free tier until
+  // the IPC settles; the popover would otherwise briefly offer paid
+  // entries on the first paint of a free build.
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
+  // REQ-091 — clicking a locked entry below opens the upsell.
+  const openUpsell = useStoreUpsellStore((s) => s.openUpsell)
 
   const resolvedFontId = value ?? activeFontId
   const resolvedMeta = getFontMeta(resolvedFontId)
   const isOverriding = value !== undefined && value !== activeFontId
 
-  // Selectable list = every registered font that's actually installed.
-  // Uninstalled fonts are hidden so we never set a per-row fontId that
-  // burn-in would reject.  Order follows the registry (Noto first).
-  const selectable = FONT_REGISTRY.filter((m) => installed.has(m.id))
+  // Selectable list = every registered font that's actually installed
+  // AND permitted by the current tier (REQ-088 #4 — free tier limits
+  // selection to the bundled default even if a paid-tier user
+  // downgraded with installed fonts on disk).  Order follows the
+  // registry (Noto first).  Uninstalled fonts are hidden so we never
+  // set a per-row fontId that burn-in would reject.
+  const selectable = FONT_REGISTRY.filter(
+    (m) => installed.has(m.id) && canSelectFontInTier(isMsix, m.id),
+  )
+  // REQ-091 — in the free tier, also render the paid-only fonts so the
+  // user can discover them and click through to the upsell.  Listed
+  // AFTER `selectable` (which in NSIS is just the default) so the
+  // popover's first scroll-visible rows remain the ones the user can
+  // actually pick.  Empty in MSIX (every installed font is already in
+  // `selectable`); empty for the bundled default (never tier-locked).
+  const tierLocked = !isMsix
+    ? FONT_REGISTRY.filter((m) => !canSelectFontInTier(isMsix, m.id))
+    : []
 
   function pick(next: FontId | undefined) {
     onChange(next)
@@ -157,6 +180,38 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
               </button>
             )
           })}
+
+          {/* REQ-091 — tier-locked discovery rows.  Empty in MSIX
+              (every installed font is in `selectable` above).  In NSIS
+              these are paid-only fonts the user can't pick but can
+              click to surface the Store upsell.  Visually muted +
+              Lock icon so they read as "available with the paid
+              version" rather than "broken / unavailable". */}
+          {tierLocked.length > 0 && (
+            <>
+              <div className="my-1 h-px bg-surface-2" />
+              {tierLocked.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => { openUpsell(); setOpen(false) }}
+                  className={cn(
+                    'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
+                    'hover:bg-accent/40 text-fg-muted',
+                  )}
+                  title={t('step1:fontPicker.action.lockedPaidOnly')}
+                >
+                  <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  <span
+                    className="flex-1 min-w-0 truncate"
+                    style={{ fontFamily: `'${m.cssFontFamily}'`, fontWeight: m.weight }}
+                  >
+                    {m.displayName}
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
         </div>
       </PopoverContent>
     </Popover>

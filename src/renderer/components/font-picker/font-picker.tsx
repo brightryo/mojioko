@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Download, Trash2, X, FileText, AlertCircle } from 'lucide-react'
+import { Download, Trash2, X, FileText, AlertCircle, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { HelpIcon } from '@/components/help-icon'
@@ -15,6 +15,9 @@ import {
 import { cn } from '@/lib/utils'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useProjectStore } from '@/stores/project-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
+import { useStoreUpsellStore } from '@/stores/store-upsell-store'
+import { canSelectFontInTier, canDownloadFontInTier } from '@/lib/font-tier'
 import {
   listFonts,
   uninstallFont,
@@ -57,6 +60,13 @@ export function FontPicker({ onChange }: FontPickerProps) {
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   const setActiveFontInStore = useSettingsStore((s) => s.setActiveFontId)
   const bumpFontInventoryVersion = useUiStore((s) => s.bumpFontInventoryVersion)
+  // REQ-088 #4 — tier signal.  `null` for the brief pre-IPC window
+  // treats the build as the more restrictive NSIS (free) so the user
+  // never briefly sees enabled rows that then collapse to disabled.
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
+  // REQ-091 — surface the free-tier upsell when a user clicks a row
+  // or Lock chip whose font is tier-locked.
+  const openUpsell = useStoreUpsellStore((s) => s.openUpsell)
 
   const [state, setState] = useState<FontsState | null>(null)
   const [downloadingId, setDownloadingId] = useState<FontId | null>(null)
@@ -261,14 +271,35 @@ export function FontPicker({ onChange }: FontPickerProps) {
           const status = info?.status ?? (meta.bundled ? 'bundled' : 'not-installed')
           const isActive = activeFontId === meta.id
           const isDownloading = downloadingId === meta.id
+          // REQ-088 #4 — NSIS (free) restricts selection / download to
+          // the bundled default.  The row still renders, but its
+          // download chip is swapped for a Lock icon and clicking the
+          // body is inert.  The uninstall chip stays available so a
+          // user who downgraded from MSIX (or downloaded a font under
+          // an older free build that hadn't tier-gated yet) can still
+          // free disk space.
+          const tierAllowsSelect = canSelectFontInTier(isMsix, meta.id)
+          const tierAllowsDownload = canDownloadFontInTier(isMsix, meta.id)
           // Row click activates the font when the font is available
-          // (bundled or installed) and not already active.
-          const canSelect = (status === 'bundled' || status === 'installed') && !isActive
+          // (bundled or installed), not already active, AND the tier
+          // permits it.
+          const canSelect =
+            (status === 'bundled' || status === 'installed') &&
+            !isActive &&
+            tierAllowsSelect
           // The currently-active font cannot be uninstalled — the picker
           // is the only place to switch active, so allowing uninstall
           // here would orphan the selection.  User must pick another font
           // first.
           const canUninstall = status === 'installed' && !isActive
+          // REQ-091 — a row is "tier-locked" when this build's tier
+          // forbids both selecting AND downloading it (= free build,
+          // non-default font).  Clicks on a tier-locked row OR its
+          // Lock chip surface the upsell dialog instead of being
+          // inert.  The bundled default and any tier-allowed row
+          // stay non-upsell (false).
+          const isTierLocked =
+            !meta.bundled && !tierAllowsSelect && !tierAllowsDownload
           return (
             <FontRow
               key={meta.id}
@@ -279,10 +310,13 @@ export function FontPicker({ onChange }: FontPickerProps) {
               downloadPercent={isDownloading ? downloadPercent : 0}
               canSelect={canSelect}
               canUninstall={canUninstall}
+              tierAllowsDownload={tierAllowsDownload}
+              isTierLocked={isTierLocked}
               onSelect={() => handleSelect(meta)}
               onDownload={() => handleDownload(meta)}
               onCancelDownload={handleCancelDownload}
               onUninstall={() => handleUninstall(meta)}
+              onUpsell={openUpsell}
             />
           )
         })}
@@ -335,10 +369,24 @@ interface FontRowProps {
   downloadPercent: number
   canSelect: boolean
   canUninstall: boolean
+  /**
+   * REQ-088 #4 — when false (= NSIS free build, non-default font), the
+   * download chip is replaced by a non-interactive Lock icon so the
+   * paywall is visible without obscuring the row.  Default font and
+   * MSIX paid build leave this true.
+   */
+  tierAllowsDownload: boolean
+  /**
+   * REQ-091 — true when the row is locked behind the paid tier.  Both
+   * the row body and the Lock chip become click targets that surface
+   * the upsell dialog instead of being inert.
+   */
+  isTierLocked: boolean
   onSelect: () => void
   onDownload: () => void
   onCancelDownload: () => void
   onUninstall: () => void
+  onUpsell: () => void
 }
 
 function FontRow({
@@ -349,10 +397,13 @@ function FontRow({
   downloadPercent,
   canSelect,
   canUninstall,
+  tierAllowsDownload,
+  isTierLocked,
   onSelect,
   onDownload,
   onCancelDownload,
-  onUninstall
+  onUninstall,
+  onUpsell
 }: FontRowProps) {
   const { t } = useTranslation('step1')
 
@@ -362,25 +413,34 @@ function FontRow({
     ? { fontFamily: `'${meta.cssFontFamily}'`, fontWeight: meta.weight }
     : {}
 
-  // Whole-row click → select.  Action buttons inside stopPropagation so
-  // they don't double-trigger.  REQ-082: removed Enter / Space keyboard
-  // activation; click is the only way to select a row.
+  // Whole-row click — REQ-091 routes tier-locked rows to the upsell
+  // dialog instead of being inert.  Precedence: real-select wins over
+  // upsell so an active row never accidentally fires the upsell, and
+  // bundled / already-active / tier-allowed-but-uninstalled rows
+  // remain non-interactive (no falsey trigger).
   function handleRowClick() {
     if (canSelect) onSelect()
+    else if (isTierLocked) onUpsell()
   }
+  const isRowInteractive = canSelect || isTierLocked
 
   return (
     <div
-      role={canSelect ? 'button' : undefined}
-      tabIndex={canSelect ? 0 : undefined}
-      onClick={canSelect ? handleRowClick : undefined}
+      role={isRowInteractive ? 'button' : undefined}
+      tabIndex={isRowInteractive ? 0 : undefined}
+      onClick={isRowInteractive ? handleRowClick : undefined}
       aria-pressed={canSelect ? isActive : undefined}
       className={cn(
         'flex items-center justify-between gap-3 px-3 py-2 transition-colors',
         'focus:outline-none focus-visible:outline-none',
         isActive && 'bg-primary/10',
         canSelect && !isActive && 'cursor-pointer hover:bg-accent/30',
-        !canSelect && !isActive && 'cursor-default'
+        // REQ-091 — tier-locked rows get the same hover affordance so
+        // the upsell trigger is discoverable, but no aria-pressed
+        // semantic (they aren't toggle buttons, they're a marketing
+        // prompt).
+        isTierLocked && !isActive && 'cursor-pointer hover:bg-accent/30',
+        !isRowInteractive && !isActive && 'cursor-default'
       )}
     >
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -437,8 +497,13 @@ function FontRow({
           <>
             {/* DL / Trash swap based on install state.  Bundled fonts get
                 neither — the absence of both icons is the visual signal
-                that a row is read-only-bundled. */}
-            {status === 'not-installed' && !meta.bundled && (
+                that a row is read-only-bundled.
+                REQ-088 #4 — in the free (NSIS) tier the Download chip is
+                replaced by an inert Lock chip to signal that adding fonts
+                is a paid-version feature.  Tooltip carries the exact
+                wording the user sees in the tab's hint copy so the two
+                surfaces tell the same story. */}
+            {status === 'not-installed' && !meta.bundled && tierAllowsDownload && (
               <Button
                 size="icon"
                 variant="ghost"
@@ -449,6 +514,36 @@ function FontRow({
               >
                 <Download className="h-4 w-4" />
               </Button>
+            )}
+            {status === 'not-installed' && !meta.bundled && !tierAllowsDownload && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onUpsell() }}
+                className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-accent/40 transition-colors focus:outline-none focus-visible:outline-none"
+                aria-label={t('fontPicker.action.lockedPaidOnly')}
+                title={t('fontPicker.action.lockedPaidOnly')}
+              >
+                <Lock className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {/* REQ-088 #4 — edge case: the user is on the free tier but
+                somehow has a non-default font already installed (e.g.
+                downgraded from MSIX, or downloaded under an older free
+                build).  Mark the row locked so the click-doesn't-
+                activate behaviour is visible, while leaving the Trash
+                chip available so they can reclaim disk space.
+                REQ-091 — same Lock chip click → upsell as the
+                not-installed branch above. */}
+            {status === 'installed' && !meta.bundled && !canSelect && !isActive && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onUpsell() }}
+                className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-accent/40 transition-colors focus:outline-none focus-visible:outline-none"
+                aria-label={t('fontPicker.action.lockedPaidOnly')}
+                title={t('fontPicker.action.lockedPaidOnly')}
+              >
+                <Lock className="h-3.5 w-3.5" />
+              </button>
             )}
             {canUninstall && (
               <Button
