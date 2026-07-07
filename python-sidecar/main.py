@@ -8,6 +8,117 @@ import tempfile
 import shutil
 from pathlib import Path
 
+
+# REQ-0147 — pre-load the bundled CUDA/cuDNN runtime DLLs in dependency
+# order BEFORE `import ctranslate2` ever runs.  Fixes the Toolkit-less
+# GPU failure REQ-0146 uncovered: the shipped DLLs were physically in
+# `_internal/ctranslate2/` but `ctranslate2`'s C++ code inside
+# `ctranslate2.dll` calls a plain `LoadLibrary("cublas64_12.dll")` at
+# model-transcribe time, and that plain call ignored the Python-side
+# `os.add_dll_directory` registration set up by the vendored
+# `ctranslate2/__init__.py`.  Result on Toolkit-less machines: the
+# CDLL loop in the vendored `__init__.py` silently skipped
+# `add_dll_directory` (its try/except swallows the failure), and no
+# other channel taught the loader where cuBLAS lived, so the C++ call
+# hit "Library cublas64_12.dll is not found or cannot be loaded" the
+# moment the first GEMM ran.
+#
+# The fix leverages Windows' loaded-modules cache: once a DLL has
+# been loaded by absolute path, every subsequent `LoadLibrary("<basename>")`
+# — from any thread, from any component, regardless of search path —
+# resolves against that already-loaded module.  Pre-loading every
+# bundled CUDA/cuDNN library in the right dependency order therefore
+# side-steps the search-path problem entirely.  The order matters
+# because Windows resolves static imports when a DLL is loaded; if
+# cublas comes before its LT dep the loader would have to search for
+# cublasLt on its own (and fail on Toolkit-less machines).
+#
+# Runs at module import so it's finished before `_select_device()` or
+# any faster-whisper machinery.  On non-Windows or CPU-only builds
+# (missing DLL directory) this is a silent no-op.
+def _preload_bundled_cuda_dlls() -> None:
+    if sys.platform != "win32":
+        return
+    # Locate the bundled ctranslate2 folder both in the PyInstaller-
+    # frozen sidecar and in dev-mode (venv).  Multiple candidates
+    # cover PyInstaller layout variants across versions and the
+    # sidecar-vs-source runtime split.
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(os.path.join(meipass, "ctranslate2"))
+        candidates.append(os.path.join(meipass, "_internal", "ctranslate2"))
+    exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+    candidates.append(os.path.join(exe_dir, "_internal", "ctranslate2"))
+    candidates.append(os.path.join(exe_dir, "ctranslate2"))
+    dll_dir = next((c for c in candidates if os.path.isdir(c)), None)
+    if dll_dir is None:
+        print(f"[dll_preload] no bundled ctranslate2 folder found; tried: {candidates}",
+              file=sys.stderr)
+        return
+    print(f"[dll_preload] using DLL folder: {dll_dir}", file=sys.stderr)
+    # Register the folder for LOAD_LIBRARY_SEARCH_USER_DIRS-aware
+    # LoadLibrary paths.  ctranslate2's C++ LoadLibrary may or may not
+    # honour this depending on process default-dll-directories flags,
+    # so we do NOT rely on it — the CDLL pre-load below is the actual
+    # fix.  Still worth doing as belt-and-braces.
+    try:
+        os.add_dll_directory(dll_dir)
+    except OSError as e:
+        print(f"[dll_preload] add_dll_directory({dll_dir!r}) failed: {e}",
+              file=sys.stderr)
+
+    import ctypes
+    # Dependency-ordered preload.  Leaves first (no deps among the
+    # bundled files), roots last.  Once every DLL is in the loaded-
+    # modules table, any later `LoadLibrary("<basename>")` from any
+    # call site — Python, ctranslate2 C++, cuDNN's own delay-loaders —
+    # hits the loaded instance.
+    preload_order = [
+        # CUDA Runtime (no deps among the bundle)
+        "cudart64_12.dll",
+        # cuBLAS — cublasLt is a dep of cublas for LT-GEMM code paths
+        "cublasLt64_12.dll",
+        "cublas64_12.dll",
+        # cuDNN sub-libraries (loader `cudnn64_9.dll` imports these)
+        "cudnn_graph64_9.dll",
+        "cudnn_ops64_9.dll",
+        "cudnn_cnn64_9.dll",
+        "cudnn_adv64_9.dll",
+        "cudnn_heuristic64_9.dll",
+        "cudnn_engines_runtime_compiled64_9.dll",
+        "cudnn_engines_precompiled64_9.dll",
+        # cuDNN loader — statically imports adv/cnn/graph/ops so those
+        # must be loaded first.
+        "cudnn64_9.dll",
+    ]
+    loaded, missing, failed = [], [], []
+    for dll_name in preload_order:
+        full_path = os.path.join(dll_dir, dll_name)
+        if not os.path.isfile(full_path):
+            missing.append(dll_name)
+            continue
+        try:
+            ctypes.CDLL(full_path)
+            loaded.append(dll_name)
+        except OSError as e:
+            failed.append((dll_name, str(e)))
+    if loaded:
+        print(f"[dll_preload] loaded {len(loaded)}/{len(preload_order)}: "
+              f"{', '.join(loaded)}", file=sys.stderr)
+    if missing:
+        # Not fatal.  A build without cuDNN redist (e.g. a future CPU-
+        # only distribution) simply won't have these files, and the
+        # existing CPU fallback in `_select_device()` will engage.
+        print(f"[dll_preload] not bundled (skipped): {', '.join(missing)}",
+              file=sys.stderr)
+    if failed:
+        for name, err in failed:
+            print(f"[dll_preload] FAILED to load {name}: {err}", file=sys.stderr)
+
+
+_preload_bundled_cuda_dlls()
+
 # REQ-0103 — stdin must be reconfigured to UTF-8 as well.  Electron writes the
 # transcription request as UTF-8 JSON; if this process inherits a non-UTF-8
 # system locale (e.g. cp1252 on English Windows, Shift_JIS on Japanese Windows
