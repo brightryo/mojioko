@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import * as React from 'react'
+import { useState, useEffect } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
@@ -73,7 +74,16 @@ export function ColorPicker({
   const { t } = useTranslation('common')
   const recentColors = useUiStore((s) => s.recentColors)
   const addRecentColor = useUiStore((s) => s.addRecentColor)
-  const setColorPickerOpen = useUiStore((s) => s.setColorPickerOpen)
+  // REQ-0132 §2.1 — the ColorPicker Popover uses `modal` mode but
+  // Radix Popover's Content mount lifecycle can outlive the `open`
+  // flag, so we drive the overlay counter directly from
+  // `handleOpenChange` rather than the shared `useOverlayRegistration`
+  // hook (which every Dialog / Sheet uses).  Same registry; different
+  // wiring.  Ref tracking prevents a decrement-on-unmount from a
+  // closed popover from double-decrementing.
+  const incrementOverlay = useUiStore((s) => s.incrementOverlay)
+  const decrementOverlay = useUiStore((s) => s.decrementOverlay)
+  const overlayRegisteredRef = React.useRef(false)
 
   const [open, setOpen] = useState(false)
   const [hexDraft, setHexDraft] = useState(value)
@@ -130,14 +140,33 @@ export function ColorPicker({
       setValueOnOpen(null)
     }
     setOpen(next)
-    // REQ-0131 §2 context A — mirror the picker's open flag into
-    // ui-store so the shared `isAnyModalOpen` selector sees it.  The
-    // shortcut handler + preview panels both read that helper; without
-    // this write the Space play/pause shortcut would continue to fire
-    // while the picker is up, and Ctrl+A / Ctrl+Z would trample the
-    // user's colour work.
-    setColorPickerOpen(next)
+    // REQ-0132 §2.1 — increment/decrement the shared overlay counter
+    // so `isAnyOverlayOpen` sees the picker in exactly the same way it
+    // sees every Dialog / Sheet.  Ref-guarded so calling
+    // handleOpenChange twice with the same value cannot double-count
+    // (defensive: Radix Popover normally does not, but Cancel path
+    // calls setValueOnOpen(null) then setOpen(false) independently).
+    if (next && !overlayRegisteredRef.current) {
+      incrementOverlay()
+      overlayRegisteredRef.current = true
+    } else if (!next && overlayRegisteredRef.current) {
+      decrementOverlay()
+      overlayRegisteredRef.current = false
+    }
   }
+
+  // REQ-0132 §2.1 — final safety net: if the ColorPicker component
+  // unmounts while its popover is still registered as open (e.g. the
+  // parent row was deleted mid-pick), decrement the counter so the
+  // overlay guard doesn't get pinned "open" forever.
+  useEffect(() => {
+    return () => {
+      if (overlayRegisteredRef.current) {
+        decrementOverlay()
+        overlayRegisteredRef.current = false
+      }
+    }
+  }, [decrementOverlay])
 
   // REQ-0127 Phase 3 — explicit OK / Cancel buttons replace the outside-
   // click-to-commit affordance.  Cancel rewinds the store to
@@ -171,7 +200,10 @@ export function ColorPicker({
     }
     setValueOnOpen(null)
     setOpen(false)
-    setColorPickerOpen(false)
+    if (overlayRegisteredRef.current) {
+      decrementOverlay()
+      overlayRegisteredRef.current = false
+    }
   }
   function handleCancel() {
     if (valueOnOpen !== null && normalise(value) !== valueOnOpen) {
@@ -184,7 +216,10 @@ export function ColorPicker({
     }
     setValueOnOpen(null)
     setOpen(false)
-    setColorPickerOpen(false)
+    if (overlayRegisteredRef.current) {
+      decrementOverlay()
+      overlayRegisteredRef.current = false
+    }
   }
 
   function handlePickerChange(hex: string) {

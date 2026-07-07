@@ -23,6 +23,7 @@ import {
   duplicateRow as runDuplicateRow
 } from '@/lib/entry-row-actions'
 import { formatEditedTimecode, editedDurationOfEntry } from '@/lib/time'
+import { shortcutHint } from '@/lib/shortcut-hint'
 import { getAnchorAssPosition, clampAssPosition, recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
@@ -630,15 +631,15 @@ export function TimelineBlockInspector({
               isTrimDeleted
                 ? t('action.trimDeletedHint')
                 : entry.isDeleted
-                  ? t('action.restoreRow')
-                  : t('action.deleteRow')
+                  ? t('action.restoreRow') + shortcutHint('delete')
+                  : t('action.deleteRow') + shortcutHint('delete')
             }
             aria-label={
               isTrimDeleted
                 ? t('action.trimDeletedHint')
                 : entry.isDeleted
-                  ? t('action.restoreRow')
-                  : t('action.deleteRow')
+                  ? t('action.restoreRow') + shortcutHint('delete')
+                  : t('action.deleteRow') + shortcutHint('delete')
             }
             onClick={() => {
               if (isTrimDeleted) {
@@ -661,8 +662,8 @@ export function TimelineBlockInspector({
           </button>
           <button
             type="button"
-            title={t('action.resetRow')}
-            aria-label={t('action.resetRow')}
+            title={t('action.resetRow') + shortcutHint('reset')}
+            aria-label={t('action.resetRow') + shortcutHint('reset')}
             onClick={handleReset}
             disabled={!canReset}
             className={cn(
@@ -683,8 +684,8 @@ export function TimelineBlockInspector({
               rows mirroring the wrap-button gate. */}
           <button
             type="button"
-            title={t('action.duplicateRowHelp')}
-            aria-label={t('action.duplicateRowHelp')}
+            title={t('action.duplicateRowHelp') + shortcutHint('duplicate')}
+            aria-label={t('action.duplicateRowHelp') + shortcutHint('duplicate')}
             onClick={handleDuplicate}
             disabled={isFrozen}
             className={cn(

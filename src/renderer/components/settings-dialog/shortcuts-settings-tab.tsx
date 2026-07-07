@@ -2,20 +2,23 @@ import { useTranslation } from 'react-i18next'
 import { SHORTCUTS } from '@/lib/shortcuts'
 
 /**
- * REQ-0131 §5 — read-only "keyboard shortcuts" tab in the Settings
- * dialog.  Renders the shared `SHORTCUTS` registry so this UI can
- * never drift from the hook that actually fires the bindings.  Two
- * `<dl>` groups — Editor (context B) and Modal (context A) — mirror
- * the `context` field of each ShortcutSpec.  Context C (typing in a
- * form field) has no shortcuts by design, so it isn't shown.
+ * REQ-0131 §5 / REQ-0132 §4.2 — read-only "keyboard shortcuts" tab in
+ * the Settings dialog.  Renders the shared `SHORTCUTS` registry so
+ * this UI can never drift from the hook that actually fires the
+ * bindings.  Three `<dl>` groups — Editor (context B), Timeline
+ * (context B'), Overlay (context A) — mirror the `context` field of
+ * each ShortcutSpec.  Context C (typing in a form field) has no
+ * shortcuts by design, so it isn't shown.
  *
- * Every text goes through `t('common:shortcuts.*')` so the tab honours
- * §3 (no hardcoded literals in components).
+ * REQ-0132 §4.2 also reworked the group labels so the "modal" group is
+ * described as "dialogs / drawers" — the previous "モーダル" wording
+ * was jargon the owner flagged as confusing.
  */
 export function ShortcutsSettingsTab() {
   const { t } = useTranslation(['settings', 'common'])
   const editor = SHORTCUTS.filter((s) => s.context === 'editor')
-  const modal = SHORTCUTS.filter((s) => s.context === 'modal')
+  const timeline = SHORTCUTS.filter((s) => s.context === 'timeline')
+  const overlay = SHORTCUTS.filter((s) => s.context === 'modal')
 
   return (
     <div className="space-y-4">
@@ -41,13 +44,31 @@ export function ShortcutsSettingsTab() {
 
       <section className="space-y-2">
         <h3 className="text-body font-semibold text-fg-primary">
-          {t('settings:shortcuts.groupModal')}
+          {t('settings:shortcuts.groupTimeline')}
         </h3>
         <p className="text-body-sm text-fg-muted">
-          {t('settings:shortcuts.groupModalDesc')}
+          {t('settings:shortcuts.groupTimelineDesc')}
         </p>
         <dl className="divide-y divide-line rounded-md border border-line bg-surface-0">
-          {modal.map((s) => (
+          {timeline.map((s) => (
+            <ShortcutRow
+              key={s.id}
+              label={t(`common:${s.labelKey}`)}
+              keys={s.keys}
+            />
+          ))}
+        </dl>
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="text-body font-semibold text-fg-primary">
+          {t('settings:shortcuts.groupOverlay')}
+        </h3>
+        <p className="text-body-sm text-fg-muted">
+          {t('settings:shortcuts.groupOverlayDesc')}
+        </p>
+        <dl className="divide-y divide-line rounded-md border border-line bg-surface-0">
+          {overlay.map((s) => (
             <ShortcutRow
               key={s.id}
               label={t(`common:${s.labelKey}`)}

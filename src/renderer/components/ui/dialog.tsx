@@ -2,6 +2,7 @@ import * as React from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useOverlayRegistration } from '@/hooks/use-overlay-registration'
 
 const Dialog = DialogPrimitive.Root
 const DialogTrigger = DialogPrimitive.Trigger
@@ -31,17 +32,32 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { hideClose?: boolean }
->(({ className, children, hideClose, ...props }, ref) => (
+>(({ className, children, hideClose, ...props }, ref) => {
+  // REQ-0132 §2.1 — every Radix Dialog auto-registers with the overlay
+  // registry via the mount/unmount of this Portal-rendered Content
+  // element.  Radix only mounts Content when the Dialog is open, so
+  // mount = open and unmount = close.  This is the single line that
+  // makes `isAnyOverlayOpen` accurate for every Dialog in the app,
+  // regardless of which flag (or lack of one) the consumer uses to
+  // hold `open`.
+  useOverlayRegistration()
+  return (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      // REQ-082: suppress Radix Dialog's default Esc-to-close — Esc is no
-      // longer a keyboard shortcut anywhere in the app.  The X icon
-      // (rendered just below) and any per-dialog Cancel buttons are the
-      // only close affordances.  Outside-click closing is left intact
-      // because it's a mouse gesture, not a keyboard shortcut.
-      onEscapeKeyDown={(e) => e.preventDefault()}
+      // REQ-0132 §2.2 root-cause fix — REQ-082 had suppressed Radix's
+      // Esc-to-close on the assumption that "Esc is no longer a
+      // keyboard shortcut anywhere in the app."  That is no longer
+      // true (REQ-0132 §2.2: Esc uniformly closes the topmost
+      // overlay).  Removing the `onEscapeKeyDown` preventDefault
+      // restores Radix's built-in behaviour: pressing Esc fires
+      // `onOpenChange(false)` on the Root, which closes the dialog
+      // through the existing state channel.  The overlay registry
+      // (see `useOverlayRegistration` above) unregisters via the
+      // Content unmount that follows.  Owner-facing symptom of the
+      // pre-fix state: Settings / About / Time-editor / etc. did not
+      // close on Esc despite being visible (RES-0131 §1.1 mis-claim).
       className={cn(
         'fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%]',
         // REQ-20260615-003 mira density: p-6 → p-4, duration-200 → duration-100.
@@ -72,7 +88,8 @@ const DialogContent = React.forwardRef<
       )}
     </DialogPrimitive.Content>
   </DialogPortal>
-))
+  )
+})
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
 // REQ-20260615-003 mira density: header gap 1.5→1, mb 5→3; footer mt 6→4.

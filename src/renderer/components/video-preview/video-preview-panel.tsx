@@ -3,11 +3,12 @@ import { Play, Pause, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
-import { useUiStore, isAnyModalOpen } from '@/stores/ui-store'
+import { useUiStore, isAnyOverlayOpen } from '@/stores/ui-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { usePreviewMixStore } from '@/stores/preview-mix-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
+import { shortcutHint } from '@/lib/shortcut-hint'
 import { shellShowInFolder } from '@/services/dialog'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
@@ -579,7 +580,7 @@ export function VideoPreviewPanel() {
       // modal is open so it falls through to the modal (typing space
       // into the hex input, activating focused OK button, etc.).  Same
       // predicate the shared `useGlobalShortcuts` handler uses.
-      if (isAnyModalOpen(useUiStore.getState())) return
+      if (isAnyOverlayOpen(useUiStore.getState())) return
       const active = document.activeElement as HTMLElement | null
       if (active) {
         if (active.isContentEditable) return
@@ -1043,7 +1044,8 @@ export function VideoPreviewPanel() {
             'focus:outline-none focus-visible:outline-none',
             'disabled:cursor-not-allowed disabled:opacity-40'
           )}
-          aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
+          aria-label={(isPlaying ? t('videoPreview.pause') : t('videoPreview.play')) + shortcutHint('playPause')}
+          title={(isPlaying ? t('videoPreview.pause') : t('videoPreview.play')) + shortcutHint('playPause')}
         >
           {isPlaying
             ? <Pause className="h-5 w-5" />

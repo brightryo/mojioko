@@ -11,7 +11,7 @@ import {
  * as a global shortcut at all?" — the caller then adds a key/modifier
  * check on top.
  *
- *   A: any modal open        → false  (route to modal's Esc/Enter)
+ *   A: any overlay open        → false  (route to modal's Esc/Enter)
  *   B: neither of the above  → true   (fire the shortcut)
  *   C: typing in a form field → false (native character-input)
  *
@@ -34,7 +34,7 @@ describe('REQ-0131 — shouldGlobalShortcutFire predicate', () => {
     )
   })
 
-  describe('context A — modal open suppresses', () => {
+  describe('context A — overlay open suppresses', () => {
     it('returns false when a modal is open, even with no focused input', () => {
       expect(shouldGlobalShortcutFire(null, false, true)).toBe(false)
     })

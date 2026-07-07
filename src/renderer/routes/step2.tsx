@@ -22,6 +22,7 @@ import { useFontCacheVersionStore } from '@/stores/font-cache-version-store'
 import { cn } from '@/lib/utils'
 import { saveFileDialog, writeTextFile } from '@/services/dialog'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
+import { shortcutHint } from '@/lib/shortcut-hint'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { computeEntryWarnings, hasAnyError, hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
 import { applyCutsToEntry, effectiveEntryState, origToEdited } from '../../shared/cuts'
@@ -1035,7 +1036,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               <RotateCcw className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t('tooltip.undo')}</TooltipContent>
+          <TooltipContent>{t('tooltip.undo') + shortcutHint('undo')}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1052,7 +1053,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               <RotateCw className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t('tooltip.redo')}</TooltipContent>
+          <TooltipContent>{t('tooltip.redo') + shortcutHint('redo')}</TooltipContent>
         </Tooltip>
         <Button variant="ghost" size="md" onClick={openAddRowDialog} data-testid="add-row">
           <Plus className="h-4 w-4 mr-1" />

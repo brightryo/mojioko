@@ -93,6 +93,27 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  // REQ-0132 §3 — Ctrl+R is now the "reset selected clip" shortcut
+  // (renderer's `useGlobalShortcuts`).  Chromium and Electron would
+  // otherwise route Ctrl+R / Ctrl+Shift+R / F5 / Ctrl+F5 to
+  // `webContents.reload()`, wiping the user's in-progress edit
+  // session.  `before-input-event` runs on the main process BEFORE
+  // Chromium's accelerator layer, so preventing the input here stops
+  // the reload regardless of whether the renderer's capture-phase
+  // handler also fired.  In dev mode we still want the developer to
+  // be able to reload via the DevTools; the DevTools' own keyboard
+  // shortcuts are dispatched separately and are not intercepted here.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    const key = input.key.toLowerCase()
+    const isReload =
+      (input.control && key === 'r') ||
+      (input.control && input.shift && key === 'r') ||
+      key === 'f5' ||
+      (input.control && key === 'f5')
+    if (isReload) event.preventDefault()
+  })
+
   if (isDev) {
     win.loadURL('http://localhost:5173')
   } else {

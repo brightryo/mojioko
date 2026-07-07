@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Play, Pause, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
-import { useUiStore, isAnyModalOpen } from '@/stores/ui-store'
+import { useUiStore, isAnyOverlayOpen } from '@/stores/ui-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
+import { shortcutHint } from '@/lib/shortcut-hint'
 import { shellShowInFolder } from '@/services/dialog'
 import { findActiveEntryId } from '@/lib/active-entry'
 import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
@@ -170,7 +171,7 @@ export function AudioPreviewPanel() {
       if (e.code !== 'Space' || e.ctrlKey || e.altKey || e.metaKey) return
       // REQ-0131 §2 context A — same modal-suppression guard as
       // VideoPreviewPanel.  See that binding for the reason.
-      if (isAnyModalOpen(useUiStore.getState())) return
+      if (isAnyOverlayOpen(useUiStore.getState())) return
       const active = document.activeElement as HTMLElement | null
       if (active) {
         if (active.isContentEditable) return
@@ -285,7 +286,8 @@ export function AudioPreviewPanel() {
           <button
             type="button"
             onClick={togglePlay}
-            aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
+            aria-label={(isPlaying ? t('videoPreview.pause') : t('videoPreview.play')) + shortcutHint('playPause')}
+            title={(isPlaying ? t('videoPreview.pause') : t('videoPreview.play')) + shortcutHint('playPause')}
             className={cn(
               'flex items-center justify-center rounded-full transition-colors duration-150',
               'h-14 w-14 bg-primary text-primary-foreground hover:bg-primary/90',

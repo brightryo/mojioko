@@ -2,6 +2,7 @@ import * as React from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useOverlayRegistration } from '@/hooks/use-overlay-registration'
 
 /**
  * REQ-20260615-023: Sheet primitive adapted from shadcn's new-york-v4
@@ -43,15 +44,20 @@ const SheetContent = React.forwardRef<
     side?: SheetSide
     hideClose?: boolean
   }
->(({ className, children, side = 'right', hideClose, ...props }, ref) => (
+>(({ className, children, side = 'right', hideClose, ...props }, ref) => {
+  // REQ-0132 §2.1 — every Sheet auto-registers with the overlay
+  // registry.  Same mount = open contract Dialog uses.
+  useOverlayRegistration()
+  return (
   <SheetPortal>
     <SheetOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      // REQ-082 parity: suppress Radix Dialog's default Esc-to-close so the
-      // sheet matches MOJIOKO's other modal surfaces.  Outside-click closing
-      // is still left intact (Radix default) because that is a mouse gesture.
-      onEscapeKeyDown={(e) => e.preventDefault()}
+      // REQ-0132 §2.2 root-cause fix — REQ-082 parity had suppressed
+      // Radix's built-in Esc-to-close on Sheet.  Removing the
+      // `onEscapeKeyDown` preventDefault restores it so the burn-in
+      // drawer and transcription drawer close on Esc alongside every
+      // other overlay (§2.2 uniform Esc semantics).
       className={cn(
         'fixed z-50 flex flex-col gap-4 bg-popover text-fg-primary shadow-2xl shadow-black/60',
         // REQ-20260615-044 parity with DialogContent: Radix focuses the
@@ -84,7 +90,8 @@ const SheetContent = React.forwardRef<
       )}
     </DialogPrimitive.Content>
   </SheetPortal>
-))
+  )
+})
 SheetContent.displayName = DialogPrimitive.Content.displayName
 
 const SheetHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

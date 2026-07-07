@@ -24,16 +24,20 @@ interface UiStore {
   isDonationDialogOpen: boolean
   isFontLicensesDialogOpen: boolean
   /**
-   * REQ-0131 §2 context A — becomes `true` while the color-picker
-   * popover (REQ-0127) is open.  Every other modal already has an
-   * `is…DialogOpen` boolean, but the color picker's open state lives
-   * inside the ColorPicker component itself; without this mirror the
-   * shared `isAnyModalOpen` selector could not see it and the global
-   * shortcut handler would misclassify context A vs B while the picker
-   * was up.  ColorPicker.handleOpenChange writes to this whenever the
-   * Radix Popover's open flag changes.
+   * REQ-0132 §2.1 — app-wide count of currently-open overlays
+   * (Dialogs / Sheets / the modal Popover used by the color picker).
+   * Every overlay increments on mount and decrements on unmount via
+   * `useOverlayRegistration` (see `src/renderer/hooks/…`), which
+   * replaces REQ-0131's flag-OR `isAnyModalOpen` approach.  The
+   * counter is accurate the moment a new overlay is added because
+   * registration is a single shared hook call — no consumer needs to
+   * remember to flip a boolean.
+   *
+   * Two overlays can be open at once (e.g. Settings + a nested color
+   * picker); a counter handles that cleanly where a boolean would
+   * race.  `isAnyOverlayOpen(state)` reads `overlayOpenCount > 0`.
    */
-  isColorPickerOpen: boolean
+  overlayOpenCount: number
   tableFilter: TableFilter
   /**
    * REQ-20260614-001 Phase 3 — **playback-active entry id**.  Set by the
@@ -198,7 +202,9 @@ interface UiStore {
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
   setFontLicensesDialogOpen: (open: boolean) => void
-  setColorPickerOpen: (open: boolean) => void
+  /** REQ-0132 §2.1 — register / unregister an overlay with the counter. */
+  incrementOverlay: () => void
+  decrementOverlay: () => void
   setTableFilter: (f: TableFilter) => void
   setFocusedRowId: (id: string | null) => void
   setSelectedEntryId: (id: string | null) => void
@@ -241,7 +247,7 @@ export const useUiStore = create<UiStore>((set) => ({
   isAboutDialogOpen: false,
   isDonationDialogOpen: false,
   isFontLicensesDialogOpen: false,
-  isColorPickerOpen: false,
+  overlayOpenCount: 0,
   tableFilter: 'all',
   focusedRowId: null,
   selectedEntryId: null,
@@ -273,7 +279,12 @@ export const useUiStore = create<UiStore>((set) => ({
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
   setDonationDialogOpen: (open) => set({ isDonationDialogOpen: open }),
   setFontLicensesDialogOpen: (open) => set({ isFontLicensesDialogOpen: open }),
-  setColorPickerOpen: (open) => set({ isColorPickerOpen: open }),
+  incrementOverlay: () =>
+    set((s) => ({ overlayOpenCount: s.overlayOpenCount + 1 })),
+  decrementOverlay: () =>
+    // clamp at 0 so a mistimed cleanup can never take the counter
+    // negative (paranoia — Radix's mount/unmount pairing is reliable).
+    set((s) => ({ overlayOpenCount: Math.max(0, s.overlayOpenCount - 1) })),
   setTableFilter: (f) => set({ tableFilter: f }),
   setFocusedRowId: (id) => set({ focusedRowId: id }),
   setSelectedEntryId: (id) => set({ selectedEntryId: id }),
@@ -354,24 +365,16 @@ export const useUiStore = create<UiStore>((set) => ({
 }))
 
 /**
- * REQ-0131 §4.3 — derived selector reading every modal-open flag.
- * Both the shared shortcut handler and the preview panels' Space
- * bindings consume this so context A (any modal open) is judged the
- * same way everywhere.  Extending: when a new modal ships, add its
- * boolean here and the guard extends automatically.
+ * REQ-0132 §2.1 — derived selector reading the overlay counter that
+ * every Dialog / Sheet / modal Popover writes to via
+ * `useOverlayRegistration`.  Both the shared shortcut handler and the
+ * preview panels' Space bindings consume this so context A (any
+ * overlay open) is judged the same way everywhere — no more
+ * flag-OR drift as new overlays ship.  Replaces REQ-0131's
+ * `isAnyModalOpen(state)` which read 5 hand-maintained booleans and
+ * missed the add-row / time-editor / burn-in / transcription drawer
+ * overlays (RES-0131 §9.2 → the very bug this REQ fixes).
  */
-export function isAnyModalOpen(s: {
-  isSettingsDialogOpen: boolean
-  isAboutDialogOpen: boolean
-  isDonationDialogOpen: boolean
-  isFontLicensesDialogOpen: boolean
-  isColorPickerOpen: boolean
-}): boolean {
-  return (
-    s.isSettingsDialogOpen ||
-    s.isAboutDialogOpen ||
-    s.isDonationDialogOpen ||
-    s.isFontLicensesDialogOpen ||
-    s.isColorPickerOpen
-  )
+export function isAnyOverlayOpen(s: { overlayOpenCount: number }): boolean {
+  return s.overlayOpenCount > 0
 }

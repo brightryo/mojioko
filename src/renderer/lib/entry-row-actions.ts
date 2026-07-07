@@ -47,9 +47,9 @@ import { commitTimeEdit } from '@/lib/commit-time-edit'
 export function shouldGlobalShortcutFire(
   activeTagName: string | null,
   isContentEditable: boolean,
-  isAnyModalOpen: boolean,
+  overlayOpen: boolean,
 ): boolean {
-  if (isAnyModalOpen) return false               // context A → suppress
+  if (overlayOpen) return false                  // context A → suppress
   if (isContentEditable) return false            // context C → typing
   const tag = (activeTagName ?? '').toLowerCase()
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return false // context C
@@ -62,8 +62,8 @@ export function shouldGlobalShortcutFire(
  * REQ-0131 consolidation.  Layer over `shouldGlobalShortcutFire` so
  * both surfaces route through the same context judgement — the only
  * extra thing this variant does is check the key + modifier shape
- * (bare Delete / Backspace).  The `isAnyModalOpen` parameter defaults
- * to `false` because REQ-0130's own unit fixtures pre-date the modal
+ * (bare Delete / Backspace).  The `overlayOpen` parameter defaults
+ * to `false` because REQ-0130's own unit fixtures pre-date the overlay
  * concept.
  */
 export function shouldTimelineDeleteFire(
@@ -71,11 +71,11 @@ export function shouldTimelineDeleteFire(
   modifiers: { ctrl: boolean; alt: boolean; meta: boolean; shift: boolean },
   activeTagName: string | null,
   isContentEditable: boolean,
-  isAnyModalOpen = false,
+  overlayOpen = false,
 ): boolean {
   if (key !== 'Delete' && key !== 'Backspace') return false
   if (modifiers.ctrl || modifiers.alt || modifiers.meta || modifiers.shift) return false
-  return shouldGlobalShortcutFire(activeTagName, isContentEditable, isAnyModalOpen)
+  return shouldGlobalShortcutFire(activeTagName, isContentEditable, overlayOpen)
 }
 
 /**

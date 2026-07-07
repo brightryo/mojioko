@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { SHORTCUTS } from '../../src/renderer/lib/shortcuts'
+import { SHORTCUTS, findShortcut, type ShortcutId } from '../../src/renderer/lib/shortcuts'
+import { shortcutHint } from '../../src/renderer/lib/shortcut-hint'
 import jaCommon from '../../src/renderer/locales/ja/common.json'
 import enCommon from '../../src/renderer/locales/en/common.json'
 
@@ -59,11 +60,12 @@ describe('REQ-0131 — SHORTCUTS registry', () => {
     }
   })
 
-  it('splits into editor + modal contexts only', () => {
+  it('splits into editor / timeline / modal contexts only', () => {
     for (const s of SHORTCUTS) {
-      expect(['editor', 'modal']).toContain(s.context)
+      expect(['editor', 'timeline', 'modal']).toContain(s.context)
     }
     const editor = SHORTCUTS.filter((s) => s.context === 'editor').map((s) => s.id)
+    const timeline = SHORTCUTS.filter((s) => s.context === 'timeline').map((s) => s.id)
     const modal = SHORTCUTS.filter((s) => s.context === 'modal').map((s) => s.id)
     expect(editor).toContain('undo')
     expect(editor).toContain('redo')
@@ -71,7 +73,31 @@ describe('REQ-0131 — SHORTCUTS registry', () => {
     expect(editor).toContain('selectAll')
     expect(editor).toContain('clearSel')
     expect(editor).toContain('playPause')
+    expect(editor).toContain('duplicate')       // REQ-0132 §1.2
+    expect(editor).toContain('reset')           // REQ-0132 §1.2
+    expect(timeline).toEqual([
+      'timelinePrevBoundary',
+      'timelineNextBoundary',
+      'timelineStart',
+      'timelineEnd',
+      'timelineZoomIn',
+      'timelineZoomOut',
+    ])
     expect(modal).toEqual(['modalCancel', 'modalConfirm'])
+  })
+
+  it('findShortcut returns the SoT entry by id (REQ-0132 §4.3)', () => {
+    expect(findShortcut('duplicate')?.keys).toEqual(['Ctrl+D'])
+    expect(findShortcut('reset')?.keys).toEqual(['Ctrl+R'])
+    expect(findShortcut('timelinePrevBoundary')?.keys).toEqual(['←'])
+    expect(findShortcut('nope' as ShortcutId)).toBeUndefined()
+  })
+
+  it('shortcutHint produces a parenthesised suffix for known ids (REQ-0132 §1.4)', () => {
+    expect(shortcutHint('duplicate')).toBe(' (Ctrl+D)')
+    expect(shortcutHint('reset')).toBe(' (Ctrl+R)')
+    expect(shortcutHint('redo')).toBe(' (Ctrl+Shift+Z)') // first key = canonical
+    expect(shortcutHint('nope' as ShortcutId)).toBe('')
   })
 
   it('redo advertises both Ctrl+Shift+Z and Ctrl+Y (REQ-0131 §1.3)', () => {
