@@ -56,7 +56,15 @@
     "scopeGlobal": "グローバル",
     "scopeStep1": "ステップ1 — 文字起こし",
     "scopeStep2": "ステップ2 — 編集",
-    "scopeStep3": "ステップ3 — 書き出し"
+    "scopeStep3": "ステップ3 — 書き出し",
+    "playPause": "再生 / 一時停止",
+    "undo": "元に戻す",
+    "redo": "やり直し",
+    "delete": "選択クリップを削除",
+    "selectAll": "全選択",
+    "clearSel": "選択を解除",
+    "modalCancel": "キャンセル",
+    "modalConfirm": "OK / 確定"
   },
   "colorPicker": {
     "presets": "プリセット",

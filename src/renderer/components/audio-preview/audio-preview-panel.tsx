@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Play, Pause, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
-import { useUiStore } from '@/stores/ui-store'
+import { useUiStore, isAnyModalOpen } from '@/stores/ui-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shellShowInFolder } from '@/services/dialog'
@@ -168,6 +168,9 @@ export function AudioPreviewPanel() {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.code !== 'Space' || e.ctrlKey || e.altKey || e.metaKey) return
+      // REQ-0131 §2 context A — same modal-suppression guard as
+      // VideoPreviewPanel.  See that binding for the reason.
+      if (isAnyModalOpen(useUiStore.getState())) return
       const active = document.activeElement as HTMLElement | null
       if (active) {
         if (active.isContentEditable) return

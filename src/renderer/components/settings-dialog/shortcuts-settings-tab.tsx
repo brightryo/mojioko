@@ -1,0 +1,89 @@
+import { useTranslation } from 'react-i18next'
+import { SHORTCUTS } from '@/lib/shortcuts'
+
+/**
+ * REQ-0131 §5 — read-only "keyboard shortcuts" tab in the Settings
+ * dialog.  Renders the shared `SHORTCUTS` registry so this UI can
+ * never drift from the hook that actually fires the bindings.  Two
+ * `<dl>` groups — Editor (context B) and Modal (context A) — mirror
+ * the `context` field of each ShortcutSpec.  Context C (typing in a
+ * form field) has no shortcuts by design, so it isn't shown.
+ *
+ * Every text goes through `t('common:shortcuts.*')` so the tab honours
+ * §3 (no hardcoded literals in components).
+ */
+export function ShortcutsSettingsTab() {
+  const { t } = useTranslation(['settings', 'common'])
+  const editor = SHORTCUTS.filter((s) => s.context === 'editor')
+  const modal = SHORTCUTS.filter((s) => s.context === 'modal')
+
+  return (
+    <div className="space-y-4">
+      <p className="text-body-sm text-fg-muted">{t('settings:shortcuts.hint')}</p>
+
+      <section className="space-y-2">
+        <h3 className="text-body font-semibold text-fg-primary">
+          {t('settings:shortcuts.groupEditor')}
+        </h3>
+        <p className="text-body-sm text-fg-muted">
+          {t('settings:shortcuts.groupEditorDesc')}
+        </p>
+        <dl className="divide-y divide-line rounded-md border border-line bg-surface-0">
+          {editor.map((s) => (
+            <ShortcutRow
+              key={s.id}
+              label={t(`common:${s.labelKey}`)}
+              keys={s.keys}
+            />
+          ))}
+        </dl>
+      </section>
+
+      <section className="space-y-2">
+        <h3 className="text-body font-semibold text-fg-primary">
+          {t('settings:shortcuts.groupModal')}
+        </h3>
+        <p className="text-body-sm text-fg-muted">
+          {t('settings:shortcuts.groupModalDesc')}
+        </p>
+        <dl className="divide-y divide-line rounded-md border border-line bg-surface-0">
+          {modal.map((s) => (
+            <ShortcutRow
+              key={s.id}
+              label={t(`common:${s.labelKey}`)}
+              keys={s.keys}
+            />
+          ))}
+        </dl>
+      </section>
+    </div>
+  )
+}
+
+interface ShortcutRowProps {
+  label: string
+  keys: string[]
+}
+
+/**
+ * One <dt>/<dd> row.  `keys` renders each string as a chip; multiple
+ * chips (e.g. Ctrl+Shift+Z / Ctrl+Y for Redo) sit side-by-side with a
+ * comma between them for screen readers.
+ */
+function ShortcutRow({ label, keys }: ShortcutRowProps) {
+  return (
+    <div className="flex items-center justify-between px-3 py-2">
+      <dt className="text-body text-fg-secondary">{label}</dt>
+      <dd className="flex items-center gap-1.5" aria-label={keys.join(', ')}>
+        {keys.map((k, i) => (
+          <span
+            key={`${k}-${i}`}
+            className="rounded border border-line-strong bg-surface-1 px-2 py-0.5 font-mono text-body-sm text-fg-primary"
+          >
+            {k}
+          </span>
+        ))}
+      </dd>
+    </div>
+  )
+}

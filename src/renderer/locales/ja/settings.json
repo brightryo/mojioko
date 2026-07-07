@@ -4,7 +4,8 @@
     "general": "一般",
     "fonts": "フォント",
     "defaultStyle": "字幕スタイル",
-    "whisper": "Whisper設定"
+    "whisper": "Whisper設定",
+    "shortcuts": "ショートカット"
   },
   "general": {
     "language": "言語",
@@ -38,6 +39,13 @@
   },
   "whisper": {
     "hint": "Whisperのデフォルト設定です。"
+  },
+  "shortcuts": {
+    "hint": "現在割り当てられているキーボードショートカットの一覧です（読み取り専用）。",
+    "groupEditor": "編集画面",
+    "groupEditorDesc": "モーダルが開いておらず、テキスト入力欄などにフォーカスが無いときに有効。",
+    "groupModal": "モーダル表示中",
+    "groupModalDesc": "カラーピッカーなどのモーダル表示中は、これらのキーのみが有効。他のショートカットは無効化される。"
   },
   "about": {
     "developedBy": "このアプリはBrightRyoによって開発されました",

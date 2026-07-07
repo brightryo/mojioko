@@ -3,7 +3,7 @@ import { Play, Pause, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
-import { useUiStore } from '@/stores/ui-store'
+import { useUiStore, isAnyModalOpen } from '@/stores/ui-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { usePreviewMixStore } from '@/stores/preview-mix-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
@@ -575,6 +575,11 @@ export function VideoPreviewPanel() {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.code !== 'Space' || e.ctrlKey || e.altKey || e.metaKey) return
+      // REQ-0131 §2 context A — suppress Space play/pause while any
+      // modal is open so it falls through to the modal (typing space
+      // into the hex input, activating focused OK button, etc.).  Same
+      // predicate the shared `useGlobalShortcuts` handler uses.
+      if (isAnyModalOpen(useUiStore.getState())) return
       const active = document.activeElement as HTMLElement | null
       if (active) {
         if (active.isContentEditable) return

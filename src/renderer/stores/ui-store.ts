@@ -23,6 +23,17 @@ interface UiStore {
   isAboutDialogOpen: boolean
   isDonationDialogOpen: boolean
   isFontLicensesDialogOpen: boolean
+  /**
+   * REQ-0131 §2 context A — becomes `true` while the color-picker
+   * popover (REQ-0127) is open.  Every other modal already has an
+   * `is…DialogOpen` boolean, but the color picker's open state lives
+   * inside the ColorPicker component itself; without this mirror the
+   * shared `isAnyModalOpen` selector could not see it and the global
+   * shortcut handler would misclassify context A vs B while the picker
+   * was up.  ColorPicker.handleOpenChange writes to this whenever the
+   * Radix Popover's open flag changes.
+   */
+  isColorPickerOpen: boolean
   tableFilter: TableFilter
   /**
    * REQ-20260614-001 Phase 3 — **playback-active entry id**.  Set by the
@@ -187,6 +198,7 @@ interface UiStore {
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
   setFontLicensesDialogOpen: (open: boolean) => void
+  setColorPickerOpen: (open: boolean) => void
   setTableFilter: (f: TableFilter) => void
   setFocusedRowId: (id: string | null) => void
   setSelectedEntryId: (id: string | null) => void
@@ -229,6 +241,7 @@ export const useUiStore = create<UiStore>((set) => ({
   isAboutDialogOpen: false,
   isDonationDialogOpen: false,
   isFontLicensesDialogOpen: false,
+  isColorPickerOpen: false,
   tableFilter: 'all',
   focusedRowId: null,
   selectedEntryId: null,
@@ -260,6 +273,7 @@ export const useUiStore = create<UiStore>((set) => ({
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
   setDonationDialogOpen: (open) => set({ isDonationDialogOpen: open }),
   setFontLicensesDialogOpen: (open) => set({ isFontLicensesDialogOpen: open }),
+  setColorPickerOpen: (open) => set({ isColorPickerOpen: open }),
   setTableFilter: (f) => set({ tableFilter: f }),
   setFocusedRowId: (id) => set({ focusedRowId: id }),
   setSelectedEntryId: (id) => set({ selectedEntryId: id }),
@@ -338,3 +352,26 @@ export const useUiStore = create<UiStore>((set) => ({
     set((s) => ({ step2TimelineToolsExpanded: !s.step2TimelineToolsExpanded })),
   setLastTranscriptionWasEmpty: (v) => set({ lastTranscriptionWasEmpty: v }),
 }))
+
+/**
+ * REQ-0131 §4.3 — derived selector reading every modal-open flag.
+ * Both the shared shortcut handler and the preview panels' Space
+ * bindings consume this so context A (any modal open) is judged the
+ * same way everywhere.  Extending: when a new modal ships, add its
+ * boolean here and the guard extends automatically.
+ */
+export function isAnyModalOpen(s: {
+  isSettingsDialogOpen: boolean
+  isAboutDialogOpen: boolean
+  isDonationDialogOpen: boolean
+  isFontLicensesDialogOpen: boolean
+  isColorPickerOpen: boolean
+}): boolean {
+  return (
+    s.isSettingsDialogOpen ||
+    s.isAboutDialogOpen ||
+    s.isDonationDialogOpen ||
+    s.isFontLicensesDialogOpen ||
+    s.isColorPickerOpen
+  )
+}

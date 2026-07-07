@@ -73,6 +73,7 @@ export function ColorPicker({
   const { t } = useTranslation('common')
   const recentColors = useUiStore((s) => s.recentColors)
   const addRecentColor = useUiStore((s) => s.addRecentColor)
+  const setColorPickerOpen = useUiStore((s) => s.setColorPickerOpen)
 
   const [open, setOpen] = useState(false)
   const [hexDraft, setHexDraft] = useState(value)
@@ -129,19 +130,48 @@ export function ColorPicker({
       setValueOnOpen(null)
     }
     setOpen(next)
+    // REQ-0131 §2 context A — mirror the picker's open flag into
+    // ui-store so the shared `isAnyModalOpen` selector sees it.  The
+    // shortcut handler + preview panels both read that helper; without
+    // this write the Space play/pause shortcut would continue to fire
+    // while the picker is up, and Ctrl+A / Ctrl+Z would trample the
+    // user's colour work.
+    setColorPickerOpen(next)
   }
 
   // REQ-0127 Phase 3 — explicit OK / Cancel buttons replace the outside-
-  // click-to-commit affordance.  OK re-uses handleOpenChange(false)'s
-  // commit path (value has moved via onChange during the session, so the
-  // usual "value !== valueOnOpen" check fires onCommit as before).
-  // Cancel rewinds the store to `valueOnOpen` via `onChange` (which
-  // callers wire to the history-less updateEntryPreview / draft setter,
-  // matching REQ-0125's preview stream), then suppresses the onCommit
-  // fire by clearing `valueOnOpen` before closing — same trick as
-  // handlePairClick.
+  // click-to-commit affordance.  Cancel rewinds the store to
+  // `valueOnOpen` via `onChange` (which callers wire to the history-
+  // less updateEntryPreview / draft setter, matching REQ-0125's preview
+  // stream), then suppresses the onCommit fire by clearing
+  // `valueOnOpen` before closing — same trick as handlePairClick.
+  //
+  // REQ-0131 §2 A — Enter=OK.  When Enter fires from the hex input,
+  // the user's typed draft may not yet be flushed to `value` via the
+  // per-keystroke onChange (which only fires on HEX_RE match).  Read
+  // hexDraft directly here so the effective committed value is the
+  // typed draft, not the stale prop.  This inlines the close-side of
+  // handleOpenChange rather than delegating, because the async parent
+  // setState from `onChange(hexDraft)` would not have reached `value`
+  // by the time handleOpenChange's onCommit branch reads it.
   function handleConfirm() {
-    handleOpenChange(false)
+    const effective =
+      HEX_RE.test(hexDraft) ? normalise(hexDraft) : normalise(value)
+    if (HEX_RE.test(effective)) {
+      addRecentColor(effective)
+    }
+    if (onCommit && valueOnOpen !== null && effective !== valueOnOpen) {
+      onCommit(effective, valueOnOpen)
+    }
+    // Push the pending hex draft upward so the parent's `value` state
+    // catches up on the next render.  Skipped when hex draft already
+    // matches the prop (the OK-after-picker-drag path).
+    if (HEX_RE.test(hexDraft) && normalise(hexDraft) !== normalise(value)) {
+      onChange(normalise(hexDraft))
+    }
+    setValueOnOpen(null)
+    setOpen(false)
+    setColorPickerOpen(false)
   }
   function handleCancel() {
     if (valueOnOpen !== null && normalise(value) !== valueOnOpen) {
@@ -154,6 +184,7 @@ export function ColorPicker({
     }
     setValueOnOpen(null)
     setOpen(false)
+    setColorPickerOpen(false)
   }
 
   function handlePickerChange(hex: string) {
@@ -231,6 +262,25 @@ export function ColorPicker({
         // Esc = Cancel, per REQ-0127 §3 modal semantics.
         e.preventDefault()
         handleCancel()
+      }}
+      onKeyDown={(e) => {
+        // REQ-0131 §2 A — Enter anywhere inside the popover confirms
+        // (OK), including from the hex input (handleConfirm reads
+        // hexDraft directly, so a typed draft commits even if the
+        // per-keystroke onChange has not yet flushed to the prop).
+        // Bail on modifiers so Ctrl+Enter et al. fall through to any
+        // future in-modal shortcut without hijacking Enter=OK.
+        if (e.key !== 'Enter') return
+        if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return
+        // Textarea Enter inserts a newline — skip so the user can
+        // still enter multi-line text in future modal fields.  No
+        // textarea inside the picker today, but the guard costs
+        // nothing and future-proofs the contract.
+        const target = e.target as HTMLElement | null
+        if (target && target.tagName.toLowerCase() === 'textarea') return
+        e.preventDefault()
+        e.stopPropagation()
+        handleConfirm()
       }}
     >
       {/* Scrollable body — grows to fill remaining vertical space, and

@@ -4,7 +4,8 @@
     "general": "General",
     "fonts": "Fonts",
     "defaultStyle": "Subtitle Style",
-    "whisper": "Whisper"
+    "whisper": "Whisper",
+    "shortcuts": "Shortcuts"
   },
   "general": {
     "language": "Language",
@@ -38,6 +39,13 @@
   },
   "whisper": {
     "hint": "Default settings for Whisper."
+  },
+  "shortcuts": {
+    "hint": "Read-only reference for the currently assigned keyboard shortcuts.",
+    "groupEditor": "Editor",
+    "groupEditorDesc": "Active when no modal is open and focus is outside any text input.",
+    "groupModal": "While a modal is open",
+    "groupModalDesc": "When a modal (e.g. the color picker) is open only these keys fire; every other shortcut is suppressed."
   },
   "about": {
     "developedBy": "This app was developed by BrightRyo.",

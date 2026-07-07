@@ -17,7 +17,6 @@ import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { cn } from '@/lib/utils'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
-import { deleteEntryById, shouldTimelineDeleteFire } from '@/lib/entry-row-actions'
 import { formatEditedTimecode } from '@/lib/time'
 import {
   layoutEntries,
@@ -621,58 +620,13 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   const selectedEntryId = useUiStore((s) => s.selectedEntryId)
   const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
 
-  // REQ-0129 Phase 2 + REQ-0130 — Delete / Backspace on the timeline
-  // soft-deletes the currently-selected clip via the same `toggleDeleteRow`
-  // path the inspector's trash-icon click uses.  History op is pushed as
-  // usual (undo restores; a second Delete on the now-deleted row
-  // un-deletes, matching the inspector's toggle semantic).
-  //
-  // REQ-0130 — REQ-0129 initially wired this via `useHotkeys` from
-  // `react-hotkeys-hook`, which hit `Invalid hook call. Hooks can only
-  // be called inside of the body of a function component.  … Cannot
-  // read properties of null (reading 'useState')` at runtime on the
-  // owner's machine, blanking the Step 2 timeline entirely.  The error
-  // pattern is textbook duplicate-React (the library's internal
-  // React.useState reads a null dispatcher).  Rather than chase the
-  // library-vs-vite/electron dedup, we ripped `react-hotkeys-hook` out
-  // and re-implemented the shortcut with the same in-house pattern
-  // App.tsx's `useSuppressTabFocus` and audio-preview-panel's Space
-  // binding already use: `useEffect` + capture-phase document
-  // `keydown` + form-tag / contentEditable guard for the "typing =
-  // character-delete" rule.  Zero new deps, identical behaviour
-  // contract to REQ-0129, and it aligns the timeline shortcut with the
-  // rest of the app's keyboard wiring style.
-  //
-  // Selection is read via `useUiStore.getState()` inside the handler
-  // (not closure) so the listener registration doesn't need to move
-  // every time the selection changes — one attach at mount, one detach
-  // at unmount.  `t` is closure-captured but stable per render; a
-  // language switch remounts nothing here so the labels are always
-  // current at the moment DEL fires.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      const active = document.activeElement as HTMLElement | null
-      const shouldFire = shouldTimelineDeleteFire(
-        e.key,
-        { ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey },
-        active?.tagName ?? null,
-        active?.isContentEditable ?? false,
-      )
-      if (!shouldFire) return
-      const currentSelection = useUiStore.getState().selectedEntryId
-      if (!currentSelection) return
-      const fired = deleteEntryById(currentSelection, {
-        delete: t('history.deleteRow'),
-        restore: t('history.restoreRow'),
-      })
-      if (fired) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
-    }
-    document.addEventListener('keydown', onKeyDown, true)
-    return () => document.removeEventListener('keydown', onKeyDown, true)
-  }, [t])
+  // REQ-0131 §4.1 — DEL / Backspace on the timeline used to be handled
+  // by a local `useEffect + document.addEventListener('keydown', ..., true)`
+  // in this component (REQ-0129 Phase 2 + REQ-0130 in-house rewrite).
+  // It moved into `useGlobalShortcuts` (mounted from App.tsx) so every
+  // global editor shortcut funnels through one handler + one predicate.
+  // Behaviour contract is unchanged: same `deleteEntryById` call, same
+  // history-label pair, same context-B guard.
   const setVideoSeekRequest = useUiStore((s) => s.setVideoSeekRequest)
   // REQ-094 case B: TimelineView no longer subscribes to
   // `videoCurrentTimeSec`.  The playhead lives in its own memo'd

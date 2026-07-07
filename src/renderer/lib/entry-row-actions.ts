@@ -28,32 +28,54 @@ import { commitTimeEdit } from '@/lib/commit-time-edit'
  */
 
 /**
- * REQ-0130 — pure predicate for the timeline's DEL / Backspace guard.
- * Extracted so unit tests can pin the "typing = character-delete" rule
- * without spinning up a React render.  Returns `true` when the keydown
- * should trigger a timeline clip delete, `false` otherwise.
+ * REQ-0131 §4.3 — 3-context predicate for the shared global-shortcut
+ * handler.  Returns `true` only when the keydown is in **context B**
+ * (editor screen, no modal, focus outside any editable element).  In
+ * context A (a modal is open) and context C (focus is in a form field
+ * or contentEditable region) it returns `false` so the caller bails
+ * and the keystroke falls through to the modal's own Esc/Enter contract
+ * (A) or the field's native character-input (C).
  *
- * Rules:
- *   - Only bare Delete / Backspace fires.  Any modifier (Ctrl / Alt /
- *     Meta / Shift) bails so keyboard shortcuts and browser gestures
- *     stay untouched.
- *   - Focus on a form tag (`input` / `textarea` / `select`) or a
- *     `contentEditable` region bails — the user is typing, DEL is a
- *     character-delete.  Mirrors the guard in audio-preview-panel's
- *     Space binding so the app's keyboard shortcuts feel consistent.
+ * Extracted so unit tests can pin the tri-state rule without spinning
+ * up a React render.  Both the shared `useGlobalShortcuts` handler and
+ * the preview panels' Space bindings call this function so every
+ * global shortcut answers the same question the same way.  The
+ * per-shortcut key/modifier check (Ctrl+Z vs Delete vs Space) is the
+ * caller's job — this predicate only decides *whether it is allowed
+ * to fire in principle*.
+ */
+export function shouldGlobalShortcutFire(
+  activeTagName: string | null,
+  isContentEditable: boolean,
+  isAnyModalOpen: boolean,
+): boolean {
+  if (isAnyModalOpen) return false               // context A → suppress
+  if (isContentEditable) return false            // context C → typing
+  const tag = (activeTagName ?? '').toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return false // context C
+  return true                                     // context B → fire
+}
+
+/**
+ * REQ-0130 — pure predicate for the timeline's DEL / Backspace guard.
+ * Kept for the existing unit tests + call sites that pre-date the
+ * REQ-0131 consolidation.  Layer over `shouldGlobalShortcutFire` so
+ * both surfaces route through the same context judgement — the only
+ * extra thing this variant does is check the key + modifier shape
+ * (bare Delete / Backspace).  The `isAnyModalOpen` parameter defaults
+ * to `false` because REQ-0130's own unit fixtures pre-date the modal
+ * concept.
  */
 export function shouldTimelineDeleteFire(
   key: string,
   modifiers: { ctrl: boolean; alt: boolean; meta: boolean; shift: boolean },
   activeTagName: string | null,
   isContentEditable: boolean,
+  isAnyModalOpen = false,
 ): boolean {
   if (key !== 'Delete' && key !== 'Backspace') return false
   if (modifiers.ctrl || modifiers.alt || modifiers.meta || modifiers.shift) return false
-  if (isContentEditable) return false
-  const tag = (activeTagName ?? '').toLowerCase()
-  if (tag === 'input' || tag === 'textarea' || tag === 'select') return false
-  return true
+  return shouldGlobalShortcutFire(activeTagName, isContentEditable, isAnyModalOpen)
 }
 
 /**

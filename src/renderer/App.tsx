@@ -20,6 +20,7 @@ import { loadSettings, saveSettings } from '@/services/settings'
 import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { listFonts } from '@/services/font'
+import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts'
 import { APP_VERSION } from '../shared/app-info'
 import type { AppSettings } from '../shared/types'
 
@@ -60,6 +61,13 @@ function useSuppressTabFocus(): void {
 
 function AppInner() {
   useSuppressTabFocus()
+  // REQ-0131 §4.1 — single owner of global editor shortcuts (Undo /
+  // Redo / Delete / Ctrl+A / Ctrl+Shift+A).  Mounted at the app root
+  // so the bindings survive route transitions between Step 1 and
+  // Step 2.  Space (play/pause) still lives on the preview panels
+  // because they own the `<video>` / `<audio>` ref; both surfaces
+  // share `shouldGlobalShortcutFire` so context judgement is uniform.
+  useGlobalShortcuts()
   const [appVersion, setAppVersion] = useState(APP_VERSION)
   const location = useLocation()
   const { i18n } = useTranslation('common')

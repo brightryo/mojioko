@@ -14,6 +14,7 @@ import { DefaultStyleControls } from '@/components/default-style-controls/defaul
 import { WhisperAdvancedControls } from '@/components/whisper-advanced-controls/whisper-advanced-controls'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { FolderPathInput } from './folder-path-input'
+import { ShortcutsSettingsTab } from './shortcuts-settings-tab'
 
 // REQ-20260615-050 — fade range constants now live in shared/constants
 // (`FADE_DURATION_SEC_{MIN,MAX,STEP}`), driven by the FadeDurationSlider.
@@ -95,6 +96,7 @@ export function SettingsDialog() {
             <TabsTrigger value="fonts">{t('tabs.fonts')}</TabsTrigger>
             <TabsTrigger value="defaultStyle">{t('tabs.defaultStyle')}</TabsTrigger>
             <TabsTrigger value="whisper">{t('tabs.whisper')}</TabsTrigger>
+            <TabsTrigger value="shortcuts">{t('tabs.shortcuts')}</TabsTrigger>
           </TabsList>
 
           {/* ─ General ────────────────────────────────────────────── */}
@@ -268,6 +270,15 @@ export function SettingsDialog() {
               onUpdate={setTranscriptionAdvanced}
               onReset={resetTranscriptionAdvanced}
             />
+          </TabsContent>
+
+          {/* ─ Shortcuts ──────────────────────────────────────────── */}
+          {/* REQ-0131 §5 — read-only list rendered from the shared
+              `SHORTCUTS` registry.  No mutation UI; the tab exists so
+              the user can discover which keys do what without leaving
+              the app. */}
+          <TabsContent value="shortcuts" className="space-y-3 min-h-[490px]">
+            <ShortcutsSettingsTab />
           </TabsContent>
         </Tabs>
       </DialogContent>

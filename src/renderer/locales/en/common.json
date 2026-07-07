@@ -56,7 +56,15 @@
     "scopeGlobal": "Global",
     "scopeStep1": "Step 1 — Transcribe",
     "scopeStep2": "Step 2 — Edit",
-    "scopeStep3": "Step 3 — Render"
+    "scopeStep3": "Step 3 — Render",
+    "playPause": "Play / pause",
+    "undo": "Undo",
+    "redo": "Redo",
+    "delete": "Delete selected clip",
+    "selectAll": "Select all rows",
+    "clearSel": "Clear selection",
+    "modalCancel": "Cancel",
+    "modalConfirm": "OK / Confirm"
   },
   "colorPicker": {
     "presets": "Presets",
