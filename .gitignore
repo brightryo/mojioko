@@ -17,6 +17,10 @@ dist/
 out/
 release/
 
+# REQ-0166 — MSIX ビルド成果物 (electron-builder appx target).  4 GB 級の
+# .appx / loose-file expansion / signing 中間物が入るため絶対に追跡しない。
+dist-appx/
+
 # Python sidecar ビルド
 python-sidecar/dist/
 python-sidecar/build/
