@@ -196,7 +196,16 @@ function AppInner() {
           activeModelId: null,
           activeFontId: s.activeFontId,
           lastInputDir: null,
-          lastOutputDir: null
+          lastOutputDir: null,
+          // REQ-0158 — the Settings-dialog user-preferred fixed folders
+          // (REQ-0121) MUST be included in the payload so a "set to
+          // C:/videos" survives a restart AND a "cleared to null via
+          // the × button" propagates to disk.  The main-side merge
+          // uses `'key' in incoming` semantics (not `?? existing`) to
+          // distinguish those two cases from "renderer omitted the
+          // key entirely" — see `settings-merge.ts`.
+          defaultInputDir: s.defaultInputDir,
+          defaultOutputDir: s.defaultOutputDir
         }
         saveSettings(settings).catch(() => { /* ignore IPC failures */ })
       }, 500)

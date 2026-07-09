@@ -61,7 +61,13 @@ function buildDefaults(language?: SupportedLanguage): AppSettings {
     // REQ-0121 — user-preferred fixed default folders (Settings > General).
     // `null` = fall back to the OS Videos folder in the dialog handler.
     defaultInputDir: null,
-    defaultOutputDir: null
+    defaultOutputDir: null,
+    // REQ-0150 — default the accelerator to CPU.  Every fresh install
+    // and every settings.json older than v1.3.3 lands on CPU which
+    // matches the pre-REQ-0150 behaviour (no GPU tools bundled = no
+    // GPU env var injected).  Users opt in via the 2-card picker
+    // after downloading the GPU tools.
+    activeAccelerator: 'cpu'
   }
 }
 
