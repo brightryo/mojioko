@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Download, Trash2, X, FileText, AlertCircle, Lock } from 'lucide-react'
+import { Download, Trash2, X, FileText, AlertCircle, AlertTriangle, Lock, DownloadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { HelpIcon } from '@/components/help-icon'
 import {
   Dialog,
   DialogContent,
@@ -26,9 +25,11 @@ import {
 } from '@/services/font'
 import type { FontDownloadRun } from '@/services/font'
 import { ensureFontLoaded, evictFont } from '@/lib/font-registry'
-import { evictSubtitleFont } from '@/lib/font-metrics'
+import { evictSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { useUiStore } from '@/stores/ui-store'
-import { FONT_REGISTRY, type FontId, type FontsState, type FontInfo, type FontMeta, getFontMeta } from '../../../shared/fonts'
+import { selectBatchDownloadTargets } from '@/lib/batch-font-download'
+import { getSortedFontRegistry, type FontId, type FontsState, type FontInfo, type FontMeta, getFontMeta } from '../../../shared/fonts'
+import { FontLangBadge, FontLangBadges } from '@/components/font-lang-badge/font-lang-badge'
 
 interface FontPickerProps {
   /** Optional callback fired when a font is downloaded or activated, so the
@@ -71,6 +72,27 @@ export function FontPicker({ onChange }: FontPickerProps) {
   const [state, setState] = useState<FontsState | null>(null)
   const [downloadingId, setDownloadingId] = useState<FontId | null>(null)
   const [downloadPercent, setDownloadPercent] = useState(0)
+  /**
+   * REQ-0161 — batch download progress.  Non-null exactly while a
+   * `handleBatchDownload` iteration is in flight; used both by the
+   * batch button (label swaps to "Cancel") and by every FontRow (all
+   * DL / Trash / per-row Cancel-X buttons are greyed out during
+   * batch to avoid mid-run interference).  `completed` counts fonts
+   * that reached the `promise` resolve — fonts skipped by user cancel
+   * do NOT increment it; fonts that failed for network / 404 reasons
+   * also do not, so the "downloaded X of N" toast is exact.
+   */
+  const [batchState, setBatchState] = useState<{
+    total: number
+    completed: number
+    currentId: FontId | null
+  } | null>(null)
+  /**
+   * REQ-0161 — Cancel-batch signal.  Ref (not state) so the loop
+   * body can read the freshest value without re-rendering + closure
+   * capture.  Reset to false before every fresh batch run.
+   */
+  const batchAbortRef = useRef(false)
   /**
    * REQ-025 (ii): when the user clicks Uninstall on a font that is
    * currently referenced by one or more rows (`entry.fontId === meta.id`),
@@ -119,7 +141,19 @@ export function FontPicker({ onChange }: FontPickerProps) {
     try {
       await run.promise
       await refresh()
-      await ensureFontLoaded(meta.id).catch(() => {})
+      // REQ-0162 — kick BOTH loaders once the bytes are on disk:
+      //   - `ensureFontLoaded` registers the FontFace with document.fonts
+      //     so CSS `font-family: '<name>'` starts rendering in the new face.
+      //   - `loadSubtitleFontFor` parses the TTF via opentype.js and
+      //     populates the cmap coverage cache that REQ-0160's tofu
+      //     substitution reads.  Without this second call a freshly
+      //     downloaded font would render Japanese as system-font
+      //     fallback (bug REQ-0162 fixed) until the NEXT app launch
+      //     where App.tsx's startup loop finally catches it.
+      await Promise.all([
+        ensureFontLoaded(meta.id).catch(() => {}),
+        loadSubtitleFontFor(meta.id).catch(() => {}),
+      ])
       toast.success(t('fontPicker.toast.downloadComplete', { name: meta.displayName }))
       // Notify every other useInstalledFontIds subscriber so per-row /
       // bulk pickers immediately include the new font in their popover
@@ -153,6 +187,130 @@ export function FontPicker({ onChange }: FontPickerProps) {
     downloadRunRef.current = null
     setDownloadingId(null)
     setDownloadPercent(0)
+  }
+
+  /**
+   * REQ-0161 — sequentially download every font eligible per
+   * `selectBatchDownloadTargets`.  Design choices:
+   *
+   *  - **Serial, not parallel.**  Font downloads hit the same GitHub
+   *    Releases bucket, and the existing individual DL flow already
+   *    exercises the main-side singleton write path — starting many
+   *    concurrent runs would race on the same install directory and
+   *    invite disk / cache corruption for negligible time savings on
+   *    a ~5 MB × N payload.
+   *  - **`downloadingId` still set per-iteration.**  Reusing the
+   *    existing per-row progress bar keeps the visual language
+   *    consistent — the row of the current font shows a progress
+   *    bar the same way an individual DL does.  Other rows get their
+   *    action buttons greyed out via `disableActions` (see below).
+   *  - **Cancel via `batchAbortRef`.**  The button label swaps to
+   *    "Cancel" during batch.  Clicking it (a) aborts the in-flight
+   *    `downloadFont` promise (rejects with an "abort"-substring
+   *    message), and (b) sets `batchAbortRef` so the loop stops
+   *    before starting the next iteration.  Already-downloaded fonts
+   *    stay on disk — the REQ explicitly asks for no rollback.
+   *  - **Failure isolation.**  If a single font's download 404s or
+   *    fails mid-stream, we continue to the next one.  The tally at
+   *    the end distinguishes `completed` / `failed` / `cancelled`
+   *    so the toast is accurate.
+   */
+  async function handleBatchDownload() {
+    const targets = selectBatchDownloadTargets(state, isMsix)
+    if (targets.length === 0) return
+
+    batchAbortRef.current = false
+    setBatchState({ total: targets.length, completed: 0, currentId: null })
+    let completed = 0
+    let failed = 0
+
+    for (const meta of targets) {
+      if (batchAbortRef.current) break
+
+      setBatchState((prev) => (prev ? { ...prev, currentId: meta.id } : prev))
+      setDownloadingId(meta.id)
+      setDownloadPercent(0)
+
+      const run = downloadFont(meta.id, (evt) => {
+        if (evt.event === 'progress') setDownloadPercent(evt.percent)
+      })
+      downloadRunRef.current = run
+
+      try {
+        await run.promise
+        // Refresh the font cache eagerly so that if the user is watching
+        // the picker while the batch runs, the row visibly flips to
+        // "installed" as each font completes.  Errors here are
+        // best-effort (the file is on disk regardless).
+        //
+        // REQ-0162 — same both-loader pattern the individual DL now
+        // uses: FontFace (CSS) + opentype.js parse (cmap coverage for
+        // tofu substitution).  Without the second loader, batched
+        // downloads left the fresh fonts renderable via CSS but
+        // invisible to REQ-0160's tofu path, so an EN-only font
+        // downloaded via "Download all" would still fall back for
+        // Japanese until app restart.
+        await Promise.all([
+          ensureFontLoaded(meta.id).catch(() => {}),
+          loadSubtitleFontFor(meta.id).catch(() => {}),
+        ])
+        completed++
+      } catch (err) {
+        // A user cancel and a network / 404 both land in this branch.
+        // Only count it as `failed` when we did NOT ask for it.  When
+        // `batchAbortRef.current` is true the loop will exit at the
+        // next iteration's guard; we still let the finally-block clear
+        // per-row progress state so the row doesn't stay stuck at
+        // "downloading…" if the user cancelled mid-DL.
+        const msg = err instanceof Error ? err.message : String(err)
+        if (!batchAbortRef.current && !msg.toLowerCase().includes('abort')) {
+          failed++
+        }
+      } finally {
+        downloadRunRef.current = null
+      }
+      setBatchState((prev) => (prev ? { ...prev, completed } : prev))
+    }
+
+    await refresh()
+    // Re-notify the font-inventory subscribers once, at the end of the
+    // batch — better than N notifications while the batch is running.
+    bumpFontInventoryVersion()
+
+    const wasCancelled = batchAbortRef.current
+    batchAbortRef.current = false
+    setDownloadingId(null)
+    setDownloadPercent(0)
+    setBatchState(null)
+
+    if (wasCancelled) {
+      toast.info(
+        t('fontPicker.batchDownload.toast.cancelled', {
+          completed,
+          total: targets.length,
+        }),
+      )
+    } else if (failed > 0) {
+      toast.warning(
+        t('fontPicker.batchDownload.toast.partial', {
+          completed,
+          total: targets.length,
+          failed,
+        }),
+      )
+    } else if (completed > 0) {
+      toast.success(t('fontPicker.batchDownload.toast.done', { count: completed }))
+    }
+    onChange?.()
+  }
+
+  function handleCancelBatch() {
+    // Set the abort ref FIRST so the loop's next-iteration guard sees
+    // the truthy value even if the current DL's cancel resolves
+    // asynchronously.  The in-flight promise itself is aborted via the
+    // shared downloadRun reference used by individual DL as well.
+    batchAbortRef.current = true
+    downloadRunRef.current?.cancel()
   }
 
   /**
@@ -249,7 +407,18 @@ export function FontPicker({ onChange }: FontPickerProps) {
     if (meta.id === activeFontId) return
     // Preload before flipping the active selection so the FontFace is ready
     // by the time the preview re-renders.
-    await ensureFontLoaded(meta.id).catch(() => {})
+    // REQ-0162 — parallel-load both the CSS FontFace AND the opentype.js
+    // cmap coverage.  Selecting a font that hasn't yet been parsed
+    // by opentype.js used to leave REQ-0160's tofu substitution
+    // in a "cmap is null → skip" state for the first render (and
+    // for burn-in, which without REQ-0162's `services/burnin.ts`
+    // await would also see null), producing the same fallback
+    // symptom the bug fixes.  Awaiting here guarantees the
+    // subsequent activeFontId flip lands in a fully-loaded state.
+    await Promise.all([
+      ensureFontLoaded(meta.id).catch(() => {}),
+      loadSubtitleFontFor(meta.id).catch(() => {}),
+    ])
     const r = await setActiveFont(meta.id)
     if (r.ok) {
       setActiveFontInStore(meta.id)
@@ -259,14 +428,122 @@ export function FontPicker({ onChange }: FontPickerProps) {
     }
   }
 
+  // REQ-0161 — batch download eligibility.  The button is only rendered
+  // in the paid (MSIX) tier because the free build cannot download
+  // any non-default font; `selectBatchDownloadTargets` also returns
+  // an empty list in the free tier, so the visibility check is safe
+  // even if the tier ever gets more granular.
+  const batchTargets = selectBatchDownloadTargets(state, isMsix)
+  const showBatchButton = isMsix && (batchState !== null || batchTargets.length > 0)
+  const isBatchRunning = batchState !== null
+  // Individual DL (invoked via a per-row Download button) and batch DL
+  // are mutually exclusive: while either is running, the other's UI
+  // entry point is greyed out.  We derive both flags from the same
+  // state pair so an accidental race can't leave the two disagreeing.
+  const isIndividualDownloading = downloadingId !== null && batchState === null
+  // During batch, every row's action buttons (DL, Trash, per-row
+  // Cancel-X) are disabled — cancellation happens via the batch
+  // Cancel button.  During an individual DL, OTHER rows keep their
+  // buttons; only the batch button is disabled.  When idle both are
+  // fully interactive.
+  const perRowActionsDisabled = isBatchRunning
+
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center gap-1">
-        <span className="text-body font-medium text-foreground">{t('fontPicker.title')}</span>
-        <HelpIcon content={t('fontPicker.help')} />
+      {/* REQ-0164 §2 — heading reads "デフォルト字幕フォントの選択" /
+          "Select default subtitle font".  The pre-REQ-0164 `?`
+          HelpIcon + its `fontPicker.help` tooltip (a paragraph
+          covering "project-wide default…STEP 2 override…%APPDATA%
+          storage path") was removed: the owner flagged the tooltip
+          as misleading, and the fresh description `<p>` below the
+          header (former `settings:fonts.hint`) now carries the
+          guidance the user actually needs.
+          REQ-0165 — the "batch download" button that used to share
+          this header row moved into the legend row directly above
+          the list.  The header is now heading-only so the title
+          reads cleanly at 100 % width; the batch action sits closer
+          to the list it operates on. */}
+      <span className="block text-body font-medium text-foreground">
+        {t('fontPicker.title')}
+      </span>
+      {/* REQ-0164 §2 — description previously lived above the header
+          in the settings tab (as `settings:fonts.hint`).  Moved into
+          the FontPicker itself and repositioned BELOW the header so
+          the visual order matches "title → what to do → mechanics
+          (badges → list → warning)".  Owner flagged the pre-REQ-0164
+          "hint above heading" order as unnatural in the same session
+          that removed the `?` tooltip.  Rendering here (not in the
+          settings dialog) also gives the Subtitle Style dialog the
+          same guidance for free — that dialog reuses `<FontPicker>`
+          and now inherits the description without a separate
+          integration point. */}
+      <p className="text-body-sm text-muted-foreground leading-relaxed">
+        {t('fontPicker.description')}
+      </p>
+      {/* REQ-0163 §3 / REQ-0165 — EN / JA badge legend + batch DL
+          button on the same row.  Rationale for the row placement
+          (REQ-0165): the batch action operates on the list directly
+          below, so co-locating it with the list's immediate
+          predecessor tightens the "what am I about to affect"
+          affordance.  The legend uses the same shared
+          `<FontLangBadge>` component the list rows use, so a future
+          palette change propagates automatically.  Button uses
+          `size="sm"` (Button.tsx: `h-6 px-2 text-caption`) so its
+          height matches the caption-tone legend to its left — the
+          two sides of the row baseline-align without extra
+          alignment tweaks. */}
+      <div className="flex items-center justify-between gap-x-4 gap-y-1 flex-wrap text-caption text-muted-foreground">
+        <div className="flex items-center gap-x-4 gap-y-1 flex-wrap">
+          <span className="inline-flex items-center gap-1.5">
+            <FontLangBadge language="en" />
+            <span>… {t('fontPicker.langLegend.en')}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <FontLangBadge language="ja" />
+            <span>… {t('fontPicker.langLegend.ja')}</span>
+          </span>
+        </div>
+        {showBatchButton && (
+          <div className="flex items-center gap-2 shrink-0">
+            {isBatchRunning && batchState && (
+              <span className="text-caption text-muted-foreground tabular-nums">
+                {t('fontPicker.batchDownload.progress', {
+                  completed: batchState.completed,
+                  total: batchState.total,
+                })}
+              </span>
+            )}
+            {isBatchRunning ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleCancelBatch}
+                aria-label={t('fontPicker.batchDownload.cancel')}
+              >
+                <X className="h-3.5 w-3.5 mr-1" />
+                {t('fontPicker.batchDownload.cancel')}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => { void handleBatchDownload() }}
+                disabled={isIndividualDownloading || batchTargets.length === 0}
+                aria-label={t('fontPicker.batchDownload.button')}
+                title={t('fontPicker.batchDownload.buttonTooltip')}
+              >
+                <DownloadCloud className="h-3.5 w-3.5 mr-1" />
+                {t('fontPicker.batchDownload.button')}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
       <div className="rounded-md border border-border bg-card divide-y divide-border max-h-[300px] overflow-y-auto">
-        {FONT_REGISTRY.map((meta) => {
+        {/* REQ-0153 §2 — display in alphabetical order (all fonts, no
+            "default first" pin) so the enlarged registry is easy to
+            scan.  Selectability / tier-lock policy unchanged. */}
+        {getSortedFontRegistry().map((meta) => {
           const info: FontInfo | undefined = state?.fonts.find((f) => f.id === meta.id)
           const status = info?.status ?? (meta.bundled ? 'bundled' : 'not-installed')
           const isActive = activeFontId === meta.id
@@ -312,6 +589,10 @@ export function FontPicker({ onChange }: FontPickerProps) {
               canUninstall={canUninstall}
               tierAllowsDownload={tierAllowsDownload}
               isTierLocked={isTierLocked}
+              // REQ-0161 — grey out DL / Trash / per-row Cancel-X during
+              // a batch run.  The batch's own Cancel button in the
+              // header owns cancellation while it's active.
+              actionsDisabled={perRowActionsDisabled}
               onSelect={() => handleSelect(meta)}
               onDownload={() => handleDownload(meta)}
               onCancelDownload={handleCancelDownload}
@@ -321,6 +602,20 @@ export function FontPicker({ onChange }: FontPickerProps) {
           )
         })}
       </div>
+      {/* REQ-0161 / REQ-0163 §1 — tofu note.  Placed BELOW the list so
+          it sits in the peripheral vision without pulling attention
+          away from the picker itself.  REQ-0163 §1 promoted the tone
+          from muted-foreground to a warning-soft amber pill so the
+          missing-glyph consequence lands as a genuine notice, not
+          fine print — and pairs a `<AlertTriangle>` (same icon the
+          gpu-tool-manager uses for its own warnings) so screen readers
+          and glance-scanners both catch the signal.  Amber is now
+          reserved for this note: REQ-0163 §2 moved the `ja` badge
+          off amber to keep the two channels distinct. */}
+      <p className="inline-flex items-start gap-1.5 text-caption text-warning-soft leading-relaxed">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-[1px]" aria-hidden="true" />
+        <span>{t('fontPicker.tofuNote')}</span>
+      </p>
 
       {/* REQ-025 (ii) confirm dialog — only renders while a uninstall
           target is pending.  Same shape as step3.tsx's overwrite dialog
@@ -387,6 +682,18 @@ interface FontRowProps {
    * the upsell dialog instead of being inert.
    */
   isTierLocked: boolean
+  /**
+   * REQ-0161 — true while a batch download is running.  Greys out and
+   * disables the per-row Download / Uninstall / Cancel-X buttons so
+   * the user can't create a nested individual DL / uninstall race
+   * mid-batch.  The row's progress bar (when this row is the
+   * currently in-flight batch target) still renders — only the
+   * action buttons are gated.  Row-click selection is intentionally
+   * kept enabled so the user can still switch the active font while
+   * the batch runs (matches the "grey out DL only" scoping in the
+   * REQ).
+   */
+  actionsDisabled: boolean
   onSelect: () => void
   onDownload: () => void
   onCancelDownload: () => void
@@ -404,6 +711,7 @@ function FontRow({
   canUninstall,
   tierAllowsDownload,
   isTierLocked,
+  actionsDisabled,
   onSelect,
   onDownload,
   onCancelDownload,
@@ -461,6 +769,7 @@ function FontRow({
         <span className="text-body text-foreground truncate" style={labelStyle}>
           {meta.displayName}
         </span>
+        <FontLangBadges languages={meta.languages} />
         {/* Rare-kanji-missing note (REQ-022 step 5).  Only renders for
             fonts flagged in the registry (Hachi Maru Pop / Potta One).
             Compact amber pill + hover help so the warning is visible
@@ -488,15 +797,22 @@ function FontRow({
             <span className="text-caption text-muted-foreground tabular-nums w-9 text-right">
               {downloadPercent}%
             </span>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7"
-              onClick={(e) => { e.stopPropagation(); onCancelDownload() }}
-              aria-label={t('fontPicker.action.cancel')}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            {/* REQ-0161 — the per-row Cancel-X is hidden while the batch
+                DL owns the run (`actionsDisabled` is true then).  During
+                a batch, cancel goes through the batch's own Cancel
+                button in the header so the two surfaces don't disagree
+                about which layer of the run is being aborted. */}
+            {!actionsDisabled && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                onClick={(e) => { e.stopPropagation(); onCancelDownload() }}
+                aria-label={t('fontPicker.action.cancel')}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         ) : (
           <>
@@ -514,6 +830,7 @@ function FontRow({
                 variant="ghost"
                 className="h-7 w-7 text-muted-foreground hover:text-foreground"
                 onClick={(e) => { e.stopPropagation(); onDownload() }}
+                disabled={actionsDisabled}
                 aria-label={t('fontPicker.action.download')}
                 title={t('fontPicker.action.download')}
               >
@@ -556,6 +873,7 @@ function FontRow({
                 variant="ghost"
                 className="h-7 w-7 text-muted-foreground hover:text-destructive"
                 onClick={(e) => { e.stopPropagation(); onUninstall() }}
+                disabled={actionsDisabled}
                 aria-label={t('fontPicker.action.uninstall')}
                 title={t('fontPicker.action.uninstall')}
               >

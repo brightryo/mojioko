@@ -242,9 +242,15 @@ export function SettingsDialog() {
           {/* REQ-020: unified with the Subtitle Style dialog — row click
               selects the default font, the dot indicator shows the active
               choice, and DL / Trash icons handle inventory in the same
-              list.  No separate dropdown / management-only split. */}
+              list.  No separate dropdown / management-only split.
+              REQ-0164 §2 — the description paragraph that used to sit
+              here (`{t('fonts.hint')}`) moved INTO `<FontPicker>` so
+              the "heading → description → legend → list → warning"
+              flow is owned by the component itself.  This drops
+              `settings:fonts.hint` from the render path here; the
+              locale key stayed as-is (unused, kept for safety in case
+              a hot-fix consumer surfaces later). */}
           <TabsContent value="fonts" className="space-y-1.5 min-h-[490px]">
-            <p className="text-body-sm text-muted-foreground">{t('fonts.hint')}</p>
             <FontPicker />
           </TabsContent>
 
@@ -276,8 +282,21 @@ export function SettingsDialog() {
           {/* REQ-0131 §5 — read-only list rendered from the shared
               `SHORTCUTS` registry.  No mutation UI; the tab exists so
               the user can discover which keys do what without leaving
-              the app. */}
-          <TabsContent value="shortcuts" className="space-y-3 min-h-[490px]">
+              the app.
+              REQ-0164 §1 — `max-h-[490px] overflow-y-auto` added so
+              the shortcuts tab matches the sizing contract every other
+              tab already had (min-h == the tallest tab's height =
+              490px, established for the Fonts tab in REQ-018 #2).  The
+              REQ-0131 §5 shortcuts panel is the ONLY tab whose content
+              exceeds 490px (3 sections × ~10 rows + section
+              descriptions), so before this fix switching to it forced
+              the entire DialogContent to grow toward its
+              `max-h-[85vh]` cap and users saw the window height jump.
+              Pinning min == max here converts the tab to internal
+              scroll behind the same fixed frame the other tabs use —
+              zero visual change on other tabs, no more window resize
+              on this one. */}
+          <TabsContent value="shortcuts" className="space-y-3 min-h-[490px] max-h-[490px] overflow-y-auto">
             <ShortcutsSettingsTab />
           </TabsContent>
         </Tabs>

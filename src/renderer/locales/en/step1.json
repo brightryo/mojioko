@@ -99,6 +99,50 @@
     "activate_success": "Switched to {{modelName}}",
     "install_success": "{{modelName}} downloaded successfully"
   },
+  "gpuTool": {
+    "label": "Processing Device",
+    "tooltip": "Choose CPU or a compatible NVIDIA GPU for transcription. GPU requires downloading CUDA/cuDNN runtimes (~1 GB) once; runs offline thereafter.",
+    "cpu": {
+      "name": "CPU",
+      "description": "No download required. Works on every machine.",
+      "activeBadge": "In use",
+      "selectableBadge": "Available"
+    },
+    "gpu": {
+      "name": "GPU (CUDA / cuDNN)",
+      "description": "Transcribes with an NVIDIA GPU. Downloads CUDA / cuDNN runtimes (~{{size}}) once.",
+      "activeBadge": "In use",
+      "readyBadge": "Ready"
+    },
+    "unsupportedGpu": "Your GPU ({{name}}) is not supported for GPU acceleration. An NVIDIA GPU is required.",
+    "noGpu": "No GPU detected. An NVIDIA GPU is required.",
+    "download": "Download",
+    "downloading": "Downloading",
+    "extracting": "Extracting",
+    "cancelDownload": "Cancel",
+    "delete": "Delete",
+    "selectCpu": "Use CPU",
+    "selectGpu": "Use GPU",
+    "install_confirm_title": "Download GPU acceleration tools?",
+    "install_confirm_body": "Downloads NVIDIA CUDA / cuDNN (~{{size}}). An internet connection is required. Assets come from GitHub Releases.",
+    "install_confirm_ok": "Start download",
+    "install_info_source": "Source",
+    "install_source_value": "GitHub Releases",
+    "install_info_license": "License",
+    "install_license_value": "NVIDIA cuDNN SLA / CUDA EULA / cuBLAS BSD",
+    "install_info_path": "Install path",
+    "delete_confirm_title": "Delete GPU acceleration tools?",
+    "delete_confirm_body": "Deletes the downloaded CUDA / cuDNN files ({{size}}). GPU execution will require a fresh download to re-enable.",
+    "delete_confirm_ok": "Delete",
+    "delete_success": "GPU acceleration tools deleted",
+    "download_success": "GPU acceleration enabled",
+    "select_cpu_success": "Switched to CPU",
+    "select_gpu_success": "Switched to GPU",
+    "toast_download_failed_network": "Network disconnected. Check your connection and try again.",
+    "toast_download_failed_checksum": "The downloaded file is corrupted (SHA-256 mismatch). Please try again.",
+    "toast_download_failed_extract": "Extraction failed. Check available disk space and try again.",
+    "toast_download_failed": "Download failed: {{error}}"
+  },
   "footer": {
     "modelStatus": "Whisper: {{model}} · active",
     "modelNotDownloaded": "Whisper: no model selected",
@@ -184,8 +228,8 @@
     "futureNote": "Changes are saved automatically."
   },
   "fontPicker": {
-    "title": "Default subtitle font",
-    "help": "Project-wide default font. Individual rows can be overridden to a different font in STEP 2. Fonts other than the bundled Noto are downloaded on demand and stored under %APPDATA%/MOJIOKO/fonts/.",
+    "title": "Select default subtitle font",
+    "description": "Click a font to set it as the default. Adding and downloading fonts is a paid-version feature.",
     "status": {
       "bundled": "Bundled",
       "installed": "Installed",
@@ -218,6 +262,22 @@
       "body": "{{name}} is used by {{count}} subtitle(s). Removing it will revert them to the default font.",
       "confirm": "Remove",
       "cancel": "Cancel"
+    },
+    "tofuNote": "Characters not included in the font appear as □ or ? (e.g. using Japanese with an English-only font).",
+    "langLegend": {
+      "en": "English support",
+      "ja": "Japanese support"
+    },
+    "batchDownload": {
+      "button": "Download all",
+      "buttonTooltip": "Download every font that isn't installed yet",
+      "cancel": "Cancel",
+      "progress": "{{completed}} / {{total}} downloading…",
+      "toast": {
+        "done": "Downloaded {{count}} font(s)",
+        "cancelled": "Batch download cancelled ({{completed}} / {{total}} downloaded)",
+        "partial": "Downloaded {{completed}} of {{total}} — {{failed}} failed"
+      }
     }
   }
 }
