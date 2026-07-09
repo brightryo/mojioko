@@ -53,8 +53,26 @@ export type FontId =
   | 'potta-one'
   | 'dotgothic16'
   | 'rampart-one'
+  // REQ-0153 — 4 Latin display / sans faces added for the international
+  // (v1.3.3) tier.  All SIL OFL 1.1, full glyph coverage from upstream
+  // (Devanagari for Poppins, Cyrillic + Latin Extended for Montserrat),
+  // paid-tier only via the existing `canSelectFontInTier` / `canDownloadFontInTier`
+  // policy that gates every non-default font behind `isMsix`.
+  | 'anton'
+  | 'bebas-neue'
+  | 'montserrat'
+  | 'poppins'
 
 export type FontLicense = 'SIL-OFL-1.1'
+
+/**
+ * REQ-0153 / REQ-0154 §1 — set of scripts a font actually declares glyphs
+ * for.  Rendered as one badge per language by the shared
+ * `<FontLangBadge>` next to the display name in every font picker.
+ * Missing-glyph rendering (tofu) is intentionally NOT prevented — the
+ * badges are the discovery signal, per REQ policy.
+ */
+export type FontLanguage = 'ja' | 'en'
 
 export interface FontMeta {
   id: FontId
@@ -104,6 +122,27 @@ export interface FontMeta {
    * scripts that need them.  REQ-022 step 5.
    */
   lacksRareKanji?: boolean
+  /**
+   * REQ-0154 §1 / §2 — every language the font actually declares glyphs
+   * for.  Auto-derived from a cmap probe (`dev-docs/font-validation/
+   * probe-cmap.mjs`, one-shot script) rather than hand-picked, so a
+   * Japanese face that also carries basic Latin (all 9 pre-REQ-0153
+   * faces) correctly surfaces both badges instead of the pre-REQ-0154
+   * "ja"-only single tag.
+   *
+   * Contract (REQ-0155 flipped from REQ-0154's original ja-first order):
+   *   - Order: `'en'` first when present, then `'ja'`.  Rationale: every
+   *     registered font carries basic Latin (verified in REQ-0154 by cmap
+   *     probe), so putting `'en'` at index 0 aligns the "EN" chip in the
+   *     same column across every row in the picker, and the extra "JA"
+   *     chip on Japanese faces reads as an additive capability rather
+   *     than a re-arrangement.
+   *   - Non-empty: every registry entry declares at least one language.
+   *     The probe found no font that carries JA glyphs without also
+   *     carrying Latin, so `['ja']` alone never appears (owner's
+   *     hypothesis, verified in REQ-0154 RES §2.2).
+   */
+  languages: readonly FontLanguage[]
 }
 
 function assetUrl(fileName: string): string {
@@ -134,7 +173,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     copyright: 'Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name "Source". Noto Sans JP is licensed under the SIL Open Font License, Version 1.1.',
     sourceUrl: 'https://fonts.google.com/noto/specimen/Noto+Sans+JP',
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: 'Noto_Sans_JP/static'
+    bundledRelativeDir: 'Noto_Sans_JP/static',
+    languages: ['en', 'ja']
   },
   {
     id: 'dela-gothic-one',
@@ -150,7 +190,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     copyright: 'Copyright 2020 The Dela Gothic Project Authors (https://github.com/syakuzen/DelaGothic)',
     sourceUrl: 'https://fonts.google.com/specimen/Dela+Gothic+One',
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null
+    bundledRelativeDir: null,
+    languages: ['en', 'ja']
   },
   {
     id: 'reggae-one',
@@ -166,7 +207,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     copyright: 'Copyright 2020 The Reggae Project Authors (https://github.com/fontworks-fonts/Reggae)',
     sourceUrl: 'https://fonts.google.com/specimen/Reggae+One',
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null
+    bundledRelativeDir: null,
+    languages: ['en', 'ja']
   },
   {
     id: 'yusei-magic',
@@ -182,7 +224,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     copyright: 'Copyright 2020 The Yusei Magic Project Authors (https://github.com/tanukifont/YuseiMagic)',
     sourceUrl: 'https://fonts.google.com/specimen/Yusei+Magic',
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null
+    bundledRelativeDir: null,
+    languages: ['en', 'ja']
   },
   {
     id: 'mochiy-pop-one',
@@ -198,7 +241,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     copyright: 'Copyright 2020 The Mochiypop Project Authors (https://github.com/fontdasu/Mochiypop)',
     sourceUrl: 'https://fonts.google.com/specimen/Mochiy+Pop+One',
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null
+    bundledRelativeDir: null,
+    languages: ['en', 'ja']
   },
   {
     id: 'hachi-maru-pop',
@@ -215,7 +259,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     sourceUrl: 'https://fonts.google.com/specimen/Hachi+Maru+Pop',
     license: 'SIL-OFL-1.1',
     bundledRelativeDir: null,
-    lacksRareKanji: true
+    lacksRareKanji: true,
+    languages: ['en', 'ja']
   },
   {
     id: 'potta-one',
@@ -232,7 +277,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     sourceUrl: 'https://fonts.google.com/specimen/Potta+One',
     license: 'SIL-OFL-1.1',
     bundledRelativeDir: null,
-    lacksRareKanji: true
+    lacksRareKanji: true,
+    languages: ['en', 'ja']
   },
   {
     id: 'dotgothic16',
@@ -248,7 +294,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     copyright: 'Copyright 2020 The DotGothic16 Project Authors (https://github.com/fontworks-fonts/DotGothic16)',
     sourceUrl: 'https://fonts.google.com/specimen/DotGothic16',
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null
+    bundledRelativeDir: null,
+    languages: ['en', 'ja']
   },
   {
     id: 'rampart-one',
@@ -264,12 +311,112 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     copyright: 'Copyright 2020 The Rampart Project Authors (https://github.com/fontworks-fonts/Rampart)',
     sourceUrl: 'https://fonts.google.com/specimen/Rampart+One',
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null
+    bundledRelativeDir: null,
+    languages: ['en', 'ja']
+  },
+  // -----------------------------------------------------------------
+  // REQ-0153 — international (Latin) faces.  All SIL OFL 1.1 with the
+  // per-font copyright header preserved verbatim in the sibling
+  // `<Name>-OFL.txt` asset under the same `fonts-v1` release.  Assets
+  // uploaded to the existing `fonts-v1` tag (versionless font pool)
+  // rather than a `fonts-v2` bump — the release tag holds every
+  // downloadable font asset for the app irrespective of app version.
+  // -----------------------------------------------------------------
+  {
+    id: 'anton',
+    displayName: 'Anton',
+    cssFontFamily: 'Anton',
+    assFontName: 'Anton',
+    fileName: 'Anton-Regular.ttf',
+    weight: 400,
+    bundled: false,
+    downloadUrl: assetUrl('Anton-Regular.ttf'),
+    oflUrl: assetUrl('Anton-OFL.txt'),
+    expectedSizeBytes: 170_812,
+    copyright: 'Copyright 2020 The Anton Project Authors (https://github.com/googlefonts/AntonFont.git)',
+    sourceUrl: 'https://fonts.google.com/specimen/Anton',
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en']
+  },
+  {
+    id: 'bebas-neue',
+    displayName: 'Bebas Neue',
+    cssFontFamily: 'Bebas Neue',
+    assFontName: 'Bebas Neue',
+    fileName: 'BebasNeue-Regular.ttf',
+    weight: 400,
+    bundled: false,
+    downloadUrl: assetUrl('BebasNeue-Regular.ttf'),
+    oflUrl: assetUrl('BebasNeue-OFL.txt'),
+    expectedSizeBytes: 61_400,
+    copyright: 'Copyright © 2010 by Dharma Type.',
+    sourceUrl: 'https://fonts.google.com/specimen/Bebas+Neue',
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en']
+  },
+  {
+    id: 'montserrat',
+    displayName: 'Montserrat',
+    cssFontFamily: 'Montserrat',
+    // REQ-0153 — Google Fonts serves Montserrat only as a variable
+    // font on the wght axis.  libass (0.17+, bundled with ffmpeg
+    // shipped in this app) reads variable fonts via the same
+    // fontconfig path; the wght axis default is 400 = Regular so
+    // the ASS `Style:` line's `Fontname` = "Montserrat" resolves
+    // to the Regular instance without any extra plumbing.
+    assFontName: 'Montserrat',
+    fileName: 'Montserrat-Variable.ttf',
+    weight: 400,
+    bundled: false,
+    downloadUrl: assetUrl('Montserrat-Variable.ttf'),
+    oflUrl: assetUrl('Montserrat-OFL.txt'),
+    expectedSizeBytes: 744_936,
+    copyright: 'Copyright 2024 The Montserrat.Git Project Authors (https://github.com/JulietaUla/Montserrat.git)',
+    sourceUrl: 'https://fonts.google.com/specimen/Montserrat',
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en']
+  },
+  {
+    id: 'poppins',
+    displayName: 'Poppins',
+    cssFontFamily: 'Poppins',
+    assFontName: 'Poppins',
+    fileName: 'Poppins-Regular.ttf',
+    weight: 400,
+    bundled: false,
+    downloadUrl: assetUrl('Poppins-Regular.ttf'),
+    oflUrl: assetUrl('Poppins-OFL.txt'),
+    expectedSizeBytes: 160_316,
+    copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
+    sourceUrl: 'https://fonts.google.com/specimen/Poppins',
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en']
   }
 ] as const
 
 /** Default font.  Always installed (bundled). */
 export const DEFAULT_FONT_ID: FontId = 'noto-sans-jp-semibold'
+
+/**
+ * REQ-0153 §2 — canonical display order for every font-list rendering
+ * site (settings picker, timeline inspector row selector, bulk-edit
+ * bar selector, subtitle style dialog, license attribution list).
+ * Alphabetical by `displayName`, `en` locale, case-insensitive so
+ * "DotGothic16" sorts next to "Dela Gothic One" the way an
+ * English-speaking user expects.  `FONT_REGISTRY` order itself is
+ * intentionally NOT touched — `getFontMeta`'s defensive `[0]` fallback
+ * and the "Noto first" mental model still hold at the data layer;
+ * only the display order is sorted.
+ */
+export function getSortedFontRegistry(): FontMeta[] {
+  return [...FONT_REGISTRY].sort((a, b) =>
+    a.displayName.localeCompare(b.displayName, 'en', { sensitivity: 'base' }),
+  )
+}
 
 export function getFontMeta(id: FontId): FontMeta {
   const meta = FONT_REGISTRY.find((f) => f.id === id)

@@ -8,7 +8,8 @@ import { useStoreUpsellStore } from '@/stores/store-upsell-store'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { canSelectFontInTier } from '@/lib/font-tier'
 import { cn } from '@/lib/utils'
-import { FONT_REGISTRY, getFontMeta, type FontId } from '../../../shared/fonts'
+import { getSortedFontRegistry, getFontMeta, type FontId } from '../../../shared/fonts'
+import { FontLangBadges } from '@/components/font-lang-badge/font-lang-badge'
 
 interface RowFontSelectorProps {
   /** Current per-row override.  `undefined` = inherit project default. */
@@ -55,10 +56,12 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
   // Selectable list = every registered font that's actually installed
   // AND permitted by the current tier (REQ-088 #4 — free tier limits
   // selection to the bundled default even if a paid-tier user
-  // downgraded with installed fonts on disk).  Order follows the
-  // registry (Noto first).  Uninstalled fonts are hidden so we never
-  // set a per-row fontId that burn-in would reject.
-  const selectable = FONT_REGISTRY.filter(
+  // downgraded with installed fonts on disk).  REQ-0153 §2 — sort
+  // alphabetically by display name (was registry order = Noto first).
+  // Uninstalled fonts are hidden so we never set a per-row fontId that
+  // burn-in would reject.
+  const sortedRegistry = getSortedFontRegistry()
+  const selectable = sortedRegistry.filter(
     (m) => installed.has(m.id) && canSelectFontInTier(isMsix, m.id),
   )
   // REQ-091 — in the free tier, also render the paid-only fonts so the
@@ -68,7 +71,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
   // actually pick.  Empty in MSIX (every installed font is already in
   // `selectable`); empty for the bundled default (never tier-locked).
   const tierLocked = !isMsix
-    ? FONT_REGISTRY.filter((m) => !canSelectFontInTier(isMsix, m.id))
+    ? sortedRegistry.filter((m) => !canSelectFontInTier(isMsix, m.id))
     : []
 
   function pick(next: FontId | undefined) {
@@ -169,6 +172,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
                 >
                   {m.displayName}
                 </span>
+                <FontLangBadges languages={m.languages} />
                 {m.lacksRareKanji && (
                   <span
                     className="inline-flex items-center gap-0.5 shrink-0 text-micro uppercase tracking-wide text-warning-faint/80"
@@ -208,6 +212,7 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
                   >
                     {m.displayName}
                   </span>
+                  <FontLangBadges languages={m.languages} />
                 </button>
               ))}
             </>

@@ -23,7 +23,8 @@ import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
 import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
-import { FONT_REGISTRY, getFontMeta, isFontId, type FontId } from '../../../shared/fonts'
+import { getSortedFontRegistry, getFontMeta, isFontId, type FontId } from '../../../shared/fonts'
+import { FontLangBadges } from '@/components/font-lang-badge/font-lang-badge'
 import { recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 
 interface BulkEditBarProps {
@@ -1058,12 +1059,16 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
   const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
   // REQ-091 — Store upsell trigger.
   const openUpsell = useStoreUpsellStore((s) => s.openUpsell)
-  const selectable = FONT_REGISTRY.filter(
+  // REQ-0153 §2 — alphabetical registry order (same policy as
+  // RowFontSelector / FontPicker).  Selectability / tier gating
+  // unchanged.
+  const sortedRegistry = getSortedFontRegistry()
+  const selectable = sortedRegistry.filter(
     (m) => installed.has(m.id) && canSelectFontInTier(isMsix, m.id),
   )
   // REQ-091 — same tier-locked discovery list as RowFontSelector.
   const tierLocked = !isMsix
-    ? FONT_REGISTRY.filter((m) => !canSelectFontInTier(isMsix, m.id))
+    ? sortedRegistry.filter((m) => !canSelectFontInTier(isMsix, m.id))
     : []
 
   function pick(next: FontId | undefined) {
@@ -1120,6 +1125,7 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
               >
                 {m.displayName}
               </span>
+              <FontLangBadges languages={m.languages} />
               {m.lacksRareKanji && (
                 <span
                   className="inline-flex items-center shrink-0 text-warning-soft/80"
@@ -1151,6 +1157,7 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
                   >
                     {m.displayName}
                   </span>
+                  <FontLangBadges languages={m.languages} />
                 </button>
               ))}
             </>
