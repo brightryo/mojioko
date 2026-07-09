@@ -145,6 +145,52 @@ export function getModelsDir(): string {
 }
 
 /**
+ * REQ-0149 — physical directory holding the user-downloaded GPU
+ * acceleration DLLs (CUDA runtime + cuBLAS + cuDNN redistributables).
+ *
+ * Before REQ-0149 these 11 DLLs (~1.5 GB) shipped inside the installer
+ * under `resources/bin/transcriber/_internal/ctranslate2/`.  That pushed
+ * the NSIS payload past 1.85 GB and made the free build harder to
+ * distribute.  We now ship a CPU-only installer (~340 MB) and let users
+ * download the GPU tools on demand from a GitHub Releases asset
+ * (`cuda-v1` tag).
+ *
+ * The final layout is:
+ *   `<gpu-tools>/cuda-v1/{cudart64_12.dll, cublas64_12.dll, ...,
+ *                         NVIDIA-LICENSES.txt}`
+ * — same MSIX/NSIS virtualization rationale as `getModelsDir()`.  When
+ * unpacked to this directory, the Electron main process passes the path
+ * to the sidecar via the `MOJIOKO_GPU_TOOL_DIR` env var and
+ * `_preload_bundled_cuda_dlls()` in `python-sidecar/main.py` loads them
+ * before ctranslate2 gets a chance to LoadLibrary("cublas64_12.dll").
+ */
+export function getGpuToolsRoot(): string {
+  const ctx = getCurrentProcessContext()
+  if (isPackagedAsMsix(ctx)) {
+    const pfn = getMsixPackageFamilyName(ctx.execPath)
+    if (pfn) {
+      return buildMsixVirtualizedAppDataPath(
+        app.getPath('home'),
+        pfn,
+        APP_DATA_FOLDER,
+        'gpu-tools'
+      )
+    }
+  }
+  return join(getAppDataPath(), 'gpu-tools')
+}
+
+/**
+ * Per-release directory inside `getGpuToolsRoot()`.  Matches the GitHub
+ * Releases tag so we can ship a follow-up (`cuda-v2` etc.) without
+ * cross-contaminating old installs.  The 11 DLLs land at this path's
+ * root after extraction.
+ */
+export function getGpuToolDir(releaseTag: string): string {
+  return join(getGpuToolsRoot(), releaseTag)
+}
+
+/**
  * REQ-086 — directory holding the pre-generated multi-track preview mix.
  *
  * Same MSIX/NSIS rationale as `getModelsDir`: under MSIX the OS redirects

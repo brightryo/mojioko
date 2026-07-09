@@ -7,7 +7,6 @@ import {
   Heart,
   CheckCircle2,
   AlertCircle,
-  Loader2,
   FolderOpen,
   MessageSquare,
   Shield,
@@ -20,6 +19,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { formatElapsed } from '@/lib/format-elapsed'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { startBurnin } from '@/services/burnin'
@@ -87,6 +87,15 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
 
   const [renderState, setRenderState] = useState<RenderState>('idle')
   const [progress, setProgress] = useState(0)
+  // REQ-0148 Part A — renderer-side elapsed timer for the burn-in run,
+  // mirroring the REQ-0143 pattern already used by the transcription
+  // drawer.  ffmpeg does not emit tick events, so the drawer keeps its
+  // own start-time stamp and ticks a `nowTick` state every 500 ms.  The
+  // `mm:ss` string replaces the old `Loader2` spinner in the top slot;
+  // deleting the spinner + keeping the elapsed timer visible mirrors the
+  // transcription drawer so the two drawers read as siblings.
+  const [renderStartMs, setRenderStartMs] = useState<number | null>(null)
+  const [nowTick, setNowTick] = useState<number>(0)
   const [completedPath, setCompletedPath] = useState<string>('')
   const [completedSizeMB, setCompletedSizeMB] = useState<number>(0)
   const [errorMessage, setErrorMessage] = useState<string>('')
@@ -148,10 +157,25 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
     if (open) return
     setRenderState('idle')
     setProgress(0)
+    setRenderStartMs(null)
     setErrorMessage('')
     setOverwriteCandidate(null)
     burninHandleRef.current = null
   }, [open])
+
+  // REQ-0148 Part A — 500 ms tick that bumps `nowTick` while a burn-in
+  // is in flight so the elapsed `mm:ss` in the top slot updates roughly
+  // twice a second.  The interval is torn down as soon as `renderStartMs`
+  // clears (idle / cancel / complete / error), matching REQ-0143's
+  // approach in the transcription drawer.
+  useEffect(() => {
+    if (renderStartMs === null) return
+    const id = window.setInterval(() => setNowTick(Date.now()), 500)
+    return () => window.clearInterval(id)
+  }, [renderStartMs])
+  const elapsedSec = renderStartMs !== null
+    ? Math.max(0, Math.floor((Math.max(nowTick, Date.now()) - renderStartMs) / 1000))
+    : 0
 
   const videoDurationSec = video?.durationSec ?? Infinity
   const warningsMap = (() => {
@@ -224,6 +248,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
     if (!video) return
     setRenderState('rendering')
     setProgress(0)
+    setRenderStartMs(Date.now())
     setErrorMessage('')
 
     const burninOpts = {
@@ -255,6 +280,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
         setCompletedPath(evt.outputPath)
         setCompletedSizeMB(evt.sizeMB)
         setProgress(100)
+        setRenderStartMs(null)
         // Hand off to the completion dialog: dismiss the drawer (it slides
         // out to the right per shadcn Sheet animation) and pop the success
         // dialog at centre.
@@ -265,6 +291,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
         const errMsg = evt.error
         setErrorMessage(errMsg)
         setRenderState('error')
+        setRenderStartMs(null)
         // 'Cancelled' is the sentinel emitted by ffmpeg-burnin when the
         // user pressed Cancel — treat that as returning to 'idle' rather
         // than the error state (the drawer's own state already reflects
@@ -281,10 +308,12 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
       if (errMsg.includes('Cancelled')) {
         setRenderState('idle')
         setProgress(0)
+        setRenderStartMs(null)
         return null
       }
       setErrorMessage(errMsg)
       setRenderState('error')
+      setRenderStartMs(null)
       toast.error(t('error.renderFailed', { reason: errMsg }))
       return null
     })
@@ -297,6 +326,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
     burninHandleRef.current = null
     setRenderState('idle')
     setProgress(0)
+    setRenderStartMs(null)
   }
 
   function handleSheetOpenChange(next: boolean) {
@@ -397,8 +427,21 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
             {renderState === 'rendering' && (
               <div className="flex items-center justify-center py-12">
                 <div className="rounded-xl border border-line bg-surface-1 px-6 py-8 w-full max-w-md space-y-5">
-                  <div className="flex items-center justify-center">
-                    <Loader2 className="h-7 w-7 text-primary animate-spin" />
+                  {/* REQ-0148 Part A — matches the REQ-0143 layout in the
+                      transcription drawer.  The old spinning `Loader2`
+                      icon was purely decorative once the determinate
+                      progress bar showed real progress, and made the two
+                      drawers look visually different for no reason.
+                      Elapsed `mm:ss` at title size sits in the vacated
+                      top slot; the right-side `%` chip stays always
+                      visible because ffmpeg emits accurate percent from
+                      the first frame — there is no "preparing" region
+                      here (unlike the transcription drawer's Whisper
+                      pre-load phase). */}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <span className="font-mono tabular-nums text-title text-fg-primary">
+                      {formatElapsed(elapsedSec)}
+                    </span>
                   </div>
                   <div className="space-y-3">
                     <div className="h-2 rounded-full bg-surface-2 overflow-hidden">

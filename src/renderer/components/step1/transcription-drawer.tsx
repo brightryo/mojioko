@@ -14,21 +14,10 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import { formatElapsed } from '@/lib/format-elapsed'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useProjectStore } from '@/stores/project-store'
 import type { AudioTrack } from '../../../shared/types'
-
-/**
- * REQ-0142 — format elapsed seconds as `mm:ss`.  Renderer-only
- * (sidecar does not emit tick events).  Zero-padded so the width stays
- * stable and the layout does not shift as digits roll over.
- */
-function formatElapsed(sec: number): string {
-  const s = Math.max(0, Math.floor(sec))
-  const mm = Math.floor(s / 60).toString().padStart(2, '0')
-  const ss = (s % 60).toString().padStart(2, '0')
-  return `${mm}:${ss}`
-}
 
 /**
  * REQ-20260615-055 — STEP1's transcription drawer.

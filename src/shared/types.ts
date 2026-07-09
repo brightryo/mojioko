@@ -283,6 +283,22 @@ export interface AppSettings {
    */
   defaultInputDir?: string | null
   defaultOutputDir?: string | null
+  /**
+   * REQ-0150 — user-picked transcription accelerator.  `'cpu'` (default)
+   * runs faster-whisper on the CPU path; `'gpu'` opts into CUDA via the
+   * downloaded GPU tools (`%APPDATA%/MOJIOKO/gpu-tools/cuda-v1/`).
+   *
+   * The renderer surfaces this via the 2-card picker under the Whisper
+   * model accordion; `transcription-sidecar.ts` reads it at spawn time
+   * and only injects `MOJIOKO_GPU_TOOL_DIR` when this is `'gpu'` AND
+   * the tools are fully installed on disk.  A user who has downloaded
+   * the GPU tools but explicitly picked the CPU card gets CPU
+   * execution — the tools stay on disk for a later re-select.
+   *
+   * Optional in the persisted struct so settings.json files predating
+   * this REQ hydrate as CPU (the safe default — nothing extra to load).
+   */
+  activeAccelerator?: 'cpu' | 'gpu'
 }
 
 // ---------------------------------------------------------------------------

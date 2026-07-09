@@ -34,26 +34,29 @@ from pathlib import Path
 # cublasLt on its own (and fail on Toolkit-less machines).
 #
 # Runs at module import so it's finished before `_select_device()` or
-# any faster-whisper machinery.  On non-Windows or CPU-only builds
-# (missing DLL directory) this is a silent no-op.
+# any faster-whisper machinery.  On non-Windows, when the env var is
+# unset, or when the folder is empty (the "GPU tools not downloaded
+# yet" state) this is a silent no-op and the runtime falls through to
+# CPU via `_select_device()`.
 def _preload_bundled_cuda_dlls() -> None:
     if sys.platform != "win32":
         return
-    # Locate the bundled ctranslate2 folder both in the PyInstaller-
-    # frozen sidecar and in dev-mode (venv).  Multiple candidates
-    # cover PyInstaller layout variants across versions and the
-    # sidecar-vs-source runtime split.
-    candidates = []
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass:
-        candidates.append(os.path.join(meipass, "ctranslate2"))
-        candidates.append(os.path.join(meipass, "_internal", "ctranslate2"))
-    exe_dir = os.path.dirname(os.path.abspath(sys.executable))
-    candidates.append(os.path.join(exe_dir, "_internal", "ctranslate2"))
-    candidates.append(os.path.join(exe_dir, "ctranslate2"))
-    dll_dir = next((c for c in candidates if os.path.isdir(c)), None)
-    if dll_dir is None:
-        print(f"[dll_preload] no bundled ctranslate2 folder found; tried: {candidates}",
+    # REQ-0149 — CUDA/cuDNN redistributables are no longer bundled with
+    # the installer (dropped 1.5 GB from the NSIS payload).  Users
+    # download the GPU tools separately via the in-app UI, which extracts
+    # them under `%APPDATA%/MOJIOKO/gpu-tools/cuda-v1/`.  The Electron
+    # main process passes that path to the sidecar via the
+    # `MOJIOKO_GPU_TOOL_DIR` environment variable when spawning; unset
+    # or non-existent → "GPU tools not downloaded yet" → CPU-only path.
+    dll_dir = os.environ.get("MOJIOKO_GPU_TOOL_DIR", "").strip()
+    if not dll_dir:
+        return
+    if not os.path.isdir(dll_dir):
+        # Env var was set but the folder is gone (deleted mid-run, or the
+        # main process handed an invalid path).  Log so the operator can
+        # diagnose, then no-op.  `_select_device()`'s CPU fallback carries
+        # us through.
+        print(f"[dll_preload] MOJIOKO_GPU_TOOL_DIR={dll_dir!r} does not exist; skipping GPU preload",
               file=sys.stderr)
         return
     print(f"[dll_preload] using DLL folder: {dll_dir}", file=sys.stderr)

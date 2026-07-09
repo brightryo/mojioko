@@ -4,6 +4,7 @@ import { app } from 'electron'
 import { spawnProcess } from '../lib/child-process'
 import { getPythonSidecarPath, getPythonExecutable, getTranscriberExePath } from '../lib/paths'
 import { normalizeVideoPath } from './normalize-video-path'
+import { getEffectiveGpuToolDir } from './gpu-tool'
 import type { TranscriptionStartRequest, TranscriptionEvent } from '../../shared/ipc-contracts'
 import { TranscriptionError } from '../../shared/errors'
 import log from '../lib/logger'
@@ -20,6 +21,14 @@ export type TranscriptionEventCallback = (event: TranscriptionEvent) => void
 
 let sidecarProcess: ChildProcess | null = null
 let pendingCallback: TranscriptionEventCallback | null = null
+// REQ-0150 — remember which `MOJIOKO_GPU_TOOL_DIR` the live sidecar was
+// spawned with.  `null` means the sidecar was spawned without a GPU env
+// (CPU-only path), a string is the injected folder path.  We compare
+// against the current settings on every `ensureSidecar()` and force a
+// respawn when the user has flipped between CPU and GPU cards mid-
+// session — otherwise the loaded-modules cache from the previous run
+// would keep the old choice active.
+let lastGpuEnvValue: string | null = null
 
 /**
  * Decide how to spawn the transcription sidecar.
@@ -56,8 +65,21 @@ function resolveSidecarSpawn(): { exe: string; args: string[]; mode: 'bundled' |
 }
 
 async function ensureSidecar(): Promise<ChildProcess> {
+  // REQ-0150 — resolve the desired GPU env FIRST so we can compare
+  // against the live sidecar's env and decide whether to respawn.
+  const gpuDir = await getEffectiveGpuToolDir()
+  const desiredEnvValue = gpuDir ?? null
+
   if (sidecarProcess && !sidecarProcess.killed) {
-    return sidecarProcess
+    if (desiredEnvValue === lastGpuEnvValue) {
+      return sidecarProcess
+    }
+    log.info(
+      `[sidecar] accelerator selection changed ` +
+      `(was=${lastGpuEnvValue ?? 'null'} now=${desiredEnvValue ?? 'null'}) — respawning`,
+    )
+    try { sidecarProcess.kill() } catch { /* ignore */ }
+    sidecarProcess = null
   }
 
   const { exe, args, mode } = resolveSidecarSpawn()
@@ -67,9 +89,25 @@ async function ensureSidecar(): Promise<ChildProcess> {
     log.info(`[sidecar] script: ${args[0]}`)
   }
 
-  const proc = spawnProcess(exe, args, {
-    env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
-  })
+  // REQ-0149 / REQ-0150 — inject the GPU-tool directory only when the
+  // user has BOTH downloaded the CUDA/cuDNN redistributables AND picked
+  // the GPU card.  `getEffectiveGpuToolDir()` (called above) enforces
+  // both conditions plus an NVIDIA-adapter sanity check.  Unset =
+  // sidecar's `_preload_bundled_cuda_dlls()` no-ops silently and the
+  // runtime lands on CPU via `_select_device()`.
+  if (gpuDir) {
+    log.info(`[sidecar] MOJIOKO_GPU_TOOL_DIR=${gpuDir}`)
+  }
+  const sidecarEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    PYTHONIOENCODING: 'utf-8',
+    PYTHONUTF8: '1',
+  }
+  if (gpuDir) {
+    sidecarEnv.MOJIOKO_GPU_TOOL_DIR = gpuDir
+  }
+  lastGpuEnvValue = desiredEnvValue
+  const proc = spawnProcess(exe, args, { env: sidecarEnv })
 
   sidecarProcess = proc
 
@@ -97,6 +135,10 @@ async function ensureSidecar(): Promise<ChildProcess> {
     log.info(`[sidecar] exited with code ${code}`)
     sidecarProcess = null
     pendingCallback = null
+    // REQ-0150 — drop the remembered env value so the next spawn re-
+    // reads settings freshly rather than skipping the respawn based on
+    // a stale value.
+    lastGpuEnvValue = null
   })
 
   return proc

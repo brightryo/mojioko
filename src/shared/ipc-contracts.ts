@@ -208,6 +208,15 @@ export type DownloadModelEvent =
   | { event: 'completed' }
   | { event: 'failed'; error: string; errorCode?: 'network' | 'fatal' | 'aborted' }
 
+/**
+ * REQ-0149 — re-export the GPU tool event union from `shared/gpu-tool.ts`
+ * so consumers can import both from `ipc-contracts.ts` (protocol-shape
+ * imports) and from `gpu-tool.ts` (state / constants imports)
+ * interchangeably.  Structural parity with the fonts / whisper model
+ * download event families.
+ */
+export type { DownloadGpuToolEvent, GpuToolState } from './gpu-tool'
+
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------

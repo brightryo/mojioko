@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { Channels } from '../shared/ipc-channels'
 import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
+import type { GpuToolState } from '../shared/gpu-tool'
 import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult } from '../shared/ipc-contracts'
 
 type OkResult<T> = { ok: true; data: T }
@@ -75,6 +76,18 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.fontReadOfl, fontId),
   fontReadBytes: (fontId: FontId): Promise<IpcResult<ArrayBuffer>> =>
     ipcRenderer.invoke(Channels.fontReadBytes, fontId),
+
+  // GPU acceleration tools (REQ-0149)
+  gpuToolState: (): Promise<IpcResult<GpuToolState>> =>
+    ipcRenderer.invoke(Channels.gpuToolState),
+  gpuToolDownload: (): Promise<IpcResult<{ channelId: string }>> =>
+    ipcRenderer.invoke(Channels.gpuToolDownload),
+  gpuToolDownloadCancel: (channelId: string): Promise<void> =>
+    ipcRenderer.invoke(`${Channels.gpuToolDownload}:cancel`, channelId),
+  gpuToolDelete: (): Promise<IpcResult<GpuToolState>> =>
+    ipcRenderer.invoke(Channels.gpuToolDelete),
+  gpuToolSelect: (choice: 'cpu' | 'gpu'): Promise<IpcResult<GpuToolState>> =>
+    ipcRenderer.invoke(Channels.gpuToolSelect, choice),
 
   // Burnin
   burninStart: (opts: BurninStartRequest): Promise<IpcResult<{ channelId: string }>> =>

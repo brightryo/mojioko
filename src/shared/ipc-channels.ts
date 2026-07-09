@@ -26,6 +26,24 @@ export const Channels = {
   fontReadOfl: 'font:readOfl',
   fontReadBytes: 'font:readBytes',
 
+  /**
+   * REQ-0149 — GPU acceleration tools (CUDA/cuDNN redistributables).
+   * `state` returns the {installed / not-installed / gpu-not-detected}
+   * status + folder path; `download` streams progress on a per-run
+   * channel (same pattern as `transcriptionDownloadModel`); `delete`
+   * removes the extracted folder and returns the fresh state.
+   */
+  gpuToolState: 'gpu-tool:state',
+  gpuToolDownload: 'gpu-tool:download',
+  gpuToolDelete: 'gpu-tool:delete',
+  /**
+   * REQ-0150 — persist the user's CPU/GPU card selection.  Payload is
+   * `'cpu' | 'gpu'`; main downgrades to `'cpu'` if the GPU tools are
+   * not installed or no NVIDIA adapter is detected (defence in depth
+   * against a stale renderer state).
+   */
+  gpuToolSelect: 'gpu-tool:select',
+
   burninStart: 'burnin:start',
   burninCancel: 'burnin:cancel',
 

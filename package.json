@@ -1,6 +1,6 @@
 {
   "name": "mojioko",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Local video transcription and subtitle burn-in tool",
   "main": "./out/main/index.js",
   "scripts": {
@@ -13,7 +13,9 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "scan:pii": "node scripts/pii-scan.mjs",
-    "setup:hooks": "git config core.hooksPath scripts/hooks"
+    "setup:hooks": "git config core.hooksPath scripts/hooks",
+    "msix:register": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/msix-register-sideload.ps1",
+    "msix:register:skip-build": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/msix-register-sideload.ps1 -SkipBuild"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.0.4",

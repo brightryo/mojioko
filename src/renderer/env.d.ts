@@ -2,6 +2,7 @@
 
 import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
+import type { GpuToolState } from '../shared/gpu-tool'
 import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult } from '../shared/ipc-contracts'
 
 type IpcOk<T> = { ok: true; data: T }
@@ -49,6 +50,13 @@ declare global {
       fontSetActive: (fontId: FontId) => Promise<IpcResult<FontsState>>
       fontReadOfl: (fontId: FontId) => Promise<IpcResult<string>>
       fontReadBytes: (fontId: FontId) => Promise<IpcResult<ArrayBuffer>>
+
+      // REQ-0149 — GPU acceleration tools.
+      gpuToolState: () => Promise<IpcResult<GpuToolState>>
+      gpuToolDownload: () => Promise<IpcResult<{ channelId: string }>>
+      gpuToolDownloadCancel: (channelId: string) => Promise<void>
+      gpuToolDelete: () => Promise<IpcResult<GpuToolState>>
+      gpuToolSelect: (choice: 'cpu' | 'gpu') => Promise<IpcResult<GpuToolState>>
 
       burninStart: (opts: BurninStartRequest) => Promise<IpcResult<{ channelId: string }>>
       burninCancel: (channelId: string) => Promise<void>

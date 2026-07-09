@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog'
 import { HelpIcon } from '@/components/help-icon'
 import { WhisperModelManager } from '@/components/whisper-model-manager/whisper-model-manager'
+import { GpuToolManager } from '@/components/gpu-tool-manager/gpu-tool-manager'
 import { TranscriptionDrawer } from '@/components/step1/transcription-drawer'
 import { SubtitleStyleDialog } from '@/components/step1/subtitle-style-dialog'
 import { useProjectStore } from '@/stores/project-store'
@@ -185,7 +186,12 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // no-model case only.  Once a user has any model installed they keep
   // landing on inputVideo, matching the prior "skip past picker on the
   // happy path" intent.
-  const [openSection, setOpenSection] = useState<'whisper' | 'inputVideo' | null>(null)
+  // REQ-0152 §2 — single-open accordion across Whisper model / Processing
+  // device / Input video.  Widened from the pre-REQ-0152 binary
+  // `'whisper' | 'inputVideo'` union so the newly-promoted device
+  // accordion joins the mutual-exclusion group; `null` is the "all
+  // closed" state the REQ explicitly allows.
+  const [openSection, setOpenSection] = useState<'whisper' | 'device' | 'inputVideo' | null>(null)
   // Set on the first `handleActiveModelChange` callback, OR when the
   // user toggles the accordion header before that callback arrives.
   // Subsequent listModels-triggered callbacks (after install / uninstall
@@ -204,13 +210,18 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     []
   )
 
+  // REQ-0152 §2 — click a section's header to toggle it: open if currently
+  // closed (closing any other open section as a side-effect since the
+  // state is single-valued), close it if it was already the open one.
+  // This gives the "single-open, all-closed permitted" semantics the REQ
+  // asks for without any per-section local open state.
   const handleAccordionToggle = useCallback(
-    (next: 'whisper' | 'inputVideo') => {
+    (section: 'whisper' | 'device' | 'inputVideo') => {
       // Mark the initial decision as taken so a later listModels
       // callback (post-install/uninstall) can't override what the user
       // just chose by hand.
       initialOpenDecidedRef.current = true
-      setOpenSection(next)
+      setOpenSection((current) => (current === section ? null : section))
     },
     []
   )
@@ -705,7 +716,30 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             onActiveModelChange={handleActiveModelChange}
             disabled={isLoading || isTranscribing}
             isOpen={openSection === 'whisper'}
-            onOpenChange={(open) => handleAccordionToggle(open ? 'whisper' : 'inputVideo')}
+            // REQ-0152 §2 — `open` here reflects the direction of the
+            // pending transition (WhisperModelManager passes `!isOpen`
+            // from its header click, `false` from its post-install /
+            // activate auto-collapse).  Map both to the single-open
+            // toggle: `true` opens whisper (auto-closing others), `false`
+            // sets the section to `null` (all-closed).
+            onOpenChange={(open) => setOpenSection(open ? 'whisper' : null)}
+          />
+        </div>
+
+        {/* REQ-0150 / REQ-0152 §2 — GPU acceleration accordion, promoted
+            to an independent card between the Whisper model picker and
+            the input-video card, and now participating in the shared
+            single-open exclusion group (was uncontrolled pre-REQ-0152).
+            Position matches REQ-0150 §1 ("Whisperモデルの項目と入力
+            ファイルの項目の間"). */}
+        <div className={cn(
+          'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
+          isTranscribing && 'opacity-50 pointer-events-none'
+        )}>
+          <GpuToolManager
+            disabled={isTranscribing}
+            isOpen={openSection === 'device'}
+            onOpenChange={(open) => setOpenSection(open ? 'device' : null)}
           />
         </div>
 
@@ -730,11 +764,10 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
           isTranscribing && 'opacity-50 pointer-events-none'
         )}>
-          {/* Accordion header — clickable, toggles `openSection` to enforce
-              mutual exclusion with the Whisper card above.  Clicking the
-              header when this section is already open switches the
-              expanded panel to 'whisper'; clicking when collapsed
-              switches back here.  Either way exactly one panel is open. */}
+          {/* Accordion header — clickable, toggles `openSection` under
+              REQ-0152 §2 single-open semantics: click while closed →
+              open this section (auto-collapses whisper / device); click
+              while already open → close to the all-closed state. */}
           {/* REQ-082: Enter / Space keyboard activation removed. */}
           {/* REQ-20260615-079: header right side now shows the audio-track
               **inventory** for the loaded file (count, or "no audio"),
@@ -747,9 +780,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             role="button"
             aria-expanded={openSection === 'inputVideo'}
             tabIndex={0}
-            onClick={() =>
-              handleAccordionToggle(openSection === 'inputVideo' ? 'whisper' : 'inputVideo')
-            }
+            onClick={() => handleAccordionToggle('inputVideo')}
             className="flex items-center justify-between cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
           >
             <div className="flex items-center gap-1.5">
