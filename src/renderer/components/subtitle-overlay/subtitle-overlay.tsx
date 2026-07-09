@@ -2,7 +2,10 @@ import type { Ref } from 'react'
 import { Move } from 'lucide-react'
 import type { SubtitleEntry } from '../../../shared/types'
 import { ASS_MARGIN_LR_PX } from '../../../shared/constants'
-import { getLibassScaleFor } from '@/lib/font-metrics'
+import { getLibassScaleFor, getCmapCoverageFor, getTofuSubstituteFor, loadSubtitleFontFor } from '@/lib/font-metrics'
+import { substituteMissingGlyphs } from '../../../shared/glyph-substitute'
+import { useFontCacheVersionStore } from '@/stores/font-cache-version-store'
+import { useEffect } from 'react'
 import { useSettingsStore } from '@/stores/settings-store'
 import { getFontMeta, isFontId, type FontId } from '../../../shared/fonts'
 import { bumpRenderCount } from '@/lib/perf-counter'
@@ -213,6 +216,20 @@ export function SubtitleOverlay({
 }: SubtitleOverlayProps) {
   bumpRenderCount('SubtitleOverlay')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
+  // REQ-0162 — subscribe to the font-cache version so this overlay
+  // re-renders the moment ANY font finishes its opentype.js parse
+  // and lands in the module-level `fontCache`.  Without this
+  // subscription the first render (which happens before the async
+  // load resolves) would see `getCmapCoverageFor()` return null,
+  // skip REQ-0160's tofu substitution, and stay stuck on the raw
+  // text — Chromium would then silently fall back to a system JP
+  // font for missing glyphs.  step2's overflowMap uses the same
+  // pattern (`useFontCacheVersionStore((s) => s.version)`) for the
+  // measurement path; SubtitleOverlay needs the same signal for the
+  // render path.  Reading the value is enough to establish the
+  // subscription; the `void` discards the result to satisfy the
+  // "no unused" lint.
+  void useFontCacheVersionStore((s) => s.version)
   // Per-row font override (REQ-022 step 4): when the entry carries a
   // fontId, render with that family + its own libassScale.  Otherwise
   // fall back to the project default (activeFontId) so legacy rows and
@@ -220,6 +237,17 @@ export function SubtitleOverlay({
   const resolvedFontId = isFontId(entry.fontId) ? entry.fontId : activeFontId
   const fontMeta = getFontMeta(resolvedFontId)
   const libassScale = getLibassScaleFor(resolvedFontId)
+  // REQ-0162 — defensive lazy load.  If the effective font's cmap
+  // isn't in the cache yet (fresh download in the same session, or
+  // startup load still in flight, or the App.tsx pre-loader missed
+  // this font because it was installed post-mount), kick off the
+  // load here.  On completion `bumpFontCacheVersion` fires and the
+  // subscription above re-renders us with the populated cmap.
+  // No-op when the font is already cached (`loadSubtitleFontFor`
+  // returns the in-flight or cached promise).
+  useEffect(() => {
+    loadSubtitleFontFor(resolvedFontId).catch(() => { /* fallback stays raw */ })
+  }, [resolvedFontId])
   const scale      = containerWidthPx / videoWidthPx
   const fontSizePx = entry.fontSizePx        * libassScale * scale
   // REQ-20260613-016 Phase 3: layout is now driven by the entry itself
@@ -350,7 +378,22 @@ export function SubtitleOverlay({
   // editing this row.  Icon size is derived from the rendered font height so
   // it stays proportionate at every preview scale.
   const moveIconPx = Math.max(14, Math.min(48, fontSizePx * 0.55))
-  const renderedText = entry.text.replace(/\\N/g, '\n')
+  // REQ-0160 — replace code points not in the effective font's cmap with
+  // that font's tofu substitute (□ for most, "?" for the very few Latin
+  // faces that lack □).  Preview and burn-in must apply the same
+  // transform so the visible output stays consistent and
+  // overflow-calculator / auto-line-break measure the same characters
+  // libass will render.  When the font hasn't finished loading, the
+  // cmap set is null → substitution is a no-op and preview still
+  // shows the browser's fallback until the next font-cache bump
+  // triggers a re-render.  entry.text (the user's persisted original)
+  // is never mutated.
+  const cmapCoverage = getCmapCoverageFor(resolvedFontId)
+  const tofuSubstitute = getTofuSubstituteFor(resolvedFontId)
+  const rawText = entry.text.replace(/\\N/g, '\n')
+  const renderedText = cmapCoverage !== null && tofuSubstitute !== null
+    ? substituteMissingGlyphs(rawText, cmapCoverage, tofuSubstitute)
+    : rawText
   // REQ-20260615-039 — always wrap the visible text in this inline span so
   // the parent's position-guide measurement is consistent across layouts.
   // The `display: inline` (default) keeps inline flow identical to writing

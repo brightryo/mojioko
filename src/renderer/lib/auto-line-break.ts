@@ -4,6 +4,9 @@ import {
   getLibassScale,
   getSubtitleFontFor,
   getLibassScaleFor,
+  getCmapCoverageFor,
+  getTofuSubstituteFor,
+  getActiveFontId,
   FALLBACK_LIBASS_SCALE
 } from './font-metrics'
 import type { SubtitleFont } from './font-metrics'
@@ -46,12 +49,19 @@ export function applyAutoLineBreak(
   const libassScale = fontId !== undefined ? getLibassScaleFor(fontId) : getLibassScale()
   const effectivePx = videoWidthPx - 2 * ASS_MARGIN_LR_PX - 2 * outlineThicknessPx
   if (effectivePx <= 0) return text
+  // REQ-0160 — resolve the tofu substitute for the effective font.  The
+  // break-finder uses these to mirror the per-character advance
+  // substitution in `overflow-calculator.ts` so break positions land
+  // where libass will actually render the tofu-substituted text.
+  const effectiveFontId = fontId ?? getActiveFontId()
+  const cmap = getCmapCoverageFor(effectiveFontId)
+  const tofu = getTofuSubstituteFor(effectiveFontId)
 
   // Process each existing \N-separated segment independently,
   // then rejoin — preserves intentional manual breaks already in the text.
   return text
     .split('\\N')
-    .map((seg) => breakSegment(seg, fontSizePx, effectivePx, f, libassScale))
+    .map((seg) => breakSegment(seg, fontSizePx, effectivePx, f, libassScale, cmap, tofu))
     .join('\\N')
 }
 
@@ -68,16 +78,18 @@ function breakSegment(
   fontSizePx: number,
   effectivePx: number,
   font: SubtitleFont | null,
-  libassScale: number
+  libassScale: number,
+  cmap: Set<number> | null,
+  tofu: string | null,
 ): string {
   if (!seg) return seg
 
-  const breakPos = findBreakIndex(seg, fontSizePx, effectivePx, font, libassScale)
+  const breakPos = findBreakIndex(seg, fontSizePx, effectivePx, font, libassScale, cmap, tofu)
   if (breakPos === -1) return seg  // entire segment fits
 
   const left  = seg.slice(0, breakPos)
   const right = seg.slice(breakPos)
-  return left + '\\N' + breakSegment(right, fontSizePx, effectivePx, font, libassScale)
+  return left + '\\N' + breakSegment(right, fontSizePx, effectivePx, font, libassScale, cmap, tofu)
 }
 
 /**
@@ -96,27 +108,58 @@ function findBreakIndex(
   fontSizePx: number,
   effectivePx: number,
   font: SubtitleFont | null,
-  libassScale: number
+  libassScale: number,
+  cmap: Set<number> | null,
+  tofu: string | null,
 ): number {
   if (font) {
     const scale      = (fontSizePx / font.unitsPerEm) * libassScale
-    const glyphs     = font.stringToGlyphs(seg)
+    // REQ-0160 — pre-fetch the tofu character's advance so per-character
+    // substitution stays a single Set.has() branch inside the hot loop.
+    // Null when the font isn't cached yet (fall through to raw
+    // `stringToGlyphs` behaviour, matching overflow-calculator's contract).
+    const tofuAdvance = cmap !== null && tofu !== null
+      ? (font.charToGlyph(tofu).advanceWidth ?? 0)
+      : null
     const codePoints = [...seg]
     let cumulative   = 0
     let byteOffset   = 0
 
-    for (let gi = 0; gi < glyphs.length; gi++) {
-      cumulative += (glyphs[gi].advanceWidth ?? 0) * scale
+    for (let gi = 0; gi < codePoints.length; gi++) {
+      const ch = codePoints[gi]
+      const cp = ch.codePointAt(0)!
+      // REQ-0160 — same per-character substitution as `overflow-calculator.ts`.
+      // A code point outside the font's cmap gets the tofu character's
+      // advance so the break decision matches what libass will render.
+      // Iterates the ORIGINAL string, so `byteOffset` remains a valid
+      // slice offset even when the segment contains supplementary-plane
+      // code points (surrogate pairs); the substitution never mutates
+      // the text itself, only the per-character advance fed into
+      // `cumulative`.
+      let advance: number
+      if (tofuAdvance !== null && cmap !== null && !cmap.has(cp)) {
+        advance = tofuAdvance
+      } else {
+        advance = font.charToGlyph(ch).advanceWidth ?? 0
+      }
+      cumulative += advance * scale
 
       if (cumulative > effectivePx) {
         return byteOffset  // break BEFORE this glyph
       }
 
-      if (gi + 1 < glyphs.length) {
-        cumulative += font.getKerningValue(glyphs[gi], glyphs[gi + 1]) * scale
+      if (gi + 1 < codePoints.length) {
+        const nextCh = codePoints[gi + 1]
+        const nextCp = nextCh.codePointAt(0)!
+        // Skip kerning across a tofu boundary so the substituted glyph's
+        // (undefined) kerning tables don't contaminate the advance.
+        const bothInCmap = cmap === null || (cmap.has(cp) && cmap.has(nextCp))
+        if (bothInCmap) {
+          cumulative += font.getKerningValue(font.charToGlyph(ch), font.charToGlyph(nextCh)) * scale
+        }
       }
 
-      byteOffset += codePoints[gi].length
+      byteOffset += ch.length
     }
   } else {
     // Fallback: wide / narrow character-class estimates when the per-row font

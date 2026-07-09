@@ -1,6 +1,7 @@
 import { parse } from 'opentype.js'
 import type { Font } from 'opentype.js'
 import { DEFAULT_FONT_ID, getFontMeta, type FontId } from '../../shared/fonts'
+import { pickTofuSubstitute } from '../../shared/glyph-substitute'
 import { ensureFontLoaded } from './font-registry'
 import { bumpFontCacheVersion } from '@/stores/font-cache-version-store'
 
@@ -35,6 +36,23 @@ interface FontEntry {
   libassScale: number
   unitsPerEm: number
   winHeight: number
+  /**
+   * REQ-0160 — Set of every Unicode code point declared in the font's cmap.
+   * Built once at load time by walking `font.glyphs.glyphs[*].unicodes`
+   * (opentype.js exposes the reverse mapping directly).  Used by
+   * `substituteMissingGlyphs` to detect "font has no glyph for this
+   * character" without a per-character `charToGlyphIndex` call at
+   * render/measure time.
+   */
+  cmapCoverage: Set<number>
+  /**
+   * REQ-0160 — the character string used as the "tofu" substitute for
+   * this font.  Picked at load time by `pickTofuSubstitute` from an
+   * ordered candidate list (U+25A1 preferred, U+003F "?" last resort).
+   * Every registered font gets a non-empty pick because they all
+   * declare basic ASCII (REQ-0154 verified).
+   */
+  tofuSubstitute: string
 }
 
 const fontCache = new Map<FontId, FontEntry>()
@@ -83,7 +101,24 @@ function entryFromBytes(buf: ArrayBuffer): FontEntry {
   const os2 = font.tables.os2
   const winHeight = (os2.usWinAscent ?? 0) + (os2.usWinDescent ?? 0)
   const libassScale = winHeight > 0 ? font.unitsPerEm / winHeight : FALLBACK_LIBASS_SCALE
-  return { font, libassScale, unitsPerEm: font.unitsPerEm, winHeight }
+  // REQ-0160 — build the cmap coverage set once per font load.  opentype.js
+  // exposes each glyph's `unicodes: number[]` (reverse-mapped from the
+  // cmap tables); the .notdef glyph (index 0) never has any so it's
+  // naturally excluded, keeping the semantic "code point → has a real
+  // glyph" clean.  Uses the public `glyphs.get(i)` API — the internal
+  // `glyphs.glyphs` map is `private` in the TS types and would require
+  // a cast.  Cost: O(numGlyphs) at load, saves per-character work at
+  // every render / measure call.
+  const cmapCoverage = new Set<number>()
+  const numGlyphs = font.numGlyphs
+  for (let i = 0; i < numGlyphs; i++) {
+    const glyph = font.glyphs.get(i) as { unicodes?: number[] } | undefined
+    const unicodes = glyph?.unicodes
+    if (!unicodes) continue
+    for (const cp of unicodes) cmapCoverage.add(cp)
+  }
+  const tofuSubstitute = pickTofuSubstitute(cmapCoverage)
+  return { font, libassScale, unitsPerEm: font.unitsPerEm, winHeight, cmapCoverage, tofuSubstitute }
 }
 
 /**
@@ -142,6 +177,27 @@ export function getSubtitleFontFor(fontId: FontId): Font | null {
 
 export function getLibassScaleFor(fontId: FontId): number {
   return fontCache.get(fontId)?.libassScale ?? FALLBACK_LIBASS_SCALE
+}
+
+/**
+ * REQ-0160 — cmap coverage Set for a font, or null when the font is not
+ * yet in the cache (background load in progress or the download hasn't
+ * completed).  Callers must treat null as "cannot detect missing
+ * glyphs yet"; the safe fallback is to skip substitution and let libass
+ * do whatever fallback it normally does.  Once the font finishes loading,
+ * `bumpFontCacheVersion` triggers the React memo layer to re-run.
+ */
+export function getCmapCoverageFor(fontId: FontId): Set<number> | null {
+  return fontCache.get(fontId)?.cmapCoverage ?? null
+}
+
+/**
+ * REQ-0160 — tofu substitute character for a font, or null when the
+ * font isn't cached yet.  Same "cannot substitute yet" semantics as
+ * `getCmapCoverageFor` — the caller side treats null as skip.
+ */
+export function getTofuSubstituteFor(fontId: FontId): string | null {
+  return fontCache.get(fontId)?.tofuSubstitute ?? null
 }
 
 /**
