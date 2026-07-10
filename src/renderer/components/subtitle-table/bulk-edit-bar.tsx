@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, WrapText, AlignJustify, ChevronDown, AlertCircle, RotateCcw, Lock } from 'lucide-react'
+import { X, WrapText, AlignJustify, ChevronDown, AlertCircle, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
@@ -12,7 +12,6 @@ import { HelpIcon } from '@/components/help-icon'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
-import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { useStoreUpsellStore } from '@/stores/store-upsell-store'
 import { canSelectFontInTier } from '@/lib/font-tier'
@@ -23,7 +22,7 @@ import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
 import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
-import { getSortedFontRegistry, getFontMeta, isFontId, type FontId } from '../../../shared/fonts'
+import { getSortedFontRegistry, isFontId, type FontId } from '../../../shared/fonts'
 import { FontLangBadges } from '@/components/font-lang-badge/font-lang-badge'
 import { recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 
@@ -1052,7 +1051,11 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
   const { t } = useTranslation(['step2', 'step1', 'common'])
   const [open, setOpen] = useState(false)
   const installed = useInstalledFontIds()
-  const activeFontId = useSettingsStore((s) => s.activeFontId)
+  // REQ-0171 — `activeFontId` binding removed alongside the reset
+  // button: the only remaining consumer was the button's
+  // "current default's display name" subtitle.  Tier logic below
+  // reads `isMsix` directly and does not need the active-font
+  // reference.
   // REQ-088 #4 — mirror RowFontSelector: NSIS (free) tier restricts the
   // bulk picker to the bundled default.  `null` treated as the more
   // restrictive free tier until the boot-time IPC resolves.
@@ -1093,24 +1096,47 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
           <ChevronDown className="h-3 w-3 text-fg-muted" aria-hidden="true" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[260px] p-1">
+      <PopoverContent
+        align="start"
+        // REQ-0169 §1 — same viewport-clamp + internal-scroll pattern
+        // as `row-font-selector.tsx`, applied here for parity.  The
+        // bulk font popover shares this component's list shape (~13
+        // rows + tier-locked block) and would otherwise clip against
+        // the top edge whenever the bulk-edit bar is docked high in
+        // the STEP 2 layout.
+        collisionPadding={8}
+        className="w-[260px] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+      >
         <div className="flex flex-col">
-          <button
-            type="button"
-            onClick={() => pick(undefined)}
-            className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-fg-primary hover:bg-accent/40 cursor-pointer"
-          >
-            <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span className="flex-1 min-w-0">
-              <span className="block leading-tight">{t('bulkRowFont.useDefault')}</span>
-              <span className="block text-caption text-fg-muted truncate">
-                {getFontMeta(activeFontId).displayName}
-              </span>
-            </span>
-          </button>
-
-          <div className="my-1 h-px bg-surface-2" />
-
+          {/* REQ-0171 Phase 2 (owner approval option A) — the
+              "Use project default (Noto Sans JP SemiBold)" reset
+              button + its separator that used to sit here were
+              removed.  Rationale traced in RES-0171 §3.5: the
+              transcription path (step1.tsx:460 / 478) captures
+              `activeFontId` at transcribe-time and writes it into
+              every new row's `fontId` — those rows are pinned, not
+              inheriting, so a mid-session default change never
+              retroactively repaints them anyway.  The only paths
+              that leave `entry.fontId === undefined` (inherit) are
+              (a) STEP 2's manual "Add row" (step2.tsx:647-660,
+              deliberately no `fontId` field), (b) uninstall
+              recovery (font-picker.tsx:373 writes `undefined` when
+              the referenced font disappears), and (c) fixture data
+              (dev-only).  None of those are triggered from the
+              bulk-edit bar, so the bulk "clear to inherit" button
+              had no user-visible workflow paired with it.  The
+              button also carried the "デフォルト" label that
+              REQ-0164/0169 already erased everywhere else, making
+              its continued presence inconsistent.  Compare with
+              row-font-selector.tsx (REQ-0170): the row-picker's
+              list `onClick` already coalesces `m.id === activeFontId
+              → undefined`, so the row-picker button was purely
+              redundant; the bulk picker's list `onClick={() =>
+              pick(m.id)}` has no such coalesce, so this removal
+              consciously drops the "bulk-clear to undefined"
+              affordance — the `undefined` semantic itself is
+              preserved (uninstall recovery + add-row still write
+              it), only the UI trigger is gone. */}
           {selectable.map((m) => (
             <button
               key={m.id}

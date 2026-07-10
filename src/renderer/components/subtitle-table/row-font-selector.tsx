@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, AlertCircle, RotateCcw, Lock } from 'lucide-react'
+import { ChevronDown, AlertCircle, Lock } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
@@ -40,6 +40,13 @@ interface RowFontSelectorProps {
 export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorProps) {
   const { t } = useTranslation(['step2', 'step1'])
   const [open, setOpen] = useState(false)
+  // REQ-0169 §1 — scroll-into-view target for the currently active row.
+  // The Popover mounts empty and gets painted with the full list; ref
+  // points at the row matching `value ?? activeFontId`, and the effect
+  // below scrolls it into the visible band the first time the popover
+  // opens.  Without this, users whose current font sits mid-list have
+  // to hunt for it every time.
+  const currentItemRef = useRef<HTMLButtonElement | null>(null)
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   const installed = useInstalledFontIds()
   // REQ-088 #4 — null treated as the more restrictive free tier until
@@ -79,6 +86,19 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
     setOpen(false)
   }
 
+  // REQ-0169 §1 — scroll the currently active row into the visible band
+  // once the popover finishes mounting.  `requestAnimationFrame` waits
+  // for Radix to portal the content into the DOM; using `block: 'nearest'`
+  // avoids yanking the popover away from the trigger if the current item
+  // is already visible.
+  useEffect(() => {
+    if (!open) return
+    const raf = requestAnimationFrame(() => {
+      currentItemRef.current?.scrollIntoView({ block: 'nearest', behavior: 'auto' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [open])
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -99,11 +119,15 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
             : t('rowFont.tooltipDefault', { name: resolvedMeta.displayName })}
         >
           <span className="flex items-center gap-1.5 min-w-0">
-            {!isOverriding && (
-              <span className="text-micro uppercase tracking-wide text-fg-muted shrink-0">
-                {t('rowFont.defaultPrefix')}
-              </span>
-            )}
+            {/* REQ-0169 §2 — the `<span>{t('rowFont.defaultPrefix')}</span>`
+                ("デフォルト:" prefix) previously shown here was removed.
+                It duplicated the meaning of the pre-existing tooltip
+                (`rowFont.tooltipDefault`) that already differentiates
+                "inherit" vs "override" behaviour, cluttered the tight
+                inspector cell, and — per owner — implied a distinction
+                users don't need since the font shown IS the one that
+                will render.  The tooltip differentiation stays for
+                accessibility; only the visible chip is trimmed. */}
             <span className="truncate" style={{ fontFamily: `'${resolvedMeta.cssFontFamily}'`, fontWeight: resolvedMeta.weight }}>
               {resolvedMeta.displayName}
             </span>
@@ -116,42 +140,51 @@ export function RowFontSelector({ value, onChange, disabled }: RowFontSelectorPr
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[260px] p-1"
+        // REQ-0169 §1 — cap the popover's height to whatever Radix
+        // measured as available above/below the trigger and let the
+        // list scroll internally.  Without this cap the popover
+        // expanded to its full content height (~13 fonts × 34 px +
+        // dividers ≈ 470 px) and, when the trigger sat near the
+        // top of the viewport, spilled off the top edge past the
+        // title bar with no way to reach the hidden rows.  Radix
+        // exposes `--radix-popover-content-available-height` on
+        // Content once positioned; scoping `overflow-y-auto` here
+        // gives the entire body one scroll container.
+        // `collisionPadding` reserves an 8-px breathing gap from the
+        // viewport edges so the shadow doesn't cliff into the frame.
+        collisionPadding={8}
+        className="w-[260px] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col">
-          {/* "Use default" — only meaningful when the row currently has
-              an explicit override.  We still render it as disabled in
-              the non-overriding case so the option's position is stable
-              across rows. */}
-          <button
-            type="button"
-            onClick={() => pick(undefined)}
-            disabled={!isOverriding}
-            className={cn(
-              'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
-              isOverriding
-                ? 'hover:bg-accent/40 text-fg-primary cursor-pointer'
-                : 'text-fg-muted cursor-default'
-            )}
-          >
-            <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span className="flex-1 min-w-0">
-              <span className="block leading-tight">{t('rowFont.useDefault')}</span>
-              <span className="block text-caption text-fg-muted truncate">
-                {getFontMeta(activeFontId).displayName}
-              </span>
-            </span>
-          </button>
-
-          <div className="my-1 h-px bg-surface-2" />
-
+          {/* REQ-0170 — the "Use default (Noto Sans JP SemiBold)" reset
+              button that used to live here was removed.  Rationale: the
+              list row's `onClick` (below) already funnels the ACTIVE
+              default row through `pick(undefined)` — i.e. clicking the
+              current default font in the list produces the exact same
+              `entry.fontId = undefined` inherit state the reset button
+              produced.  The RES-0170 §A/B trace confirmed the two
+              coalesce, so the button was purely redundant UI real
+              estate that also broke REQ-0169's "no visible 'デフォルト'
+              label" intent.  Compare with `bulk-edit-bar.tsx`'s
+              BulkFontPicker: THAT picker's list `onClick` uses
+              `pick(m.id)` (no `undefined` coalesce), so its "Use
+              project default" button is semantically distinct
+              (inherit vs pin-to-Noto) and stays.  Reset path for
+              row-font-selector users is now "click Noto in the list"
+              — the scroll-into-view + `isCurrent` green dot from
+              REQ-0169 makes that easy to locate. */}
           {selectable.map((m) => {
             const isCurrent = m.id === (value ?? activeFontId)
             return (
               <button
                 key={m.id}
                 type="button"
+                // REQ-0169 §1 — the currently-active row receives a ref
+                // so `useEffect` above can scroll it into view when the
+                // popover opens.  Every other row leaves the ref
+                // untouched; only one button holds it at a time.
+                ref={isCurrent ? currentItemRef : undefined}
                 onClick={() => pick(m.id === activeFontId ? undefined : m.id)}
                 className={cn(
                   'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
