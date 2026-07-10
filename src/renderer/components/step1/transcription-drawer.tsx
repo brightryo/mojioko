@@ -221,7 +221,7 @@ export function TranscriptionDrawer({
                       className={cn(
                         'flex items-center gap-2 rounded-md border px-3 py-1.5 text-left transition-colors duration-150',
                         selectedTrack === track.index
-                          ? 'border-primary/50 bg-primary/5'
+                          ? 'border-primary'  /* REQ-0182 drawer — border-only select, no fill */
                           : 'border-line hover:bg-surface-2/40',
                       )}
                     >
