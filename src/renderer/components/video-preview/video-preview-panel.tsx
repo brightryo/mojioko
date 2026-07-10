@@ -391,18 +391,29 @@ export function VideoPreviewPanel() {
     const tick = () => {
       const v = videoRef.current
       const t = v?.currentTime ?? 0
+      // REQ-0195 §2 — when the video is paused the user is inspecting a
+      // still frame for editing purposes; snap the fade ramp to "no
+      // fade" so a caption sitting exactly on its startSec (owner's
+      // repro: 0-second entry at initial mount, currentTime = 0) is
+      // painted at full opacity instead of the fade-in start (= 0 →
+      // invisible).  During playback the burn-in-accurate ramp still
+      // applies.  Same defensive out-of-range guard as
+      // computeFadeOpacity: if the paused playhead is outside the
+      // active entry's range, keep the caption hidden.
+      const isPaused = v?.paused ?? true
       const entries = activeEntryMapRef.current
       for (const [id, el] of overlayOuterRefs.current) {
         const entry = entries.get(id)
         if (!entry) continue
-        const next = String(
-          computeFadeOpacity({
-            currentTimeSec: t,
-            startSec: entry.startSec,
-            endSec: entry.endSec,
-            fadeDurationSec: entry.fadeDurationSec,
-          }),
-        )
+        const opacity = isPaused
+          ? (t >= entry.startSec && t < entry.endSec ? 1 : 0)
+          : computeFadeOpacity({
+              currentTimeSec: t,
+              startSec: entry.startSec,
+              endSec: entry.endSec,
+              fadeDurationSec: entry.fadeDurationSec,
+            })
+        const next = String(opacity)
         // Guard CSSOM writes so a steady-state caption (mid-plateau,
         // opacity = "1") does not invalidate style every frame.
         if (el.style.opacity !== next) el.style.opacity = next

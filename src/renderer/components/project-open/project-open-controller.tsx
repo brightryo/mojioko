@@ -247,7 +247,16 @@ export function ProjectOpenController() {
 
     setState({ kind: 'idle' })
     toast.success(t('project.open.toastSuccess'))
-    navigate('/step2')
+    // REQ-0195 §1 — route by data-shape rather than by a saved "screen"
+    // flag.  Non-empty subtitles means transcription has happened → the
+    // user goes to step2 to keep editing.  Empty subtitles (project
+    // saved from step1 pre-transcription, or every row deleted) means
+    // there's nothing to edit → land on step1 with the video loaded so
+    // the user can start / redo the transcription.  Data-shape wins
+    // over any saved screen flag because it can't disagree with the
+    // stores we just hydrated.
+    const hasSubtitles = project.editing.subtitles.some((e) => !e.isDeleted)
+    navigate(hasSubtitles ? '/step2' : '/step1')
   }
 
   // ─── Dialog handlers ──────────────────────────────────────────────
