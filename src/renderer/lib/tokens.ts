@@ -4,21 +4,23 @@
  */
 
 export const colors = {
-  // Background scale — REQ-0177: mirrors the shifted --neutral-N ladder
-  // in globals.css (surface-0 = 11 % L, was 4 %).  Values here are
-  // used by canvas / JS callers (subtitle-overlay compositing,
-  // overflow calculations, timeline drawing) that can't read the CSS
-  // vars directly.  Keep in sync with globals.css :root manually.
-  bgBase: '#1c1c1c',       // was #0a0a0a — neutral-1 at 11 %
-  bgSurface: '#242424',    // was #141414 — neutral-2 at 14 %
-  bgElevated: '#2b2b2b',   // was #171717 — neutral-4 at 17 %
-  bgInput: '#1c1c1c',      // was #0a0a0a — matches bgBase
-  bgHover: '#333333',      // was #1f1f1f — neutral-5 at 20 %
+  // Background scale — mirrors the --neutral-N ladder in globals.css.
+  // REQ-0177 Phase A: lifted from 4 % to 11 % L to leave near-black.
+  // REQ-0178 Phase B-1: further +2 % L on top of Phase A (surface-0
+  // now at 13 %) after owner Phase A feedback "still reads too
+  // black".  Values here are used by canvas / JS callers
+  // (subtitle-overlay compositing, overflow calculations, timeline
+  // drawing) that can't read the CSS vars directly.
+  bgBase: '#212121',       // was #1c1c1c — neutral-1 at 13 %
+  bgSurface: '#292929',    // was #242424 — neutral-2 at 16 %
+  bgElevated: '#2e2e2e',   // was #2b2b2b — neutral-4 at 18 %
+  bgInput: '#212121',      // was #1c1c1c — matches bgBase
+  bgHover: '#363636',      // was #333333 — neutral-5 at 21 %
 
   // Border scale
-  borderDefault: '#3d3d3d',   // was #27272a — neutral-6 at 24 %
-  borderStrong: '#474747',    // was #3f3f46 — neutral-7 at 28 %
-  borderSubtle: '#212121',    // was #1f1f1f — neutral-3 at 13 %
+  borderDefault: '#3f3f3f',   // was #3d3d3d — neutral-6 at 25 %
+  borderStrong: '#474747',    // unchanged — neutral-7 at 28 %
+  borderSubtle: '#262626',    // was #212121 — neutral-3 at 15 %
 
   // Text scale
   textPrimary: '#fafafa',

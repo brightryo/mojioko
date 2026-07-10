@@ -7,14 +7,21 @@
 @layer base {
   :root {
     /*
-     * REQ-20260615-019: single tunable for the app's window-background
-     * alpha.  `0.85` = 85% opaque black (15% see-through to the desktop).
-     * Flip to `0.15` if the spec meant "85% transparent".  Set to `1`
-     * to restore a fully opaque app.  The BrowserWindow side
-     * (src/main/index.ts) is set `transparent: true` so this alpha is
-     * actually rendered against the desktop.
+     * REQ-0178 (v1.3.3, feat/ui-resolve) — window-bg-alpha bumped to 1
+     * (fully opaque).  Pre-0178 the body painted rgba(0,0,0, 0.85)
+     * ostensibly to let the desktop bleed through, but REQ-20260615-030 B
+     * had already dropped `transparent: true` on the BrowserWindow
+     * (see src/main/index.ts) so the alpha was just multiplying pure
+     * black against the Electron backing colour — no desktop actually
+     * showed through, but the composed body still read as near-black.
+     * The @layer base body rule below now paints hsl(var(--surface-0))
+     * directly, which is the correct semantic (body = surface-0), and
+     * this var is kept at 1 so any residual downstream reader sees
+     * "fully opaque" instead of the confusing 0.85.
+     *
+     * Pre-0178: 0.85
      */
-    --window-bg-alpha: 0.85;
+    --window-bg-alpha: 1;
 
     /* -------------------------------------------------------------------
      * REQ-20260615-029 — user-selectable base colour.
@@ -48,21 +55,23 @@
     /* Default = neutral dark.  data-base unset OR data-base="neutral".
      *
      * REQ-0177 Phase A — lifted the darkest steps ~7 % L so surface-0
-     * lands at 11 % L (~#1B1B1B) instead of 4 % L (~#0A0A0A).  Rationale:
-     * DaVinci Resolve's professional dark UI sits at a mid-grey base
-     * (#1B1B1E-ish); MOJIOKO's original near-black (#0A0A0A) read as
-     * "cheap dark" next to it.  The upper end (neutrals 8-12) is
-     * unchanged so text/muted contrast ratios stay AAA on the shifted
-     * surfaces.  Palette variants (stone/mauve/olive/mist/taupe) keep
-     * their pre-0177 numbers so the "Resolve base" is scoped to
-     * data-base=neutral only.
+     * lands at 11 % L (~#1B1B1B) instead of 4 % L (~#0A0A0A).
+     * REQ-0178 Phase B-1 — owner Phase A feedback: "still reads too
+     * black; drop the transparency and lift another notch".  Bumped
+     * the whole low end +2-3 % L on top of the 0177 shift, so
+     * surface-0 now lands at 13 % L (~#212121) — the "just off pure
+     * black" mid-grey Resolve's chrome sits on.  Upper end (neutral-8..12)
+     * remains untouched so text / muted contrast ratios stay AAA on the
+     * further-shifted surfaces.  Palette variants (stone/mauve/olive/
+     * mist/taupe) keep their pre-0177 numbers so the "Resolve base" is
+     * still scoped to data-base=neutral only.
      */
-    --neutral-1:  0 0% 11%;    /* was 4 %  — surface-0 = bg-base  */
-    --neutral-2:  0 0% 14%;    /* was 7 %  — surface-1 = card / panel */
-    --neutral-3:  0 0% 13%;    /* was 9 %  — popover */
-    --neutral-4:  0 0% 17%;    /* was 15 % — surface-2 = elevated / muted */
-    --neutral-5:  0 0% 20%;    /* was 19 % */
-    --neutral-6:  0 0% 24%;    /* was 25 % — surface-3 = border / scroll thumb */
+    --neutral-1:  0 0% 13%;    /* 11 % → 13 % (REQ-0178) — surface-0 = bg-base  */
+    --neutral-2:  0 0% 16%;    /* 14 % → 16 % (REQ-0178) — surface-1 = card / panel */
+    --neutral-3:  0 0% 15%;    /* 13 % → 15 % (REQ-0178) — popover */
+    --neutral-4:  0 0% 18%;    /* 17 % → 18 % (REQ-0178) — surface-2 = elevated / muted */
+    --neutral-5:  0 0% 21%;    /* 20 % → 21 % (REQ-0178) */
+    --neutral-6:  0 0% 25%;    /* 24 % → 25 % (REQ-0178) — surface-3 = border / scroll thumb */
     --neutral-7:  0 0% 28%;    /* unchanged */
     --neutral-8:  0 0% 32%;    /* neutral-600 */
     --neutral-9:  0 0% 45%;    /* neutral-500 */
@@ -509,15 +518,22 @@
 
   body {
     /*
-     * REQ-20260615-019: body paints rgba(0,0,0, --window-bg-alpha) instead
-     * of the opaque `bg-background` token so the BrowserWindow's
-     * `transparent: true` actually shows the desktop through the
-     * background.  `bg-card` etc. (used by section cards / dialogs /
-     * popovers) keep their opaque HSL tokens so foreground UI stays
-     * readable; only the bare background between cards is semi-transparent.
+     * REQ-0178 Phase B-1 — body now paints hsl(var(--surface-0))
+     * directly.  Pre-0178 the body painted rgba(0,0,0, --window-bg-alpha)
+     * (0.85) which was a leftover from the REQ-20260615-019
+     * "see-through-desktop" experiment.  REQ-20260615-030 B had already
+     * killed `transparent: true` on the BrowserWindow so the alpha was
+     * just multiplying pure black against the Electron backing colour
+     * — no desktop actually bled through, but the composed body still
+     * read as near-black even after Phase A lifted surface-0 to L 13 %.
+     * Painting hsl(var(--surface-0)) here makes the body match the
+     * intent: the app's base surface = surface-0, no aliasing.
+     *
+     * (Light mode override further below still points at surface-0 too,
+     * so the two modes stay symmetric.)
      */
     @apply text-foreground font-sans;
-    background-color: rgba(0, 0, 0, var(--window-bg-alpha));
+    background-color: hsl(var(--surface-0));
     height: 100%;
     overflow: hidden;
     font-feature-settings: 'rlig' 1, 'calt' 1;
