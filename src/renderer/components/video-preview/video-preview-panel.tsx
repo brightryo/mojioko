@@ -570,15 +570,80 @@ export function VideoPreviewPanel() {
   // rolled past the target frame.
   // REQ-0192 — reinstate the pause on the closed transition.  Also
   // defensively `setIsPlaying(false)` in case the element was already
-  // paused (no `onPause` event to sync state).  On expand, no work
-  // here: REQ-0191's step2 effect dispatches `setVideoSeekRequest`,
-  // which the paused element now consumes cleanly.
+  // paused (no `onPause` event to sync state).
   useEffect(() => {
     if (videoPreviewExpanded) return
     videoRef.current?.pause()
     audioRef.current?.pause()
     setIsPlaying(false)
   }, [videoPreviewExpanded])
+
+  // REQ-0193 — closed→open seek to the selected entry's startSec.
+  // Originally REQ-0191 dispatched `setVideoSeekRequest` from step2,
+  // which failed on real HW because the seek-consumer effect ran
+  // before the <video> re-mounted: while collapsed, previewBodySize
+  // reads 0×0 (display:none zeros the ResizeObserver contentBox),
+  // which drops videoFrameW to 0 and unmounts the <video> from the
+  // ternary at line ~1043.  On re-expand the store dispatch fired
+  // synchronously (videoRef.current still null) → the consumer
+  // cleared the request without seeking → the fresh <video> mounted
+  // and stayed at wherever browser cached the frame at.
+  // Owner-reported reproduction (RES-0193 §1): after
+  //   play → close → select entry 3 (startSec = 22.16) → open
+  // preview showed entry 1's caption at 0:11 (= the last playhead
+  // position before collapse) — proof that the seek never landed.
+  //
+  // Fix: keep a `prevExpandedRef` to detect the false→true edge.
+  // Snapshot the target startSec at the moment of the edge so a
+  // later selection change during the rAF loop doesn't retarget.
+  // Then loop `requestAnimationFrame` until `videoRef.current` is
+  // non-null AND `readyState >= HAVE_METADATA` (= seek can land),
+  // then apply `el.currentTime` directly along with the audio
+  // element and the local + store playhead slices.  This bypasses
+  // the videoSeekRequestSec store round-trip entirely for this
+  // transition — the store slice is still used by
+  // SubtitleTable row clicks / TimelineView scrub / keyboard nav
+  // where the preview is already visible and mounted, so those
+  // paths are untouched.  Max 30 frames (~500ms at 60fps) so a
+  // permanent mount failure doesn't leak the loop.
+  const prevExpandedRef = useRef(videoPreviewExpanded)
+  useEffect(() => {
+    const wasExpanded = prevExpandedRef.current
+    prevExpandedRef.current = videoPreviewExpanded
+    if (!videoPreviewExpanded || wasExpanded) return
+    const selId = useUiStore.getState().selectedEntryId
+    if (!selId) return
+    const entry = useProjectStore
+      .getState()
+      .entries.find((e) => e.id === selId)
+    if (!entry) return
+    const targetSec = entry.startSec
+    let cancelled = false
+    let attempts = 0
+    const MAX_ATTEMPTS = 30
+    function trySeek() {
+      if (cancelled) return
+      const el = videoRef.current
+      if (el && el.readyState >= 1 /* HAVE_METADATA */) {
+        el.currentTime = targetSec
+        if (audioRef.current) {
+          audioRef.current.currentTime = targetSec
+        }
+        setCurrentTime(targetSec)
+        if (!scrubState.inProgress) {
+          setVideoCurrentTimeSec(targetSec)
+        }
+        return
+      }
+      attempts += 1
+      if (attempts > MAX_ATTEMPTS) return
+      requestAnimationFrame(trySeek)
+    }
+    requestAnimationFrame(trySeek)
+    return () => {
+      cancelled = true
+    }
+  }, [videoPreviewExpanded, setVideoCurrentTimeSec])
 
   // REQ-20260615-051 B / REQ-20260615-052 — global Space keydown
   // shortcut for play / pause.

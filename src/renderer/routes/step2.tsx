@@ -293,31 +293,26 @@ export default function Step2Route(_: Step2RouteProps) {
   // resolves after the first render; the effect fires again once the
   // panel mounts and the ref lands.
   //
-  // REQ-0191 — on the closed→open transition, seek the playhead to
-  // the currently selected entry's start time so the preview lands
-  // on what the user was editing.  `selectedEntryId` / `entries` are
-  // read via `getState()` rather than added as effect deps: adding
-  // them would fire the seek every selection change, which is
-  // explicitly out of scope ("プレビューが開いている状態での通常の
-  // 選択・シーク挙動は変更しない").  If there's no selection, the
-  // playhead is left untouched (owner: "0:00 に飛ばしたりしない").
-  // The seek path reuses `videoSeekRequestSec` → VideoPreviewPanel's
-  // existing consumer effect (currentTime assignment + null reset),
-  // so no new IPC / state slice is introduced.
+  // REQ-0191 (owner-approved) — closed→open transition seeks the
+  // playhead to the selected entry's startSec.  The seek dispatch
+  // itself was originally placed here, but REQ-0193's owner report
+  // showed it not landing on real HW: while the preview is
+  // collapsed VideoPreviewPanel's `previewBodyRef` reports 0×0 (the
+  // `display:none` wrapper zeroes the ResizeObserver read), which
+  // drops `videoFrameW` to 0 and unmounts the <video> from the
+  // JSX ternary.  Dispatching `setVideoSeekRequest` at this level
+  // then hits VideoPreviewPanel's seek-consumer effect while
+  // `videoRef.current` is still null — the effect clears the
+  // request without seeking and the fresh <video> re-mounts at
+  // currentTime 0.  REQ-0193 moves the transition-driven seek
+  // inside VideoPreviewPanel where videoRef state is directly
+  // observable and the retry loop can wait for the fresh mount
+  // to accept the seek.  Keep only the pane resize here.
   useEffect(() => {
     const panel = previewPaneRef.current
     if (!panel) return
     if (videoPreviewExpanded) {
       panel.expand()
-      const { selectedEntryId, setVideoSeekRequest } = useUiStore.getState()
-      if (selectedEntryId) {
-        const entry = useProjectStore
-          .getState()
-          .entries.find((e) => e.id === selectedEntryId)
-        if (entry) {
-          setVideoSeekRequest(entry.startSec)
-        }
-      }
     } else {
       panel.collapse()
     }
