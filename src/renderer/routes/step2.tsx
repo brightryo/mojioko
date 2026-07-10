@@ -74,6 +74,20 @@ const OUTER_RIGHT_MIN_PX  = 368
 const LEFT_TOP_MIN_PX     = 313  // 312 → 313: 313 + 314 = 627 (= 628 − 1 handle)
 const LEFT_BOTTOM_MIN_PX  = 314  // 312 → 314 (symmetric ±0.5 px from previous)
 
+// REQ-0184 — collapsed-state size for the preview pane.  The
+// VideoPreviewPanel header row measures ~34-40 px in the current
+// tokens (py-1.5 padding + text-body-sm content).  40 px is the
+// safe upper bound at 1280x820 min-window; it fully accommodates
+// the "Preview | filename | folder | chevron" row without clipping.
+// When the pane is collapsed via ImperativePanelHandle.collapse(),
+// it snaps to this height and only the header shows — the media
+// stack below squeezes naturally through `flex-1 min-h-0 overflow-hidden`
+// on the wrapping div (see video-preview-panel.tsx REQ-0184 outer).
+// Under REQ-0183 this was a fixed 4 % → ~24 px which was smaller
+// than the header, clipping it (owner bug #1).  Now derived from
+// pane height so it stays correct across window sizes.
+const PREVIEW_HEADER_MIN_PX = 40
+
 /**
  * Convert a pixel minimum to a percentage string for ResizablePanel's
  * `minSize` prop.  Falls back to `"0%"` while the container dimension is
@@ -1224,7 +1238,14 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
                   // ResizableHandle to collapse the preview.
                   ref={previewPaneRef}
                   collapsible
-                  collapsedSize={4}
+                  // REQ-0184 bug #1 — the pre-0184 fixed `4` (%) was
+                  // smaller than the header row (~34-40 px) at typical
+                  // window sizes, so collapsing clipped the header
+                  // itself and left users no way to re-expand.  Now
+                  // derived from `PREVIEW_HEADER_MIN_PX` so the pane
+                  // snaps to exactly the header's height and the
+                  // toggle stays visible / clickable.
+                  collapsedSize={paneMinPct(PREVIEW_HEADER_MIN_PX, paneAreaSize.h)}
                   minSize={paneMinPct(LEFT_TOP_MIN_PX, paneAreaSize.h)}
                 >
                   {previewSlot}
