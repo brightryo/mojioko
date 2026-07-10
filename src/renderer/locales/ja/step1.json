@@ -183,7 +183,8 @@
     "modelDownloadFailedNetwork": "ネットワークが切れたため、ダウンロードを停止しました。接続を確認して再試行してください。",
     "modelNotInstalled": "モデル {{model}} が未ダウンロードです",
     "transcriptionError": "文字起こしに失敗しました: {{error}}",
-    "transcriptionCancelled": "文字起こしをキャンセルしました"
+    "transcriptionCancelled": "文字起こしをキャンセルしました",
+    "gpuFallback": "GPU が使えなかったため CPU で処理しています。処理に通常より時間がかかります。"
   },
   "error": {
     "probeVideo": "ファイルの解析に失敗しました",

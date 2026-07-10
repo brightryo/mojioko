@@ -256,11 +256,37 @@ def transcribe(msg: dict) -> None:
         #     on GPU is fastest but slightly lower quality.
         #   - CPU: `int8` (unchanged from pre-REQ-0145 — the fastest
         #     path on modern x86 SIMD int8).
+        #
+        # REQ-0173 primary defense — ask CTranslate2 which compute types
+        # the GPU actually supports on this build, then pick the fastest
+        # supported entry from a priority ladder.  Blackwell (sm_120)
+        # crashes cuBLAS with CUBLAS_STATUS_NOT_SUPPORTED when it hits
+        # the shipped 12.6 int8 kernels because the new INT8 tensor
+        # cores require a different memory-padding layout.  On such
+        # cards `get_supported_compute_types("cuda", 0)` is expected
+        # to omit int8_float16 (and int8*), so the ladder falls
+        # through to float16 — the compute type Purfview / Subtitle
+        # Edit's Blackwell reference build uses with the same
+        # ctranslate2 4.x runtime and confirms works.  Ampere / Ada
+        # keep int8_float16 in the set → byte-identical to pre-0173
+        # behaviour on RTX 20/30/40.
+        _CUDA_COMPUTE_LADDER: tuple[str, ...] = ("int8_float16", "float16", "float32")
+
         def _select_device() -> tuple[str, str]:
             try:
                 import ctranslate2  # type: ignore[import]
                 if ctranslate2.get_cuda_device_count() > 0:
-                    return "cuda", "int8_float16"
+                    supported = ctranslate2.get_supported_compute_types("cuda", 0)
+                    for candidate in _CUDA_COMPUTE_LADDER:
+                        if candidate in supported:
+                            print(f"[device] supported cuda compute_types={sorted(supported)} "
+                                  f"selected={candidate}",
+                                  file=sys.stderr)
+                            return "cuda", candidate
+                    # Empty ladder — falls through to CPU
+                    print(f"[device] no cuda compute type in ladder is supported "
+                          f"(supported={sorted(supported)}); falling back to CPU",
+                          file=sys.stderr)
             except Exception as probe_err:
                 # ctranslate2 unavailable or CUDA driver probe threw —
                 # treat as "no GPU" and continue with CPU.
@@ -272,29 +298,64 @@ def transcribe(msg: dict) -> None:
         actual_device: str = requested_device
         actual_compute: str = requested_compute
         fell_back: bool = False
+
+        # REQ-0173 secondary defense — even if `_select_device` reports
+        # int8_float16 as supported, cuBLAS may still throw
+        # CUBLAS_STATUS_NOT_SUPPORTED at WhisperModel init on Blackwell
+        # (the API's reported support and the runtime library's actual
+        # capability can disagree on brand-new architectures).  Retry
+        # the init once with float16 before the REQ-0145 CPU fallback
+        # kicks in, so a Blackwell user whose supported set incorrectly
+        # includes int8_float16 still lands on GPU rather than
+        # silently going CPU.  On success we override `actual_compute`
+        # but keep `actual_device = "cuda"` and `fell_back = False`
+        # — the run genuinely used the GPU.
+        model = None
+        init_err: Exception | None = None
         try:
             model = WhisperModel(str(model_dir), device=requested_device, compute_type=requested_compute)
         except Exception as e:
-            # REQ-0145 §2 — if the CUDA path was chosen but Model init
-            # failed (missing cuDNN redist on the user's machine, driver
-            # mismatch, out-of-memory, etc.) fall back to CPU rather
-            # than aborting the run.  Owner's UX is "transcription
-            # completes", not "transcription errors out because the GPU
-            # attempt failed."
-            if requested_device != "cpu":
-                print(f"[device] CUDA WhisperModel init failed ({type(e).__name__}: {e}); "
-                      f"falling back to device=cpu compute_type=int8",
+            init_err = e
+            print(f"[device] initial attempt device={requested_device} "
+                  f"compute_type={requested_compute} init failed "
+                  f"({type(e).__name__}: {e})",
+                  file=sys.stderr)
+
+            if requested_device == "cuda" and requested_compute != "float16":
+                print("[device] REQ-0173 secondary defense: retrying CUDA with compute_type=float16",
+                      file=sys.stderr)
+                try:
+                    model = WhisperModel(str(model_dir), device="cuda", compute_type="float16")
+                    actual_compute = "float16"
+                    init_err = None
+                    print("[device] float16 retry succeeded — staying on GPU",
+                          file=sys.stderr)
+                except Exception as e2:
+                    print(f"[device] float16 retry also failed "
+                          f"({type(e2).__name__}: {e2})",
+                          file=sys.stderr)
+                    init_err = e2
+
+            # REQ-0145 §2 — if we STILL don't have a working model and
+            # we started on CUDA, fall through to CPU.  This preserves
+            # pre-REQ-0173 behaviour for machines where every CUDA
+            # attempt genuinely failed (missing cuDNN, driver mismatch,
+            # OOM, etc.).
+            if model is None and requested_device != "cpu":
+                print("[device] falling back to device=cpu compute_type=int8",
                       file=sys.stderr)
                 try:
                     model = WhisperModel(str(model_dir), device="cpu", compute_type="int8")
                     actual_device = "cpu"
                     actual_compute = "int8"
                     fell_back = True
-                except Exception as e2:
-                    send({"event": "failed", "error": f"Failed to load model: {e2}"})
+                except Exception as e3:
+                    send({"event": "failed", "error": f"Failed to load model: {e3}"})
                     return
-            else:
-                send({"event": "failed", "error": f"Failed to load model: {e}"})
+            elif model is None:
+                # requested_device was already "cpu" (no GPU / probe failed)
+                # and the CPU init also failed — nothing else to try.
+                send({"event": "failed", "error": f"Failed to load model: {init_err}"})
                 return
 
         # REQ-0145 §3 — surface the actual device to (a) the sidecar

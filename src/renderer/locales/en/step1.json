@@ -184,7 +184,8 @@
     "modelDownloadFailedNetwork": "The download stopped because the network connection was lost. Check your connection and try again.",
     "modelNotInstalled": "Model {{model}} is not installed",
     "transcriptionError": "Transcription failed: {{error}}",
-    "transcriptionCancelled": "Transcription cancelled"
+    "transcriptionCancelled": "Transcription cancelled",
+    "gpuFallback": "GPU was unavailable; running on CPU. This may take longer than usual."
   },
   "error": {
     "probeVideo": "Failed to probe file",

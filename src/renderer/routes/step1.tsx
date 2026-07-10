@@ -408,6 +408,23 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             computeType: evt.computeType,
             fellBack: evt.fellBack,
           })
+          // REQ-0173 §2 — surface silent GPU→CPU fallback with an
+          // explicit toast.  The transcription drawer already turns
+          // its device chip warning-yellow when `fellBack === true`,
+          // but users focused on the progress bar / elapsed timer
+          // frequently miss the chip and only notice that transcribe
+          // is much slower than expected.  Firing a toast at the
+          // moment the sidecar reports the fallback catches every
+          // silent CPU-drop — Blackwell + int8 crash, missing cuDNN,
+          // driver mismatch, OOM, or the REQ-0173 §1 secondary
+          // defense exhausting its retry ladder — so the owner /
+          // user always knows the speedup they expected did not
+          // happen.  Deliberately no dependency-array useEffect: the
+          // sidecar sends `deviceInfo` at most once per transcribe
+          // run, so we can act on the event synchronously here.
+          if (evt.fellBack) {
+            toast.warning(t('toast.gpuFallback'))
+          }
         }
       }
     )
