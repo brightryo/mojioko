@@ -6,6 +6,7 @@ import {
   Download,
   Trash2,
   Check,
+  Circle,
   Target,
   Database,
   HardDrive,
@@ -324,9 +325,20 @@ export function WhisperModelManager({
             Advanced settings now live inside the TranscriptionDrawer
             opened from the footer Start button. */}
 
-        {/* Green check — only when downloaded AND selected. */}
-        {isModelReady && (
+        {/*
+          REQ-0181 — symmetric marker.  Pre-0181 the header only rendered
+          the green Check when a model was active; the "not yet ready"
+          state was silent, so the user had no per-section signal of what
+          was blocking the transcribe start.  Now we render a neutral
+          Circle in the unmet case so all three step1 sections (Whisper /
+          GPU / Input Video) carry a symmetric ✓ / ○ indicator.  The
+          tooltip / toast on the disabled Start button carries the
+          textual reason (REQ-0181 Shape C).
+        */}
+        {isModelReady ? (
           <Check className="h-4 w-4 text-primary flex-shrink-0" aria-label={t('model.active')} />
+        ) : (
+          <Circle className="h-3.5 w-3.5 text-fg-tertiary flex-shrink-0" aria-label={t('guard.pending')} />
         )}
 
         {/* Chevron */}

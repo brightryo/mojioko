@@ -152,6 +152,12 @@
     "transcribingWaiting": "文字起こし中…",
     "transcribing": "文字起こし中… {{percent}}%"
   },
+  "guard": {
+    "noInput": "入力ファイルを選択してください",
+    "noModel": "Whisperモデルをダウンロード／選択してください",
+    "noAudio": "選択したビデオに音声トラックがありません",
+    "pending": "未完了"
+  },
   "drawer": {
     "title": "文字起こし",
     "subtitle": "Whisper 設定と音声トラックを確認して実行します。",

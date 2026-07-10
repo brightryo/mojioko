@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform, Check } from 'lucide-react'
+import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform, Check, Circle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -624,6 +624,22 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const canStart = !isLoading && video !== null && (video.audioTracks?.length ?? 0) > 0 && activeModelId !== null
   const audioTracks = video?.audioTracks ?? []
 
+  // REQ-0181 — guard-reason resolver.  Mutually-exclusive priority chain
+  // that mirrors the natural dependency order (a video with no audio is
+  // impossible without a video; a model can be picked independently).
+  // Returns a translated string when the transcribe start is blocked, or
+  // `null` when canStart is true (no reason needed).  Consumed by
+  // (a) the footer Start button's tooltip + click-toast wrapper below,
+  // and (b) the TranscriptionDrawer's own Start button (same reason
+  // string forwarded via props).
+  const guardReason = (() => {
+    if (isLoading) return null                            // transient, no useful guidance
+    if (!video) return t('guard.noInput')
+    if ((video.audioTracks?.length ?? 0) === 0) return t('guard.noAudio')
+    if (!activeModelId) return t('guard.noModel')
+    return null
+  })()
+
   const footerCenter = (
     /* REQ-067 phase B: status colors lifted from text-fg-muted to
        text-fg-secondary so the model-status and privacy line stay legible
@@ -654,31 +670,52 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // REQ-028: also hidden in audio-only mode — there is no burn-in step
   // for audio, so the seed-style dialog has no consumer.
   const showStyleCaret = !isTranscribing && !isAudioOnly
+  // REQ-0181 — the footer Start button's guard state.  When the button
+  // is disabled because canStart is false (and we're not mid-transcribe),
+  // the wrapper span below catches clicks and surfaces `guardReason` as
+  // a toast; the wrapper also carries the `title` attribute so
+  // hover-tooltip works even though `disabled:pointer-events-none` on
+  // the Button itself would otherwise swallow hover events.
+  const startBlocked = !isTranscribing && !canStart
   const footerRight = (
     <div className="inline-flex items-stretch">
-      <Button
-        variant="primary"
-        size="md"
-        disabled={!isTranscribing && !canStart}
-        onClick={isTranscribing ? handleCancelClick : () => setTranscriptionDrawerOpen(true)}
-        className={cn(showStyleCaret && 'rounded-r-none')}
+      <span
+        // REQ-0181 Shape C — click-toast + tooltip wrapper.  Only active
+        // when the primary Start button is guard-disabled.  Button
+        // enabled path: `title` and `onClick` are undefined so the span
+        // is a no-op passthrough and the Button's own onClick fires
+        // normally.  Guard-disabled path: the Button carries
+        // `disabled:pointer-events-none` (from button.tsx cva) so mouse
+        // events fall through to this span, which fires the toast; the
+        // `title` attribute renders a native tooltip on hover.
+        title={startBlocked && guardReason ? guardReason : undefined}
+        onClick={startBlocked && guardReason ? () => toast.warning(guardReason) : undefined}
+        className="inline-flex"
       >
-        {isTranscribing ? (
-          transcribeProgress === 0 ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              {t('action.transcribingWaiting')}
-            </>
+        <Button
+          variant="primary"
+          size="md"
+          disabled={!isTranscribing && !canStart}
+          onClick={isTranscribing ? handleCancelClick : () => setTranscriptionDrawerOpen(true)}
+          className={cn(showStyleCaret && 'rounded-r-none')}
+        >
+          {isTranscribing ? (
+            transcribeProgress === 0 ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                {t('action.transcribingWaiting')}
+              </>
+            ) : (
+              <>
+                <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
+                {t('action.transcribing', { percent: transcribeProgress })}
+              </>
+            )
           ) : (
-            <>
-              <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
-              {t('action.transcribing', { percent: transcribeProgress })}
-            </>
-          )
-        ) : (
-          t('action.startTranscription')
-        )}
-      </Button>
+            t('action.startTranscription')
+          )}
+        </Button>
+      </span>
       {showStyleCaret && (
         <Button
           variant="primary"
@@ -812,7 +849,21 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             <div className="flex items-center gap-2">
               {(() => {
                 const labelState = pickAudioTrackLabel(video ? audioTracks.length : null)
-                if (labelState.kind === 'hidden') return null
+                // REQ-0181 — three states, three markers:
+                //   'hidden'   (no file loaded)   → Circle only, no text
+                //   'no-audio' (file, 0 tracks)   → text + Circle
+                //   'count'    (file, N tracks)   → text + green Check
+                // Pre-0181 the 'hidden' branch returned null entirely, so
+                // an empty input section had no signal at all — the whole
+                // "you haven't picked a file yet" state was silent.  Now
+                // the Circle marker lands next to the "入力ファイル" title
+                // as a symmetric ○ counterpart to the ✓ that appears
+                // once a real video-with-audio has been chosen.
+                if (labelState.kind === 'hidden') {
+                  return (
+                    <Circle className="h-3.5 w-3.5 text-fg-tertiary flex-shrink-0" aria-label={t('guard.pending')} />
+                  )
+                }
                 return (
                   <>
                     <span className="text-body-sm text-fg-secondary">
@@ -821,17 +872,18 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
                         : t('audioTracks.audioTrackCount', { count: labelState.count })}
                     </span>
                     {/* REQ-20260615-080 — positive-detection check.  Shown
-                        only when N ≥ 1 (the "we found usable audio" case),
-                        NOT for 0 / hidden.  Identical Check element +
-                        Tailwind class triple as the Whisper accordion's
-                        active-model check (whisper-model-manager.tsx:309)
-                        so the two greens in this route's two headers
-                        track each other exactly — same icon, same
-                        `text-primary`, same h-4 w-4.  Decorative; the
-                        adjacent text already conveys the count to AT, so
-                        aria-hidden mirrors the pre-REQ-079 treatment. */}
-                    {labelState.kind === 'count' && (
+                        only when N ≥ 1 (the "we found usable audio" case).
+                        Identical Check element + Tailwind class triple as
+                        the Whisper accordion's active-model check so the
+                        two greens in this route's two headers track each
+                        other exactly.
+                        REQ-0181 — no-audio branch renders the same Circle
+                        so a loaded video with 0 tracks still surfaces the
+                        blocking condition. */}
+                    {labelState.kind === 'count' ? (
                       <Check className="h-4 w-4 text-primary flex-shrink-0" aria-hidden="true" />
+                    ) : (
+                      <Circle className="h-3.5 w-3.5 text-fg-tertiary flex-shrink-0" aria-label={t('guard.pending')} />
                     )}
                   </>
                 )
@@ -1038,6 +1090,10 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         deviceInfo={deviceInfo}
         errorMessage={drawerErrorMessage}
         canStart={canStart}
+        // REQ-0181 — the drawer's own Start button gets the same
+        // guard treatment as the footer split-button in step1; the
+        // shared reason string keeps the copy in sync.
+        guardReason={guardReason}
         onStart={handleStartTranscription}
         onCancel={handleCancelClick}
       />

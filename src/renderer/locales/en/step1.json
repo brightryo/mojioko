@@ -153,6 +153,12 @@
     "transcribingWaiting": "Transcribing…",
     "transcribing": "Transcribing… {{percent}}%"
   },
+  "guard": {
+    "noInput": "Select an input file to transcribe.",
+    "noModel": "Download or select a Whisper model.",
+    "noAudio": "The selected video has no audio track.",
+    "pending": "Pending"
+  },
   "drawer": {
     "title": "Transcription",
     "subtitle": "Review Whisper settings and the audio track, then run.",

@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertCircle, Mic, Play, Settings2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -101,6 +102,16 @@ export interface TranscriptionDrawerProps {
   /** Whether the start button should be enabled.  Driven by the parent
    *  (`canStart` = video + track + model + advanced loaded). */
   canStart: boolean
+  /**
+   * REQ-0181 — human-readable reason string surfaced when `canStart`
+   * is false, or `null` when the button is enabled.  Rendered as the
+   * `title` tooltip on hover AND fired as a `toast.warning` when the
+   * user clicks the disabled Start button.  Kept as a plain string
+   * (already localised by the parent) so this component stays
+   * i18n-neutral; the parent step1 resolves `guard.noInput` /
+   * `guard.noAudio` / `guard.noModel` via its own `t()`.
+   */
+  guardReason?: string | null
   /** Fires when the user presses 文字起こし開始 inside the drawer. */
   onStart: () => void
   /** Fires when the user presses キャンセル mid-run; routes through the
@@ -120,6 +131,7 @@ export function TranscriptionDrawer({
   deviceInfo,
   errorMessage,
   canStart,
+  guardReason,
   onStart,
   onCancel,
 }: TranscriptionDrawerProps) {
@@ -372,15 +384,30 @@ export function TranscriptionDrawer({
               >
                 {t('drawer.close')}
               </Button>
-              <Button
-                variant="primary"
-                size="md"
-                onClick={onStart}
-                disabled={!canStart}
+              {/*
+                REQ-0181 — same guard wrapper pattern as the footer
+                Start split-button in step1.tsx.  Wrapper span carries
+                the `title` tooltip on hover and fires `toast.warning`
+                on click while the Button underneath is disabled and
+                `pointer-events-none` (from button.tsx's cva).  When
+                canStart is true, the wrapper's props are undefined so
+                the Button's own onClick fires normally.
+              */}
+              <span
+                title={!canStart && guardReason ? guardReason : undefined}
+                onClick={!canStart && guardReason ? () => toast.warning(guardReason) : undefined}
+                className="inline-flex"
               >
-                <Play className="h-4 w-4 mr-1.5" />
-                {t('drawer.startRun')}
-              </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={onStart}
+                  disabled={!canStart}
+                >
+                  <Play className="h-4 w-4 mr-1.5" />
+                  {t('drawer.startRun')}
+                </Button>
+              </span>
             </>
           )}
         </div>
