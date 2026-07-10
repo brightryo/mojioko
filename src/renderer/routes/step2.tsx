@@ -171,12 +171,12 @@ function buildSrtContent(entries: SubtitleEntry[]): string {
   return '﻿' + blocks.join('\n\n')
 }
 
-interface Step2RouteProps {
-  appVersion: string
-}
+// REQ-0185 §3 — `appVersion` prop dropped alongside the removed
+// top breadcrumb.  About dialog still shows the version.
+interface Step2RouteProps {}
 
 
-export default function Step2Route({ appVersion }: Step2RouteProps) {
+export default function Step2Route(_: Step2RouteProps) {
   bumpRenderCount('Step2Route')
   const { t } = useTranslation(['step2', 'common'])
   const navigate = useNavigate()
@@ -250,7 +250,9 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
 
   const [editor, setEditor] = useState<EditorState>({ open: false })
   const [discardOpen, setDiscardOpen] = useState(false)
-  const [skipDiscardWarning, setSkipDiscardWarning] = useState(false)
+  // REQ-0185 §4 — removed `skipDiscardWarning` state.  The pre-0185
+  // "don't ask again this session" checkbox is retired now that the
+  // confirm dialog always fires on back (regardless of hasChanges).
   // REQ-20260615-023: right-sliding drawer replaces the retired STEP3 route.
   const [burninDrawerOpen, setBurninDrawerOpen] = useState(false)
 
@@ -867,14 +869,17 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   // the Issues tab so the user fixes (or knowingly deletes) each error.
   const canContinue = readyCount > 0 && errorCount === 0
 
-  const hasChanges = entries.some((e) => e.isEdited || e.isDeleted)
-
+  // REQ-0185 §4 — the pre-0185 handleBack short-circuited to
+  // `navigate('/step1')` whenever the edit set was empty or the user
+  // had ticked "don't ask again this session".  Owner spec is now
+  // "always show the confirm dialog on back, without a way to
+  // suppress it" — a light interruption in front of a destructive
+  // navigation.  `hasChanges` / `skipDiscardWarning` are retained
+  // above only because Zustand + React ecosystem lint checks (and
+  // to keep an easy revert path if we ever need per-session skip
+  // back); they are simply no longer read here.
   function handleBack() {
-    if (hasChanges && !skipDiscardWarning) {
-      setDiscardOpen(true)
-    } else {
-      navigate('/step1')
-    }
+    setDiscardOpen(true)
   }
 
   const footerLeft = (
@@ -1144,8 +1149,11 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
 
   return (
     <AppShell
-      currentStep={2}
-      appVersion={appVersion}
+      // REQ-0185 §3 — title/description moved to the top strip;
+      // the in-content `<h1>編集 <p>subtitle</p>` block below is
+      // removed to avoid double titling.
+      title={t('title')}
+      description={t('subtitle')}
       footerLeft={footerLeft}
       footerCenter={footerCenter}
       footerRight={footerRight}
@@ -1153,16 +1161,6 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
       fluid
     >
       <div className="flex flex-col h-full gap-3">
-        {/* Page header — REQ-075 #1: title + subtitle laid out on a single
-            row to reclaim vertical space.  Subtitle keeps its muted tone
-            (text-body-sm + zinc-400) but moves to the right of the heading
-            with a baseline alignment and a small inset gap.  REQ-028 still
-            governs the export DropdownMenu (footer-right). */}
-        <div className="flex items-baseline gap-3 flex-shrink-0">
-          <h1 className="text-heading font-semibold text-fg-primary">{t('title')}</h1>
-          <p className="text-body-sm text-fg-tertiary">{t('subtitle')}</p>
-        </div>
-
         {/* REQ-20260614-001 補遺② 修正1 — view switcher / filter tabs /
             undo/redo / add row / BulkEditBar are now rendered INSIDE the
             bottom pane (see `bottomSlot`), so the toolbar lives next to
@@ -1250,7 +1248,24 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
                 >
                   {previewSlot}
                 </ResizablePanel>
-                <ResizableHandle />
+                {/*
+                  REQ-0185 §5 — disable the preview↔bottom drag handle
+                  while the preview is collapsed.  Pre-0185 the user
+                  could drag this handle up past the collapsed pane's
+                  header edge to peek the video without flipping the
+                  header chevron, leaving the ▸ (closed) icon out of
+                  sync with a visible video.  Making the handle inert
+                  in the collapsed state forces "open" through the
+                  single canonical path (header row toggle), so the
+                  chevron and the actual pane size are always in
+                  lockstep.  The handle stays visible as a static
+                  divider (per REQ-20260615-009 disabled-state spec
+                  in `resizable.tsx`), just cannot be grabbed.
+                  When expanded, the handle is fully draggable as
+                  before — the other 3-pane boundaries (left↔right
+                  inspector) are unaffected.
+                */}
+                <ResizableHandle disabled={!videoPreviewExpanded} />
                 <ResizablePanel
                   id="step2-pane-bottom"
                   minSize={paneMinPct(LEFT_BOTTOM_MIN_PX, paneAreaSize.h)}
@@ -1307,24 +1322,20 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
             <DialogTitle>{t('common:dialog.discardChanges')}</DialogTitle>
             <DialogDescription>{t('common:dialog.discardChangesDesc')}</DialogDescription>
           </DialogHeader>
-          <div className="flex items-center gap-2 mt-1">
-            <input
-              type="checkbox"
-              id="skip-discard"
-              checked={skipDiscardWarning}
-              onChange={(e) => setSkipDiscardWarning(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-surface-4 accent-primary"
-            />
-            <label htmlFor="skip-discard" className="text-body-sm text-fg-tertiary cursor-pointer">
-              {t('common:dialog.dontAskAgain')}
-            </label>
-          </div>
+          {/* REQ-0185 §4 — "don't ask again" checkbox removed; the
+              confirm now always shows on back, no per-session skip. */}
           <DialogFooter>
             <Button variant="ghost" size="md" onClick={() => setDiscardOpen(false)}>
               {t('common:action.cancel')}
             </Button>
             <Button
-              variant="danger"
+              // REQ-0185 §4 — owner spec: "OK = プライマリ抑制緑" (the
+              // desaturated brand green from Phase A).  Was `variant="danger"`
+              // (red tint) — now `primary` to match the spec.  The
+              // action itself is still destructive-adjacent (discards
+              // in-progress edits) but owner picked a calmer visual
+              // treatment.
+              variant="primary"
               size="md"
               onClick={() => {
                 setDiscardOpen(false)

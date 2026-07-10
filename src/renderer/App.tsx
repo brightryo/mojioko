@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Toaster } from 'sonner'
@@ -21,7 +21,6 @@ import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { listFonts } from '@/services/font'
 import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts'
-import { APP_VERSION } from '../shared/app-info'
 import type { AppSettings } from '../shared/types'
 
 const PAGE_VARIANTS = {
@@ -68,7 +67,10 @@ function AppInner() {
   // because they own the `<video>` / `<audio>` ref; both surfaces
   // share `shouldGlobalShortcutFire` so context judgement is uniform.
   useGlobalShortcuts()
-  const [appVersion, setAppVersion] = useState(APP_VERSION)
+  // REQ-0185 §3 — `appVersion` state was consumed only by the
+  // pre-0185 top breadcrumb (removed).  About dialog reads
+  // APP_VERSION directly from shared/app-info.ts, so the runtime
+  // fetch below and the state slot are gone.
   const location = useLocation()
   const { i18n } = useTranslation('common')
 
@@ -96,12 +98,9 @@ function AppInner() {
     }
   }, [baseColor])
 
-  useEffect(() => {
-    window.electronAPI
-      .getVersion()
-      .then((v) => setAppVersion(v))
-      .catch(() => {})
-  }, [])
+  // REQ-0185 §3 — removed runtime `getVersion()` fetch; the value
+  // was only shown in the pre-0185 breadcrumb (retired).  Static
+  // APP_VERSION import at the top covers the About dialog.
 
   // Load settings from main process on mount; hydrate stores
   useEffect(() => {
@@ -248,8 +247,8 @@ function AppInner() {
           <Routes location={location}>
             {/* Splash route disabled — kept commented out for possible reintroduction.
             <Route path="/splash" element={<SplashRoute />} /> */}
-            <Route path="/step1" element={<Step1Route appVersion={appVersion} />} />
-            <Route path="/step2" element={<Step2Route appVersion={appVersion} />} />
+            <Route path="/step1" element={<Step1Route />} />
+            <Route path="/step2" element={<Step2Route />} />
             {/* REQ-20260615-023: /step3 retired; burn-in lives in a
                 right-sliding drawer on STEP2 instead. */}
             <Route path="*" element={<Navigate to="/step1" replace />} />
@@ -266,6 +265,16 @@ function AppInner() {
       <Toaster
         position="bottom-center"
         theme="dark"
+        // REQ-0185 §2 — lift toasts above the footer bar so status
+        // messages ("file loaded" etc.) no longer overlap the
+        // footer chrome.  Footer is `py-3` + `text-caption`
+        // content + `border-t` = ~48-52 px tall; using 68 px
+        // keeps the toast card clear of the footer's divider
+        // line at every viewport size the app supports.  Sonner's
+        // `offset` prop is a per-position distance from the
+        // viewport edge — for `bottom-center` this pushes the
+        // stack up from the bottom by the specified amount.
+        offset={68}
         toastOptions={{
           classNames: {
             toast:

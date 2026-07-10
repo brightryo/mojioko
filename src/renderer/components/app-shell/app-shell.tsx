@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import { Breadcrumb, type StepNumber } from './breadcrumb'
+import { Breadcrumb } from './breadcrumb'
 import { Footer } from './footer'
 
 interface AppShellProps {
-  currentStep: StepNumber
-  appVersion: string
+  /** Screen H1 (e.g. "文字起こし", "編集") — rendered in the top strip. */
+  title: string
+  /** Optional description — muted, right of title. */
+  description?: string
   footerLeft?: ReactNode
   footerCenter?: ReactNode
   footerRight?: ReactNode
@@ -26,9 +28,15 @@ interface AppShellProps {
   children: ReactNode
 }
 
+// REQ-0185 §3 — pre-0185 the AppShell also took `currentStep`
+// and `appVersion` for the removed top-of-screen breadcrumb.
+// After 0185 the top strip renders `title` + `description`
+// instead, and per-route H1 duplication was dropped, so the
+// AppShell just forwards those two strings to the (renamed-in-
+// place) Breadcrumb component.
 export function AppShell({
-  currentStep,
-  appVersion,
+  title,
+  description,
   footerLeft,
   footerCenter,
   footerRight,
@@ -36,14 +44,9 @@ export function AppShell({
   fluid,
   children
 }: AppShellProps) {
-  // REQ-20260615-019: dropped `bg-surface-0` from the outer container so
-  // the body's rgba(0,0,0, --window-bg-alpha) shows through to the
-  // desktop.  Section cards (bg-card) and dialogs / popovers keep their
-  // opaque tokens so the foreground UI remains readable — only the bare
-  // interstitial space between cards is see-through.
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Breadcrumb currentStep={currentStep} appVersion={appVersion} />
+      <Breadcrumb title={title} description={description} />
       <main className={cn('flex-1', noScroll ? 'overflow-hidden' : 'overflow-y-auto')}>
         <div
           className={cn(

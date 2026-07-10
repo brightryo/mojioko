@@ -1,104 +1,61 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Check, ChevronRight, ChevronDown } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { APP_NAME } from '../../../shared/app-info'
 import { useSettingsStore } from '@/stores/settings-store'
 
-// REQ-20260615-023: STEP3 retired in favour of the burn-in drawer on STEP2,
-// so the breadcrumb now shows two steps only (Transcribe → Edit).
-export type StepNumber = 1 | 2
+// REQ-0185 §3 — the pre-0185 top strip carried the
+// APP_NAME + version + step breadcrumb ("文字起こし > 編集").
+// Owner rationale for removal: the 3-step model was retired
+// (Transcribe → Edit are the only two now), so the breadcrumb's
+// step affordance was cosmetic; the version display added chrome
+// noise.  This file now renders a single-line "screen title +
+// description + language pill" strip, so the H1 + description that
+// used to duplicate at the top of each route's content can be
+// dropped from step1 / step2.
+//
+// The filename is kept as `breadcrumb.tsx` and the export is still
+// `Breadcrumb` to avoid touching every import site — semantically
+// this component is now a top-of-screen header, not a step
+// breadcrumb.  A rename can happen in a later cleanup pass.
+//
+// Navigation implication (RES-0185 §3 checked): the pre-0185
+// breadcrumb allowed clicking a *completed* step to navigate back
+// (edit → transcribe).  That path is preserved by step2's footer
+// "戻る" button, which now also has a REQ-0185 §4 confirm dialog
+// in front of it — so no user-reachable navigation is lost.
 
 interface BreadcrumbProps {
-  currentStep: StepNumber
-  appVersion: string
+  /** Screen H1 — displayed left of the description on the top strip. */
+  title: string
+  /** Short screen description — right of the title, muted tone. */
+  description?: string
 }
 
-interface StepConfig {
-  step: StepNumber
-  labelKey: string
-  route: string
-}
-
-const STEPS: StepConfig[] = [
-  { step: 1, labelKey: 'nav.step1', route: '/step1' },
-  { step: 2, labelKey: 'nav.step2', route: '/step2' }
-]
-
-export function Breadcrumb({ currentStep, appVersion }: BreadcrumbProps) {
-  const { t } = useTranslation('common')
-  const navigate = useNavigate()
-
+export function Breadcrumb({ title, description }: BreadcrumbProps) {
   return (
     <nav
       className="flex h-11 flex-shrink-0 border-b border-line"
-      aria-label="Steps"
+      aria-label="Screen header"
     >
-      <div className="max-w-[1100px] mx-auto w-full flex items-center px-6">
-        {/* App branding — name + version only.  The CSS-rendered "M" badge
-            that used to sit here was removed in v1.0.0; the Windows window
-            icon (build/icon.ico) is the canonical brand mark. */}
-        <div className="flex items-center gap-2 mr-5 flex-shrink-0">
-          <span className="text-body-sm font-semibold text-fg-secondary select-none">{APP_NAME}</span>
-          {/* REQ-067 phase B: was text-fg-disabled (disabled tier, ~2.5:1
-              contrast — spec violation for permanently-visible chrome).
-              Lifted to text-fg-tertiary (secondary tier ~7.8:1, AAA pass) —
-              the version is meta info, not a disabled element. */}
-          <span className="text-caption text-fg-tertiary select-none tabular-nums">{appVersion}</span>
-        </div>
-
-        <div className="h-4 w-px bg-surface-2 mr-5 flex-shrink-0" aria-hidden="true" />
-
-        {/* Step indicators */}
-        <div className="flex items-center gap-1">
-          {STEPS.map((config, idx) => {
-            const isCompleted = config.step < currentStep
-            const isCurrent = config.step === currentStep
-            const isFuture = config.step > currentStep
-
-            return (
-              <div key={config.step} className="flex items-center gap-1">
-                {idx > 0 && (
-                  <ChevronRight className="h-3.5 w-3.5 text-fg-faint" aria-hidden="true" />
-                )}
-                <button
-                  onClick={() => isCompleted && navigate(config.route)}
-                  disabled={!isCompleted}
-                  aria-current={isCurrent ? 'step' : undefined}
-                  // REQ-0182 chrome — dropped the `bg-primary/10`
-                  // pill on the current step so it reads as "quiet
-                  // accent text + small dot" per REQ §5 owner ask.
-                  // Green area shrinks to just the dot + text tint,
-                  // matching Resolve's static-and-small step
-                  // indicators.  The 1.5-px dot + accent text is
-                  // still an unambiguous "you're here" signal.
-                  className={cn(
-                    'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-body-sm transition-colors duration-150',
-                    isCurrent && 'font-medium text-primary',
-                    isCompleted && 'cursor-pointer text-fg-muted hover:text-fg-secondary',
-                    isFuture && 'cursor-not-allowed text-fg-disabled'
-                  )}
-                >
-                  {isCompleted && (
-                    <Check className="h-3 w-3 text-primary" aria-hidden="true" />
-                  )}
-                  {isCurrent && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
-                  )}
-                  {t(config.labelKey)}
-                </button>
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="flex-1" />
+      <div className="max-w-[1100px] mx-auto w-full flex items-baseline gap-3 px-6">
+        <h1 className="text-body-sm font-semibold text-fg-primary select-none">{title}</h1>
+        {description ? (
+          <p className="text-caption text-fg-tertiary select-none truncate min-w-0 flex-1">
+            {description}
+          </p>
+        ) : (
+          <div className="flex-1" />
+        )}
         <LanguagePill />
       </div>
     </nav>
   )
 }
+
+// Kept for import-site compatibility even though the concept is
+// gone; callers pass a fixed `title` string now.
+export type StepNumber = 1 | 2
 
 function LanguagePill() {
   const { i18n } = useTranslation('common')

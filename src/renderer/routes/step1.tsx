@@ -58,11 +58,11 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-interface Step1RouteProps {
-  appVersion: string
-}
+// REQ-0185 §3 — `appVersion` prop dropped alongside the removed
+// top breadcrumb.  About dialog still shows the version.
+interface Step1RouteProps {}
 
-export default function Step1Route({ appVersion }: Step1RouteProps) {
+export default function Step1Route(_: Step1RouteProps) {
   const { t } = useTranslation(['step1', 'common'])
   const navigate = useNavigate()
 
@@ -702,8 +702,12 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
   return (
     <AppShell
-      currentStep={1}
-      appVersion={appVersion}
+      // REQ-0185 §3 — title + description moved to the top strip
+      // (see components/app-shell/breadcrumb.tsx).  The in-content
+      // "Page header" block that used to render `<h1 text-heading>`
+      // + `<p text-body>` below was removed to avoid double titling.
+      title={t('title')}
+      description={t('guidance')}
       footerCenter={footerCenter}
       footerRight={footerRight}
     >
@@ -718,18 +722,8 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
         with air".  The `space-y-4` also went — vertical spacing
         is now the section padding (`py-3`) + hairline instead of
         outer margin.
-
-        The header row keeps its bottom margin because it's not a
-        section (no hairline below); it just sits above the first
-        section.
       */}
       <div className="divide-y divide-line">
-        {/* Page header */}
-        <div className="pb-3">
-          <h1 className="text-heading font-semibold text-foreground">{t('title')}</h1>
-          <p className="mt-1 text-body text-muted-foreground">{t('guidance')}</p>
-        </div>
-
         {/* Whisper model + Advanced (engine) trigger.  Subtitle Style
             does NOT live here — it is unrelated to the Whisper engine
             and sits next to the Start button in the footer instead.
