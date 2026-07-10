@@ -2018,7 +2018,15 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 onPointerMove={handleTracksPointerMove}
                 onPointerUp={handleTracksPointerUp}
                 onPointerCancel={handleTracksPointerUp}
-                className="relative touch-none"
+                // REQ-0182 timeline — sink the tracks area below the
+                // surrounding surface-0 body so it reads as a
+                // "well" that clips sit in (Resolve's timeline
+                // convention).  L 10 % is 3 pp below our surface-0
+                // (L 13 % after REQ-0178) — enough for the eye to
+                // pick up the depth without introducing another
+                // divider line.  Ruler / gutter / toolbar stay at
+                // surface-1 (L 16 %) above.
+                className="relative touch-none bg-[hsl(0_0%_10%)]"
                 style={{
                   width: `${widthPx}px`,
                   height: `${tracksHeightPx}px`
