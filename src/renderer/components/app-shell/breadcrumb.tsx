@@ -66,9 +66,16 @@ export function Breadcrumb({ currentStep, appVersion }: BreadcrumbProps) {
                   onClick={() => isCompleted && navigate(config.route)}
                   disabled={!isCompleted}
                   aria-current={isCurrent ? 'step' : undefined}
+                  // REQ-0182 chrome — dropped the `bg-primary/10`
+                  // pill on the current step so it reads as "quiet
+                  // accent text + small dot" per REQ §5 owner ask.
+                  // Green area shrinks to just the dot + text tint,
+                  // matching Resolve's static-and-small step
+                  // indicators.  The 1.5-px dot + accent text is
+                  // still an unambiguous "you're here" signal.
                   className={cn(
-                    'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-body transition-colors duration-150',
-                    isCurrent && 'bg-primary/10 font-medium text-primary',
+                    'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-body-sm transition-colors duration-150',
+                    isCurrent && 'font-medium text-primary',
                     isCompleted && 'cursor-pointer text-fg-muted hover:text-fg-secondary',
                     isFuture && 'cursor-not-allowed text-fg-disabled'
                   )}

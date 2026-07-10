@@ -383,7 +383,7 @@ function CpuCard({
   return (
     <div
       className={cn(
-        'rounded-xl border p-4 flex flex-col gap-3 transition-colors duration-150',
+        'rounded-md border p-4 flex flex-col gap-3 transition-colors duration-150',
         isActive ? 'border-primary bg-primary/5' : 'border-line bg-surface-0',
       )}
     >
@@ -461,7 +461,7 @@ function GpuCard({
   return (
     <div
       className={cn(
-        'rounded-xl border p-4 flex flex-col gap-3 transition-colors duration-150',
+        'rounded-md border p-4 flex flex-col gap-3 transition-colors duration-150',
         isActive ? 'border-primary bg-primary/5' : 'border-line bg-surface-0',
       )}
     >

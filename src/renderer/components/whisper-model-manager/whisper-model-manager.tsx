@@ -602,7 +602,13 @@ function ModelCard({
   return (
     <div
       className={cn(
-        'rounded-xl border p-4 flex flex-col gap-3 transition-colors duration-150',
+        // REQ-0182 chrome — dropped rounded-xl to rounded-md so the
+        // model picker cards read as consistent-density chrome with
+        // the tighter tokens introduced in REQ-0177 Phase A (radius
+        // scale halved).  The active-state subtle green tint is
+        // preserved (this is a picker choice, not a drawer selection
+        // — cf. the REQ-0182 drawer commit for the "border only" case).
+        'rounded-md border p-4 flex flex-col gap-3 transition-colors duration-150',
         isActive ? 'border-primary bg-primary/5' : 'border-line bg-surface-0'
       )}
     >
