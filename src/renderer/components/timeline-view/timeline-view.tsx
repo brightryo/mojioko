@@ -1519,12 +1519,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   const hasAnyVisible = visibleEntries.length > 0
 
   return (
-    // REQ-0188 — dropped `bg-surface-0` so the containing pane's
-    // `bg-surface-1` shows through.  The tracks well below still
-    // paints `bg-[hsl(0_0%_10%)]` explicitly, so it remains ~6 pp
-    // darker than the panel (well 10 % < body 13 % < panel 16 %)
-    // and the "clips sit in a sunken area" depth cue is preserved.
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-surface-0">
       {/* Toolbar — REQ-20260614-001 補遺⑧: 2 行構成。
           Row 1 は常時表示（使い方 / ズーム / カーソル送り + 右端の
           「ツール」トグル）。Row 2 はトグルで開閉し、トリミング操作と

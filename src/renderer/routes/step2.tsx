@@ -1020,18 +1020,16 @@ export default function Step2Route(_: Step2RouteProps) {
       </div>
     </div>
   )
-  // REQ-20260615-042 — the outer container picked up `bg-surface-0` so the
-  // inspector pane read as the same base-tinted grey as the timeline view
-  // and the video preview's frame region.  That was necessary in the
-  // pre-REQ-0178 transparent-window era where inheriting body would have
-  // showed the desktop through.
-  // REQ-0188 — stripped the explicit `bg-surface-0` so the pane's own
-  // `bg-surface-1` (applied at the ResizablePanel wrapper in step2's
-  // return) shows through the inspector slot's tree.  Panel now paints
-  // one tier above body (L 16 vs 13) so the inspector reads as a
-  // distinct surface without an outer frame.
+  // REQ-20260615-042 — the outer container picks up `bg-surface-0` so the
+  // inspector pane reads as the same base-tinted grey as the timeline view
+  // (`timeline-view.tsx:1476`) and the video preview's frame region
+  // (`video-preview-panel.tsx:700`).  Without it the pane inherits the
+  // semi-transparent body wash (`rgba(0, 0, 0, --window-bg-alpha)` set in
+  // `globals.css` so BrowserWindow `transparent: true` shows the desktop
+  // through bare areas) and paints near-black, breaking palette parity
+  // with the other panes.
   const inspectorSlot = (
-    <div className="flex h-full w-full flex-col">
+    <div className="flex h-full w-full flex-col bg-surface-0">
       <div className="flex-shrink-0 px-3 py-2 border-b border-line">
         {/* REQ-20260615-051 A — bulk-mode heading gets a `?` HelpIcon
             explaining what the list-view checkboxes target.  The single
@@ -1226,17 +1224,6 @@ export default function Step2Route(_: Step2RouteProps) {
               >
                 <ResizablePanel
                   id="step2-pane-preview"
-                  // REQ-0188 — lift the pane surface from body
-                  // (surface-0, L 13 %) to surface-1 (L 16 %).
-                  // Owner rationale: after REQ-0187 dropped the
-                  // outer frame around this pane group, panes
-                  // "溶けた/切れた" against the same-colour body.
-                  // Resolve-style: paint the pane surface one tier
-                  // above so the boundary reads by surface diff
-                  // instead of a bright bordering line.  Applied
-                  // to all 3 panes (preview, bottom, inspector) so
-                  // the whole 3-pane group lifts uniformly.
-                  className="bg-surface-1"
                   // REQ-0183 — wire imperative ref + `collapsible` so
                   // the VideoPreviewPanel header toggle can snap the
                   // pane between its normal `minSize` (video visible)
@@ -1288,8 +1275,6 @@ export default function Step2Route(_: Step2RouteProps) {
                 <ResizableHandle disabled={!videoPreviewExpanded} />
                 <ResizablePanel
                   id="step2-pane-bottom"
-                  // REQ-0188 — see preview pane above.
-                  className="bg-surface-1"
                   minSize={paneMinPct(LEFT_BOTTOM_MIN_PX, paneAreaSize.h)}
                 >
                   {bottomSlot}
@@ -1299,8 +1284,6 @@ export default function Step2Route(_: Step2RouteProps) {
             <ResizableHandle />
             <ResizablePanel
               id="step2-pane-right"
-              // REQ-0188 — see preview pane above.
-              className="bg-surface-1"
               minSize={paneMinPct(OUTER_RIGHT_MIN_PX, paneAreaSize.w)}
             >
               {inspectorSlot}
