@@ -38,7 +38,23 @@ export function Breadcrumb({ title, description }: BreadcrumbProps) {
       className="flex h-11 flex-shrink-0 border-b border-line"
       aria-label="Screen header"
     >
-      <div className="max-w-[1100px] mx-auto w-full flex items-baseline gap-3 px-6">
+      {/*
+        REQ-0190 — dropped `max-w-[1100px] mx-auto` so the top strip
+        spans the full viewport at every window size.  Pre-0190 the
+        centred container left visible left/right gutters at
+        maximised window while REQ-0189 had already pushed the
+        editor 3-pane edge-to-edge, so title + LanguagePill floated
+        toward the middle on wide viewports and read as disconnected
+        from the content strip below.
+        Horizontal padding also dropped from `px-6` to `px-4` so
+        the header's inset is small enough to feel "chrome flush
+        to the viewport" without letting the H1 collide with the
+        pixel edge.  The existing flex layout (h1 auto width,
+        description takes flex-1 fill, LanguagePill on the right)
+        was already effectively a space-between; removing the
+        centering wrapper is enough to make the pinning obvious.
+      */}
+      <div className="w-full flex items-baseline gap-3 px-4">
         <h1 className="text-body-sm font-semibold text-fg-primary select-none">{title}</h1>
         {description ? (
           <p
