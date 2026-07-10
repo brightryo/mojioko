@@ -13,6 +13,7 @@ import { SettingsDialog } from '@/components/settings-dialog/settings-dialog'
 import { DonationDialog } from '@/components/donation-dialog/donation-dialog'
 import { FontLicensesDialog } from '@/components/font-licenses/font-licenses-dialog'
 import { StoreUpsellDialog } from '@/components/store-upsell-dialog/store-upsell-dialog'
+import { ProjectOpenController } from '@/components/project-open/project-open-controller'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
@@ -288,6 +289,11 @@ function AppInner() {
       <DonationDialog />
       <FontLicensesDialog />
       <StoreUpsellDialog />
+      {/* REQ-0194 phase 3b — drives the `.mojioko` open flow (parse →
+          source check → identity check → font warning → hydrate stores
+          → navigate).  Mounted at the App level so the menu event
+          subscription outlives every route change. */}
+      <ProjectOpenController />
 
       <Toaster
         position="bottom-center"
