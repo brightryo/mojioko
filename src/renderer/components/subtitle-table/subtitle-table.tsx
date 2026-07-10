@@ -1054,19 +1054,19 @@ export function SubtitleTable({
             that pair with the cell values below.  Color also lifted from
             zinc-500 to zinc-300 so the headers carry the item-name weight
             of a real label. */}
-        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary text-center">{t('table.colIndex')}</div>
-        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary">{t('table.colTime')}</div>
-        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary">{isAudioOnly ? '' : t('table.colSize')}</div>
+        <div className="py-2 px-1 text-caption font-normal text-fg-secondary text-center">{t('table.colIndex')}</div>
+        <div className="py-2 px-1 text-caption font-normal text-fg-secondary">{t('table.colTime')}</div>
+        <div className="py-2 px-1 text-caption font-normal text-fg-secondary">{isAudioOnly ? '' : t('table.colSize')}</div>
         {/* REQ-20260614-001 補遺④ — column 5: style-reference block
             (text colour / outline colour / outline width — display
             only).  No header label since the cell content is purely
             visual reference. */}
-        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary"></div>
-        <div className="py-2 px-2 text-callout font-semibold text-fg-secondary">{t('table.colText')}</div>
+        <div className="py-2 px-1 text-caption font-normal text-fg-secondary"></div>
+        <div className="py-2 px-2 text-caption font-normal text-fg-secondary">{t('table.colText')}</div>
         {/* REQ-20260614-001 補遺④ — actions column removed.  Action
             icons (改行 / 削除 / リセット / 複製) now live exclusively
             in the right-pane Inspector. */}
-        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary">{t('table.colState')}</div>
+        <div className="py-2 px-1 text-caption font-normal text-fg-secondary">{t('table.colState')}</div>
       </div>
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" onScroll={handleScroll}>
         {filtered.length === 0 ? (

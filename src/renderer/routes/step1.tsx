@@ -58,11 +58,11 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-interface Step1RouteProps {
-  appVersion: string
-}
+// REQ-0185 §3 — `appVersion` prop dropped alongside the removed
+// top breadcrumb.  About dialog still shows the version.
+interface Step1RouteProps {}
 
-export default function Step1Route({ appVersion }: Step1RouteProps) {
+export default function Step1Route(_: Step1RouteProps) {
   const { t } = useTranslation(['step1', 'common'])
   const navigate = useNavigate()
 
@@ -739,18 +739,28 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
   return (
     <AppShell
-      currentStep={1}
-      appVersion={appVersion}
+      // REQ-0185 §3 — title + description moved to the top strip
+      // (see components/app-shell/breadcrumb.tsx).  The in-content
+      // "Page header" block that used to render `<h1 text-heading>`
+      // + `<p text-body>` below was removed to avoid double titling.
+      title={t('title')}
+      description={t('guidance')}
       footerCenter={footerCenter}
       footerRight={footerRight}
     >
-      <div className="space-y-4">
-        {/* Page header */}
-        <div>
-          <h1 className="text-heading font-semibold text-foreground">{t('title')}</h1>
-          <p className="mt-1 text-body text-muted-foreground">{t('guidance')}</p>
-        </div>
-
+      {/*
+        REQ-0178 Phase B-1 — dropped the 3 outer card wrappers
+        (`rounded-xl border border-border bg-card p-4`) that used to
+        box each of Whisper / GPU / Input-Video into a floating
+        rounded panel with margins between.  The panels now flow as
+        flat sections divided by hairlines (`divide-y divide-line`
+        on this parent), matching Resolve's "info-dense inspector"
+        pattern rather than the pre-0178 "3 rounded boxes stacked
+        with air".  The `space-y-4` also went — vertical spacing
+        is now the section padding (`py-3`) + hairline instead of
+        outer margin.
+      */}
+      <div className="divide-y divide-line">
         {/* Whisper model + Advanced (engine) trigger.  Subtitle Style
             does NOT live here — it is unrelated to the Whisper engine
             and sits next to the Start button in the footer instead.
@@ -758,7 +768,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             the gear icon that WhisperModelManager renders inline in its
             own header; step1 just forwards a callback. */}
         <div className={cn(
-          'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
+          'py-3 transition-opacity duration-200',
           (isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
         )}>
           {/* REQ-20260615-055 — the gear-icon "詳細設定" trigger was
@@ -787,7 +797,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             Position matches REQ-0150 §1 ("Whisperモデルの項目と入力
             ファイルの項目の間"). */}
         <div className={cn(
-          'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
+          'py-3 transition-opacity duration-200',
           isTranscribing && 'opacity-50 pointer-events-none'
         )}>
           <GpuToolManager
@@ -815,7 +825,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             subtitle overlay) — the styled live preview belongs to the
             Subtitle Style dialog. */}
         <div className={cn(
-          'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
+          'py-3 transition-opacity duration-200',
           isTranscribing && 'opacity-50 pointer-events-none'
         )}>
           {/* Accordion header — clickable, toggles `openSection` under

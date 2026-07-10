@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
+import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight, ChevronDown, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
@@ -162,6 +162,22 @@ export function TimelineBlockInspector({
   const [draft, setDraft] = useState(initialDraft)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [sizeOutOfRange, setSizeOutOfRange] = useState(false)
+
+  // REQ-0184 §4 — per-section collapse state for the three inspector
+  // sections (subtitle / layout / background).  Owner spec:
+  //   subtitle    -- default open
+  //   layout      -- default open
+  //   background  -- default closed
+  // State is **local** to the component instance, so it persists
+  // across row-selection changes (React keeps the same
+  // TimelineBlockInspector instance mounted as `entry` prop swaps),
+  // but resets whenever the inspector unmounts (empty selection,
+  // step2 route unmount).  This matches the REQ's "毎回、編集画面に入
+  // ったら 開/開/閉 で始まる" spec — entering step2 fresh gives the
+  // defaults; the user can toggle within a session.
+  const [subtitleSectionOpen, setSubtitleSectionOpen] = useState(true)
+  const [layoutSectionOpen, setLayoutSectionOpen] = useState(true)
+  const [backgroundSectionOpen, setBackgroundSectionOpen] = useState(false)
   // REQ-20260612-004: same dirty / composing pattern as CellEditor in
   // subtitle-table.tsx.  The Inspector's textarea is always mounted
   // (unlike CellEditor, which is gated by `editingText`), so without
@@ -768,9 +784,25 @@ export function TimelineBlockInspector({
           audio-only mode (REQ-028) では textarea のみ表示し、font /
           style 一式は出さない。 */}
       <div className="space-y-2 border-t border-line pt-2">
-        <div className="text-body font-semibold text-fg-secondary">
-          {t('timeline.inspector.subtitleSection')}
-        </div>
+        {/* REQ-0184 §4 — section header is now a click-to-collapse
+            toggle.  Chevron + heading text, whole row clickable.
+            Section content wraps into a conditional `hidden` div so
+            the inputs' internal state (draft text, focus, IME
+            composition guards) is preserved across collapses. */}
+        <button
+          type="button"
+          onClick={() => setSubtitleSectionOpen((v) => !v)}
+          aria-expanded={subtitleSectionOpen}
+          className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+        >
+          {subtitleSectionOpen ? (
+            <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+          )}
+          <span>{t('timeline.inspector.subtitleSection')}</span>
+        </button>
+        <div className={cn('space-y-2', !subtitleSectionOpen && 'hidden')}>
         <textarea
           ref={textareaRef}
           value={draft}
@@ -906,7 +938,12 @@ export function TimelineBlockInspector({
             {/* REQ-20260615-050 — fade duration slider (0–0.5 s, 0 = OFF).
                 Same visual rhythm as Outline width above so the two
                 slider rows form a consistent block within the 字幕
-                section. */}
+                section.
+                REQ-0184 §4 — this row is the last child of the
+                collapsible subtitle-section wrapper `<div>` opened
+                right after the section-header button above; the
+                wrapper closes just before the `</div>` that closes
+                the outer `space-y-2 border-t` section. */}
             <div className="flex items-center justify-between gap-2">
               <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.fade')}</label>
               <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
@@ -921,15 +958,28 @@ export function TimelineBlockInspector({
             </div>
           </>
         )}
+        </div>{/* REQ-0184 §4 — close subtitle-section collapse wrapper */}
       </div>
 
       {/* § 5 — レイアウト section (REQ-20260614-001 補遺⑪).
           水平 / 垂直 / マージン。audio-only 非表示。 */}
       {!isAudioOnly && (
         <div className="space-y-2 border-t border-line pt-2">
-          <div className="text-body font-semibold text-fg-secondary">
-            {t('timeline.inspector.layoutSection')}
-          </div>
+          {/* REQ-0184 §4 — collapse toggle (default open) */}
+          <button
+            type="button"
+            onClick={() => setLayoutSectionOpen((v) => !v)}
+            aria-expanded={layoutSectionOpen}
+            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+          >
+            {layoutSectionOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+            )}
+            <span>{t('timeline.inspector.layoutSection')}</span>
+          </button>
+          <div className={cn('space-y-2', !layoutSectionOpen && 'hidden')}>
           {/* REQ-20260615-014 B: horizontal / vertical lift from native
               <select> to a single-select SegmentGroup so all options are
               visible up-front.  Value bindings are unchanged. */}
@@ -1069,6 +1119,7 @@ export function TimelineBlockInspector({
               </div>
             </div>
           )}
+          </div>{/* REQ-0184 §4 — close layout-section collapse wrapper */}
         </div>
       )}
 
@@ -1081,11 +1132,28 @@ export function TimelineBlockInspector({
           {/* REQ-0096 — section heading carries a HelpIcon explaining that
               enabling the background disables the outline color.  This is
               libass-spec behavior (BorderStyle=3 paints the box from
-              OutlineColour, so the outline can't render separately). */}
-          <div className="text-body font-semibold text-fg-secondary flex items-center gap-1.5">
+              OutlineColour, so the outline can't render separately).
+              REQ-0184 §4 — heading is now a collapse toggle (default
+              CLOSED per owner spec).  HelpIcon stays but moves inside
+              the button so hovering the icon does not toggle collapse
+              — the icon has its own stopPropagation on its click.  */}
+          <button
+            type="button"
+            onClick={() => setBackgroundSectionOpen((v) => !v)}
+            aria-expanded={backgroundSectionOpen}
+            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+          >
+            {backgroundSectionOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+            )}
             <span>{t('timeline.inspector.backgroundSection')}</span>
-            <HelpIcon content={t('timeline.inspector.backgroundSectionHelp')} />
-          </div>
+            <span onClick={(e) => e.stopPropagation()}>
+              <HelpIcon content={t('timeline.inspector.backgroundSectionHelp')} />
+            </span>
+          </button>
+          <div className={cn('space-y-2', !backgroundSectionOpen && 'hidden')}>
           <div className="flex items-center justify-between gap-2">
             <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.bgEnabled')}</label>
             <Switch
@@ -1138,6 +1206,7 @@ export function TimelineBlockInspector({
               ariaLabel={t('styleCell.bgOpacity')}
             />
           </div>
+          </div>{/* REQ-0184 §4 — close background-section collapse wrapper */}
         </div>
       )}
 

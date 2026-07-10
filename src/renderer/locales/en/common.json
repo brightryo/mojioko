@@ -39,8 +39,8 @@
     "local": "Local rendering · no network"
   },
   "dialog": {
-    "discardChanges": "Discard changes?",
-    "discardChangesDesc": "You have unsaved edits. Navigate back anyway?",
+    "discardChanges": "Return to the transcription screen?",
+    "discardChangesDesc": "Any in-progress edits will be discarded.",
     "dontAskAgain": "Don't ask again this session"
   },
   "storeUpsell": {

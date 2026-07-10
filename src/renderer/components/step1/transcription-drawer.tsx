@@ -178,14 +178,23 @@ export function TranscriptionDrawer({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 divide-y divide-line">
           {renderState === 'idle' && (
             <>
-              {/* Whisper Advanced controls — same form bound to the same
-                  settings slice that the Settings dialog edits, so the two
-                  surfaces stay in sync (REQ-019 #1).  Hosted inside an
-                  outlined card to mirror burnin-drawer's section panels. */}
-              <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-3">
+              {/*
+                REQ-0180 2a — pre-0180 the two idle-state sections
+                (Whisper Advanced + Audio track grid) were each wrapped in
+                `rounded-xl border border-line bg-surface-1 p-4` cards.
+                The Sheet itself is already a bordered surface, so the
+                inner cards produced the "枠の中に枠" nesting the owner
+                flagged in the Phase B-1 pass.  Dropped both wrappers;
+                parent now uses `divide-y divide-line` so the sections
+                still visually separate but with a single hairline instead
+                of two concentric borders.  Internal `space-y-3` swapped
+                to `py-3 space-y-3` so the section's own vertical rhythm
+                is preserved on the flat surface.
+              */}
+              <div className="py-3 space-y-3">
                 <div className="flex items-center gap-1.5">
                   <Settings2 className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
                   <Label>{t('drawer.advancedSection')}</Label>
@@ -199,8 +208,9 @@ export function TranscriptionDrawer({
 
               {/* Audio track grid — same visual treatment as the legacy
                   main-card grid (compact rows with a left-edge dot and
-                  inline transcription-target Badge on selection). */}
-              <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-3">
+                  inline transcription-target Badge on selection).
+                  REQ-0180 2a: outer wrapper dropped (see comment above). */}
+              <div className="py-3 space-y-3">
                 <div className="flex items-center gap-1.5">
                   <Mic className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
                   <Label>{t('drawer.trackSection')}</Label>
@@ -223,7 +233,7 @@ export function TranscriptionDrawer({
                       className={cn(
                         'flex items-center gap-2 rounded-md border px-3 py-1.5 text-left transition-colors duration-150',
                         selectedTrack === track.index
-                          ? 'border-primary/50 bg-primary/5'
+                          ? 'border-primary'  /* REQ-0182 drawer — border-only select, no fill */
                           : 'border-line hover:bg-surface-2/40',
                       )}
                     >

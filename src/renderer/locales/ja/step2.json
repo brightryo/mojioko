@@ -1,6 +1,6 @@
 {
   "title": "編集",
-  "subtitle": "字幕テキストとタイミングを確認・修正してください。",
+  "subtitle": "字幕テキストと表示タイミングを調整することができます",
   "inspector": {
     "heading": "インスペクタ",
     "bulkHeading": "一括編集",
@@ -217,6 +217,9 @@
     }
   },
   "videoPreview": {
+    "title": "プレビュー",
+    "collapseAria": "プレビューを折りたたむ",
+    "expandAria": "プレビューを展開する",
     "play": "再生",
     "pause": "一時停止",
     "error": "ファイルの読み込みに失敗しました",

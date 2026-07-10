@@ -5,7 +5,7 @@
     "label": "入力ファイル",
     "hint": "動画: .mp4 .mkv  /  音声: .mp3 .wav .m4a .aac .flac .ogg",
     "placeholder": "ファイルを選択してください…",
-    "chooseVideo": "ファイルを選ぶ",
+    "chooseVideo": "ファイルを選択",
     "help": "文字起こしする動画または音声ファイル。動画は字幕焼き込み出力、音声はテキスト/SRT出力に対応します。",
     "infoLabel": "ファイル情報",
     "infoResolution": "解像度",

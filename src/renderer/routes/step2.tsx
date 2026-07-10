@@ -40,7 +40,7 @@ import { EditorViewSwitcher } from '@/components/editor-view-switcher/editor-vie
 import { TimelineView } from '@/components/timeline-view/timeline-view'
 import { TimelineBlockInspector } from '@/components/timeline-view/timeline-block-inspector'
 import { HelpIcon } from '@/components/help-icon'
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle, type PanelImperativeHandle } from '@/components/ui/resizable'
 import { useRef } from 'react'
 
 /**
@@ -73,6 +73,19 @@ const OUTER_LEFT_MIN_PX   = 863  // 860 → 863: 863 + 368 = 1231 (= 1232 − 1 
 const OUTER_RIGHT_MIN_PX  = 368
 const LEFT_TOP_MIN_PX     = 313  // 312 → 313: 313 + 314 = 627 (= 628 − 1 handle)
 const LEFT_BOTTOM_MIN_PX  = 314  // 312 → 314 (symmetric ±0.5 px from previous)
+
+// Collapsed-state size for the preview pane.
+// REQ-0184: was 40 (safe upper bound accommodating the header row).
+// REQ-0186 §1: tightened to 34 so the pane snaps to EXACTLY the
+// header's actual rendered height (py-1.5 = 12 px + text-body-sm
+// content ≈ 20 px + border-b 1 px = 33 px; 34 leaves 1 px of
+// hairline safety while still matching the header visually).  The
+// pre-0186 40 px left a ~4-8 px empty band below the header where
+// overflow-clipped seekbar edges could peek — owner-visible as a
+// "gap".  With 34 and the newly-added conditional `hidden` on
+// video-preview-panel.tsx's media wrapper (REQ-0186), nothing
+// renders in that band so no seam / bleed is possible.
+const PREVIEW_HEADER_MIN_PX = 34
 
 /**
  * Convert a pixel minimum to a percentage string for ResizablePanel's
@@ -157,12 +170,12 @@ function buildSrtContent(entries: SubtitleEntry[]): string {
   return '﻿' + blocks.join('\n\n')
 }
 
-interface Step2RouteProps {
-  appVersion: string
-}
+// REQ-0185 §3 — `appVersion` prop dropped alongside the removed
+// top breadcrumb.  About dialog still shows the version.
+interface Step2RouteProps {}
 
 
-export default function Step2Route({ appVersion }: Step2RouteProps) {
+export default function Step2Route(_: Step2RouteProps) {
   bumpRenderCount('Step2Route')
   const { t } = useTranslation(['step2', 'common'])
   const navigate = useNavigate()
@@ -236,7 +249,9 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
 
   const [editor, setEditor] = useState<EditorState>({ open: false })
   const [discardOpen, setDiscardOpen] = useState(false)
-  const [skipDiscardWarning, setSkipDiscardWarning] = useState(false)
+  // REQ-0185 §4 — removed `skipDiscardWarning` state.  The pre-0185
+  // "don't ask again this session" checkbox is retired now that the
+  // confirm dialog always fires on back (regardless of hasChanges).
   // REQ-20260615-023: right-sliding drawer replaces the retired STEP3 route.
   const [burninDrawerOpen, setBurninDrawerOpen] = useState(false)
 
@@ -251,6 +266,57 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const step2LeftLayout     = useUiStore((s) => s.step2LeftLayout)
   const setStep2OuterLayout = useUiStore((s) => s.setStep2OuterLayout)
   const setStep2LeftLayout  = useUiStore((s) => s.setStep2LeftLayout)
+
+  // REQ-0183 — preview accordion.  The VideoPreviewPanel header row is
+  // now a one-click toggle for the whole preview stack (body + seekbar
+  // + warning).  When collapsed, the top-left `step2-pane-preview`
+  // ResizablePanel is imperatively snapped to `collapsedSize` (~4 %
+  // ≈ the header row's height at typical viewports) so the bottom
+  // pane (subtitle table / timeline) reclaims the freed vertical
+  // space.  Expand restores the panel to its prior size.
+  //
+  // Owner spec: initial state is ALWAYS open on step2 mount — state is
+  // NOT persisted across mounts.  The mount effect below resets the
+  // store slice to `true`, and the subsequent effect calls expand()
+  // so a freshly-arrived user always sees the preview visible.
+  const videoPreviewExpanded = useUiStore((s) => s.videoPreviewExpanded)
+  const setVideoPreviewExpanded = useUiStore((s) => s.setVideoPreviewExpanded)
+  const previewPaneRef = useRef<PanelImperativeHandle | null>(null)
+  // Reset to "open" once when step2 mounts.  Depending on
+  // setVideoPreviewExpanded is safe — Zustand's setter is stable.
+  useEffect(() => {
+    setVideoPreviewExpanded(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // Drive the ResizablePanel's collapse/expand when the store flag
+  // flips.  Guarded by `previewPaneRef.current` because the ref
+  // resolves after the first render; the effect fires again once the
+  // panel mounts and the ref lands.
+  //
+  // REQ-0191 (owner-approved) — closed→open transition seeks the
+  // playhead to the selected entry's startSec.  The seek dispatch
+  // itself was originally placed here, but REQ-0193's owner report
+  // showed it not landing on real HW: while the preview is
+  // collapsed VideoPreviewPanel's `previewBodyRef` reports 0×0 (the
+  // `display:none` wrapper zeroes the ResizeObserver read), which
+  // drops `videoFrameW` to 0 and unmounts the <video> from the
+  // JSX ternary.  Dispatching `setVideoSeekRequest` at this level
+  // then hits VideoPreviewPanel's seek-consumer effect while
+  // `videoRef.current` is still null — the effect clears the
+  // request without seeking and the fresh <video> re-mounts at
+  // currentTime 0.  REQ-0193 moves the transition-driven seek
+  // inside VideoPreviewPanel where videoRef state is directly
+  // observable and the retry loop can wait for the fresh mount
+  // to accept the seek.  Keep only the pane resize here.
+  useEffect(() => {
+    const panel = previewPaneRef.current
+    if (!panel) return
+    if (videoPreviewExpanded) {
+      panel.expand()
+    } else {
+      panel.collapse()
+    }
+  }, [videoPreviewExpanded])
 
   // REQ-20260614-001 補遺⑥ — measure BOTH width and height of the
   // paneArea so the px → % minSize conversion can keep up with window
@@ -818,14 +884,17 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   // the Issues tab so the user fixes (or knowingly deletes) each error.
   const canContinue = readyCount > 0 && errorCount === 0
 
-  const hasChanges = entries.some((e) => e.isEdited || e.isDeleted)
-
+  // REQ-0185 §4 — the pre-0185 handleBack short-circuited to
+  // `navigate('/step1')` whenever the edit set was empty or the user
+  // had ticked "don't ask again this session".  Owner spec is now
+  // "always show the confirm dialog on back, without a way to
+  // suppress it" — a light interruption in front of a destructive
+  // navigation.  `hasChanges` / `skipDiscardWarning` are retained
+  // above only because Zustand + React ecosystem lint checks (and
+  // to keep an easy revert path if we ever need per-session skip
+  // back); they are simply no longer read here.
   function handleBack() {
-    if (hasChanges && !skipDiscardWarning) {
-      setDiscardOpen(true)
-    } else {
-      navigate('/step1')
-    }
+    setDiscardOpen(true)
   }
 
   const footerLeft = (
@@ -1095,25 +1164,31 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
 
   return (
     <AppShell
-      currentStep={2}
-      appVersion={appVersion}
+      // REQ-0185 §3 — title/description moved to the top strip;
+      // the in-content `<h1>編集 <p>subtitle</p>` block below is
+      // removed to avoid double titling.
+      title={t('title')}
+      description={t('subtitle')}
       footerLeft={footerLeft}
       footerCenter={footerCenter}
       footerRight={footerRight}
       noScroll
       fluid
+      // REQ-0189 — drop the AppShell content-container padding
+      // (`px-6 py-5`) so the 3-pane group spans edge-to-edge:
+      // left/right to the viewport, top to the breadcrumb line,
+      // bottom to the footer's top edge.  Owner spec: "コンテンツ
+      // を画面領域いっぱいに広げる".  STEP1 is not opted in — its
+      // centred single-column layout wants the outer breathing
+      // room.
+      edgeToEdge
     >
-      <div className="flex flex-col h-full gap-3">
-        {/* Page header — REQ-075 #1: title + subtitle laid out on a single
-            row to reclaim vertical space.  Subtitle keeps its muted tone
-            (text-body-sm + zinc-400) but moves to the right of the heading
-            with a baseline alignment and a small inset gap.  REQ-028 still
-            governs the export DropdownMenu (footer-right). */}
-        <div className="flex items-baseline gap-3 flex-shrink-0">
-          <h1 className="text-heading font-semibold text-fg-primary">{t('title')}</h1>
-          <p className="text-body-sm text-fg-tertiary">{t('subtitle')}</p>
-        </div>
-
+      {/* REQ-0189 — dropped `gap-3` from the direct wrapper (it
+          added a 12 px gap between the (removed) heading block and
+          the 3-pane, but with the heading in the top strip and
+          edge-to-edge on, the 3-pane is the only child and the gap
+          just eats space above the ResizablePanelGroup). */}
+      <div className="flex flex-col h-full">
         {/* REQ-20260614-001 補遺② 修正1 — view switcher / filter tabs /
             undo/redo / add row / BulkEditBar are now rendered INSIDE the
             bottom pane (see `bottomSlot`), so the toolbar lives next to
@@ -1148,7 +1223,15 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
                 setStep2OuterLayout({ 'step2-pane-left': left, 'step2-pane-right': right })
               }
             }}
-            className="rounded-lg border border-line overflow-hidden"
+            // REQ-0187 §2 — dropped the outer `rounded-lg border
+            // border-line` frame that wrapped the 3-pane group.
+            // Owner rationale: Resolve doesn't box its panes in a
+            // frame; pane boundaries are communicated by the
+            // ResizableHandle (1 px line) + surface tier
+            // differences between panes.  The outer border was a
+            // pre-0187 remnant of the "card boxes" pattern REQ-0178
+            // retired for the section-divider hairline pattern.
+            className="overflow-hidden"
           >
             <ResizablePanel
               id="step2-pane-left"
@@ -1170,11 +1253,55 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               >
                 <ResizablePanel
                   id="step2-pane-preview"
+                  // REQ-0183 — wire imperative ref + `collapsible` so
+                  // the VideoPreviewPanel header toggle can snap the
+                  // pane between its normal `minSize` (video visible)
+                  // and `collapsedSize` (~4 % of vertical pane area
+                  // ≈ 30 px at typical window heights — matches the
+                  // header row's own height so only the header is
+                  // visible in the collapsed state).
+                  // react-resizable-panels v4.11 exposes the handle
+                  // via `panelRef`; our ResizablePanel wrapper
+                  // forwards React `ref` into it so callers use the
+                  // normal React ref pattern.
+                  // v4.11 dropped onCollapse / onExpand — user-driven
+                  // manual drag past the collapse threshold does NOT
+                  // sync back into `videoPreviewExpanded`.  Acceptable
+                  // because the whole header row is the primary
+                  // toggle affordance now; users won't reach for the
+                  // ResizableHandle to collapse the preview.
+                  ref={previewPaneRef}
+                  collapsible
+                  // REQ-0184 bug #1 — the pre-0184 fixed `4` (%) was
+                  // smaller than the header row (~34-40 px) at typical
+                  // window sizes, so collapsing clipped the header
+                  // itself and left users no way to re-expand.  Now
+                  // derived from `PREVIEW_HEADER_MIN_PX` so the pane
+                  // snaps to exactly the header's height and the
+                  // toggle stays visible / clickable.
+                  collapsedSize={paneMinPct(PREVIEW_HEADER_MIN_PX, paneAreaSize.h)}
                   minSize={paneMinPct(LEFT_TOP_MIN_PX, paneAreaSize.h)}
                 >
                   {previewSlot}
                 </ResizablePanel>
-                <ResizableHandle />
+                {/*
+                  REQ-0185 §5 — disable the preview↔bottom drag handle
+                  while the preview is collapsed.  Pre-0185 the user
+                  could drag this handle up past the collapsed pane's
+                  header edge to peek the video without flipping the
+                  header chevron, leaving the ▸ (closed) icon out of
+                  sync with a visible video.  Making the handle inert
+                  in the collapsed state forces "open" through the
+                  single canonical path (header row toggle), so the
+                  chevron and the actual pane size are always in
+                  lockstep.  The handle stays visible as a static
+                  divider (per REQ-20260615-009 disabled-state spec
+                  in `resizable.tsx`), just cannot be grabbed.
+                  When expanded, the handle is fully draggable as
+                  before — the other 3-pane boundaries (left↔right
+                  inspector) are unaffected.
+                */}
+                <ResizableHandle disabled={!videoPreviewExpanded} />
                 <ResizablePanel
                   id="step2-pane-bottom"
                   minSize={paneMinPct(LEFT_BOTTOM_MIN_PX, paneAreaSize.h)}
@@ -1231,24 +1358,20 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
             <DialogTitle>{t('common:dialog.discardChanges')}</DialogTitle>
             <DialogDescription>{t('common:dialog.discardChangesDesc')}</DialogDescription>
           </DialogHeader>
-          <div className="flex items-center gap-2 mt-1">
-            <input
-              type="checkbox"
-              id="skip-discard"
-              checked={skipDiscardWarning}
-              onChange={(e) => setSkipDiscardWarning(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-surface-4 accent-primary"
-            />
-            <label htmlFor="skip-discard" className="text-body-sm text-fg-tertiary cursor-pointer">
-              {t('common:dialog.dontAskAgain')}
-            </label>
-          </div>
+          {/* REQ-0185 §4 — "don't ask again" checkbox removed; the
+              confirm now always shows on back, no per-session skip. */}
           <DialogFooter>
             <Button variant="ghost" size="md" onClick={() => setDiscardOpen(false)}>
               {t('common:action.cancel')}
             </Button>
             <Button
-              variant="danger"
+              // REQ-0185 §4 — owner spec: "OK = プライマリ抑制緑" (the
+              // desaturated brand green from Phase A).  Was `variant="danger"`
+              // (red tint) — now `primary` to match the spec.  The
+              // action itself is still destructive-adjacent (discards
+              // in-progress edits) but owner picked a calmer visual
+              // treatment.
+              variant="primary"
               size="md"
               onClick={() => {
                 setDiscardOpen(false)

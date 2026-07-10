@@ -362,15 +362,23 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
             <SheetDescription className="flex-1">{t('subtitle')}</SheetDescription>
           </SheetHeader>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 divide-y divide-line">
             {renderState === 'idle' && (
               <>
                 {/* Summary panel — REQ-20260615-024 A.1/A.2: section header
                     'Summary' dropped, card padding tightened (p-3), and
                     SummaryRow rows shrunk to py-1 / min-h-0 so the seven
                     facts read as a compact table rather than a stretched
-                    column. */}
-                <div className="rounded-xl border border-line bg-surface-1 px-3 py-2">
+                    column.
+                    REQ-0180 2a: outer `rounded-xl border border-line
+                    bg-surface-1` wrapper dropped — the Sheet already
+                    provides a bordered surface, and pre-0180 this section
+                    (like Audio-mode below) rendered a card inside the
+                    Sheet card = "枠の中に枠".  Parent now uses `divide-y`
+                    so sections separate via a single hairline.  The inner
+                    `divide-line/50` between SummaryRows is preserved so
+                    the seven facts still visually enumerate. */}
+                <div className="py-2">
                   <div className="flex flex-col divide-y divide-line/50">
                     <SummaryRow label={t('summary.resolution')} value={video ? `${video.widthPx}×${video.heightPx}` : '—'} />
                     <SummaryRow label={t('summary.duration')} value={video ? formatDuration(durationSec) : '—'} />
@@ -390,12 +398,27 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                 />
 
                 {/* Audio mode */}
-                <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-2">
+                {/* REQ-0180 2a: outer card wrapper dropped (see Summary
+                    section comment above); py-3 keeps internal rhythm. */}
+                <div className="py-3 space-y-2">
                   <div className="flex items-center gap-1.5">
                     <Music className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
                     <Label>{t('audio.label')}</Label>
                   </div>
                   <div className="flex flex-col gap-2">
+                    {/*
+                      REQ-0182 drawer — selected option now uses
+                      "border + accent text" instead of "border-primary/50
+                      + bg-primary/5 + text-primary".  Owner Phase B-1/2a
+                      feedback: still too green-heavy despite the alpha
+                      knock-down.  Dropping the background alpha entirely
+                      and pushing border to full `border-primary` gives
+                      Resolve's outlined-active pattern where the accent
+                      is a frame + a text tint, no fill.  Non-selected
+                      keeps `border-line` at s1's L 43 % so the two
+                      states differ by both border colour AND text
+                      colour — visible even at low colour perception.
+                    */}
                     {(['simple', 'preserve'] as const).map((mode) => (
                       <button
                         key={mode}
@@ -404,7 +427,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                         className={cn(
                           'flex flex-col items-start rounded-md border px-3 py-2 text-left transition-colors duration-150',
                           audioMode === mode
-                            ? 'border-primary/50 bg-primary/5'
+                            ? 'border-primary'
                             : 'border-line hover:bg-surface-2/40'
                         )}
                       >
@@ -705,7 +728,12 @@ function OutputFormatCard({
     : ''
 
   return (
-    <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-2">
+    // REQ-0180 2a — outer card wrapper dropped so this OutputFormatCard
+    // sibling matches the flat "Summary" and "Audio mode" sections
+    // above/below it in the drawer's divide-y-divide-line parent.
+    // Selection option buttons below keep their `rounded-md border`
+    // treatment (they're semantic pickers, not chrome grouping).
+    <div className="py-3 space-y-2">
       <div className="flex items-center gap-1.5">
         <FileVideo className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
         <Label>
@@ -715,6 +743,9 @@ function OutputFormatCard({
         </Label>
       </div>
       <div className="flex flex-col gap-2">
+        {/* REQ-0182 drawer — same "border-primary only, no fill"
+            pattern as the Audio-mode selector above; sibling
+            controls should read as the same picker shape. */}
         {(['mp4', 'sameAsInput'] as const).map((mode) => (
           <button
             key={mode}
@@ -723,7 +754,7 @@ function OutputFormatCard({
             className={cn(
               'flex flex-col items-start rounded-md border px-3 py-2 text-left transition-colors duration-150',
               outputContainer === mode
-                ? 'border-primary/50 bg-primary/5'
+                ? 'border-primary'
                 : 'border-line hover:bg-surface-2/40'
             )}
           >

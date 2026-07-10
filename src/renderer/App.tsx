@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Toaster } from 'sonner'
@@ -21,7 +21,6 @@ import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { listFonts } from '@/services/font'
 import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts'
-import { APP_VERSION } from '../shared/app-info'
 import type { AppSettings } from '../shared/types'
 
 const PAGE_VARIANTS = {
@@ -68,7 +67,10 @@ function AppInner() {
   // because they own the `<video>` / `<audio>` ref; both surfaces
   // share `shouldGlobalShortcutFire` so context judgement is uniform.
   useGlobalShortcuts()
-  const [appVersion, setAppVersion] = useState(APP_VERSION)
+  // REQ-0185 §3 — `appVersion` state was consumed only by the
+  // pre-0185 top breadcrumb (removed).  About dialog reads
+  // APP_VERSION directly from shared/app-info.ts, so the runtime
+  // fetch below and the state slot are gone.
   const location = useLocation()
   const { i18n } = useTranslation('common')
 
@@ -96,12 +98,9 @@ function AppInner() {
     }
   }, [baseColor])
 
-  useEffect(() => {
-    window.electronAPI
-      .getVersion()
-      .then((v) => setAppVersion(v))
-      .catch(() => {})
-  }, [])
+  // REQ-0185 §3 — removed runtime `getVersion()` fetch; the value
+  // was only shown in the pre-0185 breadcrumb (retired).  Static
+  // APP_VERSION import at the top covers the About dialog.
 
   // Load settings from main process on mount; hydrate stores
   useEffect(() => {
@@ -248,8 +247,8 @@ function AppInner() {
           <Routes location={location}>
             {/* Splash route disabled — kept commented out for possible reintroduction.
             <Route path="/splash" element={<SplashRoute />} /> */}
-            <Route path="/step1" element={<Step1Route appVersion={appVersion} />} />
-            <Route path="/step2" element={<Step2Route appVersion={appVersion} />} />
+            <Route path="/step1" element={<Step1Route />} />
+            <Route path="/step2" element={<Step2Route />} />
             {/* REQ-20260615-023: /step3 retired; burn-in lives in a
                 right-sliding drawer on STEP2 instead. */}
             <Route path="*" element={<Navigate to="/step1" replace />} />
@@ -266,6 +265,30 @@ function AppInner() {
       <Toaster
         position="bottom-center"
         theme="dark"
+        // Distance from the viewport bottom edge to the toast
+        // stack.  Value must equal the footer's rendered height so
+        // the toast card's bottom edge lands exactly on the
+        // footer's border-t line — owner spec "フッター区切り線の
+        // すぐ上に接地" across REQ-0185/0186/0187.
+        //
+        // REQ-0186's math (41 px) undercounted because it summed
+        // padding + text-caption line-height + border-t but forgot
+        // that the footer's actual content is the taller of its
+        // slots — left/right are `<Button size="md" h-7>` = 28 px,
+        // not text-caption 16 px.  Real breakdown:
+        //   py-3          → 12 + 12          = 24 px
+        //   Button h-7    → 28 px (tallest slot content)
+        //   border-t      →  1 px
+        //   total                              53 px
+        // REQ-0187 sets 54 (footer height + 1 px hairline safety
+        // so the toast bottom doesn't overlap the border-t line
+        // itself).  Sonner's `offset` for bottom-center positions
+        // is viewport-edge-to-toast-edge.
+        //
+        // REQ-0185 was 68 (too much); REQ-0186 was 42 (still too
+        // low, owner's spec was undermet).  REQ-0187 = 54 with
+        // corrected math.
+        offset={54}
         toastOptions={{
           classNames: {
             toast:

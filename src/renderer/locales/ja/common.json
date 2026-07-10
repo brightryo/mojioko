@@ -39,8 +39,8 @@
     "local": "ローカル処理・ネットワーク不使用"
   },
   "dialog": {
-    "discardChanges": "変更を破棄しますか？",
-    "discardChangesDesc": "編集済みの字幕がありますが、このまま戻りますか？",
+    "discardChanges": "文字起こし画面へ戻りますか？",
+    "discardChangesDesc": "編集途中のものは破棄されます。",
     "dontAskAgain": "今後このセッションでは確認しない"
   },
   "storeUpsell": {

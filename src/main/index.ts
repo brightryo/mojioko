@@ -69,11 +69,16 @@ function createWindow(): BrowserWindow {
     // On Windows that flag also DISABLES the title-bar maximize button
     // (documented Electron limitation), which the user wanted back.
     // Trade-off: drop the see-through-desktop trial, get a working
-    // maximize button.  The body's CSS rule (rgba(0,0,0, alpha))
-    // composes harmlessly over this solid backgroundColor in dark
-    // mode, and the `:root.light body` rule still paints opaque light
-    // in light mode.
-    backgroundColor: '#09090b',
+    // maximize button.
+    //
+    // REQ-0178 Phase B-1 (feat/ui-resolve): lifted backgroundColor
+    // from #09090b (near-black neutral-950, ~4 % L) to #212121
+    // (~13 % L) so it tracks the new --surface-0 token defined in
+    // globals.css :root.  The BrowserWindow paints this colour during
+    // the pre-first-paint flash and any subpixel edges where the
+    // renderer's body doesn't reach — those should read as the same
+    // grey the renderer paints, not near-black.
+    backgroundColor: '#212121',
     // Multi-size .ico ensures Windows picks the right size for the title
     // bar (32×32), the taskbar (16/24×16/24), and Alt-Tab (48×48).  Without
     // this property Electron renders the default Electron logo.

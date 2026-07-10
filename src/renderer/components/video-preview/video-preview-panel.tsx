@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
-import { Play, Pause, FolderOpen } from 'lucide-react'
+import { Play, Pause, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -159,6 +159,16 @@ export function VideoPreviewPanel() {
   // vertical space instead.  `videoPreviewExpanded` slice and its setter
   // stay in ui-store for now (no other consumer; harmless), to be cleaned
   // up in a follow-up phase along with the seek / current-time slices.
+  //
+  // REQ-0183 — retired-but-preserved slice re-adopted.  Header row is now
+  // a one-click accordion toggle for the whole preview stack (body +
+  // seekbar + warning).  When collapsed, the left-column bottom pane
+  // (subtitle table / timeline) reclaims the vertical space via step2's
+  // ImperativePanelHandle.collapse() on the preview ResizablePanel.
+  // Owner spec: initial state is always "open" (state NOT persisted
+  // across step2 mounts — step2's mount effect resets it to true).
+  const videoPreviewExpanded = useUiStore((s) => s.videoPreviewExpanded)
+  const setVideoPreviewExpanded = useUiStore((s) => s.setVideoPreviewExpanded)
 
   const videoRef  = useRef<HTMLVideoElement>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
@@ -547,10 +557,93 @@ export function VideoPreviewPanel() {
     }
   }, [])
 
-  // REQ-20260614-001 Phase 2 — the "pause-on-collapse" effect retired
-  // alongside the accordion.  Pane resize shrinks the preview area
-  // without unmounting the <video>, so playback is naturally preserved
-  // (and the user keeps explicit control via the play/pause button).
+  // REQ-20260614-001 Phase 2 — pause-on-collapse originally retired
+  // when the accordion was replaced with a plain pane-resize.
+  // REQ-0183 re-adopted the accordion collapse (header toggle snaps
+  // the pane to `collapsedSize` and REQ-0186 wraps the media stack in
+  // `display:none`), but the pause-on-collapse effect was NOT
+  // reinstated in that pass.  Chromium keeps `<video>` playing under
+  // `display:none` — audio continues, currentTime keeps advancing —
+  // so `isPlaying` stayed true across a collapse, leaving the header
+  // toggle showing ⏸ after reopen, and REQ-0191's seek-to-selection
+  // effect fired against a still-playing element that immediately
+  // rolled past the target frame.
+  // REQ-0192 — reinstate the pause on the closed transition.  Also
+  // defensively `setIsPlaying(false)` in case the element was already
+  // paused (no `onPause` event to sync state).
+  useEffect(() => {
+    if (videoPreviewExpanded) return
+    videoRef.current?.pause()
+    audioRef.current?.pause()
+    setIsPlaying(false)
+  }, [videoPreviewExpanded])
+
+  // REQ-0193 — closed→open seek to the selected entry's startSec.
+  // Originally REQ-0191 dispatched `setVideoSeekRequest` from step2,
+  // which failed on real HW because the seek-consumer effect ran
+  // before the <video> re-mounted: while collapsed, previewBodySize
+  // reads 0×0 (display:none zeros the ResizeObserver contentBox),
+  // which drops videoFrameW to 0 and unmounts the <video> from the
+  // ternary at line ~1043.  On re-expand the store dispatch fired
+  // synchronously (videoRef.current still null) → the consumer
+  // cleared the request without seeking → the fresh <video> mounted
+  // and stayed at wherever browser cached the frame at.
+  // Owner-reported reproduction (RES-0193 §1): after
+  //   play → close → select entry 3 (startSec = 22.16) → open
+  // preview showed entry 1's caption at 0:11 (= the last playhead
+  // position before collapse) — proof that the seek never landed.
+  //
+  // Fix: keep a `prevExpandedRef` to detect the false→true edge.
+  // Snapshot the target startSec at the moment of the edge so a
+  // later selection change during the rAF loop doesn't retarget.
+  // Then loop `requestAnimationFrame` until `videoRef.current` is
+  // non-null AND `readyState >= HAVE_METADATA` (= seek can land),
+  // then apply `el.currentTime` directly along with the audio
+  // element and the local + store playhead slices.  This bypasses
+  // the videoSeekRequestSec store round-trip entirely for this
+  // transition — the store slice is still used by
+  // SubtitleTable row clicks / TimelineView scrub / keyboard nav
+  // where the preview is already visible and mounted, so those
+  // paths are untouched.  Max 30 frames (~500ms at 60fps) so a
+  // permanent mount failure doesn't leak the loop.
+  const prevExpandedRef = useRef(videoPreviewExpanded)
+  useEffect(() => {
+    const wasExpanded = prevExpandedRef.current
+    prevExpandedRef.current = videoPreviewExpanded
+    if (!videoPreviewExpanded || wasExpanded) return
+    const selId = useUiStore.getState().selectedEntryId
+    if (!selId) return
+    const entry = useProjectStore
+      .getState()
+      .entries.find((e) => e.id === selId)
+    if (!entry) return
+    const targetSec = entry.startSec
+    let cancelled = false
+    let attempts = 0
+    const MAX_ATTEMPTS = 30
+    function trySeek() {
+      if (cancelled) return
+      const el = videoRef.current
+      if (el && el.readyState >= 1 /* HAVE_METADATA */) {
+        el.currentTime = targetSec
+        if (audioRef.current) {
+          audioRef.current.currentTime = targetSec
+        }
+        setCurrentTime(targetSec)
+        if (!scrubState.inProgress) {
+          setVideoCurrentTimeSec(targetSec)
+        }
+        return
+      }
+      attempts += 1
+      if (attempts > MAX_ATTEMPTS) return
+      requestAnimationFrame(trySeek)
+    }
+    requestAnimationFrame(trySeek)
+    return () => {
+      cancelled = true
+    }
+  }, [videoPreviewExpanded, setVideoCurrentTimeSec])
 
   // REQ-20260615-051 B / REQ-20260615-052 — global Space keydown
   // shortcut for play / pause.
@@ -890,28 +983,116 @@ export function VideoPreviewPanel() {
   const editedCurrentTime = origToEdited(currentTime, cuts)
 
   return (
-    <div className="flex h-full w-full flex-col">
-      {/* Header — filename + open-in-folder button.  Compact; designed
-          to live INSIDE a resizable pane so wraps gracefully when the
-          pane is narrow.  REQ-20260614-001 Phase 2. */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border/50 flex-shrink-0 min-w-0">
-        <span className="min-w-0 truncate text-body-sm text-foreground/80" title={video.path}>
-          {filename}
+    // REQ-0184 — outer container adds `overflow-hidden` so the
+    // media stack (body + seekbar + warning), when squeezed to a
+    // very short pane by REQ-0184's imperative collapse, gets
+    // clipped visually instead of overflowing the pane frame.
+    // Header stays `flex-shrink-0` on top and always renders even
+    // at the collapsed pane height (bug #1 fix).
+    <div className="flex h-full w-full flex-col overflow-hidden">
+      {/*
+        REQ-0184 — header row is a one-click accordion toggle for the
+        media stack below.  Layout owner-specified (§3):
+          [Preview] (left)   [filename+folder] (center)   [chevron] (right)
+        The whole row is `role="button"`; folder-icon click uses
+        stopPropagation so opening the folder does NOT trip collapse.
+        Owner spec: initial state always open; not persisted across
+        step2 mounts (step2's mount effect resets to true).
+      */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={videoPreviewExpanded}
+        aria-label={
+          videoPreviewExpanded
+            ? t('videoPreview.collapseAria')
+            : t('videoPreview.expandAria')
+        }
+        onClick={() => setVideoPreviewExpanded(!videoPreviewExpanded)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setVideoPreviewExpanded(!videoPreviewExpanded)
+          }
+        }}
+        className={cn(
+          'grid items-center gap-2 px-3 py-1.5 border-b border-border/50 flex-shrink-0 min-w-0',
+          // Three-column grid: title left, filename+folder center,
+          // chevron right.  Center column is `min-w-0` so long file
+          // names truncate within their allotted middle band without
+          // pushing the title or chevron out of the pane.
+          'grid-cols-[auto_minmax(0,1fr)_auto]',
+          'cursor-pointer select-none transition-colors duration-150',
+          'hover:bg-surface-2/50 focus:outline-none focus-visible:outline-none',
+        )}
+      >
+        {/* Column 1 — "Preview" title, left */}
+        <span className="text-body-sm text-fg-secondary">
+          {t('videoPreview.title')}
         </span>
-        <button
-          type="button"
-          onClick={() => shellShowInFolder(video.path).catch(() => {})}
-          title={t('videoPreview.showInFolder')}
-          className={cn(
-            'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
-            'hover:text-foreground focus:outline-none focus-visible:text-foreground'
-          )}
-          aria-label={t('videoPreview.showInFolder')}
-        >
-          <FolderOpen className="h-4 w-4" />
-        </button>
+
+        {/* Column 2 — filename + folder icon, centred as a pair */}
+        <div className="flex items-center justify-center gap-1.5 min-w-0">
+          <span
+            className="min-w-0 truncate text-body-sm text-foreground/80"
+            title={video.path}
+          >
+            {filename}
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              // REQ-0183 — stop bubble so opening the folder does not
+              // also flip the accordion toggle on the outer row.
+              e.stopPropagation()
+              shellShowInFolder(video.path).catch(() => {})
+            }}
+            title={t('videoPreview.showInFolder')}
+            className={cn(
+              'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
+              'hover:text-foreground focus:outline-none focus-visible:text-foreground',
+            )}
+            aria-label={t('videoPreview.showInFolder')}
+          >
+            <FolderOpen className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Column 3 — accordion chevron, right */}
+        {videoPreviewExpanded ? (
+          <ChevronDown className="h-4 w-4 text-fg-tertiary justify-self-end" aria-hidden="true" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-fg-tertiary justify-self-end" aria-hidden="true" />
+        )}
       </div>
 
+      {/*
+        REQ-0186 §1 — belt-and-braces collapse wrapper.  The
+        pre-0186 approach (REQ-0184) relied on flex `flex-1 min-h-0`
+        squeezing the media stack to zero when the pane snapped to
+        the collapsed size, plus `overflow-hidden` on the outer
+        container to clip any bleed.  Owner reported ~5 px of
+        "residual pixel band" below the header when collapsed (from
+        `p-2` padding on the video frame area, plus the ~6 px
+        difference between REQ-0184's 40 px collapsedSize and the
+        header's true ~33 px height).
+        Fix: wrap body + seekbar + warning in a single container
+        that flips to `hidden` (display:none) when
+        `videoPreviewExpanded` is false.  React does NOT unmount on
+        display:none, so the <video> element's playback state /
+        current time / metadata survive a collapse-expand cycle.
+        Combined with the tightened `PREVIEW_HEADER_MIN_PX = 34` in
+        step2.tsx, the collapsed pane is now exactly the header
+        row's height and the media stack contributes zero, so no
+        seam is visible.
+        Re-expand path: the parent's display flips back to block,
+        Chromium re-lays out, ResizeObserver on `previewBodyRef`
+        fires with the new dimensions, and the video frame paints
+        as usual — same code path that REQ-0184's flex-squeeze fix
+        depended on, just with a guaranteed clean 0 height instead
+        of an approximate flex-shrink.
+      */}
+      <div className={cn('contents', !videoPreviewExpanded && 'hidden')}>
       {/* Video frame area — REQ-20260614-001 補遺② 修正2.
           `previewBodyRef` is measured (clientWidth × clientHeight) so the
           frame inside can be sized in JS to the largest box that
@@ -1030,8 +1211,7 @@ export function VideoPreviewPanel() {
       </div>
 
       {/* Seekbar — REQ-20260614-001 §3: moved from the right column to
-          DIRECTLY below the video frame.  Same play/pause + range +
-          time-readout as the previous layout, just relocated. */}
+          DIRECTLY below the video frame. */}
       <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border/50 flex-shrink-0">
         <button
           type="button"
@@ -1079,6 +1259,7 @@ export function VideoPreviewPanel() {
       <p className="px-3 py-1 text-caption text-muted-foreground flex-shrink-0">
         {t('subtitleLayout.previewNote')}
       </p>
+      </div>{/* REQ-0186 §1 — close media-stack collapse wrapper */}
     </div>
   )
 }
