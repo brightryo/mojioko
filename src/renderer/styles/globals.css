@@ -71,13 +71,32 @@
     --neutral-3:  0 0% 15%;    /* 13 % → 15 % (REQ-0178) — popover */
     --neutral-4:  0 0% 18%;    /* 17 % → 18 % (REQ-0178) — surface-2 = elevated / muted */
     --neutral-5:  0 0% 21%;    /* 20 % → 21 % (REQ-0178) */
-    --neutral-6:  0 0% 25%;    /* 24 % → 25 % (REQ-0178) — surface-3 = border / scroll thumb */
-    --neutral-7:  0 0% 28%;    /* unchanged */
-    --neutral-8:  0 0% 32%;    /* neutral-600 */
-    --neutral-9:  0 0% 45%;    /* neutral-500 */
-    --neutral-10: 0 0% 55%;
-    --neutral-11: 0 0% 64%;    /* neutral-400 */
-    --neutral-12: 0 0% 96%;    /* neutral-100 — text-primary */
+    --neutral-6:  0 0% 25%;    /* 24 % → 25 % (REQ-0178) — surface-3 = scroll thumb (kept; border broken out below) */
+    --neutral-7:  0 0% 28%;    /* unchanged — surface-4 (inverse); text-faint keeps sub-visible tint */
+
+    /*
+     * REQ-0179 s1 — bumped neutral-8..11 to hit WCAG contrast tiers
+     * against surface-0 (L 13 %, Y ≈ 0.0153).  Owner Phase B-1 note:
+     * "the muted greys are unreadable; look up what contrast is
+     * actually needed."  Measured pre-0179 ratios:
+     *   text-secondary (L 64) → 6.39:1  (AA body pass, AAA fail)
+     *   text-tertiary  (L 55) → 4.80:1  (AA body pass)
+     *   text-muted     (L 45) → 3.38:1  (BELOW AA body 4.5:1) ← main complaint
+     *   text-disabled  (L 32) → 2.04:1  (exempt)
+     * Post-0179 targets (see WCAG SC 1.4.3 / 1.4.11 and RES-0179 §5.2):
+     *   text-secondary L 72 → 8.07:1  AAA body ✓
+     *   text-tertiary  L 63 → 6.20:1  AA body ✓ (near AAA)
+     *   text-muted     L 54 → 4.66:1  AA body ✓ (safety margin over 4.5)
+     *   text-disabled  L 42 → 3.02:1  ~3:1 (disabled exempt, still legible)
+     * Primary / hierarchy preserved: text-primary stays at neutral-12
+     * (L 96) → 14.72:1, and primary→secondary→muted deltas remain
+     * ~7 → 5 → 3 ratio steps so the hierarchy is visually obvious.
+     */
+    --neutral-8:  0 0% 42%;    /* 32 % → 42 % (REQ-0179) — text-disabled at ~3:1 */
+    --neutral-9:  0 0% 54%;    /* 45 % → 54 % (REQ-0179) — text-muted at 4.66:1 AA */
+    --neutral-10: 0 0% 63%;    /* 55 % → 63 % (REQ-0179) — text-tertiary at 6.20:1 */
+    --neutral-11: 0 0% 72%;    /* 64 % → 72 % (REQ-0179) — text-secondary at 8.07:1 AAA */
+    --neutral-12: 0 0% 96%;    /* neutral-100 — text-primary, ratio 14.72:1 */
 
     /* Background scale (shadcn semantic — kept for primitive compat)
      *
@@ -132,7 +151,18 @@
     --destructive-foreground: 0 0% 98%;
 
     /* Borders and inputs */
-    --border: var(--neutral-6);
+    /*
+     * REQ-0179 s1 — --border is the shadcn semantic that every
+     * `border-border` utility reads.  Pre-0179 it inherited from
+     * --neutral-6 (L 25 % → ratio 1.54:1 vs surface-0), badly failing
+     * WCAG SC 1.4.11's 3:1 requirement for UI components.  Broken
+     * out to a raw HSL value at L 43 % so it clears 3:1 with a small
+     * safety margin (3.14:1 measured), independent of --surface-3
+     * (which still reads --neutral-6 at L 25 % so scroll-thumb and
+     * depth surfaces stay subtly muted).  --border-default /
+     * --border-strong further down get the same treatment.
+     */
+    --border: 0 0% 43%;              /* was var(--neutral-6) — WCAG SC 1.4.11 3:1 */
     --input:  var(--neutral-1);
     --ring:   152 42% 47%;           /* REQ-0177 — track --primary */
 
@@ -252,9 +282,18 @@
     --text-faint:     var(--neutral-7);
     --text-inverse:   var(--neutral-1);
 
-    --border-default: var(--neutral-6);
-    --border-strong:  var(--neutral-7);
-    --border-subtle:  var(--neutral-3);
+    /*
+     * REQ-0179 s1 — MOJIOKO's custom `border-line` / `border-line-strong`
+     * utilities now hit WCAG SC 1.4.11.  Same treatment as --border
+     * above: broken out to raw HSL values so surface depth tokens
+     * (--surface-3 / --surface-4) don't shift.
+     *   default  L 43 → 3.14:1  (SC 1.4.11 3:1 min for structural rules)
+     *   strong   L 54 → 4.66:1  (input frames, focus rows — same tier as text-muted)
+     *   subtle   L 18 → 1.30:1  (barely-there between-row rule, decorative)
+     */
+    --border-default: 0 0% 43%;      /* was var(--neutral-6) 25 % */
+    --border-strong:  0 0% 54%;      /* was var(--neutral-7) 28 % */
+    --border-subtle:  0 0% 18%;      /* was var(--neutral-3) 15 % — nudged for visibility */
 
     /* Action accent variants (green family) — REQ-0177: track the
        toned-down --primary above.  Same relative L ladder as before
