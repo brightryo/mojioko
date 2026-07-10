@@ -74,19 +74,18 @@ const OUTER_RIGHT_MIN_PX  = 368
 const LEFT_TOP_MIN_PX     = 313  // 312 → 313: 313 + 314 = 627 (= 628 − 1 handle)
 const LEFT_BOTTOM_MIN_PX  = 314  // 312 → 314 (symmetric ±0.5 px from previous)
 
-// REQ-0184 — collapsed-state size for the preview pane.  The
-// VideoPreviewPanel header row measures ~34-40 px in the current
-// tokens (py-1.5 padding + text-body-sm content).  40 px is the
-// safe upper bound at 1280x820 min-window; it fully accommodates
-// the "Preview | filename | folder | chevron" row without clipping.
-// When the pane is collapsed via ImperativePanelHandle.collapse(),
-// it snaps to this height and only the header shows — the media
-// stack below squeezes naturally through `flex-1 min-h-0 overflow-hidden`
-// on the wrapping div (see video-preview-panel.tsx REQ-0184 outer).
-// Under REQ-0183 this was a fixed 4 % → ~24 px which was smaller
-// than the header, clipping it (owner bug #1).  Now derived from
-// pane height so it stays correct across window sizes.
-const PREVIEW_HEADER_MIN_PX = 40
+// Collapsed-state size for the preview pane.
+// REQ-0184: was 40 (safe upper bound accommodating the header row).
+// REQ-0186 §1: tightened to 34 so the pane snaps to EXACTLY the
+// header's actual rendered height (py-1.5 = 12 px + text-body-sm
+// content ≈ 20 px + border-b 1 px = 33 px; 34 leaves 1 px of
+// hairline safety while still matching the header visually).  The
+// pre-0186 40 px left a ~4-8 px empty band below the header where
+// overflow-clipped seekbar edges could peek — owner-visible as a
+// "gap".  With 34 and the newly-added conditional `hidden` on
+// video-preview-panel.tsx's media wrapper (REQ-0186), nothing
+// renders in that band so no seam / bleed is possible.
+const PREVIEW_HEADER_MIN_PX = 34
 
 /**
  * Convert a pixel minimum to a percentage string for ResizablePanel's

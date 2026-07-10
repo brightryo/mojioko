@@ -793,7 +793,7 @@ export function TimelineBlockInspector({
           type="button"
           onClick={() => setSubtitleSectionOpen((v) => !v)}
           aria-expanded={subtitleSectionOpen}
-          className="flex items-center gap-1.5 text-body font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+          className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
         >
           {subtitleSectionOpen ? (
             <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
@@ -970,7 +970,7 @@ export function TimelineBlockInspector({
             type="button"
             onClick={() => setLayoutSectionOpen((v) => !v)}
             aria-expanded={layoutSectionOpen}
-            className="flex items-center gap-1.5 text-body font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
           >
             {layoutSectionOpen ? (
               <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
@@ -1141,7 +1141,7 @@ export function TimelineBlockInspector({
             type="button"
             onClick={() => setBackgroundSectionOpen((v) => !v)}
             aria-expanded={backgroundSectionOpen}
-            className="flex items-center gap-1.5 text-body font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
           >
             {backgroundSectionOpen ? (
               <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />

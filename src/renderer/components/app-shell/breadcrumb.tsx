@@ -41,7 +41,15 @@ export function Breadcrumb({ title, description }: BreadcrumbProps) {
       <div className="max-w-[1100px] mx-auto w-full flex items-baseline gap-3 px-6">
         <h1 className="text-body-sm font-semibold text-fg-primary select-none">{title}</h1>
         {description ? (
-          <p className="text-caption text-fg-tertiary select-none truncate min-w-0 flex-1">
+          <p
+            // REQ-0186 §2 — bumped one step from `text-caption` (12 px)
+            // to `text-body-sm` (13 px) so the top-strip description
+            // sits closer to the H1 in weight while still reading as
+            // supporting copy.  Applied to both routes' descriptions
+            // uniformly (step1 uses `t('guidance')`, step2 uses
+            // `t('subtitle')` — both flow through this component).
+            className="text-body-sm text-fg-tertiary select-none truncate min-w-0 flex-1"
+          >
             {description}
           </p>
         ) : (

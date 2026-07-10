@@ -265,16 +265,20 @@ function AppInner() {
       <Toaster
         position="bottom-center"
         theme="dark"
-        // REQ-0185 §2 — lift toasts above the footer bar so status
-        // messages ("file loaded" etc.) no longer overlap the
-        // footer chrome.  Footer is `py-3` + `text-caption`
-        // content + `border-t` = ~48-52 px tall; using 68 px
-        // keeps the toast card clear of the footer's divider
-        // line at every viewport size the app supports.  Sonner's
-        // `offset` prop is a per-position distance from the
-        // viewport edge — for `bottom-center` this pushes the
-        // stack up from the bottom by the specified amount.
-        offset={68}
+        // Distance from the viewport bottom edge to the toast
+        // stack.  Value must equal the footer's rendered height so
+        // the toast card's bottom edge lands exactly on the
+        // footer's border-t line — REQ-0186 §4 owner spec
+        // "接地する（重ならず、離れもしない）".
+        // Footer height breakdown (app-shell/footer.tsx):
+        //   py-3          → 12 px + 12 px  =  24 px
+        //   text-caption  → line-height 16 =  16 px
+        //   border-t      →                   1 px
+        //   total                             41 px
+        // REQ-0185 originally set 68 (too much clearance); REQ-0186
+        // tightened to 42 (footer height + 1 px hairline gap so the
+        // toast doesn't overlap the border-t line).
+        offset={42}
         toastOptions={{
           classNames: {
             toast:

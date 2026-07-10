@@ -983,6 +983,33 @@ export function VideoPreviewPanel() {
         )}
       </div>
 
+      {/*
+        REQ-0186 §1 — belt-and-braces collapse wrapper.  The
+        pre-0186 approach (REQ-0184) relied on flex `flex-1 min-h-0`
+        squeezing the media stack to zero when the pane snapped to
+        the collapsed size, plus `overflow-hidden` on the outer
+        container to clip any bleed.  Owner reported ~5 px of
+        "residual pixel band" below the header when collapsed (from
+        `p-2` padding on the video frame area, plus the ~6 px
+        difference between REQ-0184's 40 px collapsedSize and the
+        header's true ~33 px height).
+        Fix: wrap body + seekbar + warning in a single container
+        that flips to `hidden` (display:none) when
+        `videoPreviewExpanded` is false.  React does NOT unmount on
+        display:none, so the <video> element's playback state /
+        current time / metadata survive a collapse-expand cycle.
+        Combined with the tightened `PREVIEW_HEADER_MIN_PX = 34` in
+        step2.tsx, the collapsed pane is now exactly the header
+        row's height and the media stack contributes zero, so no
+        seam is visible.
+        Re-expand path: the parent's display flips back to block,
+        Chromium re-lays out, ResizeObserver on `previewBodyRef`
+        fires with the new dimensions, and the video frame paints
+        as usual — same code path that REQ-0184's flex-squeeze fix
+        depended on, just with a guaranteed clean 0 height instead
+        of an approximate flex-shrink.
+      */}
+      <div className={cn('contents', !videoPreviewExpanded && 'hidden')}>
       {/* Video frame area — REQ-20260614-001 補遺② 修正2.
           `previewBodyRef` is measured (clientWidth × clientHeight) so the
           frame inside can be sized in JS to the largest box that
@@ -1149,6 +1176,7 @@ export function VideoPreviewPanel() {
       <p className="px-3 py-1 text-caption text-muted-foreground flex-shrink-0">
         {t('subtitleLayout.previewNote')}
       </p>
+      </div>{/* REQ-0186 §1 — close media-stack collapse wrapper */}
     </div>
   )
 }
