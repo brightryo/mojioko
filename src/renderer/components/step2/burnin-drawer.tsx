@@ -362,15 +362,23 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
             <SheetDescription className="flex-1">{t('subtitle')}</SheetDescription>
           </SheetHeader>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 divide-y divide-line">
             {renderState === 'idle' && (
               <>
                 {/* Summary panel — REQ-20260615-024 A.1/A.2: section header
                     'Summary' dropped, card padding tightened (p-3), and
                     SummaryRow rows shrunk to py-1 / min-h-0 so the seven
                     facts read as a compact table rather than a stretched
-                    column. */}
-                <div className="rounded-xl border border-line bg-surface-1 px-3 py-2">
+                    column.
+                    REQ-0180 2a: outer `rounded-xl border border-line
+                    bg-surface-1` wrapper dropped — the Sheet already
+                    provides a bordered surface, and pre-0180 this section
+                    (like Audio-mode below) rendered a card inside the
+                    Sheet card = "枠の中に枠".  Parent now uses `divide-y`
+                    so sections separate via a single hairline.  The inner
+                    `divide-line/50` between SummaryRows is preserved so
+                    the seven facts still visually enumerate. */}
+                <div className="py-2">
                   <div className="flex flex-col divide-y divide-line/50">
                     <SummaryRow label={t('summary.resolution')} value={video ? `${video.widthPx}×${video.heightPx}` : '—'} />
                     <SummaryRow label={t('summary.duration')} value={video ? formatDuration(durationSec) : '—'} />
@@ -390,7 +398,9 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                 />
 
                 {/* Audio mode */}
-                <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-2">
+                {/* REQ-0180 2a: outer card wrapper dropped (see Summary
+                    section comment above); py-3 keeps internal rhythm. */}
+                <div className="py-3 space-y-2">
                   <div className="flex items-center gap-1.5">
                     <Music className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
                     <Label>{t('audio.label')}</Label>
@@ -705,7 +715,12 @@ function OutputFormatCard({
     : ''
 
   return (
-    <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-2">
+    // REQ-0180 2a — outer card wrapper dropped so this OutputFormatCard
+    // sibling matches the flat "Summary" and "Audio mode" sections
+    // above/below it in the drawer's divide-y-divide-line parent.
+    // Selection option buttons below keep their `rounded-md border`
+    // treatment (they're semantic pickers, not chrome grouping).
+    <div className="py-3 space-y-2">
       <div className="flex items-center gap-1.5">
         <FileVideo className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
         <Label>
