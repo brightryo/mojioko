@@ -557,10 +557,28 @@ export function VideoPreviewPanel() {
     }
   }, [])
 
-  // REQ-20260614-001 Phase 2 — the "pause-on-collapse" effect retired
-  // alongside the accordion.  Pane resize shrinks the preview area
-  // without unmounting the <video>, so playback is naturally preserved
-  // (and the user keeps explicit control via the play/pause button).
+  // REQ-20260614-001 Phase 2 — pause-on-collapse originally retired
+  // when the accordion was replaced with a plain pane-resize.
+  // REQ-0183 re-adopted the accordion collapse (header toggle snaps
+  // the pane to `collapsedSize` and REQ-0186 wraps the media stack in
+  // `display:none`), but the pause-on-collapse effect was NOT
+  // reinstated in that pass.  Chromium keeps `<video>` playing under
+  // `display:none` — audio continues, currentTime keeps advancing —
+  // so `isPlaying` stayed true across a collapse, leaving the header
+  // toggle showing ⏸ after reopen, and REQ-0191's seek-to-selection
+  // effect fired against a still-playing element that immediately
+  // rolled past the target frame.
+  // REQ-0192 — reinstate the pause on the closed transition.  Also
+  // defensively `setIsPlaying(false)` in case the element was already
+  // paused (no `onPause` event to sync state).  On expand, no work
+  // here: REQ-0191's step2 effect dispatches `setVideoSeekRequest`,
+  // which the paused element now consumes cleanly.
+  useEffect(() => {
+    if (videoPreviewExpanded) return
+    videoRef.current?.pause()
+    audioRef.current?.pause()
+    setIsPlaying(false)
+  }, [videoPreviewExpanded])
 
   // REQ-20260615-051 B / REQ-20260615-052 — global Space keydown
   // shortcut for play / pause.
