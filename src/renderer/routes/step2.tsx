@@ -292,11 +292,32 @@ export default function Step2Route(_: Step2RouteProps) {
   // flips.  Guarded by `previewPaneRef.current` because the ref
   // resolves after the first render; the effect fires again once the
   // panel mounts and the ref lands.
+  //
+  // REQ-0191 — on the closed→open transition, seek the playhead to
+  // the currently selected entry's start time so the preview lands
+  // on what the user was editing.  `selectedEntryId` / `entries` are
+  // read via `getState()` rather than added as effect deps: adding
+  // them would fire the seek every selection change, which is
+  // explicitly out of scope ("プレビューが開いている状態での通常の
+  // 選択・シーク挙動は変更しない").  If there's no selection, the
+  // playhead is left untouched (owner: "0:00 に飛ばしたりしない").
+  // The seek path reuses `videoSeekRequestSec` → VideoPreviewPanel's
+  // existing consumer effect (currentTime assignment + null reset),
+  // so no new IPC / state slice is introduced.
   useEffect(() => {
     const panel = previewPaneRef.current
     if (!panel) return
     if (videoPreviewExpanded) {
       panel.expand()
+      const { selectedEntryId, setVideoSeekRequest } = useUiStore.getState()
+      if (selectedEntryId) {
+        const entry = useProjectStore
+          .getState()
+          .entries.find((e) => e.id === selectedEntryId)
+        if (entry) {
+          setVideoSeekRequest(entry.startSec)
+        }
+      }
     } else {
       panel.collapse()
     }
