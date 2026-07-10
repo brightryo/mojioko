@@ -45,14 +45,25 @@
      * rationale).
      * ------------------------------------------------------------------- */
 
-    /* Default = neutral dark.  data-base unset OR data-base="neutral". */
-    --neutral-1:  0 0% 4%;     /* neutral-950 */
-    --neutral-2:  0 0% 7%;
-    --neutral-3:  0 0% 9%;     /* neutral-900 */
-    --neutral-4:  0 0% 15%;    /* neutral-800 */
-    --neutral-5:  0 0% 19%;
-    --neutral-6:  0 0% 25%;    /* neutral-700 */
-    --neutral-7:  0 0% 28%;
+    /* Default = neutral dark.  data-base unset OR data-base="neutral".
+     *
+     * REQ-0177 Phase A — lifted the darkest steps ~7 % L so surface-0
+     * lands at 11 % L (~#1B1B1B) instead of 4 % L (~#0A0A0A).  Rationale:
+     * DaVinci Resolve's professional dark UI sits at a mid-grey base
+     * (#1B1B1E-ish); MOJIOKO's original near-black (#0A0A0A) read as
+     * "cheap dark" next to it.  The upper end (neutrals 8-12) is
+     * unchanged so text/muted contrast ratios stay AAA on the shifted
+     * surfaces.  Palette variants (stone/mauve/olive/mist/taupe) keep
+     * their pre-0177 numbers so the "Resolve base" is scoped to
+     * data-base=neutral only.
+     */
+    --neutral-1:  0 0% 11%;    /* was 4 %  — surface-0 = bg-base  */
+    --neutral-2:  0 0% 14%;    /* was 7 %  — surface-1 = card / panel */
+    --neutral-3:  0 0% 13%;    /* was 9 %  — popover */
+    --neutral-4:  0 0% 17%;    /* was 15 % — surface-2 = elevated / muted */
+    --neutral-5:  0 0% 20%;    /* was 19 % */
+    --neutral-6:  0 0% 24%;    /* was 25 % — surface-3 = border / scroll thumb */
+    --neutral-7:  0 0% 28%;    /* unchanged */
     --neutral-8:  0 0% 32%;    /* neutral-600 */
     --neutral-9:  0 0% 45%;    /* neutral-500 */
     --neutral-10: 0 0% 55%;
@@ -74,17 +85,19 @@
     --card-foreground:    var(--neutral-12);
     --popover-foreground: var(--neutral-12);
 
-    /* Primary action: green-500.
-       REQ-071 Phase 3.7: --primary-foreground shifted green-950 (dark
-       forest green, hue collides with bg-primary green) -> zinc-950
-       (near-black neutral, hue independent of bg).  Same reasoning as
-       Phase 3.6's button.tsx primary variant fix: the dark-green hue
-       washed into the green background even at AA contrast, so the
-       checkmark icon (checkbox.tsx) and the round Play button
-       (audio-preview-panel.tsx) read as muddy green-on-green.  zinc-950
-       gives AAA contrast and reads as a real black mark on the green
-       surface. */
-    --primary: 142.1 70.6% 45.3%;
+    /* Primary action: desaturated professional green.
+       REQ-0177 Phase A — the pre-0177 emerald (green-500 = #22c55e,
+       H 142 / S 71 % / L 45 %) read as high-saturation "consumer-app"
+       against Resolve's muted UI.  Pulled saturation down to ~46 %
+       and shifted hue slightly (152 vs 142) to land closer to the
+       #3EA97B-ish "tanned green" spec in REQ-0177 §4.1.  Still a
+       recognisable brand green, just calmer.  --primary-hover /
+       -active / -soft / -faint are re-scaled below to keep the same
+       relative brightness ladder.
+       REQ-071 Phase 3.7 note (retained): --primary-foreground stays
+       on the darkest neutral so the checkmark / play-button icon
+       reads as clean dark-on-green rather than dark-forest-on-green. */
+    --primary: 152 42% 47%;      /* was 142.1 70.6% 45.3% */
     --primary-foreground: var(--neutral-1); /* darkest neutral, near-black on light + on green */
 
     /* Secondary mapped to base surface */
@@ -112,7 +125,7 @@
     /* Borders and inputs */
     --border: var(--neutral-6);
     --input:  var(--neutral-1);
-    --ring:   142.1 70.6% 45.3%;     /* green-500 focus ring (accent kept) */
+    --ring:   152 42% 47%;           /* REQ-0177 — track --primary */
 
     /*
      * Multi-row selection (bulk-edit) — distinct from the green focused-row
@@ -122,9 +135,9 @@
      *   --row-selected-alpha      : row body tint opacity (0–1).
      *   --row-selected-border     : left-edge marker stripe.
      */
-    --row-selected: 217 91% 60%;          /* blue-500 */
+    --row-selected: 217 45% 55%;          /* REQ-0177 — desaturated blue for bulk-select tint */
     --row-selected-alpha: 0.10;
-    --row-selected-border: 217 91% 60%;
+    --row-selected-border: 217 45% 55%;
 
     /*
      * Soft inline separator (thinner than --border).  Used to demarcate
@@ -234,11 +247,15 @@
     --border-strong:  var(--neutral-7);
     --border-subtle:  var(--neutral-3);
 
-    /* Action accent variants (green family) */
-    --primary-hover:  142 76% 36%;       /* green-600  #16a34a */
-    --primary-active: 142 72% 29%;       /* green-700  #15803d */
-    --primary-soft:   142 71% 58%;       /* green-400  #4ade80 */
-    --primary-faint:  141 79% 73%;       /* green-300  #86efac */
+    /* Action accent variants (green family) — REQ-0177: track the
+       toned-down --primary above.  Same relative L ladder as before
+       (hover -9, active -18, soft +11, faint +26) but at the new
+       H 152 / S 42 % base so the whole ladder feels one shade cooler
+       and less shouty. */
+    --primary-hover:  152 44% 38%;       /* was 142 76% 36% */
+    --primary-active: 152 46% 29%;       /* was 142 72% 29% */
+    --primary-soft:   152 40% 58%;       /* was 142 71% 58% */
+    --primary-faint:  152 38% 73%;       /* was 141 79% 73% */
 
     /* Destructive variants (red family) */
     --destructive-hover: 0 72% 51%;      /* red-600  #dc2626 */
@@ -249,19 +266,23 @@
     --warning-faint:      46 97% 65%;    /* amber-300 #fcd34d */
     --warning-very-faint: 48 96% 89%;    /* amber-100 #fef3c7 */
 
-    /* Info accent (single-use blue) */
-    --info: 213 94% 68%;                 /* blue-400 */
+    /* Info accent (single-use blue) — REQ-0177 desaturated */
+    --info: 213 45% 62%;                 /* was 213 94% 68% */
 
     --row-edited:  43 96% 56%;           /* amber-400 */
     --row-error:   0 84% 60%;            /* red-500 */
     --row-playing: 199 89% 48%;          /* sky-500 — kept for legend / inspector */
 
-    --playhead:      0 84% 60%;          /* red-500 */
+    --playhead:      0 84% 60%;          /* red-500 — kept vivid for playhead legibility */
     --trim-overlay: 38 92% 50%;          /* amber-500 */
-    --cursor-active: 142.1 70.6% 45.3%;  /* green-500 / = --primary */
+    --cursor-active: 152 42% 47%;        /* REQ-0177 — track --primary (was green-500) */
 
-    /* shadcn radius — matches our rounded-lg (8px) */
-    --radius: 0.5rem;
+    /* shadcn radius — REQ-0177 dropped 8 px → 3 px to match the
+       flat / squared-off Resolve panel feel.  The Tailwind
+       `borderRadius` scale in tailwind.config.ts also drops
+       proportionally so `rounded-lg` / `rounded-xl` etc. inherit
+       the new spec without per-call-site edits. */
+    --radius: 0.1875rem;             /* 3 px, was 0.5 rem (8 px) */
   }
 
   /* -------------------------------------------------------------------

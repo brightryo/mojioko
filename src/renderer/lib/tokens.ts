@@ -4,17 +4,21 @@
  */
 
 export const colors = {
-  // Background scale
-  bgBase: '#0a0a0a',
-  bgSurface: '#141414',
-  bgElevated: '#171717',
-  bgInput: '#0a0a0a',
-  bgHover: '#1f1f1f',
+  // Background scale — REQ-0177: mirrors the shifted --neutral-N ladder
+  // in globals.css (surface-0 = 11 % L, was 4 %).  Values here are
+  // used by canvas / JS callers (subtitle-overlay compositing,
+  // overflow calculations, timeline drawing) that can't read the CSS
+  // vars directly.  Keep in sync with globals.css :root manually.
+  bgBase: '#1c1c1c',       // was #0a0a0a — neutral-1 at 11 %
+  bgSurface: '#242424',    // was #141414 — neutral-2 at 14 %
+  bgElevated: '#2b2b2b',   // was #171717 — neutral-4 at 17 %
+  bgInput: '#1c1c1c',      // was #0a0a0a — matches bgBase
+  bgHover: '#333333',      // was #1f1f1f — neutral-5 at 20 %
 
   // Border scale
-  borderDefault: '#27272a',
-  borderStrong: '#3f3f46',
-  borderSubtle: '#1f1f1f',
+  borderDefault: '#3d3d3d',   // was #27272a — neutral-6 at 24 %
+  borderStrong: '#474747',    // was #3f3f46 — neutral-7 at 28 %
+  borderSubtle: '#212121',    // was #1f1f1f — neutral-3 at 13 %
 
   // Text scale
   textPrimary: '#fafafa',
@@ -23,30 +27,37 @@ export const colors = {
   textMuted: '#52525b',
   textOnAccent: '#052e16',
 
-  // Accent: green
-  accent: '#22c55e',
-  accentHover: '#16a34a',
-  accentActive: '#15803d',
-  accentSoft: 'rgba(34,197,94,0.10)',
-  accentSoftBorder: 'rgba(34,197,94,0.20)',
+  // Accent: desaturated green — REQ-0177 tone-down from #22c55e emerald.
+  // H 152 / S 42 % / L 47 % ≈ #45AA7A, brand-recognisable but calmer.
+  accent: '#45aa7a',
+  accentHover: '#388d63',
+  accentActive: '#2b6d4c',
+  accentSoft: 'rgba(69,170,122,0.10)',
+  accentSoftBorder: 'rgba(69,170,122,0.20)',
 
-  // Semantic
+  // Semantic — REQ-0177: success tracks the desaturated accent so the
+  // brand-green ladder stays coherent; info desaturated to a Resolve-
+  // friendly muted blue.  warning / danger untouched (their vividness
+  // is load-bearing for user attention).
   warning: '#fbbf24',
   warningSoft: 'rgba(251,191,36,0.10)',
   danger: '#ef4444',
   dangerSoft: 'rgba(239,68,68,0.10)',
-  success: '#22c55e',
-  successSoft: 'rgba(34,197,94,0.10)',
-  info: '#3b82f6',
-  infoSoft: 'rgba(59,130,246,0.10)'
+  success: '#45aa7a',                       // was #22c55e — tracks accent
+  successSoft: 'rgba(69,170,122,0.10)',     // was rgba(34,197,94,0.10)
+  info: '#5989b9',                          // was #3b82f6 — desaturated
+  infoSoft: 'rgba(89,137,185,0.10)'
 } as const
 
+// REQ-0177 Phase A — flat radius scale.  Mirrors tailwind.config.ts
+// borderRadius so JS callers (canvas ROI rects, timeline block rounds)
+// match the DOM UI.
 export const radius = {
-  sm: 4,
-  md: 6,
-  lg: 8,
-  xl: 10,
-  '2xl': 12
+  sm: 2,
+  md: 3,
+  lg: 4,
+  xl: 5,
+  '2xl': 6
 } as const
 
 export const motion = {
