@@ -152,17 +152,29 @@
 
     /* Borders and inputs */
     /*
-     * REQ-0179 s1 — --border is the shadcn semantic that every
-     * `border-border` utility reads.  Pre-0179 it inherited from
-     * --neutral-6 (L 25 % → ratio 1.54:1 vs surface-0), badly failing
-     * WCAG SC 1.4.11's 3:1 requirement for UI components.  Broken
-     * out to a raw HSL value at L 43 % so it clears 3:1 with a small
-     * safety margin (3.14:1 measured), independent of --surface-3
-     * (which still reads --neutral-6 at L 25 % so scroll-thumb and
-     * depth surfaces stay subtly muted).  --border-default /
-     * --border-strong further down get the same treatment.
+     * REQ-0187 — line-colour philosophy shift.  Pre-0187 REQ-0179
+     * had lifted --border to L 43 % (3.14:1 vs surface-0) to hit
+     * WCAG SC 1.4.11's 3:1 minimum for UI components.  Owner
+     * feedback: "白線が強い / Resolve は白線でなく濃いグレーの線"
+     * — WCAG-driven bright borders were reading as loud on a dark
+     * pro-editor canvas, opposite of the Resolve reference stills.
+     *
+     * New direction: DaVinci Resolve style — lines are quiet
+     * mid-grey and boundaries are co-communicated by SURFACE TIER
+     * differences (surface-0 body L 13 % vs surface-1 panel L 16 %
+     * = 1.10:1 tier lift).  For editor chrome this is the
+     * accepted trade-off: SC 1.4.11 asks 3:1 for graphical objects
+     * "required to understand content", but here the tier lift +
+     * spacing (py-3, divide-y) co-communicate grouping so the
+     * line itself can recede.  Input frames / focus rings (below)
+     * still hit stronger contrast because they are functional
+     * boundaries (interactive).
+     *
+     * --border (shadcn semantic that every `border-border` utility
+     * reads): L 43 % → 22 % (1.37:1 vs surface-0).  Recedes on the
+     * base surface, doesn't shout.
      */
-    --border: 0 0% 43%;              /* was var(--neutral-6) — WCAG SC 1.4.11 3:1 */
+    --border: 0 0% 22%;              /* was L 43 % — REQ-0187 Resolve line */
     --input:  var(--neutral-1);
     --ring:   152 42% 47%;           /* REQ-0177 — track --primary */
 
@@ -283,17 +295,30 @@
     --text-inverse:   var(--neutral-1);
 
     /*
-     * REQ-0179 s1 — MOJIOKO's custom `border-line` / `border-line-strong`
-     * utilities now hit WCAG SC 1.4.11.  Same treatment as --border
-     * above: broken out to raw HSL values so surface depth tokens
-     * (--surface-3 / --surface-4) don't shift.
-     *   default  L 43 → 3.14:1  (SC 1.4.11 3:1 min for structural rules)
-     *   strong   L 54 → 4.66:1  (input frames, focus rows — same tier as text-muted)
-     *   subtle   L 18 → 1.30:1  (barely-there between-row rule, decorative)
+     * REQ-0187 — Resolve-style dark line palette.  Pre-0187 REQ-0179
+     * had these at L 43-54 for WCAG SC 1.4.11's 3:1 minimum; owner
+     * pushed back that bright borders read "loud" on a dark editor
+     * canvas.  See --border comment above for the design-shift
+     * rationale (line quiet, tier lift co-communicates boundary).
+     *
+     * Measured contrasts vs surface-0 (L 13 %, Y ≈ 0.0153):
+     *   default  L 22 → 1.37:1  (was 3.14:1) — quiet grey line
+     *   strong   L 32 → 2.04:1  (was 4.66:1) — visible for input frames
+     *                                          without shouting; matches
+     *                                          Chrome's dark-mode native
+     *                                          input frame contrast band
+     *   subtle   L 15 → 1.07:1  (was 1.30:1) — near-invisible inter-row rule
+     *
+     * These borders fall below WCAG SC 1.4.11's 3:1 min because the
+     * lines here are decorative (grouping is co-communicated by
+     * surface tier changes + spacing).  Functional / interactive
+     * boundaries (--ring for keyboard focus, per-Input focus states)
+     * remain accented via --primary (>7:1) so accessibility is
+     * preserved where it actually matters.
      */
-    --border-default: 0 0% 43%;      /* was var(--neutral-6) 25 % */
-    --border-strong:  0 0% 54%;      /* was var(--neutral-7) 28 % */
-    --border-subtle:  0 0% 18%;      /* was var(--neutral-3) 15 % — nudged for visibility */
+    --border-default: 0 0% 22%;      /* REQ-0187 — was 43 % */
+    --border-strong:  0 0% 32%;      /* REQ-0187 — was 54 %; input frames */
+    --border-subtle:  0 0% 15%;      /* REQ-0187 — was 18 %; near-invisible */
 
     /* Action accent variants (green family) — REQ-0177: track the
        toned-down --primary above.  Same relative L ladder as before

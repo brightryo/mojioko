@@ -268,17 +268,27 @@ function AppInner() {
         // Distance from the viewport bottom edge to the toast
         // stack.  Value must equal the footer's rendered height so
         // the toast card's bottom edge lands exactly on the
-        // footer's border-t line — REQ-0186 §4 owner spec
-        // "接地する（重ならず、離れもしない）".
-        // Footer height breakdown (app-shell/footer.tsx):
-        //   py-3          → 12 px + 12 px  =  24 px
-        //   text-caption  → line-height 16 =  16 px
-        //   border-t      →                   1 px
-        //   total                             41 px
-        // REQ-0185 originally set 68 (too much clearance); REQ-0186
-        // tightened to 42 (footer height + 1 px hairline gap so the
-        // toast doesn't overlap the border-t line).
-        offset={42}
+        // footer's border-t line — owner spec "フッター区切り線の
+        // すぐ上に接地" across REQ-0185/0186/0187.
+        //
+        // REQ-0186's math (41 px) undercounted because it summed
+        // padding + text-caption line-height + border-t but forgot
+        // that the footer's actual content is the taller of its
+        // slots — left/right are `<Button size="md" h-7>` = 28 px,
+        // not text-caption 16 px.  Real breakdown:
+        //   py-3          → 12 + 12          = 24 px
+        //   Button h-7    → 28 px (tallest slot content)
+        //   border-t      →  1 px
+        //   total                              53 px
+        // REQ-0187 sets 54 (footer height + 1 px hairline safety
+        // so the toast bottom doesn't overlap the border-t line
+        // itself).  Sonner's `offset` for bottom-center positions
+        // is viewport-edge-to-toast-edge.
+        //
+        // REQ-0185 was 68 (too much); REQ-0186 was 42 (still too
+        // low, owner's spec was undermet).  REQ-0187 = 54 with
+        // corrected math.
+        offset={54}
         toastOptions={{
           classNames: {
             toast:

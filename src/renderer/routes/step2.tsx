@@ -1194,7 +1194,15 @@ export default function Step2Route(_: Step2RouteProps) {
                 setStep2OuterLayout({ 'step2-pane-left': left, 'step2-pane-right': right })
               }
             }}
-            className="rounded-lg border border-line overflow-hidden"
+            // REQ-0187 §2 — dropped the outer `rounded-lg border
+            // border-line` frame that wrapped the 3-pane group.
+            // Owner rationale: Resolve doesn't box its panes in a
+            // frame; pane boundaries are communicated by the
+            // ResizableHandle (1 px line) + surface tier
+            // differences between panes.  The outer border was a
+            // pre-0187 remnant of the "card boxes" pattern REQ-0178
+            // retired for the section-divider hairline pattern.
+            className="overflow-hidden"
           >
             <ResizablePanel
               id="step2-pane-left"
