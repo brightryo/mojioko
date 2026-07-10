@@ -1158,8 +1158,21 @@ export default function Step2Route(_: Step2RouteProps) {
       footerRight={footerRight}
       noScroll
       fluid
+      // REQ-0189 — drop the AppShell content-container padding
+      // (`px-6 py-5`) so the 3-pane group spans edge-to-edge:
+      // left/right to the viewport, top to the breadcrumb line,
+      // bottom to the footer's top edge.  Owner spec: "コンテンツ
+      // を画面領域いっぱいに広げる".  STEP1 is not opted in — its
+      // centred single-column layout wants the outer breathing
+      // room.
+      edgeToEdge
     >
-      <div className="flex flex-col h-full gap-3">
+      {/* REQ-0189 — dropped `gap-3` from the direct wrapper (it
+          added a 12 px gap between the (removed) heading block and
+          the 3-pane, but with the heading in the top strip and
+          edge-to-edge on, the 3-pane is the only child and the gap
+          just eats space above the ResizablePanelGroup). */}
+      <div className="flex flex-col h-full">
         {/* REQ-20260614-001 補遺② 修正1 — view switcher / filter tabs /
             undo/redo / add row / BulkEditBar are now rendered INSIDE the
             bottom pane (see `bottomSlot`), so the toolbar lives next to

@@ -22,9 +22,19 @@ interface AppShellProps {
    * When true, the inner content container fills 100% of the viewport width
    * with the same horizontal padding (px-6) as the bounded variant — so
    * STEP2 screens reading "edge padding present, max width gone" rather
-   * than "edge-to-edge".
+   * than "edge-to-edge".  See also `edgeToEdge` below (REQ-0189) which
+   * drops that horizontal padding.
    */
   fluid?: boolean
+  /**
+   * REQ-0189 — drop the outer horizontal AND vertical padding
+   * (`px-6 py-5 / py-6`) around the content container so it butts up
+   * against the breadcrumb below, the footer above, and both viewport
+   * edges.  Owner spec for STEP2: "3-pane を画面領域いっぱいに広げる".
+   * STEP1's centred single-column layout keeps the padding (unset =
+   * pre-0189 behaviour); only STEP2 opts in.
+   */
+  edgeToEdge?: boolean
   children: ReactNode
 }
 
@@ -42,6 +52,7 @@ export function AppShell({
   footerRight,
   noScroll,
   fluid,
+  edgeToEdge,
   children
 }: AppShellProps) {
   return (
@@ -50,12 +61,22 @@ export function AppShell({
       <main className={cn('flex-1', noScroll ? 'overflow-hidden' : 'overflow-y-auto')}>
         <div
           className={cn(
-            'mx-auto w-full px-6',
+            'mx-auto w-full',
+            // Horizontal padding: default px-6, dropped when
+            // `edgeToEdge` (REQ-0189) so STEP2's 3-pane spans the
+            // full viewport width.
+            !edgeToEdge && 'px-6',
             // REQ-20260614-001 Phase 2: STEP2 sets `fluid` so the 3-pane
             // resizable layout can use the full window width.  Other steps
             // keep the bounded 1100px chrome for readability.
             fluid ? 'max-w-none' : 'max-w-[1100px]',
-            noScroll ? 'h-full py-5' : 'py-6'
+            // Vertical padding: default py-5 (noScroll) or py-6
+            // (scrolling).  Dropped by `edgeToEdge`, but height stays
+            // h-full in the noScroll case so the child fills the main
+            // area under the breadcrumb and above the footer.
+            noScroll
+              ? cn('h-full', !edgeToEdge && 'py-5')
+              : (edgeToEdge ? undefined : 'py-6')
           )}
         >
           {children}
