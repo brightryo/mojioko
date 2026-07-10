@@ -27,6 +27,7 @@
     "defaultAudioTrackOption": "Track {{index}}",
     "defaultInputDir": "Input folder",
     "defaultOutputDir": "Output folder",
+    "defaultProjectDir": "Project folder",
     "folderPathUsingSystemVideos": "System Videos folder",
     "folderPathBrowse": "Browse…",
     "folderPathClear": "Clear"

@@ -100,5 +100,43 @@
   "thirdPartyLicenses": {
     "title": "Third-party licenses",
     "openFolder": "Open third-party licenses folder"
+  },
+  "project": {
+    "save": {
+      "toastSuccess": "Project saved",
+      "toastSuccessDesc": "The original input file (video/audio) is required to reopen this .mojioko.",
+      "toastNothingToSave": "No project to save (load an input file first).",
+      "toastError": "Save failed: {{error}}"
+    },
+    "open": {
+      "toastError": "Couldn't open project: {{error}}",
+      "reasonInvalidJson": "The file isn't valid JSON.",
+      "reasonNotMojioko": "This isn't a MOJIOKO project file.",
+      "reasonUnsupportedVersion": "This project file was saved by a newer MOJIOKO version.",
+      "reasonMissingFields": "Required fields are missing.",
+      "sourceMissingTitle": "Original file not found",
+      "sourceMissingDesc": "The input file recorded in this project isn't at the saved location. Please pick it again.",
+      "sourceMissingReselect": "Select file…",
+      "sourceMissingCancel": "Cancel",
+      "identityMismatchTitle": "Video doesn't match",
+      "identityMismatchDesc": "The saved video and the current file differ in duration or resolution. The file may have been replaced.",
+      "identityDurationLabel": "Duration",
+      "identityResolutionLabel": "Resolution",
+      "identityPathLabel": "File path",
+      "identityFileNameLabel": "File name",
+      "identitySavedLabel": "Saved",
+      "identityCurrentLabel": "Current",
+      "identityClose": "Close",
+      "fontWarningTitle": "Font warning",
+      "fontWarningDesc": "This project uses fonts that aren't downloaded / available. Substitute fonts will be shown instead.",
+      "fontWarningLockedDesc": "The free edition can't use these paid fonts, so substitute fonts will be shown instead.",
+      "fontWarningCancel": "Cancel",
+      "fontWarningOpen": "Open anyway",
+      "discardConfirmTitle": "Discard current project?",
+      "discardConfirmDesc": "Unsaved edits will be discarded. Continue?",
+      "discardConfirmCancel": "Cancel",
+      "discardConfirmOk": "OK",
+      "toastSuccess": "Project opened"
+    }
   }
 }

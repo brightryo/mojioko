@@ -58,6 +58,12 @@ export const Channels = {
    * ['openDirectory']` on top of `showOpenDialog`.
    */
   dialogOpenDir: 'dialog:openDir',
+  /**
+   * REQ-0194 — project file open dialog for `.mojioko`.  Same permission
+   * surface as the video/audio open dialog; only the extension filter and
+   * default folder differ.
+   */
+  dialogOpenProject: 'dialog:openProject',
 
   shellOpenPath: 'shell:openPath',
   shellShowInFolder: 'shell:showInFolder',
@@ -66,6 +72,13 @@ export const Channels = {
   shellOpenThirdPartyLicensesFolder: 'shell:openThirdPartyLicensesFolder',
   shellWriteTextFile: 'shell:writeTextFile',
   shellFileExists: 'shell:fileExists',
+  /**
+   * REQ-0194 — read the project file (`.mojioko`) as a UTF-8 string.
+   * Path is trusted (only comes from the OS open dialog); the handler
+   * still validates it points to a regular file to avoid a directory /
+   * device read.
+   */
+  shellReadTextFile: 'shell:readTextFile',
 
   /** App metadata queries */
   appGetVersion: 'app:getVersion',

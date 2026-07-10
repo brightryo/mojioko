@@ -42,6 +42,9 @@ export function SettingsDialog() {
   const setDefaultInputDir = useSettingsStore((s) => s.setDefaultInputDir)
   const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
   const setDefaultOutputDir = useSettingsStore((s) => s.setDefaultOutputDir)
+  // REQ-0194 — default folder for `.mojioko` project save/open dialogs.
+  const defaultProjectDir = useSettingsStore((s) => s.defaultProjectDir)
+  const setDefaultProjectDir = useSettingsStore((s) => s.setDefaultProjectDir)
 
   // Default style — single source of truth lives on settingsStore.
   // SubtitleStyleDialog reads & writes the same slice via REQ-016 wiring.
@@ -234,6 +237,18 @@ export function SettingsDialog() {
                 onChange={setDefaultOutputDir}
                 placeholder={t('general.folderPathUsingSystemVideos')}
                 ariaLabel={t('general.defaultOutputDir')}
+              />
+
+              {/* REQ-0194 — user-preferred fixed default folder for the
+                  `.mojioko` project save/open dialogs. */}
+              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
+                {t('general.defaultProjectDir')}
+              </span>
+              <FolderPathInput
+                value={defaultProjectDir}
+                onChange={setDefaultProjectDir}
+                placeholder={t('general.folderPathUsingSystemVideos')}
+                ariaLabel={t('general.defaultProjectDir')}
               />
             </div>
           </TabsContent>

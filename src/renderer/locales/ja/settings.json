@@ -27,6 +27,7 @@
     "defaultAudioTrackOption": "トラック{{index}}",
     "defaultInputDir": "入力フォルダ",
     "defaultOutputDir": "出力フォルダ",
+    "defaultProjectDir": "プロジェクト保存フォルダ",
     "folderPathUsingSystemVideos": "システムの Videos フォルダ",
     "folderPathBrowse": "参照…",
     "folderPathClear": "クリア"

@@ -21,6 +21,8 @@ import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { listFonts } from '@/services/font'
 import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts'
+import { toast } from 'sonner'
+import { saveCurrentProject } from '@/services/project-file'
 import type { AppSettings } from '../shared/types'
 
 const PAGE_VARIANTS = {
@@ -72,7 +74,7 @@ function AppInner() {
   // APP_VERSION directly from shared/app-info.ts, so the runtime
   // fetch below and the state slot are gone.
   const location = useLocation()
-  const { i18n } = useTranslation('common')
+  const { t, i18n } = useTranslation('common')
 
   // REQ-20260615-026: keep <html> in sync with the user-selected theme so
   // the `:root.light { ... }` overrides in globals.css activate.  Default
@@ -204,7 +206,11 @@ function AppInner() {
           // distinguish those two cases from "renderer omitted the
           // key entirely" — see `settings-merge.ts`.
           defaultInputDir: s.defaultInputDir,
-          defaultOutputDir: s.defaultOutputDir
+          defaultOutputDir: s.defaultOutputDir,
+          // REQ-0194 — same include-always contract as the input/output
+          // folders above (a null must propagate to disk so a manual
+          // "clear" round-trips).
+          defaultProjectDir: s.defaultProjectDir
         }
         saveSettings(settings).catch(() => { /* ignore IPC failures */ })
       }, 500)
@@ -227,6 +233,27 @@ function AppInner() {
       }),
       window.electronAPI?.subscribeToChannel('menu:openDonations', () => {
         useUiStore.getState().setDonationDialogOpen(true)
+      }),
+      // REQ-0194 — File > Save Project (Ctrl+S).  The save routine
+      // handles its own IO + serialisation; App.tsx owns the toast
+      // bridge because the sonner instance mounts here.  Failures
+      // land on toast.error; a "no project to save" state (Step 1
+      // with no video) surfaces a warning toast instead of a
+      // silent no-op so the user knows the click was received.
+      window.electronAPI?.subscribeToChannel('menu:saveProject', () => {
+        void (async () => {
+          const r = await saveCurrentProject()
+          if (r.ok) {
+            toast.success(t('project.save.toastSuccess'), {
+              description: t('project.save.toastSuccessDesc'),
+            })
+          } else if (r.reason === 'no-project') {
+            toast.warning(t('project.save.toastNothingToSave'))
+          } else if (r.reason === 'io-error') {
+            toast.error(t('project.save.toastError', { error: r.message ?? '' }))
+          }
+          // 'cancelled' — user closed the OS save dialog; no toast.
+        })()
       })
     ]
     return () => subs.forEach(u => u?.())
