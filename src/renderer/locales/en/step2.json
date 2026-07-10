@@ -217,6 +217,9 @@
     }
   },
   "videoPreview": {
+    "title": "Preview",
+    "collapseAria": "Collapse preview",
+    "expandAria": "Expand preview",
     "play": "Play",
     "pause": "Pause",
     "error": "Failed to load file",

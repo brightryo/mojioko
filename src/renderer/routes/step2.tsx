@@ -40,7 +40,7 @@ import { EditorViewSwitcher } from '@/components/editor-view-switcher/editor-vie
 import { TimelineView } from '@/components/timeline-view/timeline-view'
 import { TimelineBlockInspector } from '@/components/timeline-view/timeline-block-inspector'
 import { HelpIcon } from '@/components/help-icon'
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle, type PanelImperativeHandle } from '@/components/ui/resizable'
 import { useRef } from 'react'
 
 /**
@@ -251,6 +251,41 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const step2LeftLayout     = useUiStore((s) => s.step2LeftLayout)
   const setStep2OuterLayout = useUiStore((s) => s.setStep2OuterLayout)
   const setStep2LeftLayout  = useUiStore((s) => s.setStep2LeftLayout)
+
+  // REQ-0183 — preview accordion.  The VideoPreviewPanel header row is
+  // now a one-click toggle for the whole preview stack (body + seekbar
+  // + warning).  When collapsed, the top-left `step2-pane-preview`
+  // ResizablePanel is imperatively snapped to `collapsedSize` (~4 %
+  // ≈ the header row's height at typical viewports) so the bottom
+  // pane (subtitle table / timeline) reclaims the freed vertical
+  // space.  Expand restores the panel to its prior size.
+  //
+  // Owner spec: initial state is ALWAYS open on step2 mount — state is
+  // NOT persisted across mounts.  The mount effect below resets the
+  // store slice to `true`, and the subsequent effect calls expand()
+  // so a freshly-arrived user always sees the preview visible.
+  const videoPreviewExpanded = useUiStore((s) => s.videoPreviewExpanded)
+  const setVideoPreviewExpanded = useUiStore((s) => s.setVideoPreviewExpanded)
+  const previewPaneRef = useRef<PanelImperativeHandle | null>(null)
+  // Reset to "open" once when step2 mounts.  Depending on
+  // setVideoPreviewExpanded is safe — Zustand's setter is stable.
+  useEffect(() => {
+    setVideoPreviewExpanded(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // Drive the ResizablePanel's collapse/expand when the store flag
+  // flips.  Guarded by `previewPaneRef.current` because the ref
+  // resolves after the first render; the effect fires again once the
+  // panel mounts and the ref lands.
+  useEffect(() => {
+    const panel = previewPaneRef.current
+    if (!panel) return
+    if (videoPreviewExpanded) {
+      panel.expand()
+    } else {
+      panel.collapse()
+    }
+  }, [videoPreviewExpanded])
 
   // REQ-20260614-001 補遺⑥ — measure BOTH width and height of the
   // paneArea so the px → % minSize conversion can keep up with window
@@ -1170,6 +1205,26 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               >
                 <ResizablePanel
                   id="step2-pane-preview"
+                  // REQ-0183 — wire imperative ref + `collapsible` so
+                  // the VideoPreviewPanel header toggle can snap the
+                  // pane between its normal `minSize` (video visible)
+                  // and `collapsedSize` (~4 % of vertical pane area
+                  // ≈ 30 px at typical window heights — matches the
+                  // header row's own height so only the header is
+                  // visible in the collapsed state).
+                  // react-resizable-panels v4.11 exposes the handle
+                  // via `panelRef`; our ResizablePanel wrapper
+                  // forwards React `ref` into it so callers use the
+                  // normal React ref pattern.
+                  // v4.11 dropped onCollapse / onExpand — user-driven
+                  // manual drag past the collapse threshold does NOT
+                  // sync back into `videoPreviewExpanded`.  Acceptable
+                  // because the whole header row is the primary
+                  // toggle affordance now; users won't reach for the
+                  // ResizableHandle to collapse the preview.
+                  ref={previewPaneRef}
+                  collapsible
+                  collapsedSize={4}
                   minSize={paneMinPct(LEFT_TOP_MIN_PX, paneAreaSize.h)}
                 >
                   {previewSlot}

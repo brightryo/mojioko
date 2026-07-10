@@ -217,6 +217,9 @@
     }
   },
   "videoPreview": {
+    "title": "プレビュー",
+    "collapseAria": "プレビューを折りたたむ",
+    "expandAria": "プレビューを展開する",
     "play": "再生",
     "pause": "一時停止",
     "error": "ファイルの読み込みに失敗しました",
