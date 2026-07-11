@@ -9,6 +9,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.3] - Unreleased
+
+Fifth minor-line release: a full editor redesign inspired by
+DaVinci Resolve, a new project save / open workflow for pausing
+and resuming an edit, and RTX 50-series GPU support for the
+Whisper transcription backend.
+
+### Added
+
+- **Project save & open (`.mojioko`).**  Save your session —
+  video, subtitles, cuts, per-row styles — to a `.mojioko` file
+  and reopen it later to keep editing.  Works from either the
+  transcribe or edit screen.  Menu: File > Open Project…
+  (Ctrl+O) and File > Save Project… (Ctrl+S).  A default project
+  folder can be set under Settings > General.  When the original
+  video has moved, the app asks you to point it at the new
+  location before opening.
+- **RTX 50 series (Blackwell) GPU support.**  The Whisper
+  backend picks the right compute type automatically for newer
+  NVIDIA cards, and now falls back to CPU cleanly when a card
+  reports GPU support but stumbles at model init.
+- **Transcribe start guards, visualised.**  Each precondition
+  (input file, model, GPU / audio track) shows a small ○ / ✓
+  marker on the transcribe screen; hovering the disabled Start
+  button explains what's still missing, and clicking it surfaces
+  the same reason as a toast.
+
+### Improved
+
+- **Full editor UI refresh.**  The editor was rebuilt with a
+  DaVinci Resolve-inspired dark palette, higher-contrast text
+  and borders (WCAG AA), a flatter chrome (card outlines
+  removed in favour of hairline dividers), and an edge-to-edge
+  edit layout that gives the timeline more room.  The video
+  preview area can be collapsed to reclaim vertical space for
+  the subtitle table, and reopens to the currently-selected
+  clip's start time.
+- **Font picker polish.**  The picker popover now clamps
+  properly at every window size and scrolls inside its own
+  panel.  The "Default:" prefix on the currently-selected font
+  was dropped, and per-row reset buttons were simplified.
+- Numerous small polish fixes across the transcribe screen,
+  editor, and export drawer as part of the redesign.
+
+### Fixed
+
+- The video preview now stops when you collapse it, and the
+  play button resets to ▶ so it never gets stuck showing
+  pause after a reopen.
+- Timeline cuts are now honoured on playback for projects
+  opened from a `.mojioko` file (previously they only skipped
+  during the same session they were made in).
+
+---
+
 ## [1.3.2] - 2026-07-01
 
 ### Improved
