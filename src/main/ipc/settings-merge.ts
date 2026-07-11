@@ -54,6 +54,8 @@ export function mergeSettingsForSave(
     activeAccelerator: incoming.activeAccelerator ?? existing.activeAccelerator,
     defaultInputDir:   'defaultInputDir'  in incoming ? incoming.defaultInputDir  : existing.defaultInputDir,
     defaultOutputDir:  'defaultOutputDir' in incoming ? incoming.defaultOutputDir : existing.defaultOutputDir,
+    // REQ-0194 — same `'key' in incoming` semantics as REQ-0158.
+    defaultProjectDir: 'defaultProjectDir' in incoming ? incoming.defaultProjectDir : existing.defaultProjectDir,
   }
   delete merged.burnin
   delete merged.subtitleBackground

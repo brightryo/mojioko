@@ -38,3 +38,13 @@ export async function shellOpenExternal(url: string): Promise<void> {
 export async function fileExists(filePath: string): Promise<boolean> {
   return window.electronAPI.shellFileExists(filePath)
 }
+
+/** REQ-0194 — `.mojioko` project file open dialog. */
+export async function openProjectDialog(defaultDir?: string): Promise<string | null> {
+  return window.electronAPI.openProjectDialog(defaultDir)
+}
+
+/** REQ-0194 — read a UTF-8 text file (used for `.mojioko` project files). */
+export async function readTextFile(filePath: string): Promise<string> {
+  return window.electronAPI.shellReadTextFile(filePath)
+}

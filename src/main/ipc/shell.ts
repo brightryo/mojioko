@@ -95,4 +95,18 @@ export function registerShellHandlers(): void {
       return false
     }
   })
+
+  /**
+   * REQ-0194 — read a UTF-8 text file (used for `.mojioko` project files).
+   * `filePath` is trusted (only comes from the OS open dialog), but we
+   * still ensure it's a regular file before reading so a stray directory
+   * or device path can't hang the renderer.
+   */
+  ipcMain.handle(Channels.shellReadTextFile, async (_event, filePath: string): Promise<string> => {
+    const stat = await fsp.stat(filePath)
+    if (!stat.isFile()) {
+      throw new Error(`Not a regular file: ${filePath}`)
+    }
+    return fsp.readFile(filePath, 'utf-8')
+  })
 }

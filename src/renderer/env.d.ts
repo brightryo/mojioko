@@ -28,6 +28,8 @@ declare global {
       ) => Promise<string | null>
       // REQ-0121 — folder picker used by Settings > General.
       openDirectoryDialog: (defaultDir?: string) => Promise<string | null>
+      // REQ-0194 — `.mojioko` project file open dialog.
+      openProjectDialog: (defaultDir?: string) => Promise<string | null>
 
       videoProbe: (path: string) => Promise<IpcResult<VideoInfo>>
       videoExtractThumbnail: (path: string, atSec: number) => Promise<IpcResult<string>>
@@ -71,6 +73,8 @@ declare global {
       shellOpenThirdPartyLicensesFolder: () => Promise<void>
       shellWriteTextFile: (filePath: string, content: string) => Promise<void>
       shellFileExists: (filePath: string) => Promise<boolean>
+      // REQ-0194 — read `.mojioko` project files back as UTF-8 strings.
+      shellReadTextFile: (filePath: string) => Promise<string>
 
       subscribeToChannel: (channelId: string, cb: (payload: unknown) => void) => () => void
     }

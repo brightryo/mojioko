@@ -84,4 +84,23 @@ export function registerDialogHandlers(): void {
     })
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
   })
+
+  /**
+   * REQ-0194 — project file open dialog.  Same permission surface as the
+   * other open dialogs; filter narrowed to the `.mojioko` extension.
+   */
+  ipcMain.handle(Channels.dialogOpenProject, async (event, defaultDir?: string): Promise<string | null> => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const defaultPath = resolveDialogDir(defaultDir)
+    const result = await dialog.showOpenDialog(win ?? BrowserWindow.getFocusedWindow()!, {
+      title: 'Open Project',
+      defaultPath,
+      filters: [
+        { name: 'MOJIOKO Project', extensions: ['mojioko'] },
+        { name: 'All files',       extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  })
 }

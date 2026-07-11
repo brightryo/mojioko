@@ -32,6 +32,9 @@ const electronAPI = {
   // REQ-0121 — folder picker used by Settings > General.
   openDirectoryDialog: (defaultDir?: string): Promise<string | null> =>
     ipcRenderer.invoke(Channels.dialogOpenDir, defaultDir),
+  // REQ-0194 — .mojioko project file open dialog.
+  openProjectDialog: (defaultDir?: string): Promise<string | null> =>
+    ipcRenderer.invoke(Channels.dialogOpenProject, defaultDir),
 
   // Video
   videoProbe: (path: string): Promise<IpcResult<VideoInfo>> =>
@@ -116,6 +119,9 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.shellWriteTextFile, filePath, content),
   shellFileExists: (filePath: string): Promise<boolean> =>
     ipcRenderer.invoke(Channels.shellFileExists, filePath),
+  // REQ-0194 — read `.mojioko` project files back as UTF-8 strings.
+  shellReadTextFile: (filePath: string): Promise<string> =>
+    ipcRenderer.invoke(Channels.shellReadTextFile, filePath),
 
   // Streaming event subscriptions
   subscribeToChannel: (channelId: string, cb: (payload: unknown) => void): (() => void) => {

@@ -278,19 +278,39 @@ export function VideoPreviewPanel() {
   // visible flash at the start of every fade-in.  Closes over `entry`
   // so the lookup needs no Map; new closure per render is cheap at
   // typical overlay counts (< 10 simultaneous captions).
+  //
+  // REQ-0196 §2 — the pre-0196 initial-write here used the raw
+  // computeFadeOpacity() and painted opacity 0 for any entry mounted
+  // while its startSec matched the video's currentTime (owner repro:
+  // opening a project with a 0-second caption — video is paused at
+  // currentTime = 0, entry.startSec = 0 sits exactly on the fade-in
+  // boundary → opacity = 0 → invisible).  REQ-0195's rAF-loop fix
+  // used a paused-aware bypass on subsequent ticks, but the initial
+  // callback write happened FIRST and burned in the invisible state
+  // for at least one paint; the rAF write can only overwrite when v
+  // and activeEntryMapRef are populated, and the map is populated by
+  // a useEffect that in practice ran AFTER the browser's first paint
+  // for this callback.  The fix mirrors the rAF logic here: on paused
+  // (which is the initial-mount case since <video> starts paused per
+  // the HTML5 spec), snap to 1 when the entry covers t and to 0
+  // otherwise.  Playback and seek-during-play paths remain
+  // burn-in-accurate.
   const setOverlayOuterRef = useCallback(
     (entry: SubtitleEntry) => (el: HTMLSpanElement | null) => {
       if (el) {
         overlayOuterRefs.current.set(entry.id, el)
-        const t = videoRef.current?.currentTime ?? 0
-        el.style.opacity = String(
-          computeFadeOpacity({
-            currentTimeSec: t,
-            startSec: entry.startSec,
-            endSec: entry.endSec,
-            fadeDurationSec: entry.fadeDurationSec,
-          }),
-        )
+        const v = videoRef.current
+        const t = v?.currentTime ?? 0
+        const isPaused = v?.paused ?? true
+        const opacity = isPaused
+          ? (t >= entry.startSec && t < entry.endSec ? 1 : 0)
+          : computeFadeOpacity({
+              currentTimeSec: t,
+              startSec: entry.startSec,
+              endSec: entry.endSec,
+              fadeDurationSec: entry.fadeDurationSec,
+            })
+        el.style.opacity = String(opacity)
       } else {
         overlayOuterRefs.current.delete(entry.id)
       }
@@ -391,18 +411,29 @@ export function VideoPreviewPanel() {
     const tick = () => {
       const v = videoRef.current
       const t = v?.currentTime ?? 0
+      // REQ-0195 §2 — when the video is paused the user is inspecting a
+      // still frame for editing purposes; snap the fade ramp to "no
+      // fade" so a caption sitting exactly on its startSec (owner's
+      // repro: 0-second entry at initial mount, currentTime = 0) is
+      // painted at full opacity instead of the fade-in start (= 0 →
+      // invisible).  During playback the burn-in-accurate ramp still
+      // applies.  Same defensive out-of-range guard as
+      // computeFadeOpacity: if the paused playhead is outside the
+      // active entry's range, keep the caption hidden.
+      const isPaused = v?.paused ?? true
       const entries = activeEntryMapRef.current
       for (const [id, el] of overlayOuterRefs.current) {
         const entry = entries.get(id)
         if (!entry) continue
-        const next = String(
-          computeFadeOpacity({
-            currentTimeSec: t,
-            startSec: entry.startSec,
-            endSec: entry.endSec,
-            fadeDurationSec: entry.fadeDurationSec,
-          }),
-        )
+        const opacity = isPaused
+          ? (t >= entry.startSec && t < entry.endSec ? 1 : 0)
+          : computeFadeOpacity({
+              currentTimeSec: t,
+              startSec: entry.startSec,
+              endSec: entry.endSec,
+              fadeDurationSec: entry.fadeDurationSec,
+            })
+        const next = String(opacity)
         // Guard CSSOM writes so a steady-state caption (mid-plateau,
         // opacity = "1") does not invalidate style every frame.
         if (el.style.opacity !== next) el.style.opacity = next

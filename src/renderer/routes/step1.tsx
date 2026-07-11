@@ -267,6 +267,26 @@ export default function Step1Route(_: Step1RouteProps) {
     // must fall back to `<video>`-only audio rather than play stale audio
     // over the new visuals.
     usePreviewMixStore.getState().clear()
+    // REQ-0196 §1 — defensive clear of the step2-produced editing state
+    // (entries + cuts) before hydrating the new video.  The back-discard
+    // handler in step2 already clears these when the user hits "OK", but
+    // that path is only taken in one flow — a project-open that landed
+    // on step1 (REQ-0195 branching) or a first-launch step1 could still
+    // hold entries in the Zustand store from an earlier session pattern.
+    // Picking a new video means the old subtitles are always stale.
+    // History is cleared too so Ctrl+Z can't rewind into the old set;
+    // ui selection follows.  Same "keep video + track + defaults" line
+    // as the discard handler — but we're about to replace `video`
+    // anyway a few lines below.
+    useProjectStore.getState().resetEditingState()
+    useHistoryStore.getState().clear()
+    const ui = useUiStore.getState()
+    ui.setSelectedEntryId(null)
+    ui.setRowSelection(new Set())
+    ui.setFocusedRowId(null)
+    ui.setScrollToRowId(null)
+    ui.setVideoCurrentTimeSec(0)
+    ui.setVideoSeekRequest(null)
 
     const result = await probeVideo(filePath)
     if (!result.ok) {

@@ -40,6 +40,13 @@ interface SettingsStore {
    */
   defaultInputDir: string | null
   defaultOutputDir: string | null
+  /**
+   * REQ-0194 — user-preferred default folder for the `.mojioko` project
+   * file save / open dialogs (Settings > General).  Same semantics as
+   * `defaultInputDir` / `defaultOutputDir` (nullable → OS Videos fallback,
+   * lazy existence check on use).
+   */
+  defaultProjectDir: string | null
 
   setLanguage: (lang: string) => void
   setTheme: (t: AppTheme) => void
@@ -56,6 +63,7 @@ interface SettingsStore {
   setActiveFontId: (id: FontId) => void
   setDefaultInputDir: (path: string | null) => void
   setDefaultOutputDir: (path: string | null) => void
+  setDefaultProjectDir: (path: string | null) => void
 
   /**
    * REQ-20260613-016 Phase 4 — `burnin` / `subtitleBackground` were dropped
@@ -67,7 +75,7 @@ interface SettingsStore {
   resetStep3Settings: () => void
 
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -93,6 +101,7 @@ export const useSettingsStore = create<SettingsStore>()(
       activeFontId: DEFAULT_FONT_ID,
       defaultInputDir: null,
       defaultOutputDir: null,
+      defaultProjectDir: null,
 
       setLanguage: (lang) => set({ language: lang }),
       setTheme: (t) => set({ theme: t }),
@@ -112,6 +121,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setActiveFontId: (id) => set({ activeFontId: id }),
       setDefaultInputDir: (path) => set({ defaultInputDir: path }),
       setDefaultOutputDir: (path) => set({ defaultOutputDir: path }),
+      setDefaultProjectDir: (path) => set({ defaultProjectDir: path }),
 
       resetStep3Settings: () =>
         set({
@@ -171,7 +181,10 @@ export const useSettingsStore = create<SettingsStore>()(
           // settings.json files that predate this REQ.  `null` = use the
           // OS Videos folder (resolved by the main-side dialog handler).
           defaultInputDir: typeof s.defaultInputDir === 'string' ? s.defaultInputDir : null,
-          defaultOutputDir: typeof s.defaultOutputDir === 'string' ? s.defaultOutputDir : null
+          defaultOutputDir: typeof s.defaultOutputDir === 'string' ? s.defaultOutputDir : null,
+          // REQ-0194 — optional for backward compat with settings.json files
+          // that predate the project-save feature.  Same fallback semantics.
+          defaultProjectDir: typeof s.defaultProjectDir === 'string' ? s.defaultProjectDir : null
         })
       }
     }),
@@ -192,7 +205,8 @@ export const useSettingsStore = create<SettingsStore>()(
         fadeDurationSec: state.fadeDurationSec,
         activeFontId: state.activeFontId,
         defaultInputDir: state.defaultInputDir,
-        defaultOutputDir: state.defaultOutputDir
+        defaultOutputDir: state.defaultOutputDir,
+        defaultProjectDir: state.defaultProjectDir
       })
     }
   )

@@ -20,6 +20,8 @@ function openExternalSafe(url: string, label: string): void {
 
 interface MenuLabels {
   file: string
+  openProject: string
+  saveProject: string
   quit: string
   tools: string
   settings: string
@@ -34,6 +36,8 @@ interface MenuLabels {
 
 const JA: MenuLabels = {
   file: 'ファイル',
+  openProject: 'プロジェクトを開く…',
+  saveProject: 'プロジェクトを保存…',
   quit: '終了',
   tools: 'ツール',
   settings: '設定',
@@ -48,6 +52,8 @@ const JA: MenuLabels = {
 
 const EN: MenuLabels = {
   file: 'File',
+  openProject: 'Open Project…',
+  saveProject: 'Save Project…',
   quit: 'Quit',
   tools: 'Tools',
   settings: 'Settings',
@@ -83,6 +89,22 @@ export function buildMenu(win: BrowserWindow, lang: Lang = 'en'): Menu {
     {
       label: L.file,
       submenu: [
+        // REQ-0194 — project save/open menu items.  Ctrl+O / Ctrl+S accelerators
+        // are the near-universal convention for these actions and do not clash
+        // with any renderer shortcut (Space = play/pause, Del = delete row,
+        // Ctrl+R = reset row, Enter = confirm dialog).  Menu clicks go over
+        // IPC to the renderer, which owns the state involved.
+        {
+          label: L.openProject,
+          accelerator: 'CmdOrCtrl+O',
+          click: () => send('menu:openProject')
+        },
+        {
+          label: L.saveProject,
+          accelerator: 'CmdOrCtrl+S',
+          click: () => send('menu:saveProject')
+        },
+        { type: 'separator' },
         {
           // REQ-082: accelerator removed (no keyboard shortcuts except Space).
           label: L.quit,

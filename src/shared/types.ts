@@ -284,6 +284,15 @@ export interface AppSettings {
   defaultInputDir?: string | null
   defaultOutputDir?: string | null
   /**
+   * REQ-0194 — user-preferred default folder for the `.mojioko` project
+   * file save / open dialogs.  Same shape as `defaultInputDir` /
+   * `defaultOutputDir` (nullable, folder-picker on Settings > General,
+   * lazy existence check on use, silent fallback to the OS Videos
+   * folder).  Optional in the persisted struct so settings.json files
+   * predating this REQ hydrate cleanly.
+   */
+  defaultProjectDir?: string | null
+  /**
    * REQ-0150 — user-picked transcription accelerator.  `'cpu'` (default)
    * runs faster-whisper on the CPU path; `'gpu'` opts into CUDA via the
    * downloaded GPU tools (`%APPDATA%/MOJIOKO/gpu-tools/cuda-v1/`).
