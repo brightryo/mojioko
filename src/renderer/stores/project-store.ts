@@ -63,6 +63,23 @@ interface ProjectStore {
   /** Patch a cut's start/end (id unchanged).  Sanitised after patch. */
   updateCut: (id: string, patch: Partial<Pick<Cut, 'startSec' | 'endSec'>>) => void
   reset: () => void
+  /**
+   * REQ-0196 — partial reset that clears the step2-produced editing
+   * state (`entries` + `cuts`) while keeping the source video, its
+   * loading state, and the currently-selected transcription track.
+   * Called from:
+   *   1. step2's discard-back confirm dialog — REQ-0185 promises
+   *      "編集途中のものは破棄されます" but the pre-0196 handler only
+   *      called `navigate('/step1')` and left the entries live in
+   *      the Zustand store, so the next `saveCurrentProject()` from
+   *      step1 emitted a `.mojioko` pairing the new video with the
+   *      old entries.
+   *   2. step1's video-picker as a defensive follow-up: even if the
+   *      back-discard cleared entries, a project-open path could
+   *      have left them populated; picking a fresh video means the
+   *      old subtitles are always semantically stale.
+   */
+  resetEditingState: () => void
 }
 
 const initialDefaults: TranscriptionDefaults = { ...sampleDefaults }
@@ -159,6 +176,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       selectedTrackIndex: 2,
       entries: [],
       defaults: { ...initialDefaults },
+      cuts: []
+    }),
+  resetEditingState: () =>
+    set({
+      entries: [],
       cuts: []
     })
 }))

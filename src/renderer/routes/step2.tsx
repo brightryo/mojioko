@@ -1375,6 +1375,27 @@ export default function Step2Route(_: Step2RouteProps) {
               size="md"
               onClick={() => {
                 setDiscardOpen(false)
+                // REQ-0196 §1 — actually discard the entries/cuts the
+                // dialog just promised to drop.  Pre-0196 the handler
+                // only navigated, leaving the store populated so a
+                // later `step1 → 別動画 → 保存` emitted a `.mojioko`
+                // pairing the new video with the old subtitles.
+                // History goes with them so Ctrl+Z can't rewind past
+                // the discard into a stale entries set; ui selection
+                // + focus + scroll + playhead-sync slices reset for
+                // the same reason.  `video` / `videoLoadingState` /
+                // `selectedTrackIndex` are intentionally KEPT so the
+                // user can immediately re-transcribe the same source
+                // if that's why they came back to step1.
+                useProjectStore.getState().resetEditingState()
+                useHistoryStore.getState().clear()
+                const ui = useUiStore.getState()
+                ui.setSelectedEntryId(null)
+                ui.setRowSelection(new Set())
+                ui.setFocusedRowId(null)
+                ui.setScrollToRowId(null)
+                ui.setVideoCurrentTimeSec(0)
+                ui.setVideoSeekRequest(null)
                 navigate('/step1')
               }}
             >
