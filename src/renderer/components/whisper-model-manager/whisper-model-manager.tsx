@@ -398,8 +398,26 @@ export function WhisperModelManager({
                 {t('whisperModel.updateNote')}
               </p>
 
-              {/* Bottom status bar */}
-              <div className="rounded-lg border border-line px-4 py-2.5 flex items-center justify-between">
+              {/* Bottom status bar.
+
+                  REQ-0206 — the row previously stretched full-width and
+                  read like a section heading, which encouraged users to
+                  click the "Open folder" button on the right without
+                  reading the disk-usage labels on the left.  Cap the
+                  width to the SAME `max-w-[38rem]` the model-grid
+                  container above uses (L373), and centre with
+                  `mx-auto`, so the row's left / right edges land under
+                  the outermost card edges.
+
+                  Card-count independence: the 38rem cap is a fixed
+                  literal, not a computation over `state.models.length`.
+                  Changing `grid-cols-2` to `grid-cols-3` or back only
+                  affects the interior column count -- the outer width
+                  stays 38rem in both the grid and this row.  Under 1
+                  card the grid keeps its 38rem width (card occupies
+                  one column of two) and this row keeps 38rem too.  See
+                  RES-0206 §2 for the full rationale. */}
+              <div className="rounded-lg border border-line px-4 py-2.5 flex items-center justify-between mx-auto max-w-[38rem]">
                 <div className="flex items-center gap-5 text-body-sm">
                   <span className="flex items-center gap-1.5 text-fg-tertiary">
                     <Database className="h-3.5 w-3.5 flex-shrink-0" />
