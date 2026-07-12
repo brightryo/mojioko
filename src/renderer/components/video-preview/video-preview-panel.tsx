@@ -22,7 +22,7 @@ import {
   getAnchorAssPosition,
   clampAssPosition,
 } from '@/lib/preview-coords'
-import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
+import { editedDuration, editedToOrig, effectiveEntryState, origToEdited } from '../../../shared/cuts'
 import { computeFadeOpacity } from '@/lib/fade-opacity'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -321,14 +321,31 @@ export function VideoPreviewPanel() {
   const videoUrl = video ? pathToVideoUrl(video.path) : null
 
   /**
-   * Pre-filter to non-deleted entries only, sorted by startSec.
+   * Pre-filter to effectively-non-deleted entries only, sorted by startSec.
    * Sorted array is required for the binary search in findActiveEntryId.
+   *
+   * REQ-0202 / REQ-0203 — the pre-REQ-0203 filter used `!e.isDeleted` and
+   * therefore let trim-deleted entries (`applyCutsToEntry === null`, but
+   * `entry.isDeleted === false`) leak into the preview overlay, where
+   * they rendered as a phantom second stack line while the burn-in
+   * correctly dropped them.  Routing through
+   * `effectiveEntryState(e, cuts).effectivelyDeleted` gives the preview
+   * the same visibility contract the burn-in already uses
+   * (`ffmpeg-burnin.ts:127-144` drops trim-deleted via `applyCutsToEntry`,
+   * then `ass-generator.ts:185` drops manual-deleted).
+   *
+   * Cuts is in the deps because effectiveEntryState reads them.  With
+   * `cuts = []` the classifier collapses to `entry.isDeleted`, so
+   * no-cut users see byte-identical behaviour.  Forgetting the dep
+   * would produce a different bug: cuts change without re-invalidating
+   * the memo, and the preview stays stuck on the pre-cut set until an
+   * unrelated re-render.
    */
   const sortedActiveEntries = useMemo(() => {
     return entries
-      .filter((e) => !e.isDeleted)
+      .filter((e) => !effectiveEntryState(e, cuts).effectivelyDeleted)
       .sort((a, b) => a.startSec - b.startSec)
-  }, [entries])
+  }, [entries, cuts])
 
   /**
    * REQ-080 #1 + REQ-20260613-004: source of truth for the overlay — EVERY
