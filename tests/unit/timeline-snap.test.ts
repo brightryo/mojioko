@@ -7,6 +7,7 @@ import {
 } from '../../src/renderer/lib/timeline-snap'
 import type { SubtitleEntry } from '../../src/shared/types'
 import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
+import type { CutList } from '../../src/shared/cuts'
 
 function entry(
   id: string,
@@ -178,5 +179,92 @@ describe('snapInterval — end-to-end drag scenarios at default 50 px/sec', () =
    */
   it('SNAP_DISTANCE_PX is 12 (REQ-084 bumped from the original 6)', () => {
     expect(SNAP_DISTANCE_PX).toBe(12)
+  })
+})
+
+/**
+ * REQ-0201 — snap targets emit Edited-axis `timeSec` values (entry edges
+ * pass through `origToEdited`) and drop entries flagged as
+ * `effectivelyDeleted` (which includes trim-deleted entries the
+ * pre-REQ-0201 `isDeleted`-only filter let leak in).
+ *
+ * These tests exercise the new axis contract and the wider deletion
+ * filter.  The pre-REQ-0201 tests above stay unchanged because they
+ * pass cuts=[] implicitly, and with no cuts origToEdited is the
+ * identity + effectivelyDeleted ≡ entry.isDeleted — so their
+ * assertions still hold.
+ */
+describe('buildSnapTargets — REQ-0201 axis + trim-deleted filter', () => {
+  const CUT: CutList = [{ id: 'c', startSec: 1.5, endSec: 3.4 }]
+
+  it('translates entry edges through origToEdited when cuts are provided', () => {
+    // Clip b at Original [4.0, 5.0] projects to Edited [2.1, 3.1]
+    // (subtract cut duration 1.9).  Snap targets must be Edited values
+    // so that findBestSnap's distance test matches the pixel position
+    // the user actually sees on the timeline.
+    const targets = buildSnapTargets(
+      [entry('a', 0, 1.0), entry('b', 4.0, 5.0)],
+      'a',
+      NaN,           // suppress playhead — not the point of this test
+      8.1,           // edited timeline total
+      1,
+      CUT,
+    )
+    const edges = targets.filter((t) => t.kind === 'edge').map((t) => t.timeSec)
+    expect(edges).toEqual(expect.arrayContaining([2.1, 3.1]))
+    // Original edges must NOT leak through (would drag snap to wrong
+    // Edited px position at pps=50: |2.1 - 4.0| * 50 = 95 px).
+    expect(edges).not.toContain(4.0)
+    expect(edges).not.toContain(5.0)
+  })
+
+  it('drops trim-deleted entries (cut fully contains them) from targets', () => {
+    // Clip b at Original [1.7, 2.5] is fully consumed by the cut →
+    // effectivelyDeleted=true even though entry.isDeleted=false.
+    // Pre-REQ-0201 the isDeleted-only filter kept its Original edges
+    // 1.7 and 2.5 in the list, both of which projected to Edited 1.5
+    // (the cut boundary) — invisible entries yanking the drag.
+    const targets = buildSnapTargets(
+      [entry('a', 0, 1.0), entry('b', 1.7, 2.5)],
+      'a',
+      NaN,
+      8.1,
+      1,
+      CUT,
+    )
+    const edges = targets.filter((t) => t.kind === 'edge').map((t) => t.timeSec)
+    expect(edges).toEqual([])           // b was the only non-dragging entry
+  })
+
+  it('keeps entries that partially overlap a cut (head/tail clamp survives)', () => {
+    // Clip b at Original [1.0, 2.5] — partially cut but visibleSec > 0.
+    // Its EFFECTIVE (clamped) edges land at Edited 1.0 (its own start,
+    // pre-cut) and Edited 1.5 (the cut boundary that consumed its tail).
+    // buildSnapTargets emits the ENTRY's raw startSec/endSec through
+    // origToEdited, not the clamped values — the intent is "let the
+    // user snap to what they see on screen," and the block IS still
+    // rendered (with clamped extent).
+    const targets = buildSnapTargets(
+      [entry('a', 3.5, 4.0), entry('b', 1.0, 2.5)],
+      'a',
+      NaN,
+      8.1,
+      1,
+      CUT,
+    )
+    const edges = targets.filter((t) => t.kind === 'edge').map((t) => t.timeSec)
+    // b.startSec=1.0 → Edited 1.0.  b.endSec=2.5 → inside cut → Edited 1.5.
+    expect(edges).toEqual(expect.arrayContaining([1.0, 1.5]))
+  })
+
+  it('no-cut path (default cuts=[]): behaviour is bit-identical to the pre-REQ-0201 signature', () => {
+    // The identity contract for the shipping default.  Same call as
+    // the first test in the pre-REQ-0201 block above, with cuts omitted.
+    const entries = [entry('a', 5, 10), entry('b', 20, 25)]
+    const targets = buildSnapTargets(entries, 'a', 8, 60, 1)
+    const edges = targets.filter((t) => t.kind === 'edge').map((t) => t.timeSec)
+    expect(edges).toEqual(expect.arrayContaining([20, 25]))
+    expect(edges).not.toContain(5)
+    expect(edges).not.toContain(10)
   })
 })

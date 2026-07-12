@@ -1,4 +1,9 @@
 import type { SubtitleEntry } from '../../shared/types'
+import {
+  origToEdited,
+  effectiveEntryState,
+  type CutList,
+} from '../../shared/cuts'
 
 /**
  * Snap helper for timeline drag operations.
@@ -21,6 +26,17 @@ import type { SubtitleEntry } from '../../shared/types'
  *
  * Self-edges of the entry being dragged are excluded so a resize-start
  * does not "snap to itself" at the moment the cursor is over the start.
+ *
+ * REQ-0201 (v1.3.3) — axis contract:
+ *   All `timeSec` values (targets, candidates, guides) live on the
+ *   **Edited axis**.  The Edited axis is what the timeline actually
+ *   renders (REQ-074 §1c) so measuring "distance in px" via
+ *   `Math.abs(target - candidate) * pixelsPerSec` matches the pixel
+ *   distance the user sees on screen.  `buildSnapTargets` translates
+ *   entry edges through `origToEdited` before emitting them; callers
+ *   (`computeDragPatch`) pre-project the playhead and pass Edited-axis
+ *   candidates.  For no-cut cases the translation is the identity, so
+ *   this contract is bit-identical to the pre-REQ-0201 pipeline.
  */
 
 export type SnapKind = 'playhead' | 'edge' | 'grid'
@@ -48,30 +64,50 @@ export interface SnapResult {
  * `videoCurrentTimeSec` of 0 with no video loaded would still be added —
  * callers that want to suppress this should pass a sentinel like
  * `Number.NaN` (the playhead-NaN target is filtered out below).
+ *
+ * REQ-0201 — `videoCurrentTimeSec` and `totalSec` are expected on the
+ * **Edited axis** (the caller `computeDragPatch` pre-projects the
+ * Original-axis playhead / video duration through `origToEdited` /
+ * `editedDuration`).  Entry edges are translated internally through
+ * `origToEdited` using `cuts` so all emitted `timeSec` values are on
+ * the same axis.
+ *
+ * REQ-0201 — the entry filter now uses `effectiveEntryState(e, cuts)
+ * .effectivelyDeleted` so trim-deleted entries (cut-consumed,
+ * `isDeleted === false`) also drop out of the snap target list.  The
+ * pre-REQ-0201 `if (e.isDeleted) continue` guard let these entries'
+ * Original edges leak in — visually invisible (their block is not
+ * rendered), but at snap distance they still yanked the drag around.
+ * With `cuts` defaulting to `[]`, `effectiveEntryState` collapses to
+ * `entry.isDeleted` and the no-cut path stays bit-identical.
  */
 export function buildSnapTargets(
   entries: readonly SubtitleEntry[],
   draggingEntryId: string,
   videoCurrentTimeSec: number,
   totalSec: number,
-  gridStepSec: number
+  gridStepSec: number,
+  cuts: CutList = [],
 ): SnapTarget[] {
   const out: SnapTarget[] = []
 
-  // Playhead — only when finite & non-negative.
+  // Playhead — only when finite & non-negative.  Caller is responsible
+  // for converting to the Edited axis (REQ-0201).
   if (isFinite(videoCurrentTimeSec) && videoCurrentTimeSec >= 0) {
     out.push({ timeSec: videoCurrentTimeSec, kind: 'playhead' })
   }
 
-  // Neighbour edges — every non-deleted entry except the dragging one.
+  // Neighbour edges — every EFFECTIVELY-non-deleted entry except the
+  // dragging one.  Edges are translated through origToEdited so the snap
+  // distance is measured against the pixel position the user sees.
   for (const e of entries) {
     if (e.id === draggingEntryId) continue
-    if (e.isDeleted) continue
-    out.push({ timeSec: e.startSec, kind: 'edge' })
-    out.push({ timeSec: e.endSec,   kind: 'edge' })
+    if (effectiveEntryState(e, cuts).effectivelyDeleted) continue
+    out.push({ timeSec: origToEdited(e.startSec, cuts), kind: 'edge' })
+    out.push({ timeSec: origToEdited(e.endSec, cuts),   kind: 'edge' })
   }
 
-  // Ruler grid — multiples of gridStepSec from 0 up to totalSec.
+  // Ruler grid — multiples of gridStepSec from 0 up to totalSec (Edited).
   if (gridStepSec > 0 && isFinite(totalSec) && totalSec > 0) {
     for (let s = 0; s <= totalSec + 1e-6; s += gridStepSec) {
       out.push({ timeSec: s, kind: 'grid' })
