@@ -22,6 +22,7 @@ import {
   toggleDeleteRow as runToggleDeleteRow,
   duplicateRow as runDuplicateRow
 } from '@/lib/entry-row-actions'
+import { commitTextEditWithHistory } from '@/lib/commit-text-edit'
 import { formatEditedTimecode, editedDurationOfEntry } from '@/lib/time'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { getAnchorAssPosition, clampAssPosition, recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
@@ -210,30 +211,22 @@ export function TimelineBlockInspector({
   function commitText(next: string) {
     // Round-trip newlines back to ASS \N
     const normalized = next.replace(/\n/g, '\\N')
-    if (normalized === entry.text) {
-      // No actual change to commit, but we still clear the dirty flag
-      // so a subsequent external update is allowed to sync into draft.
-      dirtyRef.current = false
-      textFocusValueRef.current = null
-      return
-    }
-    const snapshot = { ...entry }
-    // REQ-0127 Phase 1 — undoState uses the pre-focus text as the
-    // override so Undo rewinds past every onChange preview keystroke.
-    // Falls back to the naive snapshot when focus wasn't tracked (e.g.
-    // programmatic commit paths).
+    // REQ-0199 — capture-and-clear the pre-focus ref BEFORE handing off, so
+    // the helper's guard has the correct comparator and any subsequent focus
+    // session starts clean regardless of whether history was pushed.  The
+    // dirty flag is likewise cleared unconditionally — the sync effect
+    // (L204-208) treats dirtyRef=false as "safe to accept external updates,"
+    // which is true both when we pushed and when the guard skipped.
     const focusText = textFocusValueRef.current
     textFocusValueRef.current = null
-    const undoState = focusText !== null
-      ? { ...snapshot, text: focusText }
-      : snapshot
-    const patch = { text: normalized, isEdited: true }
-    pushHistory({
+    commitTextEditWithHistory({
+      entry,
+      normalizedNew: normalized,
+      normalizedOnFocus: focusText,
       label: t('history.editText'),
-      undo: () => updateEntry(entry.id, undoState),
-      redo: () => updateEntry(entry.id, { ...snapshot, ...patch })
+      updateEntry,
+      pushHistory,
     })
-    updateEntry(entry.id, patch)
     dirtyRef.current = false
   }
 

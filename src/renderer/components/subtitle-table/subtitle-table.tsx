@@ -19,6 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
+import { commitTextEditWithHistory } from '@/lib/commit-text-edit'
 import { filterEntries } from '@/lib/subtitle-filter'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
 import { effectiveEntryState, type ClipStatus, type CutList } from '../../../shared/cuts'
@@ -348,17 +349,19 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
     setEditingText(false)
     // CellEditor uses real newlines internally; convert back to ASS \N on save.
     const normalized = text.replace(/\n/g, '\\N')
-    if (normalized === entry.text) return
-    // REQ-0127 Phase 1 — beforePatch carries the pre-focus text so
-    // Undo rewinds past every onPreview keystroke back to what was on
-    // screen before the editor opened.  Handles both the direct-typed
-    // path and the IME composition path (both stream through onPreview).
     const normalizedOnFocus = textOnFocus.replace(/\n/g, '\\N')
-    withHistory(
-      t('history.editText'),
-      { text: normalized },
-      { text: normalizedOnFocus }
-    )
+    // REQ-0199 — routed through the shared helper.  Guard compares against the
+    // pre-focus value (NOT `entry.text`, which the preview stream already moved
+    // to match `normalized`) so real text edits push exactly one history op and
+    // Undo rewinds to what was on screen before the editor gained focus.
+    commitTextEditWithHistory({
+      entry,
+      normalizedNew: normalized,
+      normalizedOnFocus,
+      label: t('history.editText'),
+      updateEntry,
+      pushHistory,
+    })
   }
 
   function handleStartChange(v: number) {
