@@ -47,6 +47,25 @@ interface SettingsStore {
    * lazy existence check on use).
    */
   defaultProjectDir: string | null
+  /**
+   * REQ-0208 — "user has clicked the Store review CTA in the export-
+   * complete dialog at least once".  One-shot boolean: flips false → true
+   * the first time the button is pressed and never flips back.  Used by
+   * the dialog to decide whether to render the review row on future
+   * exports (MSIX build only; the NSIS build never surfaces the row).
+   *
+   * Deliberately NOT threaded through `hydrate()` / AppSettings — the
+   * flag lives only in zustand's own `persist` middleware (localStorage,
+   * key `mojioko-settings`) and does NOT round-trip through the
+   * main-process settings.json file.  This matters because the past
+   * "setting lost on restart" regressions (GPU pick, default folder)
+   * traced to hydrate() overwriting zustand-loaded values with a stale
+   * settings.json subset.  By keeping this field out of both the
+   * `Pick<AppSettings, ...>` hydrate signature AND the hydrate `set(...)`
+   * body, the localStorage value is the ONLY source of truth for it,
+   * and cannot be clobbered by an incomplete settings.json.
+   */
+  hasClickedStoreReview: boolean
 
   setLanguage: (lang: string) => void
   setTheme: (t: AppTheme) => void
@@ -64,6 +83,12 @@ interface SettingsStore {
   setDefaultInputDir: (path: string | null) => void
   setDefaultOutputDir: (path: string | null) => void
   setDefaultProjectDir: (path: string | null) => void
+  /**
+   * REQ-0208 — one-way setter for the Store review CTA.  Only flips to
+   * true (idempotent on repeat calls); there is no path back to false.
+   * Intentionally takes no boolean argument to make misuse impossible.
+   */
+  markStoreReviewClicked: () => void
 
   /**
    * REQ-20260613-016 Phase 4 — `burnin` / `subtitleBackground` were dropped
@@ -102,6 +127,9 @@ export const useSettingsStore = create<SettingsStore>()(
       defaultInputDir: null,
       defaultOutputDir: null,
       defaultProjectDir: null,
+      // REQ-0208 — user has not yet clicked the Store review CTA.  Once
+      // true, stays true across sessions via the persist middleware.
+      hasClickedStoreReview: false,
 
       setLanguage: (lang) => set({ language: lang }),
       setTheme: (t) => set({ theme: t }),
@@ -122,6 +150,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setDefaultInputDir: (path) => set({ defaultInputDir: path }),
       setDefaultOutputDir: (path) => set({ defaultOutputDir: path }),
       setDefaultProjectDir: (path) => set({ defaultProjectDir: path }),
+      markStoreReviewClicked: () => set({ hasClickedStoreReview: true }),
 
       resetStep3Settings: () =>
         set({
@@ -206,7 +235,11 @@ export const useSettingsStore = create<SettingsStore>()(
         activeFontId: state.activeFontId,
         defaultInputDir: state.defaultInputDir,
         defaultOutputDir: state.defaultOutputDir,
-        defaultProjectDir: state.defaultProjectDir
+        defaultProjectDir: state.defaultProjectDir,
+        // REQ-0208 — persist through localStorage only.  See interface
+        // doc-comment for why this field is NOT in the AppSettings /
+        // hydrate() path.
+        hasClickedStoreReview: state.hasClickedStoreReview
       })
     }
   )

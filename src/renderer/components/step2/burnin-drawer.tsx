@@ -5,6 +5,7 @@ import {
   Music,
   FileVideo,
   Heart,
+  ThumbsUp,
   CheckCircle2,
   AlertCircle,
   FolderOpen,
@@ -50,7 +51,9 @@ import type { BurninHandle } from '@/services/burnin'
 import type { OutputContainer } from '../../../shared/types'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
 import { DonationContent } from '@/components/donation-dialog/donation-content'
-import { GITHUB_PAGES_LOCALIZED } from '../../../shared/app-info'
+import { GITHUB_PAGES_LOCALIZED, MS_STORE_REVIEW_URL } from '../../../shared/app-info'
+import { useAppEnvStore } from '@/stores/app-env-store'
+import { shouldShowStoreReviewRow } from '@/lib/store-review-visibility'
 
 interface BurninDrawerProps {
   open: boolean
@@ -84,6 +87,12 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
   // dialog.  `null` = fall through to the OS Videos folder.
   const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
   const activeFontId = useSettingsStore((s) => s.activeFontId)
+  // REQ-0208 — Store review CTA visibility inputs.  Both are subscribed
+  // via zustand so the row hides itself the moment `markStoreReviewClicked`
+  // fires (no need to close/re-open the dialog to see the change).
+  const isMsix = useAppEnvStore((s) => s.isMsix)
+  const hasClickedStoreReview = useSettingsStore((s) => s.hasClickedStoreReview)
+  const markStoreReviewClicked = useSettingsStore((s) => s.markStoreReviewClicked)
 
   const [renderState, setRenderState] = useState<RenderState>('idle')
   const [progress, setProgress] = useState(0)
@@ -653,6 +662,55 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                 {t('completion.sendFeedback')}
               </Button>
             </div>
+
+            {/* REQ-0208 — Store review CTA.
+
+                Rendered only for the MSIX (paid) build AND only until
+                the user clicks the button once (`hasClickedStoreReview`
+                in the settings store, persisted through zustand's
+                localStorage middleware — deliberately NOT round-tripped
+                through the main-side settings.json, so the past
+                "setting resets on restart" bugs cannot reach this flag).
+
+                Placement is between the 3-button workflow row and the
+                donation card, per REQ-0208 §配置 — the first eye-line
+                position, above the support block, so it does not get
+                buried.  Icon is ThumbsUp per the same section (kept
+                distinct from the Heart used by the donation block so
+                the two CTAs read as separate offers).
+
+                The visibility predicate is factored out into
+                `lib/store-review-visibility.ts` so the truth table can
+                be pinned in a unit test without React.  When
+                `isMsix === null` (IPC still resolving) the row is
+                withheld — this prevents a one-frame flash on the very
+                first paint of the dialog after boot. */}
+            {shouldShowStoreReviewRow({ isMsix, hasClickedStoreReview }) && (
+              <div className="rounded-xl border border-line bg-surface-1 p-3 flex items-center gap-3">
+                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                  <ThumbsUp className="h-3.5 w-3.5 text-[hsl(var(--accent-soft))] flex-shrink-0" />
+                  <span className="text-body-sm font-medium text-fg-secondary truncate">
+                    {t('completion.storeReviewTitle')}
+                  </span>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    // Mark first, open second: if the user cancels the
+                    // Store handoff the button still counts as pressed
+                    // — REQ-0208 spec is explicit that "clicked once"
+                    // is the persist trigger, not "review submitted"
+                    // (which we cannot detect anyway).
+                    markStoreReviewClicked()
+                    void shellOpenExternal(MS_STORE_REVIEW_URL)
+                  }}
+                  className="flex-shrink-0"
+                >
+                  {t('completion.storeReviewButton')}
+                </Button>
+              </div>
+            )}
 
             {/* Embedded donation section. */}
             <div className="rounded-xl border border-line bg-surface-1 p-3 space-y-2">
