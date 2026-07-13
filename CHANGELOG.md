@@ -18,6 +18,14 @@ Whisper transcription backend.
 
 ### Added
 
+- **Word-level transcription (experimental, English audio).**
+  A checkbox in the transcribe drawer generates subtitles in
+  short 1–3 word chunks — the CapCut / short-form caption style.
+  Default off; opt in per run.  Works best on clean English
+  audio; results with Japanese audio may split words unnaturally
+  (single kanji become separate captions).  Positioned as an
+  experimental feature — turn it off if the cadence does not suit
+  your material.
 - **Project save & open (`.mojioko`).**  Save your session —
   video, subtitles, cuts, per-row styles — to a `.mojioko` file
   and reopen it later to keep editing.  Works from either the
@@ -55,6 +63,24 @@ Whisper transcription backend.
 
 ### Fixed
 
+- **Undo now catches text edits.**  Editing a subtitle's text
+  (typing or paste) is now correctly recorded on the undo stack.
+  Previously the edit slipped through the guard and Ctrl+Z would
+  unwind the previous timeline action — e.g. a clip drag —
+  instead of the text you just changed, which felt like the app
+  was rewriting the wrong thing.
+- **Timeline drag across a cut region.**  Extending a subtitle
+  past a trim boundary now tracks the cursor pixel-for-pixel
+  instead of stalling at the cut edge until you drag far past
+  it.  Same fix for resize-start and move drags.
+- **Preview shows only the subtitles that make it to output.**
+  Subtitles a trim consumed no longer appear as phantom second-
+  line stack captions in the preview overlay; the preview now
+  matches what the burn-in writes.
+- **Whisper model storage row layout.**  The disk-usage / open-
+  folder row under the model cards was narrowed to match the
+  card grid width, so the "Open" button no longer reads like a
+  primary action.
 - The video preview now stops when you collapse it, and the
   play button resets to ▶ so it never gets stuck showing
   pause after a reopen.
