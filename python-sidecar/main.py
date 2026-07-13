@@ -388,6 +388,12 @@ def transcribe(msg: dict) -> None:
             vad_threshold: float = float(msg.get("vadThreshold", 0.5))
             min_speech_ms: int = int(msg.get("minSpeechDurationMs", 250))
             min_silence_ms: int = int(msg.get("minSilenceDurationMs", 2000))
+            # REQ-0207 — experimental word-level subtitle re-split.
+            # Off (default / missing / falsy) is the ONLY path v1.3.3 users
+            # exercise; the branch below therefore must produce a
+            # transcribe_kwargs dict, an iterator loop and a segment event
+            # stream BYTE-IDENTICAL to the pre-REQ-0207 code path.
+            word_subtitle: bool = bool(msg.get("wordSubtitle", False))
 
             transcribe_kwargs: dict = {
                 "beam_size": beam_size,
@@ -400,6 +406,12 @@ def transcribe(msg: dict) -> None:
                     "min_speech_duration_ms": min_speech_ms,
                     "min_silence_duration_ms": min_silence_ms,
                 }
+            # REQ-0207 — request per-word timestamps ONLY when the
+            # experimental feature is requested.  In the default case the
+            # key is never inserted, so the call to model.transcribe is
+            # keyword-for-keyword identical to the pre-REQ-0207 build.
+            if word_subtitle:
+                transcribe_kwargs["word_timestamps"] = True
 
             collected = []
             try:
@@ -410,14 +422,33 @@ def transcribe(msg: dict) -> None:
                 for i, seg in enumerate(segments_iter):
                     print(f"[debug] segment {i}: start={seg.start:.3f}, end={seg.end:.3f}, text={seg.text.strip()!r}", file=sys.stderr)
                     collected.append(seg)
-                    send({
-                        "event": "segment",
-                        "segment": {
-                            "startSec": seg.start,
-                            "endSec": seg.end,
-                            "text": seg.text.strip(),
-                        },
-                    })
+                    if word_subtitle and seg.words:
+                        # REQ-0207 — run the pure re-split helper and emit
+                        # each resulting cue through the SAME `segment` IPC
+                        # shape the renderer already consumes.  Callers see
+                        # "more segments, same schema."  Import is lazy so
+                        # a startup import failure in word_split.py does not
+                        # affect the default path (which never touches it).
+                        from word_split import resplit_segment
+                        cues = resplit_segment(seg.start, seg.words)
+                        for cue in cues:
+                            send({
+                                "event": "segment",
+                                "segment": {
+                                    "startSec": cue.startSec,
+                                    "endSec": cue.endSec,
+                                    "text": cue.text,
+                                },
+                            })
+                    else:
+                        send({
+                            "event": "segment",
+                            "segment": {
+                                "startSec": seg.start,
+                                "endSec": seg.end,
+                                "text": seg.text.strip(),
+                            },
+                        })
                     if total_duration > 0:
                         percent = min(99, int(seg.end / total_duration * 100))
                     else:
