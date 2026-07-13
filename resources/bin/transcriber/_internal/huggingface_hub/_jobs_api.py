@@ -17,51 +17,8 @@ from enum import Enum
 from typing import Any
 
 from huggingface_hub import constants
-from huggingface_hub._space_api import Volume
+from huggingface_hub._space_api import SpaceHardware, Volume
 from huggingface_hub.utils._datetime import parse_datetime
-
-
-class JobHardware(str, Enum):
-    """
-    Enumeration of hardware flavors available to run Jobs on the Hub.
-
-    Value can be compared to a string:
-    ```py
-    assert JobHardware.CPU_BASIC == "cpu-basic"
-    ```
-
-    Both enums are kept in sync with the Hub API by `utils/check_hardware_flavors.py`.
-    """
-
-    # CPU
-    CPU_BASIC = "cpu-basic"
-    CPU_UPGRADE = "cpu-upgrade"
-    CPU_PERFORMANCE = "cpu-performance"
-    CPU_XL = "cpu-xl"
-
-    # GPU
-    T4_SMALL = "t4-small"
-    T4_MEDIUM = "t4-medium"
-    L4X1 = "l4x1"
-    L4X4 = "l4x4"
-    L40SX1 = "l40sx1"
-    L40SX4 = "l40sx4"
-    L40SX8 = "l40sx8"
-    A10G_SMALL = "a10g-small"
-    A10G_LARGE = "a10g-large"
-    A10G_LARGEX2 = "a10g-largex2"
-    A10G_LARGEX4 = "a10g-largex4"
-    A100_LARGE = "a100-large"
-    A100X4 = "a100x4"
-    A100X8 = "a100x8"
-    H200 = "h200"
-    H200X2 = "h200x2"
-    H200X4 = "h200x4"
-    H200X8 = "h200x8"
-    RTX_PRO_6000 = "rtx-pro-6000"
-    RTX_PRO_6000X2 = "rtx-pro-6000x2"
-    RTX_PRO_6000X4 = "rtx-pro-6000x4"
-    RTX_PRO_6000X8 = "rtx-pro-6000x8"
 
 
 class JobStage(str, Enum):
@@ -85,16 +42,10 @@ class JobStage(str, Enum):
     RUNNING = "RUNNING"
 
 
-# Stages indicating the Job has reached a terminal state and will not run further.
-TERMINAL_JOB_STAGES = (JobStage.COMPLETED, JobStage.CANCELED, JobStage.ERROR, JobStage.DELETED)
-
-
 @dataclass
 class JobStatus:
     stage: JobStage
     message: str | None
-    expose_urls: list[str] | None
-    ssh_url: str | None
 
 
 @dataclass
@@ -176,7 +127,7 @@ class JobInfo:
         secrets (`dict[str]` or `None`):
             Secret environment variables of the Job (encrypted).
         flavor (`str` or `None`):
-            Flavor for the hardware. See [`JobHardware`] for possible values.
+            Flavor for the hardware, as in Hugging Face Spaces. See [`SpaceHardware`] for possible values.
             E.g. `"cpu-basic"`.
         labels (`dict[str, str]` or `None`):
             Labels to attach to the job (key-value pairs).
@@ -191,14 +142,6 @@ class JobInfo:
             Owner of the Job, e.g. `JobOwner(id="5e9ecfc04957053f60648a3e", name="lhoestq", type="user")`
         initiator (`JobInitiator` or `None`):
             What triggered the Job, e.g. `JobInitiator(type="scheduled-job", id="...")` for a cron-triggered run.
-        expose_urls (`list[str]` or `None`):
-            Public URLs through which the Job's exposed ports are reachable (one per port exposed via `expose=`),
-            e.g. `["https://687fb701029421ae5549d998--8000.hf.jobs"]`. `None` when no port is exposed.
-            Accessing a URL requires an HF token with read access to the Job's namespace.
-        ssh_url (`str` or `None`):
-            SSH endpoint of the Job, e.g. `"ssh://687fb701029421ae5549d998@ssh.hf.jobs"`. Only present when the Job
-            was started with `ssh=True`. Connecting requires write access to the Job's namespace and an SSH public
-            key registered on the Hub (https://huggingface.co/settings/keys).
 
     Example:
 
@@ -229,7 +172,7 @@ class JobInfo:
     arguments: list[str] | None
     environment: dict[str, Any] | None
     secrets: dict[str, Any] | None
-    flavor: JobHardware | None
+    flavor: SpaceHardware | None
     labels: dict[str, str] | None
     volumes: list[Volume] | None
     status: JobStatus
@@ -262,12 +205,7 @@ class JobInfo:
         volumes = kwargs.get("volumes")
         self.volumes = [Volume(**v) for v in volumes] if volumes else None
         status = kwargs.get("status", {})
-        self.status = JobStatus(
-            stage=status["stage"],
-            message=status.get("message"),
-            expose_urls=status.get("exposeUrls"),
-            ssh_url=status.get("sshUrl"),
-        )
+        self.status = JobStatus(stage=status["stage"], message=status.get("message"))
         durations = kwargs.get("durations")
         self.durations = JobDurations(**durations) if durations else None
         initiator = kwargs.get("initiator")
@@ -288,7 +226,7 @@ class JobSpec:
     arguments: list[str] | None
     environment: dict[str, Any] | None
     secrets: dict[str, Any] | None
-    flavor: JobHardware | None
+    flavor: SpaceHardware | None
     timeout: int | None
     tags: list[str] | None
     arch: str | None
@@ -434,7 +372,7 @@ class JobAccelerator:
 
 
 @dataclass
-class JobHardwareInfo:
+class JobHardware:
     """
     Contains information about available Job hardware.
 
@@ -464,7 +402,7 @@ class JobHardwareInfo:
     >>> from huggingface_hub import list_jobs_hardware
     >>> hardware_list = list_jobs_hardware()
     >>> hardware_list[0]
-    JobHardwareInfo(name='cpu-basic', pretty_name='CPU Basic', cpu='2 vCPU', ram='16 GB', ephemeral_storage='20 GB', accelerator=None, unit_cost_micro_usd=167, unit_cost_usd=0.000167, unit_label='minute')
+    JobHardware(name='cpu-basic', pretty_name='CPU Basic', cpu='2 vCPU', ram='16 GB', ephemeral_storage='20 GB', accelerator=None, unit_cost_micro_usd=167, unit_cost_usd=0.000167, unit_label='minute')
     >>> hardware_list[0].name
     'cpu-basic'
     ```
@@ -499,19 +437,17 @@ def _create_job_spec(
     command: list[str],
     env: dict[str, Any] | None,
     secrets: dict[str, Any] | None,
-    flavor: JobHardware | str | None,
+    flavor: SpaceHardware | None,
     timeout: int | float | str | None,
     labels: dict[str, str] | None = None,
     volumes: list[Volume] | None = None,
-    expose: list[int] | None = None,
-    ssh: bool = False,
 ) -> dict[str, Any]:
     # prepare job spec to send to HF Jobs API
     job_spec: dict[str, Any] = {
         "command": command,
         "arguments": [],
         "environment": env or {},
-        "flavor": flavor or JobHardware.CPU_BASIC,
+        "flavor": flavor or SpaceHardware.CPU_BASIC,
     }
     # secrets are optional
     if secrets:
@@ -529,12 +465,6 @@ def _create_job_spec(
     # volumes are optional
     if volumes:
         job_spec["volumes"] = [vol.to_dict() for vol in volumes]
-    # expose ports through the jobs proxy
-    if expose:
-        job_spec["expose"] = {"ports": expose}
-    # make the job container reachable over SSH
-    if ssh:
-        job_spec["ssh"] = {"enabled": True}
     # input is either from docker hub or from HF spaces
     for prefix in (
         "https://huggingface.co/spaces/",

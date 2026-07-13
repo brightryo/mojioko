@@ -132,9 +132,11 @@ def get_token_to_send(token: bool | str | None) -> str | None:
     if token is False:
         return None
 
+    # Token is not provided: we get it from local cache
+    cached_token = get_token()
+
     # Case token is explicitly required
     if token is True:
-        cached_token = get_token()
         if cached_token is None:
             raise LocalTokenNotFoundError(
                 "Token is required (`token=True`), but no token found. You"
@@ -144,14 +146,12 @@ def get_token_to_send(token: bool | str | None) -> str | None:
             )
         return cached_token
 
-    # Case implicit use of the token is forbidden by env variable. Checked before resolving the
-    # cached token: `get_token()` may refresh an OAuth token (network call + file writes), which
-    # must not happen when the resolved token wouldn't be used anyway.
+    # Case implicit use of the token is forbidden by env variable
     if constants.HF_HUB_DISABLE_IMPLICIT_TOKEN:
         return None
 
     # Otherwise: we use the cached token as the user has not explicitly forbidden it
-    return get_token()
+    return cached_token
 
 
 def _http_user_agent(

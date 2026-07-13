@@ -40,6 +40,7 @@ from .utils import (
     hf_raise_for_status,
     logging,
     parse_xet_file_data_from_response,
+    refresh_xet_connection_info,
     tqdm,
     validate_hf_hub_args,
 )
@@ -224,8 +225,6 @@ def hf_hub_url(
         revision (`str`, *optional*):
             An optional Git revision id which can be a branch name, a tag, or a
             commit hash.
-        endpoint (`str`, *optional*):
-            The Hub endpoint to send the request to. Defaults to the value of `HF_ENDPOINT`.
 
     Example:
 
@@ -375,7 +374,7 @@ def http_get(
         headers=headers,
         timeout=constants.HF_HUB_DOWNLOAD_TIMEOUT,
         retry_on_exceptions=(),
-        retry_on_status_codes=(408, 429),
+        retry_on_status_codes=(429,),
     ) as response:
         hf_raise_for_status(response)
 
@@ -437,11 +436,10 @@ def http_get(
                         new_resume_size += len(chunk)
                         # Some data has been downloaded from the server so we reset the number of retries.
                         _nb_retries = 5
-            except (httpx.ConnectError, httpx.TimeoutException, httpx.RemoteProtocolError) as e:
-                # If ConnectionError (SSLError), ReadTimeout, or RemoteProtocolError (peer closed the connection before
-                # sending the complete body) happen while streaming data from the server, it is most likely a transient
-                # error (network outage?). We log a warning message and try to resume the download a few times  before
-                # giving up. The retry mechanism is basic but should be enough in most cases.
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                # If ConnectionError (SSLError) or ReadTimeout happen while streaming data from the server, it is most likely
+                # a transient error (network outage?). We log a warning message and try to resume the download a few times
+                # before giving up. Tre retry mechanism is basic but should be enough in most cases.
                 if _nb_retries <= 0:
                     logger.warning("Error while downloading from %s: %s\nMax retries exceeded.", url, str(e))
                     raise
@@ -499,23 +497,24 @@ def xet_get(
         The file download system uses Xet storage, which is a content-addressable storage system that breaks files into chunks
         for efficient storage and transfer.
 
-        ``session.new_file_download_group()`` manages downloading files by:
-        - Registering download tasks (each with its unique content hash) and starting download immediately in the background
+        `hf_xet.download_files` manages downloading files by:
+        - Taking a list of files to download (each with its unique content hash)
         - Connecting to a storage server (CAS server) that knows how files are chunked
         - Using authentication to ensure secure access
         - Providing progress updates during download
 
-        Authentication works transparently: the download group accepts a ``token_refresh_url``
-        that is used to refresh the short-lived xet access token as needed.
+        Authentication works by regularly refreshing access tokens through `refresh_xet_connection_info` to maintain a valid
+        connection to the storage server.
 
         The download process works like this:
-        1. Download tasks run in parallel:
-            1.1. Prepare to write the file to disk or to a stream (e.g. truncate file, set up cache)
-            1.2. Ask the server "how is this file split into chunks?" using the file's unique hash
+        1. Create a local cache folder at `~/.cache/huggingface/xet/chunk-cache` to store reusable file chunks
+        2. Download files in parallel:
+            2.1. Prepare to write the file to disk
+            2.2. Ask the server "how is this file split into chunks?" using the file's unique hash
                 The server responds with:
                 - Which chunks make up the complete file
                 - Where each chunk can be downloaded from
-            1.3. For each needed chunk:
+            2.3. For each needed chunk:
                 - Checks if we already have it in our local cache
                 - If not, download it from cloud storage (S3)
                 - Save it to cache for future use
@@ -523,12 +522,26 @@ def xet_get(
 
     """
     try:
-        from hf_xet import XetFileInfo  # type: ignore[no-redef]
+        from hf_xet import PyXetDownloadInfo, download_files  # type: ignore[no-redef]
     except ImportError:
         raise ValueError(
             "To use optimized download using Xet storage, you need to install the hf_xet package. "
             'Try `pip install "huggingface_hub[hf_xet]"` or `pip install hf_xet`.'
         )
+
+    connection_info = refresh_xet_connection_info(file_data=xet_file_data, headers=headers)
+
+    def token_refresher() -> tuple[str, int]:
+        connection_info = refresh_xet_connection_info(file_data=xet_file_data, headers=headers)
+        if connection_info is None:
+            raise ValueError("Failed to refresh token using xet metadata.")
+        return connection_info.access_token, connection_info.expiration_unix_epoch
+
+    xet_download_info = [
+        PyXetDownloadInfo(
+            destination_path=str(incomplete_path.absolute()), hash=xet_file_data.file_hash, file_size=expected_size
+        )
+    ]
 
     if not displayed_filename:
         displayed_filename = incomplete_path.name
@@ -547,34 +560,22 @@ def xet_get(
         _tqdm_bar=_tqdm_bar,
     )
 
-    from .utils._xet import abort_xet_session, get_xet_session, xet_headers_without_auth
-
-    xet_headers = xet_headers_without_auth(headers)
-
-    session = get_xet_session()
+    xet_headers = headers.copy()
+    xet_headers.pop("authorization", None)
 
     with progress_cm as progress:
-        _prev = 0
 
-        def _on_progress(group_report, _):
-            nonlocal _prev
-            current = group_report.total_bytes_completed
-            progress.update(max(0, current - _prev))
-            _prev = current
+        def progress_updater(progress_bytes: float):
+            progress.update(progress_bytes)
 
-        try:
-            with session.new_file_download_group(
-                token_refresh_url=xet_file_data.refresh_route,
-                token_refresh_headers=headers,
-                custom_headers=xet_headers,
-                progress_callback=_on_progress,
-            ) as group:
-                group.start_download_file(
-                    XetFileInfo(xet_file_data.file_hash, expected_size), str(incomplete_path.absolute())
-                )
-        except KeyboardInterrupt:
-            abort_xet_session()
-            raise
+        download_files(
+            xet_download_info,
+            endpoint=connection_info.endpoint,
+            token_info=(connection_info.access_token, connection_info.expiration_unix_epoch),
+            token_refresher=token_refresher,
+            progress_updater=[progress_updater],
+            request_headers=xet_headers,
+        )
 
 
 def _normalize_etag(etag: str | None) -> str | None:
@@ -710,11 +711,7 @@ def _cache_commit_hash_for_specific_revision(storage_folder: str, revision: str,
             # Update ref only if has been updated. Could cause useless error in case
             # repo is already cached and user doesn't have write access to cache folder.
             # See https://github.com/huggingface/huggingface_hub/issues/1216.
-            # Write atomically (tmp file + rename) so that concurrent readers never see
-            # a partially written ref.
-            tmp_path = ref_path.with_name(f"{ref_path.name}.{uuid.uuid4().hex[:8]}.tmp")
-            tmp_path.write_text(commit_hash)
-            os.replace(tmp_path, ref_path)
+            ref_path.write_text(commit_hash)
 
 
 @validate_hf_hub_args
@@ -922,8 +919,6 @@ def hf_hub_download(
             local cached file if it exists.
         headers (`dict`, *optional*):
             Additional headers to be sent with the request.
-        endpoint (`str`, *optional*):
-            The Hub endpoint to send the request to. Defaults to the value of `HF_ENDPOINT`.
         tqdm_class (`tqdm`, *optional*):
             If provided, overwrites the default behavior for the progress bar. Passed
             argument must inherit from `tqdm.auto.tqdm` or at least mimic its behavior.
@@ -960,15 +955,14 @@ def hf_hub_download(
         # Respect environment variable above user value
         etag_timeout = constants.HF_HUB_ETAG_TIMEOUT
 
-    if revision is None:
-        revision = constants.DEFAULT_REVISION
-
     if cache_dir is None:
         cache_dir = constants.HF_HUB_CACHE
-    cache_dir = str(Path(cache_dir).expanduser().resolve())
-
-    if local_dir is not None:
-        local_dir = str(Path(local_dir).expanduser().resolve())
+    if revision is None:
+        revision = constants.DEFAULT_REVISION
+    if isinstance(cache_dir, Path):
+        cache_dir = str(cache_dir)
+    if isinstance(local_dir, Path):
+        local_dir = str(local_dir)
 
     if subfolder == "":
         subfolder = None
@@ -1197,10 +1191,7 @@ def _hf_hub_download_to_cache_dir(
     _cache_commit_hash_for_specific_revision(storage_folder, revision, commit_hash)
 
     # Prevent parallel downloads of the same file with a lock.
-    # etag could be duplicated across repos.
-    # Note: the lock is best-effort to avoid downloading the same file twice. Cache correctness
-    # does not depend on it: each download writes to a process-unique temporary file that is
-    # atomically renamed into place (see `_download_to_tmp_and_move`).
+    # etag could be duplicated across repos,
     lock_path = os.path.join(locks_dir, repo_folder_name(repo_id=repo_id, repo_type=repo_type), f"{etag}.lock")
 
     # Some Windows versions do not allow for paths longer than 255 characters.
@@ -1702,14 +1693,13 @@ def _get_metadata_or_catch_error(
                     commit_hash = http_error.response.headers.get(constants.HUGGINGFACE_HEADER_X_REPO_COMMIT)
                     if commit_hash is not None:
                         no_exist_file_path = Path(storage_folder) / ".no_exist" / commit_hash / relative_filename
-                        if not no_exist_file_path.exists():
-                            try:
-                                no_exist_file_path.parent.mkdir(parents=True, exist_ok=True)
-                                no_exist_file_path.touch()
-                            except OSError as e:
-                                logger.error(
-                                    f"Could not cache non-existence of file. Will ignore error and continue. Error: {e}"
-                                )
+                        try:
+                            no_exist_file_path.parent.mkdir(parents=True, exist_ok=True)
+                            no_exist_file_path.touch()
+                        except OSError as e:
+                            logger.error(
+                                f"Could not cache non-existence of file. Will ignore error and continue. Error: {e}"
+                            )
                         _cache_commit_hash_for_specific_revision(storage_folder, revision, commit_hash)
                 raise
 
@@ -1828,8 +1818,10 @@ def _download_to_tmp_and_move(
 
     Internal logic:
     - return early if file is already downloaded
+    - resume download if possible (from incomplete file)
+    - do not resume download if `force_download=True`
     - check disk space before downloading
-    - download content to a process-unique temporary file
+    - download content to a temporary file
     - set correct permissions on temporary file
     - move the temporary file to the destination path
 
@@ -1839,55 +1831,54 @@ def _download_to_tmp_and_move(
         # Do nothing if already exists (except if force_download=True)
         return
 
-    # Download to a process-unique temporary file before moving it in place. A shared
-    # `<etag>.incomplete` file corrupts the cache whenever the surrounding lock is not honored:
-    # on some filesystems (Lustre, GPFS, some NFS mounts) `flock(2)` silently succeeds for every
-    # caller and concurrent processes end up appending to the same file. With a unique file per
-    # process, a broken lock costs only duplicated bandwidth: each process downloads the full
-    # file and atomically renames it to the final destination.
-    # See https://github.com/huggingface/huggingface_hub/pull/4228.
-    tmp_path = incomplete_path.with_name(f"{incomplete_path.stem}.{uuid.uuid4().hex[:8]}.incomplete")
-    try:
-        with tmp_path.open("wb") as f:
-            logger.debug(f"Downloading '{filename}' to '{tmp_path}'")
+    if incomplete_path.exists() and force_download:
+        # By default, we will try to resume the download if possible.
+        # However, if the user has set `force_download=True`, then we should
+        # not resume the download => delete the incomplete file.
+        logger.debug(f"Removing incomplete file '{incomplete_path}' (force_download=True)")
+        incomplete_path.unlink(missing_ok=True)
 
-            if expected_size is not None:  # might be None if HTTP header not set correctly
-                # Check disk space in both tmp and destination path
-                _check_disk_space(expected_size, tmp_path.parent)
-                _check_disk_space(expected_size, destination_path.parent)
+    with incomplete_path.open("ab") as f:
+        resume_size = f.tell()
+        message = f"Downloading '{filename}' to '{incomplete_path}'"
+        if resume_size > 0 and expected_size is not None:
+            message += f" (resume from {resume_size}/{expected_size})"
+        logger.debug(message)
 
-            if xet_file_data is not None and is_xet_available():
-                logger.debug("Xet Storage is enabled for this repo. Downloading file from Xet Storage..")
-                xet_get(
-                    incomplete_path=tmp_path,
-                    xet_file_data=xet_file_data,
-                    headers=headers,
-                    expected_size=expected_size,
-                    displayed_filename=filename,
-                    tqdm_class=tqdm_class,
-                )
-            else:
-                if xet_file_data is not None and not constants.HF_HUB_DISABLE_XET:
-                    logger.warning(
-                        "Xet Storage is enabled for this repo, but the 'hf_xet' package is not installed. "
-                        "Falling back to regular HTTP download. "
-                        "For better performance, install the package with: `pip install huggingface_hub[hf_xet]` or `pip install hf_xet`"
-                    )
+        if expected_size is not None:  # might be None if HTTP header not set correctly
+            # Check disk space in both tmp and destination path
+            _check_disk_space(expected_size, incomplete_path.parent)
+            _check_disk_space(expected_size, destination_path.parent)
 
-                http_get(
-                    url_to_download,
-                    f,
-                    headers=headers,
-                    expected_size=expected_size,
-                    tqdm_class=tqdm_class,
+        if xet_file_data is not None and is_xet_available():
+            logger.debug("Xet Storage is enabled for this repo. Downloading file from Xet Storage..")
+            xet_get(
+                incomplete_path=incomplete_path,
+                xet_file_data=xet_file_data,
+                headers=headers,
+                expected_size=expected_size,
+                displayed_filename=filename,
+                tqdm_class=tqdm_class,
+            )
+        else:
+            if xet_file_data is not None and not constants.HF_HUB_DISABLE_XET:
+                logger.warning(
+                    "Xet Storage is enabled for this repo, but the 'hf_xet' package is not installed. "
+                    "Falling back to regular HTTP download. "
+                    "For better performance, install the package with: `pip install huggingface_hub[hf_xet]` or `pip install hf_xet`"
                 )
 
-        logger.debug(f"Download complete. Moving file to {destination_path}")
-        _chmod_and_move(tmp_path, destination_path)
-    finally:
-        # No-op on success (file has been moved). On failure, do not keep a partial file around:
-        # it could not be reused anyway since the temporary name is unique to this download.
-        tmp_path.unlink(missing_ok=True)
+            http_get(
+                url_to_download,
+                f,
+                resume_size=resume_size,
+                headers=headers,
+                expected_size=expected_size,
+                tqdm_class=tqdm_class,
+            )
+
+    logger.debug(f"Download complete. Moving file to {destination_path}")
+    _chmod_and_move(incomplete_path, destination_path)
 
 
 def _int_or_none(value: str | None) -> int | None:
@@ -1910,12 +1901,8 @@ def _chmod_and_move(src: Path, dst: Path) -> None:
     - Fix issue: https://github.com/huggingface/huggingface_hub/issues/1141
     - Fix issue: https://github.com/huggingface/huggingface_hub/issues/1215
     """
-    # Get umask by creating a temporary file in the folder containing the incomplete file.
-    # We know this folder is writable since the incomplete file has just been written there.
-    # Probing next to `dst` is not always possible: when downloading to a local dir, `dst` is the
-    # final file location and its parents might not be writable (e.g. read-only root filesystem).
-    # See https://github.com/huggingface/huggingface_hub/issues/4304.
-    tmp_file = src.parent / f"tmp_{uuid.uuid4()}"
+    # Get umask by creating a temporary file in the cached repo folder.
+    tmp_file = dst.parent.parent / f"tmp_{uuid.uuid4()}"
     try:
         tmp_file.touch()
         cache_dir_mode = Path(tmp_file).stat().st_mode

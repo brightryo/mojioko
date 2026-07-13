@@ -40,7 +40,6 @@ from .utils import (
     parse_datetime,
     parse_hf_uri,
 )
-from .utils._hf_uris import _looks_like_hf_url
 
 
 if TYPE_CHECKING:
@@ -248,13 +247,9 @@ class BucketFolder:
 def _parse_bucket_uri(path: str) -> HfUri:
     """Parse a bucket path into a HfUri.
 
-    Accepts:
-    - `hf://buckets/namespace/name(/path/in/repo)` URIs,
-    - Hugging Face web URLs such as `https://huggingface.co/buckets/namespace/name(/tree/path)`,
-    - plain `namespace/name(/path/in/repo)` paths.
+    Accepts both `hf://buckets/namespace/name(/path/in/repo)` and plain `namespace/name(/path/in/repo)`.
     """
-    if path.startswith(constants.HF_PROTOCOL) or _looks_like_hf_url(path):
-        # Don't use 'if is_hf_uri(...)' here as we prefer 'parse_hf_uri(...)' to raise the exact error message.
+    if path.startswith(constants.HF_PROTOCOL):
         parsed = parse_hf_uri(path)
         if not parsed.is_bucket:
             raise ValueError(f"Invalid bucket path: {path}. Must be a bucket URI (hf://buckets/...).")

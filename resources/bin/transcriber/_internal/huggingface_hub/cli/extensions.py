@@ -129,12 +129,8 @@ def extension_install(
         description=description,
     )
     ext_type = manifest.type.capitalize()
-    out.result(
-        f"{ext_type} extension installed",
-        source=f"{owner}/{repo_name}",
-        command=f"hf {short_name}",
-    )
-    out.hint(f"Run it with: hf {short_name}")
+    print(f"{ext_type} extension installed successfully from {owner}/{repo_name}.")
+    print(f"Run it with: hf {short_name}")
 
 
 @extensions_cli.command(
@@ -207,7 +203,7 @@ def extension_search() -> None:
             }
         )
 
-    out.table(rows, id_key="repo")
+    out.table(rows, id_key="repo", alignments={"stars": "right"})
 
 
 @extensions_cli.command("remove | rm", examples=["hf extensions remove claude"])
@@ -225,7 +221,7 @@ def extension_remove(
         raise CLIError(f"Extension '{short_name}' is not installed.")
 
     shutil.rmtree(extension_dir)
-    out.result("Extension removed", name=short_name)
+    print(f"Removed extension '{short_name}'.")
 
 
 ### HELPER FUNCTIONS

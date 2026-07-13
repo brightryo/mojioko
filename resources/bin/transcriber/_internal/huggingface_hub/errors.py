@@ -1,6 +1,5 @@
 """Contains all custom errors."""
 
-from enum import Enum
 from pathlib import Path
 
 from httpx import HTTPError, Response
@@ -28,49 +27,6 @@ class CorruptedCacheException(Exception):
 
 class LocalTokenNotFoundError(EnvironmentError):
     """Raised if local token is required but not found."""
-
-
-# OIDC ERRORS
-
-
-class OIDCError(Exception):
-    """Raised when keyless CI/CD auth via OIDC token exchange ("Trusted Publishers") cannot proceed.
-
-    Typically because `HF_OIDC_RESOURCE` is set but no id token is available: not running in a
-    supported CI provider and `HF_OIDC_ID_TOKEN` is unset.
-
-    See https://huggingface.co/docs/hub/trusted-publishers.
-    """
-
-
-# DEVICE CODE OAUTH ERRORS
-
-
-class OAuthErrorCode(str, Enum):
-    """Known OAuth `error` codes returned by the Hub's token endpoint (RFC 6749 / RFC 8628)."""
-
-    AUTHORIZATION_PENDING = "authorization_pending"
-    SLOW_DOWN = "slow_down"
-    EXPIRED_TOKEN = "expired_token"
-    ACCESS_DENIED = "access_denied"
-    INVALID_GRANT = "invalid_grant"
-
-
-class DeviceCodeError(Exception):
-    """Raised when the Device Code OAuth login flow (RFC 8628) or an OAuth token refresh fails.
-
-    Covers failures at any step: requesting the device code, polling for the token,
-    authorization denied/expired, or unexpected server responses.
-
-    Attributes:
-        error_code (`str`, *optional*):
-            The OAuth `error` code returned by the server, if any. Known values are listed in
-            [`OAuthErrorCode`] but the server may return other codes.
-    """
-
-    def __init__(self, message: str, error_code: str | None = None):
-        super().__init__(message)
-        self.error_code = error_code
 
 
 # HTTP ERRORS
@@ -271,21 +227,6 @@ class BucketNotFoundError(HfHubHTTPError):
     """
 
     bucket_id: str | None = None
-
-
-# JOB ERRORS
-
-
-class JobNotFoundError(HfHubHTTPError):
-    """
-    Raised when trying to access a Job that does not exist.
-
-    Attributes:
-        job_id (`str`):
-            The job id that was not found.
-    """
-
-    job_id: str
 
 
 # REPOSITORY ERRORS
@@ -522,15 +463,20 @@ class StrictDataclassClassValidationError(StrictDataclassError):
 # XET ERRORS
 
 
+class XetError(Exception):
+    """Base exception for errors related to Xet Storage."""
+
+
+class XetAuthorizationError(XetError):
+    """Exception thrown when the user does not have the right authorization to use Xet Storage."""
+
+
+class XetRefreshTokenError(XetError):
+    """Exception thrown when the refresh token is invalid."""
+
+
 class XetDownloadError(Exception):
     """Exception thrown when the download from Xet Storage fails."""
-
-
-# LFS ERRORS
-
-
-class FileDuplicationError(Exception):
-    """Raised when duplicating files across repos fails."""
 
 
 # CLI ERRORS

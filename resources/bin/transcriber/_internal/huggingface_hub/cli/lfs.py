@@ -29,7 +29,6 @@ from huggingface_hub.lfs import LFS_MULTIPART_UPLOAD_COMMAND
 
 from ..utils import get_session, hf_raise_for_status, logging
 from ..utils._lfs import SliceFileObj
-from ._output import out
 
 
 logger = logging.get_logger(__name__)
@@ -62,7 +61,7 @@ def lfs_enable_largefiles(
         check=True,
         cwd=local_path,
     )
-    out.result("Local repo set up for largefiles", path=local_path)
+    print("Local repo set up for largefiles")
 
 
 def write_msg(msg: dict):

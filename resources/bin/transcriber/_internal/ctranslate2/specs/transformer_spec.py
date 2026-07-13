@@ -101,7 +101,6 @@ class TransformerEncoderSpec(model_spec.LayerSpec):
                 rms_norm=rms_norm,
                 num_heads_kv=num_heads_kv,
                 head_dim=head_dim,
-                sliding_window=sliding_window,
                 rotary_dim=rotary_dim,
                 rotary_interleave=rotary_interleave,
                 rotary_scaling_type=rotary_scaling_type,
@@ -154,7 +153,6 @@ class TransformerDecoderSpec(model_spec.LayerSpec):
         qk_norm: bool = False,
         v_norm: bool = False,
         external_pre_post_encoder_layers: Optional[bool] = False,
-        merged_encoder_attention: bool = False,
     ):
         """Initializes a Transformer decoder specification.
 
@@ -267,7 +265,6 @@ class TransformerDecoderSpec(model_spec.LayerSpec):
                 qk_norm=qk_norm,
                 v_norm=v_norm,
                 external_pre_post_encoder_layers=external_pre_post_encoder_layers,
-                merged_encoder_attention=merged_encoder_attention,
             )
             for _ in range(num_layers)
         ]
@@ -367,7 +364,6 @@ class TransformerDecoderLayerSpec(model_spec.LayerSpec):
         qk_norm=False,
         v_norm=False,
         external_pre_post_encoder_layers=False,
-        merged_encoder_attention=False,
     ):
         self.self_attention = attention_spec.MultiHeadAttentionSpec(
             self_attention=True,
@@ -386,10 +382,9 @@ class TransformerDecoderLayerSpec(model_spec.LayerSpec):
             sliding_window=sliding_window,
             qk_norm=qk_norm,
             v_norm=v_norm,
-            merged_encoder_attention=merged_encoder_attention,
         )
 
-        if with_encoder_attention and not merged_encoder_attention:
+        if with_encoder_attention:
             self.attention = attention_spec.MultiHeadAttentionSpec(
                 rms_norm=rms_norm,
                 num_heads_kv=num_heads_kv,

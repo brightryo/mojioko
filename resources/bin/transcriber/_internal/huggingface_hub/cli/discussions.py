@@ -29,10 +29,11 @@ from ._cli_utils import (
     RepoType,
     RepoTypeOpt,
     TokenOpt,
+    api_object_to_dict,
     get_hf_api,
     typer_factory,
 )
-from ._output import _dataclass_to_dict, out
+from ._output import out
 
 
 class DiscussionStatus(str, enum.Enum):
@@ -142,11 +143,12 @@ def discussion_list(
         if len(discussions) >= limit:
             break
 
-    items = [_dataclass_to_dict(d) for d in discussions]
+    items = [api_object_to_dict(d) for d in discussions]
     out.table(
         items,
         headers=["num", "title", "is_pull_request", "status", "author", "created_at"],
         id_key="num",
+        alignments={"num": "right"},
     )
 
 

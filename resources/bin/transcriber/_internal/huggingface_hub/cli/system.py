@@ -29,7 +29,7 @@ def env() -> None:
 
 def version() -> None:
     """Print information about the hf version."""
-    out.result("hf version", version=__version__)
+    print(__version__)
 
 
 def update() -> None:

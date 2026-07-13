@@ -45,13 +45,11 @@ from typing_extensions import assert_never
 from huggingface_hub._hot_reload.client import multi_replica_reload_events
 from huggingface_hub._hot_reload.types import ApiGetReloadEventSourceData, ReloadRegion
 from huggingface_hub._space_api import SpaceHardware, SpaceStage
-from huggingface_hub.cli._cli_utils import SoftChoice
 from huggingface_hub.errors import CLIError, RemoteEntryNotFoundError, RepositoryNotFoundError, RevisionNotFoundError
 from huggingface_hub.file_download import hf_hub_download
 from huggingface_hub.hf_api import ExpandSpaceProperty_T, HfApi, SpaceSort_T
 from huggingface_hub.repocard import SpaceCard
 from huggingface_hub.utils import disable_progress_bars
-from huggingface_hub.utils._parsing import parse_duration
 
 from ._cli_utils import (
     REPO_LIST_DEFAULT_LIMIT,
@@ -64,11 +62,9 @@ from ._cli_utils import (
     SearchOpt,
     SecretsFileOpt,
     SecretsOpt,
-    SshDryRunOpt,
-    SshIdentityFileOpt,
     TokenOpt,
     VolumesOpt,
-    exec_ssh,
+    api_object_to_dict,
     get_hf_api,
     make_expand_properties_parser,
     parse_env_map,
@@ -76,7 +72,7 @@ from ._cli_utils import (
     typer_factory,
 )
 from ._file_listing import list_repo_files_cmd
-from ._output import _dataclass_to_dict, out
+from ._output import out
 
 
 HOT_RELOADING_MIN_GRADIO = "6.1.0"
@@ -182,7 +178,7 @@ def spaces_ls(
     api = get_hf_api(token=token)
     sort_key = sort.value if sort else None
     results = [
-        _dataclass_to_dict(space_info)
+        api_object_to_dict(space_info)
         for space_info in api.list_spaces(
             filter=filter,
             author=author,
@@ -293,44 +289,6 @@ def spaces_search(
 
 
 @spaces_cli.command(
-    "wait",
-    examples=[
-        "hf spaces wait username/my-space",
-        "hf spaces wait username/my-space --timeout 5m",
-    ],
-)
-def spaces_wait(
-    space_id: Annotated[str, typer.Argument(help="The space ID (e.g. `username/repo-name`).")],
-    timeout: Annotated[
-        str | None,
-        typer.Option(
-            help="Max time to wait: int/float with s (seconds, default), m (minutes), h (hours) or d (days).",
-        ),
-    ] = None,
-    token: TokenOpt = None,
-) -> None:
-    """Wait for a Space to finish building/starting.
-
-    Blocks until the Space leaves an intermediate stage (BUILDING, APP_STARTING, etc.)
-    and reaches a settled stage. Exits with code 0 if the Space is RUNNING,
-    or a non-zero exit code otherwise (e.g. BUILD_ERROR, RUNTIME_ERROR).
-    """
-    timeout_secs = parse_duration(timeout) if timeout is not None else None
-    api = get_hf_api(token=token)
-    status = out.status("Waiting for Space to be ready...")
-    try:
-        runtime = api.wait_for_space(space_id, timeout=timeout_secs)
-    except TimeoutError:
-        status.done("Timed out.")
-        raise CLIError(f"Timed out after {timeout} waiting for Space '{space_id}' to be ready.") from None
-    status.done(f"Space reached stage '{runtime.stage}'.")
-    if runtime.stage != SpaceStage.RUNNING:
-        raise CLIError(f"Space '{space_id}' is not running (stage='{runtime.stage}').")
-    out.result("Space ready", space_id=space_id, stage=str(runtime.stage))
-    out.hint(f"Use `hf spaces logs {space_id}` to view run logs.")
-
-
-@spaces_cli.command(
     "dev-mode",
     examples=[
         "hf spaces dev-mode my-user-name/deepsite",
@@ -356,13 +314,30 @@ def dev_mode(
         print(f"Dev mode disabled for '{space_id}'")
         return
     api.enable_space_dev_mode(space_id)
-    runtime = api.wait_for_space(space_id)
-    if runtime.stage != SpaceStage.RUNNING:
-        out.warning(f"Dev mode is not ready (stage='{runtime.stage}')")
-        return
     info = api.space_info(space_id)
     folder = getattr(info.card_data, "dev-mode-folder", "" if info.sdk == "docker" else "/home/user/app")
     folder_query_param = f"folder={folder}" if folder else ""
+    print(f"Dev mode is currently building, track the progress here: https://huggingface.co/spaces/{info.id}")
+    intermediate_statuses_and_messages = {
+        SpaceStage.BUILDING: "building...",
+        SpaceStage.RUNNING_BUILDING: "building...",
+        SpaceStage.APP_STARTING: "app starting...",
+        SpaceStage.RUNNING_APP_STARTING: "app starting...",
+    }
+    status = out.status()
+    while True:
+        info = api.space_info(space_id)
+        if info.runtime is None:
+            print("Runtime of the space unavailable")
+            return
+        if info.runtime.stage not in intermediate_statuses_and_messages:
+            break
+        status.update(intermediate_statuses_and_messages[info.runtime.stage])
+        time.sleep(1)
+    if info.runtime.stage != SpaceStage.RUNNING:
+        status.done(f"Dev mode is not ready (stage='{info.runtime.stage}')")
+        return
+    status.done("Dev mode ready!")
     print("Connect to dev environment:")
     print("")
     print("Web:")
@@ -374,51 +349,12 @@ def dev_mode(
     print("")
     print("Local:")
     print("1. Add your SSH key to https://huggingface.co/settings/keys")
-    print(f"2. SSH with `hf spaces ssh {space_id}` (or `ssh -i <your_key> {ssh_host}`)")
+    print(f"2. SSH with `ssh -i <your_key> {ssh_host}`")
     print("   Or open")
     print(f"  * VSCode: vscode://vscode-remote/ssh-remote+{ssh_host}{folder}")
     print(f"  * Cursor: cursor://vscode-remote/ssh-remote+{ssh_host}{folder}")
     print("")
     print("PS: Dev mode stops after 48h of inactivity, don't forget to save your changes regularly.")
-
-
-@spaces_cli.command(
-    "ssh",
-    examples=[
-        "hf spaces ssh username/my-space",
-        "hf spaces ssh username/my-space --dry-run",
-        "hf spaces ssh username/my-space -i ~/.ssh/id_ed25519",
-        "hf spaces ssh username/my-space --auto",
-    ],
-)
-def spaces_ssh(
-    space_id: Annotated[str, typer.Argument(help="The space ID (e.g. `username/repo-name`).")],
-    identity_file: SshIdentityFileOpt = None,
-    dry_run: SshDryRunOpt = False,
-    auto: Annotated[
-        bool,
-        typer.Option("--auto", help="Enable Dev Mode without prompting if not already enabled."),
-    ] = False,
-    token: TokenOpt = None,
-) -> None:
-    """SSH into a Space's Dev Mode container.
-
-    Requires Dev Mode to be running on the Space and your SSH public key to be registered at https://huggingface.co/settings/keys.
-
-    See: https://huggingface.co/docs/hub/spaces-dev-mode
-    """
-    api = get_hf_api(token=token)
-    info = api.space_info(space_id)
-    if info.runtime is None or not info.runtime.dev_mode:
-        out.confirm(
-            f"Dev Mode is disabled on '{space_id}'. Enable it now?", yes=auto, default=True, confirm_param="--auto"
-        )
-        api.enable_space_dev_mode(space_id)
-        runtime = api.wait_for_space(space_id)
-        if runtime.stage != SpaceStage.RUNNING:
-            raise CLIError(f"Space '{space_id}' is not running (stage='{runtime.stage}').")
-        info = api.space_info(space_id)
-    exec_ssh(f"{info.subdomain}@ssh.hf.space", identity_file=identity_file, dry_run=dry_run)
 
 
 @spaces_cli.command(
@@ -468,7 +404,7 @@ def spaces_restart(
         stage=runtime.stage,
         factory_reboot=factory_reboot,
     )
-    out.hint(f"Use `hf spaces wait {space_id}` to wait until the Space is ready.")
+    out.hint(f"Use `hf spaces info {space_id}` to monitor the runtime stage.")
     out.hint(
         f"Mount a Volume or bucket to persist data across restarts: `hf spaces volumes set {space_id} -v hf://...`"
     )
@@ -523,11 +459,10 @@ def spaces_settings(
         ),
     ] = None,
     hardware: Annotated[
-        str | None,
+        SpaceHardware | None,
         typer.Option(
             "--hardware",
             help="Space hardware flavor (e.g. 'cpu-basic', 't4-medium', 'l4x4'). Run 'hf spaces hardware' to list available options.",
-            click_type=SoftChoice(SpaceHardware),
         ),
     ] = None,
     token: TokenOpt = None,
@@ -535,7 +470,7 @@ def spaces_settings(
     """Update the settings of a Space."""
     api = get_hf_api(token=token)
     if hardware is not None:
-        runtime = api.request_space_hardware(space_id, hardware=hardware, sleep_time=sleep_time)  # type: ignore[arg-type]
+        runtime = api.request_space_hardware(space_id, hardware=hardware, sleep_time=sleep_time)
     elif sleep_time is not None:
         runtime = api.set_space_sleep_time(space_id, sleep_time=sleep_time)
     else:
@@ -880,7 +815,7 @@ def volumes_ls(
     if info.runtime is None:
         raise CLIError(f"Runtime not available for Space '{space_id}'.")
     volumes = info.runtime.volumes or []
-    items = [_dataclass_to_dict(v) for v in volumes]
+    items = [api_object_to_dict(v) for v in volumes]
     out.table(items)
     out.hint(
         f"Use `hf spaces volumes set {space_id} -v hf://<repo_type>/<repo_id>:/<mount_path>` to set volumes for a Space."
@@ -949,7 +884,7 @@ def secrets_ls(
     """List secrets for a Space. Secret values are write-only and not returned."""
     api = get_hf_api(token=token)
     secrets = api.get_space_secrets(space_id)
-    items = [_dataclass_to_dict(s) for s in secrets.values()]
+    items = [api_object_to_dict(s) for s in secrets.values()]
     out.table(items)
     out.hint(f"Use `hf spaces secrets add {space_id} -s KEY=VALUE` to add secrets to a Space.")
 
@@ -1021,7 +956,7 @@ def variables_ls(
     """List environment variables for a Space."""
     api = get_hf_api(token=token)
     variables = api.get_space_variables(space_id)
-    items = [_dataclass_to_dict(v) for v in variables.values()]
+    items = [api_object_to_dict(v) for v in variables.values()]
     out.table(items)
     out.hint(f"Use `hf spaces variables add {space_id} -e KEY=VALUE` to add variables to a Space.")
 

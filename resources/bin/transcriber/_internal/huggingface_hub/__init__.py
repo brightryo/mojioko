@@ -46,7 +46,7 @@ import sys
 from typing import TYPE_CHECKING
 
 
-__version__ = "1.20.1"
+__version__ = "1.16.1"
 
 # Alphabetical order of definitions is ensured in tests
 # WARNING: any comment added in this dictionary definition will be lost when
@@ -80,7 +80,6 @@ _SUBMOD_ATTRS = {
         "JobAccelerator",
         "JobDurations",
         "JobHardware",
-        "JobHardwareInfo",
         "JobInfo",
         "JobInitiator",
         "JobOwner",
@@ -191,7 +190,6 @@ _SUBMOD_ATTRS = {
         "Organization",
         "RepoFile",
         "RepoFolder",
-        "RepoStorageInfo",
         "RepoUrl",
         "SpaceInfo",
         "SpaceSearchResult",
@@ -303,7 +301,6 @@ _SUBMOD_ATTRS = {
         "list_spaces_hardware",
         "list_user_followers",
         "list_user_following",
-        "list_user_repos",
         "list_webhooks",
         "merge_pull_request",
         "model_info",
@@ -343,16 +340,12 @@ _SUBMOD_ATTRS = {
         "update_collection_item",
         "update_collection_metadata",
         "update_inference_endpoint",
-        "update_job_labels",
         "update_repo_settings",
-        "update_scheduled_job_labels",
         "update_webhook",
         "upload_file",
         "upload_folder",
         "upload_large_folder",
         "verify_repo_checksums",
-        "wait_for_job",
-        "wait_for_space",
         "whoami",
     ],
     "hf_file_system": [
@@ -774,7 +767,6 @@ __all__ = [
     "JobAccelerator",
     "JobDurations",
     "JobHardware",
-    "JobHardwareInfo",
     "JobInfo",
     "JobInitiator",
     "JobOwner",
@@ -807,7 +799,6 @@ __all__ = [
     "RepoCard",
     "RepoFile",
     "RepoFolder",
-    "RepoStorageInfo",
     "RepoUrl",
     "SentenceSimilarityInput",
     "SentenceSimilarityInputData",
@@ -1041,7 +1032,6 @@ __all__ = [
     "list_spaces_hardware",
     "list_user_followers",
     "list_user_following",
-    "list_user_repos",
     "list_webhooks",
     "load_state_dict_from_file",
     "load_torch_model",
@@ -1106,16 +1096,12 @@ __all__ = [
     "update_collection_item",
     "update_collection_metadata",
     "update_inference_endpoint",
-    "update_job_labels",
     "update_repo_settings",
-    "update_scheduled_job_labels",
     "update_webhook",
     "upload_file",
     "upload_folder",
     "upload_large_folder",
     "verify_repo_checksums",
-    "wait_for_job",
-    "wait_for_space",
     "webhook_endpoint",
     "whoami",
 ]
@@ -1248,7 +1234,6 @@ if TYPE_CHECKING:  # pragma: no cover
         JobAccelerator,  # noqa: F401
         JobDurations,  # noqa: F401
         JobHardware,  # noqa: F401
-        JobHardwareInfo,  # noqa: F401
         JobInfo,  # noqa: F401
         JobInitiator,  # noqa: F401
         JobOwner,  # noqa: F401
@@ -1355,7 +1340,6 @@ if TYPE_CHECKING:  # pragma: no cover
         Organization,  # noqa: F401
         RepoFile,  # noqa: F401
         RepoFolder,  # noqa: F401
-        RepoStorageInfo,  # noqa: F401
         RepoUrl,  # noqa: F401
         SpaceInfo,  # noqa: F401
         SpaceSearchResult,  # noqa: F401
@@ -1467,7 +1451,6 @@ if TYPE_CHECKING:  # pragma: no cover
         list_spaces_hardware,  # noqa: F401
         list_user_followers,  # noqa: F401
         list_user_following,  # noqa: F401
-        list_user_repos,  # noqa: F401
         list_webhooks,  # noqa: F401
         merge_pull_request,  # noqa: F401
         model_info,  # noqa: F401
@@ -1507,16 +1490,12 @@ if TYPE_CHECKING:  # pragma: no cover
         update_collection_item,  # noqa: F401
         update_collection_metadata,  # noqa: F401
         update_inference_endpoint,  # noqa: F401
-        update_job_labels,  # noqa: F401
         update_repo_settings,  # noqa: F401
-        update_scheduled_job_labels,  # noqa: F401
         update_webhook,  # noqa: F401
         upload_file,  # noqa: F401
         upload_folder,  # noqa: F401
         upload_large_folder,  # noqa: F401
         verify_repo_checksums,  # noqa: F401
-        wait_for_job,  # noqa: F401
-        wait_for_space,  # noqa: F401
         whoami,  # noqa: F401
     )
     from .hf_file_system import (
