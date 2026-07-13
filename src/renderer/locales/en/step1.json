@@ -174,7 +174,11 @@
       "loadModel": "Loading model…",
       "prepass": "Analyzing audio…"
     },
-    "errorTitle": "Transcription failed"
+    "errorTitle": "Transcription failed",
+    "wordSubtitle": {
+      "label": "Word-level transcription (experimental)",
+      "description": "Generates subtitles in short 1–3 word chunks. An experimental feature for English audio. Results with Japanese audio may split words unnaturally."
+    }
   },
   "dialog": {
     "cancelTitle": "Cancel transcription?",

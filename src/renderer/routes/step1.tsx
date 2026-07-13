@@ -159,6 +159,15 @@ export default function Step1Route(_: Step1RouteProps) {
   // `handleStartTranscription` directly; it now opens this drawer and
   // the drawer's own Start button is the run trigger.
   const [transcriptionDrawerOpen, setTranscriptionDrawerOpen] = useState(false)
+  // REQ-0207 — experimental word-level subtitle re-split.  Non-persisted:
+  // the user has to opt in every time the drawer opens.  This is deliberate
+  // — the checkbox is labelled "experimental" and we do not want it to
+  // silently stick between projects.  Reset happens in the useEffect below,
+  // which fires as soon as the drawer transitions to closed.
+  const [wordSubtitleOn, setWordSubtitleOn] = useState(false)
+  useEffect(() => {
+    if (!transcriptionDrawerOpen) setWordSubtitleOn(false)
+  }, [transcriptionDrawerOpen])
   // Drawer render state — idle while configuring, running during the
   // ffmpeg/Whisper pipeline, error if the run failed (cancel returns
   // to idle so the user can adjust + retry without reopening).
@@ -384,7 +393,11 @@ export default function Step1Route(_: Step1RouteProps) {
           outlineThicknessPx: runDefaults.outlineThicknessPx,
           fadeDurationSec: settingsFadeDurationSec,
         },
-        advanced: transcriptionAdvanced
+        advanced: transcriptionAdvanced,
+        // REQ-0207 — pass the drawer's checkbox through.  The service
+        // wrapper omits the key entirely when false so the IPC payload
+        // matches the pre-REQ-0207 shape byte-for-byte.
+        wordSubtitle: wordSubtitleOn
       },
       (evt) => {
         if (evt.event === 'progress') {
@@ -1126,6 +1139,8 @@ export default function Step1Route(_: Step1RouteProps) {
         guardReason={guardReason}
         onStart={handleStartTranscription}
         onCancel={handleCancelClick}
+        wordSubtitleOn={wordSubtitleOn}
+        onWordSubtitleChange={setWordSubtitleOn}
       />
 
       {/* Cancel transcription dialog.
