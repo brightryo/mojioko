@@ -46,6 +46,13 @@ export interface TranscriptionOptions {
     fadeDurationSec: number
   }
   advanced: TranscriptionAdvancedParams
+  /**
+   * REQ-0207 — experimental word-level subtitle re-split.  Default off,
+   * off matches the pre-REQ-0207 payload byte-identically (the key is
+   * dropped from the sidecar JSON when false / undefined — see
+   * `main/services/transcription-sidecar.ts` for the guard).
+   */
+  wordSubtitle?: boolean
 }
 
 export interface TranscriptionRunResult {
@@ -150,7 +157,12 @@ export function runTranscription(
       modelsDir: '',   // filled in by main process
       ffmpegPath: '',  // filled in by main process
       defaults: opts.defaults,
-      advanced: opts.advanced
+      advanced: opts.advanced,
+      // REQ-0207 — only include the key when it's actually true; the
+      // sidecar service drops undefined / false anyway, but keeping it
+      // out of the request object entirely means TS tests can assert on
+      // an unchanged object shape for the default path.
+      ...(opts.wordSubtitle === true ? { wordSubtitle: true } : {}),
     })
 
     if (!result.ok) throw new Error(result.error.message)

@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { HelpIcon } from '@/components/help-icon'
 import { WhisperAdvancedControls } from '@/components/whisper-advanced-controls/whisper-advanced-controls'
 import {
@@ -117,6 +118,13 @@ export interface TranscriptionDrawerProps {
   /** Fires when the user presses キャンセル mid-run; routes through the
    *  same cancel-confirmation dialog the parent already owned. */
   onCancel: () => void
+  /**
+   * REQ-0207 — experimental word-level subtitle re-split.  Non-persisted
+   * (parent resets to false whenever the drawer closes) so the "experimental"
+   * label carries weight — the user has to opt in every time.
+   */
+  wordSubtitleOn: boolean
+  onWordSubtitleChange: (next: boolean) => void
 }
 
 export function TranscriptionDrawer({
@@ -134,6 +142,8 @@ export function TranscriptionDrawer({
   guardReason,
   onStart,
   onCancel,
+  wordSubtitleOn,
+  onWordSubtitleChange,
 }: TranscriptionDrawerProps) {
   const { t } = useTranslation(['step1', 'step3', 'common'])
 
@@ -204,6 +214,42 @@ export function TranscriptionDrawer({
                   onUpdate={setTranscriptionAdvanced}
                   onReset={resetTranscriptionAdvanced}
                 />
+
+                {/* REQ-0207 — experimental word-level subtitle re-split.
+
+                    Placed directly under the Whisper advanced controls
+                    so it reads as "another Whisper knob," not as a
+                    standalone action.  Deliberately NOT persisted in
+                    settings-store: the parent resets it every time the
+                    drawer opens (see step1.tsx useEffect on
+                    `transcriptionDrawerOpen`).  This is what keeps the
+                    "experimental" label meaningful — the user has to opt
+                    in per run, so we do not silently ship a word-level
+                    project because someone left it on last week.
+
+                    Disabled while a run is in flight so the checkbox
+                    cannot flip mid-transcription (state change has no
+                    effect on the sidecar once started, but a stale UI
+                    would confuse the user). */}
+                <div className="flex items-start gap-2 rounded-md border border-line/70 px-3 py-2 bg-surface-2/30">
+                  <Checkbox
+                    id="word-subtitle-experimental"
+                    checked={wordSubtitleOn}
+                    onCheckedChange={(v) => onWordSubtitleChange(v === true)}
+                    className="mt-0.5"
+                  />
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <label
+                      htmlFor="word-subtitle-experimental"
+                      className="text-body-sm font-medium"
+                    >
+                      {t('drawer.wordSubtitle.label')}
+                    </label>
+                    <p className="text-caption text-fg-muted leading-relaxed">
+                      {t('drawer.wordSubtitle.description')}
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Audio track grid — same visual treatment as the legacy

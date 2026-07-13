@@ -38,6 +38,21 @@ export interface TranscriptionStartRequest {
     fadeDurationSec: number
   }
   advanced: TranscriptionAdvancedParams
+  /**
+   * REQ-0207 — experimental word-level subtitle feature (default off).
+   *
+   * When `true` the sidecar sets `word_timestamps=True` on the underlying
+   * faster-whisper call and re-splits each returned segment into short
+   * 1–3 word cues before emitting the `segment` event.  The emit shape
+   * itself is unchanged — the renderer sees more segments, not different
+   * segments.
+   *
+   * Optional so pre-REQ-0207 callers (and the packaged sidecar EXE
+   * before it is rebuilt) still work.  When omitted or `false` the
+   * sidecar keyword-for-keyword matches the pre-REQ-0207 transcribe
+   * call, which is the byte-identical contract v1.3.3 users depend on.
+   */
+  wordSubtitle?: boolean
 }
 
 export interface BurninStartRequest {

@@ -19,6 +19,12 @@ export { checkModelInstalled } from './check-model-installed'
 
 export type TranscriptionEventCallback = (event: TranscriptionEvent) => void
 
+// REQ-0207 — payload construction moved to `./transcribe-payload.ts` so
+// tests can import it without also loading `electron`.  Re-export here
+// so any other main-side importer of this module keeps working.
+export { buildTranscribePayload } from './transcribe-payload'
+import { buildTranscribePayload as _buildTranscribePayload } from './transcribe-payload'
+
 let sidecarProcess: ChildProcess | null = null
 let pendingCallback: TranscriptionEventCallback | null = null
 // REQ-0150 — remember which `MOJIOKO_GPU_TOOL_DIR` the live sidecar was
@@ -169,21 +175,7 @@ export async function transcribe(
     }
     const videoPath = norm.path
 
-    const adv = request.advanced
-    const payload = {
-      cmd: 'transcribe',
-      videoPath,
-      trackIndex: request.trackIndex,
-      model: request.modelId,
-      modelsDir: request.modelsDir,
-      ffmpegPath: request.ffmpegPath,
-      vadFilter: adv.vadFilter,
-      vadThreshold: adv.vadThreshold,
-      minSpeechDurationMs: adv.minSpeechDurationMs,
-      minSilenceDurationMs: adv.minSilenceDurationMs,
-      beamSize: adv.beamSize,
-      language: adv.language
-    }
+    const payload = _buildTranscribePayload(request, videoPath)
 
     proc.stdin!.write(JSON.stringify(payload) + '\n', 'utf-8', (err) => {
       if (err) reject(new TranscriptionError(`Failed to send to sidecar: ${err.message}`))
