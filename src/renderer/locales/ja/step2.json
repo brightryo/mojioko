@@ -140,7 +140,8 @@
     "redo": "やり直し: {{label}}",
     "bulkApplied": "{{count}}件に適用しました ({{label}})",
     "bulkAppliedUndo": "元に戻す",
-    "trimDeletedRestoreHint": "トリミングで削除された字幕です。 はさみマーカーでトリミングを取り消すと復元されます"
+    "trimDeletedRestoreHint": "トリミングで削除された字幕です。 はさみマーカーでトリミングを取り消すと復元されます",
+    "batchEditActive": "一括編集が選択されています"
   },
   "tooltip": {
     "undo": "元に戻す",

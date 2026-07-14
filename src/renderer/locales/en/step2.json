@@ -140,7 +140,8 @@
     "redo": "Redo: {{label}}",
     "bulkApplied": "Applied to {{count}} rows ({{label}})",
     "bulkAppliedUndo": "Undo",
-    "trimDeletedRestoreHint": "Removed by a trim — click its scissor marker to undo the cut and restore the subtitle"
+    "trimDeletedRestoreHint": "Removed by a trim — click its scissor marker to undo the cut and restore the subtitle",
+    "batchEditActive": "Batch editing is active"
   },
   "tooltip": {
     "undo": "Undo",

@@ -18,6 +18,16 @@ interface OutlineThicknessSliderProps {
    * caller needing its own debounce.
    */
   onCommit: (next: number) => void
+  /**
+   * REQ-0222 — optional per-frame preview callback fired on every
+   * `onChange` while the user drags the thumb (before `onCommit`
+   * fires at drag boundary).  Enables surfaces that want the video
+   * overlay / preview to update mid-drag rather than only on release
+   * — the same live-preview pattern the ColorPicker already uses via
+   * `onChange`.  Omitting the prop preserves the legacy commit-only
+   * behavior byte-for-byte (Inspector's existing usage).
+   */
+  onPreview?: (next: number) => void
   disabled?: boolean
   /**
    * Required: native <input type=range> has no implicit label, so the
@@ -46,6 +56,7 @@ interface OutlineThicknessSliderProps {
 export function OutlineThicknessSlider({
   value,
   onCommit,
+  onPreview,
   disabled,
   ariaLabel,
   fullWidth
@@ -72,6 +83,7 @@ export function OutlineThicknessSlider({
     if (isNaN(v)) return
     setDraft(v)
     interactingRef.current = true
+    onPreview?.(v)
   }
 
   function commit() {
