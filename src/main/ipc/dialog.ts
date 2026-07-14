@@ -103,4 +103,24 @@ export function registerDialogHandlers(): void {
     })
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
   })
+
+  /**
+   * REQ-0223 — SRT open dialog for the step2 import flow.  Same
+   * permission surface / defaultDir resolution as `dialogOpenProject`;
+   * only the extension filter differs.
+   */
+  ipcMain.handle(Channels.dialogOpenSrt, async (event, defaultDir?: string): Promise<string | null> => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const defaultPath = resolveDialogDir(defaultDir)
+    const result = await dialog.showOpenDialog(win ?? BrowserWindow.getFocusedWindow()!, {
+      title: 'Import SRT',
+      defaultPath,
+      filters: [
+        { name: 'SRT Subtitle', extensions: ['srt'] },
+        { name: 'All files',    extensions: ['*'] },
+      ],
+      properties: ['openFile'],
+    })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  })
 }

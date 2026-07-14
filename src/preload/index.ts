@@ -35,6 +35,9 @@ const electronAPI = {
   // REQ-0194 — .mojioko project file open dialog.
   openProjectDialog: (defaultDir?: string): Promise<string | null> =>
     ipcRenderer.invoke(Channels.dialogOpenProject, defaultDir),
+  // REQ-0223 — .srt file open dialog for the step2 import flow.
+  openSrtDialog: (defaultDir?: string): Promise<string | null> =>
+    ipcRenderer.invoke(Channels.dialogOpenSrt, defaultDir),
 
   // Video
   videoProbe: (path: string): Promise<IpcResult<VideoInfo>> =>

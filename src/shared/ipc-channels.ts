@@ -64,6 +64,11 @@ export const Channels = {
    * default folder differ.
    */
   dialogOpenProject: 'dialog:openProject',
+  /**
+   * REQ-0223 — SRT open dialog for the "import SRT" flow in step2.
+   * Same shape as `dialogOpenProject`; filter narrowed to `.srt`.
+   */
+  dialogOpenSrt: 'dialog:openSrt',
 
   shellOpenPath: 'shell:openPath',
   shellShowInFolder: 'shell:showInFolder',

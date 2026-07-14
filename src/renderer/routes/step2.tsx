@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useLayoutEffect } from 'reac
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Plus, RotateCcw, RotateCw, Film } from 'lucide-react'
+import { Plus, RotateCcw, RotateCw, Film, Import } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,8 @@ import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore, type TableFilter } from '@/stores/ui-store'
 import { useFontCacheVersionStore } from '@/stores/font-cache-version-store'
 import { cn } from '@/lib/utils'
-import { saveFileDialog, writeTextFile } from '@/services/dialog'
+import { saveFileDialog, writeTextFile, openSrtDialog, readTextFile } from '@/services/dialog'
+import { parseSrt } from '@/lib/srt-parse'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
@@ -249,6 +250,12 @@ export default function Step2Route(_: Step2RouteProps) {
 
   const [editor, setEditor] = useState<EditorState>({ open: false })
   const [discardOpen, setDiscardOpen] = useState(false)
+  // REQ-0223 — SRT import is a destructive replace (clears entries +
+  // cuts + history), so we route it through a confirm dialog with the
+  // same visual treatment the discard-back dialog uses.  Boolean flag,
+  // not a state machine — no "loading" phase between confirm and file
+  // pick because the file picker itself is the next step.
+  const [srtImportConfirmOpen, setSrtImportConfirmOpen] = useState(false)
   // REQ-0185 §4 — removed `skipDiscardWarning` state.  The pre-0185
   // "don't ask again this session" checkbox is retired now that the
   // confirm dialog always fires on back (regardless of hasChanges).
@@ -873,6 +880,157 @@ export default function Step2Route(_: Step2RouteProps) {
     toast.success(t('toast.exportedSrt'))
   }
 
+  /**
+   * REQ-0223 — SRT import.  Two-phase because the operation is
+   * destructive (entries + cuts + history all cleared) and undo can't
+   * rescue the caller — phase 1 shows a confirm dialog; phase 2
+   * (`runSrtImport`) runs the file pick + parse + validate + apply.
+   *
+   * The load-bearing invariant is RES-0223 §6: the store is ONLY
+   * cleared when we know we have a non-zero cue set to write in its
+   * place.  Every failure branch below returns before `resetEditingState`
+   * / `setEntries` fire, so a cancelled file pick or a broken SRT
+   * leaves the user's existing work untouched.
+   */
+  function handleImportSrt() {
+    setSrtImportConfirmOpen(true)
+  }
+
+  async function runSrtImport() {
+    setSrtImportConfirmOpen(false)
+
+    // Phase 1 — pick a file.  Cancel = quiet no-op, existing store
+    // untouched.  We do NOT toast a "cancelled" message because the
+    // user's intent is unambiguous when the picker dismisses.
+    const srtPath = await openSrtDialog(defaultOutputDir ?? undefined)
+    if (!srtPath) return
+
+    // Phase 2 — read the file bytes.  IPC failure (permissions, race
+    // with an editor holding the file) is surfaced as a toast and we
+    // bail without clearing the store.
+    let raw: string
+    try {
+      raw = await readTextFile(srtPath)
+    } catch (err) {
+      toast.error(
+        t('toast.srtImportReadFailed', { error: err instanceof Error ? err.message : String(err) }),
+      )
+      return
+    }
+
+    // Phase 3 — parse.  A non-empty `errors` array is a hard failure:
+    // partial imports would leave the user with a subtitle set that
+    // silently dropped rows the caller expected to see.  Better to
+    // refuse and let them fix the file.
+    const parseResult = parseSrt(raw)
+    if (parseResult.errors.length > 0) {
+      toast.error(
+        t('toast.srtImportParseFailed', {
+          error: parseResult.errors[0],
+        }),
+      )
+      return
+    }
+    if (parseResult.cues.length === 0) {
+      // Empty SRT / whitespace-only SRT — nothing to import, so we
+      // don't touch the store.
+      toast.warning(t('toast.srtImportEmpty'))
+      return
+    }
+
+    // Phase 4 — video-duration filter.  A subtitle whose start OR end
+    // is outside the loaded video's timeline is unusable in step2
+    // (`computeEntryWarnings` would tag it out-of-duration on every
+    // render, and the burn-in filter would clip it).  We drop rather
+    // than clamp because clamping requires guessing what the user
+    // meant; RES-0223 §5 explains the trade-off.
+    const durationSec = video?.durationSec ?? Infinity
+    const kept: typeof parseResult.cues = []
+    let droppedForDuration = 0
+    for (const cue of parseResult.cues) {
+      if (cue.startSec > durationSec || cue.endSec > durationSec) {
+        droppedForDuration++
+        continue
+      }
+      kept.push(cue)
+    }
+    if (kept.length === 0) {
+      // Every cue was outside the video's timeline — same "no cues
+      // survived" logic; do not clear the store.
+      toast.error(
+        t('toast.srtImportAllOutOfDuration', { count: droppedForDuration }),
+      )
+      return
+    }
+
+    // Phase 5 — mint fresh `SubtitleEntry` objects using the project's
+    // current defaults (font size / colours / outline) + the settings
+    // fade + shared layout defaults.  Same shape the transcribe path
+    // and the manual add-row path use; no format-specific fields
+    // sneak in.  `isEdited: true` because the row is user-authored
+    // (SRT text ≠ original transcript) — this is what the
+    // `edited` filter counts.
+    const layoutDefaults = makeEntryLayoutDefaults()
+    const newEntries: SubtitleEntry[] = kept.map((cue) => {
+      const base = {
+        startSec: cue.startSec,
+        endSec: cue.endSec,
+        text: cue.text,
+        fontSizePx: defaults.fontSizePx,
+        textColorHex: defaults.textColorHex,
+        outlineColorHex: defaults.outlineColorHex,
+        outlineThicknessPx: defaults.outlineThicknessPx,
+        fadeDurationSec: settingsFadeDurationSec,
+        ...layoutDefaults,
+      }
+      const id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+        ? `srt-${crypto.randomUUID()}`
+        : `srt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      return {
+        id,
+        ...base,
+        isDeleted: false,
+        isEdited: true,
+        original: {
+          ...base,
+          // Deep-copy so the live entry and its `original` snapshot
+          // never share nested identity — mirrors the add-row path.
+          subtitleBackground: { ...base.subtitleBackground },
+        },
+      }
+    })
+
+    // Phase 6 — commit.  From this point the operation is
+    // irreversible via Undo (the history clear below is deliberate;
+    // the confirm dialog warned the user).  Same clear sequence the
+    // discard-back handler uses (REQ-0196) so a future refactor
+    // treats the two "start fresh" flows uniformly.
+    useProjectStore.getState().resetEditingState()  // entries + cuts
+    useProjectStore.getState().setEntries(newEntries)
+    useHistoryStore.getState().clear()
+    const ui = useUiStore.getState()
+    ui.setSelectedEntryId(null)
+    ui.setRowSelection(new Set())
+    ui.setFocusedRowId(null)
+    ui.setScrollToRowId(null)
+    ui.setVideoCurrentTimeSec(0)
+    ui.setVideoSeekRequest(null)
+
+    // Phase 7 — user feedback.  Two shapes so the "3 dropped" case
+    // doesn't force the "0 dropped" case through an awkward
+    // parenthetical.
+    if (droppedForDuration > 0) {
+      toast.success(
+        t('toast.srtImportedWithDrop', {
+          count: newEntries.length,
+          dropped: droppedForDuration,
+        }),
+      )
+    } else {
+      toast.success(t('toast.srtImportedAll', { count: newEntries.length }))
+    }
+  }
+
   // REQ-103 — `activeEntries` from REQ-102 was removed in favour of the
   // per-tab counts above; `canContinue` originally read `readyCount`
   // directly (= the 出力対象 count = entries not effectivelyDeleted).
@@ -1123,6 +1281,25 @@ export default function Step2Route(_: Step2RouteProps) {
             </Button>
           </TooltipTrigger>
           <TooltipContent>{t('tooltip.redo') + shortcutHint('redo')}</TooltipContent>
+        </Tooltip>
+        {/* REQ-0223 — SRT import.  Sits between the undo/redo pair
+            and the "Add" button so the toolbar reads left-to-right
+            as "traverse history -> bring in external data -> add
+            new".  Icon-only ghost button matches the undo/redo
+            visual weight; the destructive action is fronted by the
+            confirm dialog below (RES-0223 §4). */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleImportSrt}
+              aria-label={t('tooltip.importSrt')}
+            >
+              <Import className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t('tooltip.importSrt')}</TooltipContent>
         </Tooltip>
         <Button variant="ghost" size="md" onClick={openAddRowDialog} data-testid="add-row">
           <Plus className="h-4 w-4 mr-1" />
@@ -1399,6 +1576,29 @@ export default function Step2Route(_: Step2RouteProps) {
                 navigate('/step1')
               }}
             >
+              {t('common:action.ok')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* REQ-0223 — SRT import confirm dialog.  Same visual language
+          as the discard-back dialog above (light-primary green
+          "OK", ghost "Cancel").  `onEnterConfirm` deliberately NOT
+          set — this is a destructive operation (clears entries +
+          cuts + history), so per REQ-0139 §3 the user must click
+          the OK button; Esc still closes on the cancel side. */}
+      <Dialog open={srtImportConfirmOpen} onOpenChange={setSrtImportConfirmOpen}>
+        <DialogContent className="max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>{t('dialog.importSrtTitle')}</DialogTitle>
+            <DialogDescription>{t('dialog.importSrtBody')}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" size="md" onClick={() => setSrtImportConfirmOpen(false)}>
+              {t('common:action.cancel')}
+            </Button>
+            <Button variant="primary" size="md" onClick={runSrtImport}>
               {t('common:action.ok')}
             </Button>
           </DialogFooter>

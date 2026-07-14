@@ -44,6 +44,11 @@ export async function openProjectDialog(defaultDir?: string): Promise<string | n
   return window.electronAPI.openProjectDialog(defaultDir)
 }
 
+/** REQ-0223 — `.srt` file open dialog for the step2 import flow. */
+export async function openSrtDialog(defaultDir?: string): Promise<string | null> {
+  return window.electronAPI.openSrtDialog(defaultDir)
+}
+
 /** REQ-0194 — read a UTF-8 text file (used for `.mojioko` project files). */
 export async function readTextFile(filePath: string): Promise<string> {
   return window.electronAPI.shellReadTextFile(filePath)

@@ -108,7 +108,9 @@
       "add": "追加",
       "apply": "適用",
       "cancel": "キャンセル"
-    }
+    },
+    "importSrtTitle": "SRT をインポート",
+    "importSrtBody": "SRT形式のデータをインポートします。\n現在の字幕はすべて削除され、操作履歴も失われます（元に戻せません）。"
   },
   "addRowPopover": {
     "label": "挿入位置",
@@ -141,11 +143,18 @@
     "bulkApplied": "{{count}}件に適用しました ({{label}})",
     "bulkAppliedUndo": "元に戻す",
     "trimDeletedRestoreHint": "トリミングで削除された字幕です。 はさみマーカーでトリミングを取り消すと復元されます",
-    "batchEditActive": "一括編集が選択されています"
+    "batchEditActive": "一括編集が選択されています",
+    "srtImportedAll": "{{count}}件の字幕を読み込みました",
+    "srtImportedWithDrop": "{{count}}件の字幕を読み込みました（{{dropped}}件は動画の長さを超えるため除外）",
+    "srtImportEmpty": "読み込める字幕が見つかりませんでした",
+    "srtImportReadFailed": "SRTファイルの読み込みに失敗しました: {{error}}",
+    "srtImportParseFailed": "SRT形式を解析できませんでした: {{error}}",
+    "srtImportAllOutOfDuration": "すべての字幕が動画の尺を超えていたため読み込めませんでした（{{count}}件除外）"
   },
   "tooltip": {
     "undo": "元に戻す",
     "redo": "やり直す",
+    "importSrt": "SRT をインポート",
     "fixErrorsFirst": "書き出しに進めないエラーが {{count}} 件あります。 「問題あり」タブで赤いバッジの字幕を修正してください"
   },
   "styleCell": {

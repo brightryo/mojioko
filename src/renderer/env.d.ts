@@ -30,6 +30,8 @@ declare global {
       openDirectoryDialog: (defaultDir?: string) => Promise<string | null>
       // REQ-0194 — `.mojioko` project file open dialog.
       openProjectDialog: (defaultDir?: string) => Promise<string | null>
+      // REQ-0223 — `.srt` file open dialog for the step2 import flow.
+      openSrtDialog: (defaultDir?: string) => Promise<string | null>
 
       videoProbe: (path: string) => Promise<IpcResult<VideoInfo>>
       videoExtractThumbnail: (path: string, atSec: number) => Promise<IpcResult<string>>

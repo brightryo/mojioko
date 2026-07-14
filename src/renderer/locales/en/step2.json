@@ -108,7 +108,9 @@
       "add": "Add",
       "apply": "Apply",
       "cancel": "Cancel"
-    }
+    },
+    "importSrtTitle": "Import SRT",
+    "importSrtBody": "About to import subtitles from an SRT file.\nAll current subtitles will be replaced and edit history will be lost (this cannot be undone)."
   },
   "addRowPopover": {
     "label": "Insert position",
@@ -141,11 +143,18 @@
     "bulkApplied": "Applied to {{count}} rows ({{label}})",
     "bulkAppliedUndo": "Undo",
     "trimDeletedRestoreHint": "Removed by a trim — click its scissor marker to undo the cut and restore the subtitle",
-    "batchEditActive": "Batch editing is active"
+    "batchEditActive": "Batch editing is active",
+    "srtImportedAll": "Imported {{count}} subtitles",
+    "srtImportedWithDrop": "Imported {{count}} subtitles ({{dropped}} skipped for exceeding the video duration)",
+    "srtImportEmpty": "No subtitles were found in the file",
+    "srtImportReadFailed": "Failed to read the SRT file: {{error}}",
+    "srtImportParseFailed": "Could not parse the SRT: {{error}}",
+    "srtImportAllOutOfDuration": "All subtitles were outside the video duration ({{count}} skipped)"
   },
   "tooltip": {
     "undo": "Undo",
     "redo": "Redo",
+    "importSrt": "Import SRT",
     "fixErrorsFirst": "{{count}} subtitle(s) have errors that block export. Open the Issues tab and fix every red badge first."
   },
   "styleCell": {
