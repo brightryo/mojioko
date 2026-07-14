@@ -503,13 +503,37 @@ function GpuCard({
             <span className="truncate mr-2">
               {isExtracting ? t('gpuTool.extracting') : t('gpuTool.downloading')}
             </span>
-            <span className="tabular-nums flex-shrink-0">{downloadPercent}%</span>
+            {/* REQ-0221 — hide the percent readout during extract.
+                `gpu-tool.ts:extractZipInto` uses PowerShell's
+                `ZipFile.ExtractToDirectory` which only surfaces
+                start / end, so the caller jumps 0 → 100 across a
+                ~10-second sync call.  Showing "0%" during that
+                window reads as "stuck" to users; the indeterminate
+                stripe below signals "working" without a false
+                number. */}
+            {!isExtracting && (
+              <span className="tabular-nums flex-shrink-0">{downloadPercent}%</span>
+            )}
           </div>
+          {/* REQ-0221 — same indeterminate treatment the
+              transcription drawer uses for its pre-Whisper prep
+              region (REQ-0142, `transcription-drawer.tsx:442`):
+              a 33 %-wide primary-coloured stripe slides across
+              the track on the shared `animate-progress-indeterminate`
+              keyframe defined in `tailwind.config.ts`.  Reusing
+              the existing token keeps the pace / colour / stripe
+              width identical to that surface, so the two places
+              a user meets an unknown-duration bar read as the
+              same visual grammar. */}
           <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all duration-300 rounded-full"
-              style={{ width: `${downloadPercent}%` }}
-            />
+            {isExtracting ? (
+              <div className="h-full w-1/3 bg-primary rounded-full animate-progress-indeterminate" />
+            ) : (
+              <div
+                className="h-full bg-primary transition-all duration-300 rounded-full"
+                style={{ width: `${downloadPercent}%` }}
+              />
+            )}
           </div>
           <Button
             variant="ghost"
