@@ -65,7 +65,13 @@ export function registerGpuToolHandlers(): void {
       // settings.json in a stale `activeAccelerator='gpu'` state that
       // then no-ops silently.  `setActiveAccelerator` handles the
       // fallback internally when the install is gone.
-      deleteGpuTool()
+      //
+      // REQ-0218 §Fix 3 — `deleteGpuTool` is now async because it must
+      // wait for the sidecar to release its CUDA DLL handles before
+      // unlinking; `await` is load-bearing (dropping it would race the
+      // delete against the sidecar's own teardown and reintroduce the
+      // EPERM failure that motivated the fix).
+      await deleteGpuTool()
       const data = await setActiveAccelerator('cpu')
       return { ok: true, data }
     } catch (err) {

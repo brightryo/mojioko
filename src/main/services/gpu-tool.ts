@@ -373,10 +373,28 @@ export async function downloadGpuTool(
   }
 }
 
-export function deleteGpuTool(): void {
+/**
+ * REQ-0218 §Fix 3 — remove the on-demand CUDA/cuDNN redistributables.
+ *
+ * Terminates any live transcription sidecar BEFORE unlinking, because
+ * `_preload_bundled_cuda_dlls()` maps all 11 CUDA DLLs into the sidecar
+ * process's address space and Windows refuses `unlink` on a currently-
+ * mapped DLL (surfaces as `EPERM: operation not permitted, unlink
+ * 'cublas64_12.dll'` — RES-0217 §3).  The wait is bounded by
+ * `terminateSidecarAndWait`'s internal timeout so a stuck sidecar
+ * can't hang the delete indefinitely; if the timeout elapses and the
+ * DLLs are still locked, the subsequent `rmSync` throws EPERM and the
+ * IPC layer surfaces it to the UI as a normal error.
+ */
+export async function deleteGpuTool(): Promise<void> {
   const dir = getGpuToolDir(GPU_TOOL_RELEASE_TAG)
-  if (existsSync(dir)) {
-    log.info(`[gpu-tool] deleting ${dir}`)
-    rmSync(dir, { recursive: true, force: true })
-  }
+  if (!existsSync(dir)) return
+  // Dynamic import to avoid a static import cycle: transcription-sidecar.ts
+  // already imports `getEffectiveGpuToolDir` from this file, so a
+  // top-level `import { terminateSidecarAndWait } from './transcription-sidecar'`
+  // here would form a bidirectional edge.
+  const { terminateSidecarAndWait } = await import('./transcription-sidecar')
+  await terminateSidecarAndWait(3000)
+  log.info(`[gpu-tool] deleting ${dir}`)
+  rmSync(dir, { recursive: true, force: true })
 }

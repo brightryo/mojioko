@@ -36,6 +36,54 @@ let pendingCallback: TranscriptionEventCallback | null = null
 // would keep the old choice active.
 let lastGpuEnvValue: string | null = null
 
+// REQ-0218 §Fix 4 — idle watchdog.  Reset on every event the sidecar
+// emits (`phase` / `started` / `segment` / `progress` / `deviceInfo` /
+// terminal events).  If no event arrives for
+// `SIDECAR_IDLE_TIMEOUT_MS`, force-fail the in-flight transcribe so
+// the UI cannot end up in a silent-hang state (RES-0217 §2.4).
+//
+// Value chosen at 10 minutes: the longest legitimate gap between
+// sidecar events is the pre-Whisper prep boundary — `phase:extractAudio`
+// fires immediately, then ffmpeg extracts the selected audio track
+// (multi-track long-form MKVs can take a couple of minutes here), then
+// `phase:loadModel` fires; `WhisperModel(...)` init on the large-v3
+// model can add another 30–60 s, followed by `phase:prepass` and the
+// Silero VAD run (up to a minute on long files) before `started`
+// arrives.  Segment events during transcribe then arrive every few
+// seconds.  10 minutes gives a ~5x headroom over the worst legitimate
+// prep gap without keeping a hung UI on-screen for an hour.  Constant
+// so a future tune is a one-line change.
+const SIDECAR_IDLE_TIMEOUT_MS = 10 * 60 * 1000
+let idleWatchdog: NodeJS.Timeout | null = null
+
+function clearIdleWatchdog(): void {
+  if (idleWatchdog !== null) {
+    clearTimeout(idleWatchdog)
+    idleWatchdog = null
+  }
+}
+
+function armIdleWatchdog(): void {
+  clearIdleWatchdog()
+  idleWatchdog = setTimeout(() => {
+    idleWatchdog = null
+    const cb = pendingCallback
+    if (!cb) return
+    log.error(
+      `[sidecar] idle watchdog fired: no events for ${Math.round(SIDECAR_IDLE_TIMEOUT_MS / 60000)} min ` +
+      `— failing the in-flight transcribe`,
+    )
+    // Detach the callback BEFORE invoking it so a downstream reject
+    // that races with a late sidecar event doesn't fire the callback
+    // twice.  Same defensive pattern the exit handler uses below.
+    pendingCallback = null
+    cb({
+      event: 'failed',
+      error: `Transcription stalled: no sidecar events for ${Math.round(SIDECAR_IDLE_TIMEOUT_MS / 60000)} min`,
+    })
+  }, SIDECAR_IDLE_TIMEOUT_MS)
+}
+
 /**
  * Decide how to spawn the transcription sidecar.
  *
@@ -123,8 +171,21 @@ async function ensureSidecar(): Promise<ChildProcess> {
     try {
       const event = JSON.parse(line) as TranscriptionEvent
       if (pendingCallback) {
+        // REQ-0218 §Fix 4 — any inbound event proves the sidecar is
+        // alive.  Reset the idle watchdog on every event, then clear
+        // it entirely on the terminal ones (`completed` / `failed` /
+        // `needsDownload`) since no more events are expected.
+        const isTerminal =
+          event.event === 'completed' ||
+          event.event === 'failed' ||
+          event.event === 'needsDownload'
+        if (isTerminal) {
+          clearIdleWatchdog()
+        } else {
+          armIdleWatchdog()
+        }
         pendingCallback(event)
-        if (event.event === 'completed' || event.event === 'failed' || event.event === 'needsDownload') {
+        if (isTerminal) {
           pendingCallback = null
         }
       }
@@ -139,12 +200,36 @@ async function ensureSidecar(): Promise<ChildProcess> {
 
   proc.on('exit', (code) => {
     log.info(`[sidecar] exited with code ${code}`)
+    // REQ-0218 §Fix 1 — ownership check.  A respawn (see line 83-89)
+    // fires kill() on the old proc synchronously but the OS-level exit
+    // event lands a few dozen ms later, by which point `sidecarProcess`
+    // has already been re-assigned to a fresh proc AND `transcribe()`
+    // has installed a new `pendingCallback` and written the payload
+    // to the fresh proc's stdin.  If we cleared module state here
+    // without checking, we would silently disarm the healthy new proc
+    // — RES-0217 §2 traces that exact race as the root cause of the
+    // "GPU-mode silent hang" bug.
+    if (sidecarProcess !== proc) return
+
+    // REQ-0218 §Fix 2 — the owning process died while a transcribe was
+    // in flight.  Emit a `failed` event before nullifying the callback
+    // so the UI surfaces an error instead of hanging forever waiting
+    // for a `completed`/`failed` that will never arrive.
+    const cb = pendingCallback
     sidecarProcess = null
     pendingCallback = null
     // REQ-0150 — drop the remembered env value so the next spawn re-
     // reads settings freshly rather than skipping the respawn based on
     // a stale value.
     lastGpuEnvValue = null
+    clearIdleWatchdog()
+    if (cb) {
+      log.error(`[sidecar] died during in-flight transcribe (code=${code})`)
+      cb({
+        event: 'failed',
+        error: `Transcription process exited unexpectedly (code=${code ?? 'null'})`,
+      })
+    }
   })
 
   return proc
@@ -170,6 +255,7 @@ export async function transcribe(
     // it to the sidecar.  See `normalize-video-path.ts` for full rationale.
     const norm = normalizeVideoPath(request.videoPath)
     if (!norm.ok) {
+      pendingCallback = null
       reject(new TranscriptionError(norm.error))
       return
     }
@@ -177,8 +263,18 @@ export async function transcribe(
 
     const payload = _buildTranscribePayload(request, videoPath)
 
+    // REQ-0218 §Fix 4 — arm the idle watchdog before the first byte
+    // leaves the pipe.  A stdin.write failure (rare, but possible if
+    // the sidecar died between spawn and this line) will disarm it
+    // in the reject path.
+    armIdleWatchdog()
+
     proc.stdin!.write(JSON.stringify(payload) + '\n', 'utf-8', (err) => {
-      if (err) reject(new TranscriptionError(`Failed to send to sidecar: ${err.message}`))
+      if (err) {
+        clearIdleWatchdog()
+        pendingCallback = null
+        reject(new TranscriptionError(`Failed to send to sidecar: ${err.message}`))
+      }
     })
   })
 }
@@ -198,5 +294,90 @@ export function terminateSidecar(): void {
   }
   sidecarProcess = null
   pendingCallback = null
+  clearIdleWatchdog()
+}
+
+/**
+ * REQ-0218 §Fix 3 — awaitable variant of {@link terminateSidecar} that
+ * resolves only after the OS process has actually exited (or the given
+ * timeout elapses).  Needed by `deleteGpuTool()` which unlinks the CUDA
+ * DLLs from disk: Windows refuses `unlink` on a DLL that any live
+ * process has mapped, so the delete has to wait for the sidecar's
+ * memory image to be torn down first (RES-0217 §3).
+ *
+ * Sequence:
+ *   1. If no live sidecar exists → resolve immediately.
+ *   2. Send `{cmd: 'shutdown'}` on stdin so the sidecar's own `main()`
+ *      loop exits cleanly (frees CUDA DLL handles as part of Python
+ *      interpreter teardown).
+ *   3. After a short grace period, escalate to `kill()` if still alive.
+ *   4. Resolve on the 'exit' event, OR after `timeoutMs` elapses —
+ *      whichever comes first.  On timeout, force `SIGKILL`-equivalent
+ *      via `kill('SIGKILL')` and resolve regardless: `deleteGpuTool()`
+ *      will then attempt `rmSync` anyway and the caller surfaces the
+ *      EPERM (if any) via the standard error path.
+ *
+ * Deliberately does NOT reject on timeout — the caller wants a
+ * best-effort "sidecar should be gone by now" signal, not a hard
+ * contract that the process is definitely dead.
+ */
+export async function terminateSidecarAndWait(timeoutMs = 3000): Promise<void> {
+  const proc = sidecarProcess
+  if (!proc || proc.killed) {
+    // Clear module state defensively — if the caller races with an
+    // exit event we may already be here without a live proc.
+    sidecarProcess = null
+    pendingCallback = null
+    clearIdleWatchdog()
+    return
+  }
+
+  return new Promise<void>((resolve) => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      clearTimeout(gracefulTimer)
+      clearTimeout(hardTimer)
+      // The proc's own 'exit' handler (installed in ensureSidecar) will
+      // clear module state via the ownership-check path.  We do NOT
+      // clear it here to avoid a double-clear race.
+      resolve()
+    }
+
+    proc.once('exit', finish)
+
+    // Try graceful shutdown first — the sidecar's `main()` loop reads
+    // `{cmd: 'shutdown'}` and breaks out cleanly, letting the Python
+    // interpreter run atexit hooks that unload the CUDA DLLs.
+    try {
+      proc.stdin?.write(JSON.stringify({ cmd: 'shutdown' }) + '\n')
+    } catch {
+      /* stdin may already be closed; the SIGTERM path below covers it */
+    }
+
+    // Escalate to SIGTERM after a short grace period if the sidecar
+    // has not exited on its own.  1 second is enough for a healthy
+    // Python interpreter to complete atexit teardown of 11 CUDA DLLs
+    // in local testing; tuning knob if a future rebuild needs longer.
+    const gracefulMs = Math.min(1000, Math.floor(timeoutMs / 2))
+    const gracefulTimer = setTimeout(() => {
+      if (!settled) {
+        try { proc.kill() } catch { /* ignore */ }
+      }
+    }, gracefulMs)
+
+    // Hard deadline — force SIGKILL-equivalent and resolve so the
+    // caller (typically `deleteGpuTool`) can proceed to `rmSync`.
+    // A DLL still locked at this point will surface as EPERM through
+    // the standard error path.
+    const hardTimer = setTimeout(() => {
+      if (!settled) {
+        log.warn(`[sidecar] terminateSidecarAndWait timed out after ${timeoutMs}ms — forcing SIGKILL`)
+        try { proc.kill('SIGKILL') } catch { /* ignore */ }
+        finish()
+      }
+    }, timeoutMs)
+  })
 }
 
