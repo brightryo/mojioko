@@ -290,12 +290,20 @@ export function registerTranscriptionHandlers(): void {
   })
 
   ipcMain.handle(Channels.transcriptionCancel, async (): Promise<void> => {
-    const { terminateSidecar } = await import('../services/transcription-sidecar')
-    terminateSidecar()
+    // REQ-0219 — cancel now goes through `cancelTranscription`, which
+    // (a) settles the in-flight `transcribe()` promise with the
+    // shared `'Cancelled'` sentinel so the parent chain's `.finally`
+    // fires and `activeRuns` cleans up, and (b) uses the SIGKILL-
+    // escalating `terminateSidecarAndWait` so a hung sidecar that
+    // ignores `SIGTERM` still dies within the 3-second deadline.
+    // The old `terminateSidecar()` path fired SIGTERM only and left
+    // the parent promise pending indefinitely.
+    const { cancelTranscription } = await import('../services/transcription-sidecar')
+    await cancelTranscription()
     // REQ-086 — also abort any in-flight preview-mix ffmpeg run.  The
     // mix runs AFTER the Whisper sidecar exits, so a user pressing
     // Cancel during the audio-mix phase needs this second signal too;
-    // `terminateSidecar` alone would leave ffmpeg running.
+    // `cancelTranscription` alone would leave ffmpeg running.
     for (const run of activeRuns) {
       run.previewMixAbort.abort()
     }

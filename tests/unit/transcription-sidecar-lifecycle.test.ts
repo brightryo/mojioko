@@ -332,93 +332,115 @@ describe('REQ-0218 Fix 2 — owning proc exit during transcribe', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Fix 4 — idle watchdog
+// REQ-0219 — cancelTranscription
 // ---------------------------------------------------------------------------
 
-describe('REQ-0218 Fix 4 — idle watchdog', () => {
-  const TEN_MIN = 10 * 60 * 1000
-
-  it('fires `failed` after 10 minutes of silence', async () => {
-    mockGpuDir = null
-    const onEvent = vi.fn()
-    const pending = silenceUnhandled(sidecar.transcribe(baseRequest(), onEvent))
-
-    // Advance almost to the limit — still no failure.
-    await vi.advanceTimersByTimeAsync(TEN_MIN - 100)
-    expect(onEvent).not.toHaveBeenCalled()
-
-    // Cross the threshold.
-    await vi.advanceTimersByTimeAsync(200)
-    expect(onEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: 'failed',
-        error: expect.stringMatching(/stalled|no sidecar events/i),
-      }),
-    )
-    await expect(pending).rejects.toThrow(/stalled|no sidecar events/i)
-  })
-
-  it('each event resets the timer — a healthy long-running transcribe never trips', async () => {
+describe('REQ-0219 cancelTranscription', () => {
+  it('settles the in-flight transcribe promise with a Cancelled error', async () => {
     mockGpuDir = null
     const onEvent = vi.fn()
     const pending = silenceUnhandled(sidecar.transcribe(baseRequest(), onEvent))
     await flushMicrotasks()
     const proc = spawnedProcs[0]
 
-    // Simulate 3 hours of continuous transcription, one segment every
-    // 8 minutes (comfortably below the 10-minute watchdog).  Emit 22
-    // events and verify no failure surfaces.
-    for (let i = 0; i < 22; i++) {
-      await vi.advanceTimersByTimeAsync(8 * 60 * 1000)
-      feedEvent(proc, { event: 'segment', segment: { startSec: i, endSec: i + 8, text: 'x' } })
-      await vi.advanceTimersByTimeAsync(0)  // flush the readline
-    }
-    expect(onEvent.mock.calls.every(([evt]) => evt.event !== 'failed')).toBe(true)
+    // User presses Cancel while transcribe is in flight.
+    const cancelPromise = sidecar.cancelTranscription()
+    // The callback should have fired with the `Cancelled` sentinel
+    // synchronously — the renderer's `msg.includes('Cancelled')` check
+    // downstream distinguishes cancel from real errors, matching the
+    // shared convention in ffmpeg-burnin / preview-mix / model-downloader.
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'failed', error: 'Cancelled' }),
+    )
+    await expect(pending).rejects.toThrow(/Cancelled/)
 
-    // Wrap up with a real completion so the promise settles.
-    feedEvent(proc, { event: 'completed', segmentCount: 22, previewMixUrl: null })
-    await vi.advanceTimersByTimeAsync(0)
-    await expect(pending).resolves.toBeUndefined()
+    // cancelTranscription itself resolves once the sidecar has exited
+    // (or the escalation deadline elapses).  Simulate the sidecar
+    // exiting cleanly after the `{cmd:'shutdown'}` write; if it did
+    // not exit, the timeout path in the next test proves the fallback.
+    proc.emit('exit', 0)
+    await expect(cancelPromise).resolves.toBeUndefined()
   })
 
-  it('terminal events (completed) disarm the watchdog completely', async () => {
+  it('sends {cmd:"shutdown"} then escalates to SIGKILL when the sidecar ignores SIGTERM', async () => {
+    mockGpuDir = null
+    const p = silenceUnhandled(sidecar.transcribe(baseRequest(), vi.fn()))
+    await flushMicrotasks()
+    const proc = spawnedProcs[0]
+    proc.__lastStdin.length = 0
+    const killSpy = vi.spyOn(proc, 'kill')
+
+    const cancelPromise = sidecar.cancelTranscription()
+    // The graceful `{cmd:'shutdown'}` write happens synchronously
+    // inside the Promise executor of terminateSidecarAndWait.
+    expect(proc.__lastStdin.some((s) => s.includes('"shutdown"'))).toBe(true)
+
+    // The sidecar ignores SIGTERM (never emits `exit`).  After 3 s
+    // the hard deadline elapses, `kill('SIGKILL')` is called, and
+    // cancelTranscription resolves anyway — the caller (IPC handler)
+    // needs to proceed regardless.
+    await vi.advanceTimersByTimeAsync(3001)
+    await expect(cancelPromise).resolves.toBeUndefined()
+    expect(killSpy.mock.calls.some((args) => args[0] === 'SIGKILL')).toBe(true)
+
+    // The in-flight transcribe promise must have settled by now (the
+    // Cancelled callback fires synchronously before the wait even
+    // begins), so no leftover pending promises.
+    await expect(p).rejects.toThrow(/Cancelled/)
+  })
+
+  it('module state is clean after cancel — a subsequent transcribe spawns fresh', async () => {
+    mockGpuDir = null
+    const p1 = silenceUnhandled(sidecar.transcribe(baseRequest(), vi.fn()))
+    await flushMicrotasks()
+    const proc1 = spawnedProcs[0]
+    expect(spawnedProcs.length).toBe(1)
+
+    const cancelPromise = sidecar.cancelTranscription()
+    proc1.emit('exit', 0)
+    await cancelPromise
+    await expect(p1).rejects.toThrow(/Cancelled/)
+
+    // Fire a fresh transcribe.  ensureSidecar sees `sidecarProcess = null`
+    // (cleared by the exit handler under Fix 1's ownership branch) and
+    // spawns a new proc — total spawn count must go to 2.
+    silenceUnhandled(sidecar.transcribe(baseRequest(), vi.fn()))
+    await flushMicrotasks()
+    expect(spawnedProcs.length).toBe(2)
+    expect(spawnedProcs[1]).not.toBe(proc1)
+  })
+
+  it('is a no-op when there is no live sidecar', async () => {
+    // Freshly reset state — no transcribe has been called.
+    await expect(sidecar.cancelTranscription()).resolves.toBeUndefined()
+    expect(spawnedProcs.length).toBe(0)
+  })
+
+  it('does not emit a spurious second `failed` from the exit-handler after callback is invoked', async () => {
+    // Regression guard for the Fix 2 / cancel interaction: after
+    // `cancelTranscription` fires the `Cancelled` callback and nulls
+    // pendingCallback, the subsequent exit event must NOT invoke a
+    // second `failed` callback (Fix 2's `if (cb)` guard covers this).
     mockGpuDir = null
     const onEvent = vi.fn()
     const p = silenceUnhandled(sidecar.transcribe(baseRequest(), onEvent))
     await flushMicrotasks()
     const proc = spawnedProcs[0]
 
-    feedEvent(proc, { event: 'completed', segmentCount: 0, previewMixUrl: null })
-    await flushMicrotasks()
-    await p
+    const cancelPromise = sidecar.cancelTranscription()
+    // Snapshot the call count after the Cancelled emission but before
+    // the exit event.
+    const callCountAfterCancel = onEvent.mock.calls.length
+    expect(callCountAfterCancel).toBe(1)
+    expect(onEvent).toHaveBeenCalledWith({ event: 'failed', error: 'Cancelled' })
 
-    // Wait way past the 10-min limit; no callback should fire because
-    // pendingCallback was cleared on the completed event.
-    onEvent.mockClear()
-    await vi.advanceTimersByTimeAsync(TEN_MIN * 3)
-    expect(onEvent).not.toHaveBeenCalled()
-  })
+    // Simulate the sidecar exiting AFTER the cancel — Fix 2 must not
+    // re-fire because pendingCallback was nulled by cancelTranscription.
+    proc.emit('exit', 0)
+    await cancelPromise
+    await expect(p).rejects.toThrow(/Cancelled/)
 
-  it('non-terminal event just before threshold pushes the deadline forward', async () => {
-    mockGpuDir = null
-    const onEvent = vi.fn()
-    const pending = silenceUnhandled(sidecar.transcribe(baseRequest(), onEvent))
-    await flushMicrotasks()
-    const proc = spawnedProcs[0]
-
-    // 9m59s of silence — inside the window.
-    await vi.advanceTimersByTimeAsync(TEN_MIN - 1000)
-    // A `phase` event arrives just in time.
-    feedEvent(proc, { event: 'phase', phase: 'loadModel' })
-    await vi.advanceTimersByTimeAsync(0)
-    // Advance another 9 minutes — still within a fresh window.
-    await vi.advanceTimersByTimeAsync(9 * 60 * 1000)
-    expect(onEvent.mock.calls.every(([evt]) => evt.event !== 'failed')).toBe(true)
-
-    // Close it out.
-    feedEvent(proc, { event: 'completed', segmentCount: 0, previewMixUrl: null })
-    await vi.advanceTimersByTimeAsync(0)
-    await expect(pending).resolves.toBeUndefined()
+    expect(onEvent.mock.calls.length).toBe(callCountAfterCancel)
   })
 })
 

@@ -36,53 +36,21 @@ let pendingCallback: TranscriptionEventCallback | null = null
 // would keep the old choice active.
 let lastGpuEnvValue: string | null = null
 
-// REQ-0218 §Fix 4 — idle watchdog.  Reset on every event the sidecar
-// emits (`phase` / `started` / `segment` / `progress` / `deviceInfo` /
-// terminal events).  If no event arrives for
-// `SIDECAR_IDLE_TIMEOUT_MS`, force-fail the in-flight transcribe so
-// the UI cannot end up in a silent-hang state (RES-0217 §2.4).
+// REQ-0219 — the idle watchdog from REQ-0218 §Fix 4 was withdrawn.
+// The premise (~event silence implies hang~) can never be safely
+// distinguished from ~heavy processing is legitimately taking a
+// while~ from the outside, and any threshold false-positives on long-
+// form CPU transcription runs — which is MOJIOKO's main use case.
+// The user can watch the UI and press Cancel if progress stalls; the
+// app must NOT guess-and-kill with an arbitrary timer.  The reliable
+// cancel path lives in `cancelTranscription()` below, which is what
+// `ipc/transcription.ts:transcriptionCancel` invokes.
 //
-// Value chosen at 10 minutes: the longest legitimate gap between
-// sidecar events is the pre-Whisper prep boundary — `phase:extractAudio`
-// fires immediately, then ffmpeg extracts the selected audio track
-// (multi-track long-form MKVs can take a couple of minutes here), then
-// `phase:loadModel` fires; `WhisperModel(...)` init on the large-v3
-// model can add another 30–60 s, followed by `phase:prepass` and the
-// Silero VAD run (up to a minute on long files) before `started`
-// arrives.  Segment events during transcribe then arrive every few
-// seconds.  10 minutes gives a ~5x headroom over the worst legitimate
-// prep gap without keeping a hung UI on-screen for an hour.  Constant
-// so a future tune is a one-line change.
-const SIDECAR_IDLE_TIMEOUT_MS = 10 * 60 * 1000
-let idleWatchdog: NodeJS.Timeout | null = null
-
-function clearIdleWatchdog(): void {
-  if (idleWatchdog !== null) {
-    clearTimeout(idleWatchdog)
-    idleWatchdog = null
-  }
-}
-
-function armIdleWatchdog(): void {
-  clearIdleWatchdog()
-  idleWatchdog = setTimeout(() => {
-    idleWatchdog = null
-    const cb = pendingCallback
-    if (!cb) return
-    log.error(
-      `[sidecar] idle watchdog fired: no events for ${Math.round(SIDECAR_IDLE_TIMEOUT_MS / 60000)} min ` +
-      `— failing the in-flight transcribe`,
-    )
-    // Detach the callback BEFORE invoking it so a downstream reject
-    // that races with a late sidecar event doesn't fire the callback
-    // twice.  Same defensive pattern the exit handler uses below.
-    pendingCallback = null
-    cb({
-      event: 'failed',
-      error: `Transcription stalled: no sidecar events for ${Math.round(SIDECAR_IDLE_TIMEOUT_MS / 60000)} min`,
-    })
-  }, SIDECAR_IDLE_TIMEOUT_MS)
-}
+// The other three REQ-0218 fixes remain in force:
+//   Fix 1 (exit-handler ownership check) — see `proc.on('exit')` below.
+//   Fix 2 (owning-proc death → `failed` event) — same handler.
+//   Fix 3 (`terminateSidecarAndWait` for GPU-tool delete) — reused
+//   here by `cancelTranscription` to guarantee SIGKILL escalation.
 
 /**
  * Decide how to spawn the transcription sidecar.
@@ -171,21 +139,8 @@ async function ensureSidecar(): Promise<ChildProcess> {
     try {
       const event = JSON.parse(line) as TranscriptionEvent
       if (pendingCallback) {
-        // REQ-0218 §Fix 4 — any inbound event proves the sidecar is
-        // alive.  Reset the idle watchdog on every event, then clear
-        // it entirely on the terminal ones (`completed` / `failed` /
-        // `needsDownload`) since no more events are expected.
-        const isTerminal =
-          event.event === 'completed' ||
-          event.event === 'failed' ||
-          event.event === 'needsDownload'
-        if (isTerminal) {
-          clearIdleWatchdog()
-        } else {
-          armIdleWatchdog()
-        }
         pendingCallback(event)
-        if (isTerminal) {
+        if (event.event === 'completed' || event.event === 'failed' || event.event === 'needsDownload') {
           pendingCallback = null
         }
       }
@@ -222,7 +177,6 @@ async function ensureSidecar(): Promise<ChildProcess> {
     // reads settings freshly rather than skipping the respawn based on
     // a stale value.
     lastGpuEnvValue = null
-    clearIdleWatchdog()
     if (cb) {
       log.error(`[sidecar] died during in-flight transcribe (code=${code})`)
       cb({
@@ -263,15 +217,8 @@ export async function transcribe(
 
     const payload = _buildTranscribePayload(request, videoPath)
 
-    // REQ-0218 §Fix 4 — arm the idle watchdog before the first byte
-    // leaves the pipe.  A stdin.write failure (rare, but possible if
-    // the sidecar died between spawn and this line) will disarm it
-    // in the reject path.
-    armIdleWatchdog()
-
     proc.stdin!.write(JSON.stringify(payload) + '\n', 'utf-8', (err) => {
       if (err) {
-        clearIdleWatchdog()
         pendingCallback = null
         reject(new TranscriptionError(`Failed to send to sidecar: ${err.message}`))
       }
@@ -294,7 +241,6 @@ export function terminateSidecar(): void {
   }
   sidecarProcess = null
   pendingCallback = null
-  clearIdleWatchdog()
 }
 
 /**
@@ -328,7 +274,6 @@ export async function terminateSidecarAndWait(timeoutMs = 3000): Promise<void> {
     // exit event we may already be here without a live proc.
     sidecarProcess = null
     pendingCallback = null
-    clearIdleWatchdog()
     return
   }
 
@@ -379,5 +324,54 @@ export async function terminateSidecarAndWait(timeoutMs = 3000): Promise<void> {
       }
     }, timeoutMs)
   })
+}
+
+/**
+ * REQ-0219 — user-initiated cancel path for a running transcribe.
+ *
+ * Two responsibilities the IPC layer needs met on every cancel:
+ *
+ *   1. **The sidecar process really dies.**  A hung sidecar that
+ *      ignores `SIGTERM` must still be killed so the user can start a
+ *      fresh transcribe.  Reuses `terminateSidecarAndWait(3000)` —
+ *      graceful `{cmd:'shutdown'}` → SIGTERM at ~1 s → SIGKILL at 3 s —
+ *      so a stuck sidecar is guaranteed to release its handles within
+ *      the 3-second deadline.  (Same escalation the GPU-tool delete
+ *      path relies on; sharing the helper keeps both call sites in
+ *      sync on the ~how do we forcibly stop the sidecar~ contract.)
+ *
+ *   2. **The main-side `transcribe()` promise settles.**  The renderer
+ *      already handles cancel locally (see `services/transcription.ts`
+ *      `doCancel` — rejects its own run promise with `Error('Cancelled')`
+ *      immediately), but the main-side promise returned by
+ *      `transcribe()` was previously left pending forever when the
+ *      cancel handler just nulled `pendingCallback`.  That leaked the
+ *      `activeRuns` entry in `ipc/transcription.ts` and the parent
+ *      `.finally(finish)` never fired.  Fixed here by invoking the
+ *      captured callback with `{event:'failed', error:'Cancelled'}`
+ *      BEFORE the proc goes away — same `'Cancelled'` sentinel string
+ *      that `ffmpeg-burnin.ts:350` / `preview-mix.ts:145` /
+ *      `model-downloader.ts:283` use, so any downstream code that
+ *      needs to distinguish cancel from error via
+ *      `msg.includes('Cancelled')` continues to work.
+ *
+ * The exit handler installed in `ensureSidecar()` (Fix 1 / Fix 2) will
+ * still fire when the proc actually exits, but by then `pendingCallback`
+ * is already null so Fix 2 correctly no-ops — no spurious second
+ * `failed` event is emitted.  Module state (`sidecarProcess`,
+ * `lastGpuEnvValue`) is cleared by that same exit handler, keeping the
+ * ownership-check invariant intact.
+ */
+export async function cancelTranscription(): Promise<void> {
+  // Detach the callback FIRST so a late sidecar event (from the
+  // 1-second graceful window) or the imminent exit handler cannot
+  // fire it a second time.  Captured local `cb` is what we invoke.
+  const cb = pendingCallback
+  pendingCallback = null
+  if (cb) {
+    log.info('[sidecar] cancelTranscription — settling in-flight transcribe with Cancelled')
+    cb({ event: 'failed', error: 'Cancelled' })
+  }
+  await terminateSidecarAndWait(3000)
 }
 
