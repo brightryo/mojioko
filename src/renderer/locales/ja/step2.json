@@ -143,7 +143,6 @@
     "bulkApplied": "{{count}}件に適用しました ({{label}})",
     "bulkAppliedUndo": "元に戻す",
     "trimDeletedRestoreHint": "トリミングで削除された字幕です。 はさみマーカーでトリミングを取り消すと復元されます",
-    "batchEditActive": "一括編集が選択されています",
     "srtImportedAll": "{{count}}件の字幕を読み込みました",
     "srtImportedWithDrop": "{{count}}件の字幕を読み込みました（{{dropped}}件は動画の長さを超えるため除外）",
     "srtImportEmpty": "読み込める字幕が見つかりませんでした",

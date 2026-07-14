@@ -209,7 +209,15 @@ export function TranscriptionDrawer({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 divide-y divide-line">
+        {/* REQ-0225 — the `divide-y divide-line` that used to draw a
+            hairline between the Whisper Advanced + wordSubtitle
+            section and the Audio Tracks section was retired.  The
+            hairline appeared directly below the "単語ごとに文字起こし"
+            checkbox and was flagged as visual noise (the two sections
+            already separate cleanly via their `py-3` padding + the
+            wordSubtitle block's own `border`).  The class stack keeps
+            the scroll container behaviour otherwise untouched. */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2">
           {renderState === 'idle' && (
             <>
               {/*

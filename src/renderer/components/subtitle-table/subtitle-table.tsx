@@ -14,12 +14,12 @@ import { Checkbox } from '@/components/ui/checkbox'
 // switch) live in the always-on right-pane Inspector.  REQ-0222 walked
 // back the per-row read-only display of textColor / outlineColor /
 // outlineThickness: those three are now editable in-place via the
-// same ColorPicker and OutlineThicknessSlider the Inspector uses,
-// wrapped so bulk-edit mode blocks the per-row path (toast) and the
-// history op is coarse-grained (popover-close boundary).
+// same ColorPicker and OutlineThicknessSlider the Inspector uses.
+// REQ-0225 walked back REQ-0222's bulk-edit blockade — the row-level
+// pickers are now always available, matching the "time / size / text
+// stay editable during bulk edit" convention the rest of the row uses.
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { OutlineThicknessPopover } from '@/components/subtitle-table/outline-thickness-popover'
-import { toast } from 'sonner'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
@@ -282,13 +282,6 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
   // onPreview so typing lights up the video overlay live.
   const updateEntryPreview = useProjectStore((s) => s.updateEntryPreview)
   const pushHistory = useHistoryStore((s) => s.push)
-  // REQ-0222 — when any row's checkbox is ticked the bulk-edit bar
-  // takes over.  In that mode we block the per-row style edits and
-  // surface an explanatory toast (silent no-ops are the worst UX —
-  // the user is left wondering whether the click registered at all).
-  // Subscribed with a boolean selector so a row only re-renders on
-  // the 0 ↔ non-0 boundary, not every checkbox toggle.
-  const hasBulkSelection = useUiStore((s) => s.selectedRowIds.size > 0)
   // REQ-028: in audio-only mode the size / style / font cells render
   // empty so the grid stays in place (col widths unchanged) but the
   // style controls are visually + functionally suppressed.
@@ -319,14 +312,6 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
   // by the Restore / Delete button branch.
   const isTrimDeleted = clipStatus === 'trimDeleted'
   const isFrozen = entry.isDeleted || isTrimDeleted
-
-  // REQ-0222 — memoise the "bulk-edit is active" toast so the two
-  // BulkBlockedSwatch instances + the BulkBlockedNumber all share the
-  // same callback identity.  The i18n key sits under the `toast`
-  // namespace next to the existing videoLoaded / probeError family.
-  const showBulkBlockedToast = useCallback(() => {
-    toast.info(t('toast.batchEditActive'))
-  }, [t])
 
   function applyPatch(patch: Partial<SubtitleEntry>) {
     updateEntry(entry.id, { ...patch, isEdited: true })
@@ -641,20 +626,21 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
         )}
       </div>
 
-      {/* REQ-20260614-001 補遺④ → REQ-0222 — style-reference block.
+      {/* REQ-20260614-001 補遺④ → REQ-0222 → REQ-0225 — style cell.
           The three cells (text colour swatch / outline colour swatch /
-          outline width readout) are now editable in-place: the two
+          outline width readout) are editable in-place: the two
           swatches open the shared ColorPicker popover, the number
           opens an OutlineThicknessPopover with the Inspector's
           slider inside.  Both use the same per-frame preview
           (`updateEntryPreview`) + close-time-commit (`withHistory`)
           split the ColorPicker already established under REQ-0125.
 
-          Bulk-edit blockade: when any checkbox is ticked
-          (`hasBulkSelection`) the per-row path defers to the bulk
-          bar.  We swap each control for a passive `<button>` that
-          fires a toast on click so the user knows why the picker
-          didn't open — silently ignoring the click was the worst UX.
+          REQ-0225 removed the REQ-0222 bulk-edit blockade: since
+          the row's time / size / text inputs stay editable during a
+          bulk selection, gating just the style trio was inconsistent.
+          Row-level edits always apply to this row only; the bulk-edit
+          bar continues to be the surface for "apply to N selected
+          rows" separately.
 
           `onClick={(e) => e.stopPropagation()}` on the outer div
           keeps swatch/number clicks from bubbling to the row's own
@@ -667,92 +653,66 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
           className="flex flex-col items-center justify-center gap-1 py-2 px-1"
           onClick={(e) => e.stopPropagation()}
         >
-          {hasBulkSelection ? (
-            // Bulk mode — three passive buttons wired to the toast.
-            <>
-              <BulkBlockedSwatch
-                colorHex={entry.textColorHex}
-                label={t('styleCell.textColor')}
-                onToast={showBulkBlockedToast}
-                isFrozen={isFrozen}
-              />
-              <BulkBlockedSwatch
-                colorHex={entry.outlineColorHex}
-                label={t('styleCell.outlineColor')}
-                onToast={showBulkBlockedToast}
-                isFrozen={isFrozen}
-              />
-              <BulkBlockedNumber
-                value={entry.outlineThicknessPx}
-                label={t('styleCell.outlineWidth')}
-                onToast={showBulkBlockedToast}
-                isFrozen={isFrozen}
-              />
-            </>
-          ) : (
-            <>
-              <ColorPicker
-                value={entry.textColorHex}
-                onChange={(hex) =>
-                  updateEntryPreview(entry.id, { textColorHex: hex })
-                }
-                onCommit={(hex, hexOnOpen) =>
-                  withHistory(
-                    t('history.editColor'),
-                    { textColorHex: hex },
-                    { textColorHex: hexOnOpen },
-                  )
-                }
-                onPairApply={(text, outline) =>
-                  withHistory(t('history.editColor'), {
-                    textColorHex: text,
-                    outlineColorHex: outline,
-                  })
-                }
-                disabled={isFrozen}
-                swatchOnly
-                heading={t('common:colorPicker.headingText')}
-              />
-              <ColorPicker
-                value={entry.outlineColorHex}
-                onChange={(hex) =>
-                  updateEntryPreview(entry.id, { outlineColorHex: hex })
-                }
-                onCommit={(hex, hexOnOpen) =>
-                  withHistory(
-                    t('history.editColor'),
-                    { outlineColorHex: hex },
-                    { outlineColorHex: hexOnOpen },
-                  )
-                }
-                onPairApply={(text, outline) =>
-                  withHistory(t('history.editColor'), {
-                    textColorHex: text,
-                    outlineColorHex: outline,
-                  })
-                }
-                disabled={isFrozen}
-                swatchOnly
-                heading={t('common:colorPicker.headingOutline')}
-              />
-              <OutlineThicknessPopover
-                value={entry.outlineThicknessPx}
-                onPreview={(v) =>
-                  updateEntryPreview(entry.id, { outlineThicknessPx: v })
-                }
-                onCommit={(v, valueOnOpen) =>
-                  withHistory(
-                    t('history.editStroke'),
-                    { outlineThicknessPx: v },
-                    { outlineThicknessPx: valueOnOpen },
-                  )
-                }
-                disabled={isFrozen}
-                isFrozen={isFrozen}
-                ariaLabel={t('styleCell.outlineWidth')}
-              />
-            </>
-          )}
+          <ColorPicker
+            value={entry.textColorHex}
+            onChange={(hex) =>
+              updateEntryPreview(entry.id, { textColorHex: hex })
+            }
+            onCommit={(hex, hexOnOpen) =>
+              withHistory(
+                t('history.editColor'),
+                { textColorHex: hex },
+                { textColorHex: hexOnOpen },
+              )
+            }
+            onPairApply={(text, outline) =>
+              withHistory(t('history.editColor'), {
+                textColorHex: text,
+                outlineColorHex: outline,
+              })
+            }
+            disabled={isFrozen}
+            swatchOnly
+            heading={t('common:colorPicker.headingText')}
+          />
+          <ColorPicker
+            value={entry.outlineColorHex}
+            onChange={(hex) =>
+              updateEntryPreview(entry.id, { outlineColorHex: hex })
+            }
+            onCommit={(hex, hexOnOpen) =>
+              withHistory(
+                t('history.editColor'),
+                { outlineColorHex: hex },
+                { outlineColorHex: hexOnOpen },
+              )
+            }
+            onPairApply={(text, outline) =>
+              withHistory(t('history.editColor'), {
+                textColorHex: text,
+                outlineColorHex: outline,
+              })
+            }
+            disabled={isFrozen}
+            swatchOnly
+            heading={t('common:colorPicker.headingOutline')}
+          />
+          <OutlineThicknessPopover
+            value={entry.outlineThicknessPx}
+            onPreview={(v) =>
+              updateEntryPreview(entry.id, { outlineThicknessPx: v })
+            }
+            onCommit={(v, valueOnOpen) =>
+              withHistory(
+                t('history.editStroke'),
+                { outlineThicknessPx: v },
+                { outlineThicknessPx: valueOnOpen },
+              )
+            }
+            disabled={isFrozen}
+            isFrozen={isFrozen}
+            ariaLabel={t('styleCell.outlineWidth')}
+          />
         </div>
       )}
 
@@ -891,72 +851,6 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
         )}
       </div>
     </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// REQ-0222 — bulk-edit blockade helpers for the style cell
-// ---------------------------------------------------------------------------
-//
-// When the bulk-edit bar is engaged (any row's checkbox ticked), the
-// per-row style pickers are blocked so the user can't accidentally
-// edit one row while intending to edit N rows via the bar.  A
-// passive-styled `<button>` replaces the interactive control and
-// fires an info toast on click so the user learns why nothing
-// happens.  Same visual footprint as the pre-REQ-0222 static
-// `<span>` swatches so the column width does not shift when bulk
-// mode toggles on/off.
-
-interface BulkBlockedSwatchProps {
-  colorHex: string
-  label: string
-  onToast: () => void
-  isFrozen: boolean
-}
-
-function BulkBlockedSwatch({ colorHex, label, onToast, isFrozen }: BulkBlockedSwatchProps) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={(e) => {
-        e.stopPropagation()
-        onToast()
-      }}
-      className={cn(
-        'inline-block h-5 w-5 rounded-sm border border-line-strong opacity-50 cursor-not-allowed',
-        isFrozen && 'opacity-30',
-      )}
-      style={{ backgroundColor: colorHex }}
-    />
-  )
-}
-
-interface BulkBlockedNumberProps {
-  value: number
-  label: string
-  onToast: () => void
-  isFrozen: boolean
-}
-
-function BulkBlockedNumber({ value, label, onToast, isFrozen }: BulkBlockedNumberProps) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={(e) => {
-        e.stopPropagation()
-        onToast()
-      }}
-      className={cn(
-        'text-body-sm tabular-nums text-fg-secondary leading-none px-1 py-0.5 rounded opacity-50 cursor-not-allowed',
-        isFrozen && 'opacity-30',
-      )}
-    >
-      {value}
-    </button>
   )
 }
 

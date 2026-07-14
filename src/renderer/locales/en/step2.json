@@ -143,7 +143,6 @@
     "bulkApplied": "Applied to {{count}} rows ({{label}})",
     "bulkAppliedUndo": "Undo",
     "trimDeletedRestoreHint": "Removed by a trim — click its scissor marker to undo the cut and restore the subtitle",
-    "batchEditActive": "Batch editing is active",
     "srtImportedAll": "Imported {{count}} subtitles",
     "srtImportedWithDrop": "Imported {{count}} subtitles ({{dropped}} skipped for exceeding the video duration)",
     "srtImportEmpty": "No subtitles were found in the file",

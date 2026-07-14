@@ -280,12 +280,15 @@ export function WhisperAdvancedControls({
         </AdvancedParamRow>
       </div>
 
-      {/* ── Reset + note ────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between pt-1">
-        <p className="text-body-sm italic text-muted-foreground/60">
-          {t('advanced.futureNote')}
-        </p>
-        {isAdvancedChanged && (
+      {/* ── Reset button ─────────────────────────────────────────────
+          REQ-0225 — the "設定は自動的に保存されます" note was retired.
+          MOJIOKO auto-saves every settings surface; a dedicated note
+          on this one panel was redundant.  The layout now shrinks to
+          just the reset button (right-aligned via `justify-end`,
+          only rendered when the current values differ from
+          TRANSCRIPTION_DEFAULTS). */}
+      {isAdvancedChanged && (
+        <div className="flex items-center justify-end pt-1">
           <Button
             variant="ghost"
             size="sm"
@@ -295,8 +298,8 @@ export function WhisperAdvancedControls({
             <RotateCcw className="h-3 w-3" />
             {t('advanced.resetToDefaults')}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
