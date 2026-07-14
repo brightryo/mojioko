@@ -9,15 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.3.3] - Unreleased
+## [1.3.3] - 2026-07-15
 
 Fifth minor-line release: a full editor redesign inspired by
 DaVinci Resolve, a new project save / open workflow for pausing
-and resuming an edit, and RTX 50-series GPU support for the
-Whisper transcription backend.
+and resuming an edit, and NVIDIA GPU acceleration for the Whisper
+transcription backend (including the new RTX 50 series).
 
 ### Added
 
+- **GPU-accelerated transcription (NVIDIA).**  Whisper can now run
+  on an NVIDIA GPU for significantly faster transcription.  The
+  CUDA / cuDNN runtime (~1.1 GB) downloads once on first use from
+  inside the app — no separate CUDA install required.  A GPU is
+  optional; MOJIOKO continues to run on CPU without it, and the
+  user's CPU/GPU choice is always respected.  The latest NVIDIA
+  generations, including RTX 50 series (Blackwell), are supported
+  — the backend picks the right compute type automatically and
+  falls back to CPU cleanly if a card reports GPU support but
+  stumbles at model init.
+- **SRT import.**  Load an external SRT subtitle file into the
+  editor to replace the current subtitle set.  Enables workflows
+  like "transcribe → export SRT → translate externally → import
+  back and burn in the translated version."  Import is
+  destructive (current subtitles and edit history are replaced),
+  so it goes through a confirm dialog first.  Cues that fall
+  outside the loaded video's duration are skipped and reported
+  in the completion toast.
+- **Per-row style editing in the subtitle list.**  Text colour,
+  outline colour, and outline width can now be edited directly
+  from a row's style cell (in addition to the inspector) —
+  clicking the colour swatch opens the same colour picker, and
+  clicking the outline-width number opens a popover with the
+  same slider the inspector uses.  Works during bulk-edit
+  selection too; row-level edits apply to that single row.
 - **Word-level transcription (Microsoft Store version only,
   experimental, for English audio).**  A checkbox in the
   transcribe drawer generates subtitles in short 1–3 word
@@ -36,10 +61,6 @@ Whisper transcription backend.
   folder can be set under Settings > General.  When the original
   video has moved, the app asks you to point it at the new
   location before opening.
-- **RTX 50 series (Blackwell) GPU support.**  The Whisper
-  backend picks the right compute type automatically for newer
-  NVIDIA cards, and now falls back to CPU cleanly when a card
-  reports GPU support but stumbles at model init.
 - **Transcribe start guards, visualised.**  Each precondition
   (input file, model, GPU / audio track) shows a small ○ / ✓
   marker on the transcribe screen; hovering the disabled Start
@@ -60,6 +81,13 @@ Whisper transcription backend.
   properly at every window size and scrolls inside its own
   panel.  The "Default:" prefix on the currently-selected font
   was dropped, and per-row reset buttons were simplified.
+- **GPU-tool extraction shows an indeterminate progress bar.**
+  The ~10-second local extraction step after the CUDA / cuDNN
+  download used to sit at 0 % and looked stuck; it now shows a
+  moving stripe so it reads as "working."
+- **Whisper settings pane cleanup.**  The redundant "settings
+  are saved automatically" line was retired from the transcribe
+  drawer and the Whisper tab of Settings.
 - Numerous small polish fixes across the transcribe screen,
   editor, and export drawer as part of the redesign.
 
