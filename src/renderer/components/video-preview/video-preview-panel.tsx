@@ -24,6 +24,7 @@ import {
 } from '@/lib/preview-coords'
 import { editedDuration, editedToOrig, effectiveEntryState, origToEdited } from '../../../shared/cuts'
 import { computeFadeOpacity } from '@/lib/fade-opacity'
+import { createPreviewSeeker, type PreviewSeeker } from '@/lib/preview-seek'
 import type { SubtitleEntry } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -213,6 +214,23 @@ export function VideoPreviewPanel() {
   const isSeeking = useRef(false)
   // Track last active entry id so we only write to the store on change.
   const activeEntryIdRef = useRef<string | null>(null)
+
+  // REQ-0229 — clean-seek helper.  Owns the pause → currentTime →
+  // await seeked → resume dance for multi-track preview seeks so
+  // Chromium's stale decoded audio buffer never leaks between the
+  // old and new playhead positions (RES-0228 root cause).  Single
+  // instance per panel; concurrent-seek serialisation is inside.
+  const seekerRef = useRef<PreviewSeeker | null>(null)
+  if (seekerRef.current === null) seekerRef.current = createPreviewSeeker()
+  const runCleanSeek = useCallback((targetSec: number) => {
+    const seeker = seekerRef.current
+    const video = videoRef.current
+    if (!seeker || !video) return
+    // Fire and forget — the seek's promise is unobserved on purpose.
+    // The seeker handles concurrent calls with a latest-wins policy
+    // (only the last seek in a chain restores playback).
+    void seeker.seek(video, audioRef.current, targetSec)
+  }, [])
 
   // REQ-20260613-016 Phase 6 — preview drag (機能B).  Captures pointer on
   // overlay pointerdown and tracks moves until pointerup.  The drag
@@ -416,15 +434,28 @@ export function VideoPreviewPanel() {
   // a frame or two, so the fade-out window is never visually skipped.
   useEffect(() => {
     let raf = 0
-    // REQ-086 — drift threshold between `<video>` (master clock) and the
-    // hidden `<audio>` (slave) before we force-resync.  50 ms is above
-    // typical inter-element jitter (a few ms) but well below the
-    // perceptual threshold for audio-video lag (~80 ms), so the
-    // correction is invisible-but-effective.  When over threshold we
-    // snap the audio to the video's currentTime — Chromium pauses
-    // playback for one frame around the assignment, which is far less
-    // disruptive than letting an audible drift accumulate.
-    const PREVIEW_MIX_DRIFT_THRESHOLD_SEC = 0.05
+    // REQ-086 / REQ-0229 — drift threshold between `<video>` (master
+    // clock) and the hidden `<audio>` (slave) before we force-resync.
+    //
+    // Widened from the original 50 ms (REQ-086) to 300 ms (REQ-0229).
+    // Rationale: `a.currentTime = X` on a playing element does NOT
+    // flush Chromium's already-decoded audio buffer (~50–100 ms
+    // worth), so every correction produces a short audible click as
+    // the stale buffer plays before the new position kicks in.  The
+    // 50 ms threshold sat right in the range where scheduling jitter
+    // repeatedly nudged drift over the line — the user heard a
+    // near-continuous "プスプス" (RES-0228 symptom A).  300 ms is
+    // still comfortably below the perceptual threshold for A/V lag
+    // (~500 ms is when a viewer starts consciously noticing lip-sync
+    // drift on continuous speech; ~100 ms is the sensitivity floor
+    // for percussive audio, which is not the target content here).
+    // In practice large drifts only accumulate under tab throttling
+    // / long background stalls, so the correction fires rarely and
+    // its transient artefact is a one-off rather than a stream of
+    // clicks.  REQ-0229's Fix A (seek-time pause+seeked wait) closes
+    // the double-play (symptom B); this widened threshold closes
+    // the click-burst residue on symptom A.
+    const PREVIEW_MIX_DRIFT_THRESHOLD_SEC = 0.30
     const tick = () => {
       const v = videoRef.current
       const t = v?.currentTime ?? 0
@@ -673,10 +704,12 @@ export function VideoPreviewPanel() {
       if (cancelled) return
       const el = videoRef.current
       if (el && el.readyState >= 1 /* HAVE_METADATA */) {
-        el.currentTime = targetSec
-        if (audioRef.current) {
-          audioRef.current.currentTime = targetSec
-        }
+        // REQ-0229 — clean-seek helper for the expand-reseek path so
+        // reopening a collapsed preview does not leak a "あありがとう"
+        // artefact on the very first playhead move after re-mount.
+        // Byte-identical (direct .currentTime = X) for single-track;
+        // full pause+seeked wait for multi-track.
+        runCleanSeek(targetSec)
         setCurrentTime(targetSec)
         if (!scrubState.inProgress) {
           setVideoCurrentTimeSec(targetSec)
@@ -691,7 +724,7 @@ export function VideoPreviewPanel() {
     return () => {
       cancelled = true
     }
-  }, [videoPreviewExpanded, setVideoCurrentTimeSec])
+  }, [videoPreviewExpanded, setVideoCurrentTimeSec, runCleanSeek])
 
   // REQ-20260615-051 B / REQ-20260615-052 — global Space keydown
   // shortcut for play / pause.
@@ -774,15 +807,18 @@ export function VideoPreviewPanel() {
     measureSync('VPP.seekEffect.total', () => {
       const el = videoRef.current
       if (el) {
+        // REQ-0229 — routed through the clean-seek helper.  For
+        // single-track (audio null) this is byte-identical to the
+        // pre-0229 `el.currentTime = X` assignment (fast-path in
+        // preview-seek.ts §4).  For multi-track it kicks off the
+        // pause → seeked-wait → resume dance that closes symptom B
+        // (RES-0228).  `runCleanSeek` fires the async seek without
+        // awaiting; state fan-out (below) proceeds immediately.
+        // measureSync now wraps only the sync launch of the seek —
+        // the actual seeked wait completes in a microtask chain.
         measureSync('VPP.seekEffect.videoSeek', () => {
-          el.currentTime = videoSeekRequestSec
+          runCleanSeek(videoSeekRequestSec)
         })
-        // REQ-086 — match the hidden audio's playhead in the same tick
-        // so a row-click seek does not cause a perceptible audio/video
-        // delta.  No-op when audioRef is null (single-track / no mix).
-        if (audioRef.current) {
-          audioRef.current.currentTime = videoSeekRequestSec
-        }
         setCurrentTime(videoSeekRequestSec)
         // REQ-096: while a manual ruler scrub is in progress, the
         // optimistic-playhead path in TimelineView's handleSeek has
@@ -800,7 +836,7 @@ export function VideoPreviewPanel() {
       // Clear the request immediately after consuming it.
       setVideoSeekRequest(null)
     })
-  }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec])
+  }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec, runCleanSeek])
 
   // -------------------------------------------------------------------------
   // Video event handlers
@@ -851,8 +887,23 @@ export function VideoPreviewPanel() {
     setDuration(el.duration)
   }
 
-  function handlePlay()  { setIsPlaying(true) }
-  function handlePause() { setIsPlaying(false) }
+  // REQ-0229 — the clean-seek helper transiently pauses the video
+  // and audio before setting currentTime, then resumes.  Chromium
+  // fires `pause` and `play` events around each of those calls, and
+  // without suppression the ▶/⏸ button icon would flicker to ⏸ for
+  // the ~50–100 ms the seek takes.  While a seek is in flight, the
+  // seeker's isInFlight() returns true and we drop the intermediate
+  // events; the button icon stays on ▶ (which reflects the user's
+  // intended "still playing" state).  The single-track fast path
+  // never sets in-flight, so single-track behaviour is unchanged.
+  function handlePlay()  {
+    if (seekerRef.current?.isInFlight()) return
+    setIsPlaying(true)
+  }
+  function handlePause() {
+    if (seekerRef.current?.isInFlight()) return
+    setIsPlaying(false)
+  }
   /**
    * REQ-079 #1: `ended` only flips the play state to false.  No more
    * "warp to 0" on EOF.  Whether the user pressed ⏭, scrubbed past the
@@ -998,15 +1049,13 @@ export function VideoPreviewPanel() {
     const origVal = editedToOrig(editedVal, cuts)
     setCurrentTime(origVal)
     setVideoCurrentTimeSec(origVal)
-    if (videoRef.current) {
-      videoRef.current.currentTime = origVal
-    }
-    // REQ-086 — keep the audio playhead aligned during seekbar drag so
-    // the user does not hear the prior playback position while watching
-    // the new one.  No-op when audioRef is null.
-    if (audioRef.current) {
-      audioRef.current.currentTime = origVal
-    }
+    // REQ-086 / REQ-0229 — video + audio playheads move together
+    // through the clean-seek helper.  Byte-identical direct
+    // assignment for single-track (no audio), full pause+seeked
+    // dance for multi-track.  Drag-scrub fires this many times per
+    // second; the seeker's latest-wins policy (§5) ensures only the
+    // final seek in the drag chain restores playback.
+    runCleanSeek(origVal)
   }
 
   // -------------------------------------------------------------------------
