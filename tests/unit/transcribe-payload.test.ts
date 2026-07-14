@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { buildTranscribePayload } from '../../src/main/services/transcribe-payload'
+import {
+  applyTranscriptionTierGate,
+  buildTranscribePayload,
+} from '../../src/main/services/transcribe-payload'
 import type { TranscriptionStartRequest } from '../../src/shared/ipc-contracts'
 import type { TranscriptionAdvancedParams } from '../../src/shared/types'
 
@@ -134,5 +137,110 @@ describe('REQ-0207 buildTranscribePayload — on path adds the flag', () => {
     const request = baseRequest({ videoPath: 'raw\\input.mp4' })
     const payload = buildTranscribePayload(request, 'C:\\normalized\\input.mp4')
     expect(payload.videoPath).toBe('C:\\normalized\\input.mp4')
+  })
+})
+
+/**
+ * REQ-0210 — main-side tier gate that runs upstream of
+ * `buildTranscribePayload` to force `wordSubtitle` off in NSIS (free-
+ * tier) builds.  These tests pin two things:
+ *
+ *   1. NSIS builds NEVER emit `wordSubtitle: true` regardless of what
+ *      the renderer passed (defence against DevTools tampering with
+ *      the outgoing IPC payload).
+ *   2. MSIX builds pass the request through unchanged, so REQ-0207's
+ *      on-path behavior is preserved.
+ *
+ * The gate is applied *before* `buildTranscribePayload`, so the byte-
+ * identical off-path guarantee above is unaffected — the builder still
+ * sees the same input shape it always did.
+ */
+describe('REQ-0210 applyTranscriptionTierGate — NSIS strips wordSubtitle', () => {
+  it('strips wordSubtitle:true when isMsix=false (renderer opted in)', () => {
+    const request = baseRequest({ wordSubtitle: true })
+    const gated = applyTranscriptionTierGate(request, false)
+    expect(gated.wordSubtitle).toBe(false)
+  })
+
+  it('leaves wordSubtitle:false alone when isMsix=false', () => {
+    const request = baseRequest({ wordSubtitle: false })
+    const gated = applyTranscriptionTierGate(request, false)
+    expect(gated.wordSubtitle).toBe(false)
+  })
+
+  it('normalizes wordSubtitle:undefined to false when isMsix=false', () => {
+    // The gate's contract is "wordSubtitle is deterministically off on
+    // NSIS" — we do not distinguish undefined from false there, since
+    // `buildTranscribePayload` treats both the same way (omitted).  The
+    // downstream byte-identical guarantee still holds because the
+    // builder gates on `=== true`, not on presence.
+    const request = baseRequest()
+    const gated = applyTranscriptionTierGate(request, false)
+    expect(gated.wordSubtitle).toBe(false)
+  })
+
+  it('preserves all non-wordSubtitle fields on NSIS builds', () => {
+    const request = baseRequest({ wordSubtitle: true })
+    const gated = applyTranscriptionTierGate(request, false)
+    // Every field except wordSubtitle should be byte-identical to input.
+    const stripWordSubtitle = (r: TranscriptionStartRequest): Omit<TranscriptionStartRequest, 'wordSubtitle'> => {
+      const clone = { ...r }
+      delete clone.wordSubtitle
+      return clone
+    }
+    expect(stripWordSubtitle(gated)).toEqual(stripWordSubtitle(request))
+  })
+
+  it('end-to-end: NSIS payload never contains wordSubtitle:true', () => {
+    // Full pipeline check — gate + builder in sequence, mimicking the
+    // main-side IPC handler.  Whatever the renderer sends, the sidecar
+    // sees `wordSubtitle` absent (byte-identical to pre-REQ-0207).
+    for (const flag of [true, false, undefined] as const) {
+      const request = baseRequest({ wordSubtitle: flag })
+      const gated = applyTranscriptionTierGate(request, false)
+      const payload = buildTranscribePayload(gated, gated.videoPath)
+      expect('wordSubtitle' in payload).toBe(false)
+      expect(payload).toEqual(OFF_TIME_REFERENCE)
+    }
+  })
+})
+
+describe('REQ-0210 applyTranscriptionTierGate — MSIX passthrough', () => {
+  it('leaves wordSubtitle:true intact when isMsix=true', () => {
+    const request = baseRequest({ wordSubtitle: true })
+    const gated = applyTranscriptionTierGate(request, true)
+    expect(gated.wordSubtitle).toBe(true)
+  })
+
+  it('leaves wordSubtitle:false intact when isMsix=true', () => {
+    const request = baseRequest({ wordSubtitle: false })
+    const gated = applyTranscriptionTierGate(request, true)
+    expect(gated.wordSubtitle).toBe(false)
+  })
+
+  it('leaves wordSubtitle:undefined intact when isMsix=true', () => {
+    const request = baseRequest()
+    const gated = applyTranscriptionTierGate(request, true)
+    expect(gated.wordSubtitle).toBeUndefined()
+  })
+
+  it('returns the same reference when isMsix=true (no shallow-clone cost)', () => {
+    // Micro-behavior guarantee: the MSIX passthrough must be a true
+    // identity so main-side callers can rely on structural equality if
+    // they need it.  If this ever changes to a spread, the assertion
+    // catches it and forces a review.
+    const request = baseRequest({ wordSubtitle: true })
+    const gated = applyTranscriptionTierGate(request, true)
+    expect(gated).toBe(request)
+  })
+
+  it('end-to-end: MSIX payload preserves REQ-0207 on-path shape', () => {
+    const request = baseRequest({ wordSubtitle: true })
+    const gated = applyTranscriptionTierGate(request, true)
+    const payload = buildTranscribePayload(gated, gated.videoPath)
+    expect(payload.wordSubtitle).toBe(true)
+    for (const [k, v] of Object.entries(OFF_TIME_REFERENCE)) {
+      expect(payload[k]).toEqual(v)
+    }
   })
 })

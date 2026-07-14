@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertCircle, Mic, Play, Settings2 } from 'lucide-react'
+import { AlertCircle, Lock, Mic, Play, Settings2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils'
 import { formatElapsed } from '@/lib/format-elapsed'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useProjectStore } from '@/stores/project-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
+import { useStoreUpsellStore } from '@/stores/store-upsell-store'
 import type { AudioTrack } from '../../../shared/types'
 
 /**
@@ -153,6 +155,25 @@ export function TranscriptionDrawer({
   const selectedTrack = useProjectStore((s) => s.selectedTrackIndex)
   const setSelectedTrack = useProjectStore((s) => s.setSelectedTrackIndex)
 
+  // REQ-0210 — word-level transcription is an MSIX-only (paid tier)
+  // feature.  On NSIS (free) builds the checkbox stays in the drawer so
+  // free users learn the capability exists, but it is rendered in a
+  // locked state (disabled + Lock icon + "有料版でのみ利用可能" badge) and
+  // clicking anywhere on the row routes to the shared StoreUpsellDialog
+  // — the same affordance the欧文フォント picker uses for locked rows
+  // (REQ-088/091, see `font-picker.tsx` line 840-849).  `isMsix ?? false`
+  // treats the pre-boot IPC-not-yet-returned state as locked, matching
+  // the font-picker convention.
+  //
+  // The runtime payload gate lives in `src/main/ipc/transcription.ts`
+  // (REQ-0210 §2) — even if a DevTools user flips the local `checked`
+  // state, the main process strips `wordSubtitle: true` before it
+  // reaches the sidecar.  The UI here is the "primary" surface; the
+  // main-side gate is the "defensive" one.
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
+  const openUpsell = useStoreUpsellStore((s) => s.openUpsell)
+  const wordSubtitleLocked = !isMsix
+
   // REQ-20260615-055 — autoselect the first available track on first open
   // so the user never sees an empty selection state.  Mirrors the
   // existing main-card heuristic (`handleVideoLoaded` already picks the
@@ -230,22 +251,71 @@ export function TranscriptionDrawer({
                     Disabled while a run is in flight so the checkbox
                     cannot flip mid-transcription (state change has no
                     effect on the sidecar once started, but a stale UI
-                    would confuse the user). */}
-                <div className="flex items-start gap-2 rounded-md border border-line/70 px-3 py-2 bg-surface-2/30">
+                    would confuse the user).
+
+                    REQ-0210 — locked as MSIX-only in NSIS builds.  The
+                    row still renders (so free users learn the feature
+                    exists) but the checkbox is disabled, dimmed, and
+                    accompanied by a Lock icon + "有料版でのみ利用可能"
+                    badge.  Clicking anywhere on the row opens the
+                    shared StoreUpsellDialog — same treatment as
+                    tier-locked font rows in `font-picker.tsx`. */}
+                <div
+                  className={cn(
+                    'flex items-start gap-2 rounded-md border border-line/70 px-3 py-2 bg-surface-2/30',
+                    wordSubtitleLocked &&
+                      'cursor-pointer hover:bg-surface-2/60 hover:border-line',
+                  )}
+                  onClick={wordSubtitleLocked ? () => openUpsell() : undefined}
+                  role={wordSubtitleLocked ? 'button' : undefined}
+                  tabIndex={wordSubtitleLocked ? 0 : undefined}
+                  onKeyDown={
+                    wordSubtitleLocked
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            openUpsell()
+                          }
+                        }
+                      : undefined
+                  }
+                  aria-label={
+                    wordSubtitleLocked
+                      ? t('drawer.wordSubtitle.lockedPaidOnly')
+                      : undefined
+                  }
+                >
                   <Checkbox
                     id="word-subtitle-experimental"
-                    checked={wordSubtitleOn}
+                    checked={wordSubtitleLocked ? false : wordSubtitleOn}
                     onCheckedChange={(v) => onWordSubtitleChange(v === true)}
+                    disabled={wordSubtitleLocked}
                     className="mt-0.5"
                   />
-                  <div className="flex flex-col gap-0.5 min-w-0">
-                    <label
-                      htmlFor="word-subtitle-experimental"
-                      className="text-body-sm font-medium"
+                  <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="word-subtitle-experimental"
+                        className={cn(
+                          'text-body-sm font-medium',
+                          wordSubtitleLocked && 'text-muted-foreground/70',
+                        )}
+                      >
+                        {t('drawer.wordSubtitle.label')}
+                      </label>
+                      {wordSubtitleLocked && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-line/70 bg-surface-1/60 px-1.5 py-0.5 text-caption text-muted-foreground/80">
+                          <Lock className="h-3 w-3" />
+                          {t('drawer.wordSubtitle.lockedPaidOnly')}
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      className={cn(
+                        'text-caption text-fg-muted leading-relaxed',
+                        wordSubtitleLocked && 'text-muted-foreground/60',
+                      )}
                     >
-                      {t('drawer.wordSubtitle.label')}
-                    </label>
-                    <p className="text-caption text-fg-muted leading-relaxed">
                       {t('drawer.wordSubtitle.description')}
                     </p>
                   </div>

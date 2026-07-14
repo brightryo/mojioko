@@ -177,7 +177,8 @@
     "errorTitle": "Transcription failed",
     "wordSubtitle": {
       "label": "Word-level transcription (experimental)",
-      "description": "Generates subtitles in short 1–3 word chunks. An experimental feature for English audio. Results with Japanese audio may split words unnaturally."
+      "description": "Generates subtitles in short 1–3 word chunks. An experimental feature for English audio. Results with Japanese audio may split words unnaturally.",
+      "lockedPaidOnly": "Paid-version only"
     }
   },
   "dialog": {

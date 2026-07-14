@@ -9,6 +9,8 @@ import { generatePreviewMix } from '../services/preview-mix'
 import { getModelsDir, getBinPath } from '../lib/paths'
 import { loadSettings, saveSettings } from '../services/settings-store'
 import { resolveActiveModelId } from '../services/resolve-active-model'
+import { applyTranscriptionTierGate } from '../services/transcribe-payload'
+import { isPackagedAsMsix, getCurrentProcessContext } from '../lib/msix'
 import type { TranscriptionStartRequest } from '../../shared/ipc-contracts'
 import type { ModelInfo, ModelStatus, ModelsState, WhisperModelId } from '../../shared/types'
 import log from '../lib/logger'
@@ -165,8 +167,17 @@ export function registerTranscriptionHandlers(): void {
     const modelsDir = getModelsDir()
     const ffmpegPath = getBinPath('ffmpeg')
 
+    // REQ-0210 — enforce MSIX-only paid-tier features at the IPC
+    // boundary before anything else touches the request.  The renderer
+    // disables the checkbox in NSIS (see `transcription-drawer.tsx`),
+    // but a DevTools user could flip the local state; this main-side
+    // gate strips `wordSubtitle: true` on NSIS builds so the sidecar
+    // never sees the flag.  MSIX builds pass through unchanged.
+    const isMsix = isPackagedAsMsix(getCurrentProcessContext())
+    const gatedRequest = applyTranscriptionTierGate(request, isMsix)
+
     const fullRequest: TranscriptionStartRequest = {
-      ...request,
+      ...gatedRequest,
       modelsDir,
       ffmpegPath
     }
