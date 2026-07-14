@@ -122,6 +122,35 @@ def _preload_bundled_cuda_dlls() -> None:
 
 _preload_bundled_cuda_dlls()
 
+
+# REQ-0215 — device-selection guard.  Pure predicate over `os.environ` so
+# unit tests can pin the truth table without importing ctranslate2 or
+# spawning a subprocess.  See RES-0214 for the full failure narrative
+# this fixes; the short version is that `_select_device()` used to probe
+# CUDA via `ctranslate2.get_cuda_device_count()`, which returns >0 on
+# any machine with an NVIDIA driver — even when the main process
+# deliberately withheld `MOJIOKO_GPU_TOOL_DIR` because the user picked
+# the CPU card (or the GPU tools aren't downloaded yet).  Selecting
+# CUDA in that state made `WhisperModel(device="cuda")` init hit
+# `LoadLibrary("cublas64_12.dll")` and fail hard.
+#
+# The contract with the main process (src/main/services/gpu-tool.ts's
+# `getEffectiveGpuToolDir`) is now: **absence of `MOJIOKO_GPU_TOOL_DIR`
+# means CPU-only**.  It is set only when the GPU tools are installed
+# AND the user has picked the GPU card.  Presence therefore doubles as
+# "GPU authorized + CUDA DLL search path pre-loaded"; absence means
+# "do not probe CUDA at all, do not pass Go, return CPU."
+def _cpu_forced_by_missing_gpu_env() -> bool:
+    """Return True when `MOJIOKO_GPU_TOOL_DIR` is unset, empty, or
+    whitespace-only — the marker that the main process wants CPU
+    execution.  Treats "set-but-blank" identically to "unset" so a
+    stray empty-string leak from the env layer cannot accidentally
+    permit CUDA probing.
+    """
+    val = os.environ.get("MOJIOKO_GPU_TOOL_DIR", "")
+    return not val.strip()
+
+
 # REQ-0103 — stdin must be reconfigured to UTF-8 as well.  Electron writes the
 # transcription request as UTF-8 JSON; if this process inherits a non-UTF-8
 # system locale (e.g. cp1252 on English Windows, Shift_JIS on Japanese Windows
@@ -273,6 +302,21 @@ def transcribe(msg: dict) -> None:
         _CUDA_COMPUTE_LADDER: tuple[str, ...] = ("int8_float16", "float16", "float32")
 
         def _select_device() -> tuple[str, str]:
+            # REQ-0215 — honour the main process's device intent.  When
+            # `MOJIOKO_GPU_TOOL_DIR` is unset, the user picked CPU (or has
+            # not downloaded the GPU tools yet) and the CUDA DLL search
+            # path was deliberately withheld.  Probing CUDA in that state
+            # produces the RES-0214 failure: NVIDIA driver presence flips
+            # `get_cuda_device_count()` to >0, we return "cuda", then
+            # `WhisperModel(device="cuda")` init hits an unresolvable
+            # `LoadLibrary("cublas64_12.dll")` and crashes the transcribe
+            # command.  Short-circuit here so the CUDA path is never
+            # entered and the CPU fallback below is only reached via the
+            # legitimate "probed CUDA and it declined" branch.
+            if _cpu_forced_by_missing_gpu_env():
+                print("[device] MOJIOKO_GPU_TOOL_DIR unset — forcing CPU (REQ-0215)",
+                      file=sys.stderr)
+                return "cpu", "int8"
             try:
                 import ctranslate2  # type: ignore[import]
                 if ctranslate2.get_cuda_device_count() > 0:
