@@ -18,14 +18,16 @@ Whisper transcription backend.
 
 ### Added
 
-- **Word-level transcription (experimental, English audio).**
-  A checkbox in the transcribe drawer generates subtitles in
-  short 1–3 word chunks — the CapCut / short-form caption style.
-  Default off; opt in per run.  Works best on clean English
-  audio; results with Japanese audio may split words unnaturally
-  (single kanji become separate captions).  Positioned as an
-  experimental feature — turn it off if the cadence does not suit
-  your material.
+- **Word-level transcription (Microsoft Store version only,
+  experimental, for English audio).**  A checkbox in the
+  transcribe drawer generates subtitles in short 1–3 word
+  chunks — the CapCut / short-form caption style.  Default off;
+  opt in per run.  Works best on clean English audio; results
+  with Japanese audio may split words unnaturally (single kanji
+  become separate captions).  Positioned as an experimental
+  feature — turn it off if the cadence does not suit your
+  material.  In the free (GitHub) build the checkbox is visible
+  but locked with a "Paid-version only" badge.
 - **Project save & open (`.mojioko`).**  Save your session —
   video, subtitles, cuts, per-row styles — to a `.mojioko` file
   and reopen it later to keep editing.  Works from either the
