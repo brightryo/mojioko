@@ -51,6 +51,8 @@
     "sendFeedback": "Feedback",
     "storeReviewTitle": "Please rate and review MOJIOKO!",
     "storeReviewButton": "Write a review",
+    "storeReviewTitleAfterClick": "Thank you for your review!",
+    "storeReviewButtonAfterClick": "Review again",
     "supportTitle": "Support MOJIOKO",
     "creditHeading": "If you'd like to credit MOJIOKO (optional)",
     "creditCopyJa": "Copy Japanese credit",

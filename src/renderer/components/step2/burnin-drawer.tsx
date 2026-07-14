@@ -663,14 +663,23 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               </Button>
             </div>
 
-            {/* REQ-0208 — Store review CTA.
+            {/* REQ-0208 / REQ-0211 — Store review CTA.
 
-                Rendered only for the MSIX (paid) build AND only until
-                the user clicks the button once (`hasClickedStoreReview`
-                in the settings store, persisted through zustand's
-                localStorage middleware — deliberately NOT round-tripped
-                through the main-side settings.json, so the past
-                "setting resets on restart" bugs cannot reach this flag).
+                Rendered only for the MSIX (paid) build.  REQ-0211
+                dropped the "hide after first click" rule from REQ-0208
+                — the row now stays up indefinitely, but the heading /
+                button text swap based on `hasClickedStoreReview` so
+                the tone shifts from "please review" to "thanks —
+                review again" once the user has opened the Store review
+                surface at least once.  The Microsoft Store review
+                editor lets users update their existing rating, so the
+                re-entry point is genuinely useful, not a nag.
+
+                The click flag is still persisted through zustand's
+                localStorage middleware (deliberately NOT round-tripped
+                through the main-side settings.json — see RES-0208 §3
+                for the "setting resets on restart" bug history that
+                this design avoids).  Do not move it into `AppSettings`.
 
                 Placement is between the 3-button workflow row and the
                 donation card, per REQ-0208 §配置 — the first eye-line
@@ -680,17 +689,21 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                 the two CTAs read as separate offers).
 
                 The visibility predicate is factored out into
-                `lib/store-review-visibility.ts` so the truth table can
-                be pinned in a unit test without React.  When
-                `isMsix === null` (IPC still resolving) the row is
+                `lib/store-review-visibility.ts` so the (now 3-row)
+                truth table can be pinned in a unit test without React.
+                When `isMsix === null` (IPC still resolving) the row is
                 withheld — this prevents a one-frame flash on the very
                 first paint of the dialog after boot. */}
-            {shouldShowStoreReviewRow({ isMsix, hasClickedStoreReview }) && (
+            {shouldShowStoreReviewRow({ isMsix }) && (
               <div className="rounded-xl border border-line bg-surface-1 p-3 flex items-center gap-3">
                 <div className="flex items-center gap-1.5 flex-1 min-w-0">
                   <ThumbsUp className="h-3.5 w-3.5 text-[hsl(var(--accent-soft))] flex-shrink-0" />
                   <span className="text-body-sm font-medium text-fg-secondary truncate">
-                    {t('completion.storeReviewTitle')}
+                    {t(
+                      hasClickedStoreReview
+                        ? 'completion.storeReviewTitleAfterClick'
+                        : 'completion.storeReviewTitle',
+                    )}
                   </span>
                 </div>
                 <Button
@@ -701,13 +714,21 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                     // Store handoff the button still counts as pressed
                     // — REQ-0208 spec is explicit that "clicked once"
                     // is the persist trigger, not "review submitted"
-                    // (which we cannot detect anyway).
+                    // (which we cannot detect anyway).  REQ-0211
+                    // keeps this behavior unchanged; re-clicks after
+                    // the flag flips true are no-ops on the flag but
+                    // still re-open the Store review surface so users
+                    // can update their existing rating.
                     markStoreReviewClicked()
                     void shellOpenExternal(MS_STORE_REVIEW_URL)
                   }}
                   className="flex-shrink-0"
                 >
-                  {t('completion.storeReviewButton')}
+                  {t(
+                    hasClickedStoreReview
+                      ? 'completion.storeReviewButtonAfterClick'
+                      : 'completion.storeReviewButton',
+                  )}
                 </Button>
               </div>
             )}
