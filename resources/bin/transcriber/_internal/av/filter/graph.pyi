@@ -14,6 +14,7 @@ from .filter import Filter
 
 class Graph:
     configured: bool
+    threads: int
 
     def __init__(self) -> None: ...
     def configure(self, auto_buffer: bool = True, force: bool = False) -> None: ...
@@ -34,12 +35,13 @@ class Graph:
         self,
         template: AudioStream | None = None,
         sample_rate: int | None = None,
-        format: AudioFormat | None = None,
-        layout: AudioLayout | None = None,
+        format: AudioFormat | str | None = None,
+        layout: AudioLayout | str | None = None,
         channels: int | None = None,
         name: str | None = None,
         time_base: Fraction | None = None,
     ) -> FilterContext: ...
+    def set_audio_frame_size(self, frame_size: int) -> None: ...
     def push(self, frame: None | AudioFrame | VideoFrame) -> None: ...
     def pull(self) -> VideoFrame | AudioFrame: ...
     def vpush(self, frame: VideoFrame | None) -> None: ...

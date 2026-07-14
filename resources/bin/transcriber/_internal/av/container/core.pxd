@@ -1,8 +1,10 @@
 cimport libav as lib
+from libc.stdint cimport uint8_t
 
+from av.codec.hwaccel cimport HWAccel
 from av.container.pyio cimport PyIOFile
 from av.container.streams cimport StreamContainer
-from av.dictionary cimport _Dictionary
+from av.dictionary cimport Dictionary
 from av.format cimport ContainerFormat
 from av.stream cimport Stream
 
@@ -13,17 +15,13 @@ ctypedef struct timeout_info:
 
 
 cdef class Container:
-
-    cdef readonly bint writeable
     cdef lib.AVFormatContext *ptr
-
     cdef readonly object name
     cdef readonly str metadata_encoding
     cdef readonly str metadata_errors
 
     cdef readonly PyIOFile file
     cdef int buffer_size
-    cdef bint input_was_opened
     cdef readonly object io_open
     cdef readonly object open_files
 
@@ -33,10 +31,13 @@ cdef class Container:
     cdef readonly dict container_options
     cdef readonly list stream_options
 
+    cdef HWAccel hwaccel
+
     cdef readonly StreamContainer streams
     cdef readonly dict metadata
 
     # Private API.
+    cdef uint8_t _myflag  # enum: writeable, input_was_opened, started, done
     cdef _assert_open(self)
     cdef int err_check(self, int value) except -1
 

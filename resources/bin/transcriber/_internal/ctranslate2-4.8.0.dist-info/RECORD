@@ -1,10 +1,10 @@
-../../Scripts/ct2-fairseq-converter.exe,sha256=BXQNbGdpor-LXxwhHs5wamSSEUpQItNXQhmNmS3I--o,108406
-../../Scripts/ct2-marian-converter.exe,sha256=2eekgZbhEhBU3cq86f98Q54vMF0RHABdZ8f77czffrk,108405
-../../Scripts/ct2-openai-gpt2-converter.exe,sha256=5FXzt8Yy7t_vsA0BUWHe9JCH73HL2rbjPDOWY5HVprg,108410
-../../Scripts/ct2-opennmt-py-converter.exe,sha256=tI-RIFPA49ZavY5Yx0XL5fzUP0MtWtKV-Xu0xCv5xQ4,108409
-../../Scripts/ct2-opennmt-tf-converter.exe,sha256=8Ei5gxPd2eqqplkzll7o0oqcCbtnXzmASX3LyQ8E7SU,108409
-../../Scripts/ct2-opus-mt-converter.exe,sha256=LkG9dSOrOqTpxNSm5HfHiRAR0lI89bSSknFpnbt9gyE,108406
-../../Scripts/ct2-transformers-converter.exe,sha256=Uxmigjgpx1bLez17oCCSyKi44aD_1bfkg-wiahtTp5s,108411
+../../Scripts/ct2-fairseq-converter.exe,sha256=wRmSCI38dQose7_eAUAMJMpkr2x4MuYmMcIXsOKWxVA,108406
+../../Scripts/ct2-marian-converter.exe,sha256=_nulyj2CiAM_pVAWYDPJYEN5ZR5VxU5DMO5Rc1BlMls,108405
+../../Scripts/ct2-openai-gpt2-converter.exe,sha256=nUc4RBo1V8W-YHTxj4VFday-OLcEFdrd5oL71Iwp-C8,108410
+../../Scripts/ct2-opennmt-py-converter.exe,sha256=uo0Vryen1wKkVKApiindRoIA2_toM0ao1_zdQ7-fM6A,108409
+../../Scripts/ct2-opennmt-tf-converter.exe,sha256=5Wc96AKmAtKw7P8gdC6nQeE4fqnSrFNRVuo5dmHn4fk,108409
+../../Scripts/ct2-opus-mt-converter.exe,sha256=VezIpf24DtkDDpRme6cOQlckCtTlRfkwDF_avcC6jTQ,108406
+../../Scripts/ct2-transformers-converter.exe,sha256=-9-qRrozf9J46CC1j3oFYZM2wa3kik9SRP7uDLaxne0,108411
 ctranslate2-4.8.0.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
 ctranslate2-4.8.0.dist-info/METADATA,sha256=dLUVD5CjfnhaneMGdMVNrV1YLwszuf4HfOu1vtPkkXk,11289
 ctranslate2-4.8.0.dist-info/RECORD,,
