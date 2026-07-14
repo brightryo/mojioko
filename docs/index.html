@@ -95,6 +95,23 @@
         </div>
       </div>
 
+      <!-- 機能1.5: GPU アクセラレーション（REQ-0227 で追加）
+           オーナーがスクリーンショットを撮り直したら images/j-gpu.png に差し替え。
+           それまでは onerror でプレースホルダを表示する（他の要素と同じ処理）。 -->
+      <div class="feature-item reverse">
+        <div>
+          <img src="images/j-gpu.png" alt="GPU アクセラレーションの設定画面" class="feature-image" loading="lazy"
+               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>GPU アクセラレーションの画面<br>(images/j-gpu.png)</div>';">
+        </div>
+        <div class="feature-content">
+          <h3>GPU アクセラレーション</h3>
+          <p>NVIDIA GPU を使って、文字起こしを大幅に高速化できます。長時間の動画も、CPU よりずっと短時間で処理できます。</p>
+          <p>初回のみ、CUDA / cuDNN ランタイム（約 1.1 GB）をアプリ内からダウンロードします。事前の CUDA インストールは不要です。</p>
+          <p>GPU がなくても CPU で問題なく動作します。RTX 50 番台（Blackwell）を含む最新世代の NVIDIA GPU にも対応。</p>
+          <p class="feature-hint"><span class="feature-hint-label">💡 制限事項・詳細</span>NVIDIA 製 GPU 限定です（AMD／Intel GPU は非対応）。詳しくは<a href="guide/#gpu-acceleration">使い方ガイドの GPU アクセラレーションの項目</a>をご確認ください。</p>
+        </div>
+      </div>
+
       <!-- 機能2: 多彩な字幕編集（2×2グリッド） -->
       <div class="feature-block">
         <div class="feature-block-header">

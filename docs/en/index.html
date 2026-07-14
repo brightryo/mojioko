@@ -84,6 +84,24 @@
         </div>
       </div>
 
+      <!-- Feature 1.5: GPU Acceleration (added in REQ-0227).
+           Owner will provide the screenshot at ../images/e-gpu.png;
+           until then the onerror fallback renders a placeholder card,
+           matching the pattern used for the shorts screenshot below. -->
+      <div class="feature-item reverse">
+        <div>
+          <img src="../images/e-gpu.png" alt="GPU acceleration settings" class="feature-image" loading="lazy"
+               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>GPU acceleration screen<br>(images/e-gpu.png)</div>';">
+        </div>
+        <div class="feature-content">
+          <h3>GPU acceleration</h3>
+          <p>Run Whisper on an NVIDIA GPU for significantly faster transcription. Even long videos finish in a fraction of the time compared to CPU.</p>
+          <p>The CUDA / cuDNN runtime (~1.1 GB) downloads once from inside the app on first use — no separate CUDA install required.</p>
+          <p>A GPU is optional; MOJIOKO runs on CPU without one. The latest NVIDIA generations, including RTX 50 series (Blackwell), are supported.</p>
+          <p class="feature-hint"><span class="feature-hint-label">💡 Limitations & details</span>NVIDIA GPUs only (AMD / Intel GPUs are not supported). See the <a href="guide/#gpu-acceleration">GPU acceleration section of the User Guide</a> for details.</p>
+        </div>
+      </div>
+
       <!-- Feature 2: Flexible subtitle editing (2×2 grid) -->
       <div class="feature-block">
         <div class="feature-block-header">
