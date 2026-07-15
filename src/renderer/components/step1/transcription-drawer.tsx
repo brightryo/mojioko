@@ -436,16 +436,27 @@ export function TranscriptionDrawer({
                   </div>
                 )}
                 <div className="space-y-3">
-                  {/* REQ-0142 — during the pre-Whisper preparing region
-                      (`preparingPhase != null`) the determinate bar is
-                      swapped for an indeterminate stripe: RES-0141
-                      confirmed no accurate percentage exists until the
-                      first `progress` event, and the previous "stuck
-                      at 0%" bar read as a freeze.  Once Whisper starts
-                      emitting `progress` events (or the parent moves
-                      to preview-mix which pins at 100 %) the bar is
-                      determinate again. */}
-                  {preparingPhase ? (
+                  {/* REQ-0142 / REQ-0231 — the bar is indeterminate in
+                      TWO cases:
+                        (1) pre-Whisper preparing region
+                            (`preparingPhase != null`) — RES-0141
+                            confirmed no accurate percentage exists
+                            until the first `progress` event, so a "0 %"
+                            bar read as "stuck".
+                        (2) REQ-086 preview-mix phase
+                            (`runningLabelOverride` set) — the amix
+                            ffmpeg pass emits no per-frame progress,
+                            so the pre-0231 UI pinned the bar at 100 %
+                            which was indistinguishable from "done but
+                            hanging".  REQ-0231 swaps in the same
+                            indeterminate stripe the prep region uses
+                            (and the GPU-tool extract step from
+                            REQ-0221) so the user sees "still working"
+                            instead of "stuck at 100 %".
+                      Between these two states — Whisper inference —
+                      real progress events flow and the bar is
+                      determinate as before. */}
+                  {(preparingPhase || runningLabelOverride) ? (
                     <div className="h-2 rounded-full bg-surface-2 overflow-hidden">
                       <div className="h-full w-1/3 bg-primary rounded-full animate-progress-indeterminate" />
                     </div>
@@ -463,13 +474,16 @@ export function TranscriptionDrawer({
                         ? t(`drawer.preparingLabel.${preparingPhase}`)
                         : (runningLabelOverride ?? t('drawer.runningLabel'))}
                     </span>
-                    {/* REQ-0143 — the right-side percent chip now shows
-                        ONLY while a real percentage exists (= Whisper
-                        inference or preview-mix pinned at 100 %).  In
-                        the prep region no accurate percent is available
-                        so the chip is intentionally blank; the elapsed
-                        moved up top (see above) covers "is it moving?". */}
-                    {!preparingPhase && (
+                    {/* REQ-0143 / REQ-0231 — the right-side percent chip
+                        shows ONLY during Whisper inference where a real
+                        percentage flows.  Both indeterminate cases
+                        (prep + preview-mix) suppress it — the "100 %"
+                        that the pre-0231 preview-mix pass showed was
+                        misleading (there was no real progress signal
+                        behind it, just a pinned value), so the chip is
+                        now consistently absent whenever the bar is
+                        indeterminate. */}
+                    {!preparingPhase && !runningLabelOverride && (
                       <span className="font-mono tabular-nums">{progress}%</span>
                     )}
                   </div>

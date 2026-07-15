@@ -215,18 +215,74 @@ export function getPreviewMixDir(): string {
 }
 
 /**
- * Fixed file name for the preview mix — always overwritten in place so
- * the directory never accumulates one file per loaded video.  Atomic
- * rename from `<path>.tmp` is performed by `preview-mix.ts` so a half-
- * written file can never masquerade as a finished one.
+ * REQ-0231 — per-run unique preview-mix filename.
+ *
+ * The v1.3.2 design used a fixed `preview-mix.m4a` and relied on an
+ * atomic `.tmp` → `.m4a` rename to swap in each new run.  That flow
+ * hit EPERM on Windows when the renderer's `<audio>` element from the
+ * previous run still held the old `preview-mix.m4a` open — Chromium
+ * does not release the file handle synchronously with URL swap or
+ * component unmount, so a rapid "transcribe → open editor → back to
+ * step 1 → transcribe again" cycle stalls at the rename with EPERM
+ * (see RES-0119 §1, REQ-0129 backoff attempts, and the fresh
+ * REQ-0231 repro).  Even a longer backoff cannot force `<audio>` to
+ * release the handle.
+ *
+ * REQ-0231 fix: every run writes to a new unique file (`.tmp` staged
+ * next to it), so the rename target never collides with a locked
+ * file.  Old files from prior runs are swept up (best-effort) before
+ * each generation, and any file that IS still held by the previous
+ * `<audio>` simply survives the sweep until the audio releases —
+ * cleanup is not on the critical path.
+ *
+ * Filename shape (chosen for readability in Explorer + sort order +
+ * defence-in-depth against same-millisecond collisions):
+ *   preview-mix-YYYYMMDD-HHMMSS-mmm-<4-char base36>.m4a
+ * Example:
+ *   preview-mix-20260715-091033-123-abcd.m4a
+ *
+ * Regex used by the sweep + protocol validator:
+ *   ^preview-mix-\d{8}-\d{6}-\d{3}-[a-z0-9]{4}\.m4a(\.tmp)?$
+ * Also matches the legacy fixed name `preview-mix.m4a(.tmp)` so a
+ * post-upgrade sweep tidies pre-REQ-0231 leftovers.
  */
-export function getPreviewMixPath(): string {
-  return join(getPreviewMixDir(), 'preview-mix.m4a')
+export function generatePreviewMixFilename(now: Date = new Date()): string {
+  const YYYY = String(now.getFullYear()).padStart(4, '0')
+  const MM = String(now.getMonth() + 1).padStart(2, '0')
+  const DD = String(now.getDate()).padStart(2, '0')
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mm = String(now.getMinutes()).padStart(2, '0')
+  const ss = String(now.getSeconds()).padStart(2, '0')
+  const ms = String(now.getMilliseconds()).padStart(3, '0')
+  // 4 base36 chars ≈ 20 bits of entropy — same-ms collision odds are
+  // ~1 in 1.7M per call.  This is only a safety net; timestamp
+  // uniqueness already covers realistic call rates (< 1 per second).
+  const rand = Math.random().toString(36).slice(2, 6).padEnd(4, '0')
+  return `preview-mix-${YYYY}${MM}${DD}-${hh}${mm}${ss}-${ms}-${rand}.m4a`
 }
 
-/** Temporary path ffmpeg writes to before the atomic rename. */
-export function getPreviewMixTmpPath(): string {
-  return join(getPreviewMixDir(), 'preview-mix.m4a.tmp')
+/** Absolute path for a given preview-mix filename. */
+export function getPreviewMixFilePath(filename: string): string {
+  return join(getPreviewMixDir(), filename)
+}
+
+/**
+ * True iff `name` is one of our own preview-mix files (finished OR
+ * `.tmp`, new REQ-0231 naming OR legacy fixed name).  Used by both
+ * the sweep and the custom protocol to validate anything before
+ * touching / serving it.
+ *
+ * Callers of the protocol treat any URL whose filename does NOT
+ * match this as file-not-found so a malicious renderer cannot smuggle
+ * a `../../foo.txt` path through the URL.
+ */
+export function isPreviewMixFilename(name: string): boolean {
+  // Path separators must never appear — defence against traversal.
+  if (name.includes('/') || name.includes('\\')) return false
+  // Legacy fixed-name shape from REQ-086 / pre-REQ-0231.
+  if (name === 'preview-mix.m4a' || name === 'preview-mix.m4a.tmp') return true
+  // REQ-0231 unique-name shape.
+  return /^preview-mix-\d{8}-\d{6}-\d{3}-[a-z0-9]{4}\.m4a(\.tmp)?$/.test(name)
 }
 
 export function getPythonSidecarPath(): string {

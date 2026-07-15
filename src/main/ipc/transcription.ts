@@ -243,11 +243,15 @@ export function registerTranscriptionHandlers(): void {
           event.sender.send(channelId, { event: 'phase', phase: 'preview-mix' })
         }
         try {
-          await generatePreviewMix(
+          const mix = await generatePreviewMix(
             { inputPath: request.videoPath, audioTrackCount },
             mixAbort.signal,
           )
-          previewMixUrl = `mojioko-preview-mix://current?t=${Date.now()}`
+          // REQ-0231 — the URL now carries the per-run unique filename
+          // in the path segment (`/<filename>`).  The protocol handler
+          // validates it against `isPreviewMixFilename` before touching
+          // the disk (defence against path traversal).
+          previewMixUrl = `mojioko-preview-mix://current/${mix.filename}?t=${Date.now()}`
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err)
           log.error(`[ipc/transcription] failed (preview-mix): model=${request.modelId} reason=${reason}`)
