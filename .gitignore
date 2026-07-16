@@ -161,6 +161,14 @@ dev-docs/reports/
 # ffplay.exe は electron-builder の extraResources で除外されているため Git 管理不要
 resources/bin/ffmpeg/ffplay.exe
 
+# REQ-0236 — CUDA / cuDNN ランタイム DLL は GitHub Releases の cuda-v1.zip として
+# on-demand DL する運用 (src/shared/gpu-tool.ts)。PyInstaller の rebuild で
+# _internal/ctranslate2/ 配下に大容量 DLL (>100MB) が再度混入するのを防ぐため
+# gitignore で塞ぐ。REQ-0146 で 11 個 (~1.5GB) を一度追跡し REQ-0148/0149 で
+# 削除したが、履歴に blob が残って push がリジェクトされた事案 (REQ-0236) を
+# 受けた再発防止措置。既に追跡済みの DLL (ctranslate2.dll など) には影響なし。
+resources/bin/transcriber/_internal/ctranslate2/*.dll
+
 # ============================================
 # Whisper モデルファイル（ユーザー環境にのみ存在、絶対に追跡しない）
 # ============================================
