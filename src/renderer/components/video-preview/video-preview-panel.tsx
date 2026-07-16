@@ -1,13 +1,14 @@
 import { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
-import { Play, Pause, FolderOpen } from 'lucide-react'
+import { Play, Pause, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
-import { useUiStore } from '@/stores/ui-store'
+import { useUiStore, isAnyOverlayOpen } from '@/stores/ui-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { usePreviewMixStore } from '@/stores/preview-mix-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
+import { shortcutHint } from '@/lib/shortcut-hint'
 import { shellShowInFolder } from '@/services/dialog'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
@@ -21,8 +22,9 @@ import {
   getAnchorAssPosition,
   clampAssPosition,
 } from '@/lib/preview-coords'
-import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
+import { editedDuration, editedToOrig, effectiveEntryState, origToEdited } from '../../../shared/cuts'
 import { computeFadeOpacity } from '@/lib/fade-opacity'
+import { createPreviewSeeker, type PreviewSeeker } from '@/lib/preview-seek'
 import type { SubtitleEntry } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -158,6 +160,16 @@ export function VideoPreviewPanel() {
   // vertical space instead.  `videoPreviewExpanded` slice and its setter
   // stay in ui-store for now (no other consumer; harmless), to be cleaned
   // up in a follow-up phase along with the seek / current-time slices.
+  //
+  // REQ-0183 — retired-but-preserved slice re-adopted.  Header row is now
+  // a one-click accordion toggle for the whole preview stack (body +
+  // seekbar + warning).  When collapsed, the left-column bottom pane
+  // (subtitle table / timeline) reclaims the vertical space via step2's
+  // ImperativePanelHandle.collapse() on the preview ResizablePanel.
+  // Owner spec: initial state is always "open" (state NOT persisted
+  // across step2 mounts — step2's mount effect resets it to true).
+  const videoPreviewExpanded = useUiStore((s) => s.videoPreviewExpanded)
+  const setVideoPreviewExpanded = useUiStore((s) => s.setVideoPreviewExpanded)
 
   const videoRef  = useRef<HTMLVideoElement>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
@@ -202,6 +214,23 @@ export function VideoPreviewPanel() {
   const isSeeking = useRef(false)
   // Track last active entry id so we only write to the store on change.
   const activeEntryIdRef = useRef<string | null>(null)
+
+  // REQ-0229 — clean-seek helper.  Owns the pause → currentTime →
+  // await seeked → resume dance for multi-track preview seeks so
+  // Chromium's stale decoded audio buffer never leaks between the
+  // old and new playhead positions (RES-0228 root cause).  Single
+  // instance per panel; concurrent-seek serialisation is inside.
+  const seekerRef = useRef<PreviewSeeker | null>(null)
+  if (seekerRef.current === null) seekerRef.current = createPreviewSeeker()
+  const runCleanSeek = useCallback((targetSec: number) => {
+    const seeker = seekerRef.current
+    const video = videoRef.current
+    if (!seeker || !video) return
+    // Fire and forget — the seek's promise is unobserved on purpose.
+    // The seeker handles concurrent calls with a latest-wins policy
+    // (only the last seek in a chain restores playback).
+    void seeker.seek(video, audioRef.current, targetSec)
+  }, [])
 
   // REQ-20260613-016 Phase 6 — preview drag (機能B).  Captures pointer on
   // overlay pointerdown and tracks moves until pointerup.  The drag
@@ -267,19 +296,39 @@ export function VideoPreviewPanel() {
   // visible flash at the start of every fade-in.  Closes over `entry`
   // so the lookup needs no Map; new closure per render is cheap at
   // typical overlay counts (< 10 simultaneous captions).
+  //
+  // REQ-0196 §2 — the pre-0196 initial-write here used the raw
+  // computeFadeOpacity() and painted opacity 0 for any entry mounted
+  // while its startSec matched the video's currentTime (owner repro:
+  // opening a project with a 0-second caption — video is paused at
+  // currentTime = 0, entry.startSec = 0 sits exactly on the fade-in
+  // boundary → opacity = 0 → invisible).  REQ-0195's rAF-loop fix
+  // used a paused-aware bypass on subsequent ticks, but the initial
+  // callback write happened FIRST and burned in the invisible state
+  // for at least one paint; the rAF write can only overwrite when v
+  // and activeEntryMapRef are populated, and the map is populated by
+  // a useEffect that in practice ran AFTER the browser's first paint
+  // for this callback.  The fix mirrors the rAF logic here: on paused
+  // (which is the initial-mount case since <video> starts paused per
+  // the HTML5 spec), snap to 1 when the entry covers t and to 0
+  // otherwise.  Playback and seek-during-play paths remain
+  // burn-in-accurate.
   const setOverlayOuterRef = useCallback(
     (entry: SubtitleEntry) => (el: HTMLSpanElement | null) => {
       if (el) {
         overlayOuterRefs.current.set(entry.id, el)
-        const t = videoRef.current?.currentTime ?? 0
-        el.style.opacity = String(
-          computeFadeOpacity({
-            currentTimeSec: t,
-            startSec: entry.startSec,
-            endSec: entry.endSec,
-            fadeDurationSec: entry.fadeDurationSec,
-          }),
-        )
+        const v = videoRef.current
+        const t = v?.currentTime ?? 0
+        const isPaused = v?.paused ?? true
+        const opacity = isPaused
+          ? (t >= entry.startSec && t < entry.endSec ? 1 : 0)
+          : computeFadeOpacity({
+              currentTimeSec: t,
+              startSec: entry.startSec,
+              endSec: entry.endSec,
+              fadeDurationSec: entry.fadeDurationSec,
+            })
+        el.style.opacity = String(opacity)
       } else {
         overlayOuterRefs.current.delete(entry.id)
       }
@@ -290,14 +339,31 @@ export function VideoPreviewPanel() {
   const videoUrl = video ? pathToVideoUrl(video.path) : null
 
   /**
-   * Pre-filter to non-deleted entries only, sorted by startSec.
+   * Pre-filter to effectively-non-deleted entries only, sorted by startSec.
    * Sorted array is required for the binary search in findActiveEntryId.
+   *
+   * REQ-0202 / REQ-0203 — the pre-REQ-0203 filter used `!e.isDeleted` and
+   * therefore let trim-deleted entries (`applyCutsToEntry === null`, but
+   * `entry.isDeleted === false`) leak into the preview overlay, where
+   * they rendered as a phantom second stack line while the burn-in
+   * correctly dropped them.  Routing through
+   * `effectiveEntryState(e, cuts).effectivelyDeleted` gives the preview
+   * the same visibility contract the burn-in already uses
+   * (`ffmpeg-burnin.ts:127-144` drops trim-deleted via `applyCutsToEntry`,
+   * then `ass-generator.ts:185` drops manual-deleted).
+   *
+   * Cuts is in the deps because effectiveEntryState reads them.  With
+   * `cuts = []` the classifier collapses to `entry.isDeleted`, so
+   * no-cut users see byte-identical behaviour.  Forgetting the dep
+   * would produce a different bug: cuts change without re-invalidating
+   * the memo, and the preview stays stuck on the pre-cut set until an
+   * unrelated re-render.
    */
   const sortedActiveEntries = useMemo(() => {
     return entries
-      .filter((e) => !e.isDeleted)
+      .filter((e) => !effectiveEntryState(e, cuts).effectivelyDeleted)
       .sort((a, b) => a.startSec - b.startSec)
-  }, [entries])
+  }, [entries, cuts])
 
   /**
    * REQ-080 #1 + REQ-20260613-004: source of truth for the overlay — EVERY
@@ -368,30 +434,54 @@ export function VideoPreviewPanel() {
   // a frame or two, so the fade-out window is never visually skipped.
   useEffect(() => {
     let raf = 0
-    // REQ-086 — drift threshold between `<video>` (master clock) and the
-    // hidden `<audio>` (slave) before we force-resync.  50 ms is above
-    // typical inter-element jitter (a few ms) but well below the
-    // perceptual threshold for audio-video lag (~80 ms), so the
-    // correction is invisible-but-effective.  When over threshold we
-    // snap the audio to the video's currentTime — Chromium pauses
-    // playback for one frame around the assignment, which is far less
-    // disruptive than letting an audible drift accumulate.
-    const PREVIEW_MIX_DRIFT_THRESHOLD_SEC = 0.05
+    // REQ-086 / REQ-0229 — drift threshold between `<video>` (master
+    // clock) and the hidden `<audio>` (slave) before we force-resync.
+    //
+    // Widened from the original 50 ms (REQ-086) to 300 ms (REQ-0229).
+    // Rationale: `a.currentTime = X` on a playing element does NOT
+    // flush Chromium's already-decoded audio buffer (~50–100 ms
+    // worth), so every correction produces a short audible click as
+    // the stale buffer plays before the new position kicks in.  The
+    // 50 ms threshold sat right in the range where scheduling jitter
+    // repeatedly nudged drift over the line — the user heard a
+    // near-continuous "プスプス" (RES-0228 symptom A).  300 ms is
+    // still comfortably below the perceptual threshold for A/V lag
+    // (~500 ms is when a viewer starts consciously noticing lip-sync
+    // drift on continuous speech; ~100 ms is the sensitivity floor
+    // for percussive audio, which is not the target content here).
+    // In practice large drifts only accumulate under tab throttling
+    // / long background stalls, so the correction fires rarely and
+    // its transient artefact is a one-off rather than a stream of
+    // clicks.  REQ-0229's Fix A (seek-time pause+seeked wait) closes
+    // the double-play (symptom B); this widened threshold closes
+    // the click-burst residue on symptom A.
+    const PREVIEW_MIX_DRIFT_THRESHOLD_SEC = 0.30
     const tick = () => {
       const v = videoRef.current
       const t = v?.currentTime ?? 0
+      // REQ-0195 §2 — when the video is paused the user is inspecting a
+      // still frame for editing purposes; snap the fade ramp to "no
+      // fade" so a caption sitting exactly on its startSec (owner's
+      // repro: 0-second entry at initial mount, currentTime = 0) is
+      // painted at full opacity instead of the fade-in start (= 0 →
+      // invisible).  During playback the burn-in-accurate ramp still
+      // applies.  Same defensive out-of-range guard as
+      // computeFadeOpacity: if the paused playhead is outside the
+      // active entry's range, keep the caption hidden.
+      const isPaused = v?.paused ?? true
       const entries = activeEntryMapRef.current
       for (const [id, el] of overlayOuterRefs.current) {
         const entry = entries.get(id)
         if (!entry) continue
-        const next = String(
-          computeFadeOpacity({
-            currentTimeSec: t,
-            startSec: entry.startSec,
-            endSec: entry.endSec,
-            fadeDurationSec: entry.fadeDurationSec,
-          }),
-        )
+        const opacity = isPaused
+          ? (t >= entry.startSec && t < entry.endSec ? 1 : 0)
+          : computeFadeOpacity({
+              currentTimeSec: t,
+              startSec: entry.startSec,
+              endSec: entry.endSec,
+              fadeDurationSec: entry.fadeDurationSec,
+            })
+        const next = String(opacity)
         // Guard CSSOM writes so a steady-state caption (mid-plateau,
         // opacity = "1") does not invalidate style every frame.
         if (el.style.opacity !== next) el.style.opacity = next
@@ -546,10 +636,95 @@ export function VideoPreviewPanel() {
     }
   }, [])
 
-  // REQ-20260614-001 Phase 2 — the "pause-on-collapse" effect retired
-  // alongside the accordion.  Pane resize shrinks the preview area
-  // without unmounting the <video>, so playback is naturally preserved
-  // (and the user keeps explicit control via the play/pause button).
+  // REQ-20260614-001 Phase 2 — pause-on-collapse originally retired
+  // when the accordion was replaced with a plain pane-resize.
+  // REQ-0183 re-adopted the accordion collapse (header toggle snaps
+  // the pane to `collapsedSize` and REQ-0186 wraps the media stack in
+  // `display:none`), but the pause-on-collapse effect was NOT
+  // reinstated in that pass.  Chromium keeps `<video>` playing under
+  // `display:none` — audio continues, currentTime keeps advancing —
+  // so `isPlaying` stayed true across a collapse, leaving the header
+  // toggle showing ⏸ after reopen, and REQ-0191's seek-to-selection
+  // effect fired against a still-playing element that immediately
+  // rolled past the target frame.
+  // REQ-0192 — reinstate the pause on the closed transition.  Also
+  // defensively `setIsPlaying(false)` in case the element was already
+  // paused (no `onPause` event to sync state).
+  useEffect(() => {
+    if (videoPreviewExpanded) return
+    videoRef.current?.pause()
+    audioRef.current?.pause()
+    setIsPlaying(false)
+  }, [videoPreviewExpanded])
+
+  // REQ-0193 — closed→open seek to the selected entry's startSec.
+  // Originally REQ-0191 dispatched `setVideoSeekRequest` from step2,
+  // which failed on real HW because the seek-consumer effect ran
+  // before the <video> re-mounted: while collapsed, previewBodySize
+  // reads 0×0 (display:none zeros the ResizeObserver contentBox),
+  // which drops videoFrameW to 0 and unmounts the <video> from the
+  // ternary at line ~1043.  On re-expand the store dispatch fired
+  // synchronously (videoRef.current still null) → the consumer
+  // cleared the request without seeking → the fresh <video> mounted
+  // and stayed at wherever browser cached the frame at.
+  // Owner-reported reproduction (RES-0193 §1): after
+  //   play → close → select entry 3 (startSec = 22.16) → open
+  // preview showed entry 1's caption at 0:11 (= the last playhead
+  // position before collapse) — proof that the seek never landed.
+  //
+  // Fix: keep a `prevExpandedRef` to detect the false→true edge.
+  // Snapshot the target startSec at the moment of the edge so a
+  // later selection change during the rAF loop doesn't retarget.
+  // Then loop `requestAnimationFrame` until `videoRef.current` is
+  // non-null AND `readyState >= HAVE_METADATA` (= seek can land),
+  // then apply `el.currentTime` directly along with the audio
+  // element and the local + store playhead slices.  This bypasses
+  // the videoSeekRequestSec store round-trip entirely for this
+  // transition — the store slice is still used by
+  // SubtitleTable row clicks / TimelineView scrub / keyboard nav
+  // where the preview is already visible and mounted, so those
+  // paths are untouched.  Max 30 frames (~500ms at 60fps) so a
+  // permanent mount failure doesn't leak the loop.
+  const prevExpandedRef = useRef(videoPreviewExpanded)
+  useEffect(() => {
+    const wasExpanded = prevExpandedRef.current
+    prevExpandedRef.current = videoPreviewExpanded
+    if (!videoPreviewExpanded || wasExpanded) return
+    const selId = useUiStore.getState().selectedEntryId
+    if (!selId) return
+    const entry = useProjectStore
+      .getState()
+      .entries.find((e) => e.id === selId)
+    if (!entry) return
+    const targetSec = entry.startSec
+    let cancelled = false
+    let attempts = 0
+    const MAX_ATTEMPTS = 30
+    function trySeek() {
+      if (cancelled) return
+      const el = videoRef.current
+      if (el && el.readyState >= 1 /* HAVE_METADATA */) {
+        // REQ-0229 — clean-seek helper for the expand-reseek path so
+        // reopening a collapsed preview does not leak a "あありがとう"
+        // artefact on the very first playhead move after re-mount.
+        // Byte-identical (direct .currentTime = X) for single-track;
+        // full pause+seeked wait for multi-track.
+        runCleanSeek(targetSec)
+        setCurrentTime(targetSec)
+        if (!scrubState.inProgress) {
+          setVideoCurrentTimeSec(targetSec)
+        }
+        return
+      }
+      attempts += 1
+      if (attempts > MAX_ATTEMPTS) return
+      requestAnimationFrame(trySeek)
+    }
+    requestAnimationFrame(trySeek)
+    return () => {
+      cancelled = true
+    }
+  }, [videoPreviewExpanded, setVideoCurrentTimeSec, runCleanSeek])
 
   // REQ-20260615-051 B / REQ-20260615-052 — global Space keydown
   // shortcut for play / pause.
@@ -575,6 +750,11 @@ export function VideoPreviewPanel() {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.code !== 'Space' || e.ctrlKey || e.altKey || e.metaKey) return
+      // REQ-0131 §2 context A — suppress Space play/pause while any
+      // modal is open so it falls through to the modal (typing space
+      // into the hex input, activating focused OK button, etc.).  Same
+      // predicate the shared `useGlobalShortcuts` handler uses.
+      if (isAnyOverlayOpen(useUiStore.getState())) return
       const active = document.activeElement as HTMLElement | null
       if (active) {
         if (active.isContentEditable) return
@@ -627,15 +807,18 @@ export function VideoPreviewPanel() {
     measureSync('VPP.seekEffect.total', () => {
       const el = videoRef.current
       if (el) {
+        // REQ-0229 — routed through the clean-seek helper.  For
+        // single-track (audio null) this is byte-identical to the
+        // pre-0229 `el.currentTime = X` assignment (fast-path in
+        // preview-seek.ts §4).  For multi-track it kicks off the
+        // pause → seeked-wait → resume dance that closes symptom B
+        // (RES-0228).  `runCleanSeek` fires the async seek without
+        // awaiting; state fan-out (below) proceeds immediately.
+        // measureSync now wraps only the sync launch of the seek —
+        // the actual seeked wait completes in a microtask chain.
         measureSync('VPP.seekEffect.videoSeek', () => {
-          el.currentTime = videoSeekRequestSec
+          runCleanSeek(videoSeekRequestSec)
         })
-        // REQ-086 — match the hidden audio's playhead in the same tick
-        // so a row-click seek does not cause a perceptible audio/video
-        // delta.  No-op when audioRef is null (single-track / no mix).
-        if (audioRef.current) {
-          audioRef.current.currentTime = videoSeekRequestSec
-        }
         setCurrentTime(videoSeekRequestSec)
         // REQ-096: while a manual ruler scrub is in progress, the
         // optimistic-playhead path in TimelineView's handleSeek has
@@ -653,7 +836,7 @@ export function VideoPreviewPanel() {
       // Clear the request immediately after consuming it.
       setVideoSeekRequest(null)
     })
-  }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec])
+  }, [videoSeekRequestSec, setVideoSeekRequest, setVideoCurrentTimeSec, runCleanSeek])
 
   // -------------------------------------------------------------------------
   // Video event handlers
@@ -704,8 +887,23 @@ export function VideoPreviewPanel() {
     setDuration(el.duration)
   }
 
-  function handlePlay()  { setIsPlaying(true) }
-  function handlePause() { setIsPlaying(false) }
+  // REQ-0229 — the clean-seek helper transiently pauses the video
+  // and audio before setting currentTime, then resumes.  Chromium
+  // fires `pause` and `play` events around each of those calls, and
+  // without suppression the ▶/⏸ button icon would flicker to ⏸ for
+  // the ~50–100 ms the seek takes.  While a seek is in flight, the
+  // seeker's isInFlight() returns true and we drop the intermediate
+  // events; the button icon stays on ▶ (which reflects the user's
+  // intended "still playing" state).  The single-track fast path
+  // never sets in-flight, so single-track behaviour is unchanged.
+  function handlePlay()  {
+    if (seekerRef.current?.isInFlight()) return
+    setIsPlaying(true)
+  }
+  function handlePause() {
+    if (seekerRef.current?.isInFlight()) return
+    setIsPlaying(false)
+  }
   /**
    * REQ-079 #1: `ended` only flips the play state to false.  No more
    * "warp to 0" on EOF.  Whether the user pressed ⏭, scrubbed past the
@@ -851,15 +1049,13 @@ export function VideoPreviewPanel() {
     const origVal = editedToOrig(editedVal, cuts)
     setCurrentTime(origVal)
     setVideoCurrentTimeSec(origVal)
-    if (videoRef.current) {
-      videoRef.current.currentTime = origVal
-    }
-    // REQ-086 — keep the audio playhead aligned during seekbar drag so
-    // the user does not hear the prior playback position while watching
-    // the new one.  No-op when audioRef is null.
-    if (audioRef.current) {
-      audioRef.current.currentTime = origVal
-    }
+    // REQ-086 / REQ-0229 — video + audio playheads move together
+    // through the clean-seek helper.  Byte-identical direct
+    // assignment for single-track (no audio), full pause+seeked
+    // dance for multi-track.  Drag-scrub fires this many times per
+    // second; the seeker's latest-wins policy (§5) ensures only the
+    // final seek in the drag chain restores playback.
+    runCleanSeek(origVal)
   }
 
   // -------------------------------------------------------------------------
@@ -884,28 +1080,116 @@ export function VideoPreviewPanel() {
   const editedCurrentTime = origToEdited(currentTime, cuts)
 
   return (
-    <div className="flex h-full w-full flex-col">
-      {/* Header — filename + open-in-folder button.  Compact; designed
-          to live INSIDE a resizable pane so wraps gracefully when the
-          pane is narrow.  REQ-20260614-001 Phase 2. */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border/50 flex-shrink-0 min-w-0">
-        <span className="min-w-0 truncate text-body-sm text-foreground/80" title={video.path}>
-          {filename}
+    // REQ-0184 — outer container adds `overflow-hidden` so the
+    // media stack (body + seekbar + warning), when squeezed to a
+    // very short pane by REQ-0184's imperative collapse, gets
+    // clipped visually instead of overflowing the pane frame.
+    // Header stays `flex-shrink-0` on top and always renders even
+    // at the collapsed pane height (bug #1 fix).
+    <div className="flex h-full w-full flex-col overflow-hidden">
+      {/*
+        REQ-0184 — header row is a one-click accordion toggle for the
+        media stack below.  Layout owner-specified (§3):
+          [Preview] (left)   [filename+folder] (center)   [chevron] (right)
+        The whole row is `role="button"`; folder-icon click uses
+        stopPropagation so opening the folder does NOT trip collapse.
+        Owner spec: initial state always open; not persisted across
+        step2 mounts (step2's mount effect resets to true).
+      */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={videoPreviewExpanded}
+        aria-label={
+          videoPreviewExpanded
+            ? t('videoPreview.collapseAria')
+            : t('videoPreview.expandAria')
+        }
+        onClick={() => setVideoPreviewExpanded(!videoPreviewExpanded)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setVideoPreviewExpanded(!videoPreviewExpanded)
+          }
+        }}
+        className={cn(
+          'grid items-center gap-2 px-3 py-1.5 border-b border-border/50 flex-shrink-0 min-w-0',
+          // Three-column grid: title left, filename+folder center,
+          // chevron right.  Center column is `min-w-0` so long file
+          // names truncate within their allotted middle band without
+          // pushing the title or chevron out of the pane.
+          'grid-cols-[auto_minmax(0,1fr)_auto]',
+          'cursor-pointer select-none transition-colors duration-150',
+          'hover:bg-surface-2/50 focus:outline-none focus-visible:outline-none',
+        )}
+      >
+        {/* Column 1 — "Preview" title, left */}
+        <span className="text-body-sm text-fg-secondary">
+          {t('videoPreview.title')}
         </span>
-        <button
-          type="button"
-          onClick={() => shellShowInFolder(video.path).catch(() => {})}
-          title={t('videoPreview.showInFolder')}
-          className={cn(
-            'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
-            'hover:text-foreground focus:outline-none focus-visible:text-foreground'
-          )}
-          aria-label={t('videoPreview.showInFolder')}
-        >
-          <FolderOpen className="h-4 w-4" />
-        </button>
+
+        {/* Column 2 — filename + folder icon, centred as a pair */}
+        <div className="flex items-center justify-center gap-1.5 min-w-0">
+          <span
+            className="min-w-0 truncate text-body-sm text-foreground/80"
+            title={video.path}
+          >
+            {filename}
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              // REQ-0183 — stop bubble so opening the folder does not
+              // also flip the accordion toggle on the outer row.
+              e.stopPropagation()
+              shellShowInFolder(video.path).catch(() => {})
+            }}
+            title={t('videoPreview.showInFolder')}
+            className={cn(
+              'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
+              'hover:text-foreground focus:outline-none focus-visible:text-foreground',
+            )}
+            aria-label={t('videoPreview.showInFolder')}
+          >
+            <FolderOpen className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Column 3 — accordion chevron, right */}
+        {videoPreviewExpanded ? (
+          <ChevronDown className="h-4 w-4 text-fg-tertiary justify-self-end" aria-hidden="true" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-fg-tertiary justify-self-end" aria-hidden="true" />
+        )}
       </div>
 
+      {/*
+        REQ-0186 §1 — belt-and-braces collapse wrapper.  The
+        pre-0186 approach (REQ-0184) relied on flex `flex-1 min-h-0`
+        squeezing the media stack to zero when the pane snapped to
+        the collapsed size, plus `overflow-hidden` on the outer
+        container to clip any bleed.  Owner reported ~5 px of
+        "residual pixel band" below the header when collapsed (from
+        `p-2` padding on the video frame area, plus the ~6 px
+        difference between REQ-0184's 40 px collapsedSize and the
+        header's true ~33 px height).
+        Fix: wrap body + seekbar + warning in a single container
+        that flips to `hidden` (display:none) when
+        `videoPreviewExpanded` is false.  React does NOT unmount on
+        display:none, so the <video> element's playback state /
+        current time / metadata survive a collapse-expand cycle.
+        Combined with the tightened `PREVIEW_HEADER_MIN_PX = 34` in
+        step2.tsx, the collapsed pane is now exactly the header
+        row's height and the media stack contributes zero, so no
+        seam is visible.
+        Re-expand path: the parent's display flips back to block,
+        Chromium re-lays out, ResizeObserver on `previewBodyRef`
+        fires with the new dimensions, and the video frame paints
+        as usual — same code path that REQ-0184's flex-squeeze fix
+        depended on, just with a guaranteed clean 0 height instead
+        of an approximate flex-shrink.
+      */}
+      <div className={cn('contents', !videoPreviewExpanded && 'hidden')}>
       {/* Video frame area — REQ-20260614-001 補遺② 修正2.
           `previewBodyRef` is measured (clientWidth × clientHeight) so the
           frame inside can be sized in JS to the largest box that
@@ -1024,8 +1308,7 @@ export function VideoPreviewPanel() {
       </div>
 
       {/* Seekbar — REQ-20260614-001 §3: moved from the right column to
-          DIRECTLY below the video frame.  Same play/pause + range +
-          time-readout as the previous layout, just relocated. */}
+          DIRECTLY below the video frame. */}
       <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border/50 flex-shrink-0">
         <button
           type="button"
@@ -1038,7 +1321,8 @@ export function VideoPreviewPanel() {
             'focus:outline-none focus-visible:outline-none',
             'disabled:cursor-not-allowed disabled:opacity-40'
           )}
-          aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
+          aria-label={(isPlaying ? t('videoPreview.pause') : t('videoPreview.play')) + shortcutHint('playPause')}
+          title={(isPlaying ? t('videoPreview.pause') : t('videoPreview.play')) + shortcutHint('playPause')}
         >
           {isPlaying
             ? <Pause className="h-5 w-5" />
@@ -1072,6 +1356,7 @@ export function VideoPreviewPanel() {
       <p className="px-3 py-1 text-caption text-muted-foreground flex-shrink-0">
         {t('subtitleLayout.previewNote')}
       </p>
+      </div>{/* REQ-0186 §1 — close media-stack collapse wrapper */}
     </div>
   )
 }

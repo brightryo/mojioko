@@ -1,6 +1,6 @@
 {
   "title": "編集",
-  "subtitle": "字幕テキストとタイミングを確認・修正してください。",
+  "subtitle": "字幕テキストと表示タイミングを調整することができます",
   "inspector": {
     "heading": "インスペクタ",
     "bulkHeading": "一括編集",
@@ -108,7 +108,9 @@
       "add": "追加",
       "apply": "適用",
       "cancel": "キャンセル"
-    }
+    },
+    "importSrtTitle": "SRT をインポート",
+    "importSrtBody": "SRT形式のデータをインポートします。\n現在の字幕はすべて削除され、操作履歴も失われます（元に戻せません）。"
   },
   "addRowPopover": {
     "label": "挿入位置",
@@ -140,11 +142,18 @@
     "redo": "やり直し: {{label}}",
     "bulkApplied": "{{count}}件に適用しました ({{label}})",
     "bulkAppliedUndo": "元に戻す",
-    "trimDeletedRestoreHint": "トリミングで削除された字幕です。 はさみマーカーでトリミングを取り消すと復元されます"
+    "trimDeletedRestoreHint": "トリミングで削除された字幕です。 はさみマーカーでトリミングを取り消すと復元されます",
+    "srtImportedAll": "{{count}}件の字幕を読み込みました",
+    "srtImportedWithDrop": "{{count}}件の字幕を読み込みました（{{dropped}}件は動画の長さを超えるため除外）",
+    "srtImportEmpty": "読み込める字幕が見つかりませんでした",
+    "srtImportReadFailed": "SRTファイルの読み込みに失敗しました: {{error}}",
+    "srtImportParseFailed": "SRT形式を解析できませんでした: {{error}}",
+    "srtImportAllOutOfDuration": "すべての字幕が動画の尺を超えていたため読み込めませんでした（{{count}}件除外）"
   },
   "tooltip": {
     "undo": "元に戻す",
     "redo": "やり直す",
+    "importSrt": "SRT をインポート",
     "fixErrorsFirst": "書き出しに進めないエラーが {{count}} 件あります。 「問題あり」タブで赤いバッジの字幕を修正してください"
   },
   "styleCell": {
@@ -217,6 +226,9 @@
     }
   },
   "videoPreview": {
+    "title": "プレビュー",
+    "collapseAria": "プレビューを折りたたむ",
+    "expandAria": "プレビューを展開する",
     "play": "再生",
     "pause": "一時停止",
     "error": "ファイルの読み込みに失敗しました",
@@ -259,6 +271,7 @@
     "vertical": "垂直位置",
     "margin": "縦マージン (px)",
     "marginShort": "マージン",
+    "marginDisabledCenter": "中央配置では上下マージンは無効です",
     "left": "左",
     "center": "中央",
     "right": "右",

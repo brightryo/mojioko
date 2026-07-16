@@ -31,6 +31,41 @@ interface SettingsStore {
    * burn-in time.  Persisted alongside other system-wide settings.
    */
   activeFontId: FontId
+  /**
+   * REQ-0121 — user-preferred fixed default folders shown by the input /
+   * output dialogs (Settings > General).  Distinct from the MRU
+   * `lastInputDir` / `lastOutputDir` on the main-side settings-store which
+   * are updated automatically after each open/save.  `null` means "use the
+   * OS Videos folder", which the main-side dialog handler resolves.
+   */
+  defaultInputDir: string | null
+  defaultOutputDir: string | null
+  /**
+   * REQ-0194 — user-preferred default folder for the `.mojioko` project
+   * file save / open dialogs (Settings > General).  Same semantics as
+   * `defaultInputDir` / `defaultOutputDir` (nullable → OS Videos fallback,
+   * lazy existence check on use).
+   */
+  defaultProjectDir: string | null
+  /**
+   * REQ-0208 — "user has clicked the Store review CTA in the export-
+   * complete dialog at least once".  One-shot boolean: flips false → true
+   * the first time the button is pressed and never flips back.  Used by
+   * the dialog to decide whether to render the review row on future
+   * exports (MSIX build only; the NSIS build never surfaces the row).
+   *
+   * Deliberately NOT threaded through `hydrate()` / AppSettings — the
+   * flag lives only in zustand's own `persist` middleware (localStorage,
+   * key `mojioko-settings`) and does NOT round-trip through the
+   * main-process settings.json file.  This matters because the past
+   * "setting lost on restart" regressions (GPU pick, default folder)
+   * traced to hydrate() overwriting zustand-loaded values with a stale
+   * settings.json subset.  By keeping this field out of both the
+   * `Pick<AppSettings, ...>` hydrate signature AND the hydrate `set(...)`
+   * body, the localStorage value is the ONLY source of truth for it,
+   * and cannot be clobbered by an incomplete settings.json.
+   */
+  hasClickedStoreReview: boolean
 
   setLanguage: (lang: string) => void
   setTheme: (t: AppTheme) => void
@@ -45,6 +80,15 @@ interface SettingsStore {
   setFadeDurationSec: (v: number) => void
   setOutputContainer: (v: OutputContainer) => void
   setActiveFontId: (id: FontId) => void
+  setDefaultInputDir: (path: string | null) => void
+  setDefaultOutputDir: (path: string | null) => void
+  setDefaultProjectDir: (path: string | null) => void
+  /**
+   * REQ-0208 — one-way setter for the Store review CTA.  Only flips to
+   * true (idempotent on repeat calls); there is no path back to false.
+   * Intentionally takes no boolean argument to make misuse impossible.
+   */
+  markStoreReviewClicked: () => void
 
   /**
    * REQ-20260613-016 Phase 4 — `burnin` / `subtitleBackground` were dropped
@@ -56,7 +100,7 @@ interface SettingsStore {
   resetStep3Settings: () => void
 
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -80,6 +124,12 @@ export const useSettingsStore = create<SettingsStore>()(
       fadeDurationSec: BURNIN_DEFAULTS.fadeDurationSec,
       outputContainer: 'mp4',
       activeFontId: DEFAULT_FONT_ID,
+      defaultInputDir: null,
+      defaultOutputDir: null,
+      defaultProjectDir: null,
+      // REQ-0208 — user has not yet clicked the Store review CTA.  Once
+      // true, stays true across sessions via the persist middleware.
+      hasClickedStoreReview: false,
 
       setLanguage: (lang) => set({ language: lang }),
       setTheme: (t) => set({ theme: t }),
@@ -97,6 +147,10 @@ export const useSettingsStore = create<SettingsStore>()(
       setFadeDurationSec: (v) => set({ fadeDurationSec: v }),
       setOutputContainer: (v) => set({ outputContainer: v }),
       setActiveFontId: (id) => set({ activeFontId: id }),
+      setDefaultInputDir: (path) => set({ defaultInputDir: path }),
+      setDefaultOutputDir: (path) => set({ defaultOutputDir: path }),
+      setDefaultProjectDir: (path) => set({ defaultProjectDir: path }),
+      markStoreReviewClicked: () => set({ hasClickedStoreReview: true }),
 
       resetStep3Settings: () =>
         set({
@@ -151,7 +205,15 @@ export const useSettingsStore = create<SettingsStore>()(
           encoder: s.encoder ?? 'auto',
           defaultAudioTrackIndex: s.defaultAudioTrackIndex,
           fadeDurationSec: migratedFadeDurationSec,
-          activeFontId: isFontId(s.activeFontId) ? s.activeFontId : DEFAULT_FONT_ID
+          activeFontId: isFontId(s.activeFontId) ? s.activeFontId : DEFAULT_FONT_ID,
+          // REQ-0121 — optional in AppSettings for backward compat with
+          // settings.json files that predate this REQ.  `null` = use the
+          // OS Videos folder (resolved by the main-side dialog handler).
+          defaultInputDir: typeof s.defaultInputDir === 'string' ? s.defaultInputDir : null,
+          defaultOutputDir: typeof s.defaultOutputDir === 'string' ? s.defaultOutputDir : null,
+          // REQ-0194 — optional for backward compat with settings.json files
+          // that predate the project-save feature.  Same fallback semantics.
+          defaultProjectDir: typeof s.defaultProjectDir === 'string' ? s.defaultProjectDir : null
         })
       }
     }),
@@ -170,7 +232,14 @@ export const useSettingsStore = create<SettingsStore>()(
         encoder: state.encoder,
         defaultAudioTrackIndex: state.defaultAudioTrackIndex,
         fadeDurationSec: state.fadeDurationSec,
-        activeFontId: state.activeFontId
+        activeFontId: state.activeFontId,
+        defaultInputDir: state.defaultInputDir,
+        defaultOutputDir: state.defaultOutputDir,
+        defaultProjectDir: state.defaultProjectDir,
+        // REQ-0208 — persist through localStorage only.  See interface
+        // doc-comment for why this field is NOT in the AppSettings /
+        // hydrate() path.
+        hasClickedStoreReview: state.hasClickedStoreReview
       })
     }
   )

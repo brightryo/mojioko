@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useLayoutEffect } from 'reac
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Plus, RotateCcw, RotateCw, Film } from 'lucide-react'
+import { Plus, RotateCcw, RotateCw, Film, Import } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { Button } from '@/components/ui/button'
@@ -20,8 +20,10 @@ import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore, type TableFilter } from '@/stores/ui-store'
 import { useFontCacheVersionStore } from '@/stores/font-cache-version-store'
 import { cn } from '@/lib/utils'
-import { saveFileDialog, writeTextFile } from '@/services/dialog'
+import { saveFileDialog, writeTextFile, openSrtDialog, readTextFile } from '@/services/dialog'
+import { parseSrt } from '@/lib/srt-parse'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
+import { shortcutHint } from '@/lib/shortcut-hint'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { computeEntryWarnings, hasAnyError, hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
 import { applyCutsToEntry, effectiveEntryState, origToEdited } from '../../shared/cuts'
@@ -39,7 +41,7 @@ import { EditorViewSwitcher } from '@/components/editor-view-switcher/editor-vie
 import { TimelineView } from '@/components/timeline-view/timeline-view'
 import { TimelineBlockInspector } from '@/components/timeline-view/timeline-block-inspector'
 import { HelpIcon } from '@/components/help-icon'
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle, type PanelImperativeHandle } from '@/components/ui/resizable'
 import { useRef } from 'react'
 
 /**
@@ -72,6 +74,19 @@ const OUTER_LEFT_MIN_PX   = 863  // 860 → 863: 863 + 368 = 1231 (= 1232 − 1 
 const OUTER_RIGHT_MIN_PX  = 368
 const LEFT_TOP_MIN_PX     = 313  // 312 → 313: 313 + 314 = 627 (= 628 − 1 handle)
 const LEFT_BOTTOM_MIN_PX  = 314  // 312 → 314 (symmetric ±0.5 px from previous)
+
+// Collapsed-state size for the preview pane.
+// REQ-0184: was 40 (safe upper bound accommodating the header row).
+// REQ-0186 §1: tightened to 34 so the pane snaps to EXACTLY the
+// header's actual rendered height (py-1.5 = 12 px + text-body-sm
+// content ≈ 20 px + border-b 1 px = 33 px; 34 leaves 1 px of
+// hairline safety while still matching the header visually).  The
+// pre-0186 40 px left a ~4-8 px empty band below the header where
+// overflow-clipped seekbar edges could peek — owner-visible as a
+// "gap".  With 34 and the newly-added conditional `hidden` on
+// video-preview-panel.tsx's media wrapper (REQ-0186), nothing
+// renders in that band so no seam / bleed is possible.
+const PREVIEW_HEADER_MIN_PX = 34
 
 /**
  * Convert a pixel minimum to a percentage string for ResizablePanel's
@@ -156,12 +171,12 @@ function buildSrtContent(entries: SubtitleEntry[]): string {
   return '﻿' + blocks.join('\n\n')
 }
 
-interface Step2RouteProps {
-  appVersion: string
-}
+// REQ-0185 §3 — `appVersion` prop dropped alongside the removed
+// top breadcrumb.  About dialog still shows the version.
+interface Step2RouteProps {}
 
 
-export default function Step2Route({ appVersion }: Step2RouteProps) {
+export default function Step2Route(_: Step2RouteProps) {
   bumpRenderCount('Step2Route')
   const { t } = useTranslation(['step2', 'common'])
   const navigate = useNavigate()
@@ -235,7 +250,15 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
 
   const [editor, setEditor] = useState<EditorState>({ open: false })
   const [discardOpen, setDiscardOpen] = useState(false)
-  const [skipDiscardWarning, setSkipDiscardWarning] = useState(false)
+  // REQ-0223 — SRT import is a destructive replace (clears entries +
+  // cuts + history), so we route it through a confirm dialog with the
+  // same visual treatment the discard-back dialog uses.  Boolean flag,
+  // not a state machine — no "loading" phase between confirm and file
+  // pick because the file picker itself is the next step.
+  const [srtImportConfirmOpen, setSrtImportConfirmOpen] = useState(false)
+  // REQ-0185 §4 — removed `skipDiscardWarning` state.  The pre-0185
+  // "don't ask again this session" checkbox is retired now that the
+  // confirm dialog always fires on back (regardless of hasChanges).
   // REQ-20260615-023: right-sliding drawer replaces the retired STEP3 route.
   const [burninDrawerOpen, setBurninDrawerOpen] = useState(false)
 
@@ -250,6 +273,57 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   const step2LeftLayout     = useUiStore((s) => s.step2LeftLayout)
   const setStep2OuterLayout = useUiStore((s) => s.setStep2OuterLayout)
   const setStep2LeftLayout  = useUiStore((s) => s.setStep2LeftLayout)
+
+  // REQ-0183 — preview accordion.  The VideoPreviewPanel header row is
+  // now a one-click toggle for the whole preview stack (body + seekbar
+  // + warning).  When collapsed, the top-left `step2-pane-preview`
+  // ResizablePanel is imperatively snapped to `collapsedSize` (~4 %
+  // ≈ the header row's height at typical viewports) so the bottom
+  // pane (subtitle table / timeline) reclaims the freed vertical
+  // space.  Expand restores the panel to its prior size.
+  //
+  // Owner spec: initial state is ALWAYS open on step2 mount — state is
+  // NOT persisted across mounts.  The mount effect below resets the
+  // store slice to `true`, and the subsequent effect calls expand()
+  // so a freshly-arrived user always sees the preview visible.
+  const videoPreviewExpanded = useUiStore((s) => s.videoPreviewExpanded)
+  const setVideoPreviewExpanded = useUiStore((s) => s.setVideoPreviewExpanded)
+  const previewPaneRef = useRef<PanelImperativeHandle | null>(null)
+  // Reset to "open" once when step2 mounts.  Depending on
+  // setVideoPreviewExpanded is safe — Zustand's setter is stable.
+  useEffect(() => {
+    setVideoPreviewExpanded(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // Drive the ResizablePanel's collapse/expand when the store flag
+  // flips.  Guarded by `previewPaneRef.current` because the ref
+  // resolves after the first render; the effect fires again once the
+  // panel mounts and the ref lands.
+  //
+  // REQ-0191 (owner-approved) — closed→open transition seeks the
+  // playhead to the selected entry's startSec.  The seek dispatch
+  // itself was originally placed here, but REQ-0193's owner report
+  // showed it not landing on real HW: while the preview is
+  // collapsed VideoPreviewPanel's `previewBodyRef` reports 0×0 (the
+  // `display:none` wrapper zeroes the ResizeObserver read), which
+  // drops `videoFrameW` to 0 and unmounts the <video> from the
+  // JSX ternary.  Dispatching `setVideoSeekRequest` at this level
+  // then hits VideoPreviewPanel's seek-consumer effect while
+  // `videoRef.current` is still null — the effect clears the
+  // request without seeking and the fresh <video> re-mounts at
+  // currentTime 0.  REQ-0193 moves the transition-driven seek
+  // inside VideoPreviewPanel where videoRef state is directly
+  // observable and the retry loop can wait for the fresh mount
+  // to accept the seek.  Keep only the pane resize here.
+  useEffect(() => {
+    const panel = previewPaneRef.current
+    if (!panel) return
+    if (videoPreviewExpanded) {
+      panel.expand()
+    } else {
+      panel.collapse()
+    }
+  }, [videoPreviewExpanded])
 
   // REQ-20260614-001 補遺⑥ — measure BOTH width and height of the
   // paneArea so the px → % minSize conversion can keep up with window
@@ -276,6 +350,8 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   // General-tab slider IS the "default for new entries").  Each row
   // built via the add-row dialog seeds `fadeDurationSec` from here.
   const settingsFadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
+  // REQ-0121 — applied to the text / SRT save dialogs below.
+  const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
   const [subtitleFont, setSubtitleFont] = useState<SubtitleFont | null>(getSubtitleFont)
 
   // Re-load the opentype.js Font whenever the active font selection changes.
@@ -773,7 +849,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     const stem = video?.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'transcript'
     const savePath = await saveFileDialog(
       `${stem}_transcript.txt`,
-      undefined,
+      defaultOutputDir ?? undefined,
       [
         { name: 'Text File', extensions: ['txt'] },
         { name: 'All Files', extensions: ['*'] }
@@ -792,7 +868,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     const stem = video?.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'subtitles'
     const savePath = await saveFileDialog(
       `${stem}_subtitles.srt`,
-      undefined,
+      defaultOutputDir ?? undefined,
       [
         { name: 'SRT Subtitle', extensions: ['srt'] },
         { name: 'All Files', extensions: ['*'] }
@@ -802,6 +878,157 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
     const content = buildSrtContent(getOutputEntries())
     await writeTextFile(savePath, content)
     toast.success(t('toast.exportedSrt'))
+  }
+
+  /**
+   * REQ-0223 — SRT import.  Two-phase because the operation is
+   * destructive (entries + cuts + history all cleared) and undo can't
+   * rescue the caller — phase 1 shows a confirm dialog; phase 2
+   * (`runSrtImport`) runs the file pick + parse + validate + apply.
+   *
+   * The load-bearing invariant is RES-0223 §6: the store is ONLY
+   * cleared when we know we have a non-zero cue set to write in its
+   * place.  Every failure branch below returns before `resetEditingState`
+   * / `setEntries` fire, so a cancelled file pick or a broken SRT
+   * leaves the user's existing work untouched.
+   */
+  function handleImportSrt() {
+    setSrtImportConfirmOpen(true)
+  }
+
+  async function runSrtImport() {
+    setSrtImportConfirmOpen(false)
+
+    // Phase 1 — pick a file.  Cancel = quiet no-op, existing store
+    // untouched.  We do NOT toast a "cancelled" message because the
+    // user's intent is unambiguous when the picker dismisses.
+    const srtPath = await openSrtDialog(defaultOutputDir ?? undefined)
+    if (!srtPath) return
+
+    // Phase 2 — read the file bytes.  IPC failure (permissions, race
+    // with an editor holding the file) is surfaced as a toast and we
+    // bail without clearing the store.
+    let raw: string
+    try {
+      raw = await readTextFile(srtPath)
+    } catch (err) {
+      toast.error(
+        t('toast.srtImportReadFailed', { error: err instanceof Error ? err.message : String(err) }),
+      )
+      return
+    }
+
+    // Phase 3 — parse.  A non-empty `errors` array is a hard failure:
+    // partial imports would leave the user with a subtitle set that
+    // silently dropped rows the caller expected to see.  Better to
+    // refuse and let them fix the file.
+    const parseResult = parseSrt(raw)
+    if (parseResult.errors.length > 0) {
+      toast.error(
+        t('toast.srtImportParseFailed', {
+          error: parseResult.errors[0],
+        }),
+      )
+      return
+    }
+    if (parseResult.cues.length === 0) {
+      // Empty SRT / whitespace-only SRT — nothing to import, so we
+      // don't touch the store.
+      toast.warning(t('toast.srtImportEmpty'))
+      return
+    }
+
+    // Phase 4 — video-duration filter.  A subtitle whose start OR end
+    // is outside the loaded video's timeline is unusable in step2
+    // (`computeEntryWarnings` would tag it out-of-duration on every
+    // render, and the burn-in filter would clip it).  We drop rather
+    // than clamp because clamping requires guessing what the user
+    // meant; RES-0223 §5 explains the trade-off.
+    const durationSec = video?.durationSec ?? Infinity
+    const kept: typeof parseResult.cues = []
+    let droppedForDuration = 0
+    for (const cue of parseResult.cues) {
+      if (cue.startSec > durationSec || cue.endSec > durationSec) {
+        droppedForDuration++
+        continue
+      }
+      kept.push(cue)
+    }
+    if (kept.length === 0) {
+      // Every cue was outside the video's timeline — same "no cues
+      // survived" logic; do not clear the store.
+      toast.error(
+        t('toast.srtImportAllOutOfDuration', { count: droppedForDuration }),
+      )
+      return
+    }
+
+    // Phase 5 — mint fresh `SubtitleEntry` objects using the project's
+    // current defaults (font size / colours / outline) + the settings
+    // fade + shared layout defaults.  Same shape the transcribe path
+    // and the manual add-row path use; no format-specific fields
+    // sneak in.  `isEdited: true` because the row is user-authored
+    // (SRT text ≠ original transcript) — this is what the
+    // `edited` filter counts.
+    const layoutDefaults = makeEntryLayoutDefaults()
+    const newEntries: SubtitleEntry[] = kept.map((cue) => {
+      const base = {
+        startSec: cue.startSec,
+        endSec: cue.endSec,
+        text: cue.text,
+        fontSizePx: defaults.fontSizePx,
+        textColorHex: defaults.textColorHex,
+        outlineColorHex: defaults.outlineColorHex,
+        outlineThicknessPx: defaults.outlineThicknessPx,
+        fadeDurationSec: settingsFadeDurationSec,
+        ...layoutDefaults,
+      }
+      const id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+        ? `srt-${crypto.randomUUID()}`
+        : `srt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      return {
+        id,
+        ...base,
+        isDeleted: false,
+        isEdited: true,
+        original: {
+          ...base,
+          // Deep-copy so the live entry and its `original` snapshot
+          // never share nested identity — mirrors the add-row path.
+          subtitleBackground: { ...base.subtitleBackground },
+        },
+      }
+    })
+
+    // Phase 6 — commit.  From this point the operation is
+    // irreversible via Undo (the history clear below is deliberate;
+    // the confirm dialog warned the user).  Same clear sequence the
+    // discard-back handler uses (REQ-0196) so a future refactor
+    // treats the two "start fresh" flows uniformly.
+    useProjectStore.getState().resetEditingState()  // entries + cuts
+    useProjectStore.getState().setEntries(newEntries)
+    useHistoryStore.getState().clear()
+    const ui = useUiStore.getState()
+    ui.setSelectedEntryId(null)
+    ui.setRowSelection(new Set())
+    ui.setFocusedRowId(null)
+    ui.setScrollToRowId(null)
+    ui.setVideoCurrentTimeSec(0)
+    ui.setVideoSeekRequest(null)
+
+    // Phase 7 — user feedback.  Two shapes so the "3 dropped" case
+    // doesn't force the "0 dropped" case through an awkward
+    // parenthetical.
+    if (droppedForDuration > 0) {
+      toast.success(
+        t('toast.srtImportedWithDrop', {
+          count: newEntries.length,
+          dropped: droppedForDuration,
+        }),
+      )
+    } else {
+      toast.success(t('toast.srtImportedAll', { count: newEntries.length }))
+    }
   }
 
   // REQ-103 — `activeEntries` from REQ-102 was removed in favour of the
@@ -815,14 +1042,17 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
   // the Issues tab so the user fixes (or knowingly deletes) each error.
   const canContinue = readyCount > 0 && errorCount === 0
 
-  const hasChanges = entries.some((e) => e.isEdited || e.isDeleted)
-
+  // REQ-0185 §4 — the pre-0185 handleBack short-circuited to
+  // `navigate('/step1')` whenever the edit set was empty or the user
+  // had ticked "don't ask again this session".  Owner spec is now
+  // "always show the confirm dialog on back, without a way to
+  // suppress it" — a light interruption in front of a destructive
+  // navigation.  `hasChanges` / `skipDiscardWarning` are retained
+  // above only because Zustand + React ecosystem lint checks (and
+  // to keep an easy revert path if we ever need per-session skip
+  // back); they are simply no longer read here.
   function handleBack() {
-    if (hasChanges && !skipDiscardWarning) {
-      setDiscardOpen(true)
-    } else {
-      navigate('/step1')
-    }
+    setDiscardOpen(true)
   }
 
   const footerLeft = (
@@ -1033,7 +1263,7 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               <RotateCcw className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t('tooltip.undo')}</TooltipContent>
+          <TooltipContent>{t('tooltip.undo') + shortcutHint('undo')}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1050,7 +1280,26 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               <RotateCw className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t('tooltip.redo')}</TooltipContent>
+          <TooltipContent>{t('tooltip.redo') + shortcutHint('redo')}</TooltipContent>
+        </Tooltip>
+        {/* REQ-0223 — SRT import.  Sits between the undo/redo pair
+            and the "Add" button so the toolbar reads left-to-right
+            as "traverse history -> bring in external data -> add
+            new".  Icon-only ghost button matches the undo/redo
+            visual weight; the destructive action is fronted by the
+            confirm dialog below (RES-0223 §4). */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleImportSrt}
+              aria-label={t('tooltip.importSrt')}
+            >
+              <Import className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t('tooltip.importSrt')}</TooltipContent>
         </Tooltip>
         <Button variant="ghost" size="md" onClick={openAddRowDialog} data-testid="add-row">
           <Plus className="h-4 w-4 mr-1" />
@@ -1092,25 +1341,31 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
 
   return (
     <AppShell
-      currentStep={2}
-      appVersion={appVersion}
+      // REQ-0185 §3 — title/description moved to the top strip;
+      // the in-content `<h1>編集 <p>subtitle</p>` block below is
+      // removed to avoid double titling.
+      title={t('title')}
+      description={t('subtitle')}
       footerLeft={footerLeft}
       footerCenter={footerCenter}
       footerRight={footerRight}
       noScroll
       fluid
+      // REQ-0189 — drop the AppShell content-container padding
+      // (`px-6 py-5`) so the 3-pane group spans edge-to-edge:
+      // left/right to the viewport, top to the breadcrumb line,
+      // bottom to the footer's top edge.  Owner spec: "コンテンツ
+      // を画面領域いっぱいに広げる".  STEP1 is not opted in — its
+      // centred single-column layout wants the outer breathing
+      // room.
+      edgeToEdge
     >
-      <div className="flex flex-col h-full gap-3">
-        {/* Page header — REQ-075 #1: title + subtitle laid out on a single
-            row to reclaim vertical space.  Subtitle keeps its muted tone
-            (text-body-sm + zinc-400) but moves to the right of the heading
-            with a baseline alignment and a small inset gap.  REQ-028 still
-            governs the export DropdownMenu (footer-right). */}
-        <div className="flex items-baseline gap-3 flex-shrink-0">
-          <h1 className="text-heading font-semibold text-fg-primary">{t('title')}</h1>
-          <p className="text-body-sm text-fg-tertiary">{t('subtitle')}</p>
-        </div>
-
+      {/* REQ-0189 — dropped `gap-3` from the direct wrapper (it
+          added a 12 px gap between the (removed) heading block and
+          the 3-pane, but with the heading in the top strip and
+          edge-to-edge on, the 3-pane is the only child and the gap
+          just eats space above the ResizablePanelGroup). */}
+      <div className="flex flex-col h-full">
         {/* REQ-20260614-001 補遺② 修正1 — view switcher / filter tabs /
             undo/redo / add row / BulkEditBar are now rendered INSIDE the
             bottom pane (see `bottomSlot`), so the toolbar lives next to
@@ -1145,7 +1400,15 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
                 setStep2OuterLayout({ 'step2-pane-left': left, 'step2-pane-right': right })
               }
             }}
-            className="rounded-lg border border-line overflow-hidden"
+            // REQ-0187 §2 — dropped the outer `rounded-lg border
+            // border-line` frame that wrapped the 3-pane group.
+            // Owner rationale: Resolve doesn't box its panes in a
+            // frame; pane boundaries are communicated by the
+            // ResizableHandle (1 px line) + surface tier
+            // differences between panes.  The outer border was a
+            // pre-0187 remnant of the "card boxes" pattern REQ-0178
+            // retired for the section-divider hairline pattern.
+            className="overflow-hidden"
           >
             <ResizablePanel
               id="step2-pane-left"
@@ -1167,11 +1430,55 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
               >
                 <ResizablePanel
                   id="step2-pane-preview"
+                  // REQ-0183 — wire imperative ref + `collapsible` so
+                  // the VideoPreviewPanel header toggle can snap the
+                  // pane between its normal `minSize` (video visible)
+                  // and `collapsedSize` (~4 % of vertical pane area
+                  // ≈ 30 px at typical window heights — matches the
+                  // header row's own height so only the header is
+                  // visible in the collapsed state).
+                  // react-resizable-panels v4.11 exposes the handle
+                  // via `panelRef`; our ResizablePanel wrapper
+                  // forwards React `ref` into it so callers use the
+                  // normal React ref pattern.
+                  // v4.11 dropped onCollapse / onExpand — user-driven
+                  // manual drag past the collapse threshold does NOT
+                  // sync back into `videoPreviewExpanded`.  Acceptable
+                  // because the whole header row is the primary
+                  // toggle affordance now; users won't reach for the
+                  // ResizableHandle to collapse the preview.
+                  ref={previewPaneRef}
+                  collapsible
+                  // REQ-0184 bug #1 — the pre-0184 fixed `4` (%) was
+                  // smaller than the header row (~34-40 px) at typical
+                  // window sizes, so collapsing clipped the header
+                  // itself and left users no way to re-expand.  Now
+                  // derived from `PREVIEW_HEADER_MIN_PX` so the pane
+                  // snaps to exactly the header's height and the
+                  // toggle stays visible / clickable.
+                  collapsedSize={paneMinPct(PREVIEW_HEADER_MIN_PX, paneAreaSize.h)}
                   minSize={paneMinPct(LEFT_TOP_MIN_PX, paneAreaSize.h)}
                 >
                   {previewSlot}
                 </ResizablePanel>
-                <ResizableHandle />
+                {/*
+                  REQ-0185 §5 — disable the preview↔bottom drag handle
+                  while the preview is collapsed.  Pre-0185 the user
+                  could drag this handle up past the collapsed pane's
+                  header edge to peek the video without flipping the
+                  header chevron, leaving the ▸ (closed) icon out of
+                  sync with a visible video.  Making the handle inert
+                  in the collapsed state forces "open" through the
+                  single canonical path (header row toggle), so the
+                  chevron and the actual pane size are always in
+                  lockstep.  The handle stays visible as a static
+                  divider (per REQ-20260615-009 disabled-state spec
+                  in `resizable.tsx`), just cannot be grabbed.
+                  When expanded, the handle is fully draggable as
+                  before — the other 3-pane boundaries (left↔right
+                  inspector) are unaffected.
+                */}
+                <ResizableHandle disabled={!videoPreviewExpanded} />
                 <ResizablePanel
                   id="step2-pane-bottom"
                   minSize={paneMinPct(LEFT_BOTTOM_MIN_PX, paneAreaSize.h)}
@@ -1216,37 +1523,82 @@ export default function Step2Route({ appVersion }: Step2RouteProps) {
         onCancel={closeEditor}
       />
 
-      {/* Discard changes dialog */}
+      {/* Discard changes dialog.
+          REQ-0139 §3 — `onEnterConfirm` was set by REQ-0138 §2.1 but
+          rolled back here because this is a destructive confirmation
+          (discards the user's edits and navigates back to Step 1).
+          Owner must click the OK button; Esc still closes on the
+          cancel side (no navigation). */}
       <Dialog open={discardOpen} onOpenChange={setDiscardOpen}>
         <DialogContent className="max-w-[400px]">
           <DialogHeader>
             <DialogTitle>{t('common:dialog.discardChanges')}</DialogTitle>
             <DialogDescription>{t('common:dialog.discardChangesDesc')}</DialogDescription>
           </DialogHeader>
-          <div className="flex items-center gap-2 mt-1">
-            <input
-              type="checkbox"
-              id="skip-discard"
-              checked={skipDiscardWarning}
-              onChange={(e) => setSkipDiscardWarning(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-surface-4 accent-primary"
-            />
-            <label htmlFor="skip-discard" className="text-body-sm text-fg-tertiary cursor-pointer">
-              {t('common:dialog.dontAskAgain')}
-            </label>
-          </div>
+          {/* REQ-0185 §4 — "don't ask again" checkbox removed; the
+              confirm now always shows on back, no per-session skip. */}
           <DialogFooter>
             <Button variant="ghost" size="md" onClick={() => setDiscardOpen(false)}>
               {t('common:action.cancel')}
             </Button>
             <Button
-              variant="danger"
+              // REQ-0185 §4 — owner spec: "OK = プライマリ抑制緑" (the
+              // desaturated brand green from Phase A).  Was `variant="danger"`
+              // (red tint) — now `primary` to match the spec.  The
+              // action itself is still destructive-adjacent (discards
+              // in-progress edits) but owner picked a calmer visual
+              // treatment.
+              variant="primary"
               size="md"
               onClick={() => {
                 setDiscardOpen(false)
+                // REQ-0196 §1 — actually discard the entries/cuts the
+                // dialog just promised to drop.  Pre-0196 the handler
+                // only navigated, leaving the store populated so a
+                // later `step1 → 別動画 → 保存` emitted a `.mojioko`
+                // pairing the new video with the old subtitles.
+                // History goes with them so Ctrl+Z can't rewind past
+                // the discard into a stale entries set; ui selection
+                // + focus + scroll + playhead-sync slices reset for
+                // the same reason.  `video` / `videoLoadingState` /
+                // `selectedTrackIndex` are intentionally KEPT so the
+                // user can immediately re-transcribe the same source
+                // if that's why they came back to step1.
+                useProjectStore.getState().resetEditingState()
+                useHistoryStore.getState().clear()
+                const ui = useUiStore.getState()
+                ui.setSelectedEntryId(null)
+                ui.setRowSelection(new Set())
+                ui.setFocusedRowId(null)
+                ui.setScrollToRowId(null)
+                ui.setVideoCurrentTimeSec(0)
+                ui.setVideoSeekRequest(null)
                 navigate('/step1')
               }}
             >
+              {t('common:action.ok')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* REQ-0223 — SRT import confirm dialog.  Same visual language
+          as the discard-back dialog above (light-primary green
+          "OK", ghost "Cancel").  `onEnterConfirm` deliberately NOT
+          set — this is a destructive operation (clears entries +
+          cuts + history), so per REQ-0139 §3 the user must click
+          the OK button; Esc still closes on the cancel side. */}
+      <Dialog open={srtImportConfirmOpen} onOpenChange={setSrtImportConfirmOpen}>
+        <DialogContent className="max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>{t('dialog.importSrtTitle')}</DialogTitle>
+            <DialogDescription>{t('dialog.importSrtBody')}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" size="md" onClick={() => setSrtImportConfirmOpen(false)}>
+              {t('common:action.cancel')}
+            </Button>
+            <Button variant="primary" size="md" onClick={runSrtImport}>
               {t('common:action.ok')}
             </Button>
           </DialogFooter>

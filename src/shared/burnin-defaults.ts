@@ -72,7 +72,8 @@ export const BURNIN_DEFAULTS = {
  */
 export function makeEntryLayoutDefaults(): {
   horizontalPosition: 'left' | 'center' | 'right'
-  verticalPosition: 'top' | 'bottom'
+  // REQ-0140 — widened to include `'center'`; default stays `'bottom'`.
+  verticalPosition: 'top' | 'center' | 'bottom'
   verticalMarginPx: number
   subtitleBackground: SubtitleBackground
 } {

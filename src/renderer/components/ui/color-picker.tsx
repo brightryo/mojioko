@@ -2,12 +2,25 @@ import { useState } from 'react'
 import { HexColorPicker } from 'react-colorful'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/stores/ui-store'
+import { useOverlayRegistration } from '@/hooks/use-overlay-registration'
 import { BASIC_COLORS, COLOR_PAIRS, CUD_COLORS, type ColorPair } from '@/lib/color-palette'
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
+
+/**
+ * REQ-0137 fix — internal component that lives inside `<PopoverContent>`
+ * so its mount lifecycle tracks Radix Popover's Presence gate.  When
+ * the picker is open the child mounts and `useOverlayRegistration`
+ * registers a unique id; when closed the child unmounts and the id is
+ * released.  Same pattern the shared Dialog / Sheet primitives use.
+ */
+function OverlayRegistrar(): null {
+  useOverlayRegistration()
+  return null
+}
 
 interface ColorPickerProps {
   value: string
@@ -20,6 +33,16 @@ interface ColorPickerProps {
    */
   swatchOnly?: boolean
   /**
+   * REQ-0127 Phase 3 — heading shown at the top of the popover (e.g.
+   * "フォントカラー選択" / "アウトラインカラー選択") so the modal picker
+   * communicates which colour the user is editing.  Callers pass the
+   * pre-translated string; `common.colorPicker.headingText` /
+   * `.headingOutline` are the canonical i18n keys.  When omitted the
+   * heading row is hidden (back-compat for future call sites that
+   * don't want a heading).
+   */
+  heading?: string
+  /**
    * Optional "commit" callback fired on popover close, once, with the
    * final value — only when the value actually changed since the popover
    * opened.  Use this from contexts that need a single coarse-grained
@@ -27,8 +50,13 @@ interface ColorPickerProps {
    * separately from `onChange` which fires per-pixel during a saturation
    * drag.  Existing per-row usage that wants live history per micro-move
    * simply omits this prop and continues to rely on `onChange`.
+   *
+   * REQ-0125 — the second argument carries the popover's open-time
+   * value ("before"), so callers can hand it into a beforePatch on the
+   * history push and Undo rewinds past any preview mutations from
+   * `onChange` during the drag.
    */
-  onCommit?: (hex: string) => void
+  onCommit?: (hex: string, hexOnOpen: string) => void
   /**
    * Optional pair-apply callback.  When provided, the popover renders
    * the "Suggested pairs" group (REQ-033 §2) — clicking a pair calls
@@ -52,7 +80,8 @@ export function ColorPicker({
   disabled,
   swatchOnly,
   onCommit,
-  onPairApply
+  onPairApply,
+  heading
 }: ColorPickerProps) {
   const { t } = useTranslation('common')
   const recentColors = useUiStore((s) => s.recentColors)
@@ -103,11 +132,69 @@ export function ColorPicker({
       // only when the value moved.  Callers that need it (BulkEditBar) use
       // it to register a single undoable op per popover open/close cycle.
       if (onCommit && valueOnOpen !== null && normalise(value) !== valueOnOpen) {
-        onCommit(normalise(value))
+        // REQ-0125 — pass the open-time value so the caller can build a
+        // beforePatch on its history push (the preview mutations from
+        // onChange have already moved the store past `valueOnOpen`, so
+        // a naive snapshot at commit time would capture the after-value
+        // and Undo would be a no-op).
+        onCommit(normalise(value), valueOnOpen)
       }
       setValueOnOpen(null)
     }
     setOpen(next)
+    // REQ-0137 fix — overlay registration is now driven by the
+    // `<OverlayRegistrar />` child inside `<PopoverContent>` (see
+    // `pickerContent` below).  Radix Popover's Presence mounts
+    // Content's children only when the picker is open, so add/remove
+    // to `overlayIds` happens automatically and cannot leak.  The
+    // previous manual increment/decrement + ref (REQ-0132) has been
+    // removed alongside its safety-net cleanup effect.
+  }
+
+  // REQ-0127 Phase 3 — explicit OK / Cancel buttons replace the outside-
+  // click-to-commit affordance.  Cancel rewinds the store to
+  // `valueOnOpen` via `onChange` (which callers wire to the history-
+  // less updateEntryPreview / draft setter, matching REQ-0125's preview
+  // stream), then suppresses the onCommit fire by clearing
+  // `valueOnOpen` before closing — same trick as handlePairClick.
+  //
+  // REQ-0131 §2 A — Enter=OK.  When Enter fires from the hex input,
+  // the user's typed draft may not yet be flushed to `value` via the
+  // per-keystroke onChange (which only fires on HEX_RE match).  Read
+  // hexDraft directly here so the effective committed value is the
+  // typed draft, not the stale prop.  This inlines the close-side of
+  // handleOpenChange rather than delegating, because the async parent
+  // setState from `onChange(hexDraft)` would not have reached `value`
+  // by the time handleOpenChange's onCommit branch reads it.
+  function handleConfirm() {
+    const effective =
+      HEX_RE.test(hexDraft) ? normalise(hexDraft) : normalise(value)
+    if (HEX_RE.test(effective)) {
+      addRecentColor(effective)
+    }
+    if (onCommit && valueOnOpen !== null && effective !== valueOnOpen) {
+      onCommit(effective, valueOnOpen)
+    }
+    // Push the pending hex draft upward so the parent's `value` state
+    // catches up on the next render.  Skipped when hex draft already
+    // matches the prop (the OK-after-picker-drag path).
+    if (HEX_RE.test(hexDraft) && normalise(hexDraft) !== normalise(value)) {
+      onChange(normalise(hexDraft))
+    }
+    setValueOnOpen(null)
+    setOpen(false)
+  }
+  function handleCancel() {
+    if (valueOnOpen !== null && normalise(value) !== valueOnOpen) {
+      // Rewind preview state to the open-time value.  Bulk callers wire
+      // onChange to setColorDraft + updateEntriesPreview, so this
+      // restores both the picker's own displayed value and every
+      // selected entry's store value.  Inspector callers wire onChange
+      // to updateEntryPreview directly.
+      onChange(valueOnOpen)
+    }
+    setValueOnOpen(null)
+    setOpen(false)
   }
 
   function handlePickerChange(hex: string) {
@@ -125,6 +212,11 @@ export function ColorPicker({
     // can hit them quickly.
     addRecentColor(pair.text)
     addRecentColor(pair.outline)
+    // REQ-0125 — the pair-apply path already pushed its own history op
+    // via the caller's `onPairApply` closure, so suppress the coarse
+    // onCommit that handleOpenChange(false) would otherwise fire (it
+    // would double-push under the new preview / commit split).
+    setValueOnOpen(null)
     // Close the popover so the user sees the result immediately — pair
     // clicks are a fully-committed action, not an exploratory pick.
     handleOpenChange(false)
@@ -160,38 +252,93 @@ export function ColorPicker({
 
   const pickerContent = (
     <PopoverContent
-      // REQ-035: 3-group palette + saturation/hue picker + recent row +
-      // hex input is ~530 px tall — exceeds Settings dialog's modest
-      // height when the trigger sits near the dialog's middle, causing
-      // top/bottom clipping.  Radix already flips side to avoid the
-      // viewport edge; we additionally cap max-height to the *available*
-      // vertical space exposed by Radix (`--radix-popover-content-
-      // available-height`) and let the body scroll inside the popover
-      // when content doesn't fit.  Generous PopoverContent positions
-      // (字幕スタイルダイアログ, STEP 2 行) still render without a
-      // scrollbar because available-height covers the full popover.
-      className="w-[280px] p-3 space-y-3 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
-      align="start"
-      sideOffset={8}
-      collisionPadding={12}
-      onInteractOutside={() => handleOpenChange(false)}
+      // REQ-0127 Phase 3 — modal via `<Popover modal>` on Root.
+      // Backdrop clicks disabled via onInteractOutside.
+      // REQ-0128 Phase 2 — the popover is anchored to a fixed viewport
+      // position (see PopoverAnchor below) rather than the trigger,
+      // so it always fits regardless of where the color swatch sits.
+      // The content is a flex column: a scrollable body (rare fallback
+      // for constrained viewports) plus a sticky OK/Cancel footer.
+      // `align="end"` + `side="bottom"` + `avoidCollisions={false}`
+      // keeps Radix from flipping/shifting the popover away from the
+      // fixed anchor, so the OK button is guaranteed reachable.
+      className="w-[300px] p-0 flex flex-col max-h-[calc(100vh-56px)]"
+      align="end"
+      side="bottom"
+      sideOffset={0}
+      avoidCollisions={false}
+      onInteractOutside={(e) => e.preventDefault()}
+      onEscapeKeyDown={(e) => {
+        // Esc = Cancel, per REQ-0127 §3 modal semantics.
+        e.preventDefault()
+        handleCancel()
+      }}
+      onKeyDown={(e) => {
+        // REQ-0131 §2 A — Enter anywhere inside the popover confirms
+        // (OK), including from the hex input (handleConfirm reads
+        // hexDraft directly, so a typed draft commits even if the
+        // per-keystroke onChange has not yet flushed to the prop).
+        // Bail on modifiers so Ctrl+Enter et al. fall through to any
+        // future in-modal shortcut without hijacking Enter=OK.
+        if (e.key !== 'Enter') return
+        if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return
+        // Textarea Enter inserts a newline — skip so the user can
+        // still enter multi-line text in future modal fields.  No
+        // textarea inside the picker today, but the guard costs
+        // nothing and future-proofs the contract.
+        const target = e.target as HTMLElement | null
+        if (target && target.tagName.toLowerCase() === 'textarea') return
+        e.preventDefault()
+        e.stopPropagation()
+        handleConfirm()
+      }}
     >
-      {/* Close X — explicit affordance.  Outside-click also closes the
-          popover via onInteractOutside, but REQ-033 asks for a visible
-          dismiss control. */}
+      {/* REQ-0137 fix — child of Radix PopoverContent.  Presence
+          mounts this only when the popover is open, so overlay
+          registration tracks the picker's visibility exactly.
+          Replaces the REQ-0132 manual increment/decrement in
+          `handleOpenChange`. */}
+      <OverlayRegistrar />
+      {/* Scrollable body — grows to fill remaining vertical space, and
+          scrolls internally in the rare case the palette is taller than
+          the viewport allowance.  The sticky footer below stays pinned. */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+      {/* REQ-0127 Phase 3 — heading row.  Shows which colour is being
+          edited (e.g. "フォントカラー選択" / "アウトラインカラー選択")
+          + X close button that maps to Cancel (revert + no commit). */}
+      {heading && (
+        <div className="flex items-center justify-between border-b border-line pb-2 -mb-1">
+          <p className="text-body font-semibold text-fg-primary">{heading}</p>
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="-mr-1 flex h-6 w-6 items-center justify-center rounded text-fg-muted hover:bg-surface-2 hover:text-fg-secondary transition-colors"
+            aria-label={t('colorPicker.close')}
+            title={t('colorPicker.close')}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+      {/* "Basic colours" group label + X close button.  When `heading`
+          is set, the top-right X was rendered by the heading row above;
+          the label here loses the paired X to avoid duplicate close
+          affordances but is otherwise unchanged. */}
       <div className="flex items-start justify-between">
         <p className="text-label font-medium uppercase tracking-wider text-fg-muted">
           {t('colorPicker.basic')}
         </p>
-        <button
-          type="button"
-          onClick={() => handleOpenChange(false)}
-          className="-mt-0.5 -mr-1 flex h-5 w-5 items-center justify-center rounded text-fg-muted hover:bg-surface-2 hover:text-fg-secondary transition-colors"
-          aria-label={t('colorPicker.close')}
-          title={t('colorPicker.close')}
-        >
-          <X className="h-3 w-3" />
-        </button>
+        {!heading && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="-mt-0.5 -mr-1 flex h-5 w-5 items-center justify-center rounded text-fg-muted hover:bg-surface-2 hover:text-fg-secondary transition-colors"
+            aria-label={t('colorPicker.close')}
+            title={t('colorPicker.close')}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
       </div>
 
       {/* Group 1: Basic colours (10) */}
@@ -292,6 +439,45 @@ export function ColorPicker({
           'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30'
         )}
       />
+
+      </div>{/* /scrollable body */}
+
+      {/* REQ-0127 Phase 3 + REQ-0128 Phase 2 — footer sits OUTSIDE the
+          scroll area, so OK / Cancel are guaranteed visible regardless
+          of viewport height.  If the body overflows the popover's
+          max-height, only the body scrolls; the footer stays pinned.
+          OK confirms via the usual handleOpenChange(false) commit path
+          (fires onCommit with the after value).  Cancel rewinds the
+          preview stream to `valueOnOpen` via onChange(valueOnOpen)
+          then closes without firing onCommit.  Aligned right so the
+          primary action (OK) sits under the user's mouse in a common
+          closing gesture. */}
+      <div className="flex items-center justify-end gap-2 border-t border-line px-3 py-2 flex-shrink-0 bg-surface-1">
+        <button
+          type="button"
+          onClick={handleCancel}
+          className={cn(
+            'inline-flex items-center justify-center h-8 px-3 rounded-md text-body-sm',
+            'bg-transparent text-fg-secondary border border-line',
+            'hover:bg-surface-1 hover:text-fg-primary',
+            'transition-colors duration-150 focus:outline-none'
+          )}
+        >
+          {t('colorPicker.cancel')}
+        </button>
+        <button
+          type="button"
+          onClick={handleConfirm}
+          className={cn(
+            'inline-flex items-center justify-center h-8 px-3 rounded-md text-body-sm font-medium',
+            'bg-primary text-fg-inverse',
+            'hover:bg-primary-hover active:bg-primary-active',
+            'transition-colors duration-150 focus:outline-none'
+          )}
+        >
+          {t('colorPicker.ok')}
+        </button>
+      </div>
     </PopoverContent>
   )
 
@@ -299,9 +485,37 @@ export function ColorPicker({
   // Render — compact swatch or full-width button
   // -------------------------------------------------------------------------
 
+  // REQ-0128 Phase 2 — a fixed-viewport anchor point so the popover
+  // renders in a predictable region (top-right of viewport, at a
+  // vertical offset that leaves room for the app's top nav +
+  // breadcrumb) regardless of where the color-swatch trigger sits.
+  // Without this, a trigger placed near the bottom of the viewport
+  // gave Radix nowhere to render a ~500 px popover — the OK button
+  // would fall below the viewport edge with no way to reach it.  The
+  // anchor is a zero-size, pointer-events-none div at fixed
+  // `top: 56px right: 12px` — approximately the inspector's top-right
+  // corner in the Step 2 layout — and PopoverContent uses
+  // `align="end"` `side="bottom"` `avoidCollisions={false}` above so
+  // Radix doesn't flip/shift away from it.
+  const anchorEl = (
+    <PopoverAnchor asChild>
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed',
+          top: 56,
+          right: 12,
+          width: 0,
+          height: 0,
+          pointerEvents: 'none',
+        }}
+      />
+    </PopoverAnchor>
+  )
+
   if (swatchOnly) {
     return (
-      <Popover open={open} onOpenChange={handleOpenChange}>
+      <Popover open={open} onOpenChange={handleOpenChange} modal>
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -318,13 +532,14 @@ export function ColorPicker({
             aria-label={value}
           />
         </PopoverTrigger>
+        {anchorEl}
         {pickerContent}
       </Popover>
     )
   }
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={handleOpenChange} modal>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -345,6 +560,7 @@ export function ColorPicker({
           <span className="font-mono text-body-sm text-fg-secondary">{normalise(value)}</span>
         </button>
       </PopoverTrigger>
+      {anchorEl}
       {pickerContent}
     </Popover>
   )

@@ -4,6 +4,9 @@ import {
   getLibassScale,
   getSubtitleFontFor,
   getLibassScaleFor,
+  getCmapCoverageFor,
+  getTofuSubstituteFor,
+  getActiveFontId,
   FALLBACK_LIBASS_SCALE,
   type SubtitleFont
 } from './font-metrics'
@@ -95,6 +98,27 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
   // overflowStartIndex is an index into normalizedText — subtitle-table.tsx
   // applies the same normalisation before slicing, so the indices stay in sync.
   const normalizedText = text.replace(/\\N/g, '\n')
+  // REQ-0160 — the glyph loop below measures per-character advance.  When
+  // the code point is not in the effective font's cmap we swap in the
+  // tofu substitute's advance instead of the font's `.notdef` — that
+  // matches what libass will render post-fix (also using the same
+  // tofu substitute, injected by `services/burnin.ts`) and stops the
+  // 2× width mismatch that produced the auto-line-break failure.
+  //
+  // Crucially we iterate the ORIGINAL text characters, preserving code
+  // unit offsets — the substitution affects only the per-character
+  // *advance* fed into `cumulative`, not the string content.  This
+  // keeps `overflowStartIndex` a valid slice offset for
+  // `subtitle-table.tsx` even when the original text contains
+  // supplementary-plane code points (surrogate pairs) that would
+  // otherwise shift after substitution.
+  //
+  // When the font isn't cached yet (`cmap === null`) we fall through to
+  // the legacy `.notdef` behaviour — the next `bumpFontCacheVersion`
+  // rebuild triggers a correct re-measure.
+  const effectiveFontId = fontId ?? getActiveFontId()
+  const cmap = getCmapCoverageFor(effectiveFontId)
+  const tofu = getTofuSubstituteFor(effectiveFontId)
   const lines = normalizedText.split('\n')
   let charOffset = 0
 
@@ -106,15 +130,35 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
       // scale = fontSizePx / unitsPerEm × libassScale
       //       = effective pixels per font unit in libass rendering.
       const scale = (fontSizePx / font.unitsPerEm) * libassScale
-      const glyphs = font.stringToGlyphs(line)
+      // Pre-compute the tofu character's advance once (all missing
+      // glyphs get the same effective width — the substitute's own
+      // glyph metrics).  Null when we're falling through the "font
+      // not cached" branch, in which case the loop below uses the
+      // legacy `stringToGlyphs` result directly.
+      const tofuAdvance = cmap !== null && tofu !== null
+        ? (font.charToGlyph(tofu).advanceWidth ?? 0)
+        : null
       // [...line] iterates by Unicode code point; .length is the code-unit
       // count (1 for BMP, 2 for supplementary), matching string slice offsets.
       const codePoints = [...line]
       let byteOffset = 0
 
-      for (let gi = 0; gi < glyphs.length; gi++) {
-        // Add advance for this glyph (right edge before kerning to next).
-        cumulative += (glyphs[gi].advanceWidth ?? 0) * scale
+      for (let gi = 0; gi < codePoints.length; gi++) {
+        // Per-character advance: substitute the tofu's advance when the
+        // code point is not in the font's cmap, else use the character's
+        // own glyph advance.  Note we drop the pre-fetched `glyphs`
+        // array — using `font.charToGlyph` per code point gives the
+        // same result and lets the substitution live inside the loop
+        // without a parallel index array.
+        const ch = codePoints[gi]
+        const cp = ch.codePointAt(0)!
+        let advance: number
+        if (tofuAdvance !== null && cmap !== null && !cmap.has(cp)) {
+          advance = tofuAdvance
+        } else {
+          advance = font.charToGlyph(ch).advanceWidth ?? 0
+        }
+        cumulative += advance * scale
 
         // Overflow check: right edge of this glyph exceeds the budget.
         if (cumulative > effectivePx) {
@@ -122,12 +166,19 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
         }
 
         // Kerning between this glyph and the next — shifts where next char starts.
-        // Zero for all CJK/kana pairs in NotoSansJP-SemiBold.
-        if (gi + 1 < glyphs.length) {
-          cumulative += font.getKerningValue(glyphs[gi], glyphs[gi + 1]) * scale
+        // Zero for all CJK/kana pairs in NotoSansJP-SemiBold.  Skip kerning
+        // across a tofu boundary since kerning tables are not defined for
+        // the substituted glyph's neighbours in practice.
+        if (gi + 1 < codePoints.length) {
+          const nextCh = codePoints[gi + 1]
+          const nextCp = nextCh.codePointAt(0)!
+          const bothInCmap = cmap === null || (cmap.has(cp) && cmap.has(nextCp))
+          if (bothInCmap) {
+            cumulative += font.getKerningValue(font.charToGlyph(ch), font.charToGlyph(nextCh)) * scale
+          }
         }
 
-        byteOffset += codePoints[gi].length
+        byteOffset += ch.length
       }
     } else {
       // Fallback: character-class estimates when the per-row font is not yet

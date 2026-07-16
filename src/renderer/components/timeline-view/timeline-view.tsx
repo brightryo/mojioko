@@ -619,6 +619,14 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   // 一覧 (subtitle-table.tsx) 側で自動スクロールに使われ続けている。
   const selectedEntryId = useUiStore((s) => s.selectedEntryId)
   const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
+
+  // REQ-0131 §4.1 — DEL / Backspace on the timeline used to be handled
+  // by a local `useEffect + document.addEventListener('keydown', ..., true)`
+  // in this component (REQ-0129 Phase 2 + REQ-0130 in-house rewrite).
+  // It moved into `useGlobalShortcuts` (mounted from App.tsx) so every
+  // global editor shortcut funnels through one handler + one predicate.
+  // Behaviour contract is unchanged: same `deleteEntryById` call, same
+  // history-label pair, same context-B guard.
   const setVideoSeekRequest = useUiStore((s) => s.setVideoSeekRequest)
   // REQ-094 case B: TimelineView no longer subscribes to
   // `videoCurrentTimeSec`.  The playhead lives in its own memo'd
@@ -878,6 +886,10 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       // `tests/unit/timeline-drag.test.ts` drive the EXACT same code path
       // production uses, and prevents future "tests-pass-but-production-
       // breaks" regressions in this lane.
+      // REQ-0201 — pass the live cut list so the drag pipeline can
+      // translate its delta on the Edited axis.  Read once here rather
+      // than twice further down for the noop / patch branch below.
+      const liveCuts = useProjectStore.getState().cuts
       const result = computeDragPatch({
         snapshot: d.snapshot,
         kind: d.kind,
@@ -889,23 +901,20 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
         playhead,
         liveEntries,
         draggingEntryId: d.entryId,
+        cuts: liveCuts,
       })
 
       // Visual snap guide — 1 px vertical line at the snap target's
       // pixel position.  Cleared when no snap was applied.
       //
-      // REQ-099: translate `guideTimeSec` from the Original axis
-      // (every entry of `buildSnapTargets` — edges, playhead, grid —
-      // is sourced from Original-axis fields) to the Edited axis the
-      // tracks actually render in.  The Block render path uses
-      // `editedBlockPositions = origToEdited(entry.startSec, cuts) *
-      // pps` (see editedBlockPositions memo above and the Block
-      // mapping at L~1656); without the same `origToEdited` step
-      // here, the guide line drifts to the LEFT of the block edge by
-      // exactly the cumulative cut duration up to the snap target,
-      // which is the position-mismatch the owner reported.  Empty
-      // cuts → identity, so the legacy non-trim behaviour is
-      // unchanged.
+      // REQ-0201 — `result.guideTimeSec` is already on the Edited axis
+      // (buildSnapTargets translates entry edges through origToEdited
+      // and computeDragPatch pre-projects the playhead).  The pre-
+      // REQ-0201 pipeline returned Original values and this call site
+      // did the origToEdited conversion locally; that conversion has
+      // moved into the pipeline so the guide's px position is now
+      // simply `guideTimeSec * pps`.  Empty cuts → identity, so the
+      // legacy non-trim behaviour is unchanged.
       //
       // REQ-100: this write runs UNCONDITIONALLY now, including for
       // move-drag noops (|dxPx| < 3).  Previously the sub-3 px
@@ -916,10 +925,9 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       // around the drag origin produced visible gaps.  `result` is
       // never null from `computeDragPatch` anymore; `result.isNoop`
       // is the new gating signal for the entry-write below.
-      const liveCuts = useProjectStore.getState().cuts
       setSnapGuidePx(
         result.guideTimeSec !== null
-          ? origToEdited(result.guideTimeSec, liveCuts) * pps
+          ? result.guideTimeSec * pps
           : null,
       )
 
@@ -2010,7 +2018,15 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 onPointerMove={handleTracksPointerMove}
                 onPointerUp={handleTracksPointerUp}
                 onPointerCancel={handleTracksPointerUp}
-                className="relative touch-none"
+                // REQ-0182 timeline — sink the tracks area below the
+                // surrounding surface-0 body so it reads as a
+                // "well" that clips sit in (Resolve's timeline
+                // convention).  L 10 % is 3 pp below our surface-0
+                // (L 13 % after REQ-0178) — enough for the eye to
+                // pick up the depth without introducing another
+                // divider line.  Ruler / gutter / toolbar stay at
+                // surface-1 (L 16 %) above.
+                className="relative touch-none bg-[hsl(0_0%_10%)]"
                 style={{
                   width: `${widthPx}px`,
                   height: `${tracksHeightPx}px`

@@ -76,6 +76,17 @@ export const DOCUMENTATION_URLS = {
 export const MS_STORE_PRODUCT_ID = '9N03JMH9LF6M'
 export const MS_STORE_APP_URL = `ms-windows-store://pdp/?productid=${MS_STORE_PRODUCT_ID}`
 export const MS_STORE_WEB_URL = `https://apps.microsoft.com/detail/${MS_STORE_PRODUCT_ID}`
+/**
+ * REQ-0208 — deep link to the Microsoft Store review composer for MOJIOKO's
+ * MSIX build.  Documented at
+ * https://learn.microsoft.com/en-us/windows/uwp/monetize/launch-store-app.
+ * Note the path segment `review` and query key `ProductId` are exactly as
+ * Microsoft's docs spell them; this URL does NOT share a prefix with
+ * `MS_STORE_APP_URL` (which uses `pdp/?productid`), so it needs its own
+ * entry in `ALLOWED_EXTERNAL_URLS`.  Only invoked from the MSIX build's
+ * export-complete dialog — the NSIS build never reaches this code path.
+ */
+export const MS_STORE_REVIEW_URL = `ms-windows-store://review?ProductId=${MS_STORE_PRODUCT_ID}`
 
 /**
  * Locale-aware GitHub Pages URLs.  Used by the Help menu so each entry opens
@@ -111,6 +122,9 @@ export const ALLOWED_EXTERNAL_URLS: readonly string[] = [
   // future product-ID change has to come through here.
   MS_STORE_APP_URL,
   MS_STORE_WEB_URL,
+  // REQ-0208 — Store review composer.  Prefix-independent from the two
+  // above (different path + query), so it needs its own entry.
+  MS_STORE_REVIEW_URL,
 ]
 
 /** Locale codes supported by the app. The Settings dialog discovers them from this list. */

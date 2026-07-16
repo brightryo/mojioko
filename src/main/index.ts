@@ -10,6 +10,7 @@ import { registerSettingsHandlers } from './ipc/settings'
 import { registerDialogHandlers } from './ipc/dialog'
 import { registerShellHandlers } from './ipc/shell'
 import { registerFontHandlers } from './ipc/font'
+import { registerGpuToolHandlers } from './ipc/gpu-tool'
 import { terminateSidecar } from './services/transcription-sidecar'
 import { execFileAsync } from './lib/child-process'
 import { detectAvailableEncoders, getBestEncoder } from './services/encoder-detector'
@@ -68,11 +69,16 @@ function createWindow(): BrowserWindow {
     // On Windows that flag also DISABLES the title-bar maximize button
     // (documented Electron limitation), which the user wanted back.
     // Trade-off: drop the see-through-desktop trial, get a working
-    // maximize button.  The body's CSS rule (rgba(0,0,0, alpha))
-    // composes harmlessly over this solid backgroundColor in dark
-    // mode, and the `:root.light body` rule still paints opaque light
-    // in light mode.
-    backgroundColor: '#09090b',
+    // maximize button.
+    //
+    // REQ-0178 Phase B-1 (feat/ui-resolve): lifted backgroundColor
+    // from #09090b (near-black neutral-950, ~4 % L) to #212121
+    // (~13 % L) so it tracks the new --surface-0 token defined in
+    // globals.css :root.  The BrowserWindow paints this colour during
+    // the pre-first-paint flash and any subpixel edges where the
+    // renderer's body doesn't reach — those should read as the same
+    // grey the renderer paints, not near-black.
+    backgroundColor: '#212121',
     // Multi-size .ico ensures Windows picks the right size for the title
     // bar (32×32), the taskbar (16/24×16/24), and Alt-Tab (48×48).  Without
     // this property Electron renders the default Electron logo.
@@ -91,6 +97,37 @@ function createWindow(): BrowserWindow {
     if (isDev) {
       win.webContents.openDevTools({ mode: 'detach' })
     }
+  })
+
+  // REQ-0132 §3 / REQ-0139 fix — Ctrl+R is the "reset selected clip"
+  // shortcut (renderer's `useGlobalShortcuts`).  REQ-0132 had
+  // preventDefaulted Ctrl+R here on the (wrong) assumption that
+  // Chromium would otherwise reload the page.  `event.preventDefault()`
+  // in `before-input-event` blocks the accelerator AND the DOM
+  // keydown from ever reaching the renderer, so the reset never
+  // fired — REQ-0139's owner-reported bug (Ctrl+R "does nothing"
+  // while the inspector's Reset button worked).
+  //
+  // Our custom application menu (see `menu.ts`) has no Reload item,
+  // so there is no accelerator to eat: an unmodified Ctrl+R already
+  // flows through Chromium unchanged and lands in the renderer as a
+  // plain DOM keydown.  Let it through; the renderer's capture-phase
+  // handler calls `preventDefault` + `stopPropagation` after firing
+  // the reset.
+  //
+  // Ctrl+Shift+R / F5 / Ctrl+F5 have no in-app behaviour, so we keep
+  // preventDefault-ing them as belt-and-braces against a future
+  // Electron/Chromium version that might introduce a default
+  // accelerator.  This safeguards the user's edit session from a
+  // stray "hard reload" keystroke.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    const key = input.key.toLowerCase()
+    const isNonResetReload =
+      (input.control && input.shift && key === 'r') ||
+      key === 'f5' ||
+      (input.control && key === 'f5')
+    if (isNonResetReload) event.preventDefault()
   })
 
   if (isDev) {
@@ -160,6 +197,7 @@ function registerIpcHandlers(): void {
   registerDialogHandlers()
   registerShellHandlers()
   registerFontHandlers()
+  registerGpuToolHandlers()
 }
 
 /**

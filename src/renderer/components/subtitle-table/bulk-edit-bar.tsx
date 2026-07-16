@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, WrapText, AlignJustify, ChevronDown, AlertCircle, RotateCcw, Lock } from 'lucide-react'
+import { X, WrapText, AlignJustify, ChevronDown, AlertCircle, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
@@ -12,7 +12,6 @@ import { HelpIcon } from '@/components/help-icon'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
-import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { useStoreUpsellStore } from '@/stores/store-upsell-store'
 import { canSelectFontInTier } from '@/lib/font-tier'
@@ -23,7 +22,8 @@ import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
 import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
-import { FONT_REGISTRY, getFontMeta, isFontId, type FontId } from '../../../shared/fonts'
+import { getSortedFontRegistry, isFontId, type FontId } from '../../../shared/fonts'
+import { FontLangBadges } from '@/components/font-lang-badge/font-lang-badge'
 import { recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 
 interface BulkEditBarProps {
@@ -81,7 +81,7 @@ function pickFirstSelectedSize(selectedIds: ReadonlySet<string>): string {
  */
 function pickFirstSelectedLayout(selectedIds: ReadonlySet<string>): {
   horizontalPosition: 'left' | 'center' | 'right'
-  verticalPosition: 'top' | 'bottom'
+  verticalPosition: 'top' | 'center' | 'bottom'
   verticalMarginPx: number
   bgEnabled: boolean
   bgColor: 'black' | 'white'
@@ -113,12 +113,12 @@ function pickFirstSelectedLayout(selectedIds: ReadonlySet<string>): {
  */
 function pickUniformLayoutSegments(selectedIds: ReadonlySet<string>): {
   horizontalPosition: 'left' | 'center' | 'right' | null
-  verticalPosition: 'top' | 'bottom' | null
+  verticalPosition: 'top' | 'center' | 'bottom' | null
 } {
   if (selectedIds.size === 0) return { horizontalPosition: null, verticalPosition: null }
   const entries = useProjectStore.getState().entries
   let hp: 'left' | 'center' | 'right' | null = null
-  let vp: 'top' | 'bottom' | null = null
+  let vp: 'top' | 'center' | 'bottom' | null = null
   let hpSeen = false
   let vpSeen = false
   let hpMixed = false
@@ -214,8 +214,11 @@ function BulkSegmentGroup<T extends string>({
 export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // step1 included so the size input's `title` tooltip can reuse the
   // `subtitleDefaults.sizeHint` string defined for STEP 1 (REQ-034 #3).
-  const { t } = useTranslation(['step2', 'step1'])
+  const { t } = useTranslation(['step2', 'step1', 'common'])
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
+  // REQ-0125 — history-less preview writer used from the color picker's
+  // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
+  const updateEntriesPreview = useProjectStore((s) => s.updateEntriesPreview)
   const clearRowSelection = useUiStore((s) => s.clearRowSelection)
 
   // Local drafts.  Pickers/inputs operate on these so a saturation drag
@@ -276,7 +279,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // committed to every selected row and the local draft flips to the
   // non-null value (selection is now uniform).
   const [hPosDraft,   setHPosDraft]   = useState<'left' | 'center' | 'right' | null>(initialSegments.horizontalPosition)
-  const [vPosDraft,   setVPosDraft]   = useState<'top' | 'bottom' | null>(initialSegments.verticalPosition)
+  const [vPosDraft,   setVPosDraft]   = useState<'top' | 'center' | 'bottom' | null>(initialSegments.verticalPosition)
   const [marginDraft, setMarginDraft] = useState<string>(String(initialLayout?.verticalMarginPx ?? 40))
   const [bgEnabledDraft, setBgEnabledDraft]     = useState<boolean>(initialLayout?.bgEnabled ?? false)
   const [bgColorDraft, setBgColorDraft]         = useState<'black' | 'white'>(initialLayout?.bgColor ?? 'black')
@@ -312,7 +315,15 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // Core history op — snapshot every selected entry in full, apply patch
   // to all of them with isEdited:true, register one undo/redo pair.
   // ---------------------------------------------------------------------
-  function applyBulk(patch: Partial<SubtitleEntry>, label: string) {
+  function applyBulk(
+    patch: Partial<SubtitleEntry>,
+    label: string,
+    // REQ-0125 — per-entry field snapshots captured BEFORE the color
+    // picker's preview stream mutated the store, so Undo rewinds each
+    // row to its individual pre-drag value.  Not needed for other bulk
+    // paths (font size, layout, etc.) since they don't stream previews.
+    preBeforeSnapshots?: ReadonlyMap<string, Partial<SubtitleEntry>>
+  ) {
     const ids = Array.from(selectedRowIds)
     if (ids.length === 0) return
 
@@ -373,7 +384,12 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     const revert = () => {
       const s = useProjectStore.getState()
       for (const [id, snap] of snapshots) {
-        s.updateEntry(id, snap)
+        // REQ-0125 — when the caller provided pre-drag field snapshots,
+        // override those fields on the naive per-entry snapshot so undo
+        // doesn't restore the after-drag values that the color picker's
+        // preview stream would otherwise have baked in.
+        const beforeOverride = preBeforeSnapshots?.get(id)
+        s.updateEntry(id, beforeOverride ? { ...snap, ...beforeOverride } : snap)
       }
     }
 
@@ -401,10 +417,40 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setSizeDraft(String(clamped))
   }
 
+  // REQ-0125 — refs holding per-entry pre-drag colour values for the
+  // current color-picker session.  Populated on the first onChange fire
+  // (before the preview mutation lands) so applyBulk's undo path can
+  // rewind each row to its own individual pre-drag value.  Cleared on
+  // commit so a fresh session snapshots afresh.
+  const bulkTextColorBeforeRef = useRef<Map<string, string> | null>(null)
+  const bulkOutlineColorBeforeRef = useRef<Map<string, string> | null>(null)
+
+  function handleTextColorPreview(hex: string) {
+    if (bulkTextColorBeforeRef.current === null) {
+      const map = new Map<string, string>()
+      const all = useProjectStore.getState().entries
+      for (const id of selectedRowIds) {
+        const e = all.find((x) => x.id === id)
+        if (e) map.set(id, e.textColorHex)
+      }
+      bulkTextColorBeforeRef.current = map
+    }
+    setColorDraftText(hex)
+    updateEntriesPreview(Array.from(selectedRowIds), { textColorHex: hex })
+  }
+
   function handleTextColorCommit(hex: string) {
+    const beforeMap = bulkTextColorBeforeRef.current
+    bulkTextColorBeforeRef.current = null
+    const preSnapshots = beforeMap
+      ? new Map<string, Partial<SubtitleEntry>>(
+          Array.from(beforeMap.entries()).map(([id, v]) => [id, { textColorHex: v }])
+        )
+      : undefined
     applyBulk(
       { textColorHex: hex },
-      t('bulk.history.textColor', { count: selectedRowIds.size })
+      t('bulk.history.textColor', { count: selectedRowIds.size }),
+      preSnapshots
     )
     // Intentionally do NOT clear the draft here — the swatch should keep
     // showing the colour the user just applied so they have a clear visual
@@ -412,10 +458,32 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftText(hex)
   }
 
+  function handleOutlineColorPreview(hex: string) {
+    if (bulkOutlineColorBeforeRef.current === null) {
+      const map = new Map<string, string>()
+      const all = useProjectStore.getState().entries
+      for (const id of selectedRowIds) {
+        const e = all.find((x) => x.id === id)
+        if (e) map.set(id, e.outlineColorHex)
+      }
+      bulkOutlineColorBeforeRef.current = map
+    }
+    setColorDraftOutline(hex)
+    updateEntriesPreview(Array.from(selectedRowIds), { outlineColorHex: hex })
+  }
+
   function handleOutlineColorCommit(hex: string) {
+    const beforeMap = bulkOutlineColorBeforeRef.current
+    bulkOutlineColorBeforeRef.current = null
+    const preSnapshots = beforeMap
+      ? new Map<string, Partial<SubtitleEntry>>(
+          Array.from(beforeMap.entries()).map(([id, v]) => [id, { outlineColorHex: v }])
+        )
+      : undefined
     applyBulk(
       { outlineColorHex: hex },
-      t('bulk.history.outlineColor', { count: selectedRowIds.size })
+      t('bulk.history.outlineColor', { count: selectedRowIds.size }),
+      preSnapshots
     )
     setColorDraftOutline(hex)
   }
@@ -466,7 +534,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       t('bulk.history.layout', { count: selectedRowIds.size })
     )
   }
-  function handleVPosCommit(v: 'top' | 'bottom') {
+  function handleVPosCommit(v: 'top' | 'center' | 'bottom') {
     setVPosDraft(v)
     applyBulk(
       { verticalPosition: v },
@@ -785,10 +853,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             <span>{t('bulk.textColor')}</span>
             <ColorPicker
               value={colorDraftText ?? '#FFFFFF'}
-              onChange={setColorDraftText}
+              onChange={handleTextColorPreview}
               onCommit={handleTextColorCommit}
               onPairApply={handleColorPairCommit}
               swatchOnly
+              heading={t('common:colorPicker.headingText')}
             />
           </label>
           {/* Outline color */}
@@ -796,10 +865,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             <span>{t('bulk.outlineColor')}</span>
             <ColorPicker
               value={colorDraftOutline ?? '#000000'}
-              onChange={setColorDraftOutline}
+              onChange={handleOutlineColorPreview}
               onCommit={handleOutlineColorCommit}
               onPairApply={handleColorPairCommit}
               swatchOnly
+              heading={t('common:colorPicker.headingOutline')}
             />
           </label>
           {/* Outline width — REQ-20260615-061 B: slider now wrapped in
@@ -858,17 +928,31 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           </label>
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('styleCell.layoutV')}</span>
-            <BulkSegmentGroup<'top' | 'bottom'>
+            <BulkSegmentGroup<'top' | 'center' | 'bottom'>
               value={vPosDraft}
               onChange={(v) => handleVPosCommit(v)}
               ariaLabel={t('subtitlePosition.vertical')}
               options={[
                 { value: 'top',    label: t('subtitlePosition.top') },
+                { value: 'center', label: t('subtitlePosition.center') },
                 { value: 'bottom', label: t('subtitlePosition.bottom') },
               ]}
             />
           </label>
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+          {/* REQ-0140 — disable the bulk margin stepper when the
+              uniform vertical draft is `'center'`.  When the selection
+              is mixed (vPosDraft === null) the stepper stays enabled;
+              committing a value applies it to every selected row but
+              only affects the top/bottom-aligned ones (center-aligned
+              rows keep the value in storage but ignore it at render). */}
+          <label
+            className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground"
+            title={
+              vPosDraft === 'center'
+                ? t('subtitlePosition.marginDisabledCenter')
+                : undefined
+            }
+          >
             <span>{t('styleCell.marginV')}</span>
             {/* REQ-20260615-059 B — ±10 stepper to keep margin in step
                 with size adjustments.  Range [0, 300] same as before. */}
@@ -881,6 +965,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                 setMarginDraft(String(next))
                 handleMarginCommit(String(next))
               }}
+              disabled={vPosDraft === 'center'}
               ariaLabel={t('subtitlePosition.margin')}
             />
           </label>
@@ -963,22 +1048,30 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
 // fonts + font-registry filter logic without giving any new abstraction.
 // ---------------------------------------------------------------------------
 function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void }) {
-  const { t } = useTranslation(['step2', 'step1'])
+  const { t } = useTranslation(['step2', 'step1', 'common'])
   const [open, setOpen] = useState(false)
   const installed = useInstalledFontIds()
-  const activeFontId = useSettingsStore((s) => s.activeFontId)
+  // REQ-0171 — `activeFontId` binding removed alongside the reset
+  // button: the only remaining consumer was the button's
+  // "current default's display name" subtitle.  Tier logic below
+  // reads `isMsix` directly and does not need the active-font
+  // reference.
   // REQ-088 #4 — mirror RowFontSelector: NSIS (free) tier restricts the
   // bulk picker to the bundled default.  `null` treated as the more
   // restrictive free tier until the boot-time IPC resolves.
   const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
   // REQ-091 — Store upsell trigger.
   const openUpsell = useStoreUpsellStore((s) => s.openUpsell)
-  const selectable = FONT_REGISTRY.filter(
+  // REQ-0153 §2 — alphabetical registry order (same policy as
+  // RowFontSelector / FontPicker).  Selectability / tier gating
+  // unchanged.
+  const sortedRegistry = getSortedFontRegistry()
+  const selectable = sortedRegistry.filter(
     (m) => installed.has(m.id) && canSelectFontInTier(isMsix, m.id),
   )
   // REQ-091 — same tier-locked discovery list as RowFontSelector.
   const tierLocked = !isMsix
-    ? FONT_REGISTRY.filter((m) => !canSelectFontInTier(isMsix, m.id))
+    ? sortedRegistry.filter((m) => !canSelectFontInTier(isMsix, m.id))
     : []
 
   function pick(next: FontId | undefined) {
@@ -1003,24 +1096,47 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
           <ChevronDown className="h-3 w-3 text-fg-muted" aria-hidden="true" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[260px] p-1">
+      <PopoverContent
+        align="start"
+        // REQ-0169 §1 — same viewport-clamp + internal-scroll pattern
+        // as `row-font-selector.tsx`, applied here for parity.  The
+        // bulk font popover shares this component's list shape (~13
+        // rows + tier-locked block) and would otherwise clip against
+        // the top edge whenever the bulk-edit bar is docked high in
+        // the STEP 2 layout.
+        collisionPadding={8}
+        className="w-[260px] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+      >
         <div className="flex flex-col">
-          <button
-            type="button"
-            onClick={() => pick(undefined)}
-            className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-fg-primary hover:bg-accent/40 cursor-pointer"
-          >
-            <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span className="flex-1 min-w-0">
-              <span className="block leading-tight">{t('bulkRowFont.useDefault')}</span>
-              <span className="block text-caption text-fg-muted truncate">
-                {getFontMeta(activeFontId).displayName}
-              </span>
-            </span>
-          </button>
-
-          <div className="my-1 h-px bg-surface-2" />
-
+          {/* REQ-0171 Phase 2 (owner approval option A) — the
+              "Use project default (Noto Sans JP SemiBold)" reset
+              button + its separator that used to sit here were
+              removed.  Rationale traced in RES-0171 §3.5: the
+              transcription path (step1.tsx:460 / 478) captures
+              `activeFontId` at transcribe-time and writes it into
+              every new row's `fontId` — those rows are pinned, not
+              inheriting, so a mid-session default change never
+              retroactively repaints them anyway.  The only paths
+              that leave `entry.fontId === undefined` (inherit) are
+              (a) STEP 2's manual "Add row" (step2.tsx:647-660,
+              deliberately no `fontId` field), (b) uninstall
+              recovery (font-picker.tsx:373 writes `undefined` when
+              the referenced font disappears), and (c) fixture data
+              (dev-only).  None of those are triggered from the
+              bulk-edit bar, so the bulk "clear to inherit" button
+              had no user-visible workflow paired with it.  The
+              button also carried the "デフォルト" label that
+              REQ-0164/0169 already erased everywhere else, making
+              its continued presence inconsistent.  Compare with
+              row-font-selector.tsx (REQ-0170): the row-picker's
+              list `onClick` already coalesces `m.id === activeFontId
+              → undefined`, so the row-picker button was purely
+              redundant; the bulk picker's list `onClick={() =>
+              pick(m.id)}` has no such coalesce, so this removal
+              consciously drops the "bulk-clear to undefined"
+              affordance — the `undefined` semantic itself is
+              preserved (uninstall recovery + add-row still write
+              it), only the UI trigger is gone. */}
           {selectable.map((m) => (
             <button
               key={m.id}
@@ -1035,6 +1151,7 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
               >
                 {m.displayName}
               </span>
+              <FontLangBadges languages={m.languages} />
               {m.lacksRareKanji && (
                 <span
                   className="inline-flex items-center shrink-0 text-warning-soft/80"
@@ -1066,6 +1183,7 @@ function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void
                   >
                     {m.displayName}
                   </span>
+                  <FontLangBadges languages={m.languages} />
                 </button>
               ))}
             </>

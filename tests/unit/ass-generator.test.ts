@@ -94,12 +94,16 @@ describe('generateAss — Style header (REQ-20260613-016 Phase 2)', () => {
 describe('generateAss — per-row alignment (\\an)', () => {
   const alignmentCases: Array<{
     h: 'left' | 'center' | 'right'
-    v: 'top' | 'bottom'
+    v: 'top' | 'center' | 'bottom'
     expected: number
   }> = [
     { h: 'left', v: 'top', expected: 7 },
     { h: 'center', v: 'top', expected: 8 },
     { h: 'right', v: 'top', expected: 9 },
+    // REQ-0140 — center row maps to numpad 4/5/6.
+    { h: 'left', v: 'center', expected: 4 },
+    { h: 'center', v: 'center', expected: 5 },
+    { h: 'right', v: 'center', expected: 6 },
     { h: 'left', v: 'bottom', expected: 1 },
     { h: 'center', v: 'bottom', expected: 2 },
     { h: 'right', v: 'bottom', expected: 3 },

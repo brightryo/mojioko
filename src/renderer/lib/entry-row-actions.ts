@@ -28,6 +28,115 @@ import { commitTimeEdit } from '@/lib/commit-time-edit'
  */
 
 /**
+ * REQ-0131 §4.3 — 3-context predicate for the shared global-shortcut
+ * handler.  Returns `true` only when the keydown is in **context B**
+ * (editor screen, no modal, focus outside any editable element).  In
+ * context A (a modal is open) and context C (focus is in a form field
+ * or contentEditable region) it returns `false` so the caller bails
+ * and the keystroke falls through to the modal's own Esc/Enter contract
+ * (A) or the field's native character-input (C).
+ *
+ * Extracted so unit tests can pin the tri-state rule without spinning
+ * up a React render.  Both the shared `useGlobalShortcuts` handler and
+ * the preview panels' Space bindings call this function so every
+ * global shortcut answers the same question the same way.  The
+ * per-shortcut key/modifier check (Ctrl+Z vs Delete vs Space) is the
+ * caller's job — this predicate only decides *whether it is allowed
+ * to fire in principle*.
+ */
+export function shouldGlobalShortcutFire(
+  activeTagName: string | null,
+  isContentEditable: boolean,
+  overlayOpen: boolean,
+): boolean {
+  if (overlayOpen) return false                  // context A → suppress
+  if (isContentEditable) return false            // context C → typing
+  const tag = (activeTagName ?? '').toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return false // context C
+  return true                                     // context B → fire
+}
+
+/**
+ * REQ-0130 — pure predicate for the timeline's DEL / Backspace guard.
+ * Kept for the existing unit tests + call sites that pre-date the
+ * REQ-0131 consolidation.  Layer over `shouldGlobalShortcutFire` so
+ * both surfaces route through the same context judgement — the only
+ * extra thing this variant does is check the key + modifier shape
+ * (bare Delete / Backspace).  The `overlayOpen` parameter defaults
+ * to `false` because REQ-0130's own unit fixtures pre-date the overlay
+ * concept.
+ */
+export function shouldTimelineDeleteFire(
+  key: string,
+  modifiers: { ctrl: boolean; alt: boolean; meta: boolean; shift: boolean },
+  activeTagName: string | null,
+  isContentEditable: boolean,
+  overlayOpen = false,
+): boolean {
+  if (key !== 'Delete' && key !== 'Backspace') return false
+  if (modifiers.ctrl || modifiers.alt || modifiers.meta || modifiers.shift) return false
+  return shouldGlobalShortcutFire(activeTagName, isContentEditable, overlayOpen)
+}
+
+/**
+ * REQ-0138 — delete-only keyboard binding for DEL / Backspace.  Looks
+ * up the selected entry and, if it is not already deleted, soft-deletes
+ * it via a single history op.  Returns `true` when a delete actually
+ * fired so the caller (`use-global-shortcuts.ts`) can decide whether to
+ * swallow the keystroke.
+ *
+ * Semantics (REQ-0138 §1.1):
+ *   - Undeleted row → soft-delete + history push.
+ *   - Already-deleted row → **no-op**.  Returns `false` so the keystroke
+ *     is not swallowed and the user does not perceive anything happening.
+ *   - Unknown / no selection → `false`.
+ *
+ * Rationale: REQ-0129 / REQ-0130 originally routed DEL through
+ * `toggleDeleteRow`, which flipped `isDeleted` in either direction.
+ * Owner feedback (REQ-0138 §0-1): pressing DEL on a deleted row
+ * silently restored it, which felt like "the delete didn't stick."
+ * Restore is now keyboard-inaccessible for DEL; users restore via the
+ * inspector's restore button (which still calls `toggleDeleteRow`) or
+ * via `Ctrl+Z` on the delete op.
+ */
+export function deleteEntryById(
+  entryId: string | null | undefined,
+  labels: { delete: string }
+): boolean {
+  if (!entryId) return false
+  const entry = useProjectStore.getState().entries.find((e) => e.id === entryId)
+  if (!entry) return false
+  if (entry.isDeleted) return false
+  softDeleteRow(entry, labels)
+  return true
+}
+
+/**
+ * REQ-0138 — soft-delete without the "restore" branch that
+ * `toggleDeleteRow` has.  Pushes one history op labelled with
+ * `labels.delete`.  Callers that need the toggle semantic (the
+ * inspector's delete/restore button) keep using `toggleDeleteRow`;
+ * callers that only want "delete" (the DEL/BS keyboard binding) use
+ * this so a re-press on an already-deleted row is a no-op rather than
+ * a silent restore.
+ */
+export function softDeleteRow(
+  entry: SubtitleEntry,
+  labels: { delete: string }
+): void {
+  if (entry.isDeleted) return
+  const projectStore = useProjectStore.getState()
+  const pushHistory = useHistoryStore.getState().push
+  const snapshot = { ...entry }
+  pushHistory({
+    label: labels.delete,
+    undo: () => projectStore.updateEntry(entry.id, snapshot),
+    redo: () => projectStore.updateEntry(entry.id, { ...snapshot, isDeleted: true })
+  })
+  projectStore.updateEntry(entry.id, { isDeleted: true })
+}
+
+/**
  * Toggle a row between active and soft-deleted.  Pushes a single
  * history op labelled with `labels.delete` (when actively deleting) or
  * `labels.restore` (when undeleting), so undo / redo cycle the row back

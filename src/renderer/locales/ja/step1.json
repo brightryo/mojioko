@@ -5,7 +5,7 @@
     "label": "入力ファイル",
     "hint": "動画: .mp4 .mkv  /  音声: .mp3 .wav .m4a .aac .flac .ogg",
     "placeholder": "ファイルを選択してください…",
-    "chooseVideo": "ファイルを選ぶ",
+    "chooseVideo": "ファイルを選択",
     "help": "文字起こしする動画または音声ファイル。動画は字幕焼き込み出力、音声はテキスト/SRT出力に対応します。",
     "infoLabel": "ファイル情報",
     "infoResolution": "解像度",
@@ -98,6 +98,50 @@
     "activate_success": "{{modelName}} を使用中に切り替えました",
     "install_success": "{{modelName}} のダウンロードが完了しました"
   },
+  "gpuTool": {
+    "label": "処理デバイス",
+    "tooltip": "文字起こしを CPU で実行するか、対応 NVIDIA GPU で実行するかを選びます。GPU 実行には CUDA/cuDNN ランタイム（約 1 GB）を 1 度だけダウンロードすれば以降オフラインで動作します。",
+    "cpu": {
+      "name": "CPU",
+      "description": "追加ダウンロード不要。どのマシンでも動作します。",
+      "activeBadge": "使用中",
+      "selectableBadge": "利用可能"
+    },
+    "gpu": {
+      "name": "GPU（CUDA / cuDNN）",
+      "description": "NVIDIA GPU で高速に文字起こしします。CUDA / cuDNN ランタイム（約 {{size}}）を 1 度だけダウンロードします。",
+      "activeBadge": "使用中",
+      "readyBadge": "使用可能"
+    },
+    "unsupportedGpu": "お使いの GPU（{{name}}）は GPU アクセラレーションに対応していません。NVIDIA GPU が必要です。",
+    "noGpu": "GPU が検出されませんでした。NVIDIA GPU が必要です。",
+    "download": "ダウンロード",
+    "downloading": "ダウンロード中",
+    "extracting": "展開中",
+    "cancelDownload": "キャンセル",
+    "delete": "削除",
+    "selectCpu": "CPU を使用",
+    "selectGpu": "GPU を使用",
+    "install_confirm_title": "GPU アクセラレーターをダウンロードしますか？",
+    "install_confirm_body": "NVIDIA CUDA / cuDNN 一式（約 {{size}}）をダウンロードします。インターネット接続が必要です。GitHub Releases から取得します。",
+    "install_confirm_ok": "ダウンロード開始",
+    "install_info_source": "ダウンロード元",
+    "install_source_value": "GitHub Releases",
+    "install_info_license": "ライセンス",
+    "install_license_value": "NVIDIA cuDNN SLA / CUDA EULA / cuBLAS BSD",
+    "install_info_path": "保存先",
+    "delete_confirm_title": "GPU アクセラレーターを削除しますか？",
+    "delete_confirm_body": "ダウンロード済みの CUDA / cuDNN 一式（{{size}}）を削除します。再度 GPU 実行するには再ダウンロードが必要です。",
+    "delete_confirm_ok": "削除する",
+    "delete_success": "GPU アクセラレーターを削除しました",
+    "download_success": "GPU アクセラレーターが有効になりました",
+    "select_cpu_success": "CPU に切り替えました",
+    "select_gpu_success": "GPU に切り替えました",
+    "toast_download_failed_network": "ネットワークが切断されました。接続を確認して再度お試しください。",
+    "toast_download_failed_checksum": "ダウンロードしたファイルが破損しています（SHA-256 不一致）。もう一度お試しください。",
+    "toast_download_failed_extract": "展開に失敗しました。ディスク空き容量を確認して再度お試しください。",
+    "toast_download_failed": "ダウンロードに失敗しました: {{error}}"
+  },
   "footer": {
     "modelStatus": "Whisper: {{model}} · 使用中",
     "modelNotDownloaded": "Whisper: モデル未選択",
@@ -107,6 +151,12 @@
     "startTranscription": "文字起こし開始",
     "transcribingWaiting": "文字起こし中…",
     "transcribing": "文字起こし中… {{percent}}%"
+  },
+  "guard": {
+    "noInput": "入力ファイルを選択してください",
+    "noModel": "Whisperモデルをダウンロード／選択してください",
+    "noAudio": "選択したビデオに音声トラックがありません",
+    "pending": "未完了"
   },
   "drawer": {
     "title": "文字起こし",
@@ -118,7 +168,17 @@
     "close": "閉じる",
     "runningLabel": "文字起こし中…",
     "runningLabelPreviewMix": "プレビュー音声を準備中…",
-    "errorTitle": "文字起こし失敗"
+    "preparingLabel": {
+      "extractAudio": "音声を抽出しています…",
+      "loadModel": "モデルを読み込んでいます…",
+      "prepass": "音声を解析しています…"
+    },
+    "errorTitle": "文字起こし失敗",
+    "wordSubtitle": {
+      "label": "単語ごとに文字起こし（試験的機能）",
+      "description": "字幕を1〜3語ごとの短い単位で生成します。英語音声向けの試験的機能です。日本語音声では単語の切れ目が不自然になる場合があります。",
+      "lockedPaidOnly": "有料版でのみ利用可能"
+    }
   },
   "dialog": {
     "cancelTitle": "文字起こしをキャンセルしますか？",
@@ -134,7 +194,8 @@
     "modelDownloadFailedNetwork": "ネットワークが切れたため、ダウンロードを停止しました。接続を確認して再試行してください。",
     "modelNotInstalled": "モデル {{model}} が未ダウンロードです",
     "transcriptionError": "文字起こしに失敗しました: {{error}}",
-    "transcriptionCancelled": "文字起こしをキャンセルしました"
+    "transcriptionCancelled": "文字起こしをキャンセルしました",
+    "gpuFallback": "GPU が使えなかったため CPU で処理しています。処理に通常より時間がかかります。"
   },
   "error": {
     "probeVideo": "ファイルの解析に失敗しました",
@@ -174,12 +235,11 @@
     "lang_de": "ドイツ語",
     "lang_pt": "ポルトガル語",
     "lang_ru": "ロシア語",
-    "lang_ar": "アラビア語",
-    "futureNote": "設定は自動的に保存されます。"
+    "lang_ar": "アラビア語"
   },
   "fontPicker": {
-    "title": "デフォルト字幕フォント",
-    "help": "プロジェクト全体のデフォルトフォントです。STEP 2 で字幕ごとに別フォントへ上書きできます。標準同梱の Noto Sans JP 以外は必要に応じてダウンロードされ、%APPDATA%\\MOJIOKO\\fonts\\ 配下に保存されます。",
+    "title": "デフォルト字幕フォントの選択",
+    "description": "フォントをクリックして既定フォントを選択します。フォントの追加およびダウンロードは有料版のみの機能です。",
     "status": {
       "bundled": "標準同梱",
       "installed": "ダウンロード済み",
@@ -212,6 +272,22 @@
       "body": "{{name}} は {{count}} 件で使用されています。削除すると、それらはデフォルトフォントに戻ります。",
       "confirm": "削除する",
       "cancel": "キャンセル"
+    },
+    "tofuNote": "フォントに含まれない文字は □ や ? などで表示されます（例：英語専用フォントで日本語を使用した場合）",
+    "langLegend": {
+      "en": "英語対応",
+      "ja": "日本語対応"
+    },
+    "batchDownload": {
+      "button": "まとめてダウンロード",
+      "buttonTooltip": "未ダウンロードのフォントをすべてダウンロードします",
+      "cancel": "中止",
+      "progress": "{{completed}} / {{total}} ダウンロード中…",
+      "toast": {
+        "done": "{{count}} 個のフォントをダウンロードしました",
+        "cancelled": "まとめダウンロードを中止しました（{{completed}} / {{total}} 完了）",
+        "partial": "{{total}} 中 {{completed}} をダウンロード、{{failed}} が失敗しました"
+      }
     }
   }
 }

@@ -6,6 +6,7 @@ import {
   Download,
   Trash2,
   Check,
+  Circle,
   Target,
   Database,
   HardDrive,
@@ -324,9 +325,20 @@ export function WhisperModelManager({
             Advanced settings now live inside the TranscriptionDrawer
             opened from the footer Start button. */}
 
-        {/* Green check — only when downloaded AND selected. */}
-        {isModelReady && (
+        {/*
+          REQ-0181 — symmetric marker.  Pre-0181 the header only rendered
+          the green Check when a model was active; the "not yet ready"
+          state was silent, so the user had no per-section signal of what
+          was blocking the transcribe start.  Now we render a neutral
+          Circle in the unmet case so all three step1 sections (Whisper /
+          GPU / Input Video) carry a symmetric ✓ / ○ indicator.  The
+          tooltip / toast on the disabled Start button carries the
+          textual reason (REQ-0181 Shape C).
+        */}
+        {isModelReady ? (
           <Check className="h-4 w-4 text-primary flex-shrink-0" aria-label={t('model.active')} />
+        ) : (
+          <Circle className="h-3.5 w-3.5 text-fg-tertiary flex-shrink-0" aria-label={t('guard.pending')} />
         )}
 
         {/* Chevron */}
@@ -386,8 +398,26 @@ export function WhisperModelManager({
                 {t('whisperModel.updateNote')}
               </p>
 
-              {/* Bottom status bar */}
-              <div className="rounded-lg border border-line px-4 py-2.5 flex items-center justify-between">
+              {/* Bottom status bar.
+
+                  REQ-0206 — the row previously stretched full-width and
+                  read like a section heading, which encouraged users to
+                  click the "Open folder" button on the right without
+                  reading the disk-usage labels on the left.  Cap the
+                  width to the SAME `max-w-[38rem]` the model-grid
+                  container above uses (L373), and centre with
+                  `mx-auto`, so the row's left / right edges land under
+                  the outermost card edges.
+
+                  Card-count independence: the 38rem cap is a fixed
+                  literal, not a computation over `state.models.length`.
+                  Changing `grid-cols-2` to `grid-cols-3` or back only
+                  affects the interior column count -- the outer width
+                  stays 38rem in both the grid and this row.  Under 1
+                  card the grid keeps its 38rem width (card occupies
+                  one column of two) and this row keeps 38rem too.  See
+                  RES-0206 §2 for the full rationale. */}
+              <div className="rounded-lg border border-line px-4 py-2.5 flex items-center justify-between mx-auto max-w-[38rem]">
                 <div className="flex items-center gap-5 text-body-sm">
                   <span className="flex items-center gap-1.5 text-fg-tertiary">
                     <Database className="h-3.5 w-3.5 flex-shrink-0" />
@@ -454,7 +484,11 @@ export function WhisperModelManager({
 
       {dialog?.kind === 'install-confirm' && (
         <Dialog open onOpenChange={() => setDialog(null)}>
-          <DialogContent className="max-w-[460px]">
+          <DialogContent
+            className="max-w-[460px]"
+            // REQ-0138 §2.1 — Enter starts the install.
+            onEnterConfirm={() => handleConfirmInstall(dialog.model)}
+          >
             <DialogHeader>
               <DialogTitle>{t('model.install_confirm_title')}</DialogTitle>
               <DialogDescription>
@@ -506,7 +540,12 @@ export function WhisperModelManager({
 
       {dialog?.kind === 'uninstall-confirm' && (
         <Dialog open onOpenChange={() => setDialog(null)}>
-          <DialogContent className="max-w-[400px]">
+          <DialogContent
+            className="max-w-[400px]"
+            // REQ-0139 §3 — REQ-0138's `onEnterConfirm` was removed
+            // because this is a destructive confirmation (removes
+            // multi-GB Whisper model from disk).  Owner must click.
+          >
             <DialogHeader>
               <DialogTitle>{t('model.uninstall_confirm_title')}</DialogTitle>
               <DialogDescription>
@@ -593,7 +632,13 @@ function ModelCard({
   return (
     <div
       className={cn(
-        'rounded-xl border p-4 flex flex-col gap-3 transition-colors duration-150',
+        // REQ-0182 chrome — dropped rounded-xl to rounded-md so the
+        // model picker cards read as consistent-density chrome with
+        // the tighter tokens introduced in REQ-0177 Phase A (radius
+        // scale halved).  The active-state subtle green tint is
+        // preserved (this is a picker choice, not a drawer selection
+        // — cf. the REQ-0182 drawer commit for the "border only" case).
+        'rounded-md border p-4 flex flex-col gap-3 transition-colors duration-150',
         isActive ? 'border-primary bg-primary/5' : 'border-line bg-surface-0'
       )}
     >

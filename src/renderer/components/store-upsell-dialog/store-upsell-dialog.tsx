@@ -61,7 +61,12 @@ export function StoreUpsellDialog() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setOpen}>
-      <DialogContent className="max-w-[480px]">
+      <DialogContent
+        className="max-w-[480px]"
+        // REQ-0138 §2.1 — Enter opens the Store link (safe: launches
+        // the OS browser, no encoding / no destructive action).
+        onEnterConfirm={handleOpenStore}
+      >
         <DialogHeader>
           <DialogTitle>{t('storeUpsell.title')}</DialogTitle>
           <DialogDescription className="whitespace-pre-line text-body-sm text-muted-foreground">

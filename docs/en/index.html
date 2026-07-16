@@ -35,7 +35,7 @@
             <li>All core features are free: transcription, editing, subtitle text export, and subtitle video export.</li>
             <li>Includes one default font (Noto Sans JP).</li>
           </ul>
-          <a href="https://github.com/brightryo/mojioko/releases/download/v1.3.2/MOJIOKO.Setup.1.3.2.exe" class="version-card-btn">
+          <a href="https://github.com/brightryo/mojioko/releases/download/v1.3.3/MOJIOKO.Setup.1.3.3.exe" class="version-card-btn">
             Download
           </a>
         </div>
@@ -81,6 +81,24 @@
           <p>Automatically transcribe speech from video or audio using Whisper, a high-accuracy speech-recognition AI developed by OpenAI. Even long videos are transcribed into text in one go.</p>
           <p>Works with both video and audio files. For videos with multiple audio tracks, you can pick which track to transcribe.</p>
           <p class="feature-hint"><span class="feature-hint-label">💡 Multiple audio tracks?</span>Videos where different sounds — like game audio and mic voice — are recorded separately. MOJIOKO lets you transcribe just the voice.</p>
+        </div>
+      </div>
+
+      <!-- Feature 1.5: GPU Acceleration (added in REQ-0227).
+           Owner will provide the screenshot at ../images/e-gpu.png;
+           until then the onerror fallback renders a placeholder card,
+           matching the pattern used for the shorts screenshot below. -->
+      <div class="feature-item reverse">
+        <div>
+          <img src="../images/e-gpu.png" alt="GPU acceleration settings" class="feature-image" loading="lazy"
+               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>GPU acceleration screen<br>(images/e-gpu.png)</div>';">
+        </div>
+        <div class="feature-content">
+          <h3>GPU acceleration</h3>
+          <p>Run Whisper on an NVIDIA GPU for significantly faster transcription. Even long videos finish in a fraction of the time compared to CPU.</p>
+          <p>The CUDA / cuDNN runtime (~1.1 GB) downloads once from inside the app on first use — no separate CUDA install required.</p>
+          <p>A GPU is optional; MOJIOKO runs on CPU without one. The latest NVIDIA generations, including RTX 50 series (Blackwell), are supported.</p>
+          <p class="feature-hint"><span class="feature-hint-label">💡 Limitations & details</span>NVIDIA GPUs only (AMD / Intel GPUs are not supported). See the <a href="guide/#gpu-acceleration">GPU acceleration section of the User Guide</a> for details.</p>
         </div>
       </div>
 
@@ -157,17 +175,6 @@
       </div>
     </section>
 
-    <!-- Planned Features Section -->
-    <section class="planned">
-      <h2>Planned Features</h2>
-      <p class="planned-intro">The following features are under consideration</p>
-      <ul class="planned-list">
-        <li>Timeline editor</li>
-        <li>Text and outline opacity settings</li>
-      </ul>
-      <p class="planned-note">* Timing TBD. May be changed or canceled.</p>
-    </section>
-
     <!-- Support Section -->
     <section class="support">
       <div class="support-header">
@@ -213,7 +220,7 @@
       <h2>Get Started</h2>
       <p>All processing runs locally on your PC. Your video data is never uploaded anywhere.</p>
       <div class="cta-actions">
-        <a href="https://github.com/brightryo/mojioko/releases/download/v1.3.2/MOJIOKO.Setup.1.3.2.exe" class="cta-btn">
+        <a href="https://github.com/brightryo/mojioko/releases/download/v1.3.3/MOJIOKO.Setup.1.3.3.exe" class="cta-btn">
           Download (Free)
         </a>
         <a href="https://apps.microsoft.com/detail/9N03JMH9LF6M" class="cta-btn" target="_blank" rel="noopener">

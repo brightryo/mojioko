@@ -13,6 +13,8 @@ import { FontPicker } from '@/components/font-picker/font-picker'
 import { DefaultStyleControls } from '@/components/default-style-controls/default-style-controls'
 import { WhisperAdvancedControls } from '@/components/whisper-advanced-controls/whisper-advanced-controls'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
+import { FolderPathInput } from './folder-path-input'
+import { ShortcutsSettingsTab } from './shortcuts-settings-tab'
 
 // REQ-20260615-050 — fade range constants now live in shared/constants
 // (`FADE_DURATION_SEC_{MIN,MAX,STEP}`), driven by the FadeDurationSlider.
@@ -33,6 +35,16 @@ export function SettingsDialog() {
   const setBaseColor = useSettingsStore((s) => s.setBaseColor)
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   const setFadeDurationSec = useSettingsStore((s) => s.setFadeDurationSec)
+  // REQ-0121 — audio track selector + input/output folder inputs.
+  const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
+  const setDefaultAudioTrackIndex = useSettingsStore((s) => s.setDefaultAudioTrackIndex)
+  const defaultInputDir = useSettingsStore((s) => s.defaultInputDir)
+  const setDefaultInputDir = useSettingsStore((s) => s.setDefaultInputDir)
+  const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
+  const setDefaultOutputDir = useSettingsStore((s) => s.setDefaultOutputDir)
+  // REQ-0194 — default folder for `.mojioko` project save/open dialogs.
+  const defaultProjectDir = useSettingsStore((s) => s.defaultProjectDir)
+  const setDefaultProjectDir = useSettingsStore((s) => s.setDefaultProjectDir)
 
   // Default style — single source of truth lives on settingsStore.
   // SubtitleStyleDialog reads & writes the same slice via REQ-016 wiring.
@@ -87,6 +99,7 @@ export function SettingsDialog() {
             <TabsTrigger value="fonts">{t('tabs.fonts')}</TabsTrigger>
             <TabsTrigger value="defaultStyle">{t('tabs.defaultStyle')}</TabsTrigger>
             <TabsTrigger value="whisper">{t('tabs.whisper')}</TabsTrigger>
+            <TabsTrigger value="shortcuts">{t('tabs.shortcuts')}</TabsTrigger>
           </TabsList>
 
           {/* ─ General ────────────────────────────────────────────── */}
@@ -173,6 +186,70 @@ export function SettingsDialog() {
                 />
                 <p className="text-body-sm text-fg-muted">{t('general.fadeDurationHint')}</p>
               </div>
+
+              {/* REQ-0121 — default transcription audio track (1..6).  Fixed
+                  1..6 dropdown regardless of the current video's track count
+                  (OBS supports up to 6).  Runtime fallback lives in
+                  step1-track-pick.ts (preferred → Track 1 → none). */}
+              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
+                {t('general.defaultAudioTrack')}
+              </span>
+              <div className="flex items-center">
+                <Select
+                  value={String(defaultAudioTrackIndex)}
+                  onValueChange={(v) => setDefaultAudioTrackIndex(Number(v))}
+                >
+                  <SelectTrigger className="h-9 w-full [&>span]:flex-1 [&>span]:text-center">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5, 6].map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {t('general.defaultAudioTrackOption', { index: n })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* REQ-0121 — user-preferred fixed default input folder for
+                  the "Choose input video" dialog.  The active session's
+                  MRU (last-opened video's directory) still wins; this
+                  setting is the fallback when no MRU exists yet. */}
+              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
+                {t('general.defaultInputDir')}
+              </span>
+              <FolderPathInput
+                value={defaultInputDir}
+                onChange={setDefaultInputDir}
+                placeholder={t('general.folderPathUsingSystemVideos')}
+                ariaLabel={t('general.defaultInputDir')}
+              />
+
+              {/* REQ-0121 — user-preferred fixed default output folder for
+                  ALL save dialogs (burn-in video, transcription text, SRT
+                  subtitles, exported frame). */}
+              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
+                {t('general.defaultOutputDir')}
+              </span>
+              <FolderPathInput
+                value={defaultOutputDir}
+                onChange={setDefaultOutputDir}
+                placeholder={t('general.folderPathUsingSystemVideos')}
+                ariaLabel={t('general.defaultOutputDir')}
+              />
+
+              {/* REQ-0194 — user-preferred fixed default folder for the
+                  `.mojioko` project save/open dialogs. */}
+              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
+                {t('general.defaultProjectDir')}
+              </span>
+              <FolderPathInput
+                value={defaultProjectDir}
+                onChange={setDefaultProjectDir}
+                placeholder={t('general.folderPathUsingSystemVideos')}
+                ariaLabel={t('general.defaultProjectDir')}
+              />
             </div>
           </TabsContent>
 
@@ -180,9 +257,15 @@ export function SettingsDialog() {
           {/* REQ-020: unified with the Subtitle Style dialog — row click
               selects the default font, the dot indicator shows the active
               choice, and DL / Trash icons handle inventory in the same
-              list.  No separate dropdown / management-only split. */}
+              list.  No separate dropdown / management-only split.
+              REQ-0164 §2 — the description paragraph that used to sit
+              here (`{t('fonts.hint')}`) moved INTO `<FontPicker>` so
+              the "heading → description → legend → list → warning"
+              flow is owned by the component itself.  This drops
+              `settings:fonts.hint` from the render path here; the
+              locale key stayed as-is (unused, kept for safety in case
+              a hot-fix consumer surfaces later). */}
           <TabsContent value="fonts" className="space-y-1.5 min-h-[490px]">
-            <p className="text-body-sm text-muted-foreground">{t('fonts.hint')}</p>
             <FontPicker />
           </TabsContent>
 
@@ -208,6 +291,28 @@ export function SettingsDialog() {
               onUpdate={setTranscriptionAdvanced}
               onReset={resetTranscriptionAdvanced}
             />
+          </TabsContent>
+
+          {/* ─ Shortcuts ──────────────────────────────────────────── */}
+          {/* REQ-0131 §5 — read-only list rendered from the shared
+              `SHORTCUTS` registry.  No mutation UI; the tab exists so
+              the user can discover which keys do what without leaving
+              the app.
+              REQ-0164 §1 — `max-h-[490px] overflow-y-auto` added so
+              the shortcuts tab matches the sizing contract every other
+              tab already had (min-h == the tallest tab's height =
+              490px, established for the Fonts tab in REQ-018 #2).  The
+              REQ-0131 §5 shortcuts panel is the ONLY tab whose content
+              exceeds 490px (3 sections × ~10 rows + section
+              descriptions), so before this fix switching to it forced
+              the entire DialogContent to grow toward its
+              `max-h-[85vh]` cap and users saw the window height jump.
+              Pinning min == max here converts the tab to internal
+              scroll behind the same fixed frame the other tabs use —
+              zero visual change on other tabs, no more window resize
+              on this one. */}
+          <TabsContent value="shortcuts" className="space-y-3 min-h-[490px] max-h-[490px] overflow-y-auto">
+            <ShortcutsSettingsTab />
           </TabsContent>
         </Tabs>
       </DialogContent>

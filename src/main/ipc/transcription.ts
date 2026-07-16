@@ -9,6 +9,8 @@ import { generatePreviewMix } from '../services/preview-mix'
 import { getModelsDir, getBinPath } from '../lib/paths'
 import { loadSettings, saveSettings } from '../services/settings-store'
 import { resolveActiveModelId } from '../services/resolve-active-model'
+import { applyTranscriptionTierGate } from '../services/transcribe-payload'
+import { isPackagedAsMsix, getCurrentProcessContext } from '../lib/msix'
 import type { TranscriptionStartRequest } from '../../shared/ipc-contracts'
 import type { ModelInfo, ModelStatus, ModelsState, WhisperModelId } from '../../shared/types'
 import log from '../lib/logger'
@@ -165,8 +167,17 @@ export function registerTranscriptionHandlers(): void {
     const modelsDir = getModelsDir()
     const ffmpegPath = getBinPath('ffmpeg')
 
+    // REQ-0210 — enforce MSIX-only paid-tier features at the IPC
+    // boundary before anything else touches the request.  The renderer
+    // disables the checkbox in NSIS (see `transcription-drawer.tsx`),
+    // but a DevTools user could flip the local state; this main-side
+    // gate strips `wordSubtitle: true` on NSIS builds so the sidecar
+    // never sees the flag.  MSIX builds pass through unchanged.
+    const isMsix = isPackagedAsMsix(getCurrentProcessContext())
+    const gatedRequest = applyTranscriptionTierGate(request, isMsix)
+
     const fullRequest: TranscriptionStartRequest = {
-      ...request,
+      ...gatedRequest,
       modelsDir,
       ffmpegPath
     }
@@ -232,11 +243,15 @@ export function registerTranscriptionHandlers(): void {
           event.sender.send(channelId, { event: 'phase', phase: 'preview-mix' })
         }
         try {
-          await generatePreviewMix(
+          const mix = await generatePreviewMix(
             { inputPath: request.videoPath, audioTrackCount },
             mixAbort.signal,
           )
-          previewMixUrl = `mojioko-preview-mix://current?t=${Date.now()}`
+          // REQ-0231 — the URL now carries the per-run unique filename
+          // in the path segment (`/<filename>`).  The protocol handler
+          // validates it against `isPreviewMixFilename` before touching
+          // the disk (defence against path traversal).
+          previewMixUrl = `mojioko-preview-mix://current/${mix.filename}?t=${Date.now()}`
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err)
           log.error(`[ipc/transcription] failed (preview-mix): model=${request.modelId} reason=${reason}`)
@@ -279,12 +294,20 @@ export function registerTranscriptionHandlers(): void {
   })
 
   ipcMain.handle(Channels.transcriptionCancel, async (): Promise<void> => {
-    const { terminateSidecar } = await import('../services/transcription-sidecar')
-    terminateSidecar()
+    // REQ-0219 — cancel now goes through `cancelTranscription`, which
+    // (a) settles the in-flight `transcribe()` promise with the
+    // shared `'Cancelled'` sentinel so the parent chain's `.finally`
+    // fires and `activeRuns` cleans up, and (b) uses the SIGKILL-
+    // escalating `terminateSidecarAndWait` so a hung sidecar that
+    // ignores `SIGTERM` still dies within the 3-second deadline.
+    // The old `terminateSidecar()` path fired SIGTERM only and left
+    // the parent promise pending indefinitely.
+    const { cancelTranscription } = await import('../services/transcription-sidecar')
+    await cancelTranscription()
     // REQ-086 — also abort any in-flight preview-mix ffmpeg run.  The
     // mix runs AFTER the Whisper sidecar exits, so a user pressing
     // Cancel during the audio-mix phase needs this second signal too;
-    // `terminateSidecar` alone would leave ffmpeg running.
+    // `cancelTranscription` alone would leave ffmpeg running.
     for (const run of activeRuns) {
       run.previewMixAbort.abort()
     }

@@ -10,15 +10,20 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { TimeInput } from '@/components/time-input'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-// REQ-20260614-001 補遺③ — ColorPicker / OutlineThicknessSlider /
-// RowFontSelector / Switch / FontId imports retired alongside the fat
-// Style column.  All those controls live in the always-on right-pane
-// Inspector now.  補遺④ also retired the row-level action handlers
-// (autoLineBreakRow / overflowWrapRow / resetRow / toggleDeleteRow /
-// duplicateRow) — the actions column itself is gone from the row.
+// REQ-20260614-001 補遺③ — most Style-column controls (font picker /
+// switch) live in the always-on right-pane Inspector.  REQ-0222 walked
+// back the per-row read-only display of textColor / outlineColor /
+// outlineThickness: those three are now editable in-place via the
+// same ColorPicker and OutlineThicknessSlider the Inspector uses.
+// REQ-0225 walked back REQ-0222's bulk-edit blockade — the row-level
+// pickers are now always available, matching the "time / size / text
+// stay editable during bulk edit" convention the rest of the row uses.
+import { ColorPicker } from '@/components/color-picker/color-picker'
+import { OutlineThicknessPopover } from '@/components/subtitle-table/outline-thickness-popover'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
+import { commitTextEditWithHistory } from '@/lib/commit-text-edit'
 import { filterEntries } from '@/lib/subtitle-filter'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
 import { effectiveEntryState, type ClipStatus, type CutList } from '../../../shared/cuts'
@@ -74,13 +79,33 @@ function getRowState(entry: SubtitleEntry, isOverflow: boolean): RowState {
 
 interface CellEditorProps {
   value: string
-  onCommit: (v: string) => void
+  /**
+   * REQ-0127 Phase 1 — `textOnFocus` is captured at the moment the
+   * editor mounts (= gains focus in the table row flow, since the
+   * editor is gated by an outer `editingText` state).  Callers hand
+   * it into a `beforePatch` on their history push so the resulting
+   * Undo target is the pre-focus text — regardless of how many
+   * onPreview fires happened in between.
+   */
+  onCommit: (v: string, textOnFocus: string) => void
+  /**
+   * REQ-0127 Phase 1 — fires per-keystroke with the current typed
+   * value.  Callers wire this to `projectStore.updateEntryPreview`
+   * (history-less writer) so the preview overlay reflects typing
+   * live without polluting Undo.
+   */
+  onPreview?: (v: string) => void
   multiline?: boolean
 }
 
-function CellEditor({ value, onCommit, multiline }: CellEditorProps) {
+function CellEditor({ value, onCommit, onPreview, multiline }: CellEditorProps) {
   const [draft, setDraft] = useState(value)
   const ref = useRef<HTMLTextAreaElement & HTMLInputElement>(null)
+  // REQ-0127 Phase 1 — snapshot of the pre-focus value; the editor
+  // remounts on every `editingText → true`, so the constructor of this
+  // component IS the focus event, and `value` at construction time IS
+  // the pre-focus value we want Undo to rewind to.
+  const focusValueRef = useRef(value)
   // REQ-20260612-004: track whether the user has typed since the last
   // commit / external sync.  Used by the value-sync effect and the
   // blur handler so that an external `updateEntry({text})` (e.g. from
@@ -141,12 +166,21 @@ function CellEditor({ value, onCommit, multiline }: CellEditorProps) {
   // stale draft back and undo the external update.
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) {
     dirtyRef.current = true
-    setDraft(e.target.value)
+    const next = e.target.value
+    setDraft(next)
+    // REQ-0127 Phase 1 — stream the typed value into the store via
+    // the history-less preview writer so the overlay lights up live.
+    // Skip while an IME composition is in progress; the composition-
+    // end handler flushes the final value into draft and re-runs
+    // preview from there.
+    if (!isComposingRef.current) {
+      onPreview?.(next)
+    }
   }
   function handleBlur() {
     if (!dirtyRef.current) return
     dirtyRef.current = false
-    onCommit(draft)
+    onCommit(draft, focusValueRef.current)
   }
   function handleCompositionStart() {
     isComposingRef.current = true
@@ -157,7 +191,11 @@ function CellEditor({ value, onCommit, multiline }: CellEditorProps) {
     // blur flushes the converted text.  `e.target.value` already
     // reflects the post-composition value when this fires.
     dirtyRef.current = true
-    setDraft((e.target as HTMLTextAreaElement | HTMLInputElement).value)
+    const next = (e.target as HTMLTextAreaElement | HTMLInputElement).value
+    setDraft(next)
+    // REQ-0127 Phase 1 — flush the IME-committed value into the
+    // preview stream so the overlay reflects the final composed text.
+    onPreview?.(next)
   }
 
   if (multiline) {
@@ -240,6 +278,9 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
   // Subtitle Style dialog (REQ-034 #3).
   const { t } = useTranslation(['step2', 'step1'])
   const updateEntry = useProjectStore((s) => s.updateEntry)
+  // REQ-0127 Phase 1 — history-less preview writer used from CellEditor's
+  // onPreview so typing lights up the video overlay live.
+  const updateEntryPreview = useProjectStore((s) => s.updateEntryPreview)
   const pushHistory = useHistoryStore((s) => s.push)
   // REQ-028: in audio-only mode the size / style / font cells render
   // empty so the grid stays in place (col widths unchanged) but the
@@ -276,8 +317,19 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
     updateEntry(entry.id, { ...patch, isEdited: true })
   }
 
-  function withHistory(label: string, patch: Partial<SubtitleEntry>) {
+  function withHistory(
+    label: string,
+    patch: Partial<SubtitleEntry>,
+    // REQ-0127 Phase 1 — like the inspector's applyStyleEdit(beforePatch),
+    // this override tells `undo` which fields to restore to which values
+    // instead of using the naive current-entry snapshot.  The text-cell
+    // path uses it because the preview stream has moved the store past
+    // the pre-focus value, so a naive snapshot would capture the typed
+    // text and Undo would be a no-op.
+    beforePatch?: Partial<SubtitleEntry>
+  ) {
     const snapshot = { ...entry }
+    const undoState = beforePatch ? { ...snapshot, ...beforePatch } : snapshot
     // Time-affecting patches (startSec / endSec) need a re-sort on undo /
     // redo as well so the row visually lands at the position that matches
     // its restored or re-applied time value.  Non-time patches (text, size,
@@ -286,7 +338,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
     pushHistory({
       label,
       undo: () => {
-        updateEntry(entry.id, snapshot)
+        updateEntry(entry.id, undoState)
         if (affectsTime) useProjectStore.getState().sortByStartSec()
       },
       redo: () => {
@@ -297,12 +349,23 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
     applyPatch(patch)
   }
 
-  function handleTextCommit(text: string) {
+  function handleTextCommit(text: string, textOnFocus: string) {
     setEditingText(false)
     // CellEditor uses real newlines internally; convert back to ASS \N on save.
     const normalized = text.replace(/\n/g, '\\N')
-    if (normalized === entry.text) return
-    withHistory(t('history.editText'), { text: normalized })
+    const normalizedOnFocus = textOnFocus.replace(/\n/g, '\\N')
+    // REQ-0199 — routed through the shared helper.  Guard compares against the
+    // pre-focus value (NOT `entry.text`, which the preview stream already moved
+    // to match `normalized`) so real text edits push exactly one history op and
+    // Undo rewinds to what was on screen before the editor gained focus.
+    commitTextEditWithHistory({
+      entry,
+      normalizedNew: normalized,
+      normalizedOnFocus,
+      label: t('history.editText'),
+      updateEntry,
+      pushHistory,
+    })
   }
 
   function handleStartChange(v: number) {
@@ -528,6 +591,9 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
               key={entry.fontSizePx}
               onChange={handleSizeChange}
               onBlur={handleSizeBlur}
+              // REQ-0128 Phase 1 — Enter commits via blur, matching
+              // REQ-0127's DaVinci contract for every numeric input.
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
               disabled={isFrozen}
               // REQ-034 #3: 64 px column has no room for an inline hint
               // line, so surface the clamp range as a hover tooltip.
@@ -560,45 +626,93 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
         )}
       </div>
 
-      {/* REQ-20260614-001 補遺④ — style-reference block, display only.
-          Vertical 3-row stack:
-              row 1: text colour swatch
-              row 2: outline colour swatch
-              row 3: outline width (number, display-only)
-          No event handlers — clicks bubble to the row's onClick →
-          selection.  Editing lives exclusively in the Inspector. */}
+      {/* REQ-20260614-001 補遺④ → REQ-0222 → REQ-0225 — style cell.
+          The three cells (text colour swatch / outline colour swatch /
+          outline width readout) are editable in-place: the two
+          swatches open the shared ColorPicker popover, the number
+          opens an OutlineThicknessPopover with the Inspector's
+          slider inside.  Both use the same per-frame preview
+          (`updateEntryPreview`) + close-time-commit (`withHistory`)
+          split the ColorPicker already established under REQ-0125.
+
+          REQ-0225 removed the REQ-0222 bulk-edit blockade: since
+          the row's time / size / text inputs stay editable during a
+          bulk selection, gating just the style trio was inconsistent.
+          Row-level edits always apply to this row only; the bulk-edit
+          bar continues to be the surface for "apply to N selected
+          rows" separately.
+
+          `onClick={(e) => e.stopPropagation()}` on the outer div
+          keeps swatch/number clicks from bubbling to the row's own
+          select handler; without it every picker open would also
+          shift the Inspector to this row. */}
       {isAudioOnly ? (
         <div className="py-2 px-1" />
       ) : (
-        <div className="flex flex-col items-center justify-center gap-1 py-2 px-1">
-          <span
-            title={t('styleCell.textColor')}
-            aria-label={t('styleCell.textColor')}
-            className={cn(
-              'inline-block h-5 w-5 rounded-sm border border-line-strong',
-              isFrozen && 'opacity-40'
-            )}
-            style={{ backgroundColor: entry.textColorHex }}
+        <div
+          className="flex flex-col items-center justify-center gap-1 py-2 px-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ColorPicker
+            value={entry.textColorHex}
+            onChange={(hex) =>
+              updateEntryPreview(entry.id, { textColorHex: hex })
+            }
+            onCommit={(hex, hexOnOpen) =>
+              withHistory(
+                t('history.editColor'),
+                { textColorHex: hex },
+                { textColorHex: hexOnOpen },
+              )
+            }
+            onPairApply={(text, outline) =>
+              withHistory(t('history.editColor'), {
+                textColorHex: text,
+                outlineColorHex: outline,
+              })
+            }
+            disabled={isFrozen}
+            swatchOnly
+            heading={t('common:colorPicker.headingText')}
           />
-          <span
-            title={t('styleCell.outlineColor')}
-            aria-label={t('styleCell.outlineColor')}
-            className={cn(
-              'inline-block h-5 w-5 rounded-sm border border-line-strong',
-              isFrozen && 'opacity-40'
-            )}
-            style={{ backgroundColor: entry.outlineColorHex }}
+          <ColorPicker
+            value={entry.outlineColorHex}
+            onChange={(hex) =>
+              updateEntryPreview(entry.id, { outlineColorHex: hex })
+            }
+            onCommit={(hex, hexOnOpen) =>
+              withHistory(
+                t('history.editColor'),
+                { outlineColorHex: hex },
+                { outlineColorHex: hexOnOpen },
+              )
+            }
+            onPairApply={(text, outline) =>
+              withHistory(t('history.editColor'), {
+                textColorHex: text,
+                outlineColorHex: outline,
+              })
+            }
+            disabled={isFrozen}
+            swatchOnly
+            heading={t('common:colorPicker.headingOutline')}
           />
-          <span
-            title={t('styleCell.outlineWidth')}
-            aria-label={t('styleCell.outlineWidth')}
-            className={cn(
-              'text-body-sm tabular-nums text-fg-secondary leading-none',
-              isFrozen && 'opacity-40'
-            )}
-          >
-            {entry.outlineThicknessPx}
-          </span>
+          <OutlineThicknessPopover
+            value={entry.outlineThicknessPx}
+            onPreview={(v) =>
+              updateEntryPreview(entry.id, { outlineThicknessPx: v })
+            }
+            onCommit={(v, valueOnOpen) =>
+              withHistory(
+                t('history.editStroke'),
+                { outlineThicknessPx: v },
+                { outlineThicknessPx: valueOnOpen },
+              )
+            }
+            disabled={isFrozen}
+            isFrozen={isFrozen}
+            ariaLabel={t('styleCell.outlineWidth')}
+          />
         </div>
       )}
 
@@ -646,6 +760,7 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
           <CellEditor
             value={entry.text.replace(/\\N/g, '\n')}
             onCommit={handleTextCommit}
+            onPreview={(text) => updateEntryPreview(entry.id, { text: text.replace(/\n/g, '\\N') })}
             multiline
           />
         ) : isFrozen ? (
@@ -994,19 +1109,19 @@ export function SubtitleTable({
             that pair with the cell values below.  Color also lifted from
             zinc-500 to zinc-300 so the headers carry the item-name weight
             of a real label. */}
-        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary text-center">{t('table.colIndex')}</div>
-        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary">{t('table.colTime')}</div>
-        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary">{isAudioOnly ? '' : t('table.colSize')}</div>
+        <div className="py-2 px-1 text-caption font-normal text-fg-secondary text-center">{t('table.colIndex')}</div>
+        <div className="py-2 px-1 text-caption font-normal text-fg-secondary">{t('table.colTime')}</div>
+        <div className="py-2 px-1 text-caption font-normal text-fg-secondary">{isAudioOnly ? '' : t('table.colSize')}</div>
         {/* REQ-20260614-001 補遺④ — column 5: style-reference block
             (text colour / outline colour / outline width — display
             only).  No header label since the cell content is purely
             visual reference. */}
-        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary"></div>
-        <div className="py-2 px-2 text-callout font-semibold text-fg-secondary">{t('table.colText')}</div>
+        <div className="py-2 px-1 text-caption font-normal text-fg-secondary"></div>
+        <div className="py-2 px-2 text-caption font-normal text-fg-secondary">{t('table.colText')}</div>
         {/* REQ-20260614-001 補遺④ — actions column removed.  Action
             icons (改行 / 削除 / リセット / 複製) now live exclusively
             in the right-pane Inspector. */}
-        <div className="py-2 px-1 text-callout font-semibold text-fg-secondary">{t('table.colState')}</div>
+        <div className="py-2 px-1 text-caption font-normal text-fg-secondary">{t('table.colState')}</div>
       </div>
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" onScroll={handleScroll}>
         {filtered.length === 0 ? (

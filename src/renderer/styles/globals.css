@@ -7,14 +7,21 @@
 @layer base {
   :root {
     /*
-     * REQ-20260615-019: single tunable for the app's window-background
-     * alpha.  `0.85` = 85% opaque black (15% see-through to the desktop).
-     * Flip to `0.15` if the spec meant "85% transparent".  Set to `1`
-     * to restore a fully opaque app.  The BrowserWindow side
-     * (src/main/index.ts) is set `transparent: true` so this alpha is
-     * actually rendered against the desktop.
+     * REQ-0178 (v1.3.3, feat/ui-resolve) — window-bg-alpha bumped to 1
+     * (fully opaque).  Pre-0178 the body painted rgba(0,0,0, 0.85)
+     * ostensibly to let the desktop bleed through, but REQ-20260615-030 B
+     * had already dropped `transparent: true` on the BrowserWindow
+     * (see src/main/index.ts) so the alpha was just multiplying pure
+     * black against the Electron backing colour — no desktop actually
+     * showed through, but the composed body still read as near-black.
+     * The @layer base body rule below now paints hsl(var(--surface-0))
+     * directly, which is the correct semantic (body = surface-0), and
+     * this var is kept at 1 so any residual downstream reader sees
+     * "fully opaque" instead of the confusing 0.85.
+     *
+     * Pre-0178: 0.85
      */
-    --window-bg-alpha: 0.85;
+    --window-bg-alpha: 1;
 
     /* -------------------------------------------------------------------
      * REQ-20260615-029 — user-selectable base colour.
@@ -45,19 +52,51 @@
      * rationale).
      * ------------------------------------------------------------------- */
 
-    /* Default = neutral dark.  data-base unset OR data-base="neutral". */
-    --neutral-1:  0 0% 4%;     /* neutral-950 */
-    --neutral-2:  0 0% 7%;
-    --neutral-3:  0 0% 9%;     /* neutral-900 */
-    --neutral-4:  0 0% 15%;    /* neutral-800 */
-    --neutral-5:  0 0% 19%;
-    --neutral-6:  0 0% 25%;    /* neutral-700 */
-    --neutral-7:  0 0% 28%;
-    --neutral-8:  0 0% 32%;    /* neutral-600 */
-    --neutral-9:  0 0% 45%;    /* neutral-500 */
-    --neutral-10: 0 0% 55%;
-    --neutral-11: 0 0% 64%;    /* neutral-400 */
-    --neutral-12: 0 0% 96%;    /* neutral-100 — text-primary */
+    /* Default = neutral dark.  data-base unset OR data-base="neutral".
+     *
+     * REQ-0177 Phase A — lifted the darkest steps ~7 % L so surface-0
+     * lands at 11 % L (~#1B1B1B) instead of 4 % L (~#0A0A0A).
+     * REQ-0178 Phase B-1 — owner Phase A feedback: "still reads too
+     * black; drop the transparency and lift another notch".  Bumped
+     * the whole low end +2-3 % L on top of the 0177 shift, so
+     * surface-0 now lands at 13 % L (~#212121) — the "just off pure
+     * black" mid-grey Resolve's chrome sits on.  Upper end (neutral-8..12)
+     * remains untouched so text / muted contrast ratios stay AAA on the
+     * further-shifted surfaces.  Palette variants (stone/mauve/olive/
+     * mist/taupe) keep their pre-0177 numbers so the "Resolve base" is
+     * still scoped to data-base=neutral only.
+     */
+    --neutral-1:  0 0% 13%;    /* 11 % → 13 % (REQ-0178) — surface-0 = bg-base  */
+    --neutral-2:  0 0% 16%;    /* 14 % → 16 % (REQ-0178) — surface-1 = card / panel */
+    --neutral-3:  0 0% 15%;    /* 13 % → 15 % (REQ-0178) — popover */
+    --neutral-4:  0 0% 18%;    /* 17 % → 18 % (REQ-0178) — surface-2 = elevated / muted */
+    --neutral-5:  0 0% 21%;    /* 20 % → 21 % (REQ-0178) */
+    --neutral-6:  0 0% 25%;    /* 24 % → 25 % (REQ-0178) — surface-3 = scroll thumb (kept; border broken out below) */
+    --neutral-7:  0 0% 28%;    /* unchanged — surface-4 (inverse); text-faint keeps sub-visible tint */
+
+    /*
+     * REQ-0179 s1 — bumped neutral-8..11 to hit WCAG contrast tiers
+     * against surface-0 (L 13 %, Y ≈ 0.0153).  Owner Phase B-1 note:
+     * "the muted greys are unreadable; look up what contrast is
+     * actually needed."  Measured pre-0179 ratios:
+     *   text-secondary (L 64) → 6.39:1  (AA body pass, AAA fail)
+     *   text-tertiary  (L 55) → 4.80:1  (AA body pass)
+     *   text-muted     (L 45) → 3.38:1  (BELOW AA body 4.5:1) ← main complaint
+     *   text-disabled  (L 32) → 2.04:1  (exempt)
+     * Post-0179 targets (see WCAG SC 1.4.3 / 1.4.11 and RES-0179 §5.2):
+     *   text-secondary L 72 → 8.07:1  AAA body ✓
+     *   text-tertiary  L 63 → 6.20:1  AA body ✓ (near AAA)
+     *   text-muted     L 54 → 4.66:1  AA body ✓ (safety margin over 4.5)
+     *   text-disabled  L 42 → 3.02:1  ~3:1 (disabled exempt, still legible)
+     * Primary / hierarchy preserved: text-primary stays at neutral-12
+     * (L 96) → 14.72:1, and primary→secondary→muted deltas remain
+     * ~7 → 5 → 3 ratio steps so the hierarchy is visually obvious.
+     */
+    --neutral-8:  0 0% 42%;    /* 32 % → 42 % (REQ-0179) — text-disabled at ~3:1 */
+    --neutral-9:  0 0% 54%;    /* 45 % → 54 % (REQ-0179) — text-muted at 4.66:1 AA */
+    --neutral-10: 0 0% 63%;    /* 55 % → 63 % (REQ-0179) — text-tertiary at 6.20:1 */
+    --neutral-11: 0 0% 72%;    /* 64 % → 72 % (REQ-0179) — text-secondary at 8.07:1 AAA */
+    --neutral-12: 0 0% 96%;    /* neutral-100 — text-primary, ratio 14.72:1 */
 
     /* Background scale (shadcn semantic — kept for primitive compat)
      *
@@ -74,17 +113,19 @@
     --card-foreground:    var(--neutral-12);
     --popover-foreground: var(--neutral-12);
 
-    /* Primary action: green-500.
-       REQ-071 Phase 3.7: --primary-foreground shifted green-950 (dark
-       forest green, hue collides with bg-primary green) -> zinc-950
-       (near-black neutral, hue independent of bg).  Same reasoning as
-       Phase 3.6's button.tsx primary variant fix: the dark-green hue
-       washed into the green background even at AA contrast, so the
-       checkmark icon (checkbox.tsx) and the round Play button
-       (audio-preview-panel.tsx) read as muddy green-on-green.  zinc-950
-       gives AAA contrast and reads as a real black mark on the green
-       surface. */
-    --primary: 142.1 70.6% 45.3%;
+    /* Primary action: desaturated professional green.
+       REQ-0177 Phase A — the pre-0177 emerald (green-500 = #22c55e,
+       H 142 / S 71 % / L 45 %) read as high-saturation "consumer-app"
+       against Resolve's muted UI.  Pulled saturation down to ~46 %
+       and shifted hue slightly (152 vs 142) to land closer to the
+       #3EA97B-ish "tanned green" spec in REQ-0177 §4.1.  Still a
+       recognisable brand green, just calmer.  --primary-hover /
+       -active / -soft / -faint are re-scaled below to keep the same
+       relative brightness ladder.
+       REQ-071 Phase 3.7 note (retained): --primary-foreground stays
+       on the darkest neutral so the checkmark / play-button icon
+       reads as clean dark-on-green rather than dark-forest-on-green. */
+    --primary: 152 42% 47%;      /* was 142.1 70.6% 45.3% */
     --primary-foreground: var(--neutral-1); /* darkest neutral, near-black on light + on green */
 
     /* Secondary mapped to base surface */
@@ -110,9 +151,32 @@
     --destructive-foreground: 0 0% 98%;
 
     /* Borders and inputs */
-    --border: var(--neutral-6);
+    /*
+     * REQ-0187 — line-colour philosophy shift.  Pre-0187 REQ-0179
+     * had lifted --border to L 43 % (3.14:1 vs surface-0) to hit
+     * WCAG SC 1.4.11's 3:1 minimum for UI components.  Owner
+     * feedback: "白線が強い / Resolve は白線でなく濃いグレーの線"
+     * — WCAG-driven bright borders were reading as loud on a dark
+     * pro-editor canvas, opposite of the Resolve reference stills.
+     *
+     * New direction: DaVinci Resolve style — lines are quiet
+     * mid-grey and boundaries are co-communicated by SURFACE TIER
+     * differences (surface-0 body L 13 % vs surface-1 panel L 16 %
+     * = 1.10:1 tier lift).  For editor chrome this is the
+     * accepted trade-off: SC 1.4.11 asks 3:1 for graphical objects
+     * "required to understand content", but here the tier lift +
+     * spacing (py-3, divide-y) co-communicate grouping so the
+     * line itself can recede.  Input frames / focus rings (below)
+     * still hit stronger contrast because they are functional
+     * boundaries (interactive).
+     *
+     * --border (shadcn semantic that every `border-border` utility
+     * reads): L 43 % → 22 % (1.37:1 vs surface-0).  Recedes on the
+     * base surface, doesn't shout.
+     */
+    --border: 0 0% 22%;              /* was L 43 % — REQ-0187 Resolve line */
     --input:  var(--neutral-1);
-    --ring:   142.1 70.6% 45.3%;     /* green-500 focus ring (accent kept) */
+    --ring:   152 42% 47%;           /* REQ-0177 — track --primary */
 
     /*
      * Multi-row selection (bulk-edit) — distinct from the green focused-row
@@ -122,9 +186,9 @@
      *   --row-selected-alpha      : row body tint opacity (0–1).
      *   --row-selected-border     : left-edge marker stripe.
      */
-    --row-selected: 217 91% 60%;          /* blue-500 */
+    --row-selected: 217 45% 55%;          /* REQ-0177 — desaturated blue for bulk-select tint */
     --row-selected-alpha: 0.10;
-    --row-selected-border: 217 91% 60%;
+    --row-selected-border: 217 45% 55%;
 
     /*
      * Soft inline separator (thinner than --border).  Used to demarcate
@@ -230,15 +294,41 @@
     --text-faint:     var(--neutral-7);
     --text-inverse:   var(--neutral-1);
 
-    --border-default: var(--neutral-6);
-    --border-strong:  var(--neutral-7);
-    --border-subtle:  var(--neutral-3);
+    /*
+     * REQ-0187 — Resolve-style dark line palette.  Pre-0187 REQ-0179
+     * had these at L 43-54 for WCAG SC 1.4.11's 3:1 minimum; owner
+     * pushed back that bright borders read "loud" on a dark editor
+     * canvas.  See --border comment above for the design-shift
+     * rationale (line quiet, tier lift co-communicates boundary).
+     *
+     * Measured contrasts vs surface-0 (L 13 %, Y ≈ 0.0153):
+     *   default  L 22 → 1.37:1  (was 3.14:1) — quiet grey line
+     *   strong   L 32 → 2.04:1  (was 4.66:1) — visible for input frames
+     *                                          without shouting; matches
+     *                                          Chrome's dark-mode native
+     *                                          input frame contrast band
+     *   subtle   L 15 → 1.07:1  (was 1.30:1) — near-invisible inter-row rule
+     *
+     * These borders fall below WCAG SC 1.4.11's 3:1 min because the
+     * lines here are decorative (grouping is co-communicated by
+     * surface tier changes + spacing).  Functional / interactive
+     * boundaries (--ring for keyboard focus, per-Input focus states)
+     * remain accented via --primary (>7:1) so accessibility is
+     * preserved where it actually matters.
+     */
+    --border-default: 0 0% 22%;      /* REQ-0187 — was 43 % */
+    --border-strong:  0 0% 32%;      /* REQ-0187 — was 54 %; input frames */
+    --border-subtle:  0 0% 15%;      /* REQ-0187 — was 18 %; near-invisible */
 
-    /* Action accent variants (green family) */
-    --primary-hover:  142 76% 36%;       /* green-600  #16a34a */
-    --primary-active: 142 72% 29%;       /* green-700  #15803d */
-    --primary-soft:   142 71% 58%;       /* green-400  #4ade80 */
-    --primary-faint:  141 79% 73%;       /* green-300  #86efac */
+    /* Action accent variants (green family) — REQ-0177: track the
+       toned-down --primary above.  Same relative L ladder as before
+       (hover -9, active -18, soft +11, faint +26) but at the new
+       H 152 / S 42 % base so the whole ladder feels one shade cooler
+       and less shouty. */
+    --primary-hover:  152 44% 38%;       /* was 142 76% 36% */
+    --primary-active: 152 46% 29%;       /* was 142 72% 29% */
+    --primary-soft:   152 40% 58%;       /* was 142 71% 58% */
+    --primary-faint:  152 38% 73%;       /* was 141 79% 73% */
 
     /* Destructive variants (red family) */
     --destructive-hover: 0 72% 51%;      /* red-600  #dc2626 */
@@ -249,19 +339,23 @@
     --warning-faint:      46 97% 65%;    /* amber-300 #fcd34d */
     --warning-very-faint: 48 96% 89%;    /* amber-100 #fef3c7 */
 
-    /* Info accent (single-use blue) */
-    --info: 213 94% 68%;                 /* blue-400 */
+    /* Info accent (single-use blue) — REQ-0177 desaturated */
+    --info: 213 45% 62%;                 /* was 213 94% 68% */
 
     --row-edited:  43 96% 56%;           /* amber-400 */
     --row-error:   0 84% 60%;            /* red-500 */
     --row-playing: 199 89% 48%;          /* sky-500 — kept for legend / inspector */
 
-    --playhead:      0 84% 60%;          /* red-500 */
+    --playhead:      0 84% 60%;          /* red-500 — kept vivid for playhead legibility */
     --trim-overlay: 38 92% 50%;          /* amber-500 */
-    --cursor-active: 142.1 70.6% 45.3%;  /* green-500 / = --primary */
+    --cursor-active: 152 42% 47%;        /* REQ-0177 — track --primary (was green-500) */
 
-    /* shadcn radius — matches our rounded-lg (8px) */
-    --radius: 0.5rem;
+    /* shadcn radius — REQ-0177 dropped 8 px → 3 px to match the
+       flat / squared-off Resolve panel feel.  The Tailwind
+       `borderRadius` scale in tailwind.config.ts also drops
+       proportionally so `rounded-lg` / `rounded-xl` etc. inherit
+       the new spec without per-call-site edits. */
+    --radius: 0.1875rem;             /* 3 px, was 0.5 rem (8 px) */
   }
 
   /* -------------------------------------------------------------------
@@ -488,15 +582,22 @@
 
   body {
     /*
-     * REQ-20260615-019: body paints rgba(0,0,0, --window-bg-alpha) instead
-     * of the opaque `bg-background` token so the BrowserWindow's
-     * `transparent: true` actually shows the desktop through the
-     * background.  `bg-card` etc. (used by section cards / dialogs /
-     * popovers) keep their opaque HSL tokens so foreground UI stays
-     * readable; only the bare background between cards is semi-transparent.
+     * REQ-0178 Phase B-1 — body now paints hsl(var(--surface-0))
+     * directly.  Pre-0178 the body painted rgba(0,0,0, --window-bg-alpha)
+     * (0.85) which was a leftover from the REQ-20260615-019
+     * "see-through-desktop" experiment.  REQ-20260615-030 B had already
+     * killed `transparent: true` on the BrowserWindow so the alpha was
+     * just multiplying pure black against the Electron backing colour
+     * — no desktop actually bled through, but the composed body still
+     * read as near-black even after Phase A lifted surface-0 to L 13 %.
+     * Painting hsl(var(--surface-0)) here makes the body match the
+     * intent: the app's base surface = surface-0, no aliasing.
+     *
+     * (Light mode override further below still points at surface-0 too,
+     * so the two modes stay symmetric.)
      */
     @apply text-foreground font-sans;
-    background-color: rgba(0, 0, 0, var(--window-bg-alpha));
+    background-color: hsl(var(--surface-0));
     height: 100%;
     overflow: hidden;
     font-feature-settings: 'rlig' 1, 'calt' 1;

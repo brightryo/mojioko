@@ -1,3 +1,4 @@
+import { forwardRef } from 'react'
 import { GripVertical } from 'lucide-react'
 import {
   Group as RrpGroup,
@@ -5,6 +6,7 @@ import {
   Separator as RrpSeparator,
   type GroupProps as RrpGroupProps,
   type PanelProps as RrpPanelProps,
+  type PanelImperativeHandle,
   type SeparatorProps as RrpSeparatorProps,
 } from 'react-resizable-panels'
 import { cn } from '@/lib/utils'
@@ -78,9 +80,20 @@ export function ResizablePanelGroup({
 }
 
 export type ResizablePanelProps = RrpPanelProps
-export function ResizablePanel(props: ResizablePanelProps) {
-  return <RrpPanel data-slot="resizable-panel" {...props} />
-}
+// REQ-0183 — forwarded ref so callers (e.g. STEP2's preview pane
+// collapse toggle) can grab the underlying `PanelImperativeHandle`
+// and drive collapse()/expand()/resize() imperatively.  The
+// react-resizable-panels v4 API exposes the handle via the `panelRef`
+// prop rather than React's built-in `ref`, so we forward the caller's
+// `ref` down as `panelRef` on the inner RrpPanel.  Consumers still
+// write `ref={myRef}` in the normal React style.
+export const ResizablePanel = forwardRef<PanelImperativeHandle, ResizablePanelProps>(
+  (props, ref) => <RrpPanel data-slot="resizable-panel" panelRef={ref ?? undefined} {...props} />,
+)
+ResizablePanel.displayName = 'ResizablePanel'
+// Re-export the handle type so consumers can annotate their refs
+// without pulling react-resizable-panels directly.
+export type { PanelImperativeHandle }
 
 export type ResizableHandleProps = RrpSeparatorProps & {
   /** When true, render shadcn's centred grip chip on top of the line. */

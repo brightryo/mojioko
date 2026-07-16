@@ -26,6 +26,24 @@ export const Channels = {
   fontReadOfl: 'font:readOfl',
   fontReadBytes: 'font:readBytes',
 
+  /**
+   * REQ-0149 — GPU acceleration tools (CUDA/cuDNN redistributables).
+   * `state` returns the {installed / not-installed / gpu-not-detected}
+   * status + folder path; `download` streams progress on a per-run
+   * channel (same pattern as `transcriptionDownloadModel`); `delete`
+   * removes the extracted folder and returns the fresh state.
+   */
+  gpuToolState: 'gpu-tool:state',
+  gpuToolDownload: 'gpu-tool:download',
+  gpuToolDelete: 'gpu-tool:delete',
+  /**
+   * REQ-0150 — persist the user's CPU/GPU card selection.  Payload is
+   * `'cpu' | 'gpu'`; main downgrades to `'cpu'` if the GPU tools are
+   * not installed or no NVIDIA adapter is detected (defence in depth
+   * against a stale renderer state).
+   */
+  gpuToolSelect: 'gpu-tool:select',
+
   burninStart: 'burnin:start',
   burninCancel: 'burnin:cancel',
 
@@ -34,6 +52,23 @@ export const Channels = {
 
   dialogOpenVideo: 'dialog:openVideo',
   dialogSaveFile: 'dialog:saveFile',
+  /**
+   * REQ-0121 — folder-picker used by Settings > General to choose the
+   * user-preferred default input / output folders.  `properties:
+   * ['openDirectory']` on top of `showOpenDialog`.
+   */
+  dialogOpenDir: 'dialog:openDir',
+  /**
+   * REQ-0194 — project file open dialog for `.mojioko`.  Same permission
+   * surface as the video/audio open dialog; only the extension filter and
+   * default folder differ.
+   */
+  dialogOpenProject: 'dialog:openProject',
+  /**
+   * REQ-0223 — SRT open dialog for the "import SRT" flow in step2.
+   * Same shape as `dialogOpenProject`; filter narrowed to `.srt`.
+   */
+  dialogOpenSrt: 'dialog:openSrt',
 
   shellOpenPath: 'shell:openPath',
   shellShowInFolder: 'shell:showInFolder',
@@ -42,6 +77,13 @@ export const Channels = {
   shellOpenThirdPartyLicensesFolder: 'shell:openThirdPartyLicensesFolder',
   shellWriteTextFile: 'shell:writeTextFile',
   shellFileExists: 'shell:fileExists',
+  /**
+   * REQ-0194 — read the project file (`.mojioko`) as a UTF-8 string.
+   * Path is trusted (only comes from the OS open dialog); the handler
+   * still validates it points to a regular file to avoid a directory /
+   * device read.
+   */
+  shellReadTextFile: 'shell:readTextFile',
 
   /** App metadata queries */
   appGetVersion: 'app:getVersion',

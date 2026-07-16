@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Toaster } from 'sonner'
@@ -13,6 +13,7 @@ import { SettingsDialog } from '@/components/settings-dialog/settings-dialog'
 import { DonationDialog } from '@/components/donation-dialog/donation-dialog'
 import { FontLicensesDialog } from '@/components/font-licenses/font-licenses-dialog'
 import { StoreUpsellDialog } from '@/components/store-upsell-dialog/store-upsell-dialog'
+import { ProjectOpenController } from '@/components/project-open/project-open-controller'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
@@ -20,7 +21,9 @@ import { loadSettings, saveSettings } from '@/services/settings'
 import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { listFonts } from '@/services/font'
-import { APP_VERSION } from '../shared/app-info'
+import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts'
+import { toast } from 'sonner'
+import { saveCurrentProject } from '@/services/project-file'
 import type { AppSettings } from '../shared/types'
 
 const PAGE_VARIANTS = {
@@ -60,9 +63,19 @@ function useSuppressTabFocus(): void {
 
 function AppInner() {
   useSuppressTabFocus()
-  const [appVersion, setAppVersion] = useState(APP_VERSION)
+  // REQ-0131 §4.1 — single owner of global editor shortcuts (Undo /
+  // Redo / Delete / Ctrl+A / Ctrl+Shift+A).  Mounted at the app root
+  // so the bindings survive route transitions between Step 1 and
+  // Step 2.  Space (play/pause) still lives on the preview panels
+  // because they own the `<video>` / `<audio>` ref; both surfaces
+  // share `shouldGlobalShortcutFire` so context judgement is uniform.
+  useGlobalShortcuts()
+  // REQ-0185 §3 — `appVersion` state was consumed only by the
+  // pre-0185 top breadcrumb (removed).  About dialog reads
+  // APP_VERSION directly from shared/app-info.ts, so the runtime
+  // fetch below and the state slot are gone.
   const location = useLocation()
-  const { i18n } = useTranslation('common')
+  const { t, i18n } = useTranslation('common')
 
   // REQ-20260615-026: keep <html> in sync with the user-selected theme so
   // the `:root.light { ... }` overrides in globals.css activate.  Default
@@ -88,12 +101,9 @@ function AppInner() {
     }
   }, [baseColor])
 
-  useEffect(() => {
-    window.electronAPI
-      .getVersion()
-      .then((v) => setAppVersion(v))
-      .catch(() => {})
-  }, [])
+  // REQ-0185 §3 — removed runtime `getVersion()` fetch; the value
+  // was only shown in the pre-0185 breadcrumb (retired).  Static
+  // APP_VERSION import at the top covers the About dialog.
 
   // Load settings from main process on mount; hydrate stores
   useEffect(() => {
@@ -188,7 +198,20 @@ function AppInner() {
           activeModelId: null,
           activeFontId: s.activeFontId,
           lastInputDir: null,
-          lastOutputDir: null
+          lastOutputDir: null,
+          // REQ-0158 — the Settings-dialog user-preferred fixed folders
+          // (REQ-0121) MUST be included in the payload so a "set to
+          // C:/videos" survives a restart AND a "cleared to null via
+          // the × button" propagates to disk.  The main-side merge
+          // uses `'key' in incoming` semantics (not `?? existing`) to
+          // distinguish those two cases from "renderer omitted the
+          // key entirely" — see `settings-merge.ts`.
+          defaultInputDir: s.defaultInputDir,
+          defaultOutputDir: s.defaultOutputDir,
+          // REQ-0194 — same include-always contract as the input/output
+          // folders above (a null must propagate to disk so a manual
+          // "clear" round-trips).
+          defaultProjectDir: s.defaultProjectDir
         }
         saveSettings(settings).catch(() => { /* ignore IPC failures */ })
       }, 500)
@@ -211,6 +234,27 @@ function AppInner() {
       }),
       window.electronAPI?.subscribeToChannel('menu:openDonations', () => {
         useUiStore.getState().setDonationDialogOpen(true)
+      }),
+      // REQ-0194 — File > Save Project (Ctrl+S).  The save routine
+      // handles its own IO + serialisation; App.tsx owns the toast
+      // bridge because the sonner instance mounts here.  Failures
+      // land on toast.error; a "no project to save" state (Step 1
+      // with no video) surfaces a warning toast instead of a
+      // silent no-op so the user knows the click was received.
+      window.electronAPI?.subscribeToChannel('menu:saveProject', () => {
+        void (async () => {
+          const r = await saveCurrentProject()
+          if (r.ok) {
+            toast.success(t('project.save.toastSuccess'), {
+              description: t('project.save.toastSuccessDesc'),
+            })
+          } else if (r.reason === 'no-project') {
+            toast.warning(t('project.save.toastNothingToSave'))
+          } else if (r.reason === 'io-error') {
+            toast.error(t('project.save.toastError', { error: r.message ?? '' }))
+          }
+          // 'cancelled' — user closed the OS save dialog; no toast.
+        })()
       })
     ]
     return () => subs.forEach(u => u?.())
@@ -231,8 +275,8 @@ function AppInner() {
           <Routes location={location}>
             {/* Splash route disabled — kept commented out for possible reintroduction.
             <Route path="/splash" element={<SplashRoute />} /> */}
-            <Route path="/step1" element={<Step1Route appVersion={appVersion} />} />
-            <Route path="/step2" element={<Step2Route appVersion={appVersion} />} />
+            <Route path="/step1" element={<Step1Route />} />
+            <Route path="/step2" element={<Step2Route />} />
             {/* REQ-20260615-023: /step3 retired; burn-in lives in a
                 right-sliding drawer on STEP2 instead. */}
             <Route path="*" element={<Navigate to="/step1" replace />} />
@@ -245,10 +289,39 @@ function AppInner() {
       <DonationDialog />
       <FontLicensesDialog />
       <StoreUpsellDialog />
+      {/* REQ-0194 phase 3b — drives the `.mojioko` open flow (parse →
+          source check → identity check → font warning → hydrate stores
+          → navigate).  Mounted at the App level so the menu event
+          subscription outlives every route change. */}
+      <ProjectOpenController />
 
       <Toaster
         position="bottom-center"
         theme="dark"
+        // Distance from the viewport bottom edge to the toast
+        // stack.  Value must equal the footer's rendered height so
+        // the toast card's bottom edge lands exactly on the
+        // footer's border-t line — owner spec "フッター区切り線の
+        // すぐ上に接地" across REQ-0185/0186/0187.
+        //
+        // REQ-0186's math (41 px) undercounted because it summed
+        // padding + text-caption line-height + border-t but forgot
+        // that the footer's actual content is the taller of its
+        // slots — left/right are `<Button size="md" h-7>` = 28 px,
+        // not text-caption 16 px.  Real breakdown:
+        //   py-3          → 12 + 12          = 24 px
+        //   Button h-7    → 28 px (tallest slot content)
+        //   border-t      →  1 px
+        //   total                              53 px
+        // REQ-0187 sets 54 (footer height + 1 px hairline safety
+        // so the toast bottom doesn't overlap the border-t line
+        // itself).  Sonner's `offset` for bottom-center positions
+        // is viewport-edge-to-toast-edge.
+        //
+        // REQ-0185 was 68 (too much); REQ-0186 was 42 (still too
+        // low, owner's spec was undermet).  REQ-0187 = 54 with
+        // corrected math.
+        offset={54}
         toastOptions={{
           classNames: {
             toast:

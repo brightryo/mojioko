@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Play, Pause, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '@/stores/project-store'
-import { useUiStore } from '@/stores/ui-store'
+import { useUiStore, isAnyOverlayOpen } from '@/stores/ui-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
+import { shortcutHint } from '@/lib/shortcut-hint'
 import { shellShowInFolder } from '@/services/dialog'
 import { findActiveEntryId } from '@/lib/active-entry'
-import { editedDuration, editedToOrig, origToEdited } from '../../../shared/cuts'
+import { editedDuration, editedToOrig, effectiveEntryState, origToEdited } from '../../../shared/cuts'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
 
@@ -102,12 +103,24 @@ export function AudioPreviewPanel() {
   // 60 timeupdates/sec while the same caption is on screen).
   const activeEntryIdRef = useRef<string | null>(null)
 
-  // Sorted, non-deleted entries — required for the binary search in
-  // findActiveEntryId.  Memoised on entries so the sort runs once per
-  // entries mutation, not per timeupdate tick.
+  // Sorted, effectively-non-deleted entries — required for the binary
+  // search in findActiveEntryId.  Memoised on entries + cuts so the
+  // sort runs once per entries/cuts mutation, not per timeupdate tick.
+  //
+  // REQ-0202 / REQ-0203 — the pre-REQ-0203 filter used `!e.isDeleted`
+  // and let trim-deleted entries (fully consumed by a cut) leak into
+  // the audio preview's active-entry lookup, so focusedRowId /
+  // scrollToRowId would point at rows that no longer exist in the
+  // output.  Same fix shape as VideoPreviewPanel:
+  // `!effectiveEntryState(e, cuts).effectivelyDeleted` gives the audio
+  // path the same visibility contract as the burn-in.  `cuts = []`
+  // collapses the classifier to `entry.isDeleted` so no-cut users
+  // (single-track audio without trim) see byte-identical behaviour.
   const sortedActiveEntries = useMemo(
-    () => entries.filter((e) => !e.isDeleted).sort((a, b) => a.startSec - b.startSec),
-    [entries]
+    () => entries
+      .filter((e) => !effectiveEntryState(e, cuts).effectivelyDeleted)
+      .sort((a, b) => a.startSec - b.startSec),
+    [entries, cuts]
   )
 
   const mediaUrl = video ? pathToMediaUrl(video.path) : null
@@ -168,6 +181,9 @@ export function AudioPreviewPanel() {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.code !== 'Space' || e.ctrlKey || e.altKey || e.metaKey) return
+      // REQ-0131 §2 context A — same modal-suppression guard as
+      // VideoPreviewPanel.  See that binding for the reason.
+      if (isAnyOverlayOpen(useUiStore.getState())) return
       const active = document.activeElement as HTMLElement | null
       if (active) {
         if (active.isContentEditable) return
@@ -282,7 +298,8 @@ export function AudioPreviewPanel() {
           <button
             type="button"
             onClick={togglePlay}
-            aria-label={isPlaying ? t('videoPreview.pause') : t('videoPreview.play')}
+            aria-label={(isPlaying ? t('videoPreview.pause') : t('videoPreview.play')) + shortcutHint('playPause')}
+            title={(isPlaying ? t('videoPreview.pause') : t('videoPreview.play')) + shortcutHint('playPause')}
             className={cn(
               'flex items-center justify-center rounded-full transition-colors duration-150',
               'h-14 w-14 bg-primary text-primary-foreground hover:bg-primary/90',

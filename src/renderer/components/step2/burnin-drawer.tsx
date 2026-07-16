@@ -5,9 +5,9 @@ import {
   Music,
   FileVideo,
   Heart,
+  ThumbsUp,
   CheckCircle2,
   AlertCircle,
-  Loader2,
   FolderOpen,
   MessageSquare,
   Shield,
@@ -20,6 +20,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { formatElapsed } from '@/lib/format-elapsed'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { startBurnin } from '@/services/burnin'
@@ -50,7 +51,9 @@ import type { BurninHandle } from '@/services/burnin'
 import type { OutputContainer } from '../../../shared/types'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
 import { DonationContent } from '@/components/donation-dialog/donation-content'
-import { GITHUB_PAGES_LOCALIZED } from '../../../shared/app-info'
+import { GITHUB_PAGES_LOCALIZED, MS_STORE_REVIEW_URL } from '../../../shared/app-info'
+import { useAppEnvStore } from '@/stores/app-env-store'
+import { shouldShowStoreReviewRow } from '@/lib/store-review-visibility'
 
 interface BurninDrawerProps {
   open: boolean
@@ -80,10 +83,28 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
   // every SubtitleEntry, so the drawer no longer reads the global slice.
   const outputContainer = useSettingsStore((s) => s.outputContainer)
   const setOutputContainer = useSettingsStore((s) => s.setOutputContainer)
+  // REQ-0121 — user-preferred fixed output folder for the burn-in save
+  // dialog.  `null` = fall through to the OS Videos folder.
+  const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
   const activeFontId = useSettingsStore((s) => s.activeFontId)
+  // REQ-0208 — Store review CTA visibility inputs.  Both are subscribed
+  // via zustand so the row hides itself the moment `markStoreReviewClicked`
+  // fires (no need to close/re-open the dialog to see the change).
+  const isMsix = useAppEnvStore((s) => s.isMsix)
+  const hasClickedStoreReview = useSettingsStore((s) => s.hasClickedStoreReview)
+  const markStoreReviewClicked = useSettingsStore((s) => s.markStoreReviewClicked)
 
   const [renderState, setRenderState] = useState<RenderState>('idle')
   const [progress, setProgress] = useState(0)
+  // REQ-0148 Part A — renderer-side elapsed timer for the burn-in run,
+  // mirroring the REQ-0143 pattern already used by the transcription
+  // drawer.  ffmpeg does not emit tick events, so the drawer keeps its
+  // own start-time stamp and ticks a `nowTick` state every 500 ms.  The
+  // `mm:ss` string replaces the old `Loader2` spinner in the top slot;
+  // deleting the spinner + keeping the elapsed timer visible mirrors the
+  // transcription drawer so the two drawers read as siblings.
+  const [renderStartMs, setRenderStartMs] = useState<number | null>(null)
+  const [nowTick, setNowTick] = useState<number>(0)
   const [completedPath, setCompletedPath] = useState<string>('')
   const [completedSizeMB, setCompletedSizeMB] = useState<number>(0)
   const [errorMessage, setErrorMessage] = useState<string>('')
@@ -145,10 +166,25 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
     if (open) return
     setRenderState('idle')
     setProgress(0)
+    setRenderStartMs(null)
     setErrorMessage('')
     setOverwriteCandidate(null)
     burninHandleRef.current = null
   }, [open])
+
+  // REQ-0148 Part A — 500 ms tick that bumps `nowTick` while a burn-in
+  // is in flight so the elapsed `mm:ss` in the top slot updates roughly
+  // twice a second.  The interval is torn down as soon as `renderStartMs`
+  // clears (idle / cancel / complete / error), matching REQ-0143's
+  // approach in the transcription drawer.
+  useEffect(() => {
+    if (renderStartMs === null) return
+    const id = window.setInterval(() => setNowTick(Date.now()), 500)
+    return () => window.clearInterval(id)
+  }, [renderStartMs])
+  const elapsedSec = renderStartMs !== null
+    ? Math.max(0, Math.floor((Math.max(nowTick, Date.now()) - renderStartMs) / 1000))
+    : 0
 
   const videoDurationSec = video?.durationSec ?? Infinity
   const warningsMap = (() => {
@@ -206,7 +242,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
     const pad = (n: number) => String(n).padStart(2, '0')
     const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
     const defaultName = `${stem}_subtitled_${ts}.${outExt}`
-    const targetPath = await saveFileDialog(defaultName)
+    const targetPath = await saveFileDialog(defaultName, defaultOutputDir ?? undefined)
     if (!targetPath) return
 
     const exists = await fileExists(targetPath).catch(() => false)
@@ -221,6 +257,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
     if (!video) return
     setRenderState('rendering')
     setProgress(0)
+    setRenderStartMs(Date.now())
     setErrorMessage('')
 
     const burninOpts = {
@@ -252,6 +289,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
         setCompletedPath(evt.outputPath)
         setCompletedSizeMB(evt.sizeMB)
         setProgress(100)
+        setRenderStartMs(null)
         // Hand off to the completion dialog: dismiss the drawer (it slides
         // out to the right per shadcn Sheet animation) and pop the success
         // dialog at centre.
@@ -262,6 +300,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
         const errMsg = evt.error
         setErrorMessage(errMsg)
         setRenderState('error')
+        setRenderStartMs(null)
         // 'Cancelled' is the sentinel emitted by ffmpeg-burnin when the
         // user pressed Cancel — treat that as returning to 'idle' rather
         // than the error state (the drawer's own state already reflects
@@ -278,10 +317,12 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
       if (errMsg.includes('Cancelled')) {
         setRenderState('idle')
         setProgress(0)
+        setRenderStartMs(null)
         return null
       }
       setErrorMessage(errMsg)
       setRenderState('error')
+      setRenderStartMs(null)
       toast.error(t('error.renderFailed', { reason: errMsg }))
       return null
     })
@@ -294,6 +335,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
     burninHandleRef.current = null
     setRenderState('idle')
     setProgress(0)
+    setRenderStartMs(null)
   }
 
   function handleSheetOpenChange(next: boolean) {
@@ -329,15 +371,23 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
             <SheetDescription className="flex-1">{t('subtitle')}</SheetDescription>
           </SheetHeader>
 
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-2 divide-y divide-line">
             {renderState === 'idle' && (
               <>
                 {/* Summary panel — REQ-20260615-024 A.1/A.2: section header
                     'Summary' dropped, card padding tightened (p-3), and
                     SummaryRow rows shrunk to py-1 / min-h-0 so the seven
                     facts read as a compact table rather than a stretched
-                    column. */}
-                <div className="rounded-xl border border-line bg-surface-1 px-3 py-2">
+                    column.
+                    REQ-0180 2a: outer `rounded-xl border border-line
+                    bg-surface-1` wrapper dropped — the Sheet already
+                    provides a bordered surface, and pre-0180 this section
+                    (like Audio-mode below) rendered a card inside the
+                    Sheet card = "枠の中に枠".  Parent now uses `divide-y`
+                    so sections separate via a single hairline.  The inner
+                    `divide-line/50` between SummaryRows is preserved so
+                    the seven facts still visually enumerate. */}
+                <div className="py-2">
                   <div className="flex flex-col divide-y divide-line/50">
                     <SummaryRow label={t('summary.resolution')} value={video ? `${video.widthPx}×${video.heightPx}` : '—'} />
                     <SummaryRow label={t('summary.duration')} value={video ? formatDuration(durationSec) : '—'} />
@@ -357,12 +407,27 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                 />
 
                 {/* Audio mode */}
-                <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-2">
+                {/* REQ-0180 2a: outer card wrapper dropped (see Summary
+                    section comment above); py-3 keeps internal rhythm. */}
+                <div className="py-3 space-y-2">
                   <div className="flex items-center gap-1.5">
                     <Music className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
                     <Label>{t('audio.label')}</Label>
                   </div>
                   <div className="flex flex-col gap-2">
+                    {/*
+                      REQ-0182 drawer — selected option now uses
+                      "border + accent text" instead of "border-primary/50
+                      + bg-primary/5 + text-primary".  Owner Phase B-1/2a
+                      feedback: still too green-heavy despite the alpha
+                      knock-down.  Dropping the background alpha entirely
+                      and pushing border to full `border-primary` gives
+                      Resolve's outlined-active pattern where the accent
+                      is a frame + a text tint, no fill.  Non-selected
+                      keeps `border-line` at s1's L 43 % so the two
+                      states differ by both border colour AND text
+                      colour — visible even at low colour perception.
+                    */}
                     {(['simple', 'preserve'] as const).map((mode) => (
                       <button
                         key={mode}
@@ -371,7 +436,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                         className={cn(
                           'flex flex-col items-start rounded-md border px-3 py-2 text-left transition-colors duration-150',
                           audioMode === mode
-                            ? 'border-primary/50 bg-primary/5'
+                            ? 'border-primary'
                             : 'border-line hover:bg-surface-2/40'
                         )}
                       >
@@ -394,8 +459,21 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
             {renderState === 'rendering' && (
               <div className="flex items-center justify-center py-12">
                 <div className="rounded-xl border border-line bg-surface-1 px-6 py-8 w-full max-w-md space-y-5">
-                  <div className="flex items-center justify-center">
-                    <Loader2 className="h-7 w-7 text-primary animate-spin" />
+                  {/* REQ-0148 Part A — matches the REQ-0143 layout in the
+                      transcription drawer.  The old spinning `Loader2`
+                      icon was purely decorative once the determinate
+                      progress bar showed real progress, and made the two
+                      drawers look visually different for no reason.
+                      Elapsed `mm:ss` at title size sits in the vacated
+                      top slot; the right-side `%` chip stays always
+                      visible because ffmpeg emits accurate percent from
+                      the first frame — there is no "preparing" region
+                      here (unlike the transcription drawer's Whisper
+                      pre-load phase). */}
+                  <div className="flex flex-col items-center gap-1.5">
+                    <span className="font-mono tabular-nums text-title text-fg-primary">
+                      {formatElapsed(elapsedSec)}
+                    </span>
                   </div>
                   <div className="space-y-3">
                     <div className="h-2 rounded-full bg-surface-2 overflow-hidden">
@@ -484,7 +562,12 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
             )}
           </div>
 
-          {/* In-drawer overwrite confirmation. */}
+          {/* In-drawer overwrite confirmation.
+              REQ-0138 §2.4 — `onEnterConfirm` intentionally NOT set.
+              The confirm button here starts the burn-in encode with an
+              overwrite, which is exactly the "heavy operation" §2.4
+              wants to guard against firing on a stray Enter.  User must
+              click the button. */}
           <Dialog
             open={overwriteCandidate !== null}
             onOpenChange={(o) => { if (!o) setOverwriteCandidate(null) }}
@@ -580,6 +663,76 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               </Button>
             </div>
 
+            {/* REQ-0208 / REQ-0211 — Store review CTA.
+
+                Rendered only for the MSIX (paid) build.  REQ-0211
+                dropped the "hide after first click" rule from REQ-0208
+                — the row now stays up indefinitely, but the heading /
+                button text swap based on `hasClickedStoreReview` so
+                the tone shifts from "please review" to "thanks —
+                review again" once the user has opened the Store review
+                surface at least once.  The Microsoft Store review
+                editor lets users update their existing rating, so the
+                re-entry point is genuinely useful, not a nag.
+
+                The click flag is still persisted through zustand's
+                localStorage middleware (deliberately NOT round-tripped
+                through the main-side settings.json — see RES-0208 §3
+                for the "setting resets on restart" bug history that
+                this design avoids).  Do not move it into `AppSettings`.
+
+                Placement is between the 3-button workflow row and the
+                donation card, per REQ-0208 §配置 — the first eye-line
+                position, above the support block, so it does not get
+                buried.  Icon is ThumbsUp per the same section (kept
+                distinct from the Heart used by the donation block so
+                the two CTAs read as separate offers).
+
+                The visibility predicate is factored out into
+                `lib/store-review-visibility.ts` so the (now 3-row)
+                truth table can be pinned in a unit test without React.
+                When `isMsix === null` (IPC still resolving) the row is
+                withheld — this prevents a one-frame flash on the very
+                first paint of the dialog after boot. */}
+            {shouldShowStoreReviewRow({ isMsix }) && (
+              <div className="rounded-xl border border-line bg-surface-1 p-3 flex items-center gap-3">
+                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                  <ThumbsUp className="h-3.5 w-3.5 text-[hsl(var(--accent-soft))] flex-shrink-0" />
+                  <span className="text-body-sm font-medium text-fg-secondary truncate">
+                    {t(
+                      hasClickedStoreReview
+                        ? 'completion.storeReviewTitleAfterClick'
+                        : 'completion.storeReviewTitle',
+                    )}
+                  </span>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    // Mark first, open second: if the user cancels the
+                    // Store handoff the button still counts as pressed
+                    // — REQ-0208 spec is explicit that "clicked once"
+                    // is the persist trigger, not "review submitted"
+                    // (which we cannot detect anyway).  REQ-0211
+                    // keeps this behavior unchanged; re-clicks after
+                    // the flag flips true are no-ops on the flag but
+                    // still re-open the Store review surface so users
+                    // can update their existing rating.
+                    markStoreReviewClicked()
+                    void shellOpenExternal(MS_STORE_REVIEW_URL)
+                  }}
+                  className="flex-shrink-0"
+                >
+                  {t(
+                    hasClickedStoreReview
+                      ? 'completion.storeReviewButtonAfterClick'
+                      : 'completion.storeReviewButton',
+                  )}
+                </Button>
+              </div>
+            )}
+
             {/* Embedded donation section. */}
             <div className="rounded-xl border border-line bg-surface-1 p-3 space-y-2">
               <div className="flex items-center gap-1.5 px-1">
@@ -654,7 +807,12 @@ function OutputFormatCard({
     : ''
 
   return (
-    <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-2">
+    // REQ-0180 2a — outer card wrapper dropped so this OutputFormatCard
+    // sibling matches the flat "Summary" and "Audio mode" sections
+    // above/below it in the drawer's divide-y-divide-line parent.
+    // Selection option buttons below keep their `rounded-md border`
+    // treatment (they're semantic pickers, not chrome grouping).
+    <div className="py-3 space-y-2">
       <div className="flex items-center gap-1.5">
         <FileVideo className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
         <Label>
@@ -664,6 +822,9 @@ function OutputFormatCard({
         </Label>
       </div>
       <div className="flex flex-col gap-2">
+        {/* REQ-0182 drawer — same "border-primary only, no fill"
+            pattern as the Audio-mode selector above; sibling
+            controls should read as the same picker shape. */}
         {(['mp4', 'sameAsInput'] as const).map((mode) => (
           <button
             key={mode}
@@ -672,7 +833,7 @@ function OutputFormatCard({
             className={cn(
               'flex flex-col items-start rounded-md border px-3 py-2 text-left transition-colors duration-150',
               outputContainer === mode
-                ? 'border-primary/50 bg-primary/5'
+                ? 'border-primary'
                 : 'border-line hover:bg-surface-2/40'
             )}
           >

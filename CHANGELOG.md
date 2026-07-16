@@ -9,6 +9,117 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.3] - 2026-07-15
+
+Fifth minor-line release: a full editor redesign inspired by
+DaVinci Resolve, a new project save / open workflow for pausing
+and resuming an edit, and NVIDIA GPU acceleration for the Whisper
+transcription backend (including the new RTX 50 series).
+
+### Added
+
+- **GPU-accelerated transcription (NVIDIA).**  Whisper can now run
+  on an NVIDIA GPU for significantly faster transcription.  The
+  CUDA / cuDNN runtime (~1.1 GB) downloads once on first use from
+  inside the app — no separate CUDA install required.  A GPU is
+  optional; MOJIOKO continues to run on CPU without it, and the
+  user's CPU/GPU choice is always respected.  The latest NVIDIA
+  generations, including RTX 50 series (Blackwell), are supported
+  — the backend picks the right compute type automatically and
+  falls back to CPU cleanly if a card reports GPU support but
+  stumbles at model init.
+- **SRT import.**  Load an external SRT subtitle file into the
+  editor to replace the current subtitle set.  Enables workflows
+  like "transcribe → export SRT → translate externally → import
+  back and burn in the translated version."  Import is
+  destructive (current subtitles and edit history are replaced),
+  so it goes through a confirm dialog first.  Cues that fall
+  outside the loaded video's duration are skipped and reported
+  in the completion toast.
+- **Per-row style editing in the subtitle list.**  Text colour,
+  outline colour, and outline width can now be edited directly
+  from a row's style cell (in addition to the inspector) —
+  clicking the colour swatch opens the same colour picker, and
+  clicking the outline-width number opens a popover with the
+  same slider the inspector uses.  Works during bulk-edit
+  selection too; row-level edits apply to that single row.
+- **Word-level transcription (Microsoft Store version only,
+  experimental, for English audio).**  A checkbox in the
+  transcribe drawer generates subtitles in short 1–3 word
+  chunks — the CapCut / short-form caption style.  Default off;
+  opt in per run.  Works best on clean English audio; results
+  with Japanese audio may split words unnaturally (single kanji
+  become separate captions).  Positioned as an experimental
+  feature — turn it off if the cadence does not suit your
+  material.  In the free (GitHub) build the checkbox is visible
+  but locked with a "Paid-version only" badge.
+- **Project save & open (`.mojioko`).**  Save your session —
+  video, subtitles, cuts, per-row styles — to a `.mojioko` file
+  and reopen it later to keep editing.  Works from either the
+  transcribe or edit screen.  Menu: File > Open Project…
+  (Ctrl+O) and File > Save Project… (Ctrl+S).  A default project
+  folder can be set under Settings > General.  When the original
+  video has moved, the app asks you to point it at the new
+  location before opening.
+- **Transcribe start guards, visualised.**  Each precondition
+  (input file, model, GPU / audio track) shows a small ○ / ✓
+  marker on the transcribe screen; hovering the disabled Start
+  button explains what's still missing, and clicking it surfaces
+  the same reason as a toast.
+
+### Improved
+
+- **Full editor UI refresh.**  The editor was rebuilt with a
+  DaVinci Resolve-inspired dark palette, higher-contrast text
+  and borders (WCAG AA), a flatter chrome (card outlines
+  removed in favour of hairline dividers), and an edge-to-edge
+  edit layout that gives the timeline more room.  The video
+  preview area can be collapsed to reclaim vertical space for
+  the subtitle table, and reopens to the currently-selected
+  clip's start time.
+- **Font picker polish.**  The picker popover now clamps
+  properly at every window size and scrolls inside its own
+  panel.  The "Default:" prefix on the currently-selected font
+  was dropped, and per-row reset buttons were simplified.
+- **GPU-tool extraction shows an indeterminate progress bar.**
+  The ~10-second local extraction step after the CUDA / cuDNN
+  download used to sit at 0 % and looked stuck; it now shows a
+  moving stripe so it reads as "working."
+- **Whisper settings pane cleanup.**  The redundant "settings
+  are saved automatically" line was retired from the transcribe
+  drawer and the Whisper tab of Settings.
+- Numerous small polish fixes across the transcribe screen,
+  editor, and export drawer as part of the redesign.
+
+### Fixed
+
+- **Undo now catches text edits.**  Editing a subtitle's text
+  (typing or paste) is now correctly recorded on the undo stack.
+  Previously the edit slipped through the guard and Ctrl+Z would
+  unwind the previous timeline action — e.g. a clip drag —
+  instead of the text you just changed, which felt like the app
+  was rewriting the wrong thing.
+- **Timeline drag across a cut region.**  Extending a subtitle
+  past a trim boundary now tracks the cursor pixel-for-pixel
+  instead of stalling at the cut edge until you drag far past
+  it.  Same fix for resize-start and move drags.
+- **Preview shows only the subtitles that make it to output.**
+  Subtitles a trim consumed no longer appear as phantom second-
+  line stack captions in the preview overlay; the preview now
+  matches what the burn-in writes.
+- **Whisper model storage row layout.**  The disk-usage / open-
+  folder row under the model cards was narrowed to match the
+  card grid width, so the "Open" button no longer reads like a
+  primary action.
+- The video preview now stops when you collapse it, and the
+  play button resets to ▶ so it never gets stuck showing
+  pause after a reopen.
+- Timeline cuts are now honoured on playback for projects
+  opened from a `.mojioko` file (previously they only skipped
+  during the same session they were made in).
+
+---
+
 ## [1.3.2] - 2026-07-01
 
 ### Improved

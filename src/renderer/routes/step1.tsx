@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform, Check } from 'lucide-react'
+import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform, Check, Circle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog'
 import { HelpIcon } from '@/components/help-icon'
 import { WhisperModelManager } from '@/components/whisper-model-manager/whisper-model-manager'
+import { GpuToolManager } from '@/components/gpu-tool-manager/gpu-tool-manager'
 import { TranscriptionDrawer } from '@/components/step1/transcription-drawer'
 import { SubtitleStyleDialog } from '@/components/step1/subtitle-style-dialog'
 import { useProjectStore } from '@/stores/project-store'
@@ -38,6 +39,7 @@ import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { pickInitialOpenSection } from './step1-initial-open'
+import { pickTranscriptionTrack } from './step1-track-pick'
 import { pickAudioTrackLabel } from '@/lib/audio-track-label'
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -56,11 +58,11 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-interface Step1RouteProps {
-  appVersion: string
-}
+// REQ-0185 §3 — `appVersion` prop dropped alongside the removed
+// top breadcrumb.  About dialog still shows the version.
+interface Step1RouteProps {}
 
-export default function Step1Route({ appVersion }: Step1RouteProps) {
+export default function Step1Route(_: Step1RouteProps) {
   const { t } = useTranslation(['step1', 'common'])
   const navigate = useNavigate()
 
@@ -86,6 +88,10 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // rows comes from the same source the user controls in Settings.
   const settingsFadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
+  // REQ-0121 — user-preferred default input folder used when the current
+  // session has no MRU yet (first browse after launch).  `null` = fall
+  // through to the OS Videos folder, resolved on the main side.
+  const defaultInputDir = useSettingsStore((s) => s.defaultInputDir)
   // transcriptionAdvanced is needed in handleStartTranscription to feed the
   // Whisper sidecar with the user's tweaked VAD / beam-size / language; the
   // dialog owns reads + writes for editing those fields, but step1 still
@@ -109,6 +115,41 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // it has no per-frame progress events; the loader spinner + new
   // label communicates that the run is still in flight.
   const [transcribePhase, setTranscribePhase] = useState<'whisper' | 'preview-mix'>('whisper')
+  // REQ-0142 — pre-Whisper preparation phase from the sidecar (RES-0141
+  // §1 phases 3, 5, 6).  Null while Whisper inference is producing
+  // real progress events, or when the run is not active.  The drawer
+  // uses this to render an indeterminate bar + phase-specific label
+  // + elapsed timer, replacing the pre-REQ-0142 stuck "0%" bar.
+  const [preparingPhase, setPreparingPhase] = useState<
+    'extractAudio' | 'loadModel' | 'prepass' | null
+  >(null)
+  // REQ-0142 — Start-click timestamp (ms) and a live tick that drives
+  // the drawer's elapsed display.  Rendered as `mm:ss` inside the
+  // drawer; the timer runs entirely renderer-side so no sidecar
+  // change is needed to keep the display moving during the prep
+  // region.  Reset back to `null` when the run finishes / fails /
+  // cancels so an idle drawer never shows leftover elapsed digits.
+  const [transcribeStartMs, setTranscribeStartMs] = useState<number | null>(null)
+  const [nowTick, setNowTick] = useState<number>(0)
+  useEffect(() => {
+    if (transcribeStartMs === null) return
+    // Half-second tick keeps the seconds field visually smooth without
+    // burning a full RAF budget.  The renderer subscribes to
+    // `nowTick` implicitly via the `elapsedSec` calc below.
+    const id = window.setInterval(() => setNowTick(Date.now()), 500)
+    return () => window.clearInterval(id)
+  }, [transcribeStartMs])
+  const elapsedSec = transcribeStartMs !== null
+    ? Math.max(0, Math.floor((Math.max(nowTick, Date.now()) - transcribeStartMs) / 1000))
+    : 0
+  // REQ-0145 — device info from the sidecar's `deviceInfo` event.
+  // `null` until the sidecar reports which device the WhisperModel
+  // constructor actually used (cuda vs cpu, and whether it fell back
+  // from a failed cuda attempt).  Owner uses this to verify GPU
+  // engagement without needing to open the dev-terminal.
+  const [deviceInfo, setDeviceInfo] = useState<
+    { device: 'cuda' | 'cpu'; computeType: string; fellBack: boolean } | null
+  >(null)
   const [thumbnail, setThumbnail] = useState<string | null>(null)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [subtitleStyleDialogOpen, setSubtitleStyleDialogOpen] = useState(false)
@@ -118,6 +159,15 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // `handleStartTranscription` directly; it now opens this drawer and
   // the drawer's own Start button is the run trigger.
   const [transcriptionDrawerOpen, setTranscriptionDrawerOpen] = useState(false)
+  // REQ-0207 — experimental word-level subtitle re-split.  Non-persisted:
+  // the user has to opt in every time the drawer opens.  This is deliberate
+  // — the checkbox is labelled "experimental" and we do not want it to
+  // silently stick between projects.  Reset happens in the useEffect below,
+  // which fires as soon as the drawer transitions to closed.
+  const [wordSubtitleOn, setWordSubtitleOn] = useState(false)
+  useEffect(() => {
+    if (!transcriptionDrawerOpen) setWordSubtitleOn(false)
+  }, [transcriptionDrawerOpen])
   // Drawer render state — idle while configuring, running during the
   // ffmpeg/Whisper pipeline, error if the run failed (cancel returns
   // to idle so the user can adjust + retry without reopening).
@@ -145,7 +195,12 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // no-model case only.  Once a user has any model installed they keep
   // landing on inputVideo, matching the prior "skip past picker on the
   // happy path" intent.
-  const [openSection, setOpenSection] = useState<'whisper' | 'inputVideo' | null>(null)
+  // REQ-0152 §2 — single-open accordion across Whisper model / Processing
+  // device / Input video.  Widened from the pre-REQ-0152 binary
+  // `'whisper' | 'inputVideo'` union so the newly-promoted device
+  // accordion joins the mutual-exclusion group; `null` is the "all
+  // closed" state the REQ explicitly allows.
+  const [openSection, setOpenSection] = useState<'whisper' | 'device' | 'inputVideo' | null>(null)
   // Set on the first `handleActiveModelChange` callback, OR when the
   // user toggles the accordion header before that callback arrives.
   // Subsequent listModels-triggered callbacks (after install / uninstall
@@ -164,13 +219,18 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     []
   )
 
+  // REQ-0152 §2 — click a section's header to toggle it: open if currently
+  // closed (closing any other open section as a side-effect since the
+  // state is single-valued), close it if it was already the open one.
+  // This gives the "single-open, all-closed permitted" semantics the REQ
+  // asks for without any per-section local open state.
   const handleAccordionToggle = useCallback(
-    (next: 'whisper' | 'inputVideo') => {
+    (section: 'whisper' | 'device' | 'inputVideo') => {
       // Mark the initial decision as taken so a later listModels
       // callback (post-install/uninstall) can't override what the user
       // just chose by hand.
       initialOpenDecidedRef.current = true
-      setOpenSection(next)
+      setOpenSection((current) => (current === section ? null : section))
     },
     []
   )
@@ -199,7 +259,12 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleBrowse() {
-    const lastDir = video?.path ? video.path.replace(/[\\/][^\\/]+$/, '') : undefined
+    // REQ-0121 — MRU wins (same-session continuity when opening video after
+    // video), else fall back to the user-preferred default input folder,
+    // else the main-side handler resolves the OS Videos folder.
+    const lastDir = video?.path
+      ? video.path.replace(/[\\/][^\\/]+$/, '')
+      : (defaultInputDir ?? undefined)
     const filePath = await openVideoDialog(lastDir)
     if (!filePath) return
 
@@ -211,6 +276,26 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     // must fall back to `<video>`-only audio rather than play stale audio
     // over the new visuals.
     usePreviewMixStore.getState().clear()
+    // REQ-0196 §1 — defensive clear of the step2-produced editing state
+    // (entries + cuts) before hydrating the new video.  The back-discard
+    // handler in step2 already clears these when the user hits "OK", but
+    // that path is only taken in one flow — a project-open that landed
+    // on step1 (REQ-0195 branching) or a first-launch step1 could still
+    // hold entries in the Zustand store from an earlier session pattern.
+    // Picking a new video means the old subtitles are always stale.
+    // History is cleared too so Ctrl+Z can't rewind into the old set;
+    // ui selection follows.  Same "keep video + track + defaults" line
+    // as the discard handler — but we're about to replace `video`
+    // anyway a few lines below.
+    useProjectStore.getState().resetEditingState()
+    useHistoryStore.getState().clear()
+    const ui = useUiStore.getState()
+    ui.setSelectedEntryId(null)
+    ui.setRowSelection(new Set())
+    ui.setFocusedRowId(null)
+    ui.setScrollToRowId(null)
+    ui.setVideoCurrentTimeSec(0)
+    ui.setVideoSeekRequest(null)
 
     const result = await probeVideo(filePath)
     if (!result.ok) {
@@ -233,12 +318,20 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     setVideoLoadingState('loaded')
     toast.success(t('toast.videoLoaded'))
 
-    // Auto-select default audio track if available
-    const defaultTrack = info.audioTracks.find((a) => a.index === defaultAudioTrackIndex)
-    if (defaultTrack) {
-      setSelectedTrack(defaultTrack.index)
-    } else if (info.audioTracks.length > 0) {
-      setSelectedTrack(info.audioTracks[0].index)
+    // REQ-0121 — audio-track fallback ladder.  See step1-track-pick.ts.
+    //   preferred exists          → use it, no notice
+    //   preferred missing, T1 ok  → use Track 1, non-blocking toast
+    //   nothing usable            → leave selection empty (existing "no
+    //                               audio track" flow handles it)
+    const picked = pickTranscriptionTrack(info.audioTracks, defaultAudioTrackIndex)
+    if (picked.trackIndex !== null) {
+      setSelectedTrack(picked.trackIndex)
+      if (picked.fallbackUsed) {
+        toast.info(t('audioTracks.defaultTrackMissing', {
+          index: defaultAudioTrackIndex,
+          fallback: picked.trackIndex
+        }))
+      }
     }
   }
 
@@ -263,6 +356,16 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
     setIsTranscribing(true)
     setTranscribeProgress(0)
     setTranscribePhase('whisper')
+    // REQ-0142 — pin the initial prep label so the drawer never shows
+    // an empty state during the ~50-ms gap between Start click and
+    // the first sidecar `phase: 'extractAudio'` event.  Also start the
+    // elapsed timer here (renderer-side) — the sidecar does not emit
+    // ticks.
+    setPreparingPhase('extractAudio')
+    setTranscribeStartMs(Date.now())
+    // REQ-0145 — clear the previous run's device chip so a fresh Start
+    // never carries stale info across runs.
+    setDeviceInfo(null)
     // REQ-20260615-055 — drive the drawer's render state too so the
     // body switches from the configuration form to the spinner /
     // progress bar / error panel as the run progresses.
@@ -290,22 +393,71 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
           outlineThicknessPx: runDefaults.outlineThicknessPx,
           fadeDurationSec: settingsFadeDurationSec,
         },
-        advanced: transcriptionAdvanced
+        advanced: transcriptionAdvanced,
+        // REQ-0207 — pass the drawer's checkbox through.  The service
+        // wrapper omits the key entirely when false so the IPC payload
+        // matches the pre-REQ-0207 shape byte-for-byte.
+        wordSubtitle: wordSubtitleOn
       },
       (evt) => {
         if (evt.event === 'progress') {
+          // REQ-0142 — first real progress event ends the prep region.
+          // Clearing `preparingPhase` swaps the drawer back to the
+          // determinate bar (already the pre-REQ-0142 look).
+          setPreparingPhase(null)
           setTranscribeProgress(Math.round(evt.percent))
         } else if (evt.event === 'segment') {
           segments.push(evt.segment)
         } else if (evt.event === 'phase') {
-          // REQ-086 — Whisper done, preview-mix in flight.  Show the
-          // mix label and pin the progress bar at 100 % so the user
-          // sees the run is still active without a misleading reset
-          // to 0.
-          setTranscribePhase(evt.phase)
-          setTranscribeProgress(100)
+          if (evt.phase === 'preview-mix') {
+            // REQ-086 — Whisper done, preview-mix in flight.  Show the
+            // mix label and pin the progress bar at 100 % so the user
+            // sees the run is still active without a misleading reset
+            // to 0.
+            setTranscribePhase('preview-mix')
+            setTranscribeProgress(100)
+            setPreparingPhase(null)
+          } else {
+            // REQ-0142 — pre-Whisper prep phases (extractAudio /
+            // loadModel / prepass) from the sidecar.  The drawer
+            // shows an indeterminate bar + phase-specific label +
+            // elapsed timer while these are in flight.
+            setPreparingPhase(evt.phase)
+          }
         } else if (evt.event === 'needsDownload') {
           toast.warning(t('toast.modelNotInstalled', { model: evt.model }))
+        } else if (evt.event === 'deviceInfo') {
+          // REQ-0145 §3 — surface the sidecar's device choice so the
+          // owner can verify GPU engagement.  Duplicated to
+          // `console.log` (visible in DevTools console) AND stored in
+          // React state so the drawer chip can render it live.  The
+          // main-process `[sidecar stderr]` log covers the third
+          // channel (dev terminal) via the print(...) in main.py.
+          console.log(
+            `[REQ-0145 deviceInfo] device=${evt.device} computeType=${evt.computeType} fellBack=${evt.fellBack}`,
+          )
+          setDeviceInfo({
+            device: evt.device,
+            computeType: evt.computeType,
+            fellBack: evt.fellBack,
+          })
+          // REQ-0173 §2 — surface silent GPU→CPU fallback with an
+          // explicit toast.  The transcription drawer already turns
+          // its device chip warning-yellow when `fellBack === true`,
+          // but users focused on the progress bar / elapsed timer
+          // frequently miss the chip and only notice that transcribe
+          // is much slower than expected.  Firing a toast at the
+          // moment the sidecar reports the fallback catches every
+          // silent CPU-drop — Blackwell + int8 crash, missing cuDNN,
+          // driver mismatch, OOM, or the REQ-0173 §1 secondary
+          // defense exhausting its retry ladder — so the owner /
+          // user always knows the speedup they expected did not
+          // happen.  Deliberately no dependency-array useEffect: the
+          // sidecar sends `deviceInfo` at most once per transcribe
+          // run, so we can act on the event synchronously here.
+          if (evt.fellBack) {
+            toast.warning(t('toast.gpuFallback'))
+          }
         }
       }
     )
@@ -327,6 +479,11 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
       }
     } finally {
       setIsTranscribing(false)
+      // REQ-0142 — stop the elapsed timer and clear the prep phase so
+      // a fresh drawer open never carries leftover state from the
+      // previous run.
+      setTranscribeStartMs(null)
+      setPreparingPhase(null)
       transcriptionRunRef.current = null
       window.electronAPI.menuSetTranscribing(false)
     }
@@ -500,6 +657,22 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   const canStart = !isLoading && video !== null && (video.audioTracks?.length ?? 0) > 0 && activeModelId !== null
   const audioTracks = video?.audioTracks ?? []
 
+  // REQ-0181 — guard-reason resolver.  Mutually-exclusive priority chain
+  // that mirrors the natural dependency order (a video with no audio is
+  // impossible without a video; a model can be picked independently).
+  // Returns a translated string when the transcribe start is blocked, or
+  // `null` when canStart is true (no reason needed).  Consumed by
+  // (a) the footer Start button's tooltip + click-toast wrapper below,
+  // and (b) the TranscriptionDrawer's own Start button (same reason
+  // string forwarded via props).
+  const guardReason = (() => {
+    if (isLoading) return null                            // transient, no useful guidance
+    if (!video) return t('guard.noInput')
+    if ((video.audioTracks?.length ?? 0) === 0) return t('guard.noAudio')
+    if (!activeModelId) return t('guard.noModel')
+    return null
+  })()
+
   const footerCenter = (
     /* REQ-067 phase B: status colors lifted from text-fg-muted to
        text-fg-secondary so the model-status and privacy line stay legible
@@ -530,31 +703,52 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
   // REQ-028: also hidden in audio-only mode — there is no burn-in step
   // for audio, so the seed-style dialog has no consumer.
   const showStyleCaret = !isTranscribing && !isAudioOnly
+  // REQ-0181 — the footer Start button's guard state.  When the button
+  // is disabled because canStart is false (and we're not mid-transcribe),
+  // the wrapper span below catches clicks and surfaces `guardReason` as
+  // a toast; the wrapper also carries the `title` attribute so
+  // hover-tooltip works even though `disabled:pointer-events-none` on
+  // the Button itself would otherwise swallow hover events.
+  const startBlocked = !isTranscribing && !canStart
   const footerRight = (
     <div className="inline-flex items-stretch">
-      <Button
-        variant="primary"
-        size="md"
-        disabled={!isTranscribing && !canStart}
-        onClick={isTranscribing ? handleCancelClick : () => setTranscriptionDrawerOpen(true)}
-        className={cn(showStyleCaret && 'rounded-r-none')}
+      <span
+        // REQ-0181 Shape C — click-toast + tooltip wrapper.  Only active
+        // when the primary Start button is guard-disabled.  Button
+        // enabled path: `title` and `onClick` are undefined so the span
+        // is a no-op passthrough and the Button's own onClick fires
+        // normally.  Guard-disabled path: the Button carries
+        // `disabled:pointer-events-none` (from button.tsx cva) so mouse
+        // events fall through to this span, which fires the toast; the
+        // `title` attribute renders a native tooltip on hover.
+        title={startBlocked && guardReason ? guardReason : undefined}
+        onClick={startBlocked && guardReason ? () => toast.warning(guardReason) : undefined}
+        className="inline-flex"
       >
-        {isTranscribing ? (
-          transcribeProgress === 0 ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              {t('action.transcribingWaiting')}
-            </>
+        <Button
+          variant="primary"
+          size="md"
+          disabled={!isTranscribing && !canStart}
+          onClick={isTranscribing ? handleCancelClick : () => setTranscriptionDrawerOpen(true)}
+          className={cn(showStyleCaret && 'rounded-r-none')}
+        >
+          {isTranscribing ? (
+            transcribeProgress === 0 ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                {t('action.transcribingWaiting')}
+              </>
+            ) : (
+              <>
+                <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
+                {t('action.transcribing', { percent: transcribeProgress })}
+              </>
+            )
           ) : (
-            <>
-              <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
-              {t('action.transcribing', { percent: transcribeProgress })}
-            </>
-          )
-        ) : (
-          t('action.startTranscription')
-        )}
-      </Button>
+            t('action.startTranscription')
+          )}
+        </Button>
+      </span>
       {showStyleCaret && (
         <Button
           variant="primary"
@@ -578,18 +772,28 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
 
   return (
     <AppShell
-      currentStep={1}
-      appVersion={appVersion}
+      // REQ-0185 §3 — title + description moved to the top strip
+      // (see components/app-shell/breadcrumb.tsx).  The in-content
+      // "Page header" block that used to render `<h1 text-heading>`
+      // + `<p text-body>` below was removed to avoid double titling.
+      title={t('title')}
+      description={t('guidance')}
       footerCenter={footerCenter}
       footerRight={footerRight}
     >
-      <div className="space-y-4">
-        {/* Page header */}
-        <div>
-          <h1 className="text-heading font-semibold text-foreground">{t('title')}</h1>
-          <p className="mt-1 text-body text-muted-foreground">{t('guidance')}</p>
-        </div>
-
+      {/*
+        REQ-0178 Phase B-1 — dropped the 3 outer card wrappers
+        (`rounded-xl border border-border bg-card p-4`) that used to
+        box each of Whisper / GPU / Input-Video into a floating
+        rounded panel with margins between.  The panels now flow as
+        flat sections divided by hairlines (`divide-y divide-line`
+        on this parent), matching Resolve's "info-dense inspector"
+        pattern rather than the pre-0178 "3 rounded boxes stacked
+        with air".  The `space-y-4` also went — vertical spacing
+        is now the section padding (`py-3`) + hairline instead of
+        outer margin.
+      */}
+      <div className="divide-y divide-line">
         {/* Whisper model + Advanced (engine) trigger.  Subtitle Style
             does NOT live here — it is unrelated to the Whisper engine
             and sits next to the Start button in the footer instead.
@@ -597,7 +801,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             the gear icon that WhisperModelManager renders inline in its
             own header; step1 just forwards a callback. */}
         <div className={cn(
-          'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
+          'py-3 transition-opacity duration-200',
           (isLoading || isTranscribing) && 'opacity-50 pointer-events-none'
         )}>
           {/* REQ-20260615-055 — the gear-icon "詳細設定" trigger was
@@ -609,7 +813,30 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             onActiveModelChange={handleActiveModelChange}
             disabled={isLoading || isTranscribing}
             isOpen={openSection === 'whisper'}
-            onOpenChange={(open) => handleAccordionToggle(open ? 'whisper' : 'inputVideo')}
+            // REQ-0152 §2 — `open` here reflects the direction of the
+            // pending transition (WhisperModelManager passes `!isOpen`
+            // from its header click, `false` from its post-install /
+            // activate auto-collapse).  Map both to the single-open
+            // toggle: `true` opens whisper (auto-closing others), `false`
+            // sets the section to `null` (all-closed).
+            onOpenChange={(open) => setOpenSection(open ? 'whisper' : null)}
+          />
+        </div>
+
+        {/* REQ-0150 / REQ-0152 §2 — GPU acceleration accordion, promoted
+            to an independent card between the Whisper model picker and
+            the input-video card, and now participating in the shared
+            single-open exclusion group (was uncontrolled pre-REQ-0152).
+            Position matches REQ-0150 §1 ("Whisperモデルの項目と入力
+            ファイルの項目の間"). */}
+        <div className={cn(
+          'py-3 transition-opacity duration-200',
+          isTranscribing && 'opacity-50 pointer-events-none'
+        )}>
+          <GpuToolManager
+            disabled={isTranscribing}
+            isOpen={openSection === 'device'}
+            onOpenChange={(open) => setOpenSection(open ? 'device' : null)}
           />
         </div>
 
@@ -631,14 +858,13 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             subtitle overlay) — the styled live preview belongs to the
             Subtitle Style dialog. */}
         <div className={cn(
-          'rounded-xl border border-border bg-card p-4 transition-opacity duration-200',
+          'py-3 transition-opacity duration-200',
           isTranscribing && 'opacity-50 pointer-events-none'
         )}>
-          {/* Accordion header — clickable, toggles `openSection` to enforce
-              mutual exclusion with the Whisper card above.  Clicking the
-              header when this section is already open switches the
-              expanded panel to 'whisper'; clicking when collapsed
-              switches back here.  Either way exactly one panel is open. */}
+          {/* Accordion header — clickable, toggles `openSection` under
+              REQ-0152 §2 single-open semantics: click while closed →
+              open this section (auto-collapses whisper / device); click
+              while already open → close to the all-closed state. */}
           {/* REQ-082: Enter / Space keyboard activation removed. */}
           {/* REQ-20260615-079: header right side now shows the audio-track
               **inventory** for the loaded file (count, or "no audio"),
@@ -651,9 +877,7 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             role="button"
             aria-expanded={openSection === 'inputVideo'}
             tabIndex={0}
-            onClick={() =>
-              handleAccordionToggle(openSection === 'inputVideo' ? 'whisper' : 'inputVideo')
-            }
+            onClick={() => handleAccordionToggle('inputVideo')}
             className="flex items-center justify-between cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
           >
             <div className="flex items-center gap-1.5">
@@ -668,7 +892,21 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             <div className="flex items-center gap-2">
               {(() => {
                 const labelState = pickAudioTrackLabel(video ? audioTracks.length : null)
-                if (labelState.kind === 'hidden') return null
+                // REQ-0181 — three states, three markers:
+                //   'hidden'   (no file loaded)   → Circle only, no text
+                //   'no-audio' (file, 0 tracks)   → text + Circle
+                //   'count'    (file, N tracks)   → text + green Check
+                // Pre-0181 the 'hidden' branch returned null entirely, so
+                // an empty input section had no signal at all — the whole
+                // "you haven't picked a file yet" state was silent.  Now
+                // the Circle marker lands next to the "入力ファイル" title
+                // as a symmetric ○ counterpart to the ✓ that appears
+                // once a real video-with-audio has been chosen.
+                if (labelState.kind === 'hidden') {
+                  return (
+                    <Circle className="h-3.5 w-3.5 text-fg-tertiary flex-shrink-0" aria-label={t('guard.pending')} />
+                  )
+                }
                 return (
                   <>
                     <span className="text-body-sm text-fg-secondary">
@@ -677,17 +915,18 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
                         : t('audioTracks.audioTrackCount', { count: labelState.count })}
                     </span>
                     {/* REQ-20260615-080 — positive-detection check.  Shown
-                        only when N ≥ 1 (the "we found usable audio" case),
-                        NOT for 0 / hidden.  Identical Check element +
-                        Tailwind class triple as the Whisper accordion's
-                        active-model check (whisper-model-manager.tsx:309)
-                        so the two greens in this route's two headers
-                        track each other exactly — same icon, same
-                        `text-primary`, same h-4 w-4.  Decorative; the
-                        adjacent text already conveys the count to AT, so
-                        aria-hidden mirrors the pre-REQ-079 treatment. */}
-                    {labelState.kind === 'count' && (
+                        only when N ≥ 1 (the "we found usable audio" case).
+                        Identical Check element + Tailwind class triple as
+                        the Whisper accordion's active-model check so the
+                        two greens in this route's two headers track each
+                        other exactly.
+                        REQ-0181 — no-audio branch renders the same Circle
+                        so a loaded video with 0 tracks still surfaces the
+                        blocking condition. */}
+                    {labelState.kind === 'count' ? (
                       <Check className="h-4 w-4 text-primary flex-shrink-0" aria-hidden="true" />
+                    ) : (
+                      <Circle className="h-3.5 w-3.5 text-fg-tertiary flex-shrink-0" aria-label={t('guard.pending')} />
                     )}
                   </>
                 )
@@ -889,13 +1128,26 @@ export default function Step1Route({ appVersion }: Step1RouteProps) {
             ? t('drawer.runningLabelPreviewMix')
             : undefined
         }
+        preparingPhase={preparingPhase}
+        elapsedSec={elapsedSec}
+        deviceInfo={deviceInfo}
         errorMessage={drawerErrorMessage}
         canStart={canStart}
+        // REQ-0181 — the drawer's own Start button gets the same
+        // guard treatment as the footer split-button in step1; the
+        // shared reason string keeps the copy in sync.
+        guardReason={guardReason}
         onStart={handleStartTranscription}
         onCancel={handleCancelClick}
+        wordSubtitleOn={wordSubtitleOn}
+        onWordSubtitleChange={setWordSubtitleOn}
       />
 
-      {/* Cancel transcription dialog */}
+      {/* Cancel transcription dialog.
+          REQ-0139 §3 — REQ-0138's `onEnterConfirm={handleConfirmCancel}`
+          was removed because this is a destructive confirmation
+          (aborts an in-flight Whisper run).  Owner must click; Esc
+          closes safely without cancelling. */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent className="max-w-[400px]">
           <DialogHeader>

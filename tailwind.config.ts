@@ -95,12 +95,23 @@ const config: Config = {
         'cursor-active': 'hsl(var(--cursor-active))'
       },
       borderRadius: {
-        sm: '4px',
-        DEFAULT: '4px',
-        md: '6px',
-        lg: '8px',
-        xl: '10px',
-        '2xl': '12px'
+        // REQ-0177 Phase A — flattened radius scale.  DaVinci Resolve
+        // panels sit at ~2-3 px; MOJIOKO's pre-0177 scale (4-12 px)
+        // read as consumer-app "roundy".  Pulled the whole ladder
+        // down by ~50 % so `rounded-md` / `rounded-lg` / `rounded-xl`
+        // call-sites downshift together without per-site edits.
+        // sm  4  → 2   – badges, tight chips
+        // DEF 4  → 3   – buttons, inputs (matches --radius above)
+        // md  6  → 3   – inline controls
+        // lg  8  → 4   – dialogs / cards
+        // xl 10  → 5   – large surfaces
+        // 2xl 12 → 6   – hero panels
+        sm:  '2px',
+        DEFAULT: '3px',
+        md:  '3px',
+        lg:  '4px',
+        xl:  '5px',
+        '2xl': '6px'
       },
       fontFamily: {
         sans: ['Inter', 'Noto Sans JP', 'system-ui', 'sans-serif'],
@@ -139,6 +150,16 @@ const config: Config = {
         // because Tailwind's fontSize tuple does not carry weight.  The
         // table above is the canonical pairing — DESIGN_SYSTEM.md §1.3
         // is the prose authority.
+        // REQ-0177 Phase A — screen H1 (heading) and hero (display)
+        // shrunk to the "quiet Resolve header" spec.  Body scale
+        // (body/callout/body-sm/label/caption/micro) untouched so
+        // dense inspector rows and data tables keep their pre-0177
+        // legibility.  Dialog title kept at 16 for now — dialogs are
+        // still modal focal points where a slightly firmer heading
+        // reads better than the screen-H1 case.
+        //
+        // heading  20 → 16   – screen H1 ("編集", "文字起こし")
+        // display  24 → 20   – About / Splash hero
         micro:        ['10px', { lineHeight: '14px' }],
         label:        ['12px', { lineHeight: '16px' }],
         caption:      ['12px', { lineHeight: '16px' }],
@@ -147,8 +168,24 @@ const config: Config = {
         body:         ['15px', { lineHeight: '22px' }],
         headline:     ['15px', { lineHeight: '22px' }],
         title:        ['16px', { lineHeight: '24px' }],
-        heading:      ['20px', { lineHeight: '28px' }],
-        display:      ['24px', { lineHeight: '32px' }]
+        heading:      ['16px', { lineHeight: '22px' }],  // was 20/28
+        display:      ['20px', { lineHeight: '28px' }]   // was 24/32
+      },
+      // REQ-0142 — indeterminate progress bar used in the transcription
+      // drawer while the sidecar is in its pre-Whisper prep region
+      // (extract / model-load / prepass).  A 33 %-wide stripe slides
+      // left → right on a 1.5-second loop, matching the density and
+      // pace of the Loader2 spinner sitting above the bar.  Kept in
+      // Tailwind config (not globals.css) so the class name is
+      // discoverable via the standard Tailwind toolchain.
+      keyframes: {
+        'progress-indeterminate': {
+          '0%':   { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(300%)' },
+        },
+      },
+      animation: {
+        'progress-indeterminate': 'progress-indeterminate 1.5s ease-in-out infinite',
       }
     }
   },

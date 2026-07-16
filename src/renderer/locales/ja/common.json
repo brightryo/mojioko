@@ -39,8 +39,8 @@
     "local": "ローカル処理・ネットワーク不使用"
   },
   "dialog": {
-    "discardChanges": "変更を破棄しますか？",
-    "discardChangesDesc": "編集済みの字幕がありますが、このまま戻りますか？",
+    "discardChanges": "文字起こし画面へ戻りますか？",
+    "discardChangesDesc": "編集途中のものは破棄されます。",
     "dontAskAgain": "今後このセッションでは確認しない"
   },
   "storeUpsell": {
@@ -56,7 +56,23 @@
     "scopeGlobal": "グローバル",
     "scopeStep1": "ステップ1 — 文字起こし",
     "scopeStep2": "ステップ2 — 編集",
-    "scopeStep3": "ステップ3 — 書き出し"
+    "scopeStep3": "ステップ3 — 書き出し",
+    "playPause": "再生 / 一時停止",
+    "undo": "元に戻す",
+    "redo": "やり直し",
+    "delete": "選択クリップを削除",
+    "duplicate": "選択クリップを複製",
+    "reset": "選択クリップをリセット",
+    "selectAll": "全選択",
+    "clearSel": "選択を解除",
+    "timelinePrevBoundary": "前の境界へ",
+    "timelineNextBoundary": "次の境界へ",
+    "timelineStart": "先頭へ",
+    "timelineEnd": "末尾へ",
+    "timelineZoomIn": "ズームイン",
+    "timelineZoomOut": "ズームアウト",
+    "modalCancel": "キャンセル",
+    "modalConfirm": "OK / 確定"
   },
   "colorPicker": {
     "presets": "プリセット",
@@ -67,7 +83,11 @@
     "cud": "色弱向け",
     "cudHint": "Color Universal Design 推奨配色",
     "close": "閉じる",
-    "pairTooltip": "文字色 {{text}} × アウトライン {{outline}}"
+    "pairTooltip": "文字色 {{text}} × アウトライン {{outline}}",
+    "ok": "OK",
+    "cancel": "キャンセル",
+    "headingText": "フォントカラー選択",
+    "headingOutline": "アウトラインカラー選択"
   },
   "fontLicenses": {
     "title": "フォントライセンス",
@@ -80,5 +100,43 @@
   "thirdPartyLicenses": {
     "title": "サードパーティライセンス",
     "openFolder": "サードパーティライセンスのフォルダを開く"
+  },
+  "project": {
+    "save": {
+      "toastSuccess": "プロジェクトを保存しました",
+      "toastSuccessDesc": "この .mojioko を開くには、元の入力ファイル（動画/音声）が必要です。",
+      "toastNothingToSave": "保存できるプロジェクトがありません（入力ファイルを読み込んでください）。",
+      "toastError": "保存に失敗しました：{{error}}"
+    },
+    "open": {
+      "toastError": "プロジェクトを開けませんでした：{{error}}",
+      "reasonInvalidJson": "ファイルの形式が不正です（JSON として読み込めません）。",
+      "reasonNotMojioko": "MOJIOKO のプロジェクトファイルではありません。",
+      "reasonUnsupportedVersion": "このバージョンの MOJIOKO では対応していない形式です。",
+      "reasonMissingFields": "必須項目が欠落しています。",
+      "sourceMissingTitle": "元のファイルが見つかりません",
+      "sourceMissingDesc": "保存されていた入力ファイルの場所にファイルがありません。場所を再選択してください。",
+      "sourceMissingReselect": "ファイルを選択…",
+      "sourceMissingCancel": "キャンセル",
+      "identityMismatchTitle": "動画が一致しません",
+      "identityMismatchDesc": "保存された動画と現在指定した動画で、再生時間または解像度が異なります。別の動画に差し替えられている可能性があります。",
+      "identityDurationLabel": "再生時間",
+      "identityResolutionLabel": "解像度",
+      "identityPathLabel": "ファイルパス",
+      "identityFileNameLabel": "ファイル名",
+      "identitySavedLabel": "保存時",
+      "identityCurrentLabel": "現在",
+      "identityClose": "閉じる",
+      "fontWarningTitle": "使用フォントの警告",
+      "fontWarningDesc": "このプロジェクトは以下のフォントを使用しますが、未ダウンロード / 利用不可です。このまま開くと代替フォントで表示されます。",
+      "fontWarningLockedDesc": "無料版では以下の有料フォントは使用できず、代替フォントで表示されます。",
+      "fontWarningCancel": "キャンセル",
+      "fontWarningOpen": "このまま開く",
+      "discardConfirmTitle": "編集中のプロジェクトは破棄されます",
+      "discardConfirmDesc": "保存されていない編集内容は破棄されます。よろしいですか？",
+      "discardConfirmCancel": "キャンセル",
+      "discardConfirmOk": "OK",
+      "toastSuccess": "プロジェクトを開きました"
+    }
   }
 }

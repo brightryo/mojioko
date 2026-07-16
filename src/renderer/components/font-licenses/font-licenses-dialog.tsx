@@ -10,7 +10,8 @@ import {
 } from '@/components/ui/dialog'
 import { useUiStore } from '@/stores/ui-store'
 import { readFontOfl } from '@/services/font'
-import { FONT_REGISTRY, type FontId, type FontMeta } from '../../../shared/fonts'
+import { getSortedFontRegistry, type FontId, type FontMeta } from '../../../shared/fonts'
+import { FontLangBadges } from '@/components/font-lang-badge/font-lang-badge'
 
 /**
  * Per-font OFL attribution surface.  Lists every font in the registry,
@@ -40,7 +41,8 @@ export function FontLicensesDialog() {
         </DialogHeader>
 
         <div className="space-y-3 pt-2">
-          {FONT_REGISTRY.map((meta) => (
+          {/* REQ-0153 §2 — alphabetical order in the attribution list too. */}
+          {getSortedFontRegistry().map((meta) => (
             <FontLicenseEntry key={meta.id} meta={meta} />
           ))}
         </div>
@@ -70,12 +72,15 @@ function FontLicenseEntry({ meta }: { meta: FontMeta }) {
   return (
     <div className="rounded-md border border-border bg-card px-3 py-2 space-y-1.5">
       <div className="flex items-center justify-between gap-3">
-        <span
-          className="text-body font-medium text-foreground truncate"
-          style={{ fontFamily: `'${meta.cssFontFamily}'`, fontWeight: meta.weight }}
-        >
-          {meta.displayName}
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="text-body font-medium text-foreground truncate"
+            style={{ fontFamily: `'${meta.cssFontFamily}'`, fontWeight: meta.weight }}
+          >
+            {meta.displayName}
+          </span>
+          <FontLangBadges languages={meta.languages} />
+        </div>
         <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"

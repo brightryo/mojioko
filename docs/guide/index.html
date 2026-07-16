@@ -127,7 +127,39 @@
         </div>
       </details>
 
-      <!-- 3: Whisper model selection (badge: info, body unchanged from prior Q1) -->
+      <!-- 3: GPU acceleration (badge: info, added in REQ-0227).
+           Sits before the Whisper model Q&A because model selection and
+           GPU selection often confuse each other on the initial-setup
+           screen — the GPU tool is ~1.1 GB and the model is ~1.5-3 GB,
+           and both trigger download UIs, so a clarifying block up-front
+           avoids conflating the two 1 GB+ downloads. -->
+      <details class="qa" id="gpu-acceleration">
+        <summary>
+          <span class="qa-badge qa-badge-info">解説</span>
+          <span class="q-text">GPU アクセラレーションについて</span>
+        </summary>
+        <div class="qa-body">
+          <p>MOJIOKO は NVIDIA GPU を使って、文字起こしを高速化できます。長時間の動画も、CPU よりずっと短時間で処理できます。GPU は必須ではなく、無い環境でも CPU で問題なく動作します。</p>
+
+          <h4>対応 GPU</h4>
+          <p><strong>NVIDIA 製 GPU のみ対応</strong>しています。AMD / Intel の GPU では利用できません（自動的に CPU 実行になります）。</p>
+          <p>RTX 50 番台（Blackwell）を含む最新世代の NVIDIA GPU に対応しています。</p>
+
+          <h4>CUDA / cuDNN ランタイムのダウンロード</h4>
+          <p>GPU アクセラレーションを利用するには、<strong>CUDA / cuDNN ランタイム（約 1.1 GB）</strong>を追加でダウンロードする必要があります。アプリ内から「GPU を使う」を選ぶと、初回のみ自動でダウンロードされます。事前に NVIDIA の CUDA を PC にインストールしておく必要はありません。</p>
+          <p><strong>Whisper モデル（約 1.5〜3 GB）とは別</strong>のダウンロードです。両方が必要になります。</p>
+          <p>1 度ダウンロードすれば、以降は追加のダウンロードは不要です。ディスク容量を空けたい場合は、アプリ内から削除できます。</p>
+
+          <h4>CPU との使い分け</h4>
+          <p>「CPU を使う」を選んだ場合は、GPU がある環境でも <strong>必ず CPU で実行</strong>されます。ユーザーの選択が優先されます。</p>
+          <p>短い動画・急がない用途では CPU、長時間の動画や繰り返し文字起こしする場合は GPU が向いています。</p>
+
+          <h4>ドライバについて</h4>
+          <p>お使いの NVIDIA GPU の <strong>ドライバが古い場合は、更新が必要になることがあります</strong>。GeForce Experience などから最新のドライバに更新してください。</p>
+        </div>
+      </details>
+
+      <!-- 4: Whisper model selection (badge: info, body unchanged from prior Q1) -->
       <details class="qa">
         <summary>
           <span class="qa-badge qa-badge-info">解説</span>

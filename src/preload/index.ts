@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { Channels } from '../shared/ipc-channels'
 import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
+import type { GpuToolState } from '../shared/gpu-tool'
 import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult } from '../shared/ipc-contracts'
 
 type OkResult<T> = { ok: true; data: T }
@@ -28,6 +29,15 @@ const electronAPI = {
     filters?: { name: string; extensions: string[] }[]
   ): Promise<string | null> =>
     ipcRenderer.invoke(Channels.dialogSaveFile, defaultName, defaultDir, filters),
+  // REQ-0121 — folder picker used by Settings > General.
+  openDirectoryDialog: (defaultDir?: string): Promise<string | null> =>
+    ipcRenderer.invoke(Channels.dialogOpenDir, defaultDir),
+  // REQ-0194 — .mojioko project file open dialog.
+  openProjectDialog: (defaultDir?: string): Promise<string | null> =>
+    ipcRenderer.invoke(Channels.dialogOpenProject, defaultDir),
+  // REQ-0223 — .srt file open dialog for the step2 import flow.
+  openSrtDialog: (defaultDir?: string): Promise<string | null> =>
+    ipcRenderer.invoke(Channels.dialogOpenSrt, defaultDir),
 
   // Video
   videoProbe: (path: string): Promise<IpcResult<VideoInfo>> =>
@@ -73,6 +83,18 @@ const electronAPI = {
   fontReadBytes: (fontId: FontId): Promise<IpcResult<ArrayBuffer>> =>
     ipcRenderer.invoke(Channels.fontReadBytes, fontId),
 
+  // GPU acceleration tools (REQ-0149)
+  gpuToolState: (): Promise<IpcResult<GpuToolState>> =>
+    ipcRenderer.invoke(Channels.gpuToolState),
+  gpuToolDownload: (): Promise<IpcResult<{ channelId: string }>> =>
+    ipcRenderer.invoke(Channels.gpuToolDownload),
+  gpuToolDownloadCancel: (channelId: string): Promise<void> =>
+    ipcRenderer.invoke(`${Channels.gpuToolDownload}:cancel`, channelId),
+  gpuToolDelete: (): Promise<IpcResult<GpuToolState>> =>
+    ipcRenderer.invoke(Channels.gpuToolDelete),
+  gpuToolSelect: (choice: 'cpu' | 'gpu'): Promise<IpcResult<GpuToolState>> =>
+    ipcRenderer.invoke(Channels.gpuToolSelect, choice),
+
   // Burnin
   burninStart: (opts: BurninStartRequest): Promise<IpcResult<{ channelId: string }>> =>
     ipcRenderer.invoke(Channels.burninStart, opts),
@@ -100,6 +122,9 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.shellWriteTextFile, filePath, content),
   shellFileExists: (filePath: string): Promise<boolean> =>
     ipcRenderer.invoke(Channels.shellFileExists, filePath),
+  // REQ-0194 — read `.mojioko` project files back as UTF-8 strings.
+  shellReadTextFile: (filePath: string): Promise<string> =>
+    ipcRenderer.invoke(Channels.shellReadTextFile, filePath),
 
   // Streaming event subscriptions
   subscribeToChannel: (channelId: string, cb: (payload: unknown) => void): (() => void) => {

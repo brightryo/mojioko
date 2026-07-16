@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
+import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight, ChevronDown, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
@@ -22,7 +22,9 @@ import {
   toggleDeleteRow as runToggleDeleteRow,
   duplicateRow as runDuplicateRow
 } from '@/lib/entry-row-actions'
+import { commitTextEditWithHistory } from '@/lib/commit-text-edit'
 import { formatEditedTimecode, editedDurationOfEntry } from '@/lib/time'
+import { shortcutHint } from '@/lib/shortcut-hint'
 import { getAnchorAssPosition, clampAssPosition, recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
@@ -120,6 +122,9 @@ export function TimelineBlockInspector({
 }: TimelineBlockInspectorProps) {
   const { t } = useTranslation(['step2', 'common', 'step1'])
   const updateEntry = useProjectStore((s) => s.updateEntry)
+  // REQ-0125 — history-less preview writer used from the color picker's
+  // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
+  const updateEntryPreview = useProjectStore((s) => s.updateEntryPreview)
   const pushHistory = useHistoryStore((s) => s.push)
   const isAudioOnly = useIsAudioOnly()
   // REQ-20260615-033: offset row needs the output video resolution to
@@ -158,6 +163,22 @@ export function TimelineBlockInspector({
   const [draft, setDraft] = useState(initialDraft)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [sizeOutOfRange, setSizeOutOfRange] = useState(false)
+
+  // REQ-0184 §4 — per-section collapse state for the three inspector
+  // sections (subtitle / layout / background).  Owner spec:
+  //   subtitle    -- default open
+  //   layout      -- default open
+  //   background  -- default closed
+  // State is **local** to the component instance, so it persists
+  // across row-selection changes (React keeps the same
+  // TimelineBlockInspector instance mounted as `entry` prop swaps),
+  // but resets whenever the inspector unmounts (empty selection,
+  // step2 route unmount).  This matches the REQ's "毎回、編集画面に入
+  // ったら 開/開/閉 で始まる" spec — entering step2 fresh gives the
+  // defaults; the user can toggle within a session.
+  const [subtitleSectionOpen, setSubtitleSectionOpen] = useState(true)
+  const [layoutSectionOpen, setLayoutSectionOpen] = useState(true)
+  const [backgroundSectionOpen, setBackgroundSectionOpen] = useState(false)
   // REQ-20260612-004: same dirty / composing pattern as CellEditor in
   // subtitle-table.tsx.  The Inspector's textarea is always mounted
   // (unlike CellEditor, which is gated by `editingText`), so without
@@ -169,6 +190,11 @@ export function TimelineBlockInspector({
   // RES-20260612-004 §3 for the full root-cause analysis.
   const dirtyRef = useRef(false)
   const isComposingRef = useRef(false)
+  // REQ-0127 Phase 1 — snapshot of `entry.text` when the textarea
+  // gained focus.  Populated in onFocus and cleared in onBlur; used
+  // as the beforePatch on the commit-time history push so Undo
+  // rewinds past every preview keystroke to the pre-focus text.
+  const textFocusValueRef = useRef<string | null>(null)
 
   // Accept external entry.text updates while the inspector is open
   // and the textarea is mounted, gated by:
@@ -185,20 +211,22 @@ export function TimelineBlockInspector({
   function commitText(next: string) {
     // Round-trip newlines back to ASS \N
     const normalized = next.replace(/\n/g, '\\N')
-    if (normalized === entry.text) {
-      // No actual change to commit, but we still clear the dirty flag
-      // so a subsequent external update is allowed to sync into draft.
-      dirtyRef.current = false
-      return
-    }
-    const snapshot = { ...entry }
-    const patch = { text: normalized, isEdited: true }
-    pushHistory({
+    // REQ-0199 — capture-and-clear the pre-focus ref BEFORE handing off, so
+    // the helper's guard has the correct comparator and any subsequent focus
+    // session starts clean regardless of whether history was pushed.  The
+    // dirty flag is likewise cleared unconditionally — the sync effect
+    // (L204-208) treats dirtyRef=false as "safe to accept external updates,"
+    // which is true both when we pushed and when the guard skipped.
+    const focusText = textFocusValueRef.current
+    textFocusValueRef.current = null
+    commitTextEditWithHistory({
+      entry,
+      normalizedNew: normalized,
+      normalizedOnFocus: focusText,
       label: t('history.editText'),
-      undo: () => updateEntry(entry.id, snapshot),
-      redo: () => updateEntry(entry.id, { ...snapshot, ...patch })
+      updateEntry,
+      pushHistory,
     })
-    updateEntry(entry.id, patch)
     dirtyRef.current = false
   }
 
@@ -209,11 +237,24 @@ export function TimelineBlockInspector({
    * deliberately NOT supported here — those flow through the dedicated
    * TimeEditorDialog or drag handlers in TimelineView.
    */
-  function applyStyleEdit(label: string, patch: Partial<SubtitleEntry>) {
+  function applyStyleEdit(
+    label: string,
+    patch: Partial<SubtitleEntry>,
+    // REQ-0125 — when the caller (color picker's onCommit) has already
+    // streamed preview mutations into the store during a drag, `entry`
+    // (and therefore `snapshot`) reflects the AFTER value.  A naive
+    // `updateEntry(id, snapshot)` on undo would then restore the after
+    // value = no-op.  Passing `beforePatch` with the fields' pre-drag
+    // values overrides those fields on the undo path so the popover's
+    // coarse-grained history op rewinds all the way past the drag
+    // stream.
+    beforePatch?: Partial<SubtitleEntry>
+  ) {
     const snapshot = { ...entry }
+    const undoState = beforePatch ? { ...snapshot, ...beforePatch } : snapshot
     pushHistory({
       label,
-      undo: () => updateEntry(entry.id, snapshot),
+      undo: () => updateEntry(entry.id, undoState),
       redo: () => updateEntry(entry.id, { ...snapshot, ...patch, isEdited: true })
     })
     updateEntry(entry.id, { ...patch, isEdited: true })
@@ -237,13 +278,35 @@ export function TimelineBlockInspector({
     if (next === entry.fontSizePx) return
     applyStyleEdit(t('history.editSize'), { fontSizePx: next })
   }
-  function handleTextColorChange(hex: string) {
-    applyStyleEdit(t('history.editColor'), { textColorHex: hex })
+  // REQ-0125 — colour picker onChange fires per-frame during S/V drag.
+  // Route those into the history-less preview API so the drag stream
+  // lights up the overlay without spamming Undo.  The single coarse-
+  // grained history op fires from onCommit at popover close.
+  function handleTextColorPreview(hex: string) {
+    updateEntryPreview(entry.id, { textColorHex: hex })
   }
-  function handleOutlineColorChange(hex: string) {
-    applyStyleEdit(t('history.editColor'), { outlineColorHex: hex })
+  function handleTextColorCommit(hex: string, hexOnOpen: string) {
+    applyStyleEdit(
+      t('history.editColor'),
+      { textColorHex: hex },
+      { textColorHex: hexOnOpen }
+    )
+  }
+  function handleOutlineColorPreview(hex: string) {
+    updateEntryPreview(entry.id, { outlineColorHex: hex })
+  }
+  function handleOutlineColorCommit(hex: string, hexOnOpen: string) {
+    applyStyleEdit(
+      t('history.editColor'),
+      { outlineColorHex: hex },
+      { outlineColorHex: hexOnOpen }
+    )
   }
   function handleColorPairApply(text: string, outline: string) {
+    // Pair clicks are a single deterministic action, not a drag, so
+    // they push their history op directly through applyStyleEdit.
+    // ColorPicker.handlePairClick suppresses the subsequent onCommit
+    // fire so we never double-push (REQ-0125).
     applyStyleEdit(t('history.editColor'), {
       textColorHex: text,
       outlineColorHex: outline
@@ -297,8 +360,13 @@ export function TimelineBlockInspector({
     applyStyleEdit(t('history.editLayout'),
       patchWithPreservedOffset({ horizontalPosition: v }))
   }
-  function handleVerticalPositionChange(v: 'top' | 'bottom') {
+  function handleVerticalPositionChange(v: 'top' | 'center' | 'bottom') {
     if (v === entry.verticalPosition) return
+    // REQ-0140 — do NOT reset verticalMarginPx when flipping to/from
+    // `'center'`.  The margin value is preserved so switching center →
+    // top/bottom restores the user's last margin (REQ §3.2 last
+    // bullet).  The margin input is only visually disabled while the
+    // row is centred; the underlying value survives.
     applyStyleEdit(t('history.editLayout'),
       patchWithPreservedOffset({ verticalPosition: v }))
   }
@@ -354,6 +422,20 @@ export function TimelineBlockInspector({
     if (entry.posX === undefined && entry.posY === undefined) return
     applyStyleEdit(t('history.editOffset'), { posX: undefined, posY: undefined })
   }
+  /**
+   * REQ-0127 Phase 2 — Enter on any of the inline numeric inputs
+   * (font size / offsetX / offsetY) commits the typed value via the
+   * existing onBlur path.  Blurring the input triggers the handler
+   * with `e.target.value` still holding the typed string, matching
+   * the click-away gesture and preserving the `key={entry.field}`
+   * remount that snaps back an out-of-range typed value.
+   */
+  function handleNumericInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.currentTarget.blur()
+    }
+  }
   function handleBackgroundEnabledChange(checked: boolean) {
     if (checked === entry.subtitleBackground.enabled) return
     applyStyleEdit(t('history.editBackground'), {
@@ -384,9 +466,25 @@ export function TimelineBlockInspector({
     if (!dirtyRef.current) return
     commitText(draft)
   }
+  // REQ-0127 Phase 1 — capture the store's current text at focus time
+  // so commitText can use it as the beforePatch for Undo.  We snapshot
+  // `entry.text` (the store value) rather than `draft` because an
+  // out-of-band external update (敷き詰め改行 etc.) can have moved
+  // the store past the last render's draft, and we want Undo to
+  // rewind to what the user was actually looking at.
+  function handleTextFocus() {
+    textFocusValueRef.current = entry.text
+  }
   function handleDraftChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     dirtyRef.current = true
-    setDraft(e.target.value)
+    const next = e.target.value
+    setDraft(next)
+    // REQ-0127 Phase 1 — stream every keystroke into the store via the
+    // history-less preview writer.  Skip while an IME composition is
+    // in progress; the composition-end handler flushes the final value.
+    if (!isComposingRef.current) {
+      updateEntryPreview(entry.id, { text: next.replace(/\n/g, '\\N') })
+    }
   }
   function handleCompositionStart() {
     isComposingRef.current = true
@@ -397,7 +495,10 @@ export function TimelineBlockInspector({
     // blur flushes the converted text.  `e.target.value` already
     // reflects the post-composition value when this fires.
     dirtyRef.current = true
-    setDraft((e.target as HTMLTextAreaElement).value)
+    const next = (e.target as HTMLTextAreaElement).value
+    setDraft(next)
+    // REQ-0127 Phase 1 — flush the IME-committed value into preview.
+    updateEntryPreview(entry.id, { text: next.replace(/\n/g, '\\N') })
   }
 
   // -------------------------------------------------------------------------
@@ -540,19 +641,24 @@ export function TimelineBlockInspector({
               state never toggles. */}
           <button
             type="button"
+            // REQ-0138 §1.3 — the delete/restore icon toggles labels
+            // (Delete when live, Restore when deleted).  The DEL/BS
+            // shortcut suffix is shown only on the Delete label because
+            // REQ-0138 §1.1 made DEL/BS delete-only; showing a
+            // shortcut hint next to "Restore" would be a lie.
             title={
               isTrimDeleted
                 ? t('action.trimDeletedHint')
                 : entry.isDeleted
                   ? t('action.restoreRow')
-                  : t('action.deleteRow')
+                  : t('action.deleteRow') + shortcutHint('delete')
             }
             aria-label={
               isTrimDeleted
                 ? t('action.trimDeletedHint')
                 : entry.isDeleted
                   ? t('action.restoreRow')
-                  : t('action.deleteRow')
+                  : t('action.deleteRow') + shortcutHint('delete')
             }
             onClick={() => {
               if (isTrimDeleted) {
@@ -575,8 +681,8 @@ export function TimelineBlockInspector({
           </button>
           <button
             type="button"
-            title={t('action.resetRow')}
-            aria-label={t('action.resetRow')}
+            title={t('action.resetRow') + shortcutHint('reset')}
+            aria-label={t('action.resetRow') + shortcutHint('reset')}
             onClick={handleReset}
             disabled={!canReset}
             className={cn(
@@ -597,8 +703,8 @@ export function TimelineBlockInspector({
               rows mirroring the wrap-button gate. */}
           <button
             type="button"
-            title={t('action.duplicateRowHelp')}
-            aria-label={t('action.duplicateRowHelp')}
+            title={t('action.duplicateRowHelp') + shortcutHint('duplicate')}
+            aria-label={t('action.duplicateRowHelp') + shortcutHint('duplicate')}
             onClick={handleDuplicate}
             disabled={isFrozen}
             className={cn(
@@ -671,12 +777,29 @@ export function TimelineBlockInspector({
           audio-only mode (REQ-028) では textarea のみ表示し、font /
           style 一式は出さない。 */}
       <div className="space-y-2 border-t border-line pt-2">
-        <div className="text-body font-semibold text-fg-secondary">
-          {t('timeline.inspector.subtitleSection')}
-        </div>
+        {/* REQ-0184 §4 — section header is now a click-to-collapse
+            toggle.  Chevron + heading text, whole row clickable.
+            Section content wraps into a conditional `hidden` div so
+            the inputs' internal state (draft text, focus, IME
+            composition guards) is preserved across collapses. */}
+        <button
+          type="button"
+          onClick={() => setSubtitleSectionOpen((v) => !v)}
+          aria-expanded={subtitleSectionOpen}
+          className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+        >
+          {subtitleSectionOpen ? (
+            <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+          )}
+          <span>{t('timeline.inspector.subtitleSection')}</span>
+        </button>
+        <div className={cn('space-y-2', !subtitleSectionOpen && 'hidden')}>
         <textarea
           ref={textareaRef}
           value={draft}
+          onFocus={handleTextFocus}
           onChange={handleDraftChange}
           onBlur={handleBlur}
           onCompositionStart={handleCompositionStart}
@@ -730,6 +853,7 @@ export function TimelineBlockInspector({
                   key={entry.fontSizePx}
                   onChange={handleSizeChange}
                   onBlur={handleSizeBlur}
+                  onKeyDown={handleNumericInputKeyDown}
                   disabled={isFrozen}
                   title={t('step1:subtitleDefaults.sizeHint', {
                     min: FONT_SIZE_MIN_PX,
@@ -766,10 +890,12 @@ export function TimelineBlockInspector({
               <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.textColor')}</label>
               <ColorPicker
                 value={entry.textColorHex}
-                onChange={handleTextColorChange}
+                onChange={handleTextColorPreview}
+                onCommit={handleTextColorCommit}
                 onPairApply={handleColorPairApply}
                 disabled={isFrozen}
                 swatchOnly
+                heading={t('common:colorPicker.headingText')}
               />
             </div>
             {/* Outline colour */}
@@ -777,10 +903,12 @@ export function TimelineBlockInspector({
               <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.outlineColor')}</label>
               <ColorPicker
                 value={entry.outlineColorHex}
-                onChange={handleOutlineColorChange}
+                onChange={handleOutlineColorPreview}
+                onCommit={handleOutlineColorCommit}
                 onPairApply={handleColorPairApply}
                 disabled={isFrozen}
                 swatchOnly
+                heading={t('common:colorPicker.headingOutline')}
               />
             </div>
             {/* Outline width — REQ-20260615-016: slider column narrowed to
@@ -803,7 +931,12 @@ export function TimelineBlockInspector({
             {/* REQ-20260615-050 — fade duration slider (0–0.5 s, 0 = OFF).
                 Same visual rhythm as Outline width above so the two
                 slider rows form a consistent block within the 字幕
-                section. */}
+                section.
+                REQ-0184 §4 — this row is the last child of the
+                collapsible subtitle-section wrapper `<div>` opened
+                right after the section-header button above; the
+                wrapper closes just before the `</div>` that closes
+                the outer `space-y-2 border-t` section. */}
             <div className="flex items-center justify-between gap-2">
               <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.fade')}</label>
               <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
@@ -818,15 +951,28 @@ export function TimelineBlockInspector({
             </div>
           </>
         )}
+        </div>{/* REQ-0184 §4 — close subtitle-section collapse wrapper */}
       </div>
 
       {/* § 5 — レイアウト section (REQ-20260614-001 補遺⑪).
           水平 / 垂直 / マージン。audio-only 非表示。 */}
       {!isAudioOnly && (
         <div className="space-y-2 border-t border-line pt-2">
-          <div className="text-body font-semibold text-fg-secondary">
-            {t('timeline.inspector.layoutSection')}
-          </div>
+          {/* REQ-0184 §4 — collapse toggle (default open) */}
+          <button
+            type="button"
+            onClick={() => setLayoutSectionOpen((v) => !v)}
+            aria-expanded={layoutSectionOpen}
+            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+          >
+            {layoutSectionOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+            )}
+            <span>{t('timeline.inspector.layoutSection')}</span>
+          </button>
+          <div className={cn('space-y-2', !layoutSectionOpen && 'hidden')}>
           {/* REQ-20260615-014 B: horizontal / vertical lift from native
               <select> to a single-select SegmentGroup so all options are
               visible up-front.  Value bindings are unchanged. */}
@@ -846,18 +992,33 @@ export function TimelineBlockInspector({
           </div>
           <div className="flex items-center justify-between gap-2">
             <label className="text-callout font-semibold text-fg-secondary shrink-0">{t('styleCell.layoutV')}</label>
-            <SegmentGroup<'top' | 'bottom'>
+            <SegmentGroup<'top' | 'center' | 'bottom'>
               value={entry.verticalPosition}
               onChange={handleVerticalPositionChange}
               disabled={isFrozen}
               ariaLabel={t('subtitlePosition.vertical')}
               options={[
                 { value: 'top', label: t('subtitlePosition.top') },
+                { value: 'center', label: t('subtitlePosition.center') },
                 { value: 'bottom', label: t('subtitlePosition.bottom') },
               ]}
             />
           </div>
-          <div className="flex items-center justify-between gap-2">
+          {/* REQ-0140 — when the row is center-aligned the margin has no
+              effect (libass `\an4/5/6` ignores MarginV; §3.2).  Keep
+              the input in the layout (§3.2 "隠さず disabled") and
+              surface the reason via a title tooltip.  The stored
+              verticalMarginPx value is preserved across the flip so
+              switching back to top/bottom restores the user's last
+              margin. */}
+          <div
+            className="flex items-center justify-between gap-2"
+            title={
+              entry.verticalPosition === 'center'
+                ? t('subtitlePosition.marginDisabledCenter')
+                : undefined
+            }
+          >
             <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.marginV')}</label>
             {/* REQ-20260615-059 B — margin gets the ±10 chevron stepper
                 the size row already uses, so the same wrist-flick keeps
@@ -879,7 +1040,7 @@ export function TimelineBlockInspector({
                 applyStyleEdit(t('history.editMargin'),
                   patchWithPreservedOffset({ verticalMarginPx: next }))
               }}
-              disabled={isFrozen}
+              disabled={isFrozen || entry.verticalPosition === 'center'}
               ariaLabel={t('subtitlePosition.margin')}
             />
           </div>
@@ -907,6 +1068,7 @@ export function TimelineBlockInspector({
                   defaultValue={offsetX}
                   key={`offsetX-${entry.id}-${offsetX}`}
                   onBlur={handleOffsetXBlur}
+                  onKeyDown={handleNumericInputKeyDown}
                   disabled={isFrozen}
                   aria-label={t('styleCell.offsetX')}
                   className={cn(
@@ -922,6 +1084,7 @@ export function TimelineBlockInspector({
                   defaultValue={offsetY}
                   key={`offsetY-${entry.id}-${offsetY}`}
                   onBlur={handleOffsetYBlur}
+                  onKeyDown={handleNumericInputKeyDown}
                   disabled={isFrozen}
                   aria-label={t('styleCell.offsetY')}
                   className={cn(
@@ -949,6 +1112,7 @@ export function TimelineBlockInspector({
               </div>
             </div>
           )}
+          </div>{/* REQ-0184 §4 — close layout-section collapse wrapper */}
         </div>
       )}
 
@@ -961,11 +1125,28 @@ export function TimelineBlockInspector({
           {/* REQ-0096 — section heading carries a HelpIcon explaining that
               enabling the background disables the outline color.  This is
               libass-spec behavior (BorderStyle=3 paints the box from
-              OutlineColour, so the outline can't render separately). */}
-          <div className="text-body font-semibold text-fg-secondary flex items-center gap-1.5">
+              OutlineColour, so the outline can't render separately).
+              REQ-0184 §4 — heading is now a collapse toggle (default
+              CLOSED per owner spec).  HelpIcon stays but moves inside
+              the button so hovering the icon does not toggle collapse
+              — the icon has its own stopPropagation on its click.  */}
+          <button
+            type="button"
+            onClick={() => setBackgroundSectionOpen((v) => !v)}
+            aria-expanded={backgroundSectionOpen}
+            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+          >
+            {backgroundSectionOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+            )}
             <span>{t('timeline.inspector.backgroundSection')}</span>
-            <HelpIcon content={t('timeline.inspector.backgroundSectionHelp')} />
-          </div>
+            <span onClick={(e) => e.stopPropagation()}>
+              <HelpIcon content={t('timeline.inspector.backgroundSectionHelp')} />
+            </span>
+          </button>
+          <div className={cn('space-y-2', !backgroundSectionOpen && 'hidden')}>
           <div className="flex items-center justify-between gap-2">
             <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.bgEnabled')}</label>
             <Switch
@@ -1018,6 +1199,7 @@ export function TimelineBlockInspector({
               ariaLabel={t('styleCell.bgOpacity')}
             />
           </div>
+          </div>{/* REQ-0184 §4 — close background-section collapse wrapper */}
         </div>
       )}
 

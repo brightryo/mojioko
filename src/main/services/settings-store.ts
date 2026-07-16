@@ -57,7 +57,20 @@ function buildDefaults(language?: SupportedLanguage): AppSettings {
     subtitleBackground: { ...BURNIN_DEFAULTS.subtitleBackground },
     activeModelId: null,
     lastInputDir: null,
-    lastOutputDir: null
+    lastOutputDir: null,
+    // REQ-0121 — user-preferred fixed default folders (Settings > General).
+    // `null` = fall back to the OS Videos folder in the dialog handler.
+    defaultInputDir: null,
+    defaultOutputDir: null,
+    // REQ-0194 — same shape as the REQ-0121 input/output folder defaults;
+    // `null` = OS Videos fallback in the dialog handler.
+    defaultProjectDir: null,
+    // REQ-0150 — default the accelerator to CPU.  Every fresh install
+    // and every settings.json older than v1.3.3 lands on CPU which
+    // matches the pre-REQ-0150 behaviour (no GPU tools bundled = no
+    // GPU env var injected).  Users opt in via the 2-card picker
+    // after downloading the GPU tools.
+    activeAccelerator: 'cpu'
   }
 }
 

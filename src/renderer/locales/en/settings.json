@@ -4,7 +4,8 @@
     "general": "General",
     "fonts": "Fonts",
     "defaultStyle": "Subtitle Style",
-    "whisper": "Whisper"
+    "whisper": "Whisper",
+    "shortcuts": "Shortcuts"
   },
   "general": {
     "language": "Language",
@@ -21,7 +22,15 @@
     "baseColorMist": "Mist",
     "baseColorTaupe": "Taupe",
     "fadeDuration": "Fade duration (seconds)",
-    "fadeDurationHint": "0.1–0.5 sec"
+    "fadeDurationHint": "0.1–0.5 sec",
+    "defaultAudioTrack": "Transcription audio track",
+    "defaultAudioTrackOption": "Track {{index}}",
+    "defaultInputDir": "Input folder",
+    "defaultOutputDir": "Output folder",
+    "defaultProjectDir": "Project folder",
+    "folderPathUsingSystemVideos": "System Videos folder",
+    "folderPathBrowse": "Browse…",
+    "folderPathClear": "Clear"
   },
   "fonts": {
     "hint": "Click a font to set it as the default. Adding and downloading fonts is a paid-version feature."
@@ -31,6 +40,15 @@
   },
   "whisper": {
     "hint": "Default settings for Whisper."
+  },
+  "shortcuts": {
+    "hint": "Read-only reference for the currently assigned keyboard shortcuts.",
+    "groupEditor": "Editor",
+    "groupEditorDesc": "Active when no dialog / drawer is open and focus is outside any text input.",
+    "groupTimeline": "Timeline view",
+    "groupTimelineDesc": "Active only while the timeline view is on screen. In the list view arrow keys revert to native focus navigation.",
+    "groupOverlay": "While a dialog / drawer is open",
+    "groupOverlayDesc": "Every dialog and drawer (settings, add row, time editor, color picker, burn-in, etc.) closes on Esc. The color picker also accepts Enter as OK."
   },
   "about": {
     "developedBy": "This app was developed by BrightRyo.",

@@ -84,7 +84,15 @@ export interface SubtitleEntryOriginal {
    * `shared/burnin-defaults.ts`.
    */
   horizontalPosition: 'left' | 'center' | 'right'
-  verticalPosition: 'top' | 'bottom'
+  /**
+   * REQ-0140 — widened from `'top' | 'bottom'` (CLAUDE.md §21 protected
+   * `SubtitleEntry` field, owner-approved 2026-07-08).  When `'center'`
+   * the entry ignores `verticalMarginPx` (libass `\an4/5/6` anchors at
+   * the vertical middle regardless of MarginV), and the inspector /
+   * bulk-edit margin input is disabled with an explanatory tooltip.
+   * `'top'` / `'bottom'` retain their pre-REQ-0140 semantics.
+   */
+  verticalPosition: 'top' | 'center' | 'bottom'
   verticalMarginPx: number
   /**
    * Per-row subtitle background (REQ-20260613-016 / v1.2.2 機能A).
@@ -172,7 +180,7 @@ export interface TranscriptionAdvancedParams {
 
 export interface BurninPosition {
   horizontalPosition: 'left' | 'center' | 'right'
-  verticalPosition: 'top' | 'bottom'
+  verticalPosition: 'top' | 'center' | 'bottom'
   verticalMarginPx: number
 }
 
@@ -265,6 +273,41 @@ export interface AppSettings {
   activeFontId?: FontId
   lastInputDir: string | null
   lastOutputDir: string | null
+  /**
+   * REQ-0121 — User-preferred fixed default folders shown in the input /
+   * output dialogs.  Distinct from `lastInputDir` / `lastOutputDir` which
+   * are MRU (updated after each open/save).  When `null` the dialog falls
+   * back to `app.getPath('videos')`.  The main-side handler validates the
+   * path on use (`fs.existsSync`) and silently falls back to Videos when
+   * the folder has been removed / moved — no toast to avoid noise.
+   */
+  defaultInputDir?: string | null
+  defaultOutputDir?: string | null
+  /**
+   * REQ-0194 — user-preferred default folder for the `.mojioko` project
+   * file save / open dialogs.  Same shape as `defaultInputDir` /
+   * `defaultOutputDir` (nullable, folder-picker on Settings > General,
+   * lazy existence check on use, silent fallback to the OS Videos
+   * folder).  Optional in the persisted struct so settings.json files
+   * predating this REQ hydrate cleanly.
+   */
+  defaultProjectDir?: string | null
+  /**
+   * REQ-0150 — user-picked transcription accelerator.  `'cpu'` (default)
+   * runs faster-whisper on the CPU path; `'gpu'` opts into CUDA via the
+   * downloaded GPU tools (`%APPDATA%/MOJIOKO/gpu-tools/cuda-v1/`).
+   *
+   * The renderer surfaces this via the 2-card picker under the Whisper
+   * model accordion; `transcription-sidecar.ts` reads it at spawn time
+   * and only injects `MOJIOKO_GPU_TOOL_DIR` when this is `'gpu'` AND
+   * the tools are fully installed on disk.  A user who has downloaded
+   * the GPU tools but explicitly picked the CPU card gets CPU
+   * execution — the tools stay on disk for a later re-select.
+   *
+   * Optional in the persisted struct so settings.json files predating
+   * this REQ hydrate as CPU (the safe default — nothing extra to load).
+   */
+  activeAccelerator?: 'cpu' | 'gpu'
 }
 
 // ---------------------------------------------------------------------------

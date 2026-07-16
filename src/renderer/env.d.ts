@@ -2,6 +2,7 @@
 
 import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
+import type { GpuToolState } from '../shared/gpu-tool'
 import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult } from '../shared/ipc-contracts'
 
 type IpcOk<T> = { ok: true; data: T }
@@ -25,6 +26,12 @@ declare global {
         defaultDir?: string,
         filters?: { name: string; extensions: string[] }[]
       ) => Promise<string | null>
+      // REQ-0121 — folder picker used by Settings > General.
+      openDirectoryDialog: (defaultDir?: string) => Promise<string | null>
+      // REQ-0194 — `.mojioko` project file open dialog.
+      openProjectDialog: (defaultDir?: string) => Promise<string | null>
+      // REQ-0223 — `.srt` file open dialog for the step2 import flow.
+      openSrtDialog: (defaultDir?: string) => Promise<string | null>
 
       videoProbe: (path: string) => Promise<IpcResult<VideoInfo>>
       videoExtractThumbnail: (path: string, atSec: number) => Promise<IpcResult<string>>
@@ -48,6 +55,13 @@ declare global {
       fontReadOfl: (fontId: FontId) => Promise<IpcResult<string>>
       fontReadBytes: (fontId: FontId) => Promise<IpcResult<ArrayBuffer>>
 
+      // REQ-0149 — GPU acceleration tools.
+      gpuToolState: () => Promise<IpcResult<GpuToolState>>
+      gpuToolDownload: () => Promise<IpcResult<{ channelId: string }>>
+      gpuToolDownloadCancel: (channelId: string) => Promise<void>
+      gpuToolDelete: () => Promise<IpcResult<GpuToolState>>
+      gpuToolSelect: (choice: 'cpu' | 'gpu') => Promise<IpcResult<GpuToolState>>
+
       burninStart: (opts: BurninStartRequest) => Promise<IpcResult<{ channelId: string }>>
       burninCancel: (channelId: string) => Promise<void>
 
@@ -61,6 +75,8 @@ declare global {
       shellOpenThirdPartyLicensesFolder: () => Promise<void>
       shellWriteTextFile: (filePath: string, content: string) => Promise<void>
       shellFileExists: (filePath: string) => Promise<boolean>
+      // REQ-0194 — read `.mojioko` project files back as UTF-8 strings.
+      shellReadTextFile: (filePath: string) => Promise<string>
 
       subscribeToChannel: (channelId: string, cb: (payload: unknown) => void) => () => void
     }

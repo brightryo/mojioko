@@ -144,6 +144,8 @@ export function WhisperAdvancedControls({
               max={1}
               step={0.05}
               defaultValue={transcriptionAdvanced.vadThreshold}
+              // REQ-0128 Phase 1 — Enter commits via blur (DaVinci-style).
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
               onBlur={(e) => {
                 const v = parseFloat(e.target.value)
                 if (isNaN(v)) return
@@ -171,6 +173,7 @@ export function WhisperAdvancedControls({
               max={1000}
               step={50}
               defaultValue={transcriptionAdvanced.minSpeechDurationMs}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
               onBlur={(e) => {
                 const v = parseInt(e.target.value, 10)
                 if (isNaN(v)) return
@@ -199,6 +202,7 @@ export function WhisperAdvancedControls({
               max={5000}
               step={100}
               defaultValue={transcriptionAdvanced.minSilenceDurationMs}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
               onBlur={(e) => {
                 const v = parseInt(e.target.value, 10)
                 if (isNaN(v)) return
@@ -232,6 +236,7 @@ export function WhisperAdvancedControls({
             max={20}
             step={1}
             defaultValue={transcriptionAdvanced.beamSize}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
             onBlur={(e) => {
               const v = parseInt(e.target.value, 10)
               if (isNaN(v)) return
@@ -275,12 +280,15 @@ export function WhisperAdvancedControls({
         </AdvancedParamRow>
       </div>
 
-      {/* ── Reset + note ────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between pt-1">
-        <p className="text-body-sm italic text-muted-foreground/60">
-          {t('advanced.futureNote')}
-        </p>
-        {isAdvancedChanged && (
+      {/* ── Reset button ─────────────────────────────────────────────
+          REQ-0225 — the "設定は自動的に保存されます" note was retired.
+          MOJIOKO auto-saves every settings surface; a dedicated note
+          on this one panel was redundant.  The layout now shrinks to
+          just the reset button (right-aligned via `justify-end`,
+          only rendered when the current values differ from
+          TRANSCRIPTION_DEFAULTS). */}
+      {isAdvancedChanged && (
+        <div className="flex items-center justify-end pt-1">
           <Button
             variant="ghost"
             size="sm"
@@ -290,8 +298,8 @@ export function WhisperAdvancedControls({
             <RotateCcw className="h-3 w-3" />
             {t('advanced.resetToDefaults')}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

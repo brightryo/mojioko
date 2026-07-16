@@ -38,6 +38,21 @@ export interface TranscriptionStartRequest {
     fadeDurationSec: number
   }
   advanced: TranscriptionAdvancedParams
+  /**
+   * REQ-0207 — experimental word-level subtitle feature (default off).
+   *
+   * When `true` the sidecar sets `word_timestamps=True` on the underlying
+   * faster-whisper call and re-splits each returned segment into short
+   * 1–3 word cues before emitting the `segment` event.  The emit shape
+   * itself is unchanged — the renderer sees more segments, not different
+   * segments.
+   *
+   * Optional so pre-REQ-0207 callers (and the packaged sidecar EXE
+   * before it is rebuilt) still work.  When omitted or `false` the
+   * sidecar keyword-for-keyword matches the pre-REQ-0207 transcribe
+   * call, which is the byte-identical contract v1.3.3 users depend on.
+   */
+  wordSubtitle?: boolean
 }
 
 export interface BurninStartRequest {
@@ -133,13 +148,41 @@ export type TranscriptionEvent =
   | { event: 'segment'; segment: { startSec: number; endSec: number; text: string } }
   | { event: 'progress'; percent: number }
   /**
-   * REQ-086 — phase change.  Emitted by the main process between Whisper
-   * completion and preview-mix generation so the renderer can update
-   * the drawer label (e.g. "音声準備中…").  No-op when the source has
-   * fewer than 2 audio tracks; in that case the run goes Whisper →
-   * `completed` directly without a `phase` event.
+   * REQ-086 / REQ-0142 — phase change.  Two distinct sources share this
+   * event shape:
+   *
+   *   - **Pre-Whisper prep (sidecar, REQ-0142)** — emitted from
+   *     `python-sidecar/main.py` at each preparation boundary so the
+   *     renderer can label the "10-second 0%" region (RES-0141 §1).
+   *     Values: `'extractAudio'` (ffmpeg audio extract), `'loadModel'`
+   *     (`WhisperModel(...)` construction), `'prepass'` (Silero VAD +
+   *     language detection majority-vote inside `model.transcribe`).
+   *     These fire strictly before the first `progress` event and
+   *     before `started`.
+   *
+   *   - **Post-Whisper preview-mix (main process, REQ-086)** — emitted
+   *     between Whisper `completed` and preview-mix `completed` when
+   *     the source has ≥2 audio tracks so the drawer label can flip
+   *     to "音声準備中…".  Single-track sources go Whisper →
+   *     `completed` directly without a `phase` event.
+   *
+   * The renderer distinguishes purely by the `phase` value; the two
+   * sources cannot both be in-flight simultaneously so there is no
+   * ordering ambiguity.
    */
-  | { event: 'phase'; phase: 'preview-mix' }
+  | { event: 'phase'; phase: 'extractAudio' | 'loadModel' | 'prepass' | 'preview-mix' }
+  /**
+   * REQ-0145 — the sidecar reports the actual inference device after
+   * `WhisperModel(...)` succeeds.  Emitted exactly once per run,
+   * between the `loadModel` and `prepass` phase events (see
+   * `python-sidecar/main.py`).  `device: 'cuda'` = the CUDA build's
+   * GPU path is live; `'cpu'` = we're running on the pre-REQ-0145
+   * fallback path.  `fellBack: true` means we asked for CUDA but the
+   * WhisperModel constructor threw and we retried on CPU (missing
+   * cuDNN redist / driver mismatch / OOM — see the sidecar stderr
+   * log for the underlying error).
+   */
+  | { event: 'deviceInfo'; device: 'cuda' | 'cpu'; computeType: string; fellBack: boolean }
   /**
    * REQ-086 — `previewMixUrl` carries the `mojioko-preview-mix://` URL
    * (with a cache-buster query) when a multi-track preview audio file
@@ -179,6 +222,15 @@ export type DownloadModelEvent =
   | { event: 'progress'; file: string; fileIndex: number; totalFiles: number; percent: number }
   | { event: 'completed' }
   | { event: 'failed'; error: string; errorCode?: 'network' | 'fatal' | 'aborted' }
+
+/**
+ * REQ-0149 — re-export the GPU tool event union from `shared/gpu-tool.ts`
+ * so consumers can import both from `ipc-contracts.ts` (protocol-shape
+ * imports) and from `gpu-tool.ts` (state / constants imports)
+ * interchangeably.  Structural parity with the fonts / whisper model
+ * download event families.
+ */
+export type { DownloadGpuToolEvent, GpuToolState } from './gpu-tool'
 
 // ---------------------------------------------------------------------------
 // Settings

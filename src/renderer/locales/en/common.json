@@ -39,8 +39,8 @@
     "local": "Local rendering · no network"
   },
   "dialog": {
-    "discardChanges": "Discard changes?",
-    "discardChangesDesc": "You have unsaved edits. Navigate back anyway?",
+    "discardChanges": "Return to the transcription screen?",
+    "discardChangesDesc": "Any in-progress edits will be discarded.",
     "dontAskAgain": "Don't ask again this session"
   },
   "storeUpsell": {
@@ -56,7 +56,23 @@
     "scopeGlobal": "Global",
     "scopeStep1": "Step 1 — Transcribe",
     "scopeStep2": "Step 2 — Edit",
-    "scopeStep3": "Step 3 — Render"
+    "scopeStep3": "Step 3 — Render",
+    "playPause": "Play / pause",
+    "undo": "Undo",
+    "redo": "Redo",
+    "delete": "Delete selected clip",
+    "duplicate": "Duplicate selected clip",
+    "reset": "Reset selected clip",
+    "selectAll": "Select all rows",
+    "clearSel": "Clear selection",
+    "timelinePrevBoundary": "Previous boundary",
+    "timelineNextBoundary": "Next boundary",
+    "timelineStart": "Jump to start",
+    "timelineEnd": "Jump to end",
+    "timelineZoomIn": "Zoom in",
+    "timelineZoomOut": "Zoom out",
+    "modalCancel": "Cancel",
+    "modalConfirm": "OK / Confirm"
   },
   "colorPicker": {
     "presets": "Presets",
@@ -67,7 +83,11 @@
     "cud": "Colour-blind friendly",
     "cudHint": "Color Universal Design recommended palette",
     "close": "Close",
-    "pairTooltip": "Text {{text}} × Outline {{outline}}"
+    "pairTooltip": "Text {{text}} × Outline {{outline}}",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "headingText": "Text colour",
+    "headingOutline": "Outline colour"
   },
   "fontLicenses": {
     "title": "Font licenses",
@@ -80,5 +100,43 @@
   "thirdPartyLicenses": {
     "title": "Third-party licenses",
     "openFolder": "Open third-party licenses folder"
+  },
+  "project": {
+    "save": {
+      "toastSuccess": "Project saved",
+      "toastSuccessDesc": "The original input file (video/audio) is required to reopen this .mojioko.",
+      "toastNothingToSave": "No project to save (load an input file first).",
+      "toastError": "Save failed: {{error}}"
+    },
+    "open": {
+      "toastError": "Couldn't open project: {{error}}",
+      "reasonInvalidJson": "The file isn't valid JSON.",
+      "reasonNotMojioko": "This isn't a MOJIOKO project file.",
+      "reasonUnsupportedVersion": "This project file was saved by a newer MOJIOKO version.",
+      "reasonMissingFields": "Required fields are missing.",
+      "sourceMissingTitle": "Original file not found",
+      "sourceMissingDesc": "The input file recorded in this project isn't at the saved location. Please pick it again.",
+      "sourceMissingReselect": "Select file…",
+      "sourceMissingCancel": "Cancel",
+      "identityMismatchTitle": "Video doesn't match",
+      "identityMismatchDesc": "The saved video and the current file differ in duration or resolution. The file may have been replaced.",
+      "identityDurationLabel": "Duration",
+      "identityResolutionLabel": "Resolution",
+      "identityPathLabel": "File path",
+      "identityFileNameLabel": "File name",
+      "identitySavedLabel": "Saved",
+      "identityCurrentLabel": "Current",
+      "identityClose": "Close",
+      "fontWarningTitle": "Font warning",
+      "fontWarningDesc": "This project uses fonts that aren't downloaded / available. Substitute fonts will be shown instead.",
+      "fontWarningLockedDesc": "The free edition can't use these paid fonts, so substitute fonts will be shown instead.",
+      "fontWarningCancel": "Cancel",
+      "fontWarningOpen": "Open anyway",
+      "discardConfirmTitle": "Discard current project?",
+      "discardConfirmDesc": "Unsaved edits will be discarded. Continue?",
+      "discardConfirmCancel": "Cancel",
+      "discardConfirmOk": "OK",
+      "toastSuccess": "Project opened"
+    }
   }
 }

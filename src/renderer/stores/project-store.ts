@@ -27,6 +27,21 @@ interface ProjectStore {
   setSelectedTrackIndex: (i: number) => void
   setEntries: (entries: SubtitleEntry[]) => void
   updateEntry: (id: string, patch: Partial<SubtitleEntry>) => void
+  /**
+   * REQ-0125 — history-less variants of `updateEntry`.  Used for live
+   * "preview during drag" updates from the color picker's `onChange`.
+   * These write to `entries` (so subscribing views like SubtitleOverlay
+   * re-render immediately) but do NOT push a history op, so an
+   * S/V-drag does not spam the Undo stack.  Once the popover closes,
+   * the caller registers a single coarse-grained history op via the
+   * existing `applyStyleEdit` / `applyBulk` paths, passing a
+   * `beforePatch` / `preBeforeSnapshots` so the Undo target rewinds
+   * past the preview stream to the pre-open state.  The pair — one
+   * history-less preview API + a beforePatch on the commit-time
+   * history push — is the unified fix for RES-0124 bugs 2 and 3.
+   */
+  updateEntryPreview: (id: string, patch: Partial<SubtitleEntry>) => void
+  updateEntriesPreview: (ids: readonly string[], patch: Partial<SubtitleEntry>) => void
   addEntry: (entry: SubtitleEntry, atIndex: number) => void
   /**
    * Re-order `entries` by `startSec` ascending (stable sort — equal-startSec
@@ -48,6 +63,23 @@ interface ProjectStore {
   /** Patch a cut's start/end (id unchanged).  Sanitised after patch. */
   updateCut: (id: string, patch: Partial<Pick<Cut, 'startSec' | 'endSec'>>) => void
   reset: () => void
+  /**
+   * REQ-0196 — partial reset that clears the step2-produced editing
+   * state (`entries` + `cuts`) while keeping the source video, its
+   * loading state, and the currently-selected transcription track.
+   * Called from:
+   *   1. step2's discard-back confirm dialog — REQ-0185 promises
+   *      "編集途中のものは破棄されます" but the pre-0196 handler only
+   *      called `navigate('/step1')` and left the entries live in
+   *      the Zustand store, so the next `saveCurrentProject()` from
+   *      step1 emitted a `.mojioko` pairing the new video with the
+   *      old entries.
+   *   2. step1's video-picker as a defensive follow-up: even if the
+   *      back-discard cleared entries, a project-open path could
+   *      have left them populated; picking a fresh video means the
+   *      old subtitles are always semantically stale.
+   */
+  resetEditingState: () => void
 }
 
 const initialDefaults: TranscriptionDefaults = { ...sampleDefaults }
@@ -85,6 +117,30 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         return { ...merged, isEdited: isEditedFromOriginal(merged) }
       })
     })),
+  // REQ-0125 — same shape as `updateEntry` (including the isEdited
+  // recompute) but intentionally does NOT invoke the history-store.
+  // Callers use this from the color picker's onChange during a drag; the
+  // matching history op fires once at popover close via the existing
+  // applyStyleEdit / applyBulk paths.
+  updateEntryPreview: (id, patch) =>
+    set((s) => ({
+      entries: s.entries.map((e) => {
+        if (e.id !== id) return e
+        const merged = { ...e, ...patch }
+        return { ...merged, isEdited: isEditedFromOriginal(merged) }
+      })
+    })),
+  updateEntriesPreview: (ids, patch) =>
+    set((s) => {
+      const idSet = new Set(ids)
+      return {
+        entries: s.entries.map((e) => {
+          if (!idSet.has(e.id)) return e
+          const merged = { ...e, ...patch }
+          return { ...merged, isEdited: isEditedFromOriginal(merged) }
+        })
+      }
+    }),
   addEntry: (entry, atIndex) =>
     set((s) => ({
       entries: [...s.entries.slice(0, atIndex), entry, ...s.entries.slice(atIndex)]
@@ -120,6 +176,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       selectedTrackIndex: 2,
       entries: [],
       defaults: { ...initialDefaults },
+      cuts: []
+    }),
+  resetEditingState: () =>
+    set({
+      entries: [],
       cuts: []
     })
 }))

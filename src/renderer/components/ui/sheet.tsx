@@ -2,6 +2,7 @@ import * as React from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useOverlayRegistration } from '@/hooks/use-overlay-registration'
 
 /**
  * REQ-20260615-023: Sheet primitive adapted from shadcn's new-york-v4
@@ -37,6 +38,17 @@ SheetOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 type SheetSide = 'top' | 'right' | 'bottom' | 'left'
 
+/**
+ * REQ-0137 fix — same OverlayRegistrar pattern Dialog uses; see
+ * dialog.tsx for the rationale.  Placed inside Radix Content so the
+ * mount lifecycle tracks the Root's `open` state, not our wrapper's
+ * unconditional render.
+ */
+function OverlayRegistrar(): null {
+  useOverlayRegistration()
+  return null
+}
+
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
@@ -48,10 +60,11 @@ const SheetContent = React.forwardRef<
     <SheetOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      // REQ-082 parity: suppress Radix Dialog's default Esc-to-close so the
-      // sheet matches MOJIOKO's other modal surfaces.  Outside-click closing
-      // is still left intact (Radix default) because that is a mouse gesture.
-      onEscapeKeyDown={(e) => e.preventDefault()}
+      // REQ-0132 §2.2 root-cause fix — REQ-082 parity had suppressed
+      // Radix's built-in Esc-to-close on Sheet.  Removing the
+      // `onEscapeKeyDown` preventDefault restores it so the burn-in
+      // drawer and transcription drawer close on Esc alongside every
+      // other overlay (§2.2 uniform Esc semantics).
       className={cn(
         'fixed z-50 flex flex-col gap-4 bg-popover text-fg-primary shadow-2xl shadow-black/60',
         // REQ-20260615-044 parity with DialogContent: Radix focuses the
@@ -75,6 +88,8 @@ const SheetContent = React.forwardRef<
       )}
       {...props}
     >
+      {/* REQ-0137 fix — child of Radix Content, gated by Presence. */}
+      <OverlayRegistrar />
       {children}
       {!hideClose && (
         <SheetClose className="absolute right-3 top-3 rounded-md p-1 text-fg-muted transition-colors hover:text-fg-secondary focus:outline-none focus-visible:outline-none">

@@ -31,6 +31,8 @@ export function ExportFrameButton() {
   const video = useProjectStore((s) => s.video)
   const entries = useProjectStore((s) => s.entries)
   const activeFontId = useSettingsStore((s) => s.activeFontId)
+  // REQ-0121 — user-preferred output folder applied to the frame save dialog.
+  const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
   // REQ-20260615-050 — fade lives per-entry; the still uses each entry's
   // own `fadeDurationSec`, no global slice is read here.
   const currentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
@@ -62,7 +64,7 @@ export function ExportFrameButton() {
 
     const savePath = await saveFileDialog(
       defaultName,
-      undefined,
+      defaultOutputDir ?? undefined,
       format === 'jpg'
         ? [{ name: 'JPEG image', extensions: ['jpg', 'jpeg'] }, { name: 'All Files', extensions: ['*'] }]
         : [{ name: 'PNG image', extensions: ['png'] }, { name: 'All Files', extensions: ['*'] }]

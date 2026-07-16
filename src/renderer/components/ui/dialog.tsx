@@ -2,6 +2,7 @@ import * as React from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useOverlayRegistration } from '@/hooks/use-overlay-registration'
 
 const Dialog = DialogPrimitive.Root
 const DialogTrigger = DialogPrimitive.Trigger
@@ -28,20 +29,107 @@ const DialogOverlay = React.forwardRef<
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
+/**
+ * REQ-0137 fix — internal component that lives INSIDE the Radix
+ * Dialog Content subtree.  Radix's `Presence` mounts Content's
+ * children only when the Root is `open` (or during a close
+ * animation), so this component's mount ⇔ dialog visible.  Placing
+ * `useOverlayRegistration()` here (instead of at the wrapper's
+ * top-level) fixes the REQ-0132 regression where every Dialog
+ * inflated the overlay counter at app boot and blocked every editor
+ * shortcut.
+ */
+function OverlayRegistrar(): null {
+  useOverlayRegistration()
+  return null
+}
+
+/**
+ * REQ-0138 §2.2 — pure predicate for the shared dialog Enter=confirm
+ * handler.  Extracted so unit tests can pin the "modifiers bail /
+ * textarea bail" rules without spinning up a Radix Dialog.  Returns
+ * `true` when Enter is allowed to fire the dialog's primary confirm
+ * action, `false` when it should fall through (native newline in a
+ * textarea, ignored on Ctrl/Alt/Meta/Shift+Enter, etc.).
+ */
+export function shouldFireDialogEnterConfirm(
+  key: string,
+  modifiers: { ctrl: boolean; alt: boolean; meta: boolean; shift: boolean },
+  activeTagName: string | null,
+): boolean {
+  if (key !== 'Enter') return false
+  if (modifiers.ctrl || modifiers.alt || modifiers.meta || modifiers.shift) return false
+  const tag = (activeTagName ?? '').toLowerCase()
+  if (tag === 'textarea') return false                   // §2.2 rule 2
+  return true
+}
+
+interface DialogContentExtraProps {
+  hideClose?: boolean
+  /**
+   * REQ-0138 §2 — when set, Enter (unmodified, not in a `<textarea>`)
+   * commits the focused field via `blur()` (fires any REQ-0128 onBlur
+   * handlers so numeric drafts commit) and then, after a setTimeout(0)
+   * to let React flush the setState from that blur, invokes
+   * `onEnterConfirm()`.  Callers whose confirm action reads local
+   * React state should pass `onEnterConfirm={() => confirmRef.current?.click()}`
+   * with `<Button ref={confirmRef}>` — the DOM click triggers the
+   * button's onClick against the latest-render closure, sidestepping
+   * the "callback closure captured pre-flush" staleness a direct
+   * `onEnterConfirm={handleConfirm}` would run into.  Callers whose
+   * confirm reads Zustand can pass the handler directly.
+   *
+   * `stopPropagation()` on the Enter keydown keeps nested dialogs from
+   * firing the outer one's confirm.
+   */
+  onEnterConfirm?: () => void
+}
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { hideClose?: boolean }
->(({ className, children, hideClose, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & DialogContentExtraProps
+>(({ className, children, hideClose, onEnterConfirm, onKeyDown, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
-      // REQ-082: suppress Radix Dialog's default Esc-to-close — Esc is no
-      // longer a keyboard shortcut anywhere in the app.  The X icon
-      // (rendered just below) and any per-dialog Cancel buttons are the
-      // only close affordances.  Outside-click closing is left intact
-      // because it's a mouse gesture, not a keyboard shortcut.
-      onEscapeKeyDown={(e) => e.preventDefault()}
+      onKeyDown={(e) => {
+        // Preserve any consumer-supplied onKeyDown first so it can
+        // preventDefault + skip our Enter handling if it wants to.
+        onKeyDown?.(e)
+        if (e.defaultPrevented) return
+        if (!onEnterConfirm) return
+        const target = e.target as HTMLElement | null
+        if (
+          !shouldFireDialogEnterConfirm(
+            e.key,
+            { ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey, shift: e.shiftKey },
+            target?.tagName ?? null,
+          )
+        ) return
+        e.preventDefault()
+        e.stopPropagation()
+        if (target && target !== document.body && typeof target.blur === 'function') {
+          target.blur()
+        }
+        // Defer to the next macrotask so React flushes any setState
+        // queued by the blur's onBlur handler before we invoke the
+        // confirm.  With the ref-click pattern documented on
+        // `onEnterConfirm`, the click then reads fresh local state.
+        setTimeout(() => onEnterConfirm(), 0)
+      }}
+      // REQ-0132 §2.2 root-cause fix — REQ-082 had suppressed Radix's
+      // Esc-to-close on the assumption that "Esc is no longer a
+      // keyboard shortcut anywhere in the app."  That is no longer
+      // true (REQ-0132 §2.2: Esc uniformly closes the topmost
+      // overlay).  Removing the `onEscapeKeyDown` preventDefault
+      // restores Radix's built-in behaviour: pressing Esc fires
+      // `onOpenChange(false)` on the Root, which closes the dialog
+      // through the existing state channel.  The overlay registry
+      // (see `<OverlayRegistrar />` below) unregisters via the
+      // Content-child unmount that follows.  Owner-facing symptom of
+      // the pre-fix state (REQ-0132): Settings / About / Time-editor /
+      // etc. did not close on Esc despite being visible.
       className={cn(
         'fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%]',
         // REQ-20260615-003 mira density: p-6 → p-4, duration-200 → duration-100.
@@ -62,6 +150,10 @@ const DialogContent = React.forwardRef<
       )}
       {...props}
     >
+      {/* REQ-0137 fix — placed inside Radix Content so it only mounts
+          when the dialog is open (Radix Presence gate).  See
+          `OverlayRegistrar` above for why. */}
+      <OverlayRegistrar />
       {children}
       {!hideClose && (
         // REQ-20260615-003 mira: close at top-2 right-2 (closer to corner).
