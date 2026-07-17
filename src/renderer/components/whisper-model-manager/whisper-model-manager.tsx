@@ -224,11 +224,15 @@ export function WhisperModelManager({
 
     try {
       await run.promise
-      const currentActive = state?.activeModelId
-      if (!currentActive) {
-        await setActiveModel(model.id)
-        setIsOpen(false) // auto-activated → collapse so user can continue
-      }
+      // REQ-0246 — removed auto-select-if-none + accordion auto-close.
+      // Under REQ-0245's parallel semantics the "which just-finished
+      // DL should win the auto-select?" question spawns edge cases
+      // (concurrent DLs completing in different orders, one being
+      // uninstalled mid-flight, etc.) that add complexity and hide
+      // bugs.  Owner directive: user always selects explicitly via
+      // the "Use this" button.  This applies to first-time downloads
+      // too — a fresh install leaves the model DL'd but not active
+      // until the user picks it.
       toast.success(t('model.install_success', { modelName: model.displayName }))
       await refresh()
     } catch (err) {

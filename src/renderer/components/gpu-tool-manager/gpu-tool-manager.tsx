@@ -151,13 +151,17 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
 
     try {
       await run.promise
-      // Mirror the Whisper model "install → auto-active" affordance: a
-      // fresh DL implies the user wants to try GPU immediately.  Main
-      // side validates the request and downgrades if the tools didn't
-      // actually land (shouldn't happen after `completed`, but safe).
-      const next = await selectAccelerator('gpu')
-      if (next) setState(next)
-      else await refresh()
+      // REQ-0246 — removed the auto-switch-to-GPU that used to fire
+      // here (`selectAccelerator('gpu')`).  Rationale matches the
+      // Whisper model manager: the "GPU tools were just downloaded,
+      // so the user must want to use GPU" heuristic breaks down as
+      // soon as concurrent DLs, partial cancels, or re-downloads
+      // enter the picture.  The user now picks GPU explicitly via
+      // the accelerator card (`handleSelectGpu`) — CPU stays the
+      // active accelerator until they do.  Note: the accordion did
+      // NOT auto-close in this path even before REQ-0246 (unlike the
+      // model side), so nothing to remove for §0.3 here.
+      await refresh()
       toast.success(t('gpuTool.download_success'))
     } catch (err) {
       if (err instanceof GpuToolDownloadError) {
