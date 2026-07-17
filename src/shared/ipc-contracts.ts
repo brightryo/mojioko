@@ -233,36 +233,13 @@ export type DownloadModelEvent =
 export type { DownloadGpuToolEvent, GpuToolState } from './gpu-tool'
 
 /**
- * REQ-0241 — shared shape for the "one active download across the app"
- * broadcast (`download:active:changed`) and the snapshot endpoint
- * (`download:active:get`).  `null` means idle; otherwise identifies
- * which kind is running and gives a human-visible label so the UI can
- * spell out "model download 'large-v3' in progress" without having to
- * look up the kind separately.
+ * REQ-0241 → REQ-0244 — DownloadManager types moved to a per-key
+ * parallel model.  The shared type stays because renderer services
+ * pattern-match on `code === 'DOWNLOAD_BUSY'` when the (rare)
+ * same-target duplicate reaches main — normal UI flow gates the
+ * button so this only fires on programmatic double-invokes.
  */
 export type DownloadKind = 'model' | 'gpu-tool' | 'font'
-export interface ActiveDownloadInfo {
-  kind: DownloadKind
-  label: string
-  startedAt: number
-}
-
-/**
- * REQ-0241 — error shape returned by the three download-start IPC
- * handlers when the DownloadManager slot is already held.  `errorCode:
- * 'DOWNLOAD_BUSY'` lets the renderer service surface this as a typed
- * rejection ({@link DownloadBusyError}) and the components display a
- * "another download is in progress" toast keyed to the active kind /
- * label.  Additive to the existing `ErrResult` union — pre-REQ-0241
- * renderers that don't know about the code still see a generic
- * failure and don't crash.
- */
-export interface DownloadBusyErrorPayload {
-  code: 'DOWNLOAD_BUSY'
-  message: string
-  activeKind: DownloadKind
-  activeLabel: string
-}
 
 // ---------------------------------------------------------------------------
 // Settings

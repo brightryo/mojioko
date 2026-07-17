@@ -39,16 +39,17 @@ export function registerGpuToolHandlers(): void {
   const activeDownloads = new Map<string, DownloadToken>()
 
   ipcMain.handle(Channels.gpuToolDownload, async (event): Promise<OkResult<{ channelId: string }> | ErrResult> => {
-    // REQ-0241 — GPU tool DL passes through the same one-slot mutex as
-    // model / font downloads.  Concurrent bandwidth + write races on
-    // %APPDATA%/MOJIOKO would otherwise be trivially reachable.
-    const acquired = downloadManager.acquire('gpu-tool', GPU_TOOL_RELEASE_TAG)
+    // REQ-0244 — GPU tool DL is per-target-key ('gpu-tool' +
+    // release tag).  Different kinds (model / font) run in parallel
+    // without contention; only a second click on GPU-tool during its
+    // own DL is refused (defence for programmatic double-invokes).
+    const acquired = downloadManager.acquire('gpu-tool', GPU_TOOL_RELEASE_TAG, GPU_TOOL_RELEASE_TAG)
     if ('busy' in acquired) {
       return {
         ok: false,
         error: {
           code: 'DOWNLOAD_BUSY',
-          message: `Another download is in progress: ${acquired.active.kind} (${acquired.active.label})`,
+          message: `Download already in progress for gpu-tool ${acquired.existing.targetId}`,
         },
       }
     }

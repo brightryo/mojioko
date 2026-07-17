@@ -1,6 +1,5 @@
 import type { FontsState, FontId, DownloadFontEvent } from '../../shared/fonts'
 import type { IpcResult } from '../../shared/types'
-import { tryParseBusyError } from './download-busy-error'
 
 export type { DownloadFontEvent }
 
@@ -41,17 +40,18 @@ export function downloadFont(
 ): FontDownloadRun {
   let channelId: string | null = null
   let unsub: (() => void) | null = null
+  // REQ-0244 — honour cancel that races the initial invoke.
+  let cancelled = false
 
   const promise = (async () => {
     const result = await window.electronAPI.fontDownload(fontId)
-    if (!result.ok) {
-      // REQ-0241 — typed busy rejection so the font picker can toast
-      // the active kind + label instead of a generic Error.
-      const busy = tryParseBusyError(result.error)
-      if (busy) throw busy
-      throw new Error(result.error.message)
-    }
+    if (!result.ok) throw new Error(result.error.message)
     channelId = result.data.channelId
+
+    if (cancelled) {
+      window.electronAPI.fontDownloadCancel(channelId)
+      throw new Error('Cancelled')
+    }
 
     return new Promise<void>((resolve, reject) => {
       unsub = window.electronAPI.subscribeToChannel(channelId!, (payload) => {
@@ -70,8 +70,17 @@ export function downloadFont(
 
   return {
     promise,
+    // REQ-0244 — critical fix: do NOT `unsub?.()` here.  Leave the
+    // subscription attached so the main-side 'failed' event fired by
+    // the abort settles the inner Promise via reject().  The pre-fix
+    // ordering (unsub → cancel) orphaned the 'failed' event and hung
+    // the outer `await run.promise` forever — the batch loop in
+    // font-picker.tsx `handleBatchDownload` couldn't advance past the
+    // cancelled iteration, so its post-loop cleanup
+    // (`setBatchState(null)`) never ran and the batch button never
+    // came back.  This is the root cause called out in REQ-0244.
     cancel: () => {
-      unsub?.()
+      cancelled = true
       if (channelId) window.electronAPI.fontDownloadCancel(channelId)
     }
   }

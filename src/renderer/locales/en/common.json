@@ -38,16 +38,6 @@
   "status": {
     "local": "Local rendering · no network"
   },
-  "download": {
-    "busy": {
-      "kind_model": "a Whisper model download",
-      "kind_gpuTool": "the GPU acceleration tools download",
-      "kind_font": "a font download",
-      "kind_unknown": "another download",
-      "toast": "{{kindDesc}} is in progress ({{label}}). Please wait for it to finish before starting another.",
-      "tooltip": "{{kindDesc}} is in progress ({{label}}). Try again after it finishes."
-    }
-  },
   "dialog": {
     "discardChanges": "Return to the transcription screen?",
     "discardChangesDesc": "Any in-progress edits will be discarded.",

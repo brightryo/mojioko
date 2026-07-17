@@ -322,17 +322,18 @@ export function registerTranscriptionHandlers(): void {
     try { assertValidModelId(modelId) } catch (err) {
       return { ok: false, error: { code: 'INVALID_MODEL_ID', message: (err as Error).message } }
     }
-    // REQ-0241 — take the global download slot before we spawn any I/O.
-    // If another kind (or another model) is running, bail out with a
-    // typed error so the renderer can toast "another download is in
-    // progress" instead of racing on the file system.
-    const acquired = downloadManager.acquire('model', modelId)
+    // REQ-0244 — per-target-key acquire.  Different models (and
+    // different kinds) run in parallel; only a same-target duplicate
+    // is refused.  The UI already swaps the Install button to a Cancel
+    // button while the DL is in flight, so this rejection is a safety
+    // net for programmatic double-invokes (keyboard shortcuts, races).
+    const acquired = downloadManager.acquire('model', modelId, modelId)
     if ('busy' in acquired) {
       return {
         ok: false,
         error: {
           code: 'DOWNLOAD_BUSY',
-          message: `Another download is in progress: ${acquired.active.kind} (${acquired.active.label})`,
+          message: `Download already in progress for model ${acquired.existing.targetId}`,
         },
       }
     }

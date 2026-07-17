@@ -51,17 +51,18 @@ export function registerFontHandlers(): void {
     try { assertValidFontId(fontId) } catch (err) {
       return { ok: false, error: { code: 'INVALID_FONT_ID', message: (err as Error).message } }
     }
-    // REQ-0241 — single-slot serialization across all download kinds.
-    // Font batch DL (font-picker.tsx handleBatchDownload) already
-    // awaits sequentially, so this passes through cleanly; the guard
-    // catches cross-kind races (model + font, GPU + font).
-    const acquired = downloadManager.acquire('font', fontId)
+    // REQ-0244 — per-font-key acquire.  The font-picker's batch DL
+    // loop iterates sequentially over fonts, so within a batch each
+    // per-font call takes and releases 'font:<id>' cleanly.  Other
+    // kinds (model / GPU) run fully in parallel.  Same-font-id
+    // duplicate rejection is a safety net for double-clicks.
+    const acquired = downloadManager.acquire('font', fontId, fontId)
     if ('busy' in acquired) {
       return {
         ok: false,
         error: {
           code: 'DOWNLOAD_BUSY',
-          message: `Another download is in progress: ${acquired.active.kind} (${acquired.active.label})`,
+          message: `Download already in progress for font ${acquired.existing.targetId}`,
         },
       }
     }

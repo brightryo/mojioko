@@ -1,34 +1,41 @@
-import { EventEmitter } from 'events'
-import { BrowserWindow } from 'electron'
-import { Channels } from '../../shared/ipc-channels'
 import log from '../lib/logger'
 
 /**
- * REQ-0241 — global single-slot mutex for every download the app initiates.
+ * REQ-0244 — per-target-key download coordinator.  Supersedes the
+ * REQ-0241 single-slot mutex.
  *
- * Motivation: model / GPU-tool / font downloads each had their own per-type
- * `activeDownloads` map with no cross-type coordination.  Starting a model
- * download while another was in flight, or kicking off a GPU-tool fetch on
- * top of a model download, could produce `EPERM` on shared paths, stream
- * lifecycle errors ("Cannot call end after a stream was destroyed") and
- * non-monotonic progress bars.  The manager forces one active download
- * across all three kinds by handing out a token that owns the
- * `AbortController` and the release hook; contending callers get a
- * `busy` result they can turn into a UI-side "another download is in
- * progress" affordance.
+ * Rules (finalized by the owner in REQ-0244 §0):
+ *
+ *   • Different targets download in parallel.  Cross-kind (model + GPU
+ *     tool + font at once) is allowed; same-kind different-target
+ *     (large-v3 + large-v3-turbo) is allowed too.
+ *   • Same target cannot double-start (`{kind, targetId}` is unique).
+ *     A second `acquire()` for a held key returns `{ busy: true }`
+ *     so the IPC layer can surface `DOWNLOAD_BUSY`.
+ *   • The font-picker's "batch DL" orchestration is a *renderer-side*
+ *     concern; it walks the target list and per-iteration acquires
+ *     `font:<id>` slots.  The manager doesn't know or care about
+ *     "batch" as a concept — that keeps the coordinator small and
+ *     unaware of UI phases.
+ *
+ * Keys are `${kind}:${targetId}` strings.  A slot holds the
+ * AbortController, the release hook, and a token-identity guard so a
+ * stale `release()` from a completed download can never wipe a fresh
+ * slot that later took the same key.
  */
 
 export type DownloadKind = 'model' | 'gpu-tool' | 'font'
 
 export interface ActiveDownloadInfo {
   kind: DownloadKind
-  /** Human-visible name shown in tooltips / toasts (e.g. "large-v3"). */
+  targetId: string
   label: string
   startedAt: number
 }
 
 export interface DownloadToken {
   kind: DownloadKind
+  targetId: string
   label: string
   signal: AbortSignal
   /** Idempotent; only releases if this token still owns the slot. */
@@ -39,45 +46,60 @@ export interface DownloadToken {
 
 export type AcquireResult =
   | DownloadToken
-  | { busy: true; active: ActiveDownloadInfo }
+  | { busy: true; existing: ActiveDownloadInfo }
 
 interface ActiveSlot extends ActiveDownloadInfo {
   controller: AbortController
   released: boolean
 }
 
-class DownloadManager extends EventEmitter {
-  private active: ActiveSlot | null = null
+function keyOf(kind: DownloadKind, targetId: string): string {
+  return `${kind}:${targetId}`
+}
 
-  acquire(kind: DownloadKind, label: string): AcquireResult {
-    if (this.active) {
-      return { busy: true, active: this.snapshot()! }
+class DownloadManager {
+  private active = new Map<string, ActiveSlot>()
+
+  /**
+   * Take the slot for `<kind, targetId>`.  Returns a token on success
+   * or a busy object naming the existing holder on contention.  Only
+   * same-key contention returns busy — different keys never block.
+   */
+  acquire(kind: DownloadKind, targetId: string, label?: string): AcquireResult {
+    const key = keyOf(kind, targetId)
+    const existing = this.active.get(key)
+    if (existing) {
+      return {
+        busy: true,
+        existing: this.slotSnapshot(existing),
+      }
     }
     const controller = new AbortController()
     const slot: ActiveSlot = {
       kind,
-      label,
+      targetId,
+      label: label ?? targetId,
       startedAt: Date.now(),
       controller,
       released: false,
     }
-    this.active = slot
-    log.info(`[download-manager] acquired kind=${kind} label=${label}`)
-    this.emitChanged()
+    this.active.set(key, slot)
+    log.info(`[download-manager] acquired ${key} (label=${slot.label})`)
 
     const release = (): void => {
       if (slot.released) return
-      // Guard against a stale release call after another download has
-      // already claimed the slot.  Compare the controller (identity) so a
-      // reused-label doesn't false-positive.
-      if (this.active?.controller !== controller) {
+      // Identity guard: only the caller that took this exact controller
+      // can release it.  Prevents a late `finally { release() }` in a
+      // cancelled download from wiping a slot that a fresh call has
+      // already re-acquired (same key, different token).
+      const current = this.active.get(key)
+      if (current?.controller !== controller) {
         slot.released = true
         return
       }
       slot.released = true
-      this.active = null
-      log.info(`[download-manager] released kind=${kind} label=${label}`)
-      this.emitChanged()
+      this.active.delete(key)
+      log.info(`[download-manager] released ${key}`)
     }
     const cancel = (): void => {
       if (!slot.released) {
@@ -85,37 +107,51 @@ class DownloadManager extends EventEmitter {
       }
       release()
     }
-    return { kind, label, signal: controller.signal, release, cancel }
-  }
-
-  snapshot(): ActiveDownloadInfo | null {
-    if (!this.active) return null
     return {
-      kind: this.active.kind,
-      label: this.active.label,
-      startedAt: this.active.startedAt,
+      kind,
+      targetId,
+      label: slot.label,
+      signal: controller.signal,
+      release,
+      cancel,
     }
   }
 
   /**
-   * Reset the manager to an empty state.  Test-only escape hatch — never
-   * called from production code (there is a single process-wide instance).
+   * True if the given key is currently held.  Used by tests and by
+   * UI code paths that want to check before invoking IPC (rare —
+   * per-component local state normally suffices).
    */
-  _resetForTests(): void {
-    if (this.active) {
-      this.active.controller.abort()
-      this.active = null
-      this.emit('changed', null)
-    }
+  isActive(kind: DownloadKind, targetId: string): boolean {
+    return this.active.has(keyOf(kind, targetId))
   }
 
-  private emitChanged(): void {
-    const snap = this.snapshot()
-    this.emit('changed', snap)
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send(Channels.downloadActiveChanged, snap)
-      }
+  /**
+   * Return a snapshot of every currently-active download.  Independent
+   * of insertion order; callers that need stability should sort.
+   */
+  snapshot(): ActiveDownloadInfo[] {
+    return Array.from(this.active.values(), (slot) => this.slotSnapshot(slot))
+  }
+
+  /**
+   * Test-only escape hatch.  Aborts every held signal and clears the
+   * map so each `it()` starts idle.  Not called by production code.
+   */
+  _resetForTests(): void {
+    for (const slot of this.active.values()) {
+      if (!slot.released) slot.controller.abort()
+      slot.released = true
+    }
+    this.active.clear()
+  }
+
+  private slotSnapshot(slot: ActiveSlot): ActiveDownloadInfo {
+    return {
+      kind: slot.kind,
+      targetId: slot.targetId,
+      label: slot.label,
+      startedAt: slot.startedAt,
     }
   }
 }

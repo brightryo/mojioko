@@ -1,26 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-// The DownloadManager module imports `BrowserWindow` from electron to
-// broadcast state changes to all open windows.  Under vitest there is
-// no Electron runtime, so we stub the module with an empty window list
-// (getAllWindows returns [] → the broadcast becomes a no-op).  The
-// logger import also transitively pulls in electron via `paths.ts`
-// dependencies; the same stub covers both.
-vi.mock('electron', () => ({
-  BrowserWindow: {
-    getAllWindows: () => [],
-  },
-  app: {
-    isPackaged: false,
-    getPath: () => '/tmp',
-    getAppPath: () => '/tmp',
-  },
-}))
-
-// electron-log's main entry expects an Electron app object; the file
-// logger transport also touches `app.getPath('userData')`.  The mock
-// above satisfies both.  Stub electron-log outright to avoid noisy
-// stdout from log lines emitted by the manager under test.
+// Stub electron-log so `logger.info(...)` in the manager doesn't try to
+// pull in the real electron `app`.  We don't need Electron itself here
+// — the REQ-0244 DownloadManager doesn't broadcast (no BrowserWindow
+// dependency any more).
 vi.mock('../../src/main/lib/logger', () => ({
   default: {
     info: vi.fn(),
@@ -33,189 +16,150 @@ vi.mock('../../src/main/lib/logger', () => ({
 import { downloadManager } from '../../src/main/services/download-manager'
 
 /**
- * REQ-0241 — DownloadManager is a global mutex.  These tests exercise
- * the core invariants that make the "one active download across all
- * kinds" guarantee useful:
+ * REQ-0244 — the DownloadManager is a per-key mutex (was single-slot
+ * in REQ-0241).  Different `{kind, targetId}` pairs download in
+ * parallel; same key is refused.  These tests pin:
  *
- *   §2.1 serialization — a second acquire while one is held must
- *     return `busy` (never a second live token).
- *   §2.1 release — after release the next acquire succeeds.
- *   §2.3 cancel — cancel aborts the signal AND releases the slot.
- *   §2.5 progress channel — the `changed` event fires on each
- *     transition so the renderer stays in sync without polling.
- *   snapshot integrity — the returned info matches what was acquired.
+ *   • same-key refusal (busy) vs different-key parallel success
+ *   • dynamic list resilience (unknown kind/target added at runtime
+ *     works because the key is a plain string)
+ *   • cancel and release semantics per token (independent per key)
+ *   • stale release does not wipe a fresh slot that took the same key
  *
- * A test-only `_resetForTests()` clears the slot between cases so
- * each `it` starts from a known idle state.
+ * A test-only `_resetForTests()` clears every slot so each `it()`
+ * starts idle.
  */
-describe('REQ-0241 DownloadManager', () => {
+describe('REQ-0244 DownloadManager (per-key parallel)', () => {
   beforeEach(() => {
     downloadManager._resetForTests()
   })
 
-  it('idle: snapshot is null before any acquire', () => {
-    expect(downloadManager.snapshot()).toBeNull()
+  it('idle: snapshot is empty', () => {
+    expect(downloadManager.snapshot()).toEqual([])
   })
 
-  it('acquire: returns a token and marks the slot busy', () => {
+  it('acquire: returns a token and marks that key busy', () => {
     const t = downloadManager.acquire('model', 'large-v3')
     expect('busy' in t).toBe(false)
     if ('busy' in t) throw new Error('unreachable')
     expect(t.kind).toBe('model')
-    expect(t.label).toBe('large-v3')
+    expect(t.targetId).toBe('large-v3')
     expect(t.signal.aborted).toBe(false)
-    const snap = downloadManager.snapshot()
-    expect(snap).not.toBeNull()
-    expect(snap?.kind).toBe('model')
-    expect(snap?.label).toBe('large-v3')
-    expect(typeof snap?.startedAt).toBe('number')
+    expect(downloadManager.isActive('model', 'large-v3')).toBe(true)
+    expect(downloadManager.isActive('model', 'large-v3-turbo')).toBe(false)
   })
 
-  it('acquire while busy: second call returns { busy, active } and NO new token', () => {
+  it('same key: second acquire returns busy with the existing holder info', () => {
     const first = downloadManager.acquire('model', 'large-v3')
-    if ('busy' in first) throw new Error('first acquire should succeed')
-
-    const second = downloadManager.acquire('font', 'Delius')
+    if ('busy' in first) throw new Error('unreachable')
+    const second = downloadManager.acquire('model', 'large-v3')
     expect('busy' in second).toBe(true)
     if (!('busy' in second)) throw new Error('unreachable')
-    expect(second.active.kind).toBe('model')
-    expect(second.active.label).toBe('large-v3')
-
-    // Cross-kind: gpu-tool trying to elbow into a font/model DL slot
-    // must also fail.  This is the core cross-kind guarantee.
-    const third = downloadManager.acquire('gpu-tool', 'cuda-v1')
-    expect('busy' in third).toBe(true)
+    expect(second.existing.kind).toBe('model')
+    expect(second.existing.targetId).toBe('large-v3')
   })
 
-  it('release: after release the next acquire succeeds', () => {
-    const first = downloadManager.acquire('font', 'Delius')
-    if ('busy' in first) throw new Error('first acquire should succeed')
-    first.release()
+  it('different keys succeed in parallel (same kind, different target)', () => {
+    const a = downloadManager.acquire('model', 'large-v3')
+    const b = downloadManager.acquire('model', 'large-v3-turbo')
+    expect('busy' in a).toBe(false)
+    expect('busy' in b).toBe(false)
+    // Both live simultaneously.
+    expect(downloadManager.snapshot().length).toBe(2)
+    expect(downloadManager.isActive('model', 'large-v3')).toBe(true)
+    expect(downloadManager.isActive('model', 'large-v3-turbo')).toBe(true)
+  })
 
-    expect(downloadManager.snapshot()).toBeNull()
-    const second = downloadManager.acquire('model', 'large-v3-turbo')
+  it('different keys succeed in parallel (cross kind — the REQ-0244 core guarantee)', () => {
+    const m = downloadManager.acquire('model', 'large-v3')
+    const g = downloadManager.acquire('gpu-tool', 'cuda-v1')
+    const f = downloadManager.acquire('font', 'Delius')
+    expect('busy' in m).toBe(false)
+    expect('busy' in g).toBe(false)
+    expect('busy' in f).toBe(false)
+    expect(downloadManager.snapshot().length).toBe(3)
+  })
+
+  it('dynamic list: acquiring a targetId the codebase has never seen before works', () => {
+    // The manager keys purely on kind + string.  Adding a new Whisper
+    // model or a new font shipped in a later release doesn't require
+    // any manager change.  Simulated here by using arbitrary strings.
+    const future1 = downloadManager.acquire('model', 'large-v4-hypothetical')
+    const future2 = downloadManager.acquire('font', 'FutureFontFamily2027')
+    expect('busy' in future1).toBe(false)
+    expect('busy' in future2).toBe(false)
+  })
+
+  it('release: after release the same key can be acquired again', () => {
+    const first = downloadManager.acquire('font', 'Delius')
+    if ('busy' in first) throw new Error('unreachable')
+    first.release()
+    expect(downloadManager.isActive('font', 'Delius')).toBe(false)
+    const second = downloadManager.acquire('font', 'Delius')
     expect('busy' in second).toBe(false)
   })
 
-  it('release is idempotent: second release is a no-op', () => {
+  it('release is idempotent', () => {
     const t = downloadManager.acquire('gpu-tool', 'cuda-v1')
     if ('busy' in t) throw new Error('unreachable')
     t.release()
-    t.release()  // must not throw and must not corrupt state
-    expect(downloadManager.snapshot()).toBeNull()
+    t.release()  // no-op, no throw
+    expect(downloadManager.isActive('gpu-tool', 'cuda-v1')).toBe(false)
   })
 
-  it('release from a stale token does not clear a fresh slot', () => {
-    // Simulates: model DL finishes and calls release() in its finally
-    // block, but by then a different code path has already released
-    // + started a new (font) DL.  Token identity must gate the release.
-    const first = downloadManager.acquire('model', 'large-v3')
-    if ('busy' in first) throw new Error('unreachable')
-    first.release()
+  it('stale release does not wipe a fresh slot that took the same key', () => {
+    const a = downloadManager.acquire('model', 'large-v3')
+    if ('busy' in a) throw new Error('unreachable')
+    a.release()
 
-    const second = downloadManager.acquire('font', 'Delius')
-    if ('busy' in second) throw new Error('unreachable')
+    const b = downloadManager.acquire('model', 'large-v3')
+    if ('busy' in b) throw new Error('unreachable')
 
-    // Stale release from the completed model download — the slot is
-    // now held by 'font'; the model's late release must NOT wipe it.
-    first.release()
+    // Simulates: the old cancelled DL's `.finally { release() }` fires
+    // after a fresh acquire has taken the same key.  Identity guard
+    // must prevent the stale release from clearing the fresh slot.
+    a.release()
 
+    expect(downloadManager.isActive('model', 'large-v3')).toBe(true)
     const snap = downloadManager.snapshot()
-    expect(snap?.kind).toBe('font')
-    expect(snap?.label).toBe('Delius')
+    expect(snap.length).toBe(1)
+    expect(snap[0].targetId).toBe('large-v3')
   })
 
-  it('cancel: aborts the signal and releases the slot', () => {
-    const t = downloadManager.acquire('gpu-tool', 'cuda-v1')
-    if ('busy' in t) throw new Error('unreachable')
-    expect(t.signal.aborted).toBe(false)
+  it('cancel: aborts the signal and releases the slot (that key only)', () => {
+    const m = downloadManager.acquire('model', 'large-v3')
+    const g = downloadManager.acquire('gpu-tool', 'cuda-v1')
+    if ('busy' in m || 'busy' in g) throw new Error('unreachable')
+    expect(m.signal.aborted).toBe(false)
+    expect(g.signal.aborted).toBe(false)
 
-    t.cancel()
-    expect(t.signal.aborted).toBe(true)
-    expect(downloadManager.snapshot()).toBeNull()
+    m.cancel()
+    // Only the cancelled slot goes away and only its signal aborts.
+    expect(m.signal.aborted).toBe(true)
+    expect(g.signal.aborted).toBe(false)
+    expect(downloadManager.isActive('model', 'large-v3')).toBe(false)
+    expect(downloadManager.isActive('gpu-tool', 'cuda-v1')).toBe(true)
   })
 
-  it('cancel is idempotent: second call is a no-op', () => {
+  it('cancel is idempotent', () => {
     const t = downloadManager.acquire('model', 'large-v3')
     if ('busy' in t) throw new Error('unreachable')
     t.cancel()
     t.cancel()
     expect(t.signal.aborted).toBe(true)
-    expect(downloadManager.snapshot()).toBeNull()
+    expect(downloadManager.isActive('model', 'large-v3')).toBe(false)
   })
 
-  it('emits "changed" on acquire and release with the correct payload', () => {
-    const events: Array<null | { kind: string; label: string }> = []
-    const listener = (info: null | { kind: string; label: string }): void => {
-      events.push(info ? { kind: info.kind, label: info.label } : null)
+  it('snapshot returns all in-flight downloads with correct payload', () => {
+    downloadManager.acquire('model', 'large-v3', 'Whisper large-v3')
+    downloadManager.acquire('font', 'Delius', 'Delius')
+    const snap = downloadManager.snapshot()
+    expect(snap.length).toBe(2)
+    const byKey = new Map(snap.map((s) => [`${s.kind}:${s.targetId}`, s]))
+    expect(byKey.get('model:large-v3')?.label).toBe('Whisper large-v3')
+    expect(byKey.get('font:Delius')?.label).toBe('Delius')
+    for (const s of snap) {
+      expect(typeof s.startedAt).toBe('number')
     }
-    downloadManager.on('changed', listener)
-
-    try {
-      const t = downloadManager.acquire('model', 'large-v3')
-      if ('busy' in t) throw new Error('unreachable')
-      t.release()
-    } finally {
-      downloadManager.off('changed', listener)
-    }
-
-    expect(events).toEqual([
-      { kind: 'model', label: 'large-v3' },
-      null,
-    ])
-  })
-
-  it('busy acquires do NOT emit changed', () => {
-    const first = downloadManager.acquire('gpu-tool', 'cuda-v1')
-    if ('busy' in first) throw new Error('unreachable')
-
-    const events: Array<null | { kind: string }> = []
-    const listener = (info: null | { kind: string }): void => {
-      events.push(info ? { kind: info.kind } : null)
-    }
-    downloadManager.on('changed', listener)
-
-    try {
-      const second = downloadManager.acquire('font', 'Delius')
-      expect('busy' in second).toBe(true)
-      // Slot state didn't transition, so nothing should have fired.
-      expect(events).toEqual([])
-    } finally {
-      downloadManager.off('changed', listener)
-      first.release()
-    }
-  })
-
-  it('after acquire cycles the "changed" listener sees the full sequence in order', () => {
-    const seq: string[] = []
-    const listener = (info: null | { kind: string; label: string }): void => {
-      seq.push(info ? `${info.kind}:${info.label}` : 'null')
-    }
-    downloadManager.on('changed', listener)
-
-    try {
-      const a = downloadManager.acquire('model', 'large-v3')
-      if ('busy' in a) throw new Error('unreachable')
-      a.release()
-
-      const b = downloadManager.acquire('gpu-tool', 'cuda-v1')
-      if ('busy' in b) throw new Error('unreachable')
-      b.cancel()  // cancel also releases
-
-      const c = downloadManager.acquire('font', 'Delius')
-      if ('busy' in c) throw new Error('unreachable')
-      c.release()
-    } finally {
-      downloadManager.off('changed', listener)
-    }
-
-    expect(seq).toEqual([
-      'model:large-v3',
-      'null',
-      'gpu-tool:cuda-v1',
-      'null',
-      'font:Delius',
-      'null',
-    ])
   })
 })
