@@ -24,6 +24,8 @@ import {
   downloadFont
 } from '@/services/font'
 import type { FontDownloadRun } from '@/services/font'
+import { DownloadBusyError } from '@/services/download-busy-error'
+import { useDownloadBusyGuard } from '@/hooks/use-download-busy-guard'
 import { ensureFontLoaded, evictFont } from '@/lib/font-registry'
 import { evictSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { useUiStore } from '@/stores/ui-store'
@@ -106,6 +108,12 @@ export function FontPicker({ onChange }: FontPickerProps) {
     affectedRowCount: number
   } | null>(null)
   const downloadRunRef = useRef<FontDownloadRun | null>(null)
+  // REQ-0241 — an active model / GPU-tool DL blocks per-font DL and
+  // batch DL from starting.  Same-kind ('font') activity is our own
+  // progress (batch loop already awaits sequentially) and does NOT
+  // block — the batch button and per-row buttons keep gating on
+  // `downloadingId` / `batchState`.
+  const busyGuard = useDownloadBusyGuard('font')
 
   const refresh = useCallback(async () => {
     const r = await listFonts()
@@ -130,6 +138,11 @@ export function FontPicker({ onChange }: FontPickerProps) {
 
   async function handleDownload(meta: FontMeta) {
     if (meta.bundled) return
+    // REQ-0241 — a model / GPU-tool DL is in flight → toast + no-op.
+    if (busyGuard.blocked) {
+      busyGuard.showBusyToast()
+      return
+    }
     setDownloadingId(meta.id)
     setDownloadPercent(0)
     const run = downloadFont(meta.id, (evt) => {
@@ -169,11 +182,17 @@ export function FontPicker({ onChange }: FontPickerProps) {
       // aligned with what the user actually chose.
       onChange?.()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.includes('HTTP 404')) {
-        toast.error(t('fontPicker.toast.downloadUnavailable', { name: meta.displayName }))
-      } else if (!msg.toLowerCase().includes('abort')) {
-        toast.error(t('fontPicker.toast.downloadFailed', { error: msg }))
+      if (err instanceof DownloadBusyError) {
+        // REQ-0241 — DownloadManager rejected because another kind is
+        // in flight.  Shared busy toast with the active kind + label.
+        busyGuard.showBusyToast()
+      } else {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (msg.includes('HTTP 404')) {
+          toast.error(t('fontPicker.toast.downloadUnavailable', { name: meta.displayName }))
+        } else if (!msg.toLowerCase().includes('abort')) {
+          toast.error(t('fontPicker.toast.downloadFailed', { error: msg }))
+        }
       }
     } finally {
       downloadRunRef.current = null
@@ -218,6 +237,13 @@ export function FontPicker({ onChange }: FontPickerProps) {
   async function handleBatchDownload() {
     const targets = selectBatchDownloadTargets(state, isMsix)
     if (targets.length === 0) return
+    // REQ-0241 — model / GPU-tool DL is in flight → the batch cannot
+    // start (each per-font call would be rejected mid-loop, producing
+    // a confusing partial run).  Toast + no-op is cleaner.
+    if (busyGuard.blocked) {
+      busyGuard.showBusyToast()
+      return
+    }
 
     batchAbortRef.current = false
     setBatchState({ total: targets.length, completed: 0, currentId: null })
@@ -528,9 +554,9 @@ export function FontPicker({ onChange }: FontPickerProps) {
                 size="sm"
                 variant="ghost"
                 onClick={() => { void handleBatchDownload() }}
-                disabled={isIndividualDownloading || batchTargets.length === 0}
+                disabled={isIndividualDownloading || batchTargets.length === 0 || busyGuard.blocked}
                 aria-label={t('fontPicker.batchDownload.button')}
-                title={t('fontPicker.batchDownload.buttonTooltip')}
+                title={busyGuard.blocked ? busyGuard.tooltip : t('fontPicker.batchDownload.buttonTooltip')}
               >
                 <DownloadCloud className="h-3.5 w-3.5 mr-1" />
                 {t('fontPicker.batchDownload.button')}
@@ -593,6 +619,8 @@ export function FontPicker({ onChange }: FontPickerProps) {
               // a batch run.  The batch's own Cancel button in the
               // header owns cancellation while it's active.
               actionsDisabled={perRowActionsDisabled}
+              downloadDisabledByOther={busyGuard.blocked}
+              downloadBusyTooltip={busyGuard.tooltip}
               onSelect={() => handleSelect(meta)}
               onDownload={() => handleDownload(meta)}
               onCancelDownload={handleCancelDownload}
@@ -694,6 +722,10 @@ interface FontRowProps {
    * REQ).
    */
   actionsDisabled: boolean
+  /** REQ-0241 — true while a different-kind DL is running. */
+  downloadDisabledByOther: boolean
+  /** REQ-0241 — localized busy tooltip attached to the DL button. */
+  downloadBusyTooltip: string
   onSelect: () => void
   onDownload: () => void
   onCancelDownload: () => void
@@ -712,6 +744,8 @@ function FontRow({
   tierAllowsDownload,
   isTierLocked,
   actionsDisabled,
+  downloadDisabledByOther,
+  downloadBusyTooltip,
   onSelect,
   onDownload,
   onCancelDownload,
@@ -830,9 +864,9 @@ function FontRow({
                 variant="ghost"
                 className="h-7 w-7 text-muted-foreground hover:text-foreground"
                 onClick={(e) => { e.stopPropagation(); onDownload() }}
-                disabled={actionsDisabled}
+                disabled={actionsDisabled || downloadDisabledByOther}
                 aria-label={t('fontPicker.action.download')}
-                title={t('fontPicker.action.download')}
+                title={downloadDisabledByOther ? downloadBusyTooltip : t('fontPicker.action.download')}
               >
                 <Download className="h-4 w-4" />
               </Button>

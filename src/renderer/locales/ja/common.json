@@ -38,6 +38,16 @@
   "status": {
     "local": "ローカル処理・ネットワーク不使用"
   },
+  "download": {
+    "busy": {
+      "kind_model": "Whisper モデルのダウンロード",
+      "kind_gpuTool": "GPU アクセラレーションツールのダウンロード",
+      "kind_font": "フォントのダウンロード",
+      "kind_unknown": "別のダウンロード",
+      "toast": "{{kindDesc}}が進行中です（{{label}}）。完了してから別のダウンロードを開始してください。",
+      "tooltip": "{{kindDesc}}が進行中です（{{label}}）。完了後に再度お試しください。"
+    }
+  },
   "dialog": {
     "discardChanges": "文字起こし画面へ戻りますか？",
     "discardChangesDesc": "編集途中のものは破棄されます。",

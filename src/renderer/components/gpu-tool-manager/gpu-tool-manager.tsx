@@ -33,6 +33,8 @@ import {
   GpuToolDownloadError,
   type GpuToolDownloadRun,
 } from '@/services/gpu-tool'
+import { DownloadBusyError } from '@/services/download-busy-error'
+import { useDownloadBusyGuard } from '@/hooks/use-download-busy-guard'
 import type { GpuToolState } from '../../../shared/gpu-tool'
 
 /**
@@ -85,6 +87,9 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
   const [isExtracting, setIsExtracting] = useState(false)
   const [dialogKind, setDialogKind] = useState<'install' | 'delete' | null>(null)
   const runRef = useRef<GpuToolDownloadRun | null>(null)
+  // REQ-0241 — another kind (model / font) is downloading → this card's
+  // Download button is disabled; the trigger path also toasts.
+  const busyGuard = useDownloadBusyGuard('gpu-tool')
 
   async function refresh() {
     setState(await getGpuToolState())
@@ -122,6 +127,14 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
   }
 
   async function handleConfirmInstall() {
+    // REQ-0241 — final guard between "user confirmed the dialog" and
+    // "we hit the DL manager".  Rare but possible if another kind
+    // grabbed the slot between the dialog open and the confirm click.
+    if (busyGuard.blocked) {
+      setDialogKind(null)
+      busyGuard.showBusyToast()
+      return
+    }
     setDialogKind(null)
     setIsDownloading(true)
     setDownloadPercent(0)
@@ -149,7 +162,11 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
       else await refresh()
       toast.success(t('gpuTool.download_success'))
     } catch (err) {
-      if (err instanceof GpuToolDownloadError) {
+      if (err instanceof DownloadBusyError) {
+        // REQ-0241 — DownloadManager rejected because another kind is
+        // running.  Shared toast copy names that kind + label.
+        busyGuard.showBusyToast()
+      } else if (err instanceof GpuToolDownloadError) {
         if (err.errorCode === 'aborted') {
           // Cancel UX is on the button — no toast.
         } else if (err.errorCode === 'network') {
@@ -283,10 +300,18 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
                   isDownloading={isDownloading}
                   isExtracting={isExtracting}
                   downloadPercent={downloadPercent}
-                  onInstall={() => setDialogKind('install')}
+                  onInstall={() => {
+                    if (busyGuard.blocked) {
+                      busyGuard.showBusyToast()
+                      return
+                    }
+                    setDialogKind('install')
+                  }}
                   onSelect={handleSelectGpu}
                   onDelete={() => setDialogKind('delete')}
                   onCancelDownload={handleCancelDownload}
+                  busyByOther={busyGuard.blocked}
+                  busyTooltip={busyGuard.tooltip}
                   t={t}
                 />
               </div>
@@ -440,6 +465,10 @@ interface GpuCardProps {
   onSelect: () => void
   onDelete: () => void
   onCancelDownload: () => void
+  /** REQ-0241 — true while a different-kind DL is in flight. */
+  busyByOther: boolean
+  /** REQ-0241 — localized busy tooltip. */
+  busyTooltip: string
   t: ReturnType<typeof useTranslation<'step1'>>['t']
 }
 
@@ -453,6 +482,8 @@ function GpuCard({
   onSelect,
   onDelete,
   onCancelDownload,
+  busyByOther,
+  busyTooltip,
   t,
 }: GpuCardProps) {
   const isInstalled = state.installStatus === 'installed'
@@ -545,7 +576,14 @@ function GpuCard({
           </Button>
         </div>
       ) : !isInstalled ? (
-        <Button variant="secondary" size="sm" className="w-full" onClick={onInstall}>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="w-full"
+          onClick={onInstall}
+          disabled={busyByOther}
+          title={busyByOther ? busyTooltip : undefined}
+        >
           <Download className="h-3.5 w-3.5 mr-1.5" />
           {t('gpuTool.download')}
         </Button>

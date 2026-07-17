@@ -5,6 +5,7 @@ import { join, parse } from 'path'
 import { Channels } from '../../shared/ipc-channels'
 import { transcribe, checkModelInstalled } from '../services/transcription-sidecar'
 import { downloadModel, isModelFormatStale, DownloadError } from '../services/model-downloader'
+import { downloadManager, type DownloadToken } from '../services/download-manager'
 import { generatePreviewMix } from '../services/preview-mix'
 import { getModelsDir, getBinPath } from '../lib/paths'
 import { loadSettings, saveSettings } from '../services/settings-store'
@@ -313,15 +314,31 @@ export function registerTranscriptionHandlers(): void {
     }
   })
 
-  const activeDownloads = new Map<string, AbortController>()
+  // REQ-0241 — store the DownloadManager-issued token so `:cancel` can
+  // both abort the signal and release the global slot in one call.
+  const activeDownloads = new Map<string, DownloadToken>()
 
   ipcMain.handle(Channels.transcriptionDownloadModel, async (event, modelId: string): Promise<OkResult<{ channelId: string }> | ErrResult> => {
     try { assertValidModelId(modelId) } catch (err) {
       return { ok: false, error: { code: 'INVALID_MODEL_ID', message: (err as Error).message } }
     }
+    // REQ-0241 — take the global download slot before we spawn any I/O.
+    // If another kind (or another model) is running, bail out with a
+    // typed error so the renderer can toast "another download is in
+    // progress" instead of racing on the file system.
+    const acquired = downloadManager.acquire('model', modelId)
+    if ('busy' in acquired) {
+      return {
+        ok: false,
+        error: {
+          code: 'DOWNLOAD_BUSY',
+          message: `Another download is in progress: ${acquired.active.kind} (${acquired.active.label})`,
+        },
+      }
+    }
+    const token = acquired
     const channelId = `transcription:download:${randomUUID()}`
-    const controller = new AbortController()
-    activeDownloads.set(channelId, controller)
+    activeDownloads.set(channelId, token)
 
     const modelsDir = getModelsDir()
     log.info(`[ipc/transcription] downloadModel ${modelId}, channelId=${channelId}`)
@@ -330,7 +347,7 @@ export function registerTranscriptionHandlers(): void {
       if (!event.sender.isDestroyed()) {
         event.sender.send(channelId, evt)
       }
-    }, controller.signal).catch((err) => {
+    }, token.signal).catch((err) => {
       log.error('[ipc/transcription] downloadModel error', err)
       if (!event.sender.isDestroyed()) {
         // REQ-20260615-081 — carry the typed code on the IPC payload so
@@ -348,6 +365,7 @@ export function registerTranscriptionHandlers(): void {
         })
       }
     }).finally(() => {
+      token.release()
       activeDownloads.delete(channelId)
     })
 
@@ -355,7 +373,7 @@ export function registerTranscriptionHandlers(): void {
   })
 
   ipcMain.handle(`${Channels.transcriptionDownloadModel}:cancel`, (_event, channelId: string): void => {
-    activeDownloads.get(channelId)?.abort()
+    activeDownloads.get(channelId)?.cancel()
     activeDownloads.delete(channelId)
   })
 

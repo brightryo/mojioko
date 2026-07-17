@@ -3,7 +3,7 @@
 import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
 import type { GpuToolState } from '../shared/gpu-tool'
-import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult } from '../shared/ipc-contracts'
+import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult, ActiveDownloadInfo } from '../shared/ipc-contracts'
 
 type IpcOk<T> = { ok: true; data: T }
 type IpcErr = { ok: false; error: { code: string; message: string } }
@@ -61,6 +61,9 @@ declare global {
       gpuToolDownloadCancel: (channelId: string) => Promise<void>
       gpuToolDelete: () => Promise<IpcResult<GpuToolState>>
       gpuToolSelect: (choice: 'cpu' | 'gpu') => Promise<IpcResult<GpuToolState>>
+
+      // REQ-0241 — app-wide download coordination snapshot.
+      downloadActiveGet: () => Promise<IpcResult<ActiveDownloadInfo | null>>
 
       burninStart: (opts: BurninStartRequest) => Promise<IpcResult<{ channelId: string }>>
       burninCancel: (channelId: string) => Promise<void>

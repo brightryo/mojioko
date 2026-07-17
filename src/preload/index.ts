@@ -3,7 +3,7 @@ import { Channels } from '../shared/ipc-channels'
 import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
 import type { GpuToolState } from '../shared/gpu-tool'
-import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult } from '../shared/ipc-contracts'
+import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult, ActiveDownloadInfo } from '../shared/ipc-contracts'
 
 type OkResult<T> = { ok: true; data: T }
 type ErrResult = { ok: false; error: { code: string; message: string } }
@@ -94,6 +94,13 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.gpuToolDelete),
   gpuToolSelect: (choice: 'cpu' | 'gpu'): Promise<IpcResult<GpuToolState>> =>
     ipcRenderer.invoke(Channels.gpuToolSelect, choice),
+
+  // REQ-0241 — app-wide download coordinator.  `active:get` returns the
+  // current (or null) in-flight download for boot-time hydration; live
+  // updates arrive on the stable `download:active:changed` channel via
+  // `subscribeToChannel`.
+  downloadActiveGet: (): Promise<IpcResult<ActiveDownloadInfo | null>> =>
+    ipcRenderer.invoke(Channels.downloadActiveGet),
 
   // Burnin
   burninStart: (opts: BurninStartRequest): Promise<IpcResult<{ channelId: string }>> =>

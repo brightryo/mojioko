@@ -2,6 +2,7 @@ import type {
   DownloadGpuToolEvent,
   GpuToolState,
 } from '../../shared/gpu-tool'
+import { tryParseBusyError } from './download-busy-error'
 
 type IpcResult<T> =
   | { ok: true; data: T }
@@ -47,7 +48,10 @@ export function startGpuToolDownload(
       .gpuToolDownload()
       .then((r: IpcResult<{ channelId: string }>) => {
         if (!r.ok) {
-          reject(new Error(r.error.message))
+          // REQ-0241 — typed busy rejection so the GPU-tool card can
+          // toast + tooltip instead of bubbling a generic Error.
+          const busy = tryParseBusyError(r.error)
+          reject(busy ?? new Error(r.error.message))
           return
         }
         cancelChannelId = r.data.channelId

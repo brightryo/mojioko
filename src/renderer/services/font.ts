@@ -1,5 +1,6 @@
 import type { FontsState, FontId, DownloadFontEvent } from '../../shared/fonts'
 import type { IpcResult } from '../../shared/types'
+import { tryParseBusyError } from './download-busy-error'
 
 export type { DownloadFontEvent }
 
@@ -43,7 +44,13 @@ export function downloadFont(
 
   const promise = (async () => {
     const result = await window.electronAPI.fontDownload(fontId)
-    if (!result.ok) throw new Error(result.error.message)
+    if (!result.ok) {
+      // REQ-0241 — typed busy rejection so the font picker can toast
+      // the active kind + label instead of a generic Error.
+      const busy = tryParseBusyError(result.error)
+      if (busy) throw busy
+      throw new Error(result.error.message)
+    }
     channelId = result.data.channelId
 
     return new Promise<void>((resolve, reject) => {

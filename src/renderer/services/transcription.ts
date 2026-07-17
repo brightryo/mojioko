@@ -93,6 +93,7 @@ export class DownloadFailedError extends Error {
   }
 }
 
+
 export function downloadModel(
   modelId: string,
   onEvent: (event: DownloadModelEvent) => void
@@ -102,7 +103,15 @@ export function downloadModel(
 
   const promise = (async () => {
     const result = await window.electronAPI.transcriptionDownloadModel(modelId)
-    if (!result.ok) throw new Error(result.error.message)
+    if (!result.ok) {
+      // REQ-0241 — surface the DownloadManager's busy rejection as a
+      // typed error so components can dispatch on it (toast + tooltip)
+      // without parsing message strings.
+      const { tryParseBusyError } = await import('./download-busy-error')
+      const busy = tryParseBusyError(result.error)
+      if (busy) throw busy
+      throw new Error(result.error.message)
+    }
     channelId = result.data.channelId
 
     return new Promise<void>((resolve, reject) => {

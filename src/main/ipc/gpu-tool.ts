@@ -7,7 +7,8 @@ import {
   deleteGpuTool,
   setActiveAccelerator,
 } from '../services/gpu-tool'
-import type { GpuToolState } from '../../shared/gpu-tool'
+import { downloadManager, type DownloadToken } from '../services/download-manager'
+import { GPU_TOOL_RELEASE_TAG, type GpuToolState } from '../../shared/gpu-tool'
 import log from '../lib/logger'
 
 type OkResult<T> = { ok: true; data: T }
@@ -34,19 +35,34 @@ export function registerGpuToolHandlers(): void {
     }
   })
 
-  const activeDownloads = new Map<string, AbortController>()
+  // REQ-0241 — DownloadManager-issued tokens keyed by per-run channelId.
+  const activeDownloads = new Map<string, DownloadToken>()
 
   ipcMain.handle(Channels.gpuToolDownload, async (event): Promise<OkResult<{ channelId: string }> | ErrResult> => {
+    // REQ-0241 — GPU tool DL passes through the same one-slot mutex as
+    // model / font downloads.  Concurrent bandwidth + write races on
+    // %APPDATA%/MOJIOKO would otherwise be trivially reachable.
+    const acquired = downloadManager.acquire('gpu-tool', GPU_TOOL_RELEASE_TAG)
+    if ('busy' in acquired) {
+      return {
+        ok: false,
+        error: {
+          code: 'DOWNLOAD_BUSY',
+          message: `Another download is in progress: ${acquired.active.kind} (${acquired.active.label})`,
+        },
+      }
+    }
+    const token = acquired
     const channelId = `gpu-tool:event:${randomUUID()}`
-    const controller = new AbortController()
-    activeDownloads.set(channelId, controller)
+    activeDownloads.set(channelId, token)
     log.info(`[ipc/gpu-tool] download start, channelId=${channelId}`)
 
     downloadGpuTool((evt) => {
       if (!event.sender.isDestroyed()) {
         event.sender.send(channelId, evt)
       }
-    }, controller.signal).finally(() => {
+    }, token.signal).finally(() => {
+      token.release()
       activeDownloads.delete(channelId)
     })
 
@@ -54,7 +70,7 @@ export function registerGpuToolHandlers(): void {
   })
 
   ipcMain.handle(`${Channels.gpuToolDownload}:cancel`, (_event, channelId: string): void => {
-    activeDownloads.get(channelId)?.abort()
+    activeDownloads.get(channelId)?.cancel()
     activeDownloads.delete(channelId)
   })
 

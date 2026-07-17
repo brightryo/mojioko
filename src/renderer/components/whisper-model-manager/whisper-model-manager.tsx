@@ -36,6 +36,8 @@ import {
   downloadModel
 } from '@/services/transcription'
 import { DownloadFailedError, type DownloadRun } from '@/services/transcription'
+import { DownloadBusyError } from '@/services/download-busy-error'
+import { useDownloadBusyGuard } from '@/hooks/use-download-busy-guard'
 import type { ModelInfo, ModelsState, WhisperModelId } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -119,6 +121,11 @@ export function WhisperModelManager({
   const [downloadFile, setDownloadFile] = useState('')
   const [dialog, setDialog] = useState<DialogKind | null>(null)
   const downloadRunRef = useRef<DownloadRun | null>(null)
+  // REQ-0241 — an active DL of a different kind (GPU tool / font)
+  // blocks new model install clicks and shows a busy toast.  Same-kind
+  // ('model') activity is our own progress and does NOT block — we
+  // already gate by `downloadingId`.
+  const busyGuard = useDownloadBusyGuard('model')
 
   async function refresh() {
     const result = await listModels()
@@ -162,6 +169,13 @@ export function WhisperModelManager({
 
   function handleInstallClick(model: ModelInfo) {
     if (!state) return
+    // REQ-0241 — another kind's DL is in flight → toast + no-op.
+    // Even though the trigger button is disabled below, this catches
+    // keyboard shortcuts / programmatic calls / stale click paths.
+    if (busyGuard.blocked) {
+      busyGuard.showBusyToast()
+      return
+    }
     const required = model.expectedSizeBytes * 1.5
     if (state.diskFreeBytes > 0 && state.diskFreeBytes < required) {
       setDialog({ kind: 'disk-full', model, required, available: state.diskFreeBytes })
@@ -201,7 +215,11 @@ export function WhisperModelManager({
       // failure → "ネットワークが切れた…接続を確認して再試行" so the
       // user knows the cause is recoverable.  Pre-REQ-081 every
       // failure produced "Error: TypeError: terminated" verbatim.
-      if (err instanceof DownloadFailedError) {
+      if (err instanceof DownloadBusyError) {
+        // REQ-0241 — the DownloadManager rejected because another kind
+        // is in flight.  Surface the shared busy toast (kind + label).
+        busyGuard.showBusyToast()
+      } else if (err instanceof DownloadFailedError) {
         if (err.errorCode === 'aborted') {
           // No toast — Cancel UX is owned by the button.
         } else if (err.errorCode === 'network') {
@@ -383,6 +401,8 @@ export function WhisperModelManager({
                         onActivate={() => handleActivate(model)}
                         onUninstall={() => handleUninstallClick(model)}
                         onCancelDownload={handleCancelDownload}
+                        busyByOther={busyGuard.blocked}
+                        busyTooltip={busyGuard.tooltip}
                         t={t}
                       />
                     ))
@@ -612,6 +632,10 @@ interface ModelCardProps {
   onActivate: () => void
   onUninstall: () => void
   onCancelDownload: () => void
+  /** REQ-0241 — true while a different-kind DL is running elsewhere. */
+  busyByOther: boolean
+  /** REQ-0241 — localized "another download is in progress" tooltip. */
+  busyTooltip: string
   t: ReturnType<typeof useTranslation<'step1'>>['t']
 }
 
@@ -624,6 +648,8 @@ function ModelCard({
   onActivate,
   onUninstall,
   onCancelDownload,
+  busyByOther,
+  busyTooltip,
   t
 }: ModelCardProps) {
   const isActive = model.status === 'active'
@@ -706,7 +732,14 @@ function ModelCard({
           </Button>
         </div>
       ) : model.status === 'not-installed' ? (
-        <Button variant="secondary" size="sm" className="w-full" onClick={onInstall}>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="w-full"
+          onClick={onInstall}
+          disabled={busyByOther}
+          title={busyByOther ? busyTooltip : undefined}
+        >
           <Download className="h-3.5 w-3.5 mr-1.5" />
           {t('model.install')}
         </Button>

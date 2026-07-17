@@ -36,6 +36,18 @@ export const Channels = {
   gpuToolState: 'gpu-tool:state',
   gpuToolDownload: 'gpu-tool:download',
   gpuToolDelete: 'gpu-tool:delete',
+
+  /**
+   * REQ-0241 — unified download coordination.  `active:get` returns a
+   * snapshot of the (at most one) in-flight download across model /
+   * GPU-tool / font kinds.  `active:changed` is a stable broadcast
+   * channel the renderer subscribes to on boot; every acquire / release
+   * fires it with the same snapshot shape.  Used by the three DL
+   * managers to disable their trigger buttons whenever any download is
+   * running, so the user cannot start a second one on top of it.
+   */
+  downloadActiveGet: 'download:active:get',
+  downloadActiveChanged: 'download:active:changed',
   /**
    * REQ-0150 — persist the user's CPU/GPU card selection.  Payload is
    * `'cpu' | 'gpu'`; main downgrades to `'cpu'` if the GPU tools are
