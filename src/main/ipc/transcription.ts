@@ -75,13 +75,12 @@ async function buildModelsState(): Promise<ModelsState> {
       `[ipc/transcription] settings.activeModelId="${resolved.correctedFrom}" ` +
       `but files missing under ${modelsDir} — reverting to null (REQ-077)`,
     )
-  } else if (resolved.source === 'migrated-from-whisper-model') {
-    // Pre-existing v1.3.0 behavior: synthesize activeModelId from the
-    // legacy `whisperModel` field for users on older settings versions.
-    // Persist so the synthesis only runs once.
-    settings.activeModelId = activeModelId
-    await saveSettings(settings)
   }
+  // REQ-0247 — the `migrated-from-whisper-model` branch was removed.
+  // That branch had persisted `settings.activeModelId = migrated` right
+  // after `refresh()` post-DL, silently activating a freshly-downloaded
+  // model whenever it matched the (default) `whisperModel` — the exact
+  // auto-select the REQ targets.  See `resolve-active-model.ts` jsdoc.
 
   const { freeBytes: diskFreeBytes, drive: diskDrive } = getDiskFree(modelsDir)
   let totalUsedBytes = 0
