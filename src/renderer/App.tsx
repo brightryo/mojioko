@@ -21,6 +21,7 @@ import { loadSettings, saveSettings } from '@/services/settings'
 import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { listFonts } from '@/services/font'
+import { initDownloadActiveStore } from '@/services/download-active'
 import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts'
 import { toast } from 'sonner'
 import { saveCurrentProject } from '@/services/project-file'
@@ -115,6 +116,12 @@ function AppInner() {
         void i18n.changeLanguage(s.language)
       }
     }).catch(() => { /* IPC unavailable in dev outside Electron */ })
+
+    // REQ-0245 — hydrate the download-active mirror + subscribe to
+    // change broadcasts.  Fire-and-forget; the store falls back to
+    // an empty array if boot IPC fails, and per-DL broadcasts still
+    // repopulate it on the next acquire/release.
+    void initDownloadActiveStore()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // REQ-088 #4 — resolve the MSIX/NSIS tier once at app boot.  Downstream

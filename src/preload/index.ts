@@ -3,7 +3,7 @@ import { Channels } from '../shared/ipc-channels'
 import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
 import type { GpuToolState } from '../shared/gpu-tool'
-import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult } from '../shared/ipc-contracts'
+import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult, ActiveDownloadInfo } from '../shared/ipc-contracts'
 
 type OkResult<T> = { ok: true; data: T }
 type ErrResult = { ok: false; error: { code: string; message: string } }
@@ -94,6 +94,12 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.gpuToolDelete),
   gpuToolSelect: (choice: 'cpu' | 'gpu'): Promise<IpcResult<GpuToolState>> =>
     ipcRenderer.invoke(Channels.gpuToolSelect, choice),
+
+  // REQ-0245 — hydrate the renderer's mirror of main's active-DL
+  // slot array on boot / after component remounts.  Live updates
+  // arrive on `Channels.downloadActiveChanged` via subscribeToChannel.
+  downloadActiveGet: (): Promise<IpcResult<ActiveDownloadInfo[]>> =>
+    ipcRenderer.invoke(Channels.downloadActiveGet),
 
   // Burnin
   burninStart: (opts: BurninStartRequest): Promise<IpcResult<{ channelId: string }>> =>

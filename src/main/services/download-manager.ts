@@ -1,10 +1,23 @@
+import { EventEmitter } from 'events'
+import { BrowserWindow } from 'electron'
+import { Channels } from '../../shared/ipc-channels'
 import log from '../lib/logger'
 
 /**
- * REQ-0244 — per-target-key download coordinator.  Supersedes the
- * REQ-0241 single-slot mutex.
+ * REQ-0244 / REQ-0245 — per-target-key download coordinator.
  *
- * Rules (finalized by the owner in REQ-0244 §0):
+ * REQ-0244 established the parallel semantics: same-key refused,
+ * different keys succeed.  REQ-0245 restored the renderer
+ * broadcast that REQ-0244 had removed as "dead weight" — under
+ * parallel semantics the renderer needs to observe main's slot map to
+ * keep per-target button state (Download vs Cancel) truthful.
+ * Without it, each UI component's local `downloadingId` state gets
+ * clobbered when a second DL starts and the first button flips back
+ * to "Download" while main still holds the slot — a click then hits
+ * `DOWNLOAD_BUSY` and the user sees "already in progress" (the exact
+ * regression REQ-0245 fixes).
+ *
+ * Rules (finalized by the owner in REQ-0244 §0, preserved by REQ-0245):
  *
  *   • Different targets download in parallel.  Cross-kind (model + GPU
  *     tool + font at once) is allowed; same-kind different-target
@@ -17,6 +30,17 @@ import log from '../lib/logger'
  *     `font:<id>` slots.  The manager doesn't know or care about
  *     "batch" as a concept — that keeps the coordinator small and
  *     unaware of UI phases.
+ *
+ * REQ-0245 addition:
+ *
+ *   • The manager extends EventEmitter and, on every state change
+ *     (acquire / release / cancel), broadcasts a snapshot ARRAY of
+ *     active downloads to every open BrowserWindow on
+ *     `Channels.downloadActiveChanged`.  The renderer store
+ *     (`stores/download-active-store.ts`) mirrors this array and
+ *     each per-row `isDownloading` derives from it — so a second DL
+ *     starting no longer flips the first row's button back to
+ *     "Download".
  *
  * Keys are `${kind}:${targetId}` strings.  A slot holds the
  * AbortController, the release hook, and a token-identity guard so a
@@ -57,7 +81,7 @@ function keyOf(kind: DownloadKind, targetId: string): string {
   return `${kind}:${targetId}`
 }
 
-class DownloadManager {
+class DownloadManager extends EventEmitter {
   private active = new Map<string, ActiveSlot>()
 
   /**
@@ -85,6 +109,7 @@ class DownloadManager {
     }
     this.active.set(key, slot)
     log.info(`[download-manager] acquired ${key} (label=${slot.label})`)
+    this.emitChanged()
 
     const release = (): void => {
       if (slot.released) return
@@ -100,6 +125,7 @@ class DownloadManager {
       slot.released = true
       this.active.delete(key)
       log.info(`[download-manager] released ${key}`)
+      this.emitChanged()
     }
     const cancel = (): void => {
       if (!slot.released) {
@@ -114,6 +140,23 @@ class DownloadManager {
       signal: controller.signal,
       release,
       cancel,
+    }
+  }
+
+  /**
+   * REQ-0245 — broadcast the current snapshot array to every open
+   * renderer window on `Channels.downloadActiveChanged`, and emit a
+   * local `changed` event for tests.  Called on every acquire /
+   * release (see above).  Silent no-op if no windows are attached
+   * (main-process test harness).
+   */
+  private emitChanged(): void {
+    const snap = this.snapshot()
+    this.emit('changed', snap)
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(Channels.downloadActiveChanged, snap)
+      }
     }
   }
 

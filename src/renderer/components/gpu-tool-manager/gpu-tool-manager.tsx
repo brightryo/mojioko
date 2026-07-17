@@ -33,7 +33,8 @@ import {
   GpuToolDownloadError,
   type GpuToolDownloadRun,
 } from '@/services/gpu-tool'
-import type { GpuToolState } from '../../../shared/gpu-tool'
+import { GPU_TOOL_RELEASE_TAG, type GpuToolState } from '../../../shared/gpu-tool'
+import { useDownloadActiveStore } from '@/stores/download-active-store'
 
 /**
  * REQ-0150 — 2-card accelerator picker replacing the REQ-0149 single-
@@ -81,10 +82,20 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
     onOpenChange?.(next)
   }
   const [downloadPercent, setDownloadPercent] = useState(0)
-  const [isDownloading, setIsDownloading] = useState(false)
+  const [localDownloading, setLocalDownloading] = useState(false)
   const [isExtracting, setIsExtracting] = useState(false)
   const [dialogKind, setDialogKind] = useState<'install' | 'delete' | null>(null)
   const runRef = useRef<GpuToolDownloadRun | null>(null)
+
+  // REQ-0245 — GPU tool has only one target ever (`cuda-v1`), so a
+  // single boolean is fine.  But we OR the local flag with the
+  // store-mirrored slot check so the button stays "Downloading" even
+  // if this component was mounted mid-DL (e.g. the settings drawer
+  // was closed and reopened while cuda-v1.zip was still downloading).
+  const isRemoteDownloading = useDownloadActiveStore((s) =>
+    s.active.some((a) => a.kind === 'gpu-tool' && a.targetId === GPU_TOOL_RELEASE_TAG),
+  )
+  const isDownloading = localDownloading || isRemoteDownloading
 
   async function refresh() {
     setState(await getGpuToolState())
@@ -123,7 +134,7 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
 
   async function handleConfirmInstall() {
     setDialogKind(null)
-    setIsDownloading(true)
+    setLocalDownloading(true)
     setDownloadPercent(0)
     setIsExtracting(false)
 
@@ -166,7 +177,7 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
       }
       await refresh()
     } finally {
-      setIsDownloading(false)
+      setLocalDownloading(false)
       setIsExtracting(false)
       setDownloadPercent(0)
       runRef.current = null

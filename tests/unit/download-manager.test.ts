@@ -1,9 +1,23 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-// Stub electron-log so `logger.info(...)` in the manager doesn't try to
-// pull in the real electron `app`.  We don't need Electron itself here
-// — the REQ-0244 DownloadManager doesn't broadcast (no BrowserWindow
-// dependency any more).
+// REQ-0245 — the manager now broadcasts to every open BrowserWindow
+// on every acquire/release.  Under vitest there are no windows, so
+// stub `BrowserWindow.getAllWindows` with an empty list (the emitter
+// runs, the loop is a no-op, no real IPC fires).  Local EventEmitter
+// listeners still fire — tests use those to assert on state changes.
+vi.mock('electron', () => ({
+  BrowserWindow: {
+    getAllWindows: () => [],
+  },
+  app: {
+    isPackaged: false,
+    getPath: () => '/tmp',
+    getAppPath: () => '/tmp',
+  },
+}))
+
+// Stub electron-log so `logger.info(...)` in the manager doesn't try
+// to pull in the real electron app.
 vi.mock('../../src/main/lib/logger', () => ({
   default: {
     info: vi.fn(),
@@ -161,5 +175,55 @@ describe('REQ-0244 DownloadManager (per-key parallel)', () => {
     for (const s of snap) {
       expect(typeof s.startedAt).toBe('number')
     }
+  })
+
+  // ---- REQ-0245 broadcast semantics ----
+  //
+  // The manager now emits `changed` on every acquire/release with an
+  // array snapshot payload.  The renderer store subscribes to the
+  // paired `download:active:changed` IPC broadcast so per-row
+  // `isDownloading` reflects main truth even when a second concurrent
+  // DL would clobber the local UI flag.
+
+  it('REQ-0245: emits `changed` with the full array snapshot on acquire', () => {
+    const events: Array<{ kind: string; targetId: string }[]> = []
+    downloadManager.on('changed', (snap) => {
+      events.push(snap.map((s: { kind: string; targetId: string }) => ({ kind: s.kind, targetId: s.targetId })))
+    })
+
+    downloadManager.acquire('model', 'large-v3')
+    downloadManager.acquire('model', 'large-v3-turbo')
+    downloadManager.acquire('font', 'Delius')
+
+    expect(events.length).toBe(3)
+    // Each emission grows the array by one; last one includes all three.
+    expect(events[0]).toEqual([{ kind: 'model', targetId: 'large-v3' }])
+    expect(events[1]).toContainEqual({ kind: 'model', targetId: 'large-v3' })
+    expect(events[1]).toContainEqual({ kind: 'model', targetId: 'large-v3-turbo' })
+    expect(events[2].length).toBe(3)
+  })
+
+  it('REQ-0245: emits `changed` on release; cancelling one leaves others in the snapshot', () => {
+    const m = downloadManager.acquire('model', 'large-v3')
+    if ('busy' in m) throw new Error('unreachable')
+    downloadManager.acquire('model', 'large-v3-turbo')
+    downloadManager.acquire('font', 'Delius')
+
+    const events: Array<{ kind: string; targetId: string }[]> = []
+    downloadManager.on('changed', (snap) => {
+      events.push(snap.map((s: { kind: string; targetId: string }) => ({ kind: s.kind, targetId: s.targetId })))
+    })
+
+    m.cancel()  // aborts + releases 'model:large-v3'
+
+    // Exactly one changed emission — the release.
+    expect(events.length).toBe(1)
+    // large-v3 gone; other two remain.  This is the core REQ-0245
+    // guarantee: cancelling one target does NOT wipe the other two
+    // from the broadcast (which would flip their UI rows back to
+    // "Download" — the regression).
+    expect(events[0]).not.toContainEqual({ kind: 'model', targetId: 'large-v3' })
+    expect(events[0]).toContainEqual({ kind: 'model', targetId: 'large-v3-turbo' })
+    expect(events[0]).toContainEqual({ kind: 'font', targetId: 'Delius' })
   })
 })
