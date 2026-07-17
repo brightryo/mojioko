@@ -285,7 +285,19 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <div className="pt-3">
+            <div className="space-y-3 pt-3">
+              {/* REQ-0248 — mirror the Whisper model section's Long
+                  description slot (`whisperModel.descriptionLong` at
+                  the same position, same markup: `text-body-sm
+                  text-fg-muted leading-relaxed`).  Explains what CPU vs
+                  GPU is and prompts the user to select a device after
+                  DL — needed after REQ-0246/0247 dropped the "DL →
+                  auto-active" affordance.  Wrapping the grid stays in
+                  its own inner div so the `space-y-3` applies between
+                  paragraph and grid. */}
+              <p className="text-body-sm text-fg-muted leading-relaxed">
+                {t('gpuTool.descriptionLong')}
+              </p>
               <div className="grid grid-cols-2 gap-3 mx-auto max-w-[38rem]">
                 <CpuCard
                   isActive={isCpuActive}
