@@ -51,6 +51,21 @@
           </a>
         </div>
       </div>
+
+      <!-- System requirements (REQ-0254): shown directly below the download
+           cards so OS / memory / storage / GPU expectations register before a
+           user clicks a download CTA. Prevents mistaken downloads by users
+           on macOS or Linux since MOJIOKO ships Windows-only. -->
+      <div class="sysreq-card">
+        <h3 class="sysreq-title">System Requirements</h3>
+        <ul class="sysreq-list">
+          <li><span class="sysreq-label">OS:</span>Windows 10 / 11 (64-bit)</li>
+          <li><span class="sysreq-label">Memory:</span>16 GB or more recommended</li>
+          <li><span class="sysreq-label">Storage:</span>10 GB or more free space recommended (includes AI model downloads)</li>
+          <li><span class="sysreq-label">GPU (optional):</span>Faster processing with an NVIDIA GPU (CUDA). Also runs on CPU without a GPU.</li>
+        </ul>
+      </div>
+
       <p class="release-notes-link">
         <a href="https://github.com/brightryo/mojioko/releases" target="_blank" rel="noopener">View release notes</a>
       </p>
