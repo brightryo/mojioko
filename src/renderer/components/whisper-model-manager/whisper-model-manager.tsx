@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -36,6 +36,10 @@ import {
   downloadModel
 } from '@/services/transcription'
 import { DownloadFailedError, type DownloadRun } from '@/services/transcription'
+import {
+  useDownloadActiveStore,
+  selectActiveKeys,
+} from '@/stores/download-active-store'
 import type { ModelInfo, ModelsState, WhisperModelId } from '../../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -114,11 +118,32 @@ export function WhisperModelManager({
     onOpenChange?.(next)
   }
   const initializedRef = useRef(false)
-  const [downloadingId, setDownloadingId] = useState<WhisperModelId | null>(null)
-  const [downloadPercent, setDownloadPercent] = useState(0)
-  const [downloadFile, setDownloadFile] = useState('')
+  // REQ-0245 — per-model progress + run maps.  Was single-value
+  // `downloadingId` / `downloadPercent` / `downloadFile` / `downloadRunRef`
+  // which broke under REQ-0244's parallel semantics: starting turbo
+  // while large-v3 was downloading overwrote each value → large-v3's
+  // `isDownloading={downloadingId === model.id}` flipped false → its
+  // row reverted to a "Download" button while main still held the
+  // slot → a re-click hit `DOWNLOAD_BUSY`.  Per-model Maps + a store
+  // selector for `isDownloading` keep every row honest even with
+  // several DLs running.
+  const [progress, setProgress] = useState<Map<WhisperModelId, { percent: number; file: string }>>(
+    () => new Map(),
+  )
+  const runsRef = useRef<Map<WhisperModelId, DownloadRun>>(new Map())
+  // Optimistic pending set: covers the ~ms window between the user
+  // clicking Install and main's `acquire()` broadcast reaching us.
+  // Cleared as soon as the store confirms (or the promise settles).
+  const [pendingIds, setPendingIds] = useState<Set<WhisperModelId>>(() => new Set())
   const [dialog, setDialog] = useState<DialogKind | null>(null)
-  const downloadRunRef = useRef<DownloadRun | null>(null)
+
+  // Store-derived active set — reflects main's slot map, immune to
+  // local state clobbering from a second concurrent DL.
+  const activeArray = useDownloadActiveStore((s) => s.active)
+  const activeModelKeys = useMemo(
+    () => selectActiveKeys(activeArray, 'model'),
+    [activeArray],
+  )
 
   async function refresh() {
     const result = await listModels()
@@ -172,25 +197,42 @@ export function WhisperModelManager({
 
   async function handleConfirmInstall(model: ModelInfo) {
     setDialog(null)
-    setDownloadingId(model.id)
-    setDownloadPercent(0)
-    setDownloadFile('')
+    // REQ-0245 — per-model progress + optimistic pending flag.
+    // Immutable Map/Set updates so React sees a new reference and
+    // re-renders every row that reads them.
+    setProgress((prev) => {
+      const next = new Map(prev)
+      next.set(model.id, { percent: 0, file: '' })
+      return next
+    })
+    setPendingIds((prev) => {
+      const next = new Set(prev)
+      next.add(model.id)
+      return next
+    })
 
     const run = downloadModel(model.id, (evt) => {
       if (evt.event === 'progress') {
-        setDownloadFile(evt.file)
-        setDownloadPercent(evt.percent)
+        setProgress((prev) => {
+          const next = new Map(prev)
+          next.set(model.id, { percent: evt.percent, file: evt.file })
+          return next
+        })
       }
     })
-    downloadRunRef.current = run
+    runsRef.current.set(model.id, run)
 
     try {
       await run.promise
-      const currentActive = state?.activeModelId
-      if (!currentActive) {
-        await setActiveModel(model.id)
-        setIsOpen(false) // auto-activated → collapse so user can continue
-      }
+      // REQ-0246 — removed auto-select-if-none + accordion auto-close.
+      // Under REQ-0245's parallel semantics the "which just-finished
+      // DL should win the auto-select?" question spawns edge cases
+      // (concurrent DLs completing in different orders, one being
+      // uninstalled mid-flight, etc.) that add complexity and hide
+      // bugs.  Owner directive: user always selects explicitly via
+      // the "Use this" button.  This applies to first-time downloads
+      // too — a fresh install leaves the model DL'd but not active
+      // until the user picks it.
       toast.success(t('model.install_success', { modelName: model.displayName }))
       await refresh()
     } catch (err) {
@@ -219,17 +261,32 @@ export function WhisperModelManager({
         }
       }
     } finally {
-      setDownloadingId(null)
-      downloadRunRef.current = null
+      runsRef.current.delete(model.id)
+      // REQ-0245 — clean up ONLY this model's entries, not the whole
+      // state map.  Under the old single-value design, a second DL
+      // completing would clobber the first's state; here each key
+      // manages its own lifecycle.
+      setProgress((prev) => {
+        if (!prev.has(model.id)) return prev
+        const next = new Map(prev)
+        next.delete(model.id)
+        return next
+      })
+      setPendingIds((prev) => {
+        if (!prev.has(model.id)) return prev
+        const next = new Set(prev)
+        next.delete(model.id)
+        return next
+      })
     }
   }
 
-  function handleCancelDownload() {
-    downloadRunRef.current?.cancel()
-    downloadRunRef.current = null
-    setDownloadingId(null)
-    setDownloadPercent(0)
-    setDownloadFile('')
+  function handleCancelDownload(modelId: WhisperModelId) {
+    // REQ-0245 — cancel the specific model's run, not "whatever ref
+    // currently points at" (the old single-ref design would target
+    // whichever DL started last).  Local state cleanup happens in
+    // the awaiting promise's `finally` block; nothing to clear here.
+    runsRef.current.get(modelId)?.cancel()
   }
 
   // --- Activate ---
@@ -376,13 +433,17 @@ export function WhisperModelManager({
                       <ModelCard
                         key={model.id}
                         model={model}
-                        isDownloading={downloadingId === model.id}
-                        downloadPercent={downloadPercent}
-                        downloadFile={downloadFile}
+                        // REQ-0245 — derive isDownloading from the
+                        // store-mirrored slot map (or optimistic
+                        // pending), NOT from a shared local id that
+                        // clobbers on a second concurrent DL.
+                        isDownloading={activeModelKeys.has(model.id) || pendingIds.has(model.id)}
+                        downloadPercent={progress.get(model.id)?.percent ?? 0}
+                        downloadFile={progress.get(model.id)?.file ?? ''}
                         onInstall={() => handleInstallClick(model)}
                         onActivate={() => handleActivate(model)}
                         onUninstall={() => handleUninstallClick(model)}
-                        onCancelDownload={handleCancelDownload}
+                        onCancelDownload={() => handleCancelDownload(model.id)}
                         t={t}
                       />
                     ))

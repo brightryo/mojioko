@@ -33,7 +33,8 @@ import {
   GpuToolDownloadError,
   type GpuToolDownloadRun,
 } from '@/services/gpu-tool'
-import type { GpuToolState } from '../../../shared/gpu-tool'
+import { GPU_TOOL_RELEASE_TAG, type GpuToolState } from '../../../shared/gpu-tool'
+import { useDownloadActiveStore } from '@/stores/download-active-store'
 
 /**
  * REQ-0150 — 2-card accelerator picker replacing the REQ-0149 single-
@@ -81,10 +82,20 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
     onOpenChange?.(next)
   }
   const [downloadPercent, setDownloadPercent] = useState(0)
-  const [isDownloading, setIsDownloading] = useState(false)
+  const [localDownloading, setLocalDownloading] = useState(false)
   const [isExtracting, setIsExtracting] = useState(false)
   const [dialogKind, setDialogKind] = useState<'install' | 'delete' | null>(null)
   const runRef = useRef<GpuToolDownloadRun | null>(null)
+
+  // REQ-0245 — GPU tool has only one target ever (`cuda-v1`), so a
+  // single boolean is fine.  But we OR the local flag with the
+  // store-mirrored slot check so the button stays "Downloading" even
+  // if this component was mounted mid-DL (e.g. the settings drawer
+  // was closed and reopened while cuda-v1.zip was still downloading).
+  const isRemoteDownloading = useDownloadActiveStore((s) =>
+    s.active.some((a) => a.kind === 'gpu-tool' && a.targetId === GPU_TOOL_RELEASE_TAG),
+  )
+  const isDownloading = localDownloading || isRemoteDownloading
 
   async function refresh() {
     setState(await getGpuToolState())
@@ -123,7 +134,7 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
 
   async function handleConfirmInstall() {
     setDialogKind(null)
-    setIsDownloading(true)
+    setLocalDownloading(true)
     setDownloadPercent(0)
     setIsExtracting(false)
 
@@ -140,13 +151,17 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
 
     try {
       await run.promise
-      // Mirror the Whisper model "install → auto-active" affordance: a
-      // fresh DL implies the user wants to try GPU immediately.  Main
-      // side validates the request and downgrades if the tools didn't
-      // actually land (shouldn't happen after `completed`, but safe).
-      const next = await selectAccelerator('gpu')
-      if (next) setState(next)
-      else await refresh()
+      // REQ-0246 — removed the auto-switch-to-GPU that used to fire
+      // here (`selectAccelerator('gpu')`).  Rationale matches the
+      // Whisper model manager: the "GPU tools were just downloaded,
+      // so the user must want to use GPU" heuristic breaks down as
+      // soon as concurrent DLs, partial cancels, or re-downloads
+      // enter the picture.  The user now picks GPU explicitly via
+      // the accelerator card (`handleSelectGpu`) — CPU stays the
+      // active accelerator until they do.  Note: the accordion did
+      // NOT auto-close in this path even before REQ-0246 (unlike the
+      // model side), so nothing to remove for §0.3 here.
+      await refresh()
       toast.success(t('gpuTool.download_success'))
     } catch (err) {
       if (err instanceof GpuToolDownloadError) {
@@ -166,7 +181,7 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
       }
       await refresh()
     } finally {
-      setIsDownloading(false)
+      setLocalDownloading(false)
       setIsExtracting(false)
       setDownloadPercent(0)
       runRef.current = null
@@ -270,7 +285,19 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <div className="pt-3">
+            <div className="space-y-3 pt-3">
+              {/* REQ-0248 — mirror the Whisper model section's Long
+                  description slot (`whisperModel.descriptionLong` at
+                  the same position, same markup: `text-body-sm
+                  text-fg-muted leading-relaxed`).  Explains what CPU vs
+                  GPU is and prompts the user to select a device after
+                  DL — needed after REQ-0246/0247 dropped the "DL →
+                  auto-active" affordance.  Wrapping the grid stays in
+                  its own inner div so the `space-y-3` applies between
+                  paragraph and grid. */}
+              <p className="text-body-sm text-fg-muted leading-relaxed">
+                {t('gpuTool.descriptionLong')}
+              </p>
               <div className="grid grid-cols-2 gap-3 mx-auto max-w-[38rem]">
                 <CpuCard
                   isActive={isCpuActive}

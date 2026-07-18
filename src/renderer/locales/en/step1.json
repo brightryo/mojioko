@@ -58,7 +58,7 @@
   "whisperModel": {
     "label": "Whisper model",
     "tooltip": "The engine that converts audio to text. Larger models are more accurate but slower.",
-    "descriptionLong": "Whisper is an engine that converts audio into text. It's an open-source library developed by OpenAI and is free to use. All processing happens entirely on your PC; no data is sent externally.",
+    "descriptionLong": "Whisper is an engine that converts audio into text. It's an open-source library developed by OpenAI and is free to use. All processing happens entirely on your PC; no data is sent externally. Download the model you want to use, then click \"Use this\" to select it.",
     "descLargeV3Turbo": "Fast and lightweight. Roughly half the download size of large-v3.",
     "descLargeV3": "Higher quality, recommended. Needs more resources to run.",
     "recommended": "Recommended",
@@ -102,6 +102,7 @@
   "gpuTool": {
     "label": "Processing Device",
     "tooltip": "Choose CPU or a compatible NVIDIA GPU for transcription. GPU requires downloading CUDA/cuDNN runtimes (~1 GB) once; runs offline thereafter.",
+    "descriptionLong": "Choose whether to run transcription on CPU or GPU. Using the GPU requires downloading the CUDA / cuDNN runtimes first. After the download, select the device you want to use.",
     "cpu": {
       "name": "CPU",
       "description": "No download required. Works on every machine.",
@@ -135,7 +136,7 @@
     "delete_confirm_body": "Deletes the downloaded CUDA / cuDNN files ({{size}}). GPU execution will require a fresh download to re-enable.",
     "delete_confirm_ok": "Delete",
     "delete_success": "GPU acceleration tools deleted",
-    "download_success": "GPU acceleration enabled",
+    "download_success": "GPU acceleration tools downloaded successfully",
     "select_cpu_success": "Switched to CPU",
     "select_gpu_success": "Switched to GPU",
     "toast_download_failed_network": "Network disconnected. Check your connection and try again.",

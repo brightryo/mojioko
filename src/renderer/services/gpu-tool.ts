@@ -41,6 +41,8 @@ export function startGpuToolDownload(
 ): GpuToolDownloadRun {
   let cleanup: (() => void) | null = null
   let cancelChannelId: string | null = null
+  // REQ-0244 — honour cancel that races the initial invoke.
+  let cancelled = false
 
   const promise = new Promise<void>((resolve, reject) => {
     window.electronAPI
@@ -51,6 +53,11 @@ export function startGpuToolDownload(
           return
         }
         cancelChannelId = r.data.channelId
+        if (cancelled) {
+          window.electronAPI.gpuToolDownloadCancel(cancelChannelId).catch(() => {})
+          reject(new GpuToolDownloadError('aborted', 'Cancelled'))
+          return
+        }
         cleanup = window.electronAPI.subscribeToChannel(
           r.data.channelId,
           (payload: unknown) => {
@@ -70,11 +77,17 @@ export function startGpuToolDownload(
 
   return {
     promise,
+    // REQ-0244 — do NOT `cleanup()` here.  Main-side abort emits a
+    // 'failed' event on the channel; leaving the subscription attached
+    // lets the callback settle the promise (reject → cleanup).  The
+    // pre-fix code called cleanup() first, orphaning the 'failed'
+    // event and hanging the promise forever (see transcription.ts
+    // fix and the batch-cancel-restore bug this REQ addresses).
     cancel: () => {
+      cancelled = true
       if (cancelChannelId) {
         window.electronAPI.gpuToolDownloadCancel(cancelChannelId).catch(() => {})
       }
-      cleanup?.()
     },
   }
 }

@@ -36,6 +36,22 @@ export const Channels = {
   gpuToolState: 'gpu-tool:state',
   gpuToolDownload: 'gpu-tool:download',
   gpuToolDelete: 'gpu-tool:delete',
+
+  /**
+   * REQ-0241 → REQ-0244 (removed) → REQ-0245 (restored, multi-slot).
+   *
+   * Under REQ-0244's per-target-key parallel semantics each UI
+   * component's local `downloadingId` state cannot reliably reflect
+   * main's slot map — a second DL starting clobbers the first
+   * component's local flag, the first row flips back to "Download",
+   * a re-click hits `DOWNLOAD_BUSY`.  REQ-0245 fixes this by
+   * restoring the broadcast, but the payload is now the SNAPSHOT
+   * ARRAY (all active downloads across all kinds), not a single
+   * slot.  Renderer stores it in a Zustand slice and per-row
+   * `isDownloading` derives from `active.some(a => matches me)`.
+   */
+  downloadActiveGet: 'download:active:get',
+  downloadActiveChanged: 'download:active:changed',
   /**
    * REQ-0150 — persist the user's CPU/GPU card selection.  Payload is
    * `'cpu' | 'gpu'`; main downgrades to `'cpu'` if the GPU tools are

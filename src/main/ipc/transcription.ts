@@ -5,6 +5,7 @@ import { join, parse } from 'path'
 import { Channels } from '../../shared/ipc-channels'
 import { transcribe, checkModelInstalled } from '../services/transcription-sidecar'
 import { downloadModel, isModelFormatStale, DownloadError } from '../services/model-downloader'
+import { downloadManager, type DownloadToken } from '../services/download-manager'
 import { generatePreviewMix } from '../services/preview-mix'
 import { getModelsDir, getBinPath } from '../lib/paths'
 import { loadSettings, saveSettings } from '../services/settings-store'
@@ -74,13 +75,12 @@ async function buildModelsState(): Promise<ModelsState> {
       `[ipc/transcription] settings.activeModelId="${resolved.correctedFrom}" ` +
       `but files missing under ${modelsDir} — reverting to null (REQ-077)`,
     )
-  } else if (resolved.source === 'migrated-from-whisper-model') {
-    // Pre-existing v1.3.0 behavior: synthesize activeModelId from the
-    // legacy `whisperModel` field for users on older settings versions.
-    // Persist so the synthesis only runs once.
-    settings.activeModelId = activeModelId
-    await saveSettings(settings)
   }
+  // REQ-0247 — the `migrated-from-whisper-model` branch was removed.
+  // That branch had persisted `settings.activeModelId = migrated` right
+  // after `refresh()` post-DL, silently activating a freshly-downloaded
+  // model whenever it matched the (default) `whisperModel` — the exact
+  // auto-select the REQ targets.  See `resolve-active-model.ts` jsdoc.
 
   const { freeBytes: diskFreeBytes, drive: diskDrive } = getDiskFree(modelsDir)
   let totalUsedBytes = 0
@@ -313,15 +313,32 @@ export function registerTranscriptionHandlers(): void {
     }
   })
 
-  const activeDownloads = new Map<string, AbortController>()
+  // REQ-0241 — store the DownloadManager-issued token so `:cancel` can
+  // both abort the signal and release the global slot in one call.
+  const activeDownloads = new Map<string, DownloadToken>()
 
   ipcMain.handle(Channels.transcriptionDownloadModel, async (event, modelId: string): Promise<OkResult<{ channelId: string }> | ErrResult> => {
     try { assertValidModelId(modelId) } catch (err) {
       return { ok: false, error: { code: 'INVALID_MODEL_ID', message: (err as Error).message } }
     }
+    // REQ-0244 — per-target-key acquire.  Different models (and
+    // different kinds) run in parallel; only a same-target duplicate
+    // is refused.  The UI already swaps the Install button to a Cancel
+    // button while the DL is in flight, so this rejection is a safety
+    // net for programmatic double-invokes (keyboard shortcuts, races).
+    const acquired = downloadManager.acquire('model', modelId, modelId)
+    if ('busy' in acquired) {
+      return {
+        ok: false,
+        error: {
+          code: 'DOWNLOAD_BUSY',
+          message: `Download already in progress for model ${acquired.existing.targetId}`,
+        },
+      }
+    }
+    const token = acquired
     const channelId = `transcription:download:${randomUUID()}`
-    const controller = new AbortController()
-    activeDownloads.set(channelId, controller)
+    activeDownloads.set(channelId, token)
 
     const modelsDir = getModelsDir()
     log.info(`[ipc/transcription] downloadModel ${modelId}, channelId=${channelId}`)
@@ -330,7 +347,7 @@ export function registerTranscriptionHandlers(): void {
       if (!event.sender.isDestroyed()) {
         event.sender.send(channelId, evt)
       }
-    }, controller.signal).catch((err) => {
+    }, token.signal).catch((err) => {
       log.error('[ipc/transcription] downloadModel error', err)
       if (!event.sender.isDestroyed()) {
         // REQ-20260615-081 — carry the typed code on the IPC payload so
@@ -348,6 +365,7 @@ export function registerTranscriptionHandlers(): void {
         })
       }
     }).finally(() => {
+      token.release()
       activeDownloads.delete(channelId)
     })
 
@@ -355,7 +373,7 @@ export function registerTranscriptionHandlers(): void {
   })
 
   ipcMain.handle(`${Channels.transcriptionDownloadModel}:cancel`, (_event, channelId: string): void => {
-    activeDownloads.get(channelId)?.abort()
+    activeDownloads.get(channelId)?.cancel()
     activeDownloads.delete(channelId)
   })
 

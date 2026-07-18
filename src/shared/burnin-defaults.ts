@@ -44,7 +44,13 @@ export const BURNIN_DEFAULTS = {
   verticalPosition: 'bottom' as const,
   verticalMarginPx: 40,
 
-  defaultAudioTrackIndex: 2,
+  // REQ-0251 案件A — fresh-install default is track 1 (the most common
+  // main-audio case).  Multi-track editing (e.g. capture-card track 2 =
+  // clean game/mic split) is an advanced pattern; users who need it flip
+  // this in Settings once and their persisted value overrides the default
+  // on hydrate (settings-store `{ ...defaults, ...parsed }` keeps the
+  // saved value).  Prior default was 2, kept for existing users.
+  defaultAudioTrackIndex: 1,
   encoder: 'auto' as EncoderSetting,
   audioMode: 'simple' as AudioMode,
 

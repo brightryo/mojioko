@@ -232,6 +232,23 @@ export type DownloadModelEvent =
  */
 export type { DownloadGpuToolEvent, GpuToolState } from './gpu-tool'
 
+/**
+ * REQ-0241 → REQ-0244 → REQ-0245 — DownloadManager types.  REQ-0245
+ * restored `ActiveDownloadInfo` (removed by REQ-0244) so the
+ * renderer can mirror main's slot map as an array via the
+ * `download:active:changed` broadcast + `download:active:get`
+ * snapshot IPC.  `DownloadKind` and the busy-error code stay for
+ * the (rare) same-target duplicate rejection path.
+ */
+export type DownloadKind = 'model' | 'gpu-tool' | 'font'
+
+export interface ActiveDownloadInfo {
+  kind: DownloadKind
+  targetId: string
+  label: string
+  startedAt: number
+}
+
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------

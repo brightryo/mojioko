@@ -7,7 +7,8 @@ import {
   deleteGpuTool,
   setActiveAccelerator,
 } from '../services/gpu-tool'
-import type { GpuToolState } from '../../shared/gpu-tool'
+import { downloadManager, type DownloadToken } from '../services/download-manager'
+import { GPU_TOOL_RELEASE_TAG, type GpuToolState } from '../../shared/gpu-tool'
 import log from '../lib/logger'
 
 type OkResult<T> = { ok: true; data: T }
@@ -34,19 +35,35 @@ export function registerGpuToolHandlers(): void {
     }
   })
 
-  const activeDownloads = new Map<string, AbortController>()
+  // REQ-0241 — DownloadManager-issued tokens keyed by per-run channelId.
+  const activeDownloads = new Map<string, DownloadToken>()
 
   ipcMain.handle(Channels.gpuToolDownload, async (event): Promise<OkResult<{ channelId: string }> | ErrResult> => {
+    // REQ-0244 — GPU tool DL is per-target-key ('gpu-tool' +
+    // release tag).  Different kinds (model / font) run in parallel
+    // without contention; only a second click on GPU-tool during its
+    // own DL is refused (defence for programmatic double-invokes).
+    const acquired = downloadManager.acquire('gpu-tool', GPU_TOOL_RELEASE_TAG, GPU_TOOL_RELEASE_TAG)
+    if ('busy' in acquired) {
+      return {
+        ok: false,
+        error: {
+          code: 'DOWNLOAD_BUSY',
+          message: `Download already in progress for gpu-tool ${acquired.existing.targetId}`,
+        },
+      }
+    }
+    const token = acquired
     const channelId = `gpu-tool:event:${randomUUID()}`
-    const controller = new AbortController()
-    activeDownloads.set(channelId, controller)
+    activeDownloads.set(channelId, token)
     log.info(`[ipc/gpu-tool] download start, channelId=${channelId}`)
 
     downloadGpuTool((evt) => {
       if (!event.sender.isDestroyed()) {
         event.sender.send(channelId, evt)
       }
-    }, controller.signal).finally(() => {
+    }, token.signal).finally(() => {
+      token.release()
       activeDownloads.delete(channelId)
     })
 
@@ -54,7 +71,7 @@ export function registerGpuToolHandlers(): void {
   })
 
   ipcMain.handle(`${Channels.gpuToolDownload}:cancel`, (_event, channelId: string): void => {
-    activeDownloads.get(channelId)?.abort()
+    activeDownloads.get(channelId)?.cancel()
     activeDownloads.delete(channelId)
   })
 

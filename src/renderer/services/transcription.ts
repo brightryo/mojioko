@@ -93,17 +93,29 @@ export class DownloadFailedError extends Error {
   }
 }
 
+
 export function downloadModel(
   modelId: string,
   onEvent: (event: DownloadModelEvent) => void
 ): DownloadRun {
   let channelId: string | null = null
   let unsub: (() => void) | null = null
+  // REQ-0244 — cancel() flag: if the user hits Cancel between
+  // `transcriptionDownloadModel` invoke and its resolution, we honour
+  // it as soon as we know the channelId (fire IPC cancel + throw).
+  let cancelled = false
 
   const promise = (async () => {
     const result = await window.electronAPI.transcriptionDownloadModel(modelId)
     if (!result.ok) throw new Error(result.error.message)
     channelId = result.data.channelId
+
+    if (cancelled) {
+      // Cancel raced the invoke.  Tell main to abort (main may or may
+      // not have started I/O yet) and unwind so awaiters stop pending.
+      window.electronAPI.transcriptionDownloadModelCancel(channelId)
+      throw new Error('Cancelled')
+    }
 
     return new Promise<void>((resolve, reject) => {
       unsub = window.electronAPI.subscribeToChannel(channelId!, (payload) => {
@@ -132,7 +144,16 @@ export function downloadModel(
   return {
     promise,
     cancel: () => {
-      unsub?.()
+      // REQ-0244 — the pre-existing bug this REQ fixes: cancel() used
+      // to `unsub()` before invoking the main-side cancel, so the
+      // 'failed' event fired by main's abort landed on nobody and the
+      // inner promise hung forever.  A caller doing `await run.promise`
+      // (e.g. font-picker's batch loop) then stalled, and the batch
+      // button never reappeared.  We now leave the subscription
+      // attached — main's cancel path will emit `{event:'failed',
+      // errorCode:'aborted'}` on the channel, the subscriber calls
+      // `unsub?.(); reject(...)`, and the outer promise settles.
+      cancelled = true
       if (channelId) window.electronAPI.transcriptionDownloadModelCancel(channelId)
     }
   }

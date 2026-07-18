@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.4] - 2026-07-18
+
+### Fixed
+
+- Fixed an issue where model, GPU tool, and font downloads could
+  fail to complete correctly.
+
+---
+
 ## [1.3.3] - 2026-07-15
 
 Fifth minor-line release: a full editor redesign inspired by

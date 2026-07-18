@@ -15,6 +15,7 @@ import {
   downloadFont,
   uninstallFont as removeFontDir
 } from '../services/font-downloader'
+import { downloadManager, type DownloadToken } from '../services/download-manager'
 import { getFontUserDir, getFontResolveDir, getBundledOflPath } from '../lib/paths'
 import { loadSettings, saveSettings } from '../services/settings-store'
 import log from '../lib/logger'
@@ -33,7 +34,8 @@ async function activeFontIdFromSettings(): Promise<FontId> {
 }
 
 export function registerFontHandlers(): void {
-  const activeDownloads = new Map<string, AbortController>()
+  // REQ-0241 — DownloadManager-issued tokens keyed by per-run channelId.
+  const activeDownloads = new Map<string, DownloadToken>()
 
   ipcMain.handle(Channels.fontList, async (): Promise<OkResult<FontsState> | ErrResult> => {
     try {
@@ -49,20 +51,36 @@ export function registerFontHandlers(): void {
     try { assertValidFontId(fontId) } catch (err) {
       return { ok: false, error: { code: 'INVALID_FONT_ID', message: (err as Error).message } }
     }
+    // REQ-0244 — per-font-key acquire.  The font-picker's batch DL
+    // loop iterates sequentially over fonts, so within a batch each
+    // per-font call takes and releases 'font:<id>' cleanly.  Other
+    // kinds (model / GPU) run fully in parallel.  Same-font-id
+    // duplicate rejection is a safety net for double-clicks.
+    const acquired = downloadManager.acquire('font', fontId, fontId)
+    if ('busy' in acquired) {
+      return {
+        ok: false,
+        error: {
+          code: 'DOWNLOAD_BUSY',
+          message: `Download already in progress for font ${acquired.existing.targetId}`,
+        },
+      }
+    }
+    const token = acquired
     const channelId = `font:download:${randomUUID()}`
-    const controller = new AbortController()
-    activeDownloads.set(channelId, controller)
+    activeDownloads.set(channelId, token)
 
     log.info(`[ipc/font] download ${fontId} channelId=${channelId}`)
 
     downloadFont(fontId, (evt) => {
       if (!event.sender.isDestroyed()) event.sender.send(channelId, evt)
-    }, controller.signal).catch((err) => {
+    }, token.signal).catch((err) => {
       log.error('[ipc/font] download error', err)
       if (!event.sender.isDestroyed()) {
         event.sender.send(channelId, { event: 'failed', error: String(err instanceof Error ? err.message : err) })
       }
     }).finally(() => {
+      token.release()
       activeDownloads.delete(channelId)
     })
 
@@ -70,7 +88,7 @@ export function registerFontHandlers(): void {
   })
 
   ipcMain.handle(`${Channels.fontDownload}:cancel`, (_event, channelId: string): void => {
-    activeDownloads.get(channelId)?.abort()
+    activeDownloads.get(channelId)?.cancel()
     activeDownloads.delete(channelId)
   })
 

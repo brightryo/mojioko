@@ -57,7 +57,7 @@
   "whisperModel": {
     "label": "Whisperモデル",
     "tooltip": "音声を文字に変換するエンジンです。モデルサイズが大きいほど精度が上がります。",
-    "descriptionLong": "Whisperは、音声を文字に変換するエンジンです。OpenAIが開発したオープンソースのライブラリで、無料で利用できます。すべての処理はあなたのPCの中だけで行われ、データが外部に送信されることはありません。",
+    "descriptionLong": "Whisperは、音声を文字に変換するエンジンです。OpenAIが開発したオープンソースのライブラリで、無料で利用できます。すべての処理はあなたのPCの中だけで行われ、データが外部に送信されることはありません。使用したいモデルをダウンロードし、「使用する」を押して選択してください。",
     "descLargeV3Turbo": "高速・軽量。ダウンロードサイズは large-v3 の約半分。",
     "descLargeV3": "高精度・推奨。動作には高いスペックが必要。",
     "recommended": "推奨",
@@ -101,6 +101,7 @@
   "gpuTool": {
     "label": "処理デバイス",
     "tooltip": "文字起こしを CPU で実行するか、対応 NVIDIA GPU で実行するかを選びます。GPU 実行には CUDA/cuDNN ランタイム（約 1 GB）を 1 度だけダウンロードすれば以降オフラインで動作します。",
+    "descriptionLong": "文字起こしをCPUとGPUのどちらで処理するかを選べます。GPUを使うには CUDA / cuDNN ランタイムのダウンロードが必要です。ダウンロード後、使用したいデバイスを選択してください。",
     "cpu": {
       "name": "CPU",
       "description": "追加ダウンロード不要。どのマシンでも動作します。",
@@ -134,7 +135,7 @@
     "delete_confirm_body": "ダウンロード済みの CUDA / cuDNN 一式（{{size}}）を削除します。再度 GPU 実行するには再ダウンロードが必要です。",
     "delete_confirm_ok": "削除する",
     "delete_success": "GPU アクセラレーターを削除しました",
-    "download_success": "GPU アクセラレーターが有効になりました",
+    "download_success": "GPU アクセラレーターのダウンロードが完了しました",
     "select_cpu_success": "CPU に切り替えました",
     "select_gpu_success": "GPU に切り替えました",
     "toast_download_failed_network": "ネットワークが切断されました。接続を確認して再度お試しください。",

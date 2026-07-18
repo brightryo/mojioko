@@ -276,6 +276,66 @@ body {
   transform: translateY(-2px);
 }
 
+/* System-requirements card (REQ-0254) — sits right below `.version-cards`
+   in the hero so users see OS / memory / storage / GPU expectations before
+   clicking a download CTA (this prevents e.g. macOS users from downloading
+   the Windows installer by mistake). Visually matches `.version-card` —
+   same background, border, radius, and ✓ bullet — but rendered as a single
+   wide card since the requirements apply to Free and Paid equally. Same
+   `max-width: 880px` as `.version-cards` keeps it aligned with the row
+   above; padding is slightly tighter (20 vs 28) so it reads as a
+   supplemental note rather than a third CTA. */
+.sysreq-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  max-width: 880px;
+  margin: 0 auto 24px;
+  text-align: left;
+}
+
+.sysreq-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.sysreq-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.sysreq-list li {
+  padding-left: 22px;
+  position: relative;
+  margin-bottom: 6px;
+}
+
+.sysreq-list li:last-child {
+  margin-bottom: 0;
+}
+
+.sysreq-list li::before {
+  content: "✓";
+  color: var(--accent);
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+}
+
+.sysreq-label {
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-right: 4px;
+}
+
 /* Subordinate link shown under the main download button — points to the
    Releases page so users who want changelog / older versions can still get
    there. Visually quieter than .download-btn so it doesn't compete. */

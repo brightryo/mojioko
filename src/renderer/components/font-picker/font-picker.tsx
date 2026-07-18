@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Download, Trash2, X, FileText, AlertCircle, AlertTriangle, Lock, DownloadCloud } from 'lucide-react'
 import { toast } from 'sonner'
@@ -28,6 +28,10 @@ import { ensureFontLoaded, evictFont } from '@/lib/font-registry'
 import { evictSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { useUiStore } from '@/stores/ui-store'
 import { selectBatchDownloadTargets } from '@/lib/batch-font-download'
+import {
+  useDownloadActiveStore,
+  selectActiveKeys,
+} from '@/stores/download-active-store'
 import { getSortedFontRegistry, type FontId, type FontsState, type FontInfo, type FontMeta, getFontMeta } from '../../../shared/fonts'
 import { FontLangBadge, FontLangBadges } from '@/components/font-lang-badge/font-lang-badge'
 
@@ -70,8 +74,27 @@ export function FontPicker({ onChange }: FontPickerProps) {
   const openUpsell = useStoreUpsellStore((s) => s.openUpsell)
 
   const [state, setState] = useState<FontsState | null>(null)
-  const [downloadingId, setDownloadingId] = useState<FontId | null>(null)
-  const [downloadPercent, setDownloadPercent] = useState(0)
+  // REQ-0245 — per-font DL progress.  Was single-value
+  // `downloadingId` / `downloadPercent` which had the same
+  // clobber-on-second-DL bug as the whisper model manager (silent
+  // here because users rarely start two fonts in parallel, but the
+  // structural problem was identical).  The batch loop reads and
+  // writes into these Maps too (batch is serial, so at most one
+  // entry from the batch at a time), so the current-iteration row
+  // still shows its own progress bar during batch.
+  const [progress, setProgress] = useState<Map<FontId, { percent: number }>>(
+    () => new Map(),
+  )
+  const runsRef = useRef<Map<FontId, FontDownloadRun>>(new Map())
+  const [pendingIds, setPendingIds] = useState<Set<FontId>>(() => new Set())
+
+  // Store-derived active-font-key set.  Immune to local state
+  // clobbering; per-row `isDownloading` reads from here.
+  const activeArray = useDownloadActiveStore((s) => s.active)
+  const activeFontKeys = useMemo(
+    () => selectActiveKeys(activeArray, 'font'),
+    [activeArray],
+  )
   /**
    * REQ-0161 — batch download progress.  Non-null exactly while a
    * `handleBatchDownload` iteration is in flight; used both by the
@@ -105,7 +128,11 @@ export function FontPicker({ onChange }: FontPickerProps) {
     meta: FontMeta
     affectedRowCount: number
   } | null>(null)
-  const downloadRunRef = useRef<FontDownloadRun | null>(null)
+  // REQ-0245 — kept for the batch loop, which is inherently serial
+  // (walks targets one at a time).  Cleared between iterations by
+  // the per-iteration finally block below.  Not used for individual
+  // per-font DL any more — see `runsRef` above.
+  const batchRunRef = useRef<FontDownloadRun | null>(null)
 
   const refresh = useCallback(async () => {
     const r = await listFonts()
@@ -130,14 +157,29 @@ export function FontPicker({ onChange }: FontPickerProps) {
 
   async function handleDownload(meta: FontMeta) {
     if (meta.bundled) return
-    setDownloadingId(meta.id)
-    setDownloadPercent(0)
+    // REQ-0245 — per-font state.  Immutable Map/Set updates so
+    // React re-renders every row that reads them.  Pending set
+    // covers the tiny window between click and broadcast landing.
+    setProgress((prev) => {
+      const next = new Map(prev)
+      next.set(meta.id, { percent: 0 })
+      return next
+    })
+    setPendingIds((prev) => {
+      const next = new Set(prev)
+      next.add(meta.id)
+      return next
+    })
     const run = downloadFont(meta.id, (evt) => {
       if (evt.event === 'progress') {
-        setDownloadPercent(evt.percent)
+        setProgress((prev) => {
+          const next = new Map(prev)
+          next.set(meta.id, { percent: evt.percent })
+          return next
+        })
       }
     })
-    downloadRunRef.current = run
+    runsRef.current.set(meta.id, run)
     try {
       await run.promise
       await refresh()
@@ -172,21 +214,36 @@ export function FontPicker({ onChange }: FontPickerProps) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.includes('HTTP 404')) {
         toast.error(t('fontPicker.toast.downloadUnavailable', { name: meta.displayName }))
-      } else if (!msg.toLowerCase().includes('abort')) {
+      } else if (
+        !msg.toLowerCase().includes('abort') &&
+        !msg.toLowerCase().includes('cancel')
+      ) {
         toast.error(t('fontPicker.toast.downloadFailed', { error: msg }))
       }
     } finally {
-      downloadRunRef.current = null
-      setDownloadingId(null)
-      setDownloadPercent(0)
+      // REQ-0245 — cleanup ONLY this font's entries, not the whole
+      // Map.  Under REQ-0244's parallel semantics several fonts can
+      // be in flight and each must clean up independently.
+      runsRef.current.delete(meta.id)
+      setProgress((prev) => {
+        if (!prev.has(meta.id)) return prev
+        const next = new Map(prev)
+        next.delete(meta.id)
+        return next
+      })
+      setPendingIds((prev) => {
+        if (!prev.has(meta.id)) return prev
+        const next = new Set(prev)
+        next.delete(meta.id)
+        return next
+      })
     }
   }
 
-  function handleCancelDownload() {
-    downloadRunRef.current?.cancel()
-    downloadRunRef.current = null
-    setDownloadingId(null)
-    setDownloadPercent(0)
+  function handleCancelDownload(fontId: FontId) {
+    // REQ-0245 — cancel the specific font's run.  Local state
+    // cleanup happens in the awaiting promise's finally block.
+    runsRef.current.get(fontId)?.cancel()
   }
 
   /**
@@ -219,98 +276,144 @@ export function FontPicker({ onChange }: FontPickerProps) {
     const targets = selectBatchDownloadTargets(state, isMsix)
     if (targets.length === 0) return
 
+    // REQ-0244 §0.3-2 — if an individual font DL is in flight, cancel
+    // it and wait for each to unwind BEFORE we open the batch.  Any
+    // font the user just started manually is a batch target too, so
+    // the batch will pick them up on their own iterations; the manual
+    // partial files are torn down by the main-side abort path.
+    //
+    // REQ-0245 — iterate ALL in-flight individual runs (the old
+    // single-ref design under REQ-0244 only cancelled one; under
+    // parallel semantics several fonts may be in flight).
+    const priorRuns = Array.from(runsRef.current.values())
+    for (const r of priorRuns) r.cancel()
+    if (priorRuns.length > 0) {
+      await Promise.allSettled(priorRuns.map((r) => r.promise))
+    }
+
     batchAbortRef.current = false
     setBatchState({ total: targets.length, completed: 0, currentId: null })
     let completed = 0
     let failed = 0
 
-    for (const meta of targets) {
-      if (batchAbortRef.current) break
+    // REQ-0244 §2.3 — whole batch wrapped in try/finally so cleanup
+    // ALWAYS runs (belt + suspenders on top of the REQ-0244 renderer-
+    // service cancel fix that lets promises settle on abort).
+    try {
+      for (const meta of targets) {
+        if (batchAbortRef.current) break
 
-      setBatchState((prev) => (prev ? { ...prev, currentId: meta.id } : prev))
-      setDownloadingId(meta.id)
-      setDownloadPercent(0)
+        setBatchState((prev) => (prev ? { ...prev, currentId: meta.id } : prev))
+        // REQ-0245 — use the same per-font Maps as individual DL so
+        // the current-iteration row shows its own progress bar.
+        setProgress((prev) => {
+          const next = new Map(prev)
+          next.set(meta.id, { percent: 0 })
+          return next
+        })
 
-      const run = downloadFont(meta.id, (evt) => {
-        if (evt.event === 'progress') setDownloadPercent(evt.percent)
-      })
-      downloadRunRef.current = run
+        const run = downloadFont(meta.id, (evt) => {
+          if (evt.event === 'progress') {
+            setProgress((prev) => {
+              const next = new Map(prev)
+              next.set(meta.id, { percent: evt.percent })
+              return next
+            })
+          }
+        })
+        batchRunRef.current = run
+        runsRef.current.set(meta.id, run)
 
-      try {
-        await run.promise
-        // Refresh the font cache eagerly so that if the user is watching
-        // the picker while the batch runs, the row visibly flips to
-        // "installed" as each font completes.  Errors here are
-        // best-effort (the file is on disk regardless).
-        //
-        // REQ-0162 — same both-loader pattern the individual DL now
-        // uses: FontFace (CSS) + opentype.js parse (cmap coverage for
-        // tofu substitution).  Without the second loader, batched
-        // downloads left the fresh fonts renderable via CSS but
-        // invisible to REQ-0160's tofu path, so an EN-only font
-        // downloaded via "Download all" would still fall back for
-        // Japanese until app restart.
-        await Promise.all([
-          ensureFontLoaded(meta.id).catch(() => {}),
-          loadSubtitleFontFor(meta.id).catch(() => {}),
-        ])
-        completed++
-      } catch (err) {
-        // A user cancel and a network / 404 both land in this branch.
-        // Only count it as `failed` when we did NOT ask for it.  When
-        // `batchAbortRef.current` is true the loop will exit at the
-        // next iteration's guard; we still let the finally-block clear
-        // per-row progress state so the row doesn't stay stuck at
-        // "downloading…" if the user cancelled mid-DL.
-        const msg = err instanceof Error ? err.message : String(err)
-        if (!batchAbortRef.current && !msg.toLowerCase().includes('abort')) {
-          failed++
+        try {
+          await run.promise
+          // Refresh the font cache eagerly so that if the user is watching
+          // the picker while the batch runs, the row visibly flips to
+          // "installed" as each font completes.  Errors here are
+          // best-effort (the file is on disk regardless).
+          //
+          // REQ-0162 — same both-loader pattern the individual DL now
+          // uses: FontFace (CSS) + opentype.js parse (cmap coverage for
+          // tofu substitution).  Without the second loader, batched
+          // downloads left the fresh fonts renderable via CSS but
+          // invisible to REQ-0160's tofu path, so an EN-only font
+          // downloaded via "Download all" would still fall back for
+          // Japanese until app restart.
+          await Promise.all([
+            ensureFontLoaded(meta.id).catch(() => {}),
+            loadSubtitleFontFor(meta.id).catch(() => {}),
+          ])
+          completed++
+        } catch (err) {
+          // A user cancel and a network / 404 both land in this branch.
+          // Only count it as `failed` when we did NOT ask for it.  When
+          // `batchAbortRef.current` is true the loop will exit at the
+          // next iteration's guard; we still let the finally-block clear
+          // per-row progress state so the row doesn't stay stuck at
+          // "downloading…" if the user cancelled mid-DL.
+          const msg = err instanceof Error ? err.message : String(err)
+          if (
+            !batchAbortRef.current
+            && !msg.toLowerCase().includes('abort')
+            && !msg.toLowerCase().includes('cancel')
+          ) {
+            failed++
+          }
+        } finally {
+          batchRunRef.current = null
+          runsRef.current.delete(meta.id)
+          setProgress((prev) => {
+            if (!prev.has(meta.id)) return prev
+            const next = new Map(prev)
+            next.delete(meta.id)
+            return next
+          })
         }
-      } finally {
-        downloadRunRef.current = null
+        setBatchState((prev) => (prev ? { ...prev, completed } : prev))
       }
-      setBatchState((prev) => (prev ? { ...prev, completed } : prev))
+
+      await refresh()
+      // Re-notify the font-inventory subscribers once, at the end of the
+      // batch — better than N notifications while the batch is running.
+      bumpFontInventoryVersion()
+
+      const wasCancelled = batchAbortRef.current
+      if (wasCancelled) {
+        toast.info(
+          t('fontPicker.batchDownload.toast.cancelled', {
+            completed,
+            total: targets.length,
+          }),
+        )
+      } else if (failed > 0) {
+        toast.warning(
+          t('fontPicker.batchDownload.toast.partial', {
+            completed,
+            total: targets.length,
+            failed,
+          }),
+        )
+      } else if (completed > 0) {
+        toast.success(t('fontPicker.batchDownload.toast.done', { count: completed }))
+      }
+      onChange?.()
+    } finally {
+      // REQ-0244 §2.3 / §0.3-3 — guaranteed state reset so the
+      // batch button reappears and per-font DL buttons come back.
+      batchAbortRef.current = false
+      batchRunRef.current = null
+      setBatchState(null)
     }
-
-    await refresh()
-    // Re-notify the font-inventory subscribers once, at the end of the
-    // batch — better than N notifications while the batch is running.
-    bumpFontInventoryVersion()
-
-    const wasCancelled = batchAbortRef.current
-    batchAbortRef.current = false
-    setDownloadingId(null)
-    setDownloadPercent(0)
-    setBatchState(null)
-
-    if (wasCancelled) {
-      toast.info(
-        t('fontPicker.batchDownload.toast.cancelled', {
-          completed,
-          total: targets.length,
-        }),
-      )
-    } else if (failed > 0) {
-      toast.warning(
-        t('fontPicker.batchDownload.toast.partial', {
-          completed,
-          total: targets.length,
-          failed,
-        }),
-      )
-    } else if (completed > 0) {
-      toast.success(t('fontPicker.batchDownload.toast.done', { count: completed }))
-    }
-    onChange?.()
   }
 
   function handleCancelBatch() {
     // Set the abort ref FIRST so the loop's next-iteration guard sees
     // the truthy value even if the current DL's cancel resolves
-    // asynchronously.  The in-flight promise itself is aborted via the
-    // shared downloadRun reference used by individual DL as well.
+    // asynchronously.  Cancel targets the batch's current iteration
+    // run.  REQ-0244's renderer-service cancel fix ensures the awaited
+    // promise settles cleanly and this handler cascades into the
+    // batch's finally block above (which resets `batchState`).
     batchAbortRef.current = true
-    downloadRunRef.current?.cancel()
+    batchRunRef.current?.cancel()
   }
 
   /**
@@ -436,16 +539,17 @@ export function FontPicker({ onChange }: FontPickerProps) {
   const batchTargets = selectBatchDownloadTargets(state, isMsix)
   const showBatchButton = isMsix && (batchState !== null || batchTargets.length > 0)
   const isBatchRunning = batchState !== null
-  // Individual DL (invoked via a per-row Download button) and batch DL
-  // are mutually exclusive: while either is running, the other's UI
-  // entry point is greyed out.  We derive both flags from the same
-  // state pair so an accidental race can't leave the two disagreeing.
-  const isIndividualDownloading = downloadingId !== null && batchState === null
   // During batch, every row's action buttons (DL, Trash, per-row
   // Cancel-X) are disabled — cancellation happens via the batch
   // Cancel button.  During an individual DL, OTHER rows keep their
   // buttons; only the batch button is disabled.  When idle both are
   // fully interactive.
+  //
+  // REQ-0244 §0.3-2 — the batch button is NO LONGER gated on
+  // individual DL: clicking Batch during an individual DL cancels the
+  // individual and starts the batch (handleBatchDownload handles the
+  // cancel-and-wait itself).  The previous `isIndividualDownloading`
+  // derivation was removed because nothing reads it any more.
   const perRowActionsDisabled = isBatchRunning
 
   return (
@@ -528,7 +632,13 @@ export function FontPicker({ onChange }: FontPickerProps) {
                 size="sm"
                 variant="ghost"
                 onClick={() => { void handleBatchDownload() }}
-                disabled={isIndividualDownloading || batchTargets.length === 0}
+                // REQ-0244 §0.3-2 — batch is clickable during an
+                // individual DL; handleBatchDownload cancels the
+                // in-flight individual first, then starts the batch
+                // (which will re-download the cancelled font as part
+                // of its list).  Only disable when there is literally
+                // nothing to download.
+                disabled={batchTargets.length === 0}
                 aria-label={t('fontPicker.batchDownload.button')}
                 title={t('fontPicker.batchDownload.buttonTooltip')}
               >
@@ -547,7 +657,21 @@ export function FontPicker({ onChange }: FontPickerProps) {
           const info: FontInfo | undefined = state?.fonts.find((f) => f.id === meta.id)
           const status = info?.status ?? (meta.bundled ? 'bundled' : 'not-installed')
           const isActive = activeFontId === meta.id
-          const isDownloading = downloadingId === meta.id
+          // REQ-0245 — per-font "is downloading" from the store
+          // (main's slot map), OR the optimistic pending flag, OR
+          // the current-iteration flag from the batch loop.  All
+          // three converge on "should this row show its progress
+          // bar / Cancel button?" but each covers a different
+          // timing window: pending covers click→broadcast; batch
+          // covers a rare race where the batch iteration started
+          // faster than its own broadcast; store covers the steady
+          // state (and every scenario where the DL was started by
+          // some other code path or persisted across component
+          // remount).
+          const isDownloading =
+            activeFontKeys.has(meta.id)
+            || pendingIds.has(meta.id)
+            || (isBatchRunning && batchState?.currentId === meta.id)
           // REQ-088 #4 — NSIS (free) restricts selection / download to
           // the bundled default.  The row still renders, but its
           // download chip is swapped for a Lock icon and clicking the
@@ -584,7 +708,7 @@ export function FontPicker({ onChange }: FontPickerProps) {
               isActive={isActive}
               status={status}
               isDownloading={isDownloading}
-              downloadPercent={isDownloading ? downloadPercent : 0}
+              downloadPercent={progress.get(meta.id)?.percent ?? 0}
               canSelect={canSelect}
               canUninstall={canUninstall}
               tierAllowsDownload={tierAllowsDownload}
@@ -593,9 +717,12 @@ export function FontPicker({ onChange }: FontPickerProps) {
               // a batch run.  The batch's own Cancel button in the
               // header owns cancellation while it's active.
               actionsDisabled={perRowActionsDisabled}
+              // REQ-0244 §0.3-1 — hide individual DL controls (not
+              // just disable) while the batch is running.
+              hideDownloadForBatch={isBatchRunning && !isDownloading}
               onSelect={() => handleSelect(meta)}
               onDownload={() => handleDownload(meta)}
-              onCancelDownload={handleCancelDownload}
+              onCancelDownload={() => handleCancelDownload(meta.id)}
               onUninstall={() => handleUninstall(meta)}
               onUpsell={openUpsell}
             />
@@ -694,6 +821,13 @@ interface FontRowProps {
    * REQ).
    */
   actionsDisabled: boolean
+  /**
+   * REQ-0244 §0.3-1 — when true the per-row Download button is
+   * *hidden* (not disabled).  The picker sets this while the batch
+   * DL is running (except on the row that IS the current batch
+   * iteration, which shows its own progress bar via `isDownloading`).
+   */
+  hideDownloadForBatch: boolean
   onSelect: () => void
   onDownload: () => void
   onCancelDownload: () => void
@@ -712,6 +846,7 @@ function FontRow({
   tierAllowsDownload,
   isTierLocked,
   actionsDisabled,
+  hideDownloadForBatch,
   onSelect,
   onDownload,
   onCancelDownload,
@@ -824,7 +959,7 @@ function FontRow({
                 is a paid-version feature.  Tooltip carries the exact
                 wording the user sees in the tab's hint copy so the two
                 surfaces tell the same story. */}
-            {status === 'not-installed' && !meta.bundled && tierAllowsDownload && (
+            {status === 'not-installed' && !meta.bundled && tierAllowsDownload && !hideDownloadForBatch && (
               <Button
                 size="icon"
                 variant="ghost"

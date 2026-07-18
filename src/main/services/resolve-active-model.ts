@@ -10,10 +10,10 @@ import type { WhisperModelId } from '../../shared/types'
  * thread the disk-existence check in as a callback so this module stays
  * fs-agnostic.
  *
- * Decision tree:
+ * Decision tree (post REQ-0247):
  *
  *   1. `activeModelId` is set in settings AND its files are on disk
- *      → `kept`  (mainstream path, no behavior change vs v1.3.1).
+ *      → `kept`  (mainstream path).
  *
  *   2. `activeModelId` is set in settings but its files are NOT on disk
  *      → **`corrected-null`** (REQ-20260615-077).  Surfaces in two
@@ -25,21 +25,32 @@ import type { WhisperModelId } from '../../shared/types'
  *        (b) NSIS user who deleted model files via Explorer rather
  *            than the in-app uninstall button — same desync.
  *      Returning `null` here lets the renderer treat the install as
- *      "no model selected" so REQ-072 auto-opens the Whisper accordion,
- *      the footer flips to the unselected label, and `canStart` falls
- *      to `false` (avoiding a delayed sidecar failure mid-transcribe).
+ *      "no model selected" so the footer flips to the unselected
+ *      label and `canStart` falls to `false` (avoiding a delayed
+ *      sidecar failure mid-transcribe).
  *
- *   3. `activeModelId` is null/missing AND `settings.transcriptionDefaults
- *      .whisperModel` names a model whose files ARE on disk
- *      → `migrated-from-whisper-model`.  Pre-existing behavior dating
- *      to v1.3.0: synthesizes an `activeModelId` for users on settings
- *      versions that pre-date the field.  Caller persists the resolved
- *      value back to settings.json so subsequent boots skip the
- *      synthesis (mainstream NSIS happy path on a fresh install of a
- *      new model).
+ *   3. Otherwise → `kept` returning `null`.  Renderer shows the
+ *      unselected state until the user explicitly picks a model
+ *      via the "Use this" button.
  *
- *   4. None of the above → `kept` returning `null`.  No persistence;
- *      no log line; the renderer shows the unselected state.
+ * REQ-0247 removed the previous "migrated-from-whisper-model" branch
+ * that synthesized an `activeModelId` from
+ * `settings.transcriptionDefaults.whisperModel` when a matching model
+ * became installed.  The intent of that branch — surfacing the
+ * user's stated model preference on first launch after upgrade —
+ * turned out to also fire on every fresh DL: a new user's
+ * `whisperModel` default is `'large-v3'` (`burnin-defaults.ts:41`)
+ * and downloading `large-v3` triggered the migration and silently
+ * activated it, mid-DL-completion refresh.  That violated the
+ * post-REQ-0244/0245/0246 rule "selection changes only on user
+ * explicit action" (see SPECIFICATION.md §24.8.3).  Legacy
+ * pre-v1.3.0 upgraders now see "no model selected" once and click
+ * "Use this" — consistent with the strict explicit-selection rule
+ * and consistent with what a fresh install shows.
+ *
+ * The `settingsWhisperModel` parameter is kept (unused) so callers
+ * do not need to be changed and future re-additions of a
+ * whisperModel-based signal can plug back in without churn.
  *
  * REQ-20260615-077 Option A — when the result is `corrected-null` the
  * caller MUST NOT persist the corrected value.  Rationale: in the MSIX
@@ -51,8 +62,13 @@ import type { WhisperModelId } from '../../shared/types'
 export interface ResolveActiveModelIdResult {
   /** The resolved value to return to the renderer. */
   activeModelId: WhisperModelId | null
-  /** Which decision branch fired — drives caller-side logging + saving. */
-  source: 'kept' | 'corrected-null' | 'migrated-from-whisper-model'
+  /**
+   * Which decision branch fired — drives caller-side logging.
+   * REQ-0247 removed `'migrated-from-whisper-model'` from the union
+   * so the caller-side branch that persisted the migration to
+   * `settings.json` also becomes unreachable.
+   */
+  source: 'kept' | 'corrected-null'
   /**
    * Populated only when `source === 'corrected-null'`.  The
    * `settingsActiveModelId` value the caller passed in — surfaced so the
@@ -63,7 +79,10 @@ export interface ResolveActiveModelIdResult {
 
 export function resolveActiveModelId(
   settingsActiveModelId: WhisperModelId | null | undefined,
-  settingsWhisperModel: WhisperModelId | null | undefined,
+  // REQ-0247 — parameter intentionally unused.  See jsdoc above for
+  // the removal rationale.  The signature is preserved so callers
+  // (`buildModelsState`) do not need to change.
+  _settingsWhisperModel: WhisperModelId | null | undefined,
   isInstalled: (modelId: WhisperModelId) => boolean,
 ): ResolveActiveModelIdResult {
   // Branch 1 & 2: settings has an activeModelId
@@ -71,38 +90,18 @@ export function resolveActiveModelId(
     if (isInstalled(settingsActiveModelId)) {
       return { activeModelId: settingsActiveModelId, source: 'kept' }
     }
-    // Stale: files missing on disk.  Fall through to the migration
-    // branch in case the legacy `whisperModel` field points at a model
-    // that IS installed.
-    const correctedFrom = settingsActiveModelId
-    if (settingsWhisperModel !== null && settingsWhisperModel !== undefined) {
-      if (isInstalled(settingsWhisperModel)) {
-        // Stale activeModelId, but whisperModel rescues us.  Treat as
-        // a fresh migration so the caller persists.  No log line for
-        // the correction — the migration log subsumes it.
-        return {
-          activeModelId: settingsWhisperModel,
-          source: 'migrated-from-whisper-model',
-        }
-      }
-    }
+    // Stale: files missing on disk.  REQ-0247 dropped the
+    // whisperModel-rescue fallback that used to try to promote a
+    // legacy preference into the active slot — the auto-select was
+    // firing on fresh downloads too (see file-level jsdoc).
     return {
       activeModelId: null,
       source: 'corrected-null',
-      correctedFrom,
+      correctedFrom: settingsActiveModelId,
     }
   }
 
-  // Branch 3: no activeModelId — try the legacy whisperModel migration.
-  if (settingsWhisperModel !== null && settingsWhisperModel !== undefined) {
-    if (isInstalled(settingsWhisperModel)) {
-      return {
-        activeModelId: settingsWhisperModel,
-        source: 'migrated-from-whisper-model',
-      }
-    }
-  }
-
-  // Branch 4: nothing usable on disk.  Renderer shows the unselected state.
+  // Branch 3: no activeModelId.  Renderer shows the unselected state.
+  // REQ-0247 removed the legacy whisperModel migration here.
   return { activeModelId: null, source: 'kept' }
 }

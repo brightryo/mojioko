@@ -11,6 +11,7 @@ import { registerDialogHandlers } from './ipc/dialog'
 import { registerShellHandlers } from './ipc/shell'
 import { registerFontHandlers } from './ipc/font'
 import { registerGpuToolHandlers } from './ipc/gpu-tool'
+import { registerDownloadHandlers } from './ipc/download'
 import { terminateSidecar } from './services/transcription-sidecar'
 import { execFileAsync } from './lib/child-process'
 import { detectAvailableEncoders, getBestEncoder } from './services/encoder-detector'
@@ -198,6 +199,7 @@ function registerIpcHandlers(): void {
   registerShellHandlers()
   registerFontHandlers()
   registerGpuToolHandlers()
+  registerDownloadHandlers()
 }
 
 /**

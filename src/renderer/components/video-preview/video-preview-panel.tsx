@@ -241,7 +241,20 @@ export function VideoPreviewPanel() {
   // state without a re-render cascade.
   const dragRef = useRef<{
     entryId: string
-    snapshot: SubtitleEntry
+    // REQ-0251 案件B — snapshot ONLY the pre-drag posX/posY as explicit-key
+    // fields (may be `undefined` for an unpinned entry).  Full-entry
+    // `{ ...draggedEntry }` was the earlier shape, but a shallow spread of
+    // an entry that never had posX/posY set produces an object literal with
+    // those keys *missing*, so undo's `updateEntry(id, snapshot)` merge
+    // `{ ...e, ...snapshot }` did not override the drag-written posX/posY
+    // and the row stayed at the drag-final position.  Storing the two
+    // fields explicitly guarantees the keys exist (even if their values
+    // are `undefined`) so the undo patch always overwrites.  Nothing else
+    // on the entry is mutated by the drag, so the smaller snapshot is
+    // sufficient and matches the color-picker / text-edit history pattern
+    // (patch scoped to the fields the operation actually touched).
+    beforePosX: number | undefined
+    beforePosY: number | undefined
     startClientX: number
     startClientY: number
     startAssX: number
@@ -969,7 +982,11 @@ export function VideoPreviewPanel() {
 
       dragRef.current = {
         entryId: draggedEntry.id,
-        snapshot: { ...draggedEntry },
+        // REQ-0251 案件B — capture posX/posY as explicit keys so undo's
+        // `updateEntry` patch spreads them (including undefined) over the
+        // drag-written values.  See dragRef type declaration for details.
+        beforePosX: draggedEntry.posX,
+        beforePosY: draggedEntry.posY,
         startClientX: e.clientX,
         startClientY: e.clientY,
         startAssX: startAss.x,
@@ -1027,15 +1044,24 @@ export function VideoPreviewPanel() {
     if (!d) return
     if (!d.moved) return // click-without-drag: nothing to commit
 
-    // Snapshot vs final-entry diff → one history op for the entire drag.
+    // REQ-0251 案件B — one history op for the entire drag, patching only
+    // posX/posY.  Both keys are always present on the `before`/`after`
+    // patches (possibly with an `undefined` value) so the store's spread
+    // reliably overwrites the drag-written value on Undo — including the
+    // unpinned→pinned transition where posX/posY started as `undefined`.
     const final = useProjectStore.getState().entries.find((x) => x.id === d.entryId)
     if (!final) return
-    const finalSnap = { ...final }
-    const pre = d.snapshot
+    const entryId = d.entryId
+    const beforePatch: Partial<SubtitleEntry> = { posX: d.beforePosX, posY: d.beforePosY }
+    const afterPatch: Partial<SubtitleEntry> = { posX: final.posX, posY: final.posY }
+    // No-op guard: if the drag ended at the same (posX, posY) it started
+    // at (e.g. dragged out and back), skip the history push so the Undo
+    // stack does not carry a no-effect entry.
+    if (beforePatch.posX === afterPatch.posX && beforePatch.posY === afterPatch.posY) return
     useHistoryStore.getState().push({
       label: t('history.dragPosition'),
-      undo: () => useProjectStore.getState().updateEntry(pre.id, pre),
-      redo: () => useProjectStore.getState().updateEntry(pre.id, finalSnap),
+      undo: () => useProjectStore.getState().updateEntry(entryId, beforePatch),
+      redo: () => useProjectStore.getState().updateEntry(entryId, afterPatch),
     })
   }, [handleWindowPointerMove, t])
 
