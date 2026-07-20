@@ -48,6 +48,22 @@ extraResources:
       - "requirements.txt"
   - from: installer/licenses
     to: licenses
+  # REQ-0258 — MOJIOKO's proprietary EULA files.  NSIS already shows
+  # `build/license_ja.txt` at install time via `nsis.license` below,
+  # but the same file is also required INSIDE the packaged app so the
+  # About dialog's "View EULA" button (added in REQ-0258) can read it
+  # via `<resourcesPath>/eula/license_<lang>.txt`.  MSIX / AppX has no
+  # install-time EULA hook at all — the AppXOptions type in
+  # electron-builder carries no `license:` field, verified against
+  # node_modules/app-builder-lib/out/options/AppXOptions.d.ts — so this
+  # in-app dialog is the paid edition's only path to the EULA body.
+  # Both languages ship every build (both editions surface both
+  # translations depending on the runtime UI language).
+  - from: build
+    to: eula
+    filter:
+      - "license_ja.txt"
+      - "license_en.txt"
   # icon.ico needs to live next to the packaged app at runtime so the
   # BrowserWindow constructor can pass it to Windows as the title-bar /
   # taskbar icon.  Without this entry the EXE itself still has its embedded

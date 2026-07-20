@@ -44,6 +44,16 @@ extraResources:
       - "requirements.txt"
   - from: installer/licenses
     to: licenses
+  # REQ-0258 — MOJIOKO EULA text shipped inside the packaged MSIX so
+  # the About > "View EULA" button can read it via
+  # <resourcesPath>/eula/license_<lang>.txt.  MSIX has no install-time
+  # EULA hook (see electron-builder.yml comment), so the in-app dialog
+  # is the sole path.  Kept in sync with the NSIS side.
+  - from: build
+    to: eula
+    filter:
+      - "license_ja.txt"
+      - "license_en.txt"
   - from: build
     to: icons
     filter:
