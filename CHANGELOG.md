@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.5] - 2026-07-21
+
+### Changed
+
+- Cleaned up license and documentation wording so that both the
+  free (GitHub) and paid (Microsoft Store) editions are described
+  consistently across the README, the download site, and the
+  bundled third-party licence notices.
+
+---
+
 ## [1.3.4] - 2026-07-18
 
 ### Fixed
