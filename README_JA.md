@@ -1,7 +1,9 @@
 # MOJIOKO
 
-無料の文字起こし動画作成ツール。動画の音声を自動文字起こしし、字幕付き動画を生成できます。
+文字起こし字幕動画作成ツール。動画の音声を自動文字起こしし、字幕付き動画を生成できます。
 すべての処理は PC 内で完結し、データが外部に送信されることはありません。
+GitHub で配布する無料版と Microsoft Store で販売する有料版があり、
+基本機能（自動文字起こし・字幕編集・字幕焼き込み・SRT／テキスト書き出し）はどちらも同じです。
 
 [ダウンロード](https://brightryo.github.io/mojioko/) | [English README](README.md)
 
@@ -12,7 +14,7 @@
 - **ローカル処理** — 文字起こしから書き出しまで、すべて PC 内で完結。クラウド連携・データ送信なし。
 - **多形式対応** — 動画は MKV / MP4、音声は MP3 / WAV / M4A / AAC / FLAC / OGG を読み込み可能。
 - **音声ファイル入力** — 音声ファイルを直接文字起こしし、テキスト / SRT 形式で出力(焼き込みステップなし)。
-- **フォントカスタマイズ** — 9 種のフォント (Noto Sans JP + Google Fonts 8 種) を搭載、行ごとに別フォント指定可能。
+- **フォントカスタマイズ** — 13 種のフォント (Noto Sans JP + Google Fonts 12 種：和文 8 種＋欧文 4 種) を搭載、行ごとに別フォント指定可能。追加 12 種は有料版のみで利用可能、無料版は Noto Sans JP のみ。
 - **縦型動画対応** — TikTok、YouTube Shorts、Instagram Reels 用の字幕制作にも利用可。
 - **MP4 書き出し** — SNS 投稿に最適化された MP4 出力（`+faststart` 付き）。
 - **多言語文字起こし** — OpenAI Whisper による 11 言語対応。
@@ -46,7 +48,9 @@
 
 ## 開発を応援
 
-MOJIOKO は無料でご利用いただけます。お役に立てましたら、開発の支援をご検討ください。
+MOJIOKO の無料版（GitHub）は無償でご利用いただけます。有料版（Microsoft Store）は、
+MOJIOKO が用意した追加の字幕フォントが利用できるほか、購入自体が開発の支援にもなります。
+無料版がお役に立てましたら、以下のいずれかの形でのご支援もご検討ください。
 
 - **[Buy Me a Coffee](https://buymeacoffee.com/brightryog)** — グローバル・アカウント不要・$3〜
 - **[BOOTH](https://brightryo.booth.pm/items/8414334)** — PayPay・コンビニ・クレジットカード対応・¥300〜
@@ -60,7 +64,10 @@ MOJIOKO は無料でご利用いただけます。お役に立てましたら、
 
 プロプライエタリ。詳細は [LICENSE](build/license_ja.txt) をご確認ください。
 
-Copyright © 2026 brightryo. All rights reserved.
+Copyright © 2026 BrightRyo. All rights reserved.
+
+本ソフトウェアの一部は copyright © 2006-2026 The FreeType Project
+(https://freetype.org) の権利を含みます。All rights reserved.
 
 ---
 
