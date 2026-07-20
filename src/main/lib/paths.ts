@@ -16,6 +16,30 @@ export function getResourcesPath(): string {
   return isDev ? join(app.getAppPath(), 'resources') : process.resourcesPath
 }
 
+/**
+ * REQ-0258 — resolve the on-disk path to the MOJIOKO EULA text for the
+ * given UI language.
+ *
+ * - Dev: the source of truth lives at `<repo>/build/license_<lang>.txt`
+ *   and is also the file the NSIS installer displays at install time.
+ * - Packaged: the same two files are shipped under
+ *   `<resourcesPath>/eula/license_<lang>.txt` via each electron-builder
+ *   yml's `extraResources` block (added in this REQ alongside the About
+ *   dialog's new "View EULA" button, since MSIX has no install-time
+ *   EULA hook — see the REQ / RES for the rationale).
+ *
+ * Pure path resolution; caller reads the file.  No fallback file
+ * lookup so a missing extraResources bundling surfaces as
+ * `EULA_NOT_FOUND` rather than silently substituting the other
+ * language.
+ */
+export function getEulaPath(lang: 'ja' | 'en'): string {
+  const filename = `license_${lang}.txt`
+  return isDev
+    ? join(app.getAppPath(), 'build', filename)
+    : join(getResourcesPath(), 'eula', filename)
+}
+
 export function getBinPath(...segments: string[]): string {
   const name = process.platform === 'win32' ? `${segments[segments.length - 1]}.exe` : segments[segments.length - 1]
   return join(getResourcesPath(), 'bin', 'ffmpeg', name)

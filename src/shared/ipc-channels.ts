@@ -107,6 +107,21 @@ export const Channels = {
   appGetBuildInfo: 'app:getBuildInfo',
   appDetectEncoders: 'app:detectEncoders',
   /**
+   * REQ-0258 — read the MOJIOKO EULA text for the current UI language.
+   * Payload: `'ja' | 'en'`.  Returns the verbatim UTF-8 contents of
+   * `build/license_<lang>.txt` (dev) / `<resourcesPath>/eula/
+   * license_<lang>.txt` (packaged) as an OkResult<string>.
+   *
+   * Motivation: the MSIX / AppX packaging format has no install-time
+   * EULA hook (electron-builder's AppXOptions carries no `license`
+   * field), so paid-edition users otherwise have no way to see the
+   * EULA text.  The NSIS installer still shows the same file at
+   * install time via `license:` in electron-builder.yml — this
+   * channel provides parity for both editions through the About
+   * dialog's "View EULA" button.
+   */
+  appReadEula: 'app:readEula',
+  /**
    * REQ-088 #4 — runtime tier signal.  `true` when the running process
    * was launched from an MSIX/AppX package (= store/paid build),
    * `false` for the NSIS GitHub free build.  The renderer uses this to
