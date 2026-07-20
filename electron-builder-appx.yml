@@ -10,7 +10,7 @@
 # sync if either changes; this file should be deleted once Phase 0/1 wraps.
 appId: com.brightryo.mojioko
 productName: MOJIOKO
-copyright: "Copyright © 2026 brightryo"
+copyright: "Copyright © 2026 BrightRyo"
 
 directories:
   buildResources: build

@@ -741,6 +741,28 @@ footer a:hover {
   flex-wrap: wrap;
 }
 
+/* REQ-0257 §1.6 — FreeType Project attribution line rendered at the
+   footer of the top pages.  The FreeType License asks for the credit
+   to travel in "documentation or user interface"; the download site
+   is the most-viewed piece of documentation the app ships with, so
+   surfacing it here plus in installer/licenses/README.md covers both
+   the audience that sees the site and the audience that opens the
+   third-party licenses folder from About.  Small font-size + muted
+   colour keep it a legal notice rather than a promoted claim. */
+.footer-credit {
+  flex-basis: 100%;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px dashed var(--border);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.footer-credit a {
+  margin: 0;
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   /* REQ-0110 — mobile hero top padding cut 28 → 16 to match the desktop

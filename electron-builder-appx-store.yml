@@ -13,7 +13,7 @@
 # so local sideload verification keeps working with the dev cert.
 appId: com.brightryo.mojioko
 productName: MOJIOKO
-copyright: "Copyright © 2026 brightryo"
+copyright: "Copyright © 2026 BrightRyo"
 
 directories:
   buildResources: build
