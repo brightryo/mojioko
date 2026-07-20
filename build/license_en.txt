@@ -2,8 +2,8 @@
 MOJIOKO End User License Agreement
 (English Version)
 
-Copyright (c) 2026 brightryo. All Rights Reserved.
-Version 1.0 - Effective Date: May 30, 2026
+Copyright (c) 2026 BrightRyo. All Rights Reserved.
+Version 1.1 - Effective Date: July 21, 2026
 ================================================================
 
 
@@ -14,10 +14,12 @@ Version 1.0 - Effective Date: May 30, 2026
   Modification           : Prohibited
   Redistribution         : Prohibited
   Reverse Engineering    : Prohibited
-  Source                 : Official distribution only (via GitHub Pages)
+  Source                 : Official distribution only
+                           (GitHub Releases via GitHub Pages, or
+                            Microsoft Store)
   Warranty               : No warranty
   Liability              : No liability
-  Copyright              : (c) 2026 brightryo
+  Copyright              : (c) 2026 BrightRyo
   Governing Law          : Laws of Japan
 
 
@@ -81,9 +83,17 @@ to the Software.
     version, imitation, or anything similar to the Software.
 
 3.5 Obtain the Software from any source other than the official
-    distribution (via GitHub Releases linked from
-    https://brightryo.github.io/mojioko/), or use any Software
-    distributed from sources other than the official distribution.
+    distribution, or use any Software distributed from sources
+    other than the official distribution.  For the purposes of
+    this Agreement, the "official distribution" of the Software
+    consists of the following two channels only:
+
+      (1) GitHub Releases linked from
+          https://brightryo.github.io/mojioko/ (the free edition);
+      (2) The Microsoft Store listing operated by the Licensor
+          under the publisher name "BrightRyo" at
+          https://apps.microsoft.com/detail/9N03JMH9LF6M
+          (the paid edition).
 
 3.6 Remove, alter, or conceal any copyright notice, trademark notice,
     this Agreement, or other notices affixed to the Software.
@@ -257,7 +267,7 @@ For inquiries regarding this Agreement, please contact:
 
 
 ================================================================
-Copyright (c) 2026 brightryo. All Rights Reserved.
+Copyright (c) 2026 BrightRyo. All Rights Reserved.
 
-Last updated: May 30, 2026
+Last updated: July 21, 2026
 ================================================================

@@ -2,8 +2,8 @@
 MOJIOKO 使用許諾契約書
 End User License Agreement (Japanese Version)
 
-Copyright (c) 2026 brightryo. All Rights Reserved.
-Version 1.0 - Effective Date: May 30, 2026
+Copyright (c) 2026 BrightRyo. All Rights Reserved.
+Version 1.1 - Effective Date: July 21, 2026
 ================================================================
 
 
@@ -14,10 +14,12 @@ Version 1.0 - Effective Date: May 30, 2026
   改変                    : 禁止
   再配布                  : 禁止
   リバースエンジニアリング: 禁止
-  入手元                  : 公式配布元（GitHub Pages 経由）のみ
+  入手元                  : 公式配布元のみ
+                            （GitHub Pages 経由の GitHub Releases
+                              または Microsoft Store）
   保証                    : 無保証
   損害責任                : 一切負わない
-  著作権                  : (c) 2026 brightryo
+  著作権                  : (c) 2026 BrightRyo
   準拠法                  : 日本法
 
 
@@ -81,9 +83,15 @@ Version 1.0 - Effective Date: May 30, 2026
 3.4 本ソフトウェアの改変版、派生版、模倣品その他これらに類するもの
     を作成、公開、配布すること。
 
-3.5 公式配布元（https://brightryo.github.io/mojioko/ を経由する
-    GitHub Releases）以外から本ソフトウェアを入手し、または、
-    公式配布元以外で配布された本ソフトウェアを使用すること。
+3.5 公式配布元以外から本ソフトウェアを入手し、または、公式配布元
+    以外で配布された本ソフトウェアを使用すること。本契約における
+    「公式配布元」とは、以下の 2 つの経路のみをいいます。
+
+    (1) https://brightryo.github.io/mojioko/ を経由する GitHub
+        Releases（無料版）
+    (2) ライセンサーが「BrightRyo」名義で運営する Microsoft Store
+        の掲載ページ
+        https://apps.microsoft.com/detail/9N03JMH9LF6M （有料版）
 
 3.6 本ソフトウェアに付された著作権表示、商標表示、本契約その他の
     通知を除去、改変、隠蔽すること。
@@ -251,7 +259,7 @@ Version 1.0 - Effective Date: May 30, 2026
 
 
 ================================================================
-Copyright (c) 2026 brightryo. All Rights Reserved.
+Copyright (c) 2026 BrightRyo. All Rights Reserved.
 
-本契約書の最終更新日: 2026年5月30日
+本契約書の最終更新日: 2026年7月21日
 ================================================================
