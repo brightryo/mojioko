@@ -101,6 +101,13 @@
     "title": "Third-party licenses",
     "openFolder": "Open third-party licenses folder"
   },
+  "eula": {
+    "title": "End User License Agreement",
+    "intro": "The full EULA text for the current build of MOJIOKO.  Shown in the language your app is currently set to; switch UI language from Settings to see the other translation.",
+    "openButton": "View EULA",
+    "loading": "Loading EULA...",
+    "error": "Could not load the EULA text ({{error}}).  Reinstall the app if this persists."
+  },
   "project": {
     "save": {
       "toastSuccess": "Project saved",

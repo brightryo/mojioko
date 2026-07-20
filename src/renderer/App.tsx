@@ -12,6 +12,7 @@ import { AboutDialog } from '@/components/about-dialog/about-dialog'
 import { SettingsDialog } from '@/components/settings-dialog/settings-dialog'
 import { DonationDialog } from '@/components/donation-dialog/donation-dialog'
 import { FontLicensesDialog } from '@/components/font-licenses/font-licenses-dialog'
+import { EulaDialog } from '@/components/eula-dialog/eula-dialog'
 import { StoreUpsellDialog } from '@/components/store-upsell-dialog/store-upsell-dialog'
 import { ProjectOpenController } from '@/components/project-open/project-open-controller'
 import { useUiStore } from '@/stores/ui-store'
@@ -295,6 +296,7 @@ function AppInner() {
       <SettingsDialog />
       <DonationDialog />
       <FontLicensesDialog />
+      <EulaDialog />
       <StoreUpsellDialog />
       {/* REQ-0194 phase 3b — drives the `.mojioko` open flow (parse →
           source check → identity check → font warning → hydrate stores

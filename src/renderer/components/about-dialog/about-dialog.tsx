@@ -68,6 +68,21 @@ export function AboutDialog() {
             <button
               type="button"
               onClick={() => {
+                // REQ-0258 — same close-then-open sequencing pattern as
+                // the Font Licenses button below.  Opening the EULA
+                // synchronously mid-close confuses Radix's focus
+                // restoration (About steals focus back before the EULA
+                // Content mounts, and the user sees nothing happen).
+                setOpen(false)
+                setTimeout(() => useUiStore.getState().setEulaDialogOpen(true), 100)
+              }}
+              className="text-body-sm text-primary hover:underline text-left pt-1"
+            >
+              {t('common:eula.openButton')} →
+            </button>
+            <button
+              type="button"
+              onClick={() => {
                 // Close About first, then open Font Licenses on the next
                 // tick.  Doing both synchronously confuses Radix's focus
                 // restoration — the close handler steals focus before the
@@ -75,7 +90,7 @@ export function AboutDialog() {
                 setOpen(false)
                 setTimeout(() => useUiStore.getState().setFontLicensesDialogOpen(true), 100)
               }}
-              className="text-body-sm text-primary hover:underline text-left pt-1"
+              className="text-body-sm text-primary hover:underline text-left"
             >
               {t('common:fontLicenses.title')} →
             </button>
