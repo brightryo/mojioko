@@ -64,6 +64,42 @@
         </div>
       </details>
 
+      <!-- REQ-0263: paid-edition font showcase.  Placed immediately after the
+           free/paid comparison panel so a visitor who reads about "the paid
+           version adds extra fonts" can immediately see which fonts they are.
+           Reuses `.qa` / `.qa-body` layout + `.screenshot-image` for the
+           bordered/rounded sample sheet; `loading="lazy"` keeps the 3.8 MB
+           4K PNG out of the initial paint since the panel is collapsed by
+           default. -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">解説</span>
+          <span class="q-text">有料版で使える追加フォント12種</span>
+        </summary>
+        <div class="qa-body">
+          <p>有料版（Microsoft Store）では、MOJIOKO が用意した以下の追加フォント 12 種（欧文 4 種 + 和文 8 種）を字幕に使えます。無料版で使えるのは、デフォルトフォントの Noto Sans JP のみです。</p>
+
+          <img src="../images/SampleFonts.png" alt="MOJIOKO の有料版に含まれる追加フォント 12 種のサンプル画像。上段左から Anton、Bebas Neue、Montserrat、Poppins、中段左から Dela Gothic One、Mochiy Pop One、Reggae One、Potta One、下段左から Rampart One、Hachi Maru Pop、DotGothic16、Yusei Magic。" class="screenshot-image" loading="lazy" />
+
+          <p>画像の左上から右への並び順で 12 種を列挙します（欧文 4 種 → 和文 8 種）。</p>
+
+          <ul class="guide-list">
+            <li>Anton</li>
+            <li>Bebas Neue</li>
+            <li>Montserrat</li>
+            <li>Poppins</li>
+            <li>Dela Gothic One</li>
+            <li>Mochiy Pop One</li>
+            <li>Reggae One</li>
+            <li>Potta One</li>
+            <li>Rampart One</li>
+            <li>Hachi Maru Pop</li>
+            <li>DotGothic16</li>
+            <li>Yusei Magic</li>
+          </ul>
+        </div>
+      </details>
+
       <!-- 1: OBS settings (revised title and opening, badge: important) -->
       <details class="qa">
         <summary>
