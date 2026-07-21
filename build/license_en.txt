@@ -26,7 +26,7 @@ Version 1.1 - Effective Date: July 21, 2026
 [ ABOUT THIS AGREEMENT ]
 
 This End User License Agreement ("Agreement") is a legal contract
-between brightryo ("Licensor") and you ("User") for the use of the
+between BrightRyo ("Licensor") and you ("User") for the use of the
 software titled "MOJIOKO" ("Software") provided by the Licensor.
 
 By installing, copying, or using the Software, the User shall be
@@ -104,6 +104,25 @@ to the Software.
     and rights of publicity).
 
 3.8 Exploit or attempt to exploit any vulnerability in the Software.
+
+3.9 Circumvent, disable, remove, or otherwise attempt to defeat any
+    technical or contractual control that the Software implements to
+    distinguish the free edition from the paid edition, or that
+    otherwise limits or restricts specific features to specific
+    editions or licences. This includes but is not limited to
+    modifying, patching, or replacing any code, configuration, flag,
+    or resource that gates access to the paid-edition features or
+    fonts.
+
+3.10 Build, compile, or otherwise produce an executable or
+     distributable form of the Software from source code, whether
+     obtained from a public source-code repository operated by the
+     Licensor or from any other source, and use, publish, or
+     distribute such an executable or distributable form. The public
+     availability of the Software's source code (for example on
+     GitHub) is provided solely for transparency and reference; it
+     does not grant any right to rebuild, redistribute, or otherwise
+     use a self-built version of the Software in any capacity.
 
 
 Article 4 (Intellectual Property Rights)
