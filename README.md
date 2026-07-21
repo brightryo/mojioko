@@ -45,7 +45,8 @@ burn-in, SRT / text export) are identical in both.
 - **[Download Page](https://brightryo.github.io/mojioko/)** — Latest version and overview
 - **[CHANGELOG.md](CHANGELOG.md)** — Version history
 - **[PRIVACY.md](PRIVACY.md)** — Privacy policy
-- **[LICENSE](build/license_en.txt)** — End User License Agreement
+- **[LICENSE](LICENSE)** — Repository-level licence statement
+- **[build/license_en.txt](build/license_en.txt)** — End User License Agreement
 
 ## Support the Project
 
