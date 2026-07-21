@@ -64,9 +64,37 @@ one of the following ways:
 Found a bug or have a feature request?
 Please open an issue on [GitHub Issues](https://github.com/brightryo/mojioko/issues).
 
+## Source Code Availability
+
+The source code for MOJIOKO is published on this GitHub repository
+so anyone can inspect what the app does, verify the privacy
+statements above, and follow the development history.
+
+**This publication is not an open-source licence.** MOJIOKO is
+proprietary software; the source is *available for reference* but
+is not licensed for reuse. In particular, the following are **not**
+permitted:
+
+- Cloning the repository and building an executable to use in
+  place of the free or paid editions distributed by BrightRyo.
+- Modifying the code to bypass the free-vs-paid feature gating and
+  using the resulting build for any purpose.
+- Redistributing modified or unmodified source, or any executable
+  built from it, to third parties.
+
+The full statement lives in [LICENSE](LICENSE) at the repository
+root; the corresponding EULA clauses are §3.3, §3.4, §3.5, §3.9,
+and §3.10 of the [End User License Agreement](build/license_en.txt).
+
+If you want to use MOJIOKO, please download the free edition from
+[the download page](https://brightryo.github.io/mojioko/) or
+purchase the paid edition on the [Microsoft Store](https://apps.microsoft.com/detail/9N03JMH9LF6M).
+
 ## License
 
-Proprietary. See [LICENSE](build/license_en.txt) for full terms.
+Proprietary. See [LICENSE](LICENSE) for the repository-level
+statement and [build/license_en.txt](build/license_en.txt) for the
+full End User License Agreement.
 
 Copyright © 2026 BrightRyo. All rights reserved.
 

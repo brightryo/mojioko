@@ -1,0 +1,74 @@
+MOJIOKO — Proprietary Source-Available License Statement
+
+Copyright (c) 2026 BrightRyo. All rights reserved.
+
+MOJIOKO is proprietary software. The source code is published in
+this repository for transparency and reference; publication does
+not grant an open-source license or any right of use beyond what
+is set out below.
+
+
+1. What is permitted
+
+  (a) Reading the source, browsing on GitHub, and forking within
+      GitHub for the sole purpose of proposing changes back to
+      this repository through a pull request.
+
+
+2. What is NOT permitted
+
+  (a) Cloning the source and building an executable to use in
+      place of the free edition (distributed on GitHub Releases)
+      or the paid edition (distributed on the Microsoft Store)
+      that BrightRyo publishes. This is prohibited by the MOJIOKO
+      End User License Agreement §3.10.
+
+  (b) Modifying the code to bypass the free-vs-paid feature
+      gating (for example, the isPackagedAsMsix flag or any
+      resource that gates access to paid-edition features or
+      fonts) and using the resulting build for any purpose. This
+      is prohibited by the MOJIOKO End User License Agreement
+      §3.9.
+
+  (c) Redistributing the source, a modified version of the
+      source, or any executable built from the source, to any
+      third party, whether for consideration or free of charge.
+      This is prohibited by the MOJIOKO End User License
+      Agreement §3.3 and §3.4.
+
+  (d) Treating this repository as if it were licensed under an
+      OSI-approved open-source license (MIT, Apache-2.0, GPL, and
+      similar). No such licence is granted here.
+
+
+3. Binary editions and the EULA
+
+The binary editions distributed by BrightRyo — the free edition on
+GitHub Releases (linked from https://brightryo.github.io/mojioko/)
+and the paid edition on the Microsoft Store
+(https://apps.microsoft.com/detail/9N03JMH9LF6M) — are governed by
+the MOJIOKO End User License Agreement bundled with each release
+at build/license_en.txt (English) / build/license_ja.txt
+(Japanese). The prohibitions in section 2 above are stated for
+repository-root visibility, but the authoritative text lives in
+the EULA.
+
+
+4. Third-party components
+
+Third-party libraries, fonts, and other assets bundled with the
+Software carry their own licences, which are documented in
+installer/licenses/README.md. Where a third-party licence and this
+statement conflict, the third-party licence prevails.
+
+
+5. Enquiries
+
+  GitHub Issues: https://github.com/brightryo/mojioko/issues
+
+
+================================================================
+Copyright (c) 2026 BrightRyo. All rights reserved.
+
+Last updated: July 21, 2026
+================================================================
