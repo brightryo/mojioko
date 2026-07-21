@@ -13,7 +13,7 @@
 # so local sideload verification keeps working with the dev cert.
 appId: com.brightryo.mojioko
 productName: MOJIOKO
-copyright: "Copyright © 2026 brightryo"
+copyright: "Copyright © 2026 BrightRyo"
 
 directories:
   buildResources: build
@@ -49,6 +49,17 @@ extraResources:
       - "requirements.txt"
   - from: installer/licenses
     to: licenses
+  # REQ-0258 — MOJIOKO EULA text shipped inside the packaged MSIX so
+  # the About > "View EULA" button can read it via
+  # <resourcesPath>/eula/license_<lang>.txt.  Store submissions have
+  # no install-time EULA hook (Partner Center handles the pre-purchase
+  # regulatory copy separately), so the in-app dialog is the sole
+  # user-reachable path to the EULA body.
+  - from: build
+    to: eula
+    filter:
+      - "license_ja.txt"
+      - "license_en.txt"
   - from: build
     to: icons
     filter:

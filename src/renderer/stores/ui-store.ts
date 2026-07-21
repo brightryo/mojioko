@@ -24,6 +24,13 @@ interface UiStore {
   isDonationDialogOpen: boolean
   isFontLicensesDialogOpen: boolean
   /**
+   * REQ-0258 — full-text EULA viewer opened from About.  MSIX/AppX has
+   * no install-time EULA hook, so this dialog is the paid edition's
+   * only path to the EULA body; the NSIS installer reaches the same
+   * text at install time.
+   */
+  isEulaDialogOpen: boolean
+  /**
    * REQ-0137 fix — id-keyed set of currently-open overlays.  Replaces
    * REQ-0132's `overlayOpenCount: number` for two reasons the Set
    * solves:
@@ -210,6 +217,8 @@ interface UiStore {
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
   setFontLicensesDialogOpen: (open: boolean) => void
+  /** REQ-0258 — see `isEulaDialogOpen` above. */
+  setEulaDialogOpen: (open: boolean) => void
   /** REQ-0137 — id-keyed overlay registration.  Idempotent add / delete. */
   addOverlay: (id: string) => void
   removeOverlay: (id: string) => void
@@ -255,6 +264,7 @@ export const useUiStore = create<UiStore>((set) => ({
   isAboutDialogOpen: false,
   isDonationDialogOpen: false,
   isFontLicensesDialogOpen: false,
+  isEulaDialogOpen: false,
   overlayIds: new Set<string>(),
   tableFilter: 'all',
   focusedRowId: null,
@@ -287,6 +297,7 @@ export const useUiStore = create<UiStore>((set) => ({
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
   setDonationDialogOpen: (open) => set({ isDonationDialogOpen: open }),
   setFontLicensesDialogOpen: (open) => set({ isFontLicensesDialogOpen: open }),
+  setEulaDialogOpen: (open) => set({ isEulaDialogOpen: open }),
   addOverlay: (id) =>
     set((s) => {
       // Idempotent: re-adding an existing id is a no-op.  StrictMode's

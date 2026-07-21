@@ -2,8 +2,8 @@
 MOJIOKO End User License Agreement
 (English Version)
 
-Copyright (c) 2026 brightryo. All Rights Reserved.
-Version 1.0 - Effective Date: May 30, 2026
+Copyright (c) 2026 BrightRyo. All Rights Reserved.
+Version 1.1 - Effective Date: July 21, 2026
 ================================================================
 
 
@@ -14,17 +14,19 @@ Version 1.0 - Effective Date: May 30, 2026
   Modification           : Prohibited
   Redistribution         : Prohibited
   Reverse Engineering    : Prohibited
-  Source                 : Official distribution only (via GitHub Pages)
+  Source                 : Official distribution only
+                           (GitHub Releases via GitHub Pages, or
+                            Microsoft Store)
   Warranty               : No warranty
   Liability              : No liability
-  Copyright              : (c) 2026 brightryo
+  Copyright              : (c) 2026 BrightRyo
   Governing Law          : Laws of Japan
 
 
 [ ABOUT THIS AGREEMENT ]
 
 This End User License Agreement ("Agreement") is a legal contract
-between brightryo ("Licensor") and you ("User") for the use of the
+between BrightRyo ("Licensor") and you ("User") for the use of the
 software titled "MOJIOKO" ("Software") provided by the Licensor.
 
 By installing, copying, or using the Software, the User shall be
@@ -81,9 +83,17 @@ to the Software.
     version, imitation, or anything similar to the Software.
 
 3.5 Obtain the Software from any source other than the official
-    distribution (via GitHub Releases linked from
-    https://brightryo.github.io/mojioko/), or use any Software
-    distributed from sources other than the official distribution.
+    distribution, or use any Software distributed from sources
+    other than the official distribution.  For the purposes of
+    this Agreement, the "official distribution" of the Software
+    consists of the following two channels only:
+
+      (1) GitHub Releases linked from
+          https://brightryo.github.io/mojioko/ (the free edition);
+      (2) The Microsoft Store listing operated by the Licensor
+          under the publisher name "BrightRyo" at
+          https://apps.microsoft.com/detail/9N03JMH9LF6M
+          (the paid edition).
 
 3.6 Remove, alter, or conceal any copyright notice, trademark notice,
     this Agreement, or other notices affixed to the Software.
@@ -94,6 +104,25 @@ to the Software.
     and rights of publicity).
 
 3.8 Exploit or attempt to exploit any vulnerability in the Software.
+
+3.9 Circumvent, disable, remove, or otherwise attempt to defeat any
+    technical or contractual control that the Software implements to
+    distinguish the free edition from the paid edition, or that
+    otherwise limits or restricts specific features to specific
+    editions or licences. This includes but is not limited to
+    modifying, patching, or replacing any code, configuration, flag,
+    or resource that gates access to the paid-edition features or
+    fonts.
+
+3.10 Build, compile, or otherwise produce an executable or
+     distributable form of the Software from source code, whether
+     obtained from a public source-code repository operated by the
+     Licensor or from any other source, and use, publish, or
+     distribute such an executable or distributable form. The public
+     availability of the Software's source code (for example on
+     GitHub) is provided solely for transparency and reference; it
+     does not grant any right to rebuild, redistribute, or otherwise
+     use a self-built version of the Software in any capacity.
 
 
 Article 4 (Intellectual Property Rights)
@@ -257,7 +286,7 @@ For inquiries regarding this Agreement, please contact:
 
 
 ================================================================
-Copyright (c) 2026 brightryo. All Rights Reserved.
+Copyright (c) 2026 BrightRyo. All Rights Reserved.
 
-Last updated: May 30, 2026
+Last updated: July 21, 2026
 ================================================================

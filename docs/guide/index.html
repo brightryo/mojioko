@@ -64,6 +64,94 @@
         </div>
       </details>
 
+      <!-- REQ-0263: paid-edition font showcase.  Placed immediately after the
+           free/paid comparison panel so a visitor who reads about "the paid
+           version adds extra fonts" can immediately see which fonts they are.
+           Reuses `.qa` / `.qa-body` layout + `.screenshot-image` for the
+           bordered/rounded sample sheet; `loading="lazy"` keeps the 3.8 MB
+           4K PNG out of the initial paint since the panel is collapsed by
+           default. -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">解説</span>
+          <span class="q-text">有料版で使える追加フォント12種</span>
+        </summary>
+        <div class="qa-body">
+          <p>有料版（Microsoft Store）では、MOJIOKO が用意した以下の追加フォント 12 種（欧文 4 種 + 和文 8 種）を字幕に使えます。無料版で使えるのは、デフォルトフォントの Noto Sans JP のみです。</p>
+
+          <img src="../images/SampleFonts.png" alt="MOJIOKO の有料版に含まれる追加フォント 12 種のサンプル画像。上段左から Anton、Bebas Neue、Montserrat、Poppins、中段左から Dela Gothic One、Mochiy Pop One、Reggae One、Potta One、下段左から Rampart One、Hachi Maru Pop、DotGothic16、Yusei Magic。" class="screenshot-image" loading="lazy" />
+
+          <p>画像の左上から右への並び順で 12 種を列挙します（欧文 4 種 → 和文 8 種）。</p>
+
+          <ul class="guide-list">
+            <li>Anton</li>
+            <li>Bebas Neue</li>
+            <li>Montserrat</li>
+            <li>Poppins</li>
+            <li>Dela Gothic One</li>
+            <li>Mochiy Pop One</li>
+            <li>Reggae One</li>
+            <li>Potta One</li>
+            <li>Rampart One</li>
+            <li>Hachi Maru Pop</li>
+            <li>DotGothic16</li>
+            <li>Yusei Magic</li>
+          </ul>
+        </div>
+      </details>
+
+      <!-- REQ-0264: experimental word-chunk transcription demo.  Placed
+           immediately after the REQ-0263 fonts showcase so the two feature-
+           highlight panels sit next to each other before the OBS / SmartScreen
+           troubleshooting FAQs that follow.  Reuses `.qa` / `.qa-body` and
+           the top page's `.hero-video` container so the pair of embedded
+           YouTube iframes inherits the same 16:9 rounded-bordered treatment
+           without any new CSS.  Both iframes use youtube-nocookie.com to
+           match the top page's hero video (privacy-preserving embed). -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">解説</span>
+          <span class="q-text">【試験的機能】英語向け・2〜3 単語ごとに区切る自動細切れ字幕</span>
+        </summary>
+        <div class="qa-body">
+          <p>MOJIOKO には、英語音声の文字起こしを 2〜3 単語ごとに区切って字幕にする試験的機能があります。Shorts / TikTok / Reels などの縦型ショート動画でよく見る、テンポの速い細切れ字幕を、下書き段階まで自動で作れます。</p>
+
+          <p>なお、この機能は英語の文字起こしに向けて調整されています。日本語では単語の区切り方の仕組みが異なるため、うまく機能しません。英語音声での利用を前提とした機能です。</p>
+
+          <h4>「試験的機能」としている理由</h4>
+          <p>単語数（2〜3 語）で機械的に区切る仕組みのため、常に「意味の切れ目」と一致するわけではありません。たとえばハイフンで繋がった語が 2 つに分かれてしまったり、短いフレーズと長い名詞句の切れ目が想定と違う位置に来ることがあります。<strong>完成品としてそのまま使うのではなく、「編集の下書き」として使い、必要に応じて手直しする</strong>のがおすすめの使い方です。</p>
+
+          <h4>デモ動画（比較）</h4>
+          <p>下の 2 本は、同じ英語音声を、（1）通常の文字起こし機能と、（2）試験的な細切れ字幕機能で処理した結果です。</p>
+
+          <h5>▼ 1. 通常の文字起こし</h5>
+          <div class="hero-video">
+            <iframe
+              src="https://www.youtube-nocookie.com/embed/dTIgWGRSTDE"
+              title="MOJIOKO デモ動画：通常の文字起こし"
+              loading="lazy"
+              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen></iframe>
+          </div>
+
+          <h5>▼ 2. 試験的な細切れ字幕（2〜3 単語ごと）</h5>
+          <div class="hero-video">
+            <iframe
+              src="https://www.youtube-nocookie.com/embed/Du4ta9IXRwI"
+              title="MOJIOKO デモ動画：試験的な細切れ字幕"
+              loading="lazy"
+              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen></iframe>
+          </div>
+
+          <h4>使用素材について（CC BY 表記）</h4>
+          <p>このデモで使用している動画素材は、<strong>Tech Steve</strong> 氏がクリエイティブ・コモンズ・ライセンス（CC BY）のもとで公開している作品を利用しています。</p>
+          <p>元動画: <a href="https://www.youtube.com/watch?v=OfIlTM3cyDg" target="_blank" rel="noopener">https://www.youtube.com/watch?v=OfIlTM3cyDg</a></p>
+        </div>
+      </details>
+
       <!-- 1: OBS settings (revised title and opening, badge: important) -->
       <details class="qa">
         <summary>
@@ -324,7 +412,7 @@
 
     <!-- Footer -->
     <footer>
-      <div>&copy; 2026 brightryo</div>
+      <div>&copy; 2026 BrightRyo</div>
       <div class="footer-links">
         <a href="https://github.com/brightryo/mojioko" target="_blank" rel="noopener">GitHub</a>
         <a href="https://github.com/brightryo/mojioko/issues" target="_blank" rel="noopener">お問い合わせ</a>

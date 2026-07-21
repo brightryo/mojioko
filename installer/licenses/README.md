@@ -159,6 +159,42 @@ licence.
 
 ---
 
+## Python sidecar runtime dependencies
+
+The `mojioko-transcriber.exe` sidecar is a PyInstaller `--onedir`
+freeze of `python-sidecar/main.py` and pulls in the following
+Python packages transitively via `faster-whisper==1.2.1`.  Each
+package's per-distribution licence text is shipped under
+`resources/bin/transcriber/_internal/<package>-<version>.dist-info/
+LICENSE*` inside the installer, so the licence obligations travel
+with the binary at the file level; this section is the aggregated
+index for the same set.
+
+| Package | Version | Licence | Notes |
+|---|---|---|---|
+| faster-whisper | 1.2.1 | MIT | Wraps CTranslate2 for Whisper inference. |
+| ctranslate2 | 4.8.0 | MIT | C++ inference engine. |
+| onnxruntime | 1.27.0 | MIT | Used for VAD and auxiliary ONNX graphs. |
+| tokenizers | 0.23.1 | Apache-2.0 | HuggingFace tokenizer. |
+| huggingface-hub | 1.20.1 | Apache-2.0 | Model download client. |
+| av (PyAV) | 17.1.0 | BSD-3-Clause | ffmpeg Python bindings used for audio decode. |
+| numpy | 2.4.6 | BSD-3-Clause (with 0BSD / MIT / Zlib / CC0-1.0 for vendored parts) | Numeric arrays. |
+| click | 8.4.1 | BSD-3-Clause | CLI argument parsing pulled in transitively. |
+| tqdm | 4.68.3 | MPL-2.0 AND MIT | Progress bar; only the MIT parts are exercised at runtime. |
+
+None of these transitive dependencies impose GPL-style copyleft on
+the surrounding MOJIOKO product — the strictest is MPL-2.0 (tqdm),
+which is a per-file weak-copyleft licence and does not extend to
+the rest of the sidecar because the tqdm sources ship unmodified.
+
+`python-sidecar/requirements.txt` pins only `faster-whisper==1.2.1`
+directly; every other row above is a transitive dependency
+selected by pip at PyInstaller build time.  The authoritative
+per-package licence text is the `LICENSE` file inside each
+`*.dist-info` directory next to the sidecar exe.
+
+---
+
 ## Bundled fonts
 
 ### Noto Sans JP (SIL OFL v1.1)
@@ -174,14 +210,28 @@ licence.
 
 ### Downloaded subtitle fonts (SIL OFL v1.1)
 
-The fonts available via the in-app picker — Dela Gothic One, Reggae
-One, Yusei Magic, Mochiy Pop One, Hachi Maru Pop, Potta One,
-DotGothic16, Rampart One — are all distributed under the SIL Open
-Font License v1.1.  Each download bundles its own `OFL.txt`
-verbatim next to the TTF in
-`%APPDATA%/MOJIOKO/fonts/<font-id>/`.  Attribution and licence text
-for every font (bundled and downloaded) is also viewable in-app
-under **About → Font licenses**.
+The fonts available via the in-app picker are all distributed under
+the SIL Open Font License v1.1.  Two groups ship in the `fonts-v1`
+GitHub release:
+
+- **Japanese display faces (8)** — Dela Gothic One, Reggae One,
+  Yusei Magic, Mochiy Pop One, Hachi Maru Pop, Potta One,
+  DotGothic16, Rampart One.
+- **Latin display / sans faces (4, added in REQ-0153)** — Anton,
+  Bebas Neue, Montserrat, Poppins.
+
+Each download bundles its own `OFL.txt` verbatim next to the TTF in
+`%APPDATA%/MOJIOKO/fonts/<font-id>/`.  The verbatim per-font
+`<Font>-OFL.txt` originates from `google/fonts/ofl/<name>/OFL.txt`
+and carries that font's own copyright header followed by the
+standard SIL OFL v1.1 body, so OFL §2 ("each copy contains the
+above copyright notice and this license") is satisfied at the
+distributed-file level.  Attribution and licence text for every
+font (bundled and downloaded) is also viewable in-app under
+**About → Font licenses**.  Tier gating: the free (GitHub) edition
+runs only on the bundled Noto Sans JP; the paid (Microsoft Store)
+edition unlocks all 12 downloadable fonts.  See
+`src/renderer/lib/font-tier.ts` for the policy.
 
 ---
 
@@ -196,11 +246,38 @@ freetype-ftl.txt                         (libfreetype FTL)
 harfbuzz-mit.txt                         (libharfbuzz Old MIT)
 fontconfig-mit.txt                       (fontconfig MIT-style)
 fribidi-lgpl-2.1.txt                     (libfribidi LGPL v2.1+)
-faster-whisper-mit.txt                   (faster-whisper MIT)
+faster-whisper-mit.txt                   (faster-whisper MIT — see also the Python
+                                          sidecar transitive-dependency table above
+                                          for ctranslate2, onnxruntime, tokenizers,
+                                          huggingface-hub, av, numpy, click, tqdm)
 electron-mit.txt                         (Electron MIT)
 react-mit.txt                            (React MIT — also representative for the 29 MIT npm pkgs)
 class-variance-authority-apache-2.0.txt  (Apache-2.0)
 lucide-react-isc.txt                     (ISC)
-noto-sans-jp-ofl.txt                     (Noto Sans JP SIL OFL v1.1)
+noto-sans-jp-ofl.txt                     (Noto Sans JP SIL OFL v1.1 — bundled font)
 README.md                                (this file)
 ```
+
+Per-font `<Font>-OFL.txt` files for the 12 downloadable fonts
+(Dela Gothic One, Reggae One, Yusei Magic, Mochiy Pop One, Hachi
+Maru Pop, Potta One, DotGothic16, Rampart One, Anton, Bebas Neue,
+Montserrat, Poppins) are fetched with the TTF and land at
+`%APPDATA%/MOJIOKO/fonts/<font-id>/OFL.txt` on the user's disk;
+they are not part of the installer payload.
+
+Per-Python-package licence files ship next to the sidecar binary
+at `resources/bin/transcriber/_internal/<package>-<version>.dist-info/
+LICENSE*` and are copied verbatim by PyInstaller — they are not
+duplicated in this folder.
+
+---
+
+## FreeType attribution
+
+Portions of MOJIOKO are built on the FreeType text rendering
+library (statically incorporated into the shipped FFmpeg
+libraries).  The FreeType License requires the following credit
+line to accompany the software:
+
+> Portions of this software are copyright © 2006-2026 The FreeType
+> Project (https://freetype.org).  All rights reserved.

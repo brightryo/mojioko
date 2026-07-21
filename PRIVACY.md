@@ -119,4 +119,4 @@ For privacy-related questions or concerns:
 
 ---
 
-Copyright © 2026 brightryo. All rights reserved.
+Copyright © 2026 BrightRyo. All rights reserved.

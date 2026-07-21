@@ -21,8 +21,9 @@ import { registerFontProtocol } from './lib/font-protocol'
 import { registerPreviewMixProtocol } from './lib/preview-mix-protocol'
 import { cleanupStalePreviewMixTmp } from './services/preview-mix'
 import { isPackagedAsMsix, getCurrentProcessContext } from './lib/msix'
-import { getResourcesPath } from './lib/paths'
+import { getResourcesPath, getEulaPath } from './lib/paths'
 import type { BuildInfo, EncoderDetectionResult } from '../shared/ipc-contracts'
+import { promises as fsp } from 'fs'
 import log from './lib/logger'
 
 const isDev = !app.isPackaged
@@ -181,6 +182,25 @@ function registerIpcHandlers(): void {
     const available = await detectAvailableEncoders()
     const best = await getBestEncoder()
     return { available, best }
+  })
+
+  ipcMain.handle(Channels.appReadEula, async (_event, lang: unknown) => {
+    // Reject anything that isn't one of the supported locales up front so
+    // a stray renderer call cannot coerce the path into reading arbitrary
+    // files.  Fallback to 'en' for shape safety; the renderer normally
+    // passes the resolved i18n language directly.
+    const resolved: 'ja' | 'en' = lang === 'ja' ? 'ja' : 'en'
+    const filePath = getEulaPath(resolved)
+    try {
+      const text = await fsp.readFile(filePath, 'utf-8')
+      return { ok: true as const, data: text }
+    } catch (err) {
+      log.warn(`[app] readEula failed for lang=${resolved} at ${filePath}: ${(err as Error).message}`)
+      return {
+        ok: false as const,
+        error: { code: 'EULA_NOT_FOUND', message: (err as Error).message },
+      }
+    }
   })
 
   ipcMain.on(Channels.menuSetLanguage, (_event, lang: string) => {

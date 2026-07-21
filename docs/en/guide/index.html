@@ -64,6 +64,94 @@
         </div>
       </details>
 
+      <!-- REQ-0263: paid-edition font showcase.  Placed immediately after the
+           free/paid comparison panel so a visitor who reads about "the paid
+           version adds extra fonts" can immediately see which fonts they are.
+           Reuses `.qa` / `.qa-body` layout + `.screenshot-image` for the
+           bordered/rounded sample sheet; `loading="lazy"` keeps the 3.8 MB
+           4K PNG out of the initial paint since the panel is collapsed by
+           default. -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">Info</span>
+          <span class="q-text">The 12 additional fonts available in the Paid version</span>
+        </summary>
+        <div class="qa-body">
+          <p>The paid version (Microsoft Store) lets you use the following 12 additional fonts prepared by MOJIOKO for your subtitles (4 Latin + 8 Japanese). The free version only ships with the default Noto Sans JP.</p>
+
+          <img src="../../images/SampleFonts.png" alt="Sample sheet of the 12 additional fonts included in the paid version of MOJIOKO. Top row (left to right): Anton, Bebas Neue, Montserrat, Poppins. Middle row: Dela Gothic One, Mochiy Pop One, Reggae One, Potta One. Bottom row: Rampart One, Hachi Maru Pop, DotGothic16, Yusei Magic." class="screenshot-image" loading="lazy" />
+
+          <p>The 12 fonts, listed in the sample sheet's reading order (left to right, top to bottom — 4 Latin faces first, then 8 Japanese faces):</p>
+
+          <ul class="guide-list">
+            <li>Anton</li>
+            <li>Bebas Neue</li>
+            <li>Montserrat</li>
+            <li>Poppins</li>
+            <li>Dela Gothic One</li>
+            <li>Mochiy Pop One</li>
+            <li>Reggae One</li>
+            <li>Potta One</li>
+            <li>Rampart One</li>
+            <li>Hachi Maru Pop</li>
+            <li>DotGothic16</li>
+            <li>Yusei Magic</li>
+          </ul>
+        </div>
+      </details>
+
+      <!-- REQ-0264: experimental word-chunk transcription demo.  Placed
+           immediately after the REQ-0263 fonts showcase so the two feature-
+           highlight panels sit next to each other before the OBS / SmartScreen
+           troubleshooting FAQs that follow.  Reuses `.qa` / `.qa-body` and
+           the top page's `.hero-video` container so the pair of embedded
+           YouTube iframes inherits the same 16:9 rounded-bordered treatment
+           without any new CSS.  Both iframes use youtube-nocookie.com to
+           match the top page's hero video (privacy-preserving embed). -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">Info</span>
+          <span class="q-text">[Experimental] English subtitles chunked every 2–3 words</span>
+        </summary>
+        <div class="qa-body">
+          <p>MOJIOKO has an experimental feature that splits an English transcription into short chunks of 2–3 words, producing the fast-paced snippet-style subtitles common on Shorts / TikTok / Reels — all the way to a draft you can edit.</p>
+
+          <p>Note that this feature is tuned for English transcription. It does not work well for Japanese, where word segmentation works differently. It is intended for use with English audio.</p>
+
+          <h4>Why we call it "experimental"</h4>
+          <p>Because the split is driven purely by word count (2–3 words), it does not always land on a natural semantic boundary. Hyphenated words can be split in half, and the break between a short phrase and a long noun phrase can end up somewhere unexpected. <strong>Treat the output as an editing draft rather than a finished product, and touch up the boundaries where needed.</strong></p>
+
+          <h4>Demo videos (side-by-side)</h4>
+          <p>The two videos below show the same English audio processed with (1) the regular transcription feature and (2) the experimental word-chunk feature.</p>
+
+          <h5>▼ 1. Regular transcription</h5>
+          <div class="hero-video">
+            <iframe
+              src="https://www.youtube-nocookie.com/embed/dTIgWGRSTDE"
+              title="MOJIOKO demo: regular transcription"
+              loading="lazy"
+              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen></iframe>
+          </div>
+
+          <h5>▼ 2. Experimental word-chunk subtitles (2–3 words per chunk)</h5>
+          <div class="hero-video">
+            <iframe
+              src="https://www.youtube-nocookie.com/embed/Du4ta9IXRwI"
+              title="MOJIOKO demo: experimental word-chunk subtitles"
+              loading="lazy"
+              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen></iframe>
+          </div>
+
+          <h4>Attribution (CC BY)</h4>
+          <p>The video footage used in this demo is a work by <strong>Tech Steve</strong>, published under the Creative Commons Attribution license (CC BY).</p>
+          <p>Original video: <a href="https://www.youtube.com/watch?v=OfIlTM3cyDg" target="_blank" rel="noopener">https://www.youtube.com/watch?v=OfIlTM3cyDg</a></p>
+        </div>
+      </details>
+
       <!-- 1: OBS settings (revised title and opening, badge: important) -->
       <details class="qa">
         <summary>
@@ -324,7 +412,7 @@
 
     <!-- Footer -->
     <footer>
-      <div>&copy; 2026 brightryo</div>
+      <div>&copy; 2026 BrightRyo</div>
       <div class="footer-links">
         <a href="https://github.com/brightryo/mojioko" target="_blank" rel="noopener">GitHub</a>
         <a href="https://github.com/brightryo/mojioko/issues" target="_blank" rel="noopener">Contact</a>
