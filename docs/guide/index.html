@@ -100,6 +100,56 @@
         </div>
       </details>
 
+      <!-- REQ-0264: experimental word-chunk transcription demo.  Placed
+           immediately after the REQ-0263 fonts showcase so the two feature-
+           highlight panels sit next to each other before the OBS / SmartScreen
+           troubleshooting FAQs that follow.  Reuses `.qa` / `.qa-body` and
+           the top page's `.hero-video` container so the pair of embedded
+           YouTube iframes inherits the same 16:9 rounded-bordered treatment
+           without any new CSS.  Both iframes use youtube-nocookie.com to
+           match the top page's hero video (privacy-preserving embed). -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">解説</span>
+          <span class="q-text">【試験的機能】英語向け・2〜3 単語ごとに区切る自動細切れ字幕</span>
+        </summary>
+        <div class="qa-body">
+          <p>MOJIOKO には、英語音声の文字起こしを 2〜3 単語ごとに区切って字幕にする試験的機能があります。Shorts / TikTok / Reels などの縦型ショート動画でよく見る、テンポの速い細切れ字幕を、下書き段階まで自動で作れます。</p>
+
+          <h4>「試験的機能」としている理由</h4>
+          <p>単語数（2〜3 語）で機械的に区切る仕組みのため、常に「意味の切れ目」と一致するわけではありません。たとえばハイフンで繋がった語が 2 つに分かれてしまったり、短いフレーズと長い名詞句の切れ目が想定と違う位置に来ることがあります。<strong>完成品としてそのまま使うのではなく、「編集の下書き」として使い、必要に応じて手直しする</strong>のがおすすめの使い方です。</p>
+
+          <h4>デモ動画（比較）</h4>
+          <p>下の 2 本は、同じ英語音声を、（1）通常の文字起こし機能と、（2）試験的な細切れ字幕機能で処理した結果です。字幕スタイルは同じで、字幕の区切り方だけが違います。</p>
+
+          <h5>▼ 1. 通常の文字起こし</h5>
+          <div class="hero-video">
+            <iframe
+              src="https://www.youtube-nocookie.com/embed/dTIgWGRSTDE"
+              title="MOJIOKO デモ動画：通常の文字起こし"
+              loading="lazy"
+              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen></iframe>
+          </div>
+
+          <h5>▼ 2. 試験的な細切れ字幕（2〜3 単語ごと）</h5>
+          <div class="hero-video">
+            <iframe
+              src="https://www.youtube-nocookie.com/embed/Du4ta9IXRwI"
+              title="MOJIOKO デモ動画：試験的な細切れ字幕"
+              loading="lazy"
+              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen></iframe>
+          </div>
+
+          <h4>使用素材について（CC BY 表記）</h4>
+          <p>このデモで使用している動画素材は、<strong>Tech Steve</strong> 氏がクリエイティブ・コモンズ・ライセンス（CC BY）のもとで公開している作品を利用しています。</p>
+          <p>元動画: <a href="https://www.youtube.com/watch?v=OfIlTM3cyDg" target="_blank" rel="noopener">https://www.youtube.com/watch?v=OfIlTM3cyDg</a></p>
+        </div>
+      </details>
+
       <!-- 1: OBS settings (revised title and opening, badge: important) -->
       <details class="qa">
         <summary>
