@@ -9,9 +9,9 @@
  *                       entry is the application default.
  * - `bundled: false`  → must be downloaded by the user on first use.  Asset
  *                       URLs follow the convention
- *                       `https://github.com/<owner>/<repo>/releases/download/fonts-v1/<FileName>.ttf`.
- *                       The `OFL.txt` shared across the release is at
- *                       `fonts-v1/OFL.txt`.
+ *                       `https://github.com/<owner>/<repo>/releases/download/<FONTS_RELEASE_TAG>/<FileName>.ttf`.
+ *                       Per-font `<Font>-OFL.txt` files live alongside
+ *                       each TTF under the same release tag.
  *
  * Notes
  * - `cssFontFamily` is the family name registered via `@font-face` (renderer
@@ -28,8 +28,23 @@
 
 import { GITHUB_OWNER, GITHUB_REPO } from './app-info'
 
-/** Release tag that hosts every downloadable font asset. */
-export const FONTS_RELEASE_TAG = 'fonts-v1'
+/**
+ * Release tag that hosts every downloadable font asset.
+ *
+ * REQ-0270 §3 — bumped from `fonts-v1` to `fonts-v2` in v1.3.6 to align
+ * the URL space with `FONT_SET_VERSION` (added below).  The v2 release
+ * is intended as a **complete replacement set**: existing 12 fonts
+ * (REQ-0153 baseline) + 14 new REQ-0269 Noto/Poppins weight assets +
+ * per-font `<Font>-OFL.txt` texts.  Every registry entry's
+ * `downloadUrl` retargets automatically because they all funnel through
+ * `assetUrl()` below.
+ *
+ * ⚠ RELEASE BLOCKER: the `fonts-v2` GitHub Release itself is not yet
+ * uploaded (承認制 owner-gated).  Until the assets are published, every
+ * font download will return HTTP 404 — that is expected on the feature
+ * branch but MUST be resolved before v1.3.6 tag / Store submission.
+ */
+export const FONTS_RELEASE_TAG = 'fonts-v2'
 
 /**
  * REQ-0269 C-4 — Font set version.  Increments every time the registry
@@ -51,12 +66,13 @@ export const FONTS_RELEASE_TAG = 'fonts-v1'
 export const FONT_SET_VERSION = 2
 
 // Per-font OFL distribution: each font ships its own `<FontName>-OFL.txt`
-// alongside its TTF in the `fonts-v1` release.  This satisfies SIL OFL v1.1
-// §2 — "each copy contains the above copyright notice and this license" —
-// because the per-font OFL text starts with that specific font's copyright
-// header (the upstream form from `google/fonts/ofl/<name>/OFL.txt`).
+// alongside its TTF in the current release tag (see FONTS_RELEASE_TAG).
+// This satisfies SIL OFL v1.1 §2 — "each copy contains the above
+// copyright notice and this license" — because the per-font OFL text
+// starts with that specific font's copyright header (the upstream form
+// from `google/fonts/ofl/<name>/OFL.txt`).
 //
-// An earlier design shared a single `fonts-v1/OFL.txt` between all fonts and
+// An earlier design shared a single `OFL.txt` between all fonts and
 // relied on `meta.copyright` to supply the per-font header at render time.
 // That approach was rejected: the *distributed file itself* must carry the
 // notice for the licence to be conveyed with the binary, not merely surfaced
@@ -142,10 +158,10 @@ export interface FontMeta {
   downloadUrl: string | null
   /**
    * Per-font OFL.txt URL.  Non-null for every downloadable font — the asset
-   * lives at `fonts-v1/<FontName>-OFL.txt` and carries that font's own
-   * copyright header followed by the standard SIL OFL v1.1 body.  Null only
-   * for bundled fonts whose OFL is shipped via the installer rather than
-   * fetched on demand.
+   * lives at `<FONTS_RELEASE_TAG>/<FontName>-OFL.txt` and carries that font's
+   * own copyright header followed by the standard SIL OFL v1.1 body.  Null
+   * only for bundled fonts whose OFL is shipped via the installer rather
+   * than fetched on demand.
    */
   oflUrl: string | null
   /** Best-effort Content-Length at release time; used for ±10 % size check. */
@@ -203,10 +219,11 @@ function assetUrl(fileName: string): string {
  * Font registry.  Order = display order in the picker.  The bundled Noto entry
  * is intentionally first so the default font sits at the top of the list.
  *
- * For the seven fonts that are not yet uploaded to `fonts-v1`, the URL is
- * pre-allocated to the canonical filename so once the owner uploads the
- * asset with the same name, the downloader starts succeeding without code
- * change.  Sizes are approximate and will tighten when actual uploads land.
+ * REQ-0270 §3 — every downloadable entry now points at `fonts-v2` via
+ * `assetUrl()` + `FONTS_RELEASE_TAG`.  Sizes remain approximate estimates
+ * for the newly-added weights and will tighten once the `fonts-v2` release
+ * assets are actually uploaded and the ±10 % integrity check settles
+ * against real Content-Length values.
  */
 // -----------------------------------------------------------------
 // REQ-0269 B — Noto Sans JP weight matrix.
@@ -217,13 +234,12 @@ function assetUrl(fileName: string): string {
 // to registered FontIds so no bytes are wasted).
 //
 // Downloadable via font set: Thin (100), ExtraLight (200), Light (300),
-// Bold (700), ExtraBold (800), Black (900).  All hosted alongside the
-// existing v1 assets under the `fonts-v1` release tag — no `fonts-v2`
-// bump because the tag is versionless.  Sizes are the Google Fonts
-// static distribution values (all ~5.4-5.5 MB per weight); the ±10 %
-// integrity check will accept the actual Content-Length once the assets
-// are uploaded (fonts-v2 GitHub release publish is owner-gated, per
-// REQ-0269 承認制操作).
+// Bold (700), ExtraBold (800), Black (900).  Hosted under the
+// `fonts-v2` release tag (REQ-0270 §3 aligned the tag with
+// FONT_SET_VERSION).  Sizes are the Google Fonts static distribution
+// values (all ~5.4-5.5 MB per weight); the ±10 % integrity check will
+// accept the actual Content-Length once the `fonts-v2` release is
+// published (owner-gated).
 //
 // Copyright / sourceUrl are shared across the whole family (Adobe /
 // Google Fonts distribute one OFL notice for the family).  Each weight
@@ -529,10 +545,10 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   // -----------------------------------------------------------------
   // REQ-0153 — international (Latin) faces.  All SIL OFL 1.1 with the
   // per-font copyright header preserved verbatim in the sibling
-  // `<Name>-OFL.txt` asset under the same `fonts-v1` release.  Assets
-  // uploaded to the existing `fonts-v1` tag (versionless font pool)
-  // rather than a `fonts-v2` bump — the release tag holds every
-  // downloadable font asset for the app irrespective of app version.
+  // `<Name>-OFL.txt` asset.  Hosted under the current
+  // `FONTS_RELEASE_TAG` alongside every other downloadable font.
+  // REQ-0270 §3 retargets these from the pre-v1.3.6 `fonts-v1` tag to
+  // `fonts-v2`, matching the FONT_SET_VERSION bump.
   // -----------------------------------------------------------------
   {
     id: 'anton',
@@ -878,34 +894,46 @@ export function getFontIdForFamilyAndWeight(cssFontFamily: string, weight: numbe
 }
 
 /**
- * REQ-0269 D-1 — pick the best available FontId to render `fontId`
- * with when the underlying font (or its downloadable weight) is not
- * yet on disk.
+ * REQ-0269 D-1 / REQ-0270 §2 — pick the best available FontId to render
+ * `fontId` with when the underlying font (or its downloadable weight)
+ * is not yet on disk OR is tier-locked (free build asking for a
+ * paid-tier weight).
  *
  *   Order:
- *     1. `fontId` itself, if installed.
- *     2. Same-family alternate: any INSTALLED weight in the same
- *        `cssFontFamily`, closest to the requested weight (Euclidean).
- *        Preserves the book/display voice better than dropping straight
- *        to Noto SemiBold.
- *     3. `DEFAULT_FONT_ID` (Noto Sans JP SemiBold) — always bundled.
+ *     1. `fontId` itself, if installed AND selectable in the current tier.
+ *     2. Same-family alternate: any weight in the same `cssFontFamily`
+ *        that is INSTALLED AND SELECTABLE, closest to the requested
+ *        weight (Euclidean).  Preserves the book/display voice better
+ *        than dropping straight to Noto SemiBold.
+ *     3. `DEFAULT_FONT_ID` (Noto Sans JP SemiBold) — always bundled AND
+ *        always selectable (`canSelectFontInTier` returns true for
+ *        `DEFAULT_FONT_ID` in every tier).
  *
- * The caller passes an installed-set predicate (typically the renderer's
- * `useInstalledFontIds` Set) so this function stays pure and testable.
+ * Both predicates are supplied by the caller so this function stays
+ * pure and testable.  `isSelectable` defaults to "always yes" for
+ * back-compat, but every real call site should pass a tier-aware
+ * predicate — REQ-0270 §2 tightened this because the pre-REQ-0270
+ * fallback would render Noto Regular / Medium on the free tier
+ * (both TTFs physically ship in the installer under
+ * `resources/fonts/Noto_Sans_JP/static/`) when a project referenced
+ * `noto-sans-jp-bold`, which is exactly the "paid-tier weight leaked
+ * to free build" hole REQ-0269 C-3 wanted closed.
+ *
  * The ORIGINAL `fontId` in the project entry is intentionally NOT
  * mutated — this returns a render-time substitute only, and the moment
- * the font set is downloaded the natural resolution walks back to
- * step 1.
+ * the font set is downloaded (paid tier) or the user upgrades to the
+ * Store build, the natural resolution walks back to step 1.
  */
 export function resolveRenderableFontId(
   fontId: FontId,
   isInstalled: (id: FontId) => boolean,
+  isSelectable: (id: FontId) => boolean = () => true,
 ): FontId {
-  if (isInstalled(fontId)) return fontId
+  if (isInstalled(fontId) && isSelectable(fontId)) return fontId
   const meta = FONT_REGISTRY.find((f) => f.id === fontId)
   if (meta) {
     const familyCandidates = FONT_REGISTRY
-      .filter((f) => f.cssFontFamily === meta.cssFontFamily && isInstalled(f.id))
+      .filter((f) => f.cssFontFamily === meta.cssFontFamily && isInstalled(f.id) && isSelectable(f.id))
       .sort((a, b) => Math.abs(a.weight - meta.weight) - Math.abs(b.weight - meta.weight))
     if (familyCandidates.length > 0) return familyCandidates[0].id
   }
@@ -913,20 +941,37 @@ export function resolveRenderableFontId(
 }
 
 /**
- * REQ-0153 §2 — canonical display order for every font-list rendering
- * site (settings picker, timeline inspector row selector, bulk-edit
- * bar selector, subtitle style dialog, license attribution list).
- * Alphabetical by `displayName`, `en` locale, case-insensitive so
- * "DotGothic16" sorts next to "Dela Gothic One" the way an
- * English-speaking user expects.  `FONT_REGISTRY` order itself is
- * intentionally NOT touched — `getFontMeta`'s defensive `[0]` fallback
- * and the "Noto first" mental model still hold at the data layer;
- * only the display order is sorted.
+ * REQ-0153 §2 / REQ-0270 §1 — canonical display order for every font-list
+ * rendering site (settings picker, timeline inspector row selector,
+ * bulk-edit bar selector, subtitle style dialog, license attribution
+ * list).
+ *
+ * Primary key: **family display name** (`en` locale, case-insensitive) so
+ *   Anton → Bebas Neue → Dela Gothic One → DotGothic16 → Hachi Maru Pop
+ *   → Mochiy Pop One → Montserrat → Noto Sans JP → Poppins → Potta One
+ *   → Rampart One → Reggae One → Yusei Magic.  The pre-REQ-0270 sort
+ *   also used displayName alphabetical, so the family-level order is
+ *   unchanged from v1.3.5.
+ *
+ * Secondary key: **numeric weight ascending** so multi-weight families
+ *   land in the natural typographic order — Thin (100) → ExtraLight
+ *   (200) → Light (300) → Regular (400) → Medium (500) → SemiBold
+ *   (600) → Bold (700) → ExtraBold (800) → Black (900).  Before
+ *   REQ-0270 the sort was purely alphabetical over the full displayName
+ *   (family+weight), which lands Black / Bold / ExtraBold before Thin —
+ *   useless as a weight selector.  Sorting by numeric weight fixes the
+ *   picker without needing a two-level (family + weight) UI.
+ *
+ * `FONT_REGISTRY` order itself is intentionally NOT touched —
+ * `getFontMeta`'s defensive `[0]` fallback and the "Noto first" mental
+ * model still hold at the data layer; only the display order is sorted.
  */
 export function getSortedFontRegistry(): FontMeta[] {
-  return [...FONT_REGISTRY].sort((a, b) =>
-    a.displayName.localeCompare(b.displayName, 'en', { sensitivity: 'base' }),
-  )
+  return [...FONT_REGISTRY].sort((a, b) => {
+    const family = a.cssFontFamily.localeCompare(b.cssFontFamily, 'en', { sensitivity: 'base' })
+    if (family !== 0) return family
+    return a.weight - b.weight
+  })
 }
 
 export function getFontMeta(id: FontId): FontMeta {

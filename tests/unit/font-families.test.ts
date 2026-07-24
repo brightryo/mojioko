@@ -129,6 +129,88 @@ describe('resolveRenderableFontId (REQ-0269 D-1 fallback)', () => {
   })
 })
 
+describe('resolveRenderableFontId — tier gating (REQ-0270 §2)', () => {
+  // Simulate the free-tier reality: every Noto Sans JP weight TTF is
+  // physically shipped (Regular / Medium / SemiBold are bundled), but
+  // only DEFAULT_FONT_ID is selectable in the free tier.  This mirrors
+  // canSelectFontInTier(false, id) === (id === DEFAULT_FONT_ID).
+  const freeTierInstalled = new Set<FontId>([
+    'noto-sans-jp-regular',
+    'noto-sans-jp-medium',
+    'noto-sans-jp-semibold',
+  ])
+  const isInstalledFree = (id: FontId) => freeTierInstalled.has(id)
+  const isSelectableFree = (id: FontId) => id === DEFAULT_FONT_ID
+
+  it('free tier — requesting DEFAULT_FONT_ID returns DEFAULT_FONT_ID', () => {
+    expect(
+      resolveRenderableFontId(DEFAULT_FONT_ID, isInstalledFree, isSelectableFree)
+    ).toBe(DEFAULT_FONT_ID)
+  })
+
+  it('free tier — requesting a bundled-but-tier-locked weight falls back to DEFAULT_FONT_ID (not to Noto Regular / Medium)', () => {
+    // Regular is bundled AND same family AND closer to requested Bold(700) than SemiBold(600).
+    // Pre-REQ-0270 would have returned 'noto-sans-jp-medium' (500 is the closest installed).
+    // With tier gating, only DEFAULT_FONT_ID (SemiBold) is selectable → it wins the fallback.
+    expect(
+      resolveRenderableFontId('noto-sans-jp-bold', isInstalledFree, isSelectableFree)
+    ).toBe(DEFAULT_FONT_ID)
+    // Requesting Regular itself also lands on the default — Regular is installed
+    // but not selectable in the free tier.
+    expect(
+      resolveRenderableFontId('noto-sans-jp-regular', isInstalledFree, isSelectableFree)
+    ).toBe(DEFAULT_FONT_ID)
+    // Every one of the 9 Noto weights should end up at DEFAULT_FONT_ID in the free tier.
+    const allNotoWeights: FontId[] = [
+      'noto-sans-jp-thin', 'noto-sans-jp-extralight', 'noto-sans-jp-light',
+      'noto-sans-jp-regular', 'noto-sans-jp-medium', 'noto-sans-jp-semibold',
+      'noto-sans-jp-bold', 'noto-sans-jp-extrabold', 'noto-sans-jp-black',
+    ]
+    for (const id of allNotoWeights) {
+      expect(
+        resolveRenderableFontId(id, isInstalledFree, isSelectableFree)
+      ).toBe(DEFAULT_FONT_ID)
+    }
+  })
+
+  it('free tier — Poppins / Anton / Bebas Neue all fall back to DEFAULT_FONT_ID', () => {
+    for (const id of ['poppins', 'poppins-bold', 'anton', 'bebas-neue', 'montserrat'] as FontId[]) {
+      expect(
+        resolveRenderableFontId(id, isInstalledFree, isSelectableFree)
+      ).toBe(DEFAULT_FONT_ID)
+    }
+  })
+
+  it('paid tier — behaviour matches the pre-tier "isInstalled only" ladder', () => {
+    // Selectability is `true` for everything in the paid tier, so the
+    // fallback should be identical to the two-argument form.
+    const isInstalledPaid = (id: FontId) => freeTierInstalled.has(id) // narrow install set for testing
+    const isSelectablePaid = () => true
+    // Requested Bold(700), only 400/500/600 installed → nearest is SemiBold(600).
+    expect(
+      resolveRenderableFontId('noto-sans-jp-bold', isInstalledPaid, isSelectablePaid)
+    ).toBe('noto-sans-jp-semibold')
+    // Requested Regular(400) — installed AND selectable → returns itself, NOT DEFAULT.
+    expect(
+      resolveRenderableFontId('noto-sans-jp-regular', isInstalledPaid, isSelectablePaid)
+    ).toBe('noto-sans-jp-regular')
+  })
+
+  it('the default `isSelectable = () => true` preserves pre-REQ-0270 two-arg call sites', () => {
+    // With 400/500/600 installed, distances to Bold(700) are
+    // 300 / 200 / 100 → SemiBold(600) is nearest.  Two-arg call
+    // (no tier predicate) returns the pre-REQ-0270 answer.
+    expect(
+      resolveRenderableFontId('noto-sans-jp-bold', isInstalledFree)
+    ).toBe('noto-sans-jp-semibold')
+    // Paid-style behaviour on the same install set: Regular (400) is
+    // installed and selectable → returns itself.
+    expect(
+      resolveRenderableFontId('noto-sans-jp-regular', isInstalledFree)
+    ).toBe('noto-sans-jp-regular')
+  })
+})
+
 describe('FONT_SET_VERSION', () => {
   it('is a positive integer', () => {
     expect(Number.isInteger(FONT_SET_VERSION)).toBe(true)

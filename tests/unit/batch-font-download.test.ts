@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { selectBatchDownloadTargets } from '../../src/renderer/lib/batch-font-download'
-import { FONT_REGISTRY, type FontId, type FontsState, type FontStatus } from '../../src/shared/fonts'
+import { FONT_REGISTRY, getSortedFontRegistry, type FontId, type FontsState, type FontStatus } from '../../src/shared/fonts'
 
 /**
  * REQ-0161 — pin the eligibility rules that decide which fonts get
@@ -89,15 +89,18 @@ describe('selectBatchDownloadTargets — REQ-0161 batch DL eligibility', () => {
     expect(targets.map((m) => m.id).sort()).toEqual(ALL_DOWNLOADABLE.slice().sort())
   })
 
-  it('preserves alphabetical order (matches the picker list)', () => {
+  it('preserves picker order (family alphabetical, weight ascending — REQ-0270 §1)', () => {
     // Batch progress marker moves down the visible list; if this
     // ordering ever regresses the batch marker would jump around.
+    // Pre-REQ-0270 this test compared against displayName alphabetical;
+    // the new sort keys are (cssFontFamily, weight ascending) so the
+    // expectation follows getSortedFontRegistry's actual output.
     const targets = selectBatchDownloadTargets(makeState({}), true)
-    const displayNames = targets.map((m) => m.displayName)
-    const sorted = displayNames.slice().sort((a, b) =>
-      a.localeCompare(b, 'en', { sensitivity: 'base' }),
-    )
-    expect(displayNames).toEqual(sorted)
+    const ids = targets.map((m) => m.id)
+    const expected = getSortedFontRegistry()
+      .filter((m) => ids.includes(m.id))
+      .map((m) => m.id)
+    expect(ids).toEqual(expected)
   })
 
   it('mixed tier: NSIS + partial install → still empty (tier gate wins)', () => {

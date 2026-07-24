@@ -23,12 +23,27 @@ describe('getSortedFontRegistry', () => {
     }
   })
 
-  it('sorts by displayName ascending, case-insensitive', () => {
+  it('sorts by family name ascending (case-insensitive), then by numeric weight ascending', () => {
+    // REQ-0270 §1 — the pre-REQ-0270 pure-alphabetical sort by full
+    // displayName landed Bold(700) / Black(900) / ExtraBold(800) before
+    // Thin(100) inside every multi-weight family, which was useless as
+    // a weight-selection UI.  The new sort keys are (cssFontFamily
+    // alphabetical) → (weight ascending) so multi-weight families land
+    // Thin → ExtraLight → Light → Regular → Medium → SemiBold → Bold
+    // → ExtraBold → Black in the natural typographic order.
     const sorted = getSortedFontRegistry()
     for (let i = 1; i < sorted.length; i++) {
-      const prev = sorted[i - 1].displayName.toLowerCase()
-      const curr = sorted[i].displayName.toLowerCase()
-      expect(prev <= curr).toBe(true)
+      const prev = sorted[i - 1]
+      const curr = sorted[i]
+      const prevFamily = prev.cssFontFamily.toLowerCase()
+      const currFamily = curr.cssFontFamily.toLowerCase()
+      if (prevFamily === currFamily) {
+        // Same family → weight ascending.
+        expect(prev.weight <= curr.weight).toBe(true)
+      } else {
+        // Different family → family name ascending.
+        expect(prevFamily <= currFamily).toBe(true)
+      }
     }
   })
 
@@ -37,13 +52,12 @@ describe('getSortedFontRegistry', () => {
     expect(sorted[0].id).toBe('anton')
   })
 
-  it('places the REQ-0153 English-only fonts in alphabetical order relative to each other', () => {
-    // REQ-0269 B expanded Poppins from a single Regular entry to 9 weights,
-    // so the English-only set now contains Anton / Bebas Neue / Montserrat
-    // plus 9 Poppins weights (Black / Bold / ExtraBold / ExtraLight / Light
-    // / Medium / Regular / SemiBold / Thin — alphabetical by displayName
-    // suffix, with `Poppins Regular` sorting between `Poppins Medium` and
-    // `Poppins SemiBold`).
+  it('places the REQ-0153 English-only fonts by family, weight-ascending within Poppins', () => {
+    // REQ-0270 §1 — with the new family-then-numeric-weight sort:
+    //   Anton (single) → Bebas Neue (single) → Montserrat (single) →
+    //   Poppins Thin(100) → ExtraLight(200) → Light(300) →
+    //   Poppins-Regular=`poppins`(400) → Medium(500) → SemiBold(600) →
+    //   Bold(700) → ExtraBold(800) → Black(900).
     const sorted = getSortedFontRegistry()
     const en = sorted
       .filter((f) => f.languages.length === 1 && f.languages[0] === 'en')
@@ -52,15 +66,37 @@ describe('getSortedFontRegistry', () => {
       'anton',
       'bebas-neue',
       'montserrat',
-      'poppins-black',
-      'poppins-bold',
-      'poppins-extrabold',
+      'poppins-thin',
       'poppins-extralight',
       'poppins-light',
-      'poppins-medium',
       'poppins',
+      'poppins-medium',
       'poppins-semibold',
-      'poppins-thin',
+      'poppins-bold',
+      'poppins-extrabold',
+      'poppins-black',
+    ])
+  })
+
+  it('places Noto Sans JP weights Thin → Black inside a contiguous block', () => {
+    // REQ-0270 §1 — the pre-REQ-0270 alphabetical sort scattered these
+    // as Black / Bold / ExtraBold / ExtraLight / Light / Medium / Regular
+    // / SemiBold / Thin.  New sort collapses them into a natural weight
+    // ladder.
+    const sorted = getSortedFontRegistry()
+    const noto = sorted
+      .filter((f) => f.cssFontFamily === 'Noto Sans JP')
+      .map((f) => f.id)
+    expect(noto).toEqual([
+      'noto-sans-jp-thin',
+      'noto-sans-jp-extralight',
+      'noto-sans-jp-light',
+      'noto-sans-jp-regular',
+      'noto-sans-jp-medium',
+      'noto-sans-jp-semibold',
+      'noto-sans-jp-bold',
+      'noto-sans-jp-extrabold',
+      'noto-sans-jp-black',
     ])
   })
 

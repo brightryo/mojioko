@@ -9,6 +9,8 @@ import { useEffect } from 'react'
 import { useSettingsStore } from '@/stores/settings-store'
 import { getFontMeta, isFontId, resolveRenderableFontId, type FontId } from '../../../shared/fonts'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
+import { useAppEnvStore } from '@/stores/app-env-store'
+import { canSelectFontInTier } from '@/lib/font-tier'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
 
@@ -236,15 +238,24 @@ export function SubtitleOverlay({
   // fall back to the project default (activeFontId) so legacy rows and
   // freshly-added blank rows match what burn-in would produce.
   const requestedFontId = isFontId(entry.fontId) ? entry.fontId : activeFontId
-  // REQ-0269 D-1 — if the requested font (a weight in the downloaded
-  // font set, typically) is not yet installed, substitute a same-family
-  // installed weight, or fall back to the bundled Noto SemiBold.  The
-  // ENTRY's `fontId` is intentionally NOT rewritten anywhere; this is
-  // purely a render-time swap so the project keeps its original weight
-  // request and the display "flips back" to the correct face the
-  // moment the user downloads the font set.
+  // REQ-0269 D-1 / REQ-0270 §2 — if the requested font (a weight in the
+  // downloaded font set, typically) is not yet installed OR is
+  // tier-locked (free build asking for a paid-only weight), substitute
+  // a same-family installed+selectable weight, or fall back to the
+  // bundled Noto SemiBold.  The ENTRY's `fontId` is intentionally NOT
+  // rewritten anywhere; this is purely a render-time swap so the
+  // project keeps its original weight request and the display "flips
+  // back" to the correct face once the user downloads the set OR
+  // upgrades to the paid build.  The `isMsix ?? false` mirrors the
+  // pattern the picker components use so the pre-IPC window doesn't
+  // briefly let a paid-only weight render on the free tier.
   const installedIds = useInstalledFontIds()
-  const resolvedFontId = resolveRenderableFontId(requestedFontId, (id) => installedIds.has(id))
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
+  const resolvedFontId = resolveRenderableFontId(
+    requestedFontId,
+    (id) => installedIds.has(id),
+    (id) => canSelectFontInTier(isMsix, id),
+  )
   const fontMeta = getFontMeta(resolvedFontId)
   const libassScale = getLibassScaleFor(resolvedFontId)
   // REQ-0162 — defensive lazy load.  If the effective font's cmap

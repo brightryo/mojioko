@@ -5,6 +5,8 @@ import type { Cut } from '../../shared/cuts'
 import { substituteMissingGlyphs } from '../../shared/glyph-substitute'
 import { getCmapCoverageFor, getTofuSubstituteFor, loadSubtitleFontFor } from '../lib/font-metrics'
 import { listFonts } from '@/services/font'
+import { useAppEnvStore } from '@/stores/app-env-store'
+import { canSelectFontInTier } from '@/lib/font-tier'
 
 export interface BurninOptions {
   inputPath: string
@@ -77,20 +79,34 @@ export async function startBurnin(
   } catch { /* fall open */ }
   const isInstalled = (id: FontId): boolean => installedSet.size === 0 || installedSet.has(id)
 
+  // REQ-0270 §2 — tier-aware selectability.  Snapshotting `isMsix` at
+  // burn-in start (rather than reading it per-row) matches the "no
+  // mid-render tier flip" semantic — the tier can never actually change
+  // during a burn-in, and even if the store were somehow bumped mid-run
+  // we want the whole run to agree on which tier's fallback logic
+  // applies.  `?? false` mirrors the picker components' pattern so a
+  // pre-IPC boot never briefly lets a paid-only weight leak into the
+  // free tier's burn-in.
+  const isMsix = useAppEnvStore.getState().isMsix ?? false
+  const isSelectable = (id: FontId): boolean => canSelectFontInTier(isMsix, id)
+
   // Resolve the project-level default AND every per-row override to an
-  // installed font before we start the pipeline.  `resolveRenderableFontId`
-  // keeps same-family same-weight when it can, walks to nearest weight
-  // otherwise, and falls back to the bundled Noto SemiBold as the last
-  // resort.  The renderer's `SubtitleOverlay` uses the exact same helper
-  // for the preview, so preview↔burn-in stay in lockstep even when the
-  // requested font set is missing.
-  const resolvedProjectFontId = resolveRenderableFontId(opts.fontId, isInstalled)
+  // installed + selectable font before we start the pipeline.
+  // `resolveRenderableFontId` keeps same-family same-weight when it
+  // can, walks to nearest weight otherwise, and falls back to the
+  // bundled Noto SemiBold as the last resort.  Both predicates
+  // (install + tier) are checked at every rung of the fallback ladder
+  // so a free-tier project referencing `noto-sans-jp-bold` lands on
+  // Noto SemiBold (not on the physically-shipped-but-tier-locked
+  // Noto Regular / Medium).  The renderer's `SubtitleOverlay` uses
+  // the exact same predicates so preview↔burn-in stay in lockstep.
+  const resolvedProjectFontId = resolveRenderableFontId(opts.fontId, isInstalled, isSelectable)
 
   const referencedFontIds = new Set<FontId>()
   referencedFontIds.add(resolvedProjectFontId)
   for (const e of opts.entries) {
     const rowRequested: FontId = isFontId(e.fontId) ? e.fontId : opts.fontId
-    referencedFontIds.add(resolveRenderableFontId(rowRequested, isInstalled))
+    referencedFontIds.add(resolveRenderableFontId(rowRequested, isInstalled, isSelectable))
   }
   await Promise.all(
     Array.from(referencedFontIds).map((id) =>
@@ -100,7 +116,7 @@ export async function startBurnin(
 
   const substitutedEntries: SubtitleEntry[] = opts.entries.map((e) => {
     const rowRequested: FontId = isFontId(e.fontId) ? e.fontId : opts.fontId
-    const rowFontId: FontId = resolveRenderableFontId(rowRequested, isInstalled)
+    const rowFontId: FontId = resolveRenderableFontId(rowRequested, isInstalled, isSelectable)
     const cmap = getCmapCoverageFor(rowFontId)
     const tofu = getTofuSubstituteFor(rowFontId)
     const substitutedText = (cmap !== null && tofu !== null)
