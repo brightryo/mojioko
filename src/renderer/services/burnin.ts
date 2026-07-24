@@ -1,9 +1,10 @@
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground, IpcResult, EncoderSetting, AudioMode, OutputContainer } from '../../shared/types'
 import type { BurninEvent } from '../../shared/ipc-contracts'
-import { isFontId, type FontId } from '../../shared/fonts'
+import { isFontId, resolveRenderableFontId, type FontId } from '../../shared/fonts'
 import type { Cut } from '../../shared/cuts'
 import { substituteMissingGlyphs } from '../../shared/glyph-substitute'
 import { getCmapCoverageFor, getTofuSubstituteFor, loadSubtitleFontFor } from '../lib/font-metrics'
+import { listFonts } from '@/services/font'
 
 export interface BurninOptions {
   inputPath: string
@@ -55,10 +56,41 @@ export async function startBurnin(
   // promise when one is running) so this is O(distinct fonts) worth
   // of awaits per burn-in.  Failures degrade gracefully — the row
   // falls through to legacy behaviour and the burn-in still runs.
+  // REQ-0269 D-1 — build the installed-font predicate BEFORE running
+  // per-row substitution so a burn-in fired against a project whose
+  // rows request fonts from the (not-yet-downloaded) font set falls
+  // back gracefully instead of libass ignoring the missing family and
+  // silently switching to its default DirectWrite / fontconfig face.
+  // The predicate is a Set snapshot taken once here — a font that
+  // finishes downloading mid-burn-in won't retroactively affect this
+  // run, which is the correct semantics (the ASS file was already
+  // written).  Failure to enumerate falls open to "everything is
+  // installed", which preserves pre-REQ-0269 behaviour.
+  const installedSet = new Set<FontId>()
+  try {
+    const r = await listFonts()
+    if (r.ok) {
+      for (const f of r.data.fonts) {
+        if (f.status === 'bundled' || f.status === 'installed') installedSet.add(f.id)
+      }
+    }
+  } catch { /* fall open */ }
+  const isInstalled = (id: FontId): boolean => installedSet.size === 0 || installedSet.has(id)
+
+  // Resolve the project-level default AND every per-row override to an
+  // installed font before we start the pipeline.  `resolveRenderableFontId`
+  // keeps same-family same-weight when it can, walks to nearest weight
+  // otherwise, and falls back to the bundled Noto SemiBold as the last
+  // resort.  The renderer's `SubtitleOverlay` uses the exact same helper
+  // for the preview, so preview↔burn-in stay in lockstep even when the
+  // requested font set is missing.
+  const resolvedProjectFontId = resolveRenderableFontId(opts.fontId, isInstalled)
+
   const referencedFontIds = new Set<FontId>()
-  referencedFontIds.add(opts.fontId)
+  referencedFontIds.add(resolvedProjectFontId)
   for (const e of opts.entries) {
-    if (isFontId(e.fontId)) referencedFontIds.add(e.fontId)
+    const rowRequested: FontId = isFontId(e.fontId) ? e.fontId : opts.fontId
+    referencedFontIds.add(resolveRenderableFontId(rowRequested, isInstalled))
   }
   await Promise.all(
     Array.from(referencedFontIds).map((id) =>
@@ -67,15 +99,26 @@ export async function startBurnin(
   )
 
   const substitutedEntries: SubtitleEntry[] = opts.entries.map((e) => {
-    const rowFontId: FontId = isFontId(e.fontId) ? e.fontId : opts.fontId
+    const rowRequested: FontId = isFontId(e.fontId) ? e.fontId : opts.fontId
+    const rowFontId: FontId = resolveRenderableFontId(rowRequested, isInstalled)
     const cmap = getCmapCoverageFor(rowFontId)
     const tofu = getTofuSubstituteFor(rowFontId)
-    if (cmap === null || tofu === null) return e
-    const substituted = substituteMissingGlyphs(e.text, cmap, tofu)
-    // substituteMissingGlyphs returns the original reference when no
-    // work was needed — skip the allocation of a copy when unchanged.
-    if (substituted === e.text) return e
-    return { ...e, text: substituted }
+    const substitutedText = (cmap !== null && tofu !== null)
+      ? substituteMissingGlyphs(e.text, cmap, tofu)
+      : e.text
+    // Build a patch that ONLY writes fields when they actually change.
+    // - fontId: only when the row had an explicit override AND that
+    //   override was substituted.  Inherit rows (e.fontId undefined) stay
+    //   inherit; the ass-generator picks up the fallback via opts.fontId
+    //   which we've already resolved above.
+    // - text: only when a code point had to be mapped to the tofu char.
+    const rowNeedsFontSubst = e.fontId !== undefined && rowFontId !== e.fontId
+    const textChanged = substitutedText !== e.text
+    if (!rowNeedsFontSubst && !textChanged) return e
+    const patch: Partial<SubtitleEntry> = {}
+    if (rowNeedsFontSubst) patch.fontId = rowFontId
+    if (textChanged) patch.text = substitutedText
+    return { ...e, ...patch }
   })
 
   const result = await window.electronAPI.burninStart({
@@ -88,7 +131,7 @@ export async function startBurnin(
     audioMode: opts.audioMode,
     subtitleBackground: opts.subtitleBackground,
     outputContainer: opts.outputContainer,
-    fontId: opts.fontId,
+    fontId: resolvedProjectFontId,
     cuts: opts.cuts
   })
 

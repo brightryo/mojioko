@@ -32,6 +32,13 @@ interface NumberStepperInputProps {
    * commit timing belong to the parent's history op.
    */
   outOfRange?: boolean
+  /**
+   * Optional Tailwind width class for the inner `<input>`.  Defaults to
+   * `w-14` (3.5rem ≈ 56px) which fits up-to-3-digit values used by
+   * fontSize / bg opacity.  REQ-0269 A callers that accept 4-digit
+   * margins pass `w-16` (4rem) so 9999 doesn't wrap the caret.
+   */
+  widthClass?: string
 }
 
 /**
@@ -59,6 +66,7 @@ export function NumberStepperInput({
   ariaLabel,
   title,
   outOfRange,
+  widthClass = 'w-14',
 }: NumberStepperInputProps) {
   function clamp(n: number): number {
     return Math.min(max, Math.max(min, n))
@@ -132,7 +140,8 @@ export function NumberStepperInput({
         title={title}
         aria-label={ariaLabel}
         className={cn(
-          'w-14 h-7 rounded border bg-surface-0 px-1.5 text-center text-body text-fg-primary',
+          widthClass,
+          'h-7 rounded border bg-surface-0 px-1.5 text-center text-body text-fg-primary',
           'focus:outline-none focus-visible:ring-1',
           '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
           'disabled:opacity-40 disabled:cursor-not-allowed',

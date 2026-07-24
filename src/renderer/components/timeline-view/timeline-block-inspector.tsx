@@ -27,7 +27,7 @@ import { formatEditedTimecode, editedDurationOfEntry } from '@/lib/time'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { getAnchorAssPosition, clampAssPosition, recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 import { effectiveEntryState } from '../../../shared/cuts'
-import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
+import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, MARGIN_V_MIN_PX, MARGIN_V_MAX_PX } from '../../../shared/constants'
 import type { FontId } from '../../../shared/fonts'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -1022,14 +1022,16 @@ export function TimelineBlockInspector({
             <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.marginV')}</label>
             {/* REQ-20260615-059 B — margin gets the ±10 chevron stepper
                 the size row already uses, so the same wrist-flick keeps
-                margin in step with size adjustments.  Range stays
-                [0, 300] (the legacy blur-clamp); the stepper clamps to
-                the same range via NumberStepperInput's own bounds. */}
+                margin in step with size adjustments.  REQ-0269 A raised
+                the ceiling from 300 to 9999 (`MARGIN_V_MAX_PX`) so
+                extreme off-frame offsets are reachable; input widens to
+                `w-16` to fit 4 digits. */}
             <NumberStepperInput
               value={entry.verticalMarginPx}
-              min={0}
-              max={300}
+              min={MARGIN_V_MIN_PX}
+              max={MARGIN_V_MAX_PX}
               step={10}
+              widthClass="w-16"
               onCommit={(next) => {
                 if (next === entry.verticalMarginPx) return
                 // REQ-20260615-037 — preserve the offset across the

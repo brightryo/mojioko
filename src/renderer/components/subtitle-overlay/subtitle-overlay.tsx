@@ -7,7 +7,8 @@ import { substituteMissingGlyphs } from '../../../shared/glyph-substitute'
 import { useFontCacheVersionStore } from '@/stores/font-cache-version-store'
 import { useEffect } from 'react'
 import { useSettingsStore } from '@/stores/settings-store'
-import { getFontMeta, isFontId, type FontId } from '../../../shared/fonts'
+import { getFontMeta, isFontId, resolveRenderableFontId, type FontId } from '../../../shared/fonts'
+import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
 
@@ -234,7 +235,16 @@ export function SubtitleOverlay({
   // fontId, render with that family + its own libassScale.  Otherwise
   // fall back to the project default (activeFontId) so legacy rows and
   // freshly-added blank rows match what burn-in would produce.
-  const resolvedFontId = isFontId(entry.fontId) ? entry.fontId : activeFontId
+  const requestedFontId = isFontId(entry.fontId) ? entry.fontId : activeFontId
+  // REQ-0269 D-1 — if the requested font (a weight in the downloaded
+  // font set, typically) is not yet installed, substitute a same-family
+  // installed weight, or fall back to the bundled Noto SemiBold.  The
+  // ENTRY's `fontId` is intentionally NOT rewritten anywhere; this is
+  // purely a render-time swap so the project keeps its original weight
+  // request and the display "flips back" to the correct face the
+  // moment the user downloads the font set.
+  const installedIds = useInstalledFontIds()
+  const resolvedFontId = resolveRenderableFontId(requestedFontId, (id) => installedIds.has(id))
   const fontMeta = getFontMeta(resolvedFontId)
   const libassScale = getLibassScaleFor(resolvedFontId)
   // REQ-0162 — defensive lazy load.  If the effective font's cmap

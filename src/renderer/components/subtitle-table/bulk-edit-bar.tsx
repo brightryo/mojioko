@@ -21,7 +21,7 @@ import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
 import { effectiveEntryState } from '../../../shared/cuts'
-import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
+import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, MARGIN_V_MIN_PX, MARGIN_V_MAX_PX } from '../../../shared/constants'
 import { getSortedFontRegistry, isFontId, type FontId } from '../../../shared/fonts'
 import { FontLangBadges } from '@/components/font-lang-badge/font-lang-badge'
 import { recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
@@ -544,7 +544,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   function handleMarginCommit(raw: string) {
     const v = parseInt(raw, 10)
     if (isNaN(v)) return
-    const clamped = Math.max(0, Math.min(300, v))
+    const clamped = Math.max(MARGIN_V_MIN_PX, Math.min(MARGIN_V_MAX_PX, v))
     applyBulk(
       { verticalMarginPx: clamped },
       t('bulk.history.margin', { count: selectedRowIds.size })
@@ -955,12 +955,14 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           >
             <span>{t('styleCell.marginV')}</span>
             {/* REQ-20260615-059 B — ±10 stepper to keep margin in step
-                with size adjustments.  Range [0, 300] same as before. */}
+                with size adjustments.  REQ-0269 A raised the ceiling
+                to 9999 (`MARGIN_V_MAX_PX`); input widens to `w-16`. */}
             <NumberStepperInput
               value={parseInt(marginDraft, 10) || 0}
-              min={0}
-              max={300}
+              min={MARGIN_V_MIN_PX}
+              max={MARGIN_V_MAX_PX}
               step={10}
+              widthClass="w-16"
               onCommit={(next) => {
                 setMarginDraft(String(next))
                 handleMarginCommit(String(next))

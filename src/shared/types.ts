@@ -271,6 +271,20 @@ export interface AppSettings {
    * defaults to `'noto-sans-jp-semibold'` when absent.
    */
   activeFontId?: FontId
+  /**
+   * REQ-0269 C-4 — records the `FONT_SET_VERSION` that was current the
+   * last time the user completed a bulk "font set" download.  Compared
+   * against `FONT_SET_VERSION` on startup / picker open: when strictly
+   * less (or absent), the picker treats the on-disk set as `outdated`
+   * and offers to re-download the incremental additions.
+   *
+   * Optional so pre-v1.3.6 settings.json files hydrate cleanly with
+   * `undefined` — which correctly means "no font set downloaded" for
+   * paid-tier users who never triggered the bulk flow.  Never set for
+   * free-tier users (they cannot trigger the download at all, per
+   * REQ-0269 C-2).
+   */
+  fontSetInstalledVersion?: number
   lastInputDir: string | null
   lastOutputDir: string | null
   /**

@@ -1,8 +1,16 @@
 /*
  * Noto Sans JP — bundled Japanese font (static TTF builds).
- * Only three weights are loaded to minimise render overhead:
- *   400 Regular, 500 Medium, 600 SemiBold.
- * Files are served from resources/fonts/Noto_Sans_JP/static/.
+ * Bundled weights (always available in fonts-css): 400 Regular,
+ * 500 Medium, 600 SemiBold.  Files are served from
+ * resources/fonts/Noto_Sans_JP/static/ via Vite publicDir.
+ *
+ * REQ-0269 B — the six additional weights (100 Thin, 200 ExtraLight,
+ * 300 Light, 700 Bold, 800 ExtraBold, 900 Black) ship as downloadable
+ * TTFs in the font set, not through fonts.css.  Once downloaded they
+ * are registered via `font-registry.ts::ensureFontLoaded` using the
+ * Blob-URL FontFace path so they attach to the same `Noto Sans JP`
+ * family with their specific `font-weight`.  CSS then picks the right
+ * face automatically when a component sets `fontWeight: 100|200|…|900`.
  */
 @font-face {
   font-family: 'Noto Sans JP';
@@ -24,14 +32,6 @@
   font-family: 'Noto Sans JP';
   font-style: normal;
   font-weight: 500;
-  /* REQ-20260615-040 B — was `swap`, which let the browser paint the
-   * first frame in the system fallback and then swap to Noto Sans JP
-   * once bytes arrived, producing a visible FOUT.  `block` keeps the
-   * text invisible until the face loads (capped at 3 s by the spec, but
-   * the bundled TTF resolves in < 100 ms locally), so on-screen text
-   * never displays in the fallback metrics.  `main.tsx` also gates the
-   * first React mount on `document.fonts.load(...)` resolving, so in
-   * practice the block period is never visible. */
   font-display: block;
   src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-Medium.ttf') format('truetype');
 }
@@ -40,14 +40,6 @@
   font-family: 'Noto Sans JP';
   font-style: normal;
   font-weight: 600;
-  /* REQ-20260615-040 B — was `swap`, which let the browser paint the
-   * first frame in the system fallback and then swap to Noto Sans JP
-   * once bytes arrived, producing a visible FOUT.  `block` keeps the
-   * text invisible until the face loads (capped at 3 s by the spec, but
-   * the bundled TTF resolves in < 100 ms locally), so on-screen text
-   * never displays in the fallback metrics.  `main.tsx` also gates the
-   * first React mount on `document.fonts.load(...)` resolving, so in
-   * practice the block period is never visible. */
   font-display: block;
   src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-SemiBold.ttf') format('truetype');
 }

@@ -31,6 +31,25 @@ import { GITHUB_OWNER, GITHUB_REPO } from './app-info'
 /** Release tag that hosts every downloadable font asset. */
 export const FONTS_RELEASE_TAG = 'fonts-v1'
 
+/**
+ * REQ-0269 C-4 — Font set version.  Increments every time the registry
+ * gains a new downloadable asset (or an existing asset is re-uploaded).
+ *
+ * Used by the "Download font set" button to detect when the user's local
+ * on-disk set is outdated versus what this app version expects.  Written
+ * into settings.json under `fontSetInstalledVersion` when the bulk
+ * download completes; if that recorded value is `< FONT_SET_VERSION`,
+ * the picker treats the set as `outdated` and offers to re-download.
+ *
+ * v1: the original 12 downloadable fonts (REQ-0153).
+ * v2: adds Noto Sans JP 6 non-bundled weights (Thin, ExtraLight, Light,
+ *     Bold, ExtraBold, Black) and 8 additional Poppins weights (Thin,
+ *     ExtraLight, Light, Medium, SemiBold, Bold, ExtraBold, Black).
+ *     Montserrat stays at Regular only — see RES-0269 Phase 0
+ *     verification for the libass variable-font rejection.
+ */
+export const FONT_SET_VERSION = 2
+
 // Per-font OFL distribution: each font ships its own `<FontName>-OFL.txt`
 // alongside its TTF in the `fonts-v1` release.  This satisfies SIL OFL v1.1
 // §2 — "each copy contains the above copyright notice and this license" —
@@ -44,7 +63,21 @@ export const FONTS_RELEASE_TAG = 'fonts-v1'
 // at runtime.  Removed `FONTS_SHARED_OFL_URL` for that reason.
 
 export type FontId =
+  // Noto Sans JP — 9 weights (REQ-0269 B).  SemiBold is the app default
+  // and the ONLY weight bundled in v1.0–v1.3.5; Regular / Medium ship as
+  // dead-weight TTFs since v1.0 (fonts.css @font-face rules referenced
+  // them) and are now first-class FontIds under REQ-0269 B-2.  The
+  // remaining six (Thin / ExtraLight / Light / Bold / ExtraBold / Black)
+  // are downloadable via the font set.
+  | 'noto-sans-jp-thin'
+  | 'noto-sans-jp-extralight'
+  | 'noto-sans-jp-light'
+  | 'noto-sans-jp-regular'
+  | 'noto-sans-jp-medium'
   | 'noto-sans-jp-semibold'
+  | 'noto-sans-jp-bold'
+  | 'noto-sans-jp-extrabold'
+  | 'noto-sans-jp-black'
   | 'dela-gothic-one'
   | 'reggae-one'
   | 'yusei-magic'
@@ -60,8 +93,25 @@ export type FontId =
   // policy that gates every non-default font behind `isMsix`.
   | 'anton'
   | 'bebas-neue'
+  // REQ-0269 Phase 0 verification: Montserrat variable font could not be
+  // driven per-weight through libass (DirectWrite path silently fell back
+  // to Regular for `Fontname="Montserrat Bold"`, only Thin coincidentally
+  // resolved — see `dev-docs/font-validation/Montserrat-libass-probe/`).
+  // Preview↔burn-in parity would break, so Montserrat stays Regular only.
   | 'montserrat'
+  // Poppins — 9 weights (REQ-0269 B).  Existing `poppins` FontId retained
+  // for backwards compatibility with pre-v1.3.6 projects — semantically
+  // it means "Poppins Regular (400)".  The 8 additional weights get
+  // explicit `-<weight>` suffixes.  Family default is Bold (per REQ B-5).
   | 'poppins'
+  | 'poppins-thin'
+  | 'poppins-extralight'
+  | 'poppins-light'
+  | 'poppins-medium'
+  | 'poppins-semibold'
+  | 'poppins-bold'
+  | 'poppins-extrabold'
+  | 'poppins-black'
 
 export type FontLicense = 'SIL-OFL-1.1'
 
@@ -158,7 +208,118 @@ function assetUrl(fileName: string): string {
  * asset with the same name, the downloader starts succeeding without code
  * change.  Sizes are approximate and will tighten when actual uploads land.
  */
+// -----------------------------------------------------------------
+// REQ-0269 B — Noto Sans JP weight matrix.
+//
+// Bundled: Regular (400), Medium (500), SemiBold (600) — TTFs already
+// live in `resources/fonts/Noto_Sans_JP/static/` since v1.0 (RES-0268
+// flagged Regular / Medium as dead weight; REQ-0269 B-2 promotes them
+// to registered FontIds so no bytes are wasted).
+//
+// Downloadable via font set: Thin (100), ExtraLight (200), Light (300),
+// Bold (700), ExtraBold (800), Black (900).  All hosted alongside the
+// existing v1 assets under the `fonts-v1` release tag — no `fonts-v2`
+// bump because the tag is versionless.  Sizes are the Google Fonts
+// static distribution values (all ~5.4-5.5 MB per weight); the ±10 %
+// integrity check will accept the actual Content-Length once the assets
+// are uploaded (fonts-v2 GitHub release publish is owner-gated, per
+// REQ-0269 承認制操作).
+//
+// Copyright / sourceUrl are shared across the whole family (Adobe /
+// Google Fonts distribute one OFL notice for the family).  Each weight
+// carries its own `<Name>-OFL.txt` in the fonts-v2 release for the
+// per-file license-with-binary requirement (SIL OFL §2).
+// -----------------------------------------------------------------
+const NOTO_COPYRIGHT = 'Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name "Source". Noto Sans JP is licensed under the SIL Open Font License, Version 1.1.'
+const NOTO_SOURCE_URL = 'https://fonts.google.com/noto/specimen/Noto+Sans+JP'
+const NOTO_BUNDLED_DIR = 'Noto_Sans_JP/static'
+
 export const FONT_REGISTRY: readonly FontMeta[] = [
+  {
+    id: 'noto-sans-jp-thin',
+    displayName: 'Noto Sans JP Thin',
+    cssFontFamily: 'Noto Sans JP',
+    assFontName: 'Noto Sans JP Thin',
+    fileName: 'NotoSansJP-Thin.ttf',
+    weight: 100,
+    bundled: false,
+    downloadUrl: assetUrl('NotoSansJP-Thin.ttf'),
+    oflUrl: assetUrl('NotoSansJP-OFL.txt'),
+    expectedSizeBytes: 5_400_000,
+    copyright: NOTO_COPYRIGHT,
+    sourceUrl: NOTO_SOURCE_URL,
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en', 'ja']
+  },
+  {
+    id: 'noto-sans-jp-extralight',
+    displayName: 'Noto Sans JP ExtraLight',
+    cssFontFamily: 'Noto Sans JP',
+    assFontName: 'Noto Sans JP ExtraLight',
+    fileName: 'NotoSansJP-ExtraLight.ttf',
+    weight: 200,
+    bundled: false,
+    downloadUrl: assetUrl('NotoSansJP-ExtraLight.ttf'),
+    oflUrl: assetUrl('NotoSansJP-OFL.txt'),
+    expectedSizeBytes: 5_400_000,
+    copyright: NOTO_COPYRIGHT,
+    sourceUrl: NOTO_SOURCE_URL,
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en', 'ja']
+  },
+  {
+    id: 'noto-sans-jp-light',
+    displayName: 'Noto Sans JP Light',
+    cssFontFamily: 'Noto Sans JP',
+    assFontName: 'Noto Sans JP Light',
+    fileName: 'NotoSansJP-Light.ttf',
+    weight: 300,
+    bundled: false,
+    downloadUrl: assetUrl('NotoSansJP-Light.ttf'),
+    oflUrl: assetUrl('NotoSansJP-OFL.txt'),
+    expectedSizeBytes: 5_400_000,
+    copyright: NOTO_COPYRIGHT,
+    sourceUrl: NOTO_SOURCE_URL,
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en', 'ja']
+  },
+  {
+    id: 'noto-sans-jp-regular',
+    displayName: 'Noto Sans JP Regular',
+    cssFontFamily: 'Noto Sans JP',
+    assFontName: 'Noto Sans JP Regular',
+    fileName: 'NotoSansJP-Regular.ttf',
+    weight: 400,
+    bundled: true,
+    downloadUrl: null,
+    oflUrl: null,
+    expectedSizeBytes: 0,
+    copyright: NOTO_COPYRIGHT,
+    sourceUrl: NOTO_SOURCE_URL,
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: NOTO_BUNDLED_DIR,
+    languages: ['en', 'ja']
+  },
+  {
+    id: 'noto-sans-jp-medium',
+    displayName: 'Noto Sans JP Medium',
+    cssFontFamily: 'Noto Sans JP',
+    assFontName: 'Noto Sans JP Medium',
+    fileName: 'NotoSansJP-Medium.ttf',
+    weight: 500,
+    bundled: true,
+    downloadUrl: null,
+    oflUrl: null,
+    expectedSizeBytes: 0,
+    copyright: NOTO_COPYRIGHT,
+    sourceUrl: NOTO_SOURCE_URL,
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: NOTO_BUNDLED_DIR,
+    languages: ['en', 'ja']
+  },
   {
     id: 'noto-sans-jp-semibold',
     displayName: 'Noto Sans JP SemiBold',
@@ -170,10 +331,61 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     downloadUrl: null,
     oflUrl: null,
     expectedSizeBytes: 0,
-    copyright: 'Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved Font Name "Source". Noto Sans JP is licensed under the SIL Open Font License, Version 1.1.',
-    sourceUrl: 'https://fonts.google.com/noto/specimen/Noto+Sans+JP',
+    copyright: NOTO_COPYRIGHT,
+    sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: 'Noto_Sans_JP/static',
+    bundledRelativeDir: NOTO_BUNDLED_DIR,
+    languages: ['en', 'ja']
+  },
+  {
+    id: 'noto-sans-jp-bold',
+    displayName: 'Noto Sans JP Bold',
+    cssFontFamily: 'Noto Sans JP',
+    assFontName: 'Noto Sans JP Bold',
+    fileName: 'NotoSansJP-Bold.ttf',
+    weight: 700,
+    bundled: false,
+    downloadUrl: assetUrl('NotoSansJP-Bold.ttf'),
+    oflUrl: assetUrl('NotoSansJP-OFL.txt'),
+    expectedSizeBytes: 5_500_000,
+    copyright: NOTO_COPYRIGHT,
+    sourceUrl: NOTO_SOURCE_URL,
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en', 'ja']
+  },
+  {
+    id: 'noto-sans-jp-extrabold',
+    displayName: 'Noto Sans JP ExtraBold',
+    cssFontFamily: 'Noto Sans JP',
+    assFontName: 'Noto Sans JP ExtraBold',
+    fileName: 'NotoSansJP-ExtraBold.ttf',
+    weight: 800,
+    bundled: false,
+    downloadUrl: assetUrl('NotoSansJP-ExtraBold.ttf'),
+    oflUrl: assetUrl('NotoSansJP-OFL.txt'),
+    expectedSizeBytes: 5_500_000,
+    copyright: NOTO_COPYRIGHT,
+    sourceUrl: NOTO_SOURCE_URL,
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en', 'ja']
+  },
+  {
+    id: 'noto-sans-jp-black',
+    displayName: 'Noto Sans JP Black',
+    cssFontFamily: 'Noto Sans JP',
+    assFontName: 'Noto Sans JP Black',
+    fileName: 'NotoSansJP-Black.ttf',
+    weight: 900,
+    bundled: false,
+    downloadUrl: assetUrl('NotoSansJP-Black.ttf'),
+    oflUrl: assetUrl('NotoSansJP-OFL.txt'),
+    expectedSizeBytes: 5_500_000,
+    copyright: NOTO_COPYRIGHT,
+    sourceUrl: NOTO_SOURCE_URL,
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
     languages: ['en', 'ja']
   },
   {
@@ -379,9 +591,71 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundledRelativeDir: null,
     languages: ['en']
   },
+  // -----------------------------------------------------------------
+  // REQ-0269 B — Poppins weight matrix (9 weights, all downloadable).
+  //
+  // Existing FontId `poppins` is kept as-is at weight 400 for backward
+  // compatibility with pre-v1.3.6 project files (which serialised it as
+  // just `poppins`).  New weights use the `poppins-<weight>` naming
+  // convention.  Family default is Bold (700) per REQ B-5.
+  //
+  // All 9 static weight TTFs are on Google Fonts under
+  // `google/fonts/ofl/poppins/`.  Each file is ~150–170 KB.
+  // -----------------------------------------------------------------
+  {
+    id: 'poppins-thin',
+    displayName: 'Poppins Thin',
+    cssFontFamily: 'Poppins',
+    assFontName: 'Poppins Thin',
+    fileName: 'Poppins-Thin.ttf',
+    weight: 100,
+    bundled: false,
+    downloadUrl: assetUrl('Poppins-Thin.ttf'),
+    oflUrl: assetUrl('Poppins-OFL.txt'),
+    expectedSizeBytes: 155_000,
+    copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
+    sourceUrl: 'https://fonts.google.com/specimen/Poppins',
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en']
+  },
+  {
+    id: 'poppins-extralight',
+    displayName: 'Poppins ExtraLight',
+    cssFontFamily: 'Poppins',
+    assFontName: 'Poppins ExtraLight',
+    fileName: 'Poppins-ExtraLight.ttf',
+    weight: 200,
+    bundled: false,
+    downloadUrl: assetUrl('Poppins-ExtraLight.ttf'),
+    oflUrl: assetUrl('Poppins-OFL.txt'),
+    expectedSizeBytes: 158_000,
+    copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
+    sourceUrl: 'https://fonts.google.com/specimen/Poppins',
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en']
+  },
+  {
+    id: 'poppins-light',
+    displayName: 'Poppins Light',
+    cssFontFamily: 'Poppins',
+    assFontName: 'Poppins Light',
+    fileName: 'Poppins-Light.ttf',
+    weight: 300,
+    bundled: false,
+    downloadUrl: assetUrl('Poppins-Light.ttf'),
+    oflUrl: assetUrl('Poppins-OFL.txt'),
+    expectedSizeBytes: 160_000,
+    copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
+    sourceUrl: 'https://fonts.google.com/specimen/Poppins',
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en']
+  },
   {
     id: 'poppins',
-    displayName: 'Poppins',
+    displayName: 'Poppins Regular',
     cssFontFamily: 'Poppins',
     assFontName: 'Poppins',
     fileName: 'Poppins-Regular.ttf',
@@ -395,11 +669,248 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     license: 'SIL-OFL-1.1',
     bundledRelativeDir: null,
     languages: ['en']
+  },
+  {
+    id: 'poppins-medium',
+    displayName: 'Poppins Medium',
+    cssFontFamily: 'Poppins',
+    assFontName: 'Poppins Medium',
+    fileName: 'Poppins-Medium.ttf',
+    weight: 500,
+    bundled: false,
+    downloadUrl: assetUrl('Poppins-Medium.ttf'),
+    oflUrl: assetUrl('Poppins-OFL.txt'),
+    expectedSizeBytes: 160_000,
+    copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
+    sourceUrl: 'https://fonts.google.com/specimen/Poppins',
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en']
+  },
+  {
+    id: 'poppins-semibold',
+    displayName: 'Poppins SemiBold',
+    cssFontFamily: 'Poppins',
+    assFontName: 'Poppins SemiBold',
+    fileName: 'Poppins-SemiBold.ttf',
+    weight: 600,
+    bundled: false,
+    downloadUrl: assetUrl('Poppins-SemiBold.ttf'),
+    oflUrl: assetUrl('Poppins-OFL.txt'),
+    expectedSizeBytes: 160_000,
+    copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
+    sourceUrl: 'https://fonts.google.com/specimen/Poppins',
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en']
+  },
+  {
+    id: 'poppins-bold',
+    displayName: 'Poppins Bold',
+    cssFontFamily: 'Poppins',
+    assFontName: 'Poppins Bold',
+    fileName: 'Poppins-Bold.ttf',
+    weight: 700,
+    bundled: false,
+    downloadUrl: assetUrl('Poppins-Bold.ttf'),
+    oflUrl: assetUrl('Poppins-OFL.txt'),
+    expectedSizeBytes: 160_000,
+    copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
+    sourceUrl: 'https://fonts.google.com/specimen/Poppins',
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en']
+  },
+  {
+    id: 'poppins-extrabold',
+    displayName: 'Poppins ExtraBold',
+    cssFontFamily: 'Poppins',
+    assFontName: 'Poppins ExtraBold',
+    fileName: 'Poppins-ExtraBold.ttf',
+    weight: 800,
+    bundled: false,
+    downloadUrl: assetUrl('Poppins-ExtraBold.ttf'),
+    oflUrl: assetUrl('Poppins-OFL.txt'),
+    expectedSizeBytes: 160_000,
+    copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
+    sourceUrl: 'https://fonts.google.com/specimen/Poppins',
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en']
+  },
+  {
+    id: 'poppins-black',
+    displayName: 'Poppins Black',
+    cssFontFamily: 'Poppins',
+    assFontName: 'Poppins Black',
+    fileName: 'Poppins-Black.ttf',
+    weight: 900,
+    bundled: false,
+    downloadUrl: assetUrl('Poppins-Black.ttf'),
+    oflUrl: assetUrl('Poppins-OFL.txt'),
+    expectedSizeBytes: 160_000,
+    copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
+    sourceUrl: 'https://fonts.google.com/specimen/Poppins',
+    license: 'SIL-OFL-1.1',
+    bundledRelativeDir: null,
+    languages: ['en']
   }
 ] as const
 
 /** Default font.  Always installed (bundled). */
 export const DEFAULT_FONT_ID: FontId = 'noto-sans-jp-semibold'
+
+/**
+ * REQ-0269 B-5 — per-family default weight, applied whenever the user
+ * switches a subtitle's font FAMILY.  Guarantees the previously-selected
+ * weight is NOT carried across family switches (Regular Noto → Bold
+ * Poppins would be a jarring UX): swapping family always resets weight
+ * to the family's canonical default, and the FONT+WEIGHT change lands
+ * as one atomic history entry so a single Undo restores both.
+ *
+ * Families not listed here are single-weight and their default is the
+ * only registered FontId in that family (identity resolved by
+ * `getFamilyDefaultFontId`).
+ */
+const FAMILY_DEFAULT_FONT_ID: Readonly<Record<string, FontId>> = {
+  'Noto Sans JP': 'noto-sans-jp-semibold',
+  'Poppins': 'poppins-bold',
+}
+
+/**
+ * REQ-0269 B — resolve the canonical FontId for a family's default
+ * weight.  Multi-weight families (Noto Sans JP, Poppins) use the
+ * hardcoded map above; single-weight families return their sole
+ * registry entry.  Falls back to `DEFAULT_FONT_ID` if the family
+ * is not known at all (defensive; shouldn't happen for valid input).
+ */
+export function getFamilyDefaultFontId(cssFontFamily: string): FontId {
+  const explicit = FAMILY_DEFAULT_FONT_ID[cssFontFamily]
+  if (explicit) return explicit
+  const single = FONT_REGISTRY.find((f) => f.cssFontFamily === cssFontFamily)
+  return single?.id ?? DEFAULT_FONT_ID
+}
+
+/**
+ * REQ-0269 B — grouped view of the registry, one entry per unique
+ * `cssFontFamily`, carrying its ordered weight list.  Used by every
+ * font picker so the family selector and weight selector can render as
+ * two dependent dropdowns instead of a flat 29-item list.  Families
+ * appear in the order they were first seen in `FONT_REGISTRY` (so
+ * "Noto Sans JP" pins first, then Anton / Bebas Neue / Dela / …).
+ */
+export interface FontFamily {
+  /** Rendered family name shared by every weight (`cssFontFamily`). */
+  cssFontFamily: string
+  /** Weights in ascending numeric order (100–900), each keyed by FontId. */
+  weights: readonly { weight: number; fontId: FontId; displayName: string; assFontName: string }[]
+  /** Family default FontId (matches `getFamilyDefaultFontId`). */
+  defaultFontId: FontId
+  /** True when the family has more than one registered weight. */
+  hasMultipleWeights: boolean
+  /** All languages advertised by any weight in the family (union). */
+  languages: readonly FontLanguage[]
+  /** True when at least one weight is bundled (family is always available). */
+  hasBundledWeight: boolean
+  /** True when at least one weight carries the `lacksRareKanji` flag. */
+  lacksRareKanji: boolean
+}
+
+export function getFontFamilies(): FontFamily[] {
+  const byFamily = new Map<string, FontFamily & { _seen: Set<number> }>()
+  for (const meta of FONT_REGISTRY) {
+    let entry = byFamily.get(meta.cssFontFamily)
+    if (!entry) {
+      entry = {
+        cssFontFamily: meta.cssFontFamily,
+        weights: [],
+        defaultFontId: getFamilyDefaultFontId(meta.cssFontFamily),
+        hasMultipleWeights: false,
+        languages: [],
+        hasBundledWeight: false,
+        lacksRareKanji: false,
+        _seen: new Set<number>()
+      }
+      byFamily.set(meta.cssFontFamily, entry)
+    }
+    if (!entry._seen.has(meta.weight)) {
+      entry._seen.add(meta.weight)
+      ;(entry.weights as { weight: number; fontId: FontId; displayName: string; assFontName: string }[]).push({
+        weight: meta.weight,
+        fontId: meta.id,
+        displayName: meta.displayName,
+        assFontName: meta.assFontName,
+      })
+    }
+    if (meta.bundled) entry.hasBundledWeight = true
+    if (meta.lacksRareKanji) entry.lacksRareKanji = true
+    // Union languages (order preserves first-seen: en before ja from the
+    // first weight seen, subsequent weights don't rearrange).
+    const union = new Set<FontLanguage>(entry.languages)
+    for (const l of meta.languages) union.add(l)
+    entry.languages = Array.from(union) as readonly FontLanguage[]
+  }
+  for (const entry of byFamily.values()) {
+    ;(entry.weights as { weight: number; fontId: FontId; displayName: string; assFontName: string }[]).sort(
+      (a, b) => a.weight - b.weight
+    )
+    entry.hasMultipleWeights = entry.weights.length > 1
+  }
+  return Array.from(byFamily.values()).map((e) => {
+    const { _seen: _drop, ...rest } = e
+    void _drop
+    return rest
+  })
+}
+
+/**
+ * REQ-0269 B — resolve the FontId that a given `(family, weight)` pair
+ * points at.  Used by the weight selector's onChange path to translate
+ * a numeric weight click into the concrete FontId to write into the
+ * project.  Falls back to the family default when the pair does not
+ * match a registered entry (defensive; shouldn't happen for valid UI
+ * input).
+ */
+export function getFontIdForFamilyAndWeight(cssFontFamily: string, weight: number): FontId {
+  const meta = FONT_REGISTRY.find((f) => f.cssFontFamily === cssFontFamily && f.weight === weight)
+  if (meta) return meta.id
+  return getFamilyDefaultFontId(cssFontFamily)
+}
+
+/**
+ * REQ-0269 D-1 — pick the best available FontId to render `fontId`
+ * with when the underlying font (or its downloadable weight) is not
+ * yet on disk.
+ *
+ *   Order:
+ *     1. `fontId` itself, if installed.
+ *     2. Same-family alternate: any INSTALLED weight in the same
+ *        `cssFontFamily`, closest to the requested weight (Euclidean).
+ *        Preserves the book/display voice better than dropping straight
+ *        to Noto SemiBold.
+ *     3. `DEFAULT_FONT_ID` (Noto Sans JP SemiBold) — always bundled.
+ *
+ * The caller passes an installed-set predicate (typically the renderer's
+ * `useInstalledFontIds` Set) so this function stays pure and testable.
+ * The ORIGINAL `fontId` in the project entry is intentionally NOT
+ * mutated — this returns a render-time substitute only, and the moment
+ * the font set is downloaded the natural resolution walks back to
+ * step 1.
+ */
+export function resolveRenderableFontId(
+  fontId: FontId,
+  isInstalled: (id: FontId) => boolean,
+): FontId {
+  if (isInstalled(fontId)) return fontId
+  const meta = FONT_REGISTRY.find((f) => f.id === fontId)
+  if (meta) {
+    const familyCandidates = FONT_REGISTRY
+      .filter((f) => f.cssFontFamily === meta.cssFontFamily && isInstalled(f.id))
+      .sort((a, b) => Math.abs(a.weight - meta.weight) - Math.abs(b.weight - meta.weight))
+    if (familyCandidates.length > 0) return familyCandidates[0].id
+  }
+  return DEFAULT_FONT_ID
+}
 
 /**
  * REQ-0153 §2 — canonical display order for every font-list rendering

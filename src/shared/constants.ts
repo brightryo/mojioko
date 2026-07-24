@@ -82,6 +82,23 @@ export const FONT_SIZE_MAX_PX = 600
 /** Maximum outline thickness in pixels (inclusive, integer). Range is 0–OUTLINE_THICKNESS_MAX_PX. */
 export const OUTLINE_THICKNESS_MAX_PX = 10
 
+/** Minimum vertical margin in pixels (inclusive, integer). */
+export const MARGIN_V_MIN_PX = 0
+/**
+ * Maximum vertical margin in pixels (inclusive, integer).
+ *
+ * REQ-0269 A raises the ceiling from the pre-v1.3.6 hardcoded 300 to 9999
+ * so short-form (vertical / 4K) editors can push subtitles far off the
+ * visible frame when they want extreme offsets.  Values that place the
+ * subtitle beyond the video edge are intentionally allowed — libass draws
+ * off-canvas, and the user's own preview panel shows when the row leaves
+ * the frame.  4 digits fits comfortably in the widened NumberStepperInput
+ * `widthClass="w-16"` used at both call sites; the legacy 300 cap is not
+ * enforced anywhere else in the pipeline (`verticalMarginPx` flows
+ * unclamped through ass-generator → libass `MarginV`).
+ */
+export const MARGIN_V_MAX_PX = 9999
+
 /**
  * Feature flag: show the video preview panel (D-1) in Step 2.
  * Set to `false` to instantly revert to the original Step 2 layout
