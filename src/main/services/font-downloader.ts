@@ -2,6 +2,7 @@ import { existsSync, readdirSync, statSync, mkdirSync, createWriteStream, unlink
 import { join } from 'path'
 import {
   FONT_REGISTRY,
+  FONT_SET_VERSION,
   type FontId,
   type FontInfo,
   type FontStatus,
@@ -46,15 +47,27 @@ export function checkFontInstalled(fontId: FontId): { installed: boolean; bundle
  * Build the full FontsState snapshot for the renderer.  Pulls the active
  * font ID from the caller (settings) to avoid coupling this module to
  * settings-store.
+ *
+ * REQ-0275 §3 — `recordedSetVersion` is the value the caller loaded from
+ * `settings.json` (`fontSetInstalledVersion`).  When it does NOT match
+ * the current `FONT_SET_VERSION`, every non-bundled font on disk is
+ * reported as `not-installed` even if its bytes exist.  This is the
+ * safeguard against a v1.3.5 user's `fonts-v1` files being picked up
+ * with the wrong upstream family name after the v1.3.6 rename:
+ * detecting the stale set forces a re-download of the MOJIOKO-
+ * namespaced replacements, avoiding the silent preview↔burn-in
+ * divergence RES-0274 documented.  Bundled fonts are never affected
+ * (they ship with the installer and are always in sync).
  */
-export function buildFontsState(activeFontId: FontId): FontsState {
+export function buildFontsState(activeFontId: FontId, recordedSetVersion?: number): FontsState {
+  const setIsCurrent = recordedSetVersion === FONT_SET_VERSION
   let totalUsedBytes = 0
   const fonts: FontInfo[] = FONT_REGISTRY.map((meta) => {
     const { installed, bundled, sizeBytes } = checkFontInstalled(meta.id)
     totalUsedBytes += sizeBytes
     let status: FontStatus
     if (bundled) status = 'bundled'
-    else if (installed) status = 'installed'
+    else if (installed && setIsCurrent) status = 'installed'
     else status = 'not-installed'
     return {
       id: meta.id,

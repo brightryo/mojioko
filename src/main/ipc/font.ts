@@ -7,6 +7,7 @@ import {
   isFontId,
   getFontMeta,
   DEFAULT_FONT_ID,
+  FONT_SET_VERSION,
   type FontId,
   type FontsState
 } from '../../shared/fonts'
@@ -27,23 +28,37 @@ function assertValidFontId(value: unknown): asserts value is FontId {
   if (!isFontId(value)) throw new Error(`Invalid fontId: ${String(value)}`)
 }
 
-async function activeFontIdFromSettings(): Promise<FontId> {
-  const settings = await loadSettings()
-  if (settings.activeFontId && isFontId(settings.activeFontId)) return settings.activeFontId
-  return DEFAULT_FONT_ID
-}
-
 export function registerFontHandlers(): void {
   // REQ-0241 — DownloadManager-issued tokens keyed by per-run channelId.
   const activeDownloads = new Map<string, DownloadToken>()
 
   ipcMain.handle(Channels.fontList, async (): Promise<OkResult<FontsState> | ErrResult> => {
     try {
-      const active = await activeFontIdFromSettings()
-      return { ok: true, data: buildFontsState(active) }
+      const settings = await loadSettings()
+      const active = settings.activeFontId && isFontId(settings.activeFontId)
+        ? settings.activeFontId
+        : DEFAULT_FONT_ID
+      return { ok: true, data: buildFontsState(active, settings.fontSetInstalledVersion) }
     } catch (err) {
       log.error('[ipc/font] list error', err)
       return { ok: false, error: { code: 'FONT_LIST_ERROR', message: (err as Error).message } }
+    }
+  })
+
+  // REQ-0275 §3 — persist the current FONT_SET_VERSION after a successful
+  // bulk download.  Renderer calls this once all fonts in the batch have
+  // landed on disk; the next fontList call will then treat them as
+  // `installed`.  Idempotent: writing the same value repeatedly is a no-op.
+  ipcMain.handle(`${Channels.fontList}:recordSetVersion`, async (): Promise<OkResult<{ version: number }> | ErrResult> => {
+    try {
+      const settings = await loadSettings()
+      settings.fontSetInstalledVersion = FONT_SET_VERSION
+      await saveSettings(settings)
+      log.info(`[ipc/font] recorded fontSetInstalledVersion=${FONT_SET_VERSION}`)
+      return { ok: true, data: { version: FONT_SET_VERSION } }
+    } catch (err) {
+      log.error('[ipc/font] recordSetVersion error', err)
+      return { ok: false, error: { code: 'FONT_SET_VERSION_RECORD_ERROR', message: (err as Error).message } }
     }
   })
 
@@ -109,8 +124,11 @@ export function registerFontHandlers(): void {
         settings.activeFontId = DEFAULT_FONT_ID
         await saveSettings(settings)
       }
-      const active = await activeFontIdFromSettings()
-      return { ok: true, data: buildFontsState(active) }
+      const refreshed = await loadSettings()
+      const active = refreshed.activeFontId && isFontId(refreshed.activeFontId)
+        ? refreshed.activeFontId
+        : DEFAULT_FONT_ID
+      return { ok: true, data: buildFontsState(active, refreshed.fontSetInstalledVersion) }
     } catch (err) {
       log.error('[ipc/font] uninstall error', err)
       return { ok: false, error: { code: 'FONT_UNINSTALL_ERROR', message: (err as Error).message } }
@@ -126,7 +144,7 @@ export function registerFontHandlers(): void {
       settings.activeFontId = fontId
       await saveSettings(settings)
       log.info(`[ipc/font] setActive → ${fontId}`)
-      return { ok: true, data: buildFontsState(fontId) }
+      return { ok: true, data: buildFontsState(fontId, settings.fontSetInstalledVersion) }
     } catch (err) {
       log.error('[ipc/font] setActive error', err)
       return { ok: false, error: { code: 'FONT_SET_ACTIVE_ERROR', message: (err as Error).message } }

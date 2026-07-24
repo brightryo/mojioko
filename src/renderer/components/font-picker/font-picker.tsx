@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Download, Trash2, X, FileText, AlertCircle, AlertTriangle, Lock, DownloadCloud } from 'lucide-react'
+import { Trash2, X, FileText, AlertCircle, AlertTriangle, Lock, DownloadCloud } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -21,7 +21,8 @@ import {
   listFonts,
   uninstallFont,
   setActiveFont,
-  downloadFont
+  downloadFont,
+  recordFontSetVersion,
 } from '@/services/font'
 import type { FontDownloadRun } from '@/services/font'
 import { ensureFontLoaded, evictFont } from '@/lib/font-registry'
@@ -369,6 +370,19 @@ export function FontPicker({ onChange }: FontPickerProps) {
           })
         }
         setBatchState((prev) => (prev ? { ...prev, completed } : prev))
+      }
+
+      // REQ-0275 §3 — mark the on-disk set as matching the current
+      // FONT_SET_VERSION as soon as every target reached its resolve.
+      // Only record when NO targets failed AND we weren't cancelled;
+      // a partial batch would leave the set inconsistent with the
+      // version stamp.  On cancel / failure the recorded version
+      // stays unchanged and the picker keeps showing the set as
+      // `not-installed`, so the next attempt starts fresh.
+      const noFailure = !batchAbortRef.current && failed === 0
+      if (noFailure && completed > 0) {
+        try { await recordFontSetVersion() }
+        catch { /* best-effort; next refresh will still show correct state */ }
       }
 
       await refresh()
@@ -846,9 +860,9 @@ function FontRow({
   tierAllowsDownload,
   isTierLocked,
   actionsDisabled,
-  hideDownloadForBatch,
+  hideDownloadForBatch: _hideDownloadForBatch,
   onSelect,
-  onDownload,
+  onDownload: _onDownload,
   onCancelDownload,
   onUninstall,
   onUpsell
@@ -951,27 +965,15 @@ function FontRow({
           </div>
         ) : (
           <>
-            {/* DL / Trash swap based on install state.  Bundled fonts get
-                neither — the absence of both icons is the visual signal
-                that a row is read-only-bundled.
-                REQ-088 #4 — in the free (NSIS) tier the Download chip is
-                replaced by an inert Lock chip to signal that adding fonts
-                is a paid-version feature.  Tooltip carries the exact
-                wording the user sees in the tab's hint copy so the two
-                surfaces tell the same story. */}
-            {status === 'not-installed' && !meta.bundled && tierAllowsDownload && !hideDownloadForBatch && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                onClick={(e) => { e.stopPropagation(); onDownload() }}
-                disabled={actionsDisabled}
-                aria-label={t('fontPicker.action.download')}
-                title={t('fontPicker.action.download')}
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-            )}
+            {/* REQ-0275 §4 — the per-row Download button was removed.
+                Bulk download is now the sole DL affordance (the "Download
+                font set" button in the header row).  Rationale:
+                (a) fonts must be downloaded as a coherent set to keep
+                fontSetInstalledVersion in sync (§3), so partial per-font
+                DL would leave the set in a mixed state;
+                (b) the individual DL UI was already redundant with the
+                batch button.  The Lock chip below is preserved for
+                free-tier discovery of paid-only fonts. */}
             {status === 'not-installed' && !meta.bundled && !tierAllowsDownload && (
               <button
                 type="button"

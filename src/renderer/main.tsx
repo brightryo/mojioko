@@ -57,7 +57,10 @@ async function maybeSeedFromUrl(): Promise<void> {
  */
 async function awaitUiFontReady(): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts || !document.fonts.load) return
-  const family = "'Noto Sans JP'"
+  // REQ-0275 §2 — family renamed to MOJIOKO-namespaced form so libass
+  // cannot silently substitute a system-installed Noto Sans JP at
+  // burn-in time.  The CSS side follows the same rename.
+  const family = "'MOJIOKO Noto Sans JP'"
   const probes = [
     document.fonts.load(`400 16px ${family}`),
     document.fonts.load(`500 16px ${family}`),

@@ -85,7 +85,7 @@ describe('getSortedFontRegistry', () => {
     // ladder.
     const sorted = getSortedFontRegistry()
     const noto = sorted
-      .filter((f) => f.cssFontFamily === 'Noto Sans JP')
+      .filter((f) => f.cssFontFamily === 'MOJIOKO Noto Sans JP')
       .map((f) => f.id)
     expect(noto).toEqual([
       'noto-sans-jp-thin',

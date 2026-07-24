@@ -23,6 +23,16 @@ export async function readFontBytes(fontId: FontId): Promise<IpcResult<ArrayBuff
   return window.electronAPI.fontReadBytes(fontId)
 }
 
+/**
+ * REQ-0275 §3 — mark the on-disk font set as matching the current
+ * FONT_SET_VERSION.  Called by the FontPicker's bulk-download success
+ * path so subsequent `listFonts` returns `status: 'installed'` for the
+ * newly-downloaded weights instead of `not-installed`.
+ */
+export async function recordFontSetVersion(): Promise<IpcResult<{ version: number }>> {
+  return window.electronAPI.fontRecordSetVersion()
+}
+
 export interface FontDownloadRun {
   promise: Promise<void>
   cancel: () => void

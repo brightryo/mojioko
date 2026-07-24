@@ -1,29 +1,25 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, WrapText, AlignJustify, ChevronDown, AlertCircle, Lock } from 'lucide-react'
+import { X, WrapText, AlignJustify } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
+import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
+import { useSettingsStore } from '@/stores/settings-store'
 import { HelpIcon } from '@/components/help-icon'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
-import { useAppEnvStore } from '@/stores/app-env-store'
-import { useStoreUpsellStore } from '@/stores/store-upsell-store'
-import { canSelectFontInTier } from '@/lib/font-tier'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
-import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
 import { effectiveEntryState } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, MARGIN_V_MIN_PX, MARGIN_V_MAX_PX } from '../../../shared/constants'
-import { getSortedFontRegistry, isFontId, type FontId } from '../../../shared/fonts'
-import { FontLangBadges } from '@/components/font-lang-badge/font-lang-badge'
+import { isFontId, type FontId } from '../../../shared/fonts'
 import { recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 
 interface BulkEditBarProps {
@@ -216,6 +212,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // `subtitleDefaults.sizeHint` string defined for STEP 1 (REQ-034 #3).
   const { t } = useTranslation(['step2', 'step1', 'common'])
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
+  // REQ-0275 §5 — FamilyWeightSelector seed value = project default,
+  // so a fresh bulk edit starts showing the same font+weight the
+  // freshly-transcribed rows carry.  Bulk apply still writes each
+  // selected row's fontId via `handleFontChange` → one Undo per bulk.
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
   // REQ-0125 — history-less preview writer used from the color picker's
   // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
   const updateEntriesPreview = useProjectStore((s) => s.updateEntriesPreview)
@@ -825,7 +826,16 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           <div className="text-body font-semibold text-foreground">
             {t('timeline.inspector.subtitleSection')}
           </div>
-          <BulkFontPicker onPick={handleFontChange} />
+          {/* REQ-0275 §5 — two-tier family + weight picker for bulk.
+              Uses activeFontId as the display seed when no rows are
+              selected or a heterogeneous selection collapses.  Bulk
+              application still goes through `applyBulk({ fontId })`
+              (via handleFontChange) so a single Undo restores every
+              affected row's prior fontId in one step. */}
+          <FamilyWeightSelector
+            value={activeFontId}
+            onChange={(nextId) => handleFontChange(nextId)}
+          />
           {/* Font size */}
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('bulk.size')}</span>
@@ -1043,155 +1053,3 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Bulk font picker — Popover content mirrors RowFontSelector's, but the
-// trigger is a fixed "Font" pill with no row-specific state.  Kept inline
-// because pulling it into its own file would duplicate the use-installed-
-// fonts + font-registry filter logic without giving any new abstraction.
-// ---------------------------------------------------------------------------
-function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void }) {
-  const { t } = useTranslation(['step2', 'step1', 'common'])
-  const [open, setOpen] = useState(false)
-  const installed = useInstalledFontIds()
-  // REQ-0171 — `activeFontId` binding removed alongside the reset
-  // button: the only remaining consumer was the button's
-  // "current default's display name" subtitle.  Tier logic below
-  // reads `isMsix` directly and does not need the active-font
-  // reference.
-  // REQ-088 #4 — mirror RowFontSelector: NSIS (free) tier restricts the
-  // bulk picker to the bundled default.  `null` treated as the more
-  // restrictive free tier until the boot-time IPC resolves.
-  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
-  // REQ-091 — Store upsell trigger.
-  const openUpsell = useStoreUpsellStore((s) => s.openUpsell)
-  // REQ-0153 §2 — alphabetical registry order (same policy as
-  // RowFontSelector / FontPicker).  Selectability / tier gating
-  // unchanged.
-  const sortedRegistry = getSortedFontRegistry()
-  const selectable = sortedRegistry.filter(
-    (m) => installed.has(m.id) && canSelectFontInTier(isMsix, m.id),
-  )
-  // REQ-091 — same tier-locked discovery list as RowFontSelector.
-  const tierLocked = !isMsix
-    ? sortedRegistry.filter((m) => !canSelectFontInTier(isMsix, m.id))
-    : []
-
-  function pick(next: FontId | undefined) {
-    onPick(next)
-    setOpen(false)
-  }
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'inline-flex items-center justify-between gap-1.5',
-            'h-7 px-2 rounded border bg-input text-body-sm text-foreground',
-            'border-border hover:border-line-strong',
-            'focus:outline-none focus-visible:outline-none'
-          )}
-          aria-label={t('bulkRowFont.label')}
-        >
-          <span>{t('bulkRowFont.label')}</span>
-          <ChevronDown className="h-3 w-3 text-fg-muted" aria-hidden="true" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        // REQ-0169 §1 — same viewport-clamp + internal-scroll pattern
-        // as `row-font-selector.tsx`, applied here for parity.  The
-        // bulk font popover shares this component's list shape (~13
-        // rows + tier-locked block) and would otherwise clip against
-        // the top edge whenever the bulk-edit bar is docked high in
-        // the STEP 2 layout.
-        collisionPadding={8}
-        className="w-[260px] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
-      >
-        <div className="flex flex-col">
-          {/* REQ-0171 Phase 2 (owner approval option A) — the
-              "Use project default (Noto Sans JP SemiBold)" reset
-              button + its separator that used to sit here were
-              removed.  Rationale traced in RES-0171 §3.5: the
-              transcription path (step1.tsx:460 / 478) captures
-              `activeFontId` at transcribe-time and writes it into
-              every new row's `fontId` — those rows are pinned, not
-              inheriting, so a mid-session default change never
-              retroactively repaints them anyway.  The only paths
-              that leave `entry.fontId === undefined` (inherit) are
-              (a) STEP 2's manual "Add row" (step2.tsx:647-660,
-              deliberately no `fontId` field), (b) uninstall
-              recovery (font-picker.tsx:373 writes `undefined` when
-              the referenced font disappears), and (c) fixture data
-              (dev-only).  None of those are triggered from the
-              bulk-edit bar, so the bulk "clear to inherit" button
-              had no user-visible workflow paired with it.  The
-              button also carried the "デフォルト" label that
-              REQ-0164/0169 already erased everywhere else, making
-              its continued presence inconsistent.  Compare with
-              row-font-selector.tsx (REQ-0170): the row-picker's
-              list `onClick` already coalesces `m.id === activeFontId
-              → undefined`, so the row-picker button was purely
-              redundant; the bulk picker's list `onClick={() =>
-              pick(m.id)}` has no such coalesce, so this removal
-              consciously drops the "bulk-clear to undefined"
-              affordance — the `undefined` semantic itself is
-              preserved (uninstall recovery + add-row still write
-              it), only the UI trigger is gone. */}
-          {selectable.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => pick(m.id)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-fg-secondary hover:bg-accent/40"
-            >
-              <span className="h-2 w-2 rounded-full bg-surface-4 shrink-0" aria-hidden="true" />
-              <span
-                className="flex-1 min-w-0 truncate"
-                style={{ fontFamily: `'${m.cssFontFamily}'`, fontWeight: m.weight }}
-              >
-                {m.displayName}
-              </span>
-              <FontLangBadges languages={m.languages} />
-              {m.lacksRareKanji && (
-                <span
-                  className="inline-flex items-center shrink-0 text-warning-soft/80"
-                  title={t('step1:fontPicker.note.missingRareKanjiHelp')}
-                >
-                  <AlertCircle className="h-3 w-3" aria-hidden="true" />
-                </span>
-              )}
-            </button>
-          ))}
-
-          {/* REQ-091 — tier-locked discovery rows, mirror of the same
-              block in row-font-selector.tsx.  Empty in MSIX. */}
-          {tierLocked.length > 0 && (
-            <>
-              <div className="my-1 h-px bg-surface-2" />
-              {tierLocked.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => { openUpsell(); setOpen(false) }}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-fg-muted hover:bg-accent/40"
-                  title={t('step1:fontPicker.action.lockedPaidOnly')}
-                >
-                  <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
-                  <span
-                    className="flex-1 min-w-0 truncate"
-                    style={{ fontFamily: `'${m.cssFontFamily}'`, fontWeight: m.weight }}
-                  >
-                    {m.displayName}
-                  </span>
-                  <FontLangBadges languages={m.languages} />
-                </button>
-              ))}
-            </>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}

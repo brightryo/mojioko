@@ -56,6 +56,8 @@ declare global {
       fontSetActive: (fontId: FontId) => Promise<IpcResult<FontsState>>
       fontReadOfl: (fontId: FontId) => Promise<IpcResult<string>>
       fontReadBytes: (fontId: FontId) => Promise<IpcResult<ArrayBuffer>>
+      // REQ-0275 §3 — persist FONT_SET_VERSION after bulk-DL success.
+      fontRecordSetVersion: () => Promise<IpcResult<{ version: number }>>
 
       // REQ-0149 — GPU acceleration tools.
       gpuToolState: () => Promise<IpcResult<GpuToolState>>

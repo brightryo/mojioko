@@ -394,7 +394,7 @@ export default function Step2Route(_: Step2RouteProps) {
       if (e.isDeleted) continue
       const r = computeOverflowSync({
         text: e.text,
-        fontFamily: 'Noto Sans JP',
+        fontFamily: 'MOJIOKO Noto Sans JP',
         fontSizePx: e.fontSizePx,
         outlineThicknessPx: e.outlineThicknessPx,
         videoWidthPx,

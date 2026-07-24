@@ -11,7 +11,8 @@ import { ColorPicker } from '@/components/color-picker/color-picker'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
-import { RowFontSelector } from '@/components/subtitle-table/row-font-selector'
+import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
+import { useSettingsStore } from '@/stores/settings-store'
 import { HelpIcon } from '@/components/help-icon'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
@@ -122,6 +123,10 @@ export function TimelineBlockInspector({
 }: TimelineBlockInspectorProps) {
   const { t } = useTranslation(['step2', 'common', 'step1'])
   const updateEntry = useProjectStore((s) => s.updateEntry)
+  // REQ-0275 §5 — active default is read for the inherit-collapse in
+  // FamilyWeightSelector's onChange (concrete FontId that equals
+  // activeFontId is stored as `undefined` = inherit).
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
   // REQ-0125 — history-less preview writer used from the color picker's
   // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
   const updateEntryPreview = useProjectStore((s) => s.updateEntryPreview)
@@ -817,11 +822,20 @@ export function TimelineBlockInspector({
         />
         {!isAudioOnly && (
           <>
-            {/* Font dropdown — label 削除 (補遺⑪)、プルダウン本体のみ。
-                aria-label は accessibility のため残す。 */}
-            <RowFontSelector
-              value={entry.fontId}
-              onChange={handleFontChange}
+            {/* REQ-0275 §5 — two-tier family + weight picker replaces
+                the flat RowFontSelector at this site.  When the user
+                picks a family it snaps to the family's default weight;
+                onChange fires once so a single Undo restores both
+                fields (§5 undo atomicity requirement).  When the
+                picked FontId matches the project's active default,
+                collapse to `undefined` so the row keeps "inherit"
+                semantics (mirrors RowFontSelector's onChange handler).
+                RowFontSelector remains available for the table's
+                per-row column where compact single-dropdown fits
+                the tight cell. */}
+            <FamilyWeightSelector
+              value={entry.fontId ?? activeFontId}
+              onChange={(nextId) => handleFontChange(nextId === activeFontId ? undefined : nextId)}
               disabled={isFrozen}
             />
             {/* Size — REQ-20260615-017: ±10 chevron stepper flanks the

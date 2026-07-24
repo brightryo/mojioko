@@ -26,7 +26,7 @@ describe('getFontFamilies', () => {
   })
 
   it('groups all 9 Noto Sans JP weight FontIds under one family', () => {
-    const noto = families.find((f) => f.cssFontFamily === 'Noto Sans JP')
+    const noto = families.find((f) => f.cssFontFamily === 'MOJIOKO Noto Sans JP')
     expect(noto).toBeDefined()
     expect(noto!.hasMultipleWeights).toBe(true)
     expect(noto!.hasBundledWeight).toBe(true)
@@ -35,7 +35,7 @@ describe('getFontFamilies', () => {
   })
 
   it('groups all 9 Poppins weight FontIds under one family', () => {
-    const poppins = families.find((f) => f.cssFontFamily === 'Poppins')
+    const poppins = families.find((f) => f.cssFontFamily === 'MOJIOKO Poppins')
     expect(poppins).toBeDefined()
     expect(poppins!.hasMultipleWeights).toBe(true)
     expect(poppins!.hasBundledWeight).toBe(false)
@@ -45,7 +45,7 @@ describe('getFontFamilies', () => {
 
   it('marks single-weight families with hasMultipleWeights=false', () => {
     for (const fam of families) {
-      if (['Noto Sans JP', 'Poppins'].includes(fam.cssFontFamily)) continue
+      if (['MOJIOKO Noto Sans JP', 'MOJIOKO Poppins'].includes(fam.cssFontFamily)) continue
       expect(fam.hasMultipleWeights).toBe(false)
       expect(fam.weights).toHaveLength(1)
     }
@@ -53,16 +53,16 @@ describe('getFontFamilies', () => {
 })
 
 describe('getFamilyDefaultFontId', () => {
-  it('returns SemiBold for Noto Sans JP (REQ-0269 B-5)', () => {
-    expect(getFamilyDefaultFontId('Noto Sans JP')).toBe('noto-sans-jp-semibold')
+  it('returns SemiBold for MOJIOKO Noto Sans JP (REQ-0269 B-5)', () => {
+    expect(getFamilyDefaultFontId('MOJIOKO Noto Sans JP')).toBe('noto-sans-jp-semibold')
   })
-  it('returns Bold for Poppins (REQ-0269 B-5)', () => {
-    expect(getFamilyDefaultFontId('Poppins')).toBe('poppins-bold')
+  it('returns Bold for MOJIOKO Poppins (REQ-0269 B-5)', () => {
+    expect(getFamilyDefaultFontId('MOJIOKO Poppins')).toBe('poppins-bold')
   })
   it('returns the only registered FontId for single-weight families', () => {
-    expect(getFamilyDefaultFontId('Anton')).toBe('anton')
-    expect(getFamilyDefaultFontId('Dela Gothic One')).toBe('dela-gothic-one')
-    expect(getFamilyDefaultFontId('Montserrat')).toBe('montserrat')
+    expect(getFamilyDefaultFontId('MOJIOKO Anton')).toBe('anton')
+    expect(getFamilyDefaultFontId('MOJIOKO Dela Gothic One')).toBe('dela-gothic-one')
+    expect(getFamilyDefaultFontId('MOJIOKO Montserrat')).toBe('montserrat')
   })
   it('falls back to DEFAULT_FONT_ID for unknown families', () => {
     expect(getFamilyDefaultFontId('This Family Does Not Exist')).toBe(DEFAULT_FONT_ID)
@@ -71,17 +71,17 @@ describe('getFamilyDefaultFontId', () => {
 
 describe('getFontIdForFamilyAndWeight', () => {
   it('maps a Noto weight to its specific FontId', () => {
-    expect(getFontIdForFamilyAndWeight('Noto Sans JP', 100)).toBe('noto-sans-jp-thin')
-    expect(getFontIdForFamilyAndWeight('Noto Sans JP', 400)).toBe('noto-sans-jp-regular')
-    expect(getFontIdForFamilyAndWeight('Noto Sans JP', 900)).toBe('noto-sans-jp-black')
+    expect(getFontIdForFamilyAndWeight('MOJIOKO Noto Sans JP', 100)).toBe('noto-sans-jp-thin')
+    expect(getFontIdForFamilyAndWeight('MOJIOKO Noto Sans JP', 400)).toBe('noto-sans-jp-regular')
+    expect(getFontIdForFamilyAndWeight('MOJIOKO Noto Sans JP', 900)).toBe('noto-sans-jp-black')
   })
   it('maps a Poppins weight to its specific FontId (Regular keeps the legacy `poppins` id)', () => {
-    expect(getFontIdForFamilyAndWeight('Poppins', 400)).toBe('poppins')
-    expect(getFontIdForFamilyAndWeight('Poppins', 700)).toBe('poppins-bold')
+    expect(getFontIdForFamilyAndWeight('MOJIOKO Poppins', 400)).toBe('poppins')
+    expect(getFontIdForFamilyAndWeight('MOJIOKO Poppins', 700)).toBe('poppins-bold')
   })
   it('falls back to the family default when the weight is not registered', () => {
-    // Poppins has no weight 450 registered — should fall back to Bold (the default).
-    expect(getFontIdForFamilyAndWeight('Poppins', 450)).toBe('poppins-bold')
+    // MOJIOKO Poppins has no weight 450 registered — should fall back to Bold (the default).
+    expect(getFontIdForFamilyAndWeight('MOJIOKO Poppins', 450)).toBe('poppins-bold')
   })
 })
 
@@ -212,7 +212,7 @@ describe('FONT_SET_VERSION', () => {
     expect(Number.isInteger(FONT_SET_VERSION)).toBe(true)
     expect(FONT_SET_VERSION).toBeGreaterThan(0)
   })
-  it('is at least 2 (REQ-0269 bumps from v1 to v2 to gate the new weight assets)', () => {
-    expect(FONT_SET_VERSION).toBeGreaterThanOrEqual(2)
+  it('is at least 3 (REQ-0275 bumped to v3 for MOJIOKO-namespaced family names)', () => {
+    expect(FONT_SET_VERSION).toBeGreaterThanOrEqual(3)
   })
 })

@@ -31,39 +31,44 @@ import { GITHUB_OWNER, GITHUB_REPO } from './app-info'
 /**
  * Release tag that hosts every downloadable font asset.
  *
- * REQ-0270 §3 — bumped from `fonts-v1` to `fonts-v2` in v1.3.6 to align
- * the URL space with `FONT_SET_VERSION` (added below).  The v2 release
- * is intended as a **complete replacement set**: existing 12 fonts
- * (REQ-0153 baseline) + 14 new REQ-0269 Noto/Poppins weight assets +
- * per-font `<Font>-OFL.txt` texts.  Every registry entry's
- * `downloadUrl` retargets automatically because they all funnel through
- * `assetUrl()` below.
+ * v1 (REQ-0153): pre-v1.3.6 baseline; 12 upstream-named fonts.
+ *   **Still published, still needed by shipped v1.3.5 users. Do NOT
+ *   modify / delete.**
+ * v2 (REQ-0271 / REQ-0273): expanded to 26 upstream-named TTFs (added
+ *   Noto Sans JP × 9 weights and Poppins × 9 weights).  **Superseded
+ *   by v3 and never reached shipping** — main was not merged with the
+ *   fonts-v2 branch because REQ-0274 discovered a fatal libass /
+ *   DirectWrite family-name collision.  Kept published for
+ *   traceability; NOT touched.
+ * v3 (REQ-0275): every family name is prefixed `MOJIOKO ` so libass'
+ *   DirectWrite provider cannot silently substitute a system-installed
+ *   font of the same name.  This is the shipping asset set for v1.3.6.
+ *   See SPECIFICATION §24.3.1 "Family-name namespacing" for the recipe.
  *
- * ⚠ RELEASE BLOCKER: the `fonts-v2` GitHub Release itself is not yet
- * uploaded (承認制 owner-gated).  Until the assets are published, every
- * font download will return HTTP 404 — that is expected on the feature
- * branch but MUST be resolved before v1.3.6 tag / Store submission.
+ * Registry entries funnel their `downloadUrl` through `assetUrl()`
+ * below, so bumping this constant retargets every URL at once.
  */
-export const FONTS_RELEASE_TAG = 'fonts-v2'
+export const FONTS_RELEASE_TAG = 'fonts-v3'
 
 /**
  * REQ-0269 C-4 — Font set version.  Increments every time the registry
  * gains a new downloadable asset (or an existing asset is re-uploaded).
  *
- * Used by the "Download font set" button to detect when the user's local
- * on-disk set is outdated versus what this app version expects.  Written
- * into settings.json under `fontSetInstalledVersion` when the bulk
- * download completes; if that recorded value is `< FONT_SET_VERSION`,
- * the picker treats the set as `outdated` and offers to re-download.
+ * Written into settings.json under `fontSetInstalledVersion` when the
+ * bulk download completes.  REQ-0275 §3 tightened the semantics: the
+ * saved value MUST equal `FONT_SET_VERSION` for a font to be treated
+ * as `installed`.  A recorded value < FONT_SET_VERSION (or absent) is
+ * `not-installed` — the picker shows a "re-download" prompt.  This
+ * protects existing v1.3.5 users whose local `fonts-v1` files reference
+ * upstream family names (`Noto Sans JP`) which libass will silently
+ * substitute in v1.3.6+; forcing a re-download replaces those files
+ * with `fonts-v3`'s MOJIOKO-namespaced versions.
  *
  * v1: the original 12 downloadable fonts (REQ-0153).
- * v2: adds Noto Sans JP 6 non-bundled weights (Thin, ExtraLight, Light,
- *     Bold, ExtraBold, Black) and 8 additional Poppins weights (Thin,
- *     ExtraLight, Light, Medium, SemiBold, Bold, ExtraBold, Black).
- *     Montserrat stays at Regular only — see RES-0269 Phase 0
- *     verification for the libass variable-font rejection.
+ * v2: added Noto/Poppins weight expansion; SUPERSEDED (never shipped).
+ * v3: MOJIOKO-namespaced family names (REQ-0275).  Ships in v1.3.6.
  */
-export const FONT_SET_VERSION = 2
+export const FONT_SET_VERSION = 3
 
 // Per-font OFL distribution: each font ships its own `<FontName>-OFL.txt`
 // alongside its TTF in the current release tag (see FONTS_RELEASE_TAG).
@@ -254,14 +259,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'noto-sans-jp-thin',
     displayName: 'Noto Sans JP Thin',
-    cssFontFamily: 'Noto Sans JP',
-    assFontName: 'Noto Sans JP Thin',
+    cssFontFamily: 'MOJIOKO Noto Sans JP',
+    assFontName: 'MOJIOKO Noto Sans JP Thin',
     fileName: 'NotoSansJP-Thin.ttf',
     weight: 100,
     bundled: false,
     downloadUrl: assetUrl('NotoSansJP-Thin.ttf'),
     oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_769_948,
+    expectedSizeBytes: 5_769_992,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
@@ -271,14 +276,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'noto-sans-jp-extralight',
     displayName: 'Noto Sans JP ExtraLight',
-    cssFontFamily: 'Noto Sans JP',
-    assFontName: 'Noto Sans JP ExtraLight',
+    cssFontFamily: 'MOJIOKO Noto Sans JP',
+    assFontName: 'MOJIOKO Noto Sans JP ExtraLight',
     fileName: 'NotoSansJP-ExtraLight.ttf',
     weight: 200,
     bundled: false,
     downloadUrl: assetUrl('NotoSansJP-ExtraLight.ttf'),
     oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_771_292,
+    expectedSizeBytes: 5_771_360,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
@@ -288,14 +293,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'noto-sans-jp-light',
     displayName: 'Noto Sans JP Light',
-    cssFontFamily: 'Noto Sans JP',
-    assFontName: 'Noto Sans JP Light',
+    cssFontFamily: 'MOJIOKO Noto Sans JP',
+    assFontName: 'MOJIOKO Noto Sans JP Light',
     fileName: 'NotoSansJP-Light.ttf',
     weight: 300,
     bundled: false,
     downloadUrl: assetUrl('NotoSansJP-Light.ttf'),
     oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_770_856,
+    expectedSizeBytes: 5_770_904,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
@@ -305,8 +310,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'noto-sans-jp-regular',
     displayName: 'Noto Sans JP Regular',
-    cssFontFamily: 'Noto Sans JP',
-    assFontName: 'Noto Sans JP Regular',
+    cssFontFamily: 'MOJIOKO Noto Sans JP',
+    assFontName: 'MOJIOKO Noto Sans JP Regular',
     fileName: 'NotoSansJP-Regular.ttf',
     weight: 400,
     bundled: true,
@@ -322,8 +327,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'noto-sans-jp-medium',
     displayName: 'Noto Sans JP Medium',
-    cssFontFamily: 'Noto Sans JP',
-    assFontName: 'Noto Sans JP Medium',
+    cssFontFamily: 'MOJIOKO Noto Sans JP',
+    assFontName: 'MOJIOKO Noto Sans JP Medium',
     fileName: 'NotoSansJP-Medium.ttf',
     weight: 500,
     bundled: true,
@@ -339,8 +344,8 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'noto-sans-jp-semibold',
     displayName: 'Noto Sans JP SemiBold',
-    cssFontFamily: 'Noto Sans JP',
-    assFontName: 'Noto Sans JP SemiBold',
+    cssFontFamily: 'MOJIOKO Noto Sans JP',
+    assFontName: 'MOJIOKO Noto Sans JP SemiBold',
     fileName: 'NotoSansJP-SemiBold.ttf',
     weight: 600,
     bundled: true,
@@ -356,14 +361,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'noto-sans-jp-bold',
     displayName: 'Noto Sans JP Bold',
-    cssFontFamily: 'Noto Sans JP',
-    assFontName: 'Noto Sans JP Bold',
+    cssFontFamily: 'MOJIOKO Noto Sans JP',
+    assFontName: 'MOJIOKO Noto Sans JP Bold',
     fileName: 'NotoSansJP-Bold.ttf',
     weight: 700,
     bundled: false,
     downloadUrl: assetUrl('NotoSansJP-Bold.ttf'),
     oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_761_728,
+    expectedSizeBytes: 5_761_772,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
@@ -373,14 +378,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'noto-sans-jp-extrabold',
     displayName: 'Noto Sans JP ExtraBold',
-    cssFontFamily: 'Noto Sans JP',
-    assFontName: 'Noto Sans JP ExtraBold',
+    cssFontFamily: 'MOJIOKO Noto Sans JP',
+    assFontName: 'MOJIOKO Noto Sans JP ExtraBold',
     fileName: 'NotoSansJP-ExtraBold.ttf',
     weight: 800,
     bundled: false,
     downloadUrl: assetUrl('NotoSansJP-ExtraBold.ttf'),
     oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_758_932,
+    expectedSizeBytes: 5_758_996,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
@@ -390,14 +395,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'noto-sans-jp-black',
     displayName: 'Noto Sans JP Black',
-    cssFontFamily: 'Noto Sans JP',
-    assFontName: 'Noto Sans JP Black',
+    cssFontFamily: 'MOJIOKO Noto Sans JP',
+    assFontName: 'MOJIOKO Noto Sans JP Black',
     fileName: 'NotoSansJP-Black.ttf',
     weight: 900,
     bundled: false,
     downloadUrl: assetUrl('NotoSansJP-Black.ttf'),
     oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_756_568,
+    expectedSizeBytes: 5_756_616,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
@@ -407,14 +412,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'dela-gothic-one',
     displayName: 'Dela Gothic One',
-    cssFontFamily: 'Dela Gothic One',
-    assFontName: 'Dela Gothic One',
+    cssFontFamily: 'MOJIOKO Dela Gothic One',
+    assFontName: 'MOJIOKO Dela Gothic One',
     fileName: 'DelaGothicOne-Regular.ttf',
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('DelaGothicOne-Regular.ttf'),
     oflUrl: assetUrl('DelaGothicOne-OFL.txt'),
-    expectedSizeBytes: 5_469_244,
+    expectedSizeBytes: 5_469_276,
     copyright: 'Copyright 2020 The Dela Gothic Project Authors (https://github.com/syakuzen/DelaGothic)',
     sourceUrl: 'https://fonts.google.com/specimen/Dela+Gothic+One',
     license: 'SIL-OFL-1.1',
@@ -424,14 +429,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'reggae-one',
     displayName: 'Reggae One',
-    cssFontFamily: 'Reggae One',
-    assFontName: 'Reggae One',
+    cssFontFamily: 'MOJIOKO Reggae One',
+    assFontName: 'MOJIOKO Reggae One',
     fileName: 'ReggaeOne-Regular.ttf',
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('ReggaeOne-Regular.ttf'),
     oflUrl: assetUrl('ReggaeOne-OFL.txt'),
-    expectedSizeBytes: 2_153_256,
+    expectedSizeBytes: 2_153_296,
     copyright: 'Copyright 2020 The Reggae Project Authors (https://github.com/fontworks-fonts/Reggae)',
     sourceUrl: 'https://fonts.google.com/specimen/Reggae+One',
     license: 'SIL-OFL-1.1',
@@ -441,14 +446,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'yusei-magic',
     displayName: 'Yusei Magic',
-    cssFontFamily: 'Yusei Magic',
-    assFontName: 'Yusei Magic',
+    cssFontFamily: 'MOJIOKO Yusei Magic',
+    assFontName: 'MOJIOKO Yusei Magic',
     fileName: 'YuseiMagic-Regular.ttf',
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('YuseiMagic-Regular.ttf'),
     oflUrl: assetUrl('YuseiMagic-OFL.txt'),
-    expectedSizeBytes: 3_134_968,
+    expectedSizeBytes: 3_135_024,
     copyright: 'Copyright 2020 The Yusei Magic Project Authors (https://github.com/tanukifont/YuseiMagic)',
     sourceUrl: 'https://fonts.google.com/specimen/Yusei+Magic',
     license: 'SIL-OFL-1.1',
@@ -458,14 +463,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'mochiy-pop-one',
     displayName: 'Mochiy Pop One',
-    cssFontFamily: 'Mochiy Pop One',
-    assFontName: 'Mochiy Pop One',
+    cssFontFamily: 'MOJIOKO Mochiy Pop One',
+    assFontName: 'MOJIOKO Mochiy Pop One',
     fileName: 'MochiyPopOne-Regular.ttf',
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('MochiyPopOne-Regular.ttf'),
     oflUrl: assetUrl('MochiyPopOne-OFL.txt'),
-    expectedSizeBytes: 5_163_948,
+    expectedSizeBytes: 5_163_984,
     copyright: 'Copyright 2020 The Mochiypop Project Authors (https://github.com/fontdasu/Mochiypop)',
     sourceUrl: 'https://fonts.google.com/specimen/Mochiy+Pop+One',
     license: 'SIL-OFL-1.1',
@@ -475,14 +480,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'hachi-maru-pop',
     displayName: 'Hachi Maru Pop',
-    cssFontFamily: 'Hachi Maru Pop',
-    assFontName: 'Hachi Maru Pop',
+    cssFontFamily: 'MOJIOKO Hachi Maru Pop',
+    assFontName: 'MOJIOKO Hachi Maru Pop',
     fileName: 'HachiMaruPop-Regular.ttf',
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('HachiMaruPop-Regular.ttf'),
     oflUrl: assetUrl('HachiMaruPop-OFL.txt'),
-    expectedSizeBytes: 4_385_624,
+    expectedSizeBytes: 4_385_668,
     copyright: 'Copyright 2020 The Hachi Maru Pop Project Authors (https://github.com/noriokanisawa/HachiMaruPop)',
     sourceUrl: 'https://fonts.google.com/specimen/Hachi+Maru+Pop',
     license: 'SIL-OFL-1.1',
@@ -493,14 +498,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'potta-one',
     displayName: 'Potta One',
-    cssFontFamily: 'Potta One',
-    assFontName: 'Potta One',
+    cssFontFamily: 'MOJIOKO Potta One',
+    assFontName: 'MOJIOKO Potta One',
     fileName: 'PottaOne-Regular.ttf',
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('PottaOne-Regular.ttf'),
     oflUrl: assetUrl('PottaOne-OFL.txt'),
-    expectedSizeBytes: 4_918_516,
+    expectedSizeBytes: 4_918_564,
     copyright: 'Copyright 2020 The Potta Project Authors (https://github.com/go108go/Potta)',
     sourceUrl: 'https://fonts.google.com/specimen/Potta+One',
     license: 'SIL-OFL-1.1',
@@ -511,14 +516,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'dotgothic16',
     displayName: 'DotGothic16',
-    cssFontFamily: 'DotGothic16',
-    assFontName: 'DotGothic16',
+    cssFontFamily: 'MOJIOKO DotGothic16',
+    assFontName: 'MOJIOKO DotGothic16',
     fileName: 'DotGothic16-Regular.ttf',
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('DotGothic16-Regular.ttf'),
     oflUrl: assetUrl('DotGothic16-OFL.txt'),
-    expectedSizeBytes: 2_069_236,
+    expectedSizeBytes: 2_069_276,
     copyright: 'Copyright 2020 The DotGothic16 Project Authors (https://github.com/fontworks-fonts/DotGothic16)',
     sourceUrl: 'https://fonts.google.com/specimen/DotGothic16',
     license: 'SIL-OFL-1.1',
@@ -528,14 +533,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'rampart-one',
     displayName: 'Rampart One',
-    cssFontFamily: 'Rampart One',
-    assFontName: 'Rampart One',
+    cssFontFamily: 'MOJIOKO Rampart One',
+    assFontName: 'MOJIOKO Rampart One',
     fileName: 'RampartOne-Regular.ttf',
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('RampartOne-Regular.ttf'),
     oflUrl: assetUrl('RampartOne-OFL.txt'),
-    expectedSizeBytes: 3_722_352,
+    expectedSizeBytes: 3_722_392,
     copyright: 'Copyright 2020 The Rampart Project Authors (https://github.com/fontworks-fonts/Rampart)',
     sourceUrl: 'https://fonts.google.com/specimen/Rampart+One',
     license: 'SIL-OFL-1.1',
@@ -553,14 +558,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'anton',
     displayName: 'Anton',
-    cssFontFamily: 'Anton',
-    assFontName: 'Anton',
+    cssFontFamily: 'MOJIOKO Anton',
+    assFontName: 'MOJIOKO Anton',
     fileName: 'Anton-Regular.ttf',
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('Anton-Regular.ttf'),
     oflUrl: assetUrl('Anton-OFL.txt'),
-    expectedSizeBytes: 170_812,
+    expectedSizeBytes: 170_792,
     copyright: 'Copyright 2020 The Anton Project Authors (https://github.com/googlefonts/AntonFont.git)',
     sourceUrl: 'https://fonts.google.com/specimen/Anton',
     license: 'SIL-OFL-1.1',
@@ -570,14 +575,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'bebas-neue',
     displayName: 'Bebas Neue',
-    cssFontFamily: 'Bebas Neue',
-    assFontName: 'Bebas Neue',
+    cssFontFamily: 'MOJIOKO Bebas Neue',
+    assFontName: 'MOJIOKO Bebas Neue',
     fileName: 'BebasNeue-Regular.ttf',
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('BebasNeue-Regular.ttf'),
     oflUrl: assetUrl('BebasNeue-OFL.txt'),
-    expectedSizeBytes: 61_400,
+    expectedSizeBytes: 61_344,
     copyright: 'Copyright © 2010 by Dharma Type.',
     sourceUrl: 'https://fonts.google.com/specimen/Bebas+Neue',
     license: 'SIL-OFL-1.1',
@@ -587,20 +592,23 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'montserrat',
     displayName: 'Montserrat',
-    cssFontFamily: 'Montserrat',
+    cssFontFamily: 'MOJIOKO Montserrat',
     // REQ-0153 — Google Fonts serves Montserrat only as a variable
     // font on the wght axis.  libass (0.17+, bundled with ffmpeg
     // shipped in this app) reads variable fonts via the same
     // fontconfig path; the wght axis default is 400 = Regular so
-    // the ASS `Style:` line's `Fontname` = "Montserrat" resolves
-    // to the Regular instance without any extra plumbing.
-    assFontName: 'Montserrat',
+    // the ASS `Style:` line's `Fontname` = "MOJIOKO Montserrat"
+    // resolves to the Regular instance without any extra plumbing.
+    // REQ-0275 §2 namespaced the family so libass' DirectWrite
+    // provider on Windows cannot silently substitute a
+    // system-installed "Montserrat" of a different revision.
+    assFontName: 'MOJIOKO Montserrat',
     fileName: 'Montserrat-Variable.ttf',
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('Montserrat-Variable.ttf'),
     oflUrl: assetUrl('Montserrat-OFL.txt'),
-    expectedSizeBytes: 744_936,
+    expectedSizeBytes: 745_040,
     copyright: 'Copyright 2024 The Montserrat.Git Project Authors (https://github.com/JulietaUla/Montserrat.git)',
     sourceUrl: 'https://fonts.google.com/specimen/Montserrat',
     license: 'SIL-OFL-1.1',
@@ -621,14 +629,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'poppins-thin',
     displayName: 'Poppins Thin',
-    cssFontFamily: 'Poppins',
-    assFontName: 'Poppins Thin',
+    cssFontFamily: 'MOJIOKO Poppins',
+    assFontName: 'MOJIOKO Poppins Thin',
     fileName: 'Poppins-Thin.ttf',
     weight: 100,
     bundled: false,
     downloadUrl: assetUrl('Poppins-Thin.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 163_672,
+    expectedSizeBytes: 163_716,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -638,14 +646,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'poppins-extralight',
     displayName: 'Poppins ExtraLight',
-    cssFontFamily: 'Poppins',
-    assFontName: 'Poppins ExtraLight',
+    cssFontFamily: 'MOJIOKO Poppins',
+    assFontName: 'MOJIOKO Poppins ExtraLight',
     fileName: 'Poppins-ExtraLight.ttf',
     weight: 200,
     bundled: false,
     downloadUrl: assetUrl('Poppins-ExtraLight.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 163_568,
+    expectedSizeBytes: 163_612,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -655,14 +663,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'poppins-light',
     displayName: 'Poppins Light',
-    cssFontFamily: 'Poppins',
-    assFontName: 'Poppins Light',
+    cssFontFamily: 'MOJIOKO Poppins',
+    assFontName: 'MOJIOKO Poppins Light',
     fileName: 'Poppins-Light.ttf',
     weight: 300,
     bundled: false,
     downloadUrl: assetUrl('Poppins-Light.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 161_936,
+    expectedSizeBytes: 161_980,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -672,14 +680,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'poppins',
     displayName: 'Poppins Regular',
-    cssFontFamily: 'Poppins',
-    assFontName: 'Poppins',
+    cssFontFamily: 'MOJIOKO Poppins',
+    assFontName: 'MOJIOKO Poppins',
     fileName: 'Poppins-Regular.ttf',
     weight: 400,
     bundled: false,
     downloadUrl: assetUrl('Poppins-Regular.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 160_316,
+    expectedSizeBytes: 160_372,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -689,14 +697,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'poppins-medium',
     displayName: 'Poppins Medium',
-    cssFontFamily: 'Poppins',
-    assFontName: 'Poppins Medium',
+    cssFontFamily: 'MOJIOKO Poppins',
+    assFontName: 'MOJIOKO Poppins Medium',
     fileName: 'Poppins-Medium.ttf',
     weight: 500,
     bundled: false,
     downloadUrl: assetUrl('Poppins-Medium.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 158_576,
+    expectedSizeBytes: 158_620,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -706,14 +714,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'poppins-semibold',
     displayName: 'Poppins SemiBold',
-    cssFontFamily: 'Poppins',
-    assFontName: 'Poppins SemiBold',
+    cssFontFamily: 'MOJIOKO Poppins',
+    assFontName: 'MOJIOKO Poppins SemiBold',
     fileName: 'Poppins-SemiBold.ttf',
     weight: 600,
     bundled: false,
     downloadUrl: assetUrl('Poppins-SemiBold.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 157_312,
+    expectedSizeBytes: 157_356,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -723,14 +731,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'poppins-bold',
     displayName: 'Poppins Bold',
-    cssFontFamily: 'Poppins',
-    assFontName: 'Poppins Bold',
+    cssFontFamily: 'MOJIOKO Poppins',
+    assFontName: 'MOJIOKO Poppins Bold',
     fileName: 'Poppins-Bold.ttf',
     weight: 700,
     bundled: false,
     downloadUrl: assetUrl('Poppins-Bold.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 155_996,
+    expectedSizeBytes: 156_052,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -740,14 +748,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'poppins-extrabold',
     displayName: 'Poppins ExtraBold',
-    cssFontFamily: 'Poppins',
-    assFontName: 'Poppins ExtraBold',
+    cssFontFamily: 'MOJIOKO Poppins',
+    assFontName: 'MOJIOKO Poppins ExtraBold',
     fileName: 'Poppins-ExtraBold.ttf',
     weight: 800,
     bundled: false,
     downloadUrl: assetUrl('Poppins-ExtraBold.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 154_836,
+    expectedSizeBytes: 154_880,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -757,14 +765,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
   {
     id: 'poppins-black',
     displayName: 'Poppins Black',
-    cssFontFamily: 'Poppins',
-    assFontName: 'Poppins Black',
+    cssFontFamily: 'MOJIOKO Poppins',
+    assFontName: 'MOJIOKO Poppins Black',
     fileName: 'Poppins-Black.ttf',
     weight: 900,
     bundled: false,
     downloadUrl: assetUrl('Poppins-Black.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 153_440,
+    expectedSizeBytes: 153_484,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -789,8 +797,8 @@ export const DEFAULT_FONT_ID: FontId = 'noto-sans-jp-semibold'
  * `getFamilyDefaultFontId`).
  */
 const FAMILY_DEFAULT_FONT_ID: Readonly<Record<string, FontId>> = {
-  'Noto Sans JP': 'noto-sans-jp-semibold',
-  'Poppins': 'poppins-bold',
+  'MOJIOKO Noto Sans JP': 'noto-sans-jp-semibold',
+  'MOJIOKO Poppins': 'poppins-bold',
 }
 
 /**
@@ -805,6 +813,17 @@ export function getFamilyDefaultFontId(cssFontFamily: string): FontId {
   if (explicit) return explicit
   const single = FONT_REGISTRY.find((f) => f.cssFontFamily === cssFontFamily)
   return single?.id ?? DEFAULT_FONT_ID
+}
+
+/**
+ * REQ-0275 §2-2 — strip the internal `MOJIOKO ` namespace prefix from a
+ * cssFontFamily so the user-facing UI shows the upstream family name
+ * (e.g. `Noto Sans JP` instead of `MOJIOKO Noto Sans JP`).  Idempotent
+ * on strings that lack the prefix.
+ */
+export function stripFamilyNamespacePrefix(cssFontFamily: string): string {
+  const PREFIX = 'MOJIOKO '
+  return cssFontFamily.startsWith(PREFIX) ? cssFontFamily.slice(PREFIX.length) : cssFontFamily
 }
 
 /**
