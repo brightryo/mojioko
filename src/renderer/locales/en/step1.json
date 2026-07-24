@@ -276,6 +276,7 @@
       "cancel": "Cancel"
     },
     "tofuNote": "Characters not included in the font appear as □ or ? (e.g. using Japanese with an English-only font).",
+    "upgradeNotice": "This update requires re-downloading your fonts. Please click \"Download all\" to refresh.",
     "langLegend": {
       "en": "English support",
       "ja": "Japanese support"

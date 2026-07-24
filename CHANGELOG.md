@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.6] - unreleased
+
+### Added
+
+- Per-family weight selection for **Noto Sans JP** (9 weights, Thin
+  through Black) and **Poppins** (9 weights).  Every subtitle style
+  surface (inspector, bulk-edit, settings) now uses a two-tier picker
+  where family and weight are chosen separately; switching family
+  applies that family's default weight, and a single Undo restores
+  both fields together.
+- Vertical margin ceiling raised from 300 px to 9,999 px so extreme
+  off-frame offsets are reachable for short-form / 4K editing.
+
+### Changed
+
+- **Paid-tier users:** after upgrading, downloaded fonts appear as
+  "not installed" and must be re-downloaded once via the "Download
+  all" button in Settings → Fonts.  This is a one-time re-fetch that
+  replaces the pre-v1.3.6 font files with the newly-namespaced set
+  required for correct weight rendering.  Free-tier users are not
+  affected (the bundled Noto Sans JP works as before).
+- Font downloads are now bundled into a single "Download all"
+  action; per-font Download buttons were removed from the picker.
+
+### Fixed
+
+- Silent burn-in weight-substitution when a system-installed font
+  shared a family name with a MOJIOKO-shipped font (e.g. a Windows
+  install of Noto Sans JP could cause "Bold" burn-ins to render as
+  Regular).  All shipped fonts now use `MOJIOKO`-namespaced family
+  names internally so libass cannot pick up a system font by
+  mistake; the previewed weight and the burned-in weight now match.
+
+---
+
 ## [1.3.5] - 2026-07-21
 
 ### Changed

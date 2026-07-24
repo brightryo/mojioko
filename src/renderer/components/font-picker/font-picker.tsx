@@ -33,8 +33,9 @@ import {
   useDownloadActiveStore,
   selectActiveKeys,
 } from '@/stores/download-active-store'
-import { getSortedFontRegistry, type FontId, type FontsState, type FontInfo, type FontMeta, getFontMeta } from '../../../shared/fonts'
+import { getSortedFontRegistry, FONT_SET_VERSION, type FontId, type FontsState, type FontInfo, type FontMeta, getFontMeta } from '../../../shared/fonts'
 import { FontLangBadge, FontLangBadges } from '@/components/font-lang-badge/font-lang-badge'
+import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 
 interface FontPickerProps {
   /** Optional callback fired when a font is downloaded or activated, so the
@@ -520,6 +521,16 @@ export function FontPicker({ onChange }: FontPickerProps) {
     await performUninstall(meta)
   }
 
+  // REQ-0276 §1 — id-only wrapper for the top-level FamilyWeightSelector
+  // (which emits FontIds without carrying the full FontMeta around).
+  // Delegates to `handleSelect` after a metadata lookup so the two
+  // entry paths share every side effect (font preload, IPC persist,
+  // active-store flip, toast, `onChange` bump).
+  async function handleSelectById(id: FontId) {
+    const meta = getFontMeta(id)
+    await handleSelect(meta)
+  }
+
   async function handleSelect(meta: FontMeta) {
     if (meta.id === activeFontId) return
     // Preload before flipping the active selection so the FontFace is ready
@@ -598,6 +609,25 @@ export function FontPicker({ onChange }: FontPickerProps) {
       <p className="text-body-sm text-muted-foreground leading-relaxed">
         {t('fontPicker.description')}
       </p>
+      {/* REQ-0276 §1 — two-tier family + weight selector for the default
+          font.  Reuses the same `<FamilyWeightSelector>` the inspector
+          and bulk-edit bar use so all three surfaces present identical
+          UX (family dropdown stacked over weight dropdown, weight
+          hidden for single-weight families, MOJIOKO prefix stripped,
+          single-onChange atomic Undo semantics via the flat-FontId
+          scheme).  Setting the default goes through
+          `setActiveFont(fontId)` — same code path the pre-REQ-0276
+          list-row click used, so the persisted `activeFontId` field
+          and everything downstream (renderer store, preview refresh,
+          burn-in default) behave identically.  The management-side
+          list below is retained for license viewing, install status,
+          and free-tier discovery of paid-only fonts via the Lock chip. */}
+      <div className="pt-1">
+        <FamilyWeightSelector
+          value={activeFontId}
+          onChange={(nextId) => { void handleSelectById(nextId) }}
+        />
+      </div>
       {/* REQ-0163 §3 / REQ-0165 — EN / JA badge legend + batch DL
           button on the same row.  Rationale for the row placement
           (REQ-0165): the batch action operates on the list directly
@@ -757,6 +787,29 @@ export function FontPicker({ onChange }: FontPickerProps) {
         <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-[1px]" aria-hidden="true" />
         <span>{t('fontPicker.tofuNote')}</span>
       </p>
+      {/* REQ-0276 §3 — post-upgrade re-download notice.  Paid tier only:
+          appears when the user's `settings.json` already carries a
+          `fontSetInstalledVersion` (i.e. they DID complete a bulk DL on
+          an earlier build) BUT that value is < the current
+          FONT_SET_VERSION.  That combination is the "existing v1.3.5
+          user upgraded to v1.3.6" case, where their local files still
+          exist but reference the pre-namespace family (silent
+          preview↔burn-in divergence risk).  A fresh install has
+          `fontSetInstalledVersion === undefined` so no banner appears
+          — first-time users see "no fonts yet" naturally, they don't
+          need an explanation for something they never experienced.
+          The banner uses the amber warning-soft tone the tofu note
+          already uses, giving it the same visual weight — this is
+          also a "you need to take an action" notice, not a critical
+          error. */}
+      {isMsix
+        && state?.fontSetInstalledVersion !== undefined
+        && state.fontSetInstalledVersion < FONT_SET_VERSION && (
+        <p className="inline-flex items-start gap-1.5 text-caption text-warning-soft leading-relaxed">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-[1px]" aria-hidden="true" />
+          <span>{t('fontPicker.upgradeNotice')}</span>
+        </p>
+      )}
 
       {/* REQ-025 (ii) confirm dialog — only renders while a uninstall
           target is pending.  Same shape as step3.tsx's overwrite dialog

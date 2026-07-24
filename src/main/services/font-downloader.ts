@@ -3,9 +3,9 @@ import { join } from 'path'
 import {
   FONT_REGISTRY,
   FONT_SET_VERSION,
+  deriveFontStatus,
   type FontId,
   type FontInfo,
-  type FontStatus,
   type FontsState,
   type DownloadFontEvent,
   getFontMeta
@@ -58,6 +58,11 @@ export function checkFontInstalled(fontId: FontId): { installed: boolean; bundle
  * namespaced replacements, avoiding the silent preview↔burn-in
  * divergence RES-0274 documented.  Bundled fonts are never affected
  * (they ship with the installer and are always in sync).
+ *
+ * REQ-0276 §3 — `recordedSetVersion` is also echoed back in the returned
+ * `FontsState.fontSetInstalledVersion` so the renderer can distinguish
+ * "brand-new install (unset)" from "outdated (recorded but < current)"
+ * for the upgrade-notice banner.
  */
 export function buildFontsState(activeFontId: FontId, recordedSetVersion?: number): FontsState {
   const setIsCurrent = recordedSetVersion === FONT_SET_VERSION
@@ -65,21 +70,17 @@ export function buildFontsState(activeFontId: FontId, recordedSetVersion?: numbe
   const fonts: FontInfo[] = FONT_REGISTRY.map((meta) => {
     const { installed, bundled, sizeBytes } = checkFontInstalled(meta.id)
     totalUsedBytes += sizeBytes
-    let status: FontStatus
-    if (bundled) status = 'bundled'
-    else if (installed && setIsCurrent) status = 'installed'
-    else status = 'not-installed'
     return {
       id: meta.id,
       displayName: meta.displayName,
-      status,
+      status: deriveFontStatus(bundled, installed, setIsCurrent),
       sizeBytes,
       expectedSizeBytes: meta.expectedSizeBytes,
       bundled,
       hasDownloadUrl: meta.downloadUrl !== null
     }
   })
-  return { fonts, activeFontId, totalUsedBytes }
+  return { fonts, activeFontId, totalUsedBytes, fontSetInstalledVersion: recordedSetVersion }
 }
 
 /**

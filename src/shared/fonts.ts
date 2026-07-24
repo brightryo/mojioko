@@ -1019,6 +1019,30 @@ export function isFontId(value: unknown): value is FontId {
  */
 export type FontStatus = 'bundled' | 'installed' | 'not-installed' | 'unavailable'
 
+/**
+ * REQ-0275 §3 / REQ-0276 §2 — pure decision function that maps
+ * (bundled, installed, setIsCurrent) → FontStatus.  Extracted from the
+ * main-side `buildFontsState` in `font-downloader.ts` so the three-way
+ * install-status logic is unit-testable without touching disk or
+ * dragging Electron into the test bundle.
+ *
+ * Rules:
+ *   bundled = true                       → 'bundled'   (never affected by version gating)
+ *   installed = true  && setIsCurrent    → 'installed'
+ *   installed = true  && !setIsCurrent   → 'not-installed'  (stale-set safeguard)
+ *   installed = false                    → 'not-installed'
+ *
+ * `setIsCurrent` is derived by the caller from `recordedSetVersion
+ * === FONT_SET_VERSION`; keeping that comparison outside the helper
+ * makes tests drive every path with a plain boolean, no module-level
+ * constant to work around.
+ */
+export function deriveFontStatus(bundled: boolean, installed: boolean, setIsCurrent: boolean): FontStatus {
+  if (bundled) return 'bundled'
+  if (installed && setIsCurrent) return 'installed'
+  return 'not-installed'
+}
+
 export interface FontInfo {
   id: FontId
   displayName: string
@@ -1036,6 +1060,20 @@ export interface FontsState {
   activeFontId: FontId
   /** Total bytes consumed by downloaded (non-bundled) fonts. */
   totalUsedBytes: number
+  /**
+   * REQ-0276 §3 — the `fontSetInstalledVersion` value recorded in
+   * `settings.json` at the moment this state was built.  `undefined`
+   * means the user has never completed a bulk download (fresh install
+   * OR a pre-REQ-0275 install where the version stamp did not exist).
+   * A value strictly less than `FONT_SET_VERSION` indicates an
+   * outdated set that must be re-downloaded before the fonts will
+   * render correctly at burn-in.
+   *
+   * The FontPicker uses this field to distinguish "brand-new user
+   * (unset)" from "existing v1.3.5 user upgrading (outdated)" for the
+   * upgrade-notice banner (REQ-0276 §3).
+   */
+  fontSetInstalledVersion?: number
 }
 
 export type DownloadFontEvent =
