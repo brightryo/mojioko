@@ -92,25 +92,30 @@ describe('resolveRenderableFontId (REQ-0269 D-1 fallback)', () => {
     'noto-sans-jp-semibold',
   ])
   const isInstalled = (id: FontId) => bundled.has(id)
+  // REQ-0273 §8 — `isSelectable` is required.  These fallback tests only
+  // exercise the install-side ladder, so `() => true` is passed
+  // explicitly to make the "tier is not being tested here" intent
+  // visible.
+  const allSelectable = () => true
 
   it('returns the requested id when it is installed', () => {
-    expect(resolveRenderableFontId('noto-sans-jp-semibold', isInstalled)).toBe('noto-sans-jp-semibold')
+    expect(resolveRenderableFontId('noto-sans-jp-semibold', isInstalled, allSelectable)).toBe('noto-sans-jp-semibold')
   })
 
   it('falls back to the nearest installed same-family weight', () => {
     // Requested 700 (Bold), installed [400, 500, 600] → nearest is 600 (SemiBold).
-    expect(resolveRenderableFontId('noto-sans-jp-bold', isInstalled)).toBe('noto-sans-jp-semibold')
+    expect(resolveRenderableFontId('noto-sans-jp-bold', isInstalled, allSelectable)).toBe('noto-sans-jp-semibold')
     // Requested 100 (Thin), installed [400, 500, 600] → nearest is 400 (Regular).
-    expect(resolveRenderableFontId('noto-sans-jp-thin', isInstalled)).toBe('noto-sans-jp-regular')
+    expect(resolveRenderableFontId('noto-sans-jp-thin', isInstalled, allSelectable)).toBe('noto-sans-jp-regular')
     // Requested 500 (Medium — installed) → returns itself, not a substitute.
-    expect(resolveRenderableFontId('noto-sans-jp-medium', isInstalled)).toBe('noto-sans-jp-medium')
+    expect(resolveRenderableFontId('noto-sans-jp-medium', isInstalled, allSelectable)).toBe('noto-sans-jp-medium')
   })
 
   it('falls back to DEFAULT_FONT_ID when no same-family weight is installed', () => {
     // Requested Poppins Bold; nothing Poppins is installed → Noto SemiBold.
-    expect(resolveRenderableFontId('poppins-bold', isInstalled)).toBe(DEFAULT_FONT_ID)
+    expect(resolveRenderableFontId('poppins-bold', isInstalled, allSelectable)).toBe(DEFAULT_FONT_ID)
     // Requested Anton; not installed → Noto SemiBold.
-    expect(resolveRenderableFontId('anton', isInstalled)).toBe(DEFAULT_FONT_ID)
+    expect(resolveRenderableFontId('anton', isInstalled, allSelectable)).toBe(DEFAULT_FONT_ID)
   })
 
   it('picks the same family in preference to Noto when at least one family weight is installed', () => {
@@ -119,12 +124,12 @@ describe('resolveRenderableFontId (REQ-0269 D-1 fallback)', () => {
       'poppins',
     ])
     // Requested Poppins Bold; Poppins Regular is installed → prefer Poppins Regular over Noto.
-    expect(resolveRenderableFontId('poppins-bold', (id) => withPoppinsRegular.has(id))).toBe('poppins')
+    expect(resolveRenderableFontId('poppins-bold', (id) => withPoppinsRegular.has(id), allSelectable)).toBe('poppins')
   })
 
   it('does not depend on FONT_REGISTRY mutation — returns pure result', () => {
     const before = FONT_REGISTRY.map((f) => f.id)
-    resolveRenderableFontId('poppins-black', isInstalled)
+    resolveRenderableFontId('poppins-black', isInstalled, allSelectable)
     expect(FONT_REGISTRY.map((f) => f.id)).toEqual(before)
   })
 })
@@ -196,19 +201,10 @@ describe('resolveRenderableFontId — tier gating (REQ-0270 §2)', () => {
     ).toBe('noto-sans-jp-regular')
   })
 
-  it('the default `isSelectable = () => true` preserves pre-REQ-0270 two-arg call sites', () => {
-    // With 400/500/600 installed, distances to Bold(700) are
-    // 300 / 200 / 100 → SemiBold(600) is nearest.  Two-arg call
-    // (no tier predicate) returns the pre-REQ-0270 answer.
-    expect(
-      resolveRenderableFontId('noto-sans-jp-bold', isInstalledFree)
-    ).toBe('noto-sans-jp-semibold')
-    // Paid-style behaviour on the same install set: Regular (400) is
-    // installed and selectable → returns itself.
-    expect(
-      resolveRenderableFontId('noto-sans-jp-regular', isInstalledFree)
-    ).toBe('noto-sans-jp-regular')
-  })
+  // REQ-0273 §8 removed the two-arg call site (default `() => true`
+  // was fail-open).  The former "default preserves pre-REQ-0270"
+  // test is dropped because the default no longer exists; the paid-
+  // tier equivalent is covered by the "paid tier" test above.
 })
 
 describe('FONT_SET_VERSION', () => {

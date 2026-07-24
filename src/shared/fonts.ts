@@ -261,7 +261,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('NotoSansJP-Thin.ttf'),
     oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_400_000,
+    expectedSizeBytes: 5_769_948,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
@@ -278,7 +278,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('NotoSansJP-ExtraLight.ttf'),
     oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_400_000,
+    expectedSizeBytes: 5_771_292,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
@@ -295,7 +295,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('NotoSansJP-Light.ttf'),
     oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_400_000,
+    expectedSizeBytes: 5_770_856,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
@@ -363,7 +363,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('NotoSansJP-Bold.ttf'),
     oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_500_000,
+    expectedSizeBytes: 5_761_728,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
@@ -380,7 +380,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('NotoSansJP-ExtraBold.ttf'),
     oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_500_000,
+    expectedSizeBytes: 5_758_932,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
@@ -397,7 +397,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('NotoSansJP-Black.ttf'),
     oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_500_000,
+    expectedSizeBytes: 5_756_568,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
@@ -628,7 +628,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('Poppins-Thin.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 155_000,
+    expectedSizeBytes: 163_672,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -645,7 +645,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('Poppins-ExtraLight.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 158_000,
+    expectedSizeBytes: 163_568,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -662,7 +662,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('Poppins-Light.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 160_000,
+    expectedSizeBytes: 161_936,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -696,7 +696,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('Poppins-Medium.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 160_000,
+    expectedSizeBytes: 158_576,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -713,7 +713,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('Poppins-SemiBold.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 160_000,
+    expectedSizeBytes: 157_312,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -730,7 +730,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('Poppins-Bold.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 160_000,
+    expectedSizeBytes: 155_996,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -747,7 +747,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('Poppins-ExtraBold.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 160_000,
+    expectedSizeBytes: 154_836,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -764,7 +764,7 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     bundled: false,
     downloadUrl: assetUrl('Poppins-Black.ttf'),
     oflUrl: assetUrl('Poppins-OFL.txt'),
-    expectedSizeBytes: 160_000,
+    expectedSizeBytes: 153_440,
     copyright: 'Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins)',
     sourceUrl: 'https://fonts.google.com/specimen/Poppins',
     license: 'SIL-OFL-1.1',
@@ -894,10 +894,10 @@ export function getFontIdForFamilyAndWeight(cssFontFamily: string, weight: numbe
 }
 
 /**
- * REQ-0269 D-1 / REQ-0270 §2 — pick the best available FontId to render
- * `fontId` with when the underlying font (or its downloadable weight)
- * is not yet on disk OR is tier-locked (free build asking for a
- * paid-tier weight).
+ * REQ-0269 D-1 / REQ-0270 §2 / REQ-0273 §8 — pick the best available
+ * FontId to render `fontId` with when the underlying font (or its
+ * downloadable weight) is not yet on disk OR is tier-locked (free
+ * build asking for a paid-tier weight).
  *
  *   Order:
  *     1. `fontId` itself, if installed AND selectable in the current tier.
@@ -909,15 +909,14 @@ export function getFontIdForFamilyAndWeight(cssFontFamily: string, weight: numbe
  *        always selectable (`canSelectFontInTier` returns true for
  *        `DEFAULT_FONT_ID` in every tier).
  *
- * Both predicates are supplied by the caller so this function stays
- * pure and testable.  `isSelectable` defaults to "always yes" for
- * back-compat, but every real call site should pass a tier-aware
- * predicate — REQ-0270 §2 tightened this because the pre-REQ-0270
- * fallback would render Noto Regular / Medium on the free tier
- * (both TTFs physically ship in the installer under
- * `resources/fonts/Noto_Sans_JP/static/`) when a project referenced
- * `noto-sans-jp-bold`, which is exactly the "paid-tier weight leaked
- * to free build" hole REQ-0269 C-3 wanted closed.
+ * REQ-0273 §8 — both predicates are REQUIRED (no default fallback).
+ * The pre-REQ-0273 signature let `isSelectable` default to `() => true`,
+ * which was fail-open: a future caller that forgot to pass the tier
+ * predicate would silently bypass tier gating with no type error to
+ * flag the omission.  Making it required forces every call site to
+ * confront the tier question explicitly — tests that don't care about
+ * tier semantics pass `() => true` in-line, making the intent visible
+ * in the test file.
  *
  * The ORIGINAL `fontId` in the project entry is intentionally NOT
  * mutated — this returns a render-time substitute only, and the moment
@@ -927,7 +926,7 @@ export function getFontIdForFamilyAndWeight(cssFontFamily: string, weight: numbe
 export function resolveRenderableFontId(
   fontId: FontId,
   isInstalled: (id: FontId) => boolean,
-  isSelectable: (id: FontId) => boolean = () => true,
+  isSelectable: (id: FontId) => boolean,
 ): FontId {
   if (isInstalled(fontId) && isSelectable(fontId)) return fontId
   const meta = FONT_REGISTRY.find((f) => f.id === fontId)
