@@ -78,23 +78,48 @@ export function SettingsDialog() {
           element on whatever opened the dialog; users can still Tab into
           the dialog normally for keyboard navigation.
           REQ-018 #1. */}
+      {/* REQ-0283 — the DialogContent frame is FIXED at 640px (capped
+          at 85vh on tiny viewports so it never overflows the screen).
+          Content that exceeds the panel area scrolls INSIDE the wrapper
+          `<div className="flex-1 min-h-0 overflow-y-auto">` below, so
+          the frame height never depends on the active tab.
+
+          ------------------------------------------------------------
+          DO NOT (would reintroduce the REQ-018 → REQ-0164 → REQ-0283
+          content-drift bug that has been fixed 3 times already):
+            – Add `overflow-y-auto` to DialogContent (that lets the
+              OUTER frame scroll = content-driven height).
+            – Add `min-h-[...]` or `max-h-[...]` to any individual
+              `<TabsContent>` (per-tab height pinning is what caused
+              the whack-a-mole — each new tab had to remember, and
+              tall content bypassed the min-h anyway).
+            – Replace `h-[640px]` with `min-h-[Xpx]` (min alone reverts
+              to content-driven above the floor).
+          ------------------------------------------------------------
+          The `tests/unit/settings-dialog-height-invariant.test.ts`
+          suite enforces these rules at CI time — greping the TSX
+          source for the anti-patterns above.  If you have a legit
+          reason to change the fixed height, bump the pixel value here
+          AND update the test; if you're tempted to add per-tab
+          min-h/max-h, the frame is broken elsewhere — fix that
+          instead.
+
+          Height composition (approx):
+            DialogHeader   ~50px
+            + TabsList     ~44px
+            + Panel area   remaining (`flex-1 min-h-0 overflow-y-auto`)
+            + p-6 padding  48px total
+            = 640px, comfortably fits the tallest tab (fonts, shortcuts). */}
       <DialogContent
-        className="max-w-[640px] max-h-[85vh] overflow-y-auto"
+        className="max-w-[640px] h-[640px] max-h-[85vh] flex flex-col overflow-hidden"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle>{t('title')}</DialogTitle>
         </DialogHeader>
 
-        {/* min-h applied to every TabsContent below pegs the panel height
-            to the tallest tab (フォント, measured ~483px) so switching tabs
-            does not change the dialog height.  Empty space appears at the
-            bottom of shorter tabs (一般 / 既定スタイル); this is the
-            explicit trade-off vs. a smaller fixed height + internal scroll,
-            chosen because the FontPicker's internal scroll (max-h-[300px])
-            already handles the long font list.  REQ-018 #2. */}
-        <Tabs defaultValue="general" className="w-full">
-          <TabsList>
+        <Tabs defaultValue="general" className="flex-1 min-h-0 flex flex-col w-full">
+          <TabsList className="shrink-0">
             <TabsTrigger value="general">{t('tabs.general')}</TabsTrigger>
             <TabsTrigger value="fonts">{t('tabs.fonts')}</TabsTrigger>
             <TabsTrigger value="defaultStyle">{t('tabs.defaultStyle')}</TabsTrigger>
@@ -102,8 +127,15 @@ export function SettingsDialog() {
             <TabsTrigger value="shortcuts">{t('tabs.shortcuts')}</TabsTrigger>
           </TabsList>
 
+          {/* REQ-0283 — SINGLE scroll region wrapping every TabsContent.
+              Any tab content that exceeds the panel area scrolls here.
+              Do not move `overflow-y-auto` INTO individual TabsContent —
+              it must live on this wrapper so the frame stays fixed no
+              matter which tab is active OR which tabs are added later. */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+
           {/* ─ General ────────────────────────────────────────────── */}
-          <TabsContent value="general" className="min-h-[490px]">
+          <TabsContent value="general">
             <div className="grid grid-cols-2 items-start gap-y-4 gap-x-6 pt-1">
               {/* Language */}
               <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
@@ -265,12 +297,12 @@ export function SettingsDialog() {
               `settings:fonts.hint` from the render path here; the
               locale key stayed as-is (unused, kept for safety in case
               a hot-fix consumer surfaces later). */}
-          <TabsContent value="fonts" className="space-y-1.5 min-h-[490px]">
+          <TabsContent value="fonts" className="space-y-1.5">
             <FontPicker />
           </TabsContent>
 
           {/* ─ Default style ──────────────────────────────────────── */}
-          <TabsContent value="defaultStyle" className="space-y-2 min-h-[490px]">
+          <TabsContent value="defaultStyle" className="space-y-2">
             <p className="text-body-sm text-muted-foreground">{t('defaultStyle.hint')}</p>
             <DefaultStyleControls
               fontSizePx={transcriptionDefaults.fontSizePx}
@@ -284,7 +316,7 @@ export function SettingsDialog() {
           </TabsContent>
 
           {/* ─ Whisper engine ─────────────────────────────────────── */}
-          <TabsContent value="whisper" className="space-y-3 min-h-[490px]">
+          <TabsContent value="whisper" className="space-y-3">
             <p className="text-body-sm text-muted-foreground">{t('whisper.hint')}</p>
             <WhisperAdvancedControls
               transcriptionAdvanced={transcriptionAdvanced}
@@ -298,22 +330,15 @@ export function SettingsDialog() {
               `SHORTCUTS` registry.  No mutation UI; the tab exists so
               the user can discover which keys do what without leaving
               the app.
-              REQ-0164 §1 — `max-h-[490px] overflow-y-auto` added so
-              the shortcuts tab matches the sizing contract every other
-              tab already had (min-h == the tallest tab's height =
-              490px, established for the Fonts tab in REQ-018 #2).  The
-              REQ-0131 §5 shortcuts panel is the ONLY tab whose content
-              exceeds 490px (3 sections × ~10 rows + section
-              descriptions), so before this fix switching to it forced
-              the entire DialogContent to grow toward its
-              `max-h-[85vh]` cap and users saw the window height jump.
-              Pinning min == max here converts the tab to internal
-              scroll behind the same fixed frame the other tabs use —
-              zero visual change on other tabs, no more window resize
-              on this one. */}
-          <TabsContent value="shortcuts" className="space-y-3 min-h-[490px] max-h-[490px] overflow-y-auto">
+              REQ-0283 — the pre-fix `min-h-[490px] max-h-[490px]
+              overflow-y-auto` special-case that used to live here (a
+              REQ-0164 §1 whack-a-mole patch) has been removed.  Height
+              is now managed by the shared wrapper `<div>` above; this
+              tab, like every other, just describes its content. */}
+          <TabsContent value="shortcuts" className="space-y-3">
             <ShortcutsSettingsTab />
           </TabsContent>
+          </div>
         </Tabs>
       </DialogContent>
     </Dialog>
