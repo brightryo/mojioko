@@ -521,6 +521,42 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     )
   }
 
+  // REQ-0277 Phase A — bulk-apply of the four new style effects.
+  // Each handler pushes a single applyBulk call so every selected
+  // row's fields flip together with one Undo entry.  Turning shadow /
+  // glow ON without specifying the sub-values seeds neutral defaults
+  // (depth 4, black, opaque; radius 6, white) so the effect is
+  // visible immediately — matches the inspector's toggle-on behaviour.
+  function handleCasingBulk(on: boolean) {
+    applyBulk(
+      { casing: on ? 'uppercase' : 'none' },
+      t('bulk.history.casing', { count: selectedRowIds.size }),
+    )
+  }
+  function handleShadowBulkToggle(on: boolean) {
+    applyBulk(
+      on
+        ? { shadowEnabled: true, shadowDepth: 4, shadowColor: '#000000', shadowAlpha: 100 }
+        : { shadowEnabled: false },
+      t('bulk.history.shadow', { count: selectedRowIds.size }),
+    )
+  }
+  function handleGlowBulkToggle(on: boolean) {
+    applyBulk(
+      on
+        ? { glowEnabled: true, glowRadius: 6, glowColor: '#FFFFFF' }
+        : { glowEnabled: false },
+      t('bulk.history.glow', { count: selectedRowIds.size }),
+    )
+  }
+  function handleRotationBulk(deg: number) {
+    const normalized = ((deg % 360) + 360) % 360
+    applyBulk(
+      { rotation: normalized },
+      t('bulk.history.rotation', { count: selectedRowIds.size }),
+    )
+  }
+
   // REQ-20260613-016 Phase 5 — per-row layout / background bulk handlers.
   // Layout fields (horizontal / vertical / margin) commit independently
   // since each row's existing value of the other two should stay put.
@@ -909,6 +945,47 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                 onCommit={handleFadeDurationCommit}
                 ariaLabel={t('bulk.fade')}
                 fullWidth
+              />
+            </div>
+          </label>
+          {/* REQ-0277 Phase A — bulk-apply for the four new style
+              effects.  Each row is a compact toggle+control so the
+              bulk-edit column doesn't outgrow the inspector.  Bulk-
+              applied effects reset ALL selected rows to the same
+              value (no partial preserve; a Switch toggle inherently
+              coerces every row to the same state), matching the
+              existing bulk-fade / bulk-bg-enabled pattern. */}
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('styleCell.casing')}</span>
+            <div className="flex items-center gap-2 w-[50%]">
+              <Switch onCheckedChange={handleCasingBulk} aria-label={t('styleCell.casing')} />
+              <span className="text-caption text-muted-foreground">{t('styleCell.casingUppercase')}</span>
+            </div>
+          </label>
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('styleCell.shadow')}</span>
+            <div className="flex items-center gap-2 w-[50%]">
+              <Switch onCheckedChange={handleShadowBulkToggle} aria-label={t('styleCell.shadow')} />
+              <span className="text-caption text-muted-foreground">{t('styleCell.shadowDepth')} 4</span>
+            </div>
+          </label>
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('styleCell.glow')}</span>
+            <div className="flex items-center gap-2 w-[50%]">
+              <Switch onCheckedChange={handleGlowBulkToggle} aria-label={t('styleCell.glow')} />
+              <span className="text-caption text-muted-foreground">{t('styleCell.glowRadius')} 6</span>
+            </div>
+          </label>
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('styleCell.rotation')}</span>
+            <div className="w-[50%]">
+              <NumberStepperInput
+                value={0}
+                min={0}
+                max={359}
+                step={15}
+                onCommit={handleRotationBulk}
+                ariaLabel={t('styleCell.rotation')}
               />
             </div>
           </label>

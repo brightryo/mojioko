@@ -14,6 +14,23 @@ import { canSelectFontInTier } from '@/lib/font-tier'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
 
+/**
+ * REQ-0277 §2 — convert `#RRGGBB` + alpha (0-1 float) to an `rgba(...)`
+ * CSS string.  Used by the drop-shadow builder so the shadow colour
+ * can carry its own opacity independent of the text fill.  Silently
+ * returns solid black if the hex is malformed (defensive; the
+ * ColorPicker validator upstream guarantees the 6-hex form).
+ */
+function hexToRgba(hex: string, alpha01: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex)
+  if (!m) return `rgba(0, 0, 0, ${alpha01})`
+  const n = parseInt(m[1], 16)
+  const r = (n >> 16) & 0xff
+  const g = (n >> 8) & 0xff
+  const b = n & 0xff
+  return `rgba(${r}, ${g}, ${b}, ${alpha01})`
+}
+
 /** Floor (in OUTPUT pixels, not on the scale factor) applied to the visible
  *  outline so the thinnest setting (= 1) remains discernible at small preview
  *  sizes.  Larger values pass through with their natural proportional scale,
@@ -364,6 +381,69 @@ export function SubtitleOverlay({
   // libass (an opaque panel makes the outline visually redundant).
   const showOutline = !bgEnabled && outlinePx > 0
 
+  // REQ-0277 §4 — compose transform stack.  Rotation is user-chosen
+  // clockwise degrees; CSS's `rotate()` is also clockwise so no
+  // negation is needed (ass-generator on the burn-in side handles the
+  // ASS `\frz` counter-clockwise convention separately).  Applied
+  // BEFORE the layout-side transforms above so rotation stacks on top
+  // of pinned-anchor / centre-translate offsets.  When `rotation ===
+  // undefined` OR `0` no extra transform is added.
+  const rotationDeg = entry.rotation ?? 0
+  if (rotationDeg !== 0) {
+    const rotateFrag = `rotate(${rotationDeg}deg)`
+    transform = transform ? `${transform} ${rotateFrag}` : rotateFrag
+  }
+
+  // REQ-0277 §2 — drop shadow.  libass draws shadows at a fixed
+  // bottom-right offset with depth = both X and Y translation in
+  // pixels.  CSS's `text-shadow: <x> <y> <blur> <color>` mirrors that
+  // exactly (positive x = right, positive y = down, same as libass).
+  // Scale the depth by the preview `scale` factor so the shadow
+  // shrinks proportionally as the preview viewport does — mirrors the
+  // way `strokeWidthPx = outlinePx * 2` scales the CSS-side outline.
+  // Skipped when the background box is enabled (matches ass-generator's
+  // `\shad0` suppression on the bg path).
+  const shadowEnabledResolved = entry.shadowEnabled === true && !bgEnabled
+  const shadowDepthPx = shadowEnabledResolved
+    ? Math.max(0, Math.min(20, entry.shadowDepth ?? 4)) * scale
+    : 0
+  const shadowColorCss = shadowEnabledResolved
+    ? hexToRgba(entry.shadowColor ?? '#000000', (entry.shadowAlpha ?? 100) / 100)
+    : ''
+
+  // REQ-0277 §3 — glow.  CSS `filter: blur()` blurs the whole element
+  // (including the sharp glyph on top), so we instead stack multiple
+  // `text-shadow` layers with an increasing blur-radius, all in the
+  // glow colour, to build the halo.  The main text stays sharp on top
+  // because text-shadow is painted BEHIND the text fill.
+  //
+  // Tolerance criterion (REQ §3): "text is sharp; a coloured haze
+  // fringes the strokes".  Exact per-pixel match to libass' `\blur` is
+  // impossible — libass' blur is a proper Gaussian on the outline
+  // buffer while CSS text-shadow with blur-radius is a spread-and-fade
+  // approximation.  Both look correct at typical values (radius 4-12);
+  // preview may look slightly less soft than burn-in.  The
+  // "sharp text + coloured halo" invariant holds.
+  const glowEnabledResolved = entry.glowEnabled === true
+  const glowRadiusRaw = glowEnabledResolved
+    ? Math.max(0, Math.min(20, entry.glowRadius ?? 6))
+    : 0
+  const glowRadiusPx = glowRadiusRaw * scale
+  const glowColorCss = glowEnabledResolved
+    ? (entry.glowColor ?? '#FFFFFF')
+    : ''
+  const glowShadow = glowEnabledResolved && glowRadiusPx > 0
+    ? [
+        `0 0 ${glowRadiusPx * 0.5}px ${glowColorCss}`,
+        `0 0 ${glowRadiusPx}px ${glowColorCss}`,
+        `0 0 ${glowRadiusPx * 1.5}px ${glowColorCss}`,
+      ].join(', ')
+    : ''
+  const dropShadow = shadowEnabledResolved && shadowDepthPx > 0
+    ? `${shadowDepthPx}px ${shadowDepthPx}px 0 ${shadowColorCss}`
+    : ''
+  const textShadowCombined = [dropShadow, glowShadow].filter(Boolean).join(', ') || undefined
+
   // REQ-20260613-016 Phase 6 — when the parent supplies onPointerDown the
   // overlay becomes interactive: cursor=move, pointer-events-auto, and the
   // raw pointer-down event is forwarded with the bound entry so the
@@ -457,6 +537,18 @@ export function SubtitleOverlay({
         paintOrder: 'stroke fill',
         whiteSpace: 'pre',
         transform,
+        transformOrigin: rotationDeg !== 0 ? 'center center' : undefined,
+        // REQ-0277 §1 — CSS `text-transform: uppercase` handles Latin
+        // case-mapping natively; CJK code points have no case and pass
+        // through unchanged.  Matches ass-generator's `.toUpperCase()`
+        // on the emitted text.
+        textTransform: entry.casing === 'uppercase' ? 'uppercase' : undefined,
+        // REQ-0277 §2 (drop shadow) + §3 (glow) — combined `text-shadow`
+        // stack.  Undefined when neither effect is enabled → falls back
+        // to no CSS text-shadow.  Order: drop shadow first (paints
+        // furthest back), then glow layers.  See variable
+        // `textShadowCombined` for the composition.
+        textShadow: textShadowCombined,
         // `opacity` is intentionally NOT set here — see comment above
         // the prop list; the parent's rAF loop writes it via DOM API
         // and React never touches the value.

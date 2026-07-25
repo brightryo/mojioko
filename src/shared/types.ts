@@ -113,6 +113,56 @@ export interface SubtitleEntryOriginal {
    */
   posX?: number
   posY?: number
+
+  // ---------------------------------------------------------------------------
+  // REQ-0277 Phase A — additional per-row style effects.  All optional +
+  // neutral default so existing project files (pre-REQ-0277) hydrate as
+  // "effect off" without any migration.  Renderers (ass-generator + CSS
+  // preview) treat `undefined` identically to "off" / neutral value.
+  // ---------------------------------------------------------------------------
+  /**
+   * REQ-0277 §1 — display-only casing transform.  `'uppercase'` renders
+   * the text in ALL CAPS at burn-in + preview time WITHOUT mutating the
+   * stored transcript.  SRT export uses the original text unchanged.
+   * Latin-only in effect; CJK has no case.  `undefined` = `'none'`.
+   */
+  casing?: 'none' | 'uppercase'
+  /**
+   * REQ-0277 §2 — drop shadow.  ASS `\shad<depth>` + `\4c` + `\4a`.
+   * libass draws shadows at a fixed bottom-right offset (there is no
+   * angle control in ASS); the depth in px is the offset magnitude.
+   * `undefined` on `shadowEnabled` OR `shadowEnabled === false` =
+   * disabled (ass-generator emits `\shad0`; preview writes no
+   * text-shadow).
+   */
+  shadowEnabled?: boolean
+  /** Integer px, 0-20 (typical 2-8).  Depth = both X and Y offset in libass' fixed bottom-right direction. */
+  shadowDepth?: number
+  /** `#RRGGBB`; default `#000000`. */
+  shadowColor?: string
+  /** Integer 0-100 (opacity %; higher = more opaque).  Default `100`. */
+  shadowAlpha?: number
+  /**
+   * REQ-0277 §3 — glow / edge blur.  ASS `\blur<amount>`.  Preview
+   * approximates via stacked `text-shadow` with blur-radius (see
+   * subtitle-overlay for the recipe and tolerance criterion).
+   * `undefined` on `glowEnabled` OR `glowEnabled === false` = disabled.
+   */
+  glowEnabled?: boolean
+  /** Integer px, 0-20 (typical 4-12).  libass `\blur` value; also the CSS blur-radius. */
+  glowRadius?: number
+  /** `#RRGGBB`; default `#FFFFFF`. */
+  glowColor?: string
+  /**
+   * REQ-0277 §4 — clockwise text rotation in degrees, 0-360.  ASS
+   * `\frz<deg>`.  Preview: CSS `transform: rotate(<deg>deg)` with
+   * `transform-origin: center`.  `undefined` = `0` (no rotation).
+   *
+   * Note (from REQ): libass measures degrees COUNTER-clockwise on the
+   * `\frz` axis but our UI convention is clockwise (standard CSS/user
+   * expectation).  ass-generator negates the value before emitting.
+   */
+  rotation?: number
 }
 
 export interface SubtitleEntry extends SubtitleEntryOriginal {

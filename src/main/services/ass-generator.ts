@@ -230,6 +230,65 @@ export function generateAss(
       const outlineTag = `\\3c${hexToAss(e.outlineColorHex)}`
       const bordTag    = `\\bord${e.outlineThicknessPx}`
 
+      // REQ-0277 §2 — drop shadow.  libass' `\shad<depth>` draws the
+      // shadow with `\4c` (BackColour) at the fixed bottom-right
+      // offset; there is no angle control.  Skipped entirely when the
+      // row has a background box (the bg path emits its own `\shad0`
+      // to suppress bleed, and a user-toggled shadow would fight
+      // that intent, so bg wins).  When `shadowEnabled === undefined`
+      // OR false no tags are emitted at all — the Style header does
+      // not set a Shadow column so libass' default of 0 applies
+      // naturally, matching pre-REQ-0277 output byte-for-byte on
+      // rows without the effect.
+      let shadowDepthTag = ''
+      let shadowColorTag = ''
+      let shadowAlphaTag = ''
+      if (e.shadowEnabled && !rowBgEnabled) {
+        const depth = Math.max(0, Math.min(20, e.shadowDepth ?? 4))
+        const color = e.shadowColor ?? '#000000'
+        const alphaPct = Math.max(0, Math.min(100, e.shadowAlpha ?? 100))
+        shadowDepthTag = `\\shad${depth}`
+        shadowColorTag = `\\4c${hexToAss(color)}`
+        shadowAlphaTag = `\\4a&H${opacityToAssAlpha(alphaPct)}&`
+      }
+
+      // REQ-0277 §3 — edge blur / glow.  libass' `\blur<amount>` blurs
+      // the outline (`\3c`) and shadow (`\4c`) layers, giving a
+      // uniform-radius glow around every stroke.  `glowEnabled ===
+      // undefined` OR false → skipped (libass defaults to `\blur0`).
+      // Range clamped defensively to 0-20 to match the CSS side.
+      const glowTag = e.glowEnabled
+        ? `\\blur${Math.max(0, Math.min(20, e.glowRadius ?? 6))}`
+        : ''
+      // Glow COLOR reuses `\3c` (outline colour) because that's what
+      // libass' blur radiates from.  When the user's outline colour is
+      // already set to something else (e.g. black outline), we override
+      // it inline with the glow colour AFTER the base outlineTag so
+      // libass' last-write-wins takes the glow colour for painting the
+      // blurred halo.  Trade-off: the sharp outline colour is
+      // sacrificed while glow is on — matches typical "glow-only" UX
+      // expectations (users don't usually want a sharp outline AND a
+      // separate coloured glow).  If they do, they can turn outline
+      // thickness to 0 and rely on the glow alone.
+      const glowColorTag = e.glowEnabled && e.glowColor
+        ? `\\3c${hexToAss(e.glowColor)}`
+        : ''
+
+      // REQ-0277 §4 — text rotation (Z axis, clockwise).  libass'
+      // `\frz<deg>` measures counter-clockwise, so we negate the
+      // user-supplied clockwise value.  0 (or undefined) skips the
+      // tag to keep the ASS clean.  Rotation origin is the text's
+      // own bounding box; when the row is pinned (`\pos`) libass uses
+      // the pinned point as the origin, otherwise the alignment
+      // anchor.  For legacy alignment-based rows this means rotation
+      // pivots around the anchor point (e.g. bottom-center for the
+      // default anchor 2), which matches the CSS preview's
+      // `transform-origin: center` closely enough for the intended
+      // "tilt an already-placed caption" UX.
+      // Modulo before the tag check so 360 / 720 / -360 all collapse to 0.
+      const rotNorm = ((e.rotation ?? 0) % 360 + 360) % 360
+      const rotTag = rotNorm !== 0 ? `\\frz${(360 - rotNorm) % 360}` : ''
+
       // WithBox-only inline tags (REQ-0096 — was a bug fix).
       // libass paints the BorderStyle=3 opaque box with OutlineColour
       // (`\3c` / `\3a`), NOT BackColour (`\4c` / `\4a` — that's the drop
@@ -263,10 +322,29 @@ export function generateAss(
         bgFillTag,
         bgAlphaTag,
         bgShadTag,
+        // REQ-0277 §2 — shadow tags after bg so a WithBox row doesn't get
+        // a stray drop shadow (bg path's \shad0 wins anyway; shadow tags
+        // are only emitted when !rowBgEnabled).
+        shadowDepthTag,
+        shadowColorTag,
+        shadowAlphaTag,
+        // REQ-0277 §3 — glow tags after outlineTag AND bg tags so a
+        // glow-enabled row overrides both outline color and bg tag
+        // colour for the blur halo (last-write-wins).
+        glowColorTag,
+        glowTag,
+        // REQ-0277 §4 — rotation last (order irrelevant for libass
+        // parsing but keeps the emitted string easy to read).
+        rotTag,
         fadeTag,
       ].filter(Boolean).join('')
 
-      const text = `{${styleTag}}${escapeAssText(e.text)}`
+      // REQ-0277 §1 — display casing.  Apply to the emitted text ONLY;
+      // e.text (the stored transcript) is unchanged.  SRT export
+      // continues to see the original text.  `casing === undefined`
+      // OR `'none'` → no transform.
+      const rawText = e.casing === 'uppercase' ? e.text.toUpperCase() : e.text
+      const text = `{${styleTag}}${escapeAssText(rawText)}`
 
       // Per-row MarginV — Dialogue's MarginV column overrides the Style-level
       // default per libass spec.  REQ-20260613-016 Phase 2 §A.

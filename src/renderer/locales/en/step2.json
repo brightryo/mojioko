@@ -171,7 +171,15 @@
     "offsetResetTitle": "Reset position",
     "bgEnabled": "Background",
     "bgColor": "BG color",
-    "bgOpacity": "Opacity"
+    "bgOpacity": "Opacity",
+    "casing": "Casing",
+    "casingNone": "None",
+    "casingUppercase": "ALL CAPS",
+    "shadow": "Shadow",
+    "shadowDepth": "Depth",
+    "glow": "Glow",
+    "glowRadius": "Radius",
+    "rotation": "Rotation (deg)"
   },
   "history": {
     "editText": "Edit text",
@@ -185,6 +193,10 @@
     "editMargin": "Change margin",
     "editOffset": "Change offset",
     "editBackground": "Change background",
+    "editCasing": "Change casing",
+    "editShadow": "Change shadow",
+    "editGlow": "Change glow",
+    "editRotation": "Change rotation",
     "dragPosition": "Drag position",
     "deleteRow": "Delete",
     "restoreRow": "Restore",
@@ -222,7 +234,11 @@
       "overflowWrap": "Bulk overflow-wrap ({{count}} rows)",
       "layout": "Bulk layout change ({{count}} rows)",
       "margin": "Bulk margin change ({{count}} rows)",
-      "background": "Bulk background change ({{count}} rows)"
+      "background": "Bulk background change ({{count}} rows)",
+      "casing": "Bulk casing change ({{count}} rows)",
+      "shadow": "Bulk shadow change ({{count}} rows)",
+      "glow": "Bulk glow change ({{count}} rows)",
+      "rotation": "Bulk rotation change ({{count}} rows)"
     }
   },
   "videoPreview": {

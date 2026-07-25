@@ -329,6 +329,53 @@ export function TimelineBlockInspector({
     applyStyleEdit(t('history.editFont'), { fontId: next })
   }
 
+  // REQ-0277 Phase A style-effect commit helpers.  Each accepts a
+  // patch on the SubtitleEntry and pushes one history entry so Undo
+  // restores the effect cleanly.  Neutral-default handling (undefined
+  // → off) lives in the renderers; the store simply carries whatever
+  // the user last set.
+  function handleCasingToggle(on: boolean) {
+    applyStyleEdit(t('history.editCasing'), { casing: on ? 'uppercase' : 'none' })
+  }
+  function handleShadowToggle(on: boolean) {
+    // Seed neutral defaults when turning ON so the effect is visible
+    // immediately (depth 4 / black / fully opaque).  Turning off keeps
+    // the last depth/color/alpha in place so re-enabling restores it.
+    if (on) {
+      applyStyleEdit(t('history.editShadow'), {
+        shadowEnabled: true,
+        shadowDepth: entry.shadowDepth ?? 4,
+        shadowColor: entry.shadowColor ?? '#000000',
+        shadowAlpha: entry.shadowAlpha ?? 100,
+      })
+    } else {
+      applyStyleEdit(t('history.editShadow'), { shadowEnabled: false })
+    }
+  }
+  function handleShadowDepthCommit(depth: number) {
+    applyStyleEdit(t('history.editShadow'), { shadowDepth: depth })
+  }
+  function handleGlowToggle(on: boolean) {
+    if (on) {
+      applyStyleEdit(t('history.editGlow'), {
+        glowEnabled: true,
+        glowRadius: entry.glowRadius ?? 6,
+        glowColor: entry.glowColor ?? '#FFFFFF',
+      })
+    } else {
+      applyStyleEdit(t('history.editGlow'), { glowEnabled: false })
+    }
+  }
+  function handleGlowRadiusCommit(radius: number) {
+    applyStyleEdit(t('history.editGlow'), { glowRadius: radius })
+  }
+  function handleRotationCommit(deg: number) {
+    // Normalise into [0, 360) so a runaway drag never accumulates
+    // beyond the ASS `\frz` legible range.
+    const normalized = ((deg % 360) + 360) % 360
+    applyStyleEdit(t('history.editRotation'), { rotation: normalized })
+  }
+
   // REQ-20260613-016 Phase 5 — per-row layout / background handlers
   // mirror subtitle-table.tsx so the inspector and the list view drive
   // identical history shapes for the new fields (機能A).
@@ -960,6 +1007,80 @@ export function TimelineBlockInspector({
                   disabled={isFrozen}
                   ariaLabel={t('styleCell.fade')}
                   fullWidth
+                />
+              </div>
+            </div>
+            {/* REQ-0277 Phase A — style effects row cluster.  Compact
+                layout (label + control, ~50 % column) matching the
+                Fade / Outline width rows above so the whole
+                字幕-section keeps a consistent visual rhythm.  Each row
+                is a single primary control; the color pickers for
+                shadow / glow are follow-up polish (see RES). */}
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.casing')}</label>
+              <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
+                <Switch
+                  checked={entry.casing === 'uppercase'}
+                  onCheckedChange={handleCasingToggle}
+                  disabled={isFrozen}
+                  aria-label={t('styleCell.casing')}
+                />
+                <span className="text-body-sm text-muted-foreground">
+                  {entry.casing === 'uppercase' ? t('styleCell.casingUppercase') : t('styleCell.casingNone')}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.shadow')}</label>
+              <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
+                <Switch
+                  checked={entry.shadowEnabled === true}
+                  onCheckedChange={handleShadowToggle}
+                  disabled={isFrozen}
+                  aria-label={t('styleCell.shadow')}
+                />
+                <NumberStepperInput
+                  value={entry.shadowDepth ?? 4}
+                  min={0}
+                  max={20}
+                  step={1}
+                  onCommit={handleShadowDepthCommit}
+                  disabled={isFrozen || !entry.shadowEnabled}
+                  ariaLabel={t('styleCell.shadowDepth')}
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.glow')}</label>
+              <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
+                <Switch
+                  checked={entry.glowEnabled === true}
+                  onCheckedChange={handleGlowToggle}
+                  disabled={isFrozen}
+                  aria-label={t('styleCell.glow')}
+                />
+                <NumberStepperInput
+                  value={entry.glowRadius ?? 6}
+                  min={0}
+                  max={20}
+                  step={1}
+                  onCommit={handleGlowRadiusCommit}
+                  disabled={isFrozen || !entry.glowEnabled}
+                  ariaLabel={t('styleCell.glowRadius')}
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.rotation')}</label>
+              <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
+                <NumberStepperInput
+                  value={entry.rotation ?? 0}
+                  min={0}
+                  max={359}
+                  step={15}
+                  onCommit={handleRotationCommit}
+                  disabled={isFrozen}
+                  ariaLabel={t('styleCell.rotation')}
                 />
               </div>
             </div>
