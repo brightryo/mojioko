@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
 import { getBinPath, getFontResolveDir } from '../lib/paths'
 import { generateAss } from './ass-generator'
+import { isPackagedAsMsix, getCurrentProcessContext } from '../lib/msix'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
 import type { ExportFrameRequest, ExportFrameResult } from '../../shared/ipc-contracts'
 import type { SubtitleEntry } from '../../shared/types'
@@ -104,7 +105,12 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
         // legal value so the signature is satisfied (matches ENTRY_LAYOUT_DEFAULTS).
         { horizontalPosition: 'center', verticalPosition: 'bottom', verticalMarginPx: 40 },
         subtitleBackground,
-        fontMeta.assFontName
+        fontMeta.assFontName,
+        // REQ-0286 — pass tier flag so karaoke gate applies to frame
+        // exports too.  Frame at time T renders the karaoke state at T
+        // (some words highlighted, some not); libass handles the time-
+        // slicing naturally when we render a single frame.
+        isPackagedAsMsix(getCurrentProcessContext()),
       )
       assPath = join(tmpdir(), `mojioko-frame-${randomUUID()}.ass`)
       await fs.writeFile(assPath, assContent, 'utf-8')

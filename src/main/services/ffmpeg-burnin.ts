@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
 import { getBinPath, getFontResolveDir } from '../lib/paths'
 import { generateAss } from './ass-generator'
+import { isPackagedAsMsix, getCurrentProcessContext } from '../lib/msix'
 import { getBestEncoder, buildEncoderArgs } from './encoder-detector'
 import { buildTrimConcatFilter } from './ffmpeg-trim-filter'
 import { buildAmixAudioFilter } from './preview-mix-filter'
@@ -149,7 +150,12 @@ export async function startBurnin(
 
   // Write ASS to temp file (project default goes into Style:, per-row
   // overrides come through as \fn<family> inline tags — see ass-generator).
-  const assContent = generateAss(entriesForAss, video, burnin, subtitleBackground, fontMeta.assFontName)
+  // REQ-0286 — pass the current build's tier flag through so the karaoke
+  // gate (`canUseKaraokeInTier`) inside ass-generator can gate the `\k`
+  // emit path.  Free builds get the plain path even when a project file
+  // carries `karaokeEnabled=true` (defence-in-depth vs. tier bypass).
+  const isMsix = isPackagedAsMsix(getCurrentProcessContext())
+  const assContent = generateAss(entriesForAss, video, burnin, subtitleBackground, fontMeta.assFontName, isMsix)
   const assPath = join(tmpdir(), `mojioko-${randomUUID()}.ass`)
   await fs.writeFile(assPath, assContent, 'utf-8')
 

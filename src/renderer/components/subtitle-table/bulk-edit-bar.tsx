@@ -9,6 +9,8 @@ import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-sl
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
+import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR, KARAOKE_DEFAULT_BASE_COLOR } from '../../../shared/karaoke-gate'
 import { HelpIcon } from '@/components/help-icon'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -550,6 +552,23 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     )
   }
 
+  // REQ-0286 §5 — karaoke bulk toggle.  Seeds hardcoded default
+  // colours on ON so every selected row gets a visible karaoke effect
+  // in one operation.  Free tier: the row is hidden entirely (tier
+  // gate above), so this handler is unreachable on NSIS builds.
+  function handleKaraokeBulkToggle(on: boolean) {
+    applyBulk(
+      on
+        ? {
+            karaokeEnabled: true,
+            karaokeHighlightColor: KARAOKE_DEFAULT_HIGHLIGHT_COLOR,
+            karaokeBaseColor: KARAOKE_DEFAULT_BASE_COLOR,
+          }
+        : { karaokeEnabled: false },
+      t('bulk.history.karaoke', { count: selectedRowIds.size }),
+    )
+  }
+
   // REQ-20260613-016 Phase 5 — per-row layout / background bulk handlers.
   // Layout fields (horizontal / vertical / margin) commit independently
   // since each row's existing value of the other two should stay put.
@@ -963,6 +982,21 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             </div>
           </label>
           {/* REQ-0278 — glow bulk-toggle removed here (SPECIFICATION.md §11). */}
+          {/* REQ-0286 §5 — karaoke bulk toggle.  Hidden on free tier
+              (`canUseKaraokeInTier(isMsix)` returns false) so no free-
+              tier bulk state can be written.  Colours are seeded to
+              the karaoke defaults; per-row colour tweaking happens in
+              the inspector (mirrors how bulk-shadow seeds neutral
+              defaults but exposes no per-colour controls). */}
+          {canUseKaraokeInTier(useAppEnvStore((s) => s.isMsix) ?? false) && (
+            <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+              <span>{t('styleCell.karaoke')}</span>
+              <div className="flex items-center gap-2 w-[50%]">
+                <Switch onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
+                <span className="text-caption text-muted-foreground">{t('styleCell.karaokeSeededDefault')}</span>
+              </div>
+            </label>
+          )}
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('styleCell.rotation')}</span>
             <div className="w-[50%]">

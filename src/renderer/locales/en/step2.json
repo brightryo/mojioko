@@ -177,6 +177,13 @@
     "casingUppercase": "ALL CAPS",
     "shadow": "Shadow",
     "shadowDepth": "Depth",
+    "karaoke": "Karaoke",
+    "karaokeOn": "On",
+    "karaokeOff": "Off",
+    "karaokeOnNoWords": "On (no per-word data — this cue renders plain)",
+    "karaokeHighlightColor": "Spoken",
+    "karaokeBaseColor": "Unspoken",
+    "karaokeSeededDefault": "Uses default colors",
     "rotation": "Rotation (deg)"
   },
   "history": {
@@ -193,6 +200,7 @@
     "editBackground": "Change background",
     "editCasing": "Change casing",
     "editShadow": "Change shadow",
+    "editKaraoke": "Change karaoke",
     "editRotation": "Change rotation",
     "dragPosition": "Drag position",
     "deleteRow": "Delete",
@@ -234,6 +242,7 @@
       "background": "Bulk background change ({{count}} rows)",
       "casing": "Bulk casing change ({{count}} rows)",
       "shadow": "Bulk shadow change ({{count}} rows)",
+      "karaoke": "Bulk karaoke change ({{count}} rows)",
       "rotation": "Bulk rotation change ({{count}} rows)"
     }
   },

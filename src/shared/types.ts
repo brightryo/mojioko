@@ -164,6 +164,32 @@ export interface SubtitleEntryOriginal {
   rotation?: number
 
   /**
+   * REQ-0286 Phase B — karaoke / per-word highlight.  When
+   * `karaokeEnabled === true` AND the tier gate
+   * (`canUseKaraokeInTier(isMsix)`) allows AND
+   * `areWordsValidForText(words, text)` holds, the burn-in path emits
+   * ASS `\k` tags and the preview highlights each word as its
+   * timestamp is reached.  Any of those three failing → the cue
+   * falls back to plain rendering (see the fallback contract in
+   * REQ-0286 §0).
+   *
+   * Colours are BOTH stored so bulk-toggling ON seeds sensible
+   * defaults (`KARAOKE_DEFAULT_HIGHLIGHT_COLOR` /
+   * `KARAOKE_DEFAULT_BASE_COLOR` in `karaoke-gate.ts`) without a
+   * separate defaults surface.  When karaoke is off the fields are
+   * ignored and the cue uses `textColorHex` as usual.
+   *
+   * `undefined` / `false` on `karaokeEnabled` = disabled (default) —
+   * pre-REQ-0286 project files load with no karaoke behaviour, matching
+   * the additive-optional contract every Phase A/B field follows.
+   */
+  karaokeEnabled?: boolean
+  /** `#RRGGBB` — spoken/past words (maps to ASS PrimaryColour when karaoke on). */
+  karaokeHighlightColor?: string
+  /** `#RRGGBB` — unspoken/future words (maps to ASS SecondaryColour when karaoke on). */
+  karaokeBaseColor?: string
+
+  /**
    * REQ-0285 Phase B foundation — per-word timestamps captured by
    * faster-whisper at transcribe time.  Absolute video seconds (same
    * axis as `startSec` / `endSec`).  `text` retains faster-whisper's

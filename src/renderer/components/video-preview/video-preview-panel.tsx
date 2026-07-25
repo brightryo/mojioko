@@ -498,6 +498,40 @@ export function VideoPreviewPanel() {
         // Guard CSSOM writes so a steady-state caption (mid-plateau,
         // opacity = "1") does not invalidate style every frame.
         if (el.style.opacity !== next) el.style.opacity = next
+
+        // REQ-0286 §3 — karaoke per-word highlight, piggy-backed on the
+        // same rAF loop so we don't spin a second animation frame
+        // driver.  For each active karaoke cue, query its per-word
+        // spans (data-karaoke-word-idx) and write span.style.color
+        // directly.  Guarded on the outer entry's karaokeEnabled +
+        // words presence so we skip the query entirely for cues that
+        // don't have karaoke spans in the DOM.  The tier check
+        // (`canUseKaraokeInTier`) already ran at render time in
+        // subtitle-overlay — if it failed there, no
+        // data-karaoke-word-idx spans exist, so this branch is a
+        // no-op even without an explicit tier check here.
+        if (entry.karaokeEnabled && entry.words && entry.words.length > 0) {
+          const highlightColor = entry.karaokeHighlightColor ?? '#FFFF00'
+          const baseColor = entry.karaokeBaseColor ?? '#FFFFFF'
+          const wordSpans = el.querySelectorAll<HTMLElement>('[data-karaoke-word-idx]')
+          for (const span of wordSpans) {
+            const startSecAttr = span.getAttribute('data-karaoke-word-start-sec')
+            if (startSecAttr === null) continue
+            const wordStart = parseFloat(startSecAttr)
+            // Same "sticky highlight" rule as libass \k: once the
+            // playhead has passed the word's start, it stays lit.
+            // Paused case: honour the current playhead position too
+            // so a scrub reveals the correct karaoke state instantly.
+            const shouldHighlight = t >= wordStart
+            const targetColor = shouldHighlight ? highlightColor : baseColor
+            // Guard CSSOM writes at steady state — same rationale as
+            // opacity above.  A cue mid-plateau touches at most one
+            // span per frame (the one that just flipped).
+            if (span.style.color !== targetColor) {
+              span.style.color = targetColor
+            }
+          }
+        }
       }
       // REQ-086 — audio drift check piggy-backs on the same rAF.  The
       // guards (no audio element / video paused / video mid-seek) keep

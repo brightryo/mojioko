@@ -1,6 +1,9 @@
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground } from '../../shared/types'
 import { ASS_MARGIN_LR_PX } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
+import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR, KARAOKE_DEFAULT_BASE_COLOR } from '../../shared/karaoke-gate'
+import { buildKaraokeAssText } from '../../shared/karaoke-ass'
+import { areWordsValidForText } from '../../shared/words-validity'
 
 /**
  * REQ-20260613-016 Phase 2 — ass-generator no longer imports the main-process
@@ -146,7 +149,18 @@ export function generateAss(
    * callers that pre-date font selection continue to produce the v1.0/v1.1
    * output unchanged.
    */
-  assFontName: string = 'Noto Sans JP SemiBold'
+  assFontName: string = 'Noto Sans JP SemiBold',
+  /**
+   * REQ-0286 §0 — current build's tier flag.  Karaoke is gated behind
+   * `canUseKaraokeInTier(isMsix)`; when false, karaoke-enabled cues
+   * fall through to plain rendering (no `\k` tags, no colour swap)
+   * regardless of the entry's `karaokeEnabled` field.  Defaults to
+   * `false` so pre-REQ-0286 callers (and every existing unit test)
+   * get the plain path automatically — the "byte-identical to
+   * pre-REQ-0286 output for entries without karaoke" invariant is
+   * pinned by `ass-generator-baseline-ac1fd67.test.ts`.
+   */
+  isMsix: boolean = false,
 ): string {
   // `burnin` / `subtitleBackground` are vestigial (see JSDoc above).  Reference
   // them once so `noUnusedParameters` stays quiet without disabling lint.
@@ -226,7 +240,23 @@ export function generateAss(
       const posTag = isPinned ? `\\pos(${e.posX},${e.posY})` : ''
 
       const sizeTag    = `\\fs${e.fontSizePx}`
-      const fillTag    = `\\c${hexToAss(e.textColorHex)}`
+      // REQ-0286 §0 / §2 — karaoke gate (paid + toggle-on + words-valid).
+      // When active, PrimaryColour is the HIGHLIGHT (spoken-word) colour
+      // and we ALSO emit `\2c` for SecondaryColour (unspoken/base).  When
+      // inactive, `fillTag` stays on `textColorHex` as before and no
+      // `\2c` is emitted — output is byte-identical to pre-REQ-0286 for
+      // entries without karaoke, pinned by
+      // `ass-generator-baseline-ac1fd67.test.ts`.
+      const karaokeActive =
+        e.karaokeEnabled === true
+        && canUseKaraokeInTier(isMsix)
+        && areWordsValidForText(e.words, e.text)
+      const fillTag = karaokeActive
+        ? `\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}`
+        : `\\c${hexToAss(e.textColorHex)}`
+      const karaokeSecondaryTag = karaokeActive
+        ? `\\2c${hexToAss(e.karaokeBaseColor ?? KARAOKE_DEFAULT_BASE_COLOR)}`
+        : ''
       const outlineTag = `\\3c${hexToAss(e.outlineColorHex)}`
       const bordTag    = `\\bord${e.outlineThicknessPx}`
 
@@ -298,6 +328,12 @@ export function generateAss(
         fontTag,
         sizeTag,
         fillTag,
+        // REQ-0286 — `\2c` (SecondaryColour) placed right after `\c`
+        // (PrimaryColour) so both colours are established before any
+        // karaoke `\k` tag references them.  Empty string when
+        // karaoke is inactive; `.filter(Boolean).join('')` drops it
+        // cleanly with no whitespace drift.
+        karaokeSecondaryTag,
         outlineTag,
         bordTag,
         // bg tags MUST come AFTER outlineTag so libass takes the bg color
@@ -321,8 +357,27 @@ export function generateAss(
       // e.text (the stored transcript) is unchanged.  SRT export
       // continues to see the original text.  `casing === undefined`
       // OR `'none'` → no transform.
-      const rawText = e.casing === 'uppercase' ? e.text.toUpperCase() : e.text
-      const text = `{${styleTag}}${escapeAssText(rawText)}`
+      // REQ-0286 §2 — when karaoke is active, the text portion is
+      // built from `words` via `buildKaraokeAssText`, which inserts
+      // `\k<duration>` between each word and preserves the words'
+      // own leading spaces.  The cue's `\N` auto-line-break positions
+      // are INTENTIONALLY not applied here (see karaoke-ass.ts docstring
+      // "What this DOES NOT do") — karaoke cues use natural word-wrap
+      // on both preview and burn-in so the two stay pixel-consistent.
+      // Casing applies word-by-word via the escaper wrapper so
+      // uppercase karaoke still works.
+      let text: string
+      if (karaokeActive && e.words) {
+        const escapeWord = (s: string): string => {
+          const cased = e.casing === 'uppercase' ? s.toUpperCase() : s
+          return escapeAssText(cased)
+        }
+        const karaokeBody = buildKaraokeAssText(e.words, e.startSec, e.endSec, escapeWord)
+        text = `{${styleTag}}${karaokeBody}`
+      } else {
+        const rawText = e.casing === 'uppercase' ? e.text.toUpperCase() : e.text
+        text = `{${styleTag}}${escapeAssText(rawText)}`
+      }
 
       // Per-row MarginV — Dialogue's MarginV column overrides the Style-level
       // default per libass spec.  REQ-20260613-016 Phase 2 §A.

@@ -13,6 +13,8 @@ import { useAppEnvStore } from '@/stores/app-env-store'
 import { canSelectFontInTier } from '@/lib/font-tier'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
+import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR, KARAOKE_DEFAULT_BASE_COLOR } from '../../../shared/karaoke-gate'
+import { areWordsValidForText } from '../../../shared/words-validity'
 
 /**
  * REQ-0277 §2 — convert `#RRGGBB` + alpha (0-1 float) to an `rgba(...)`
@@ -469,6 +471,26 @@ export function SubtitleOverlay({
   const renderedText = cmapCoverage !== null && tofuSubstitute !== null
     ? substituteMissingGlyphs(rawText, cmapCoverage, tofuSubstitute)
     : rawText
+
+  // REQ-0286 §0 — karaoke gate: paid tier (`canUseKaraokeInTier`) +
+  // per-cue toggle-on + words-valid (`areWordsValidForText`).  All
+  // three must hold; any failing → this cue falls through to the
+  // pre-REQ-0286 plain rendering path.  The check runs on EVERY
+  // render but is cheap (three ANDs); the actual per-frame highlight
+  // update lives in the parent's rAF loop (video-preview-panel.tsx)
+  // which reads `data-karaoke-word-idx` attributes and writes span
+  // colours directly via the DOM.
+  const karaokeActive =
+    entry.karaokeEnabled === true
+    && canUseKaraokeInTier(isMsix)
+    && areWordsValidForText(entry.words, entry.text)
+  const karaokeHighlightColorResolved = entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR
+  const karaokeBaseColorResolved = entry.karaokeBaseColor ?? KARAOKE_DEFAULT_BASE_COLOR
+  // Silence "declared but never read" during the initial render — the
+  // parent's rAF loop consumes the highlight colour via the entry
+  // Map, not through a prop from here.  Keeping the local const
+  // documents the resolution rule alongside the base colour.
+  void karaokeHighlightColorResolved
   // REQ-20260615-039 — always wrap the visible text in this inline span so
   // the parent's position-guide measurement is consistent across layouts.
   // The `display: inline` (default) keeps inline flow identical to writing
@@ -505,7 +527,14 @@ export function SubtitleOverlay({
         fontWeight: fontMeta.weight,
         fontSize:   `${fontSizePx}px`,
         lineHeight,
-        color:      entry.textColorHex,
+        // REQ-0286 — when karaoke is active, per-word spans set their
+        // own colour (parent rAF drives highlight vs base).  The outer
+        // span's `color` becomes a fallback (used for any text not
+        // wrapped by a word span, which in practice is none).  We set
+        // the outer to base colour so any residual leaves the cue
+        // consistent with "unspoken words are base colour" until the
+        // rAF paints its first frame.
+        color:      karaokeActive ? karaokeBaseColorResolved : entry.textColorHex,
         WebkitTextStrokeWidth: showOutline ? `${strokeWidthPx}px` : undefined,
         WebkitTextStrokeColor: showOutline ? entry.outlineColorHex : undefined,
         paintOrder: 'stroke fill',
@@ -528,9 +557,44 @@ export function SubtitleOverlay({
         // and React never touches the value.
       }}
     >
-      <span ref={spanRef} style={textWrapperStyle}>
-        {renderedText}
-      </span>
+      {/* REQ-0286 §3 — karaoke render.  When karaoke is active
+          (paid tier + toggle-on + words-valid), we split the cue into
+          per-word `<span>` elements carrying `data-karaoke-word-idx`
+          + `data-karaoke-word-start-sec`.  The parent's rAF loop
+          (video-preview-panel.tsx) walks these spans on each frame
+          and sets their `style.color` directly via the DOM.  If no
+          rAF driver runs (e.g. style-sample-preview), the spans
+          render in their default color (= base colour) — a static
+          "unspoken" preview, which is a reasonable fallback for a
+          non-playback context.  All karaoke word.text values keep
+          faster-whisper's leading spaces so the rendered token
+          spacing matches natural word wrap; the cue's `\N` breaks
+          are NOT applied here (see karaoke-ass.ts docstring for the
+          preview↔burn-in parity rationale).
+          When karaoke is inactive, we render the pre-REQ-0286
+          single-text-node path unchanged (RES-0286 §4 fallback). */}
+      {karaokeActive && entry.words ? (
+        <span
+          ref={spanRef}
+          data-karaoke-cue-id={entry.id}
+          style={textWrapperStyle}
+        >
+          {entry.words.map((w, i) => (
+            <span
+              key={i}
+              data-karaoke-word-idx={i}
+              data-karaoke-word-start-sec={w.startSec}
+              style={{ color: karaokeBaseColorResolved }}
+            >
+              {w.text}
+            </span>
+          ))}
+        </span>
+      ) : (
+        <span ref={spanRef} style={textWrapperStyle}>
+          {renderedText}
+        </span>
+      )}
       {interactive && (
         <span
           aria-hidden="true"

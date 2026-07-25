@@ -177,6 +177,13 @@
     "casingUppercase": "ALL CAPS",
     "shadow": "影",
     "shadowDepth": "影の距離",
+    "karaoke": "カラオケ",
+    "karaokeOn": "有効",
+    "karaokeOff": "無効",
+    "karaokeOnNoWords": "有効（この字幕はワード情報がないため通常表示になります）",
+    "karaokeHighlightColor": "発話済み色",
+    "karaokeBaseColor": "未発話色",
+    "karaokeSeededDefault": "既定色で開始",
     "rotation": "回転 (度)"
   },
   "history": {
@@ -193,6 +200,7 @@
     "editBackground": "背景を変更",
     "editCasing": "大文字化を変更",
     "editShadow": "影を変更",
+    "editKaraoke": "カラオケを変更",
     "editRotation": "回転を変更",
     "dragPosition": "位置をドラッグで変更",
     "deleteRow": "削除",
@@ -234,6 +242,7 @@
       "background": "背景を一括変更 ({{count}}件)",
       "casing": "大文字化を一括変更 ({{count}}件)",
       "shadow": "影を一括変更 ({{count}}件)",
+      "karaoke": "カラオケを一括変更 ({{count}}件)",
       "rotation": "回転を一括変更 ({{count}}件)"
     }
   },

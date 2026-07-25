@@ -13,6 +13,9 @@ import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-sl
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
+import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR, KARAOKE_DEFAULT_BASE_COLOR } from '../../../shared/karaoke-gate'
+import { areWordsValidForText } from '../../../shared/words-validity'
 import { HelpIcon } from '@/components/help-icon'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
@@ -356,6 +359,48 @@ export function TimelineBlockInspector({
     applyStyleEdit(t('history.editShadow'), { shadowDepth: depth })
   }
   // REQ-0278 — glow handlers removed (see SPECIFICATION.md §11).
+
+  // REQ-0286 §5 — karaoke handlers.  Toggle-on seeds hardcoded default
+  // colours (yellow highlight + white base) so the effect is visible
+  // immediately; toggle-off keeps the last colours in place so re-
+  // enabling restores them.
+  function handleKaraokeToggle(on: boolean) {
+    if (on) {
+      applyStyleEdit(t('history.editKaraoke'), {
+        karaokeEnabled: true,
+        karaokeHighlightColor: entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR,
+        karaokeBaseColor: entry.karaokeBaseColor ?? KARAOKE_DEFAULT_BASE_COLOR,
+      })
+    } else {
+      applyStyleEdit(t('history.editKaraoke'), { karaokeEnabled: false })
+    }
+  }
+  // REQ-0286 §5 — colour picker follows the shared textColor/outlineColor
+  // pattern: `onChange` writes preview (per-drag frame) via
+  // updateEntryPreview, `onCommit` pushes ONE history op at popover close
+  // so a whole drag collapses to a single undo.  Same code shape as
+  // handleTextColorCommit above.
+  function handleKaraokeHighlightPreview(hex: string) {
+    updateEntryPreview(entry.id, { karaokeHighlightColor: hex })
+  }
+  function handleKaraokeHighlightCommit(hex: string, hexOnOpen: string) {
+    applyStyleEdit(
+      t('history.editKaraoke'),
+      { karaokeHighlightColor: hex },
+      { karaokeHighlightColor: hexOnOpen },
+    )
+  }
+  function handleKaraokeBasePreview(hex: string) {
+    updateEntryPreview(entry.id, { karaokeBaseColor: hex })
+  }
+  function handleKaraokeBaseCommit(hex: string, hexOnOpen: string) {
+    applyStyleEdit(
+      t('history.editKaraoke'),
+      { karaokeBaseColor: hex },
+      { karaokeBaseColor: hexOnOpen },
+    )
+  }
+
   function handleRotationCommit(deg: number) {
     // Normalise into [0, 360) so a runaway drag never accumulates
     // beyond the ASS `\frz` legible range.
@@ -616,6 +661,22 @@ export function TimelineBlockInspector({
   // swap the row from trimDeleted to manuallyDeleted).
   const isTrimDeleted = effectiveEntryState(entry, cuts).status === 'trimDeleted'
   const isFrozen = entry.isDeleted || isTrimDeleted
+  // REQ-0286 §0 / §5 — karaoke tier gate at the UI layer.  The inspector's
+  // karaoke row hides entirely on free (NSIS) builds so a free-tier user
+  // never sees the switch, cannot toggle it via keyboard focus, and
+  // cannot store karaoke state to project files.  `useAppEnvStore.isMsix`
+  // is `null` in the brief pre-IPC window; coerce to false so the more
+  // restrictive path wins during that transient (matches every other
+  // tier-gated UI in the codebase).
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
+  const showKaraokeUi = canUseKaraokeInTier(isMsix)
+  // Words-valid check surfaces the "toggle is available but cue has no
+  // per-word data" state so the row can render a subtle hint.  When
+  // validity is false the switch still works (toggling ON stores the
+  // flag; renderer + ass-generator fall through to plain rendering per
+  // §0's Layer 2 defensive fallback) but the muted colour + hint
+  // communicates why nothing visible happens.
+  const karaokeWordsValid = areWordsValidForText(entry.words, entry.text)
   // REQ-119 [2] — Reset is an EDIT (= wipe per-row overrides back to
   // `entry.original`).  A frozen row only accepts the Restore button
   // next to it; the table chrome already rejects the Reset for the
@@ -1038,6 +1099,67 @@ export function TimelineBlockInspector({
               </div>
             </div>
             {/* REQ-0278 — glow row removed here (SPECIFICATION.md §11). */}
+            {/* REQ-0286 §5 — karaoke row.  Hidden entirely on free
+                tier (`showKaraokeUi = canUseKaraokeInTier(isMsix)`) so
+                no karaoke state can be created or stored from a free
+                build.  On paid tier: Switch + 2 colour pickers
+                (highlight = spoken/past, base = unspoken/future).
+                When `karaokeWordsValid` is false, we still render the
+                controls (so a user with a per-cue-edited entry can
+                toggle for future re-transcription) but attach a
+                muted hint noting per-word data is missing. */}
+            {showKaraokeUi && (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.karaoke')}</label>
+                  <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
+                    <Switch
+                      checked={entry.karaokeEnabled === true}
+                      onCheckedChange={handleKaraokeToggle}
+                      disabled={isFrozen}
+                      aria-label={t('styleCell.karaoke')}
+                    />
+                    <span className="text-body-sm text-muted-foreground">
+                      {entry.karaokeEnabled === true
+                        ? (karaokeWordsValid
+                            ? t('styleCell.karaokeOn')
+                            : t('styleCell.karaokeOnNoWords'))
+                        : t('styleCell.karaokeOff')}
+                    </span>
+                  </div>
+                </div>
+                {entry.karaokeEnabled === true && (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.karaokeHighlightColor')}</label>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <ColorPicker
+                          value={entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR}
+                          onChange={handleKaraokeHighlightPreview}
+                          onCommit={handleKaraokeHighlightCommit}
+                          disabled={isFrozen}
+                          swatchOnly
+                          heading={t('styleCell.karaokeHighlightColor')}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.karaokeBaseColor')}</label>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <ColorPicker
+                          value={entry.karaokeBaseColor ?? KARAOKE_DEFAULT_BASE_COLOR}
+                          onChange={handleKaraokeBasePreview}
+                          onCommit={handleKaraokeBaseCommit}
+                          disabled={isFrozen}
+                          swatchOnly
+                          heading={t('styleCell.karaokeBaseColor')}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
             <div className="flex items-center justify-between gap-2">
               <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.rotation')}</label>
               <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
