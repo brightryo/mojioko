@@ -899,6 +899,43 @@ export function getFontFamilies(): FontFamily[] {
 }
 
 /**
+ * REQ-0281 §3 / §4-2 — family-level status for the FontPicker's
+ * list section.  Binary result matching the REQ's "0 / 1" model:
+ * a family counts as `'installed'` only when EVERY registered
+ * weight is on-disk AND the recorded set version matches.
+ * Bundled Noto is a special case — its family reports
+ * `'bundled'` because at least one weight (Regular / Medium /
+ * SemiBold) ships in the installer payload, so it's always
+ * available regardless of the downloadable extra weights.
+ *
+ * Rules (mirror the REQ intent — no intermediate state):
+ *   hasBundledWeight = true                          → 'bundled'
+ *   every downloadable weight installed && setIsCurrent → 'installed'
+ *   otherwise (any weight missing OR version stale)  → 'not-installed'
+ *
+ * The `setIsCurrent` input MUST come from the caller (comparing
+ * `settings.fontSetInstalledVersion` to `FONT_SET_VERSION`); this
+ * helper stays free of any storage / IO concern so it can be unit
+ * tested with plain booleans.
+ */
+export type FamilyStatus = 'bundled' | 'installed' | 'not-installed'
+
+export function deriveFamilyStatus(
+  family: FontFamily,
+  isInstalledOnDisk: (fontId: FontId) => boolean,
+  setIsCurrent: boolean,
+): FamilyStatus {
+  if (family.hasBundledWeight) return 'bundled'
+  // For a non-bundled family, EVERY registered weight must be present
+  // and the set version must match.  Missing even one weight collapses
+  // to `not-installed` — no partial state is allowed in the REQ-0281
+  // binary model.
+  if (!setIsCurrent) return 'not-installed'
+  const everyWeightPresent = family.weights.every((w) => isInstalledOnDisk(w.fontId))
+  return everyWeightPresent ? 'installed' : 'not-installed'
+}
+
+/**
  * REQ-0269 B — resolve the FontId that a given `(family, weight)` pair
  * points at.  Used by the weight selector's onChange path to translate
  * a numeric weight click into the concrete FontId to write into the

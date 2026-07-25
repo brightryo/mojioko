@@ -251,3 +251,44 @@ export function uninstallFont(fontId: FontId): void {
     log.info(`[font-downloader] uninstalled ${fontId}`)
   }
 }
+
+/**
+ * REQ-0281 §4 — sweep every downloaded non-bundled font off disk.
+ *
+ * Called from two paths:
+ *  1. Batch-DL cancel / failure — REQ-0281 §4-3 says a partial batch must
+ *     leave zero downloaded files behind, so the next batch always starts
+ *     from the clean slate.  Combined with the caller clearing
+ *     `fontSetInstalledVersion` back to `undefined`, this pins the binary
+ *     state at 0 (`not-installed`).
+ *  2. The "Uninstall all additional fonts" button on the FontPicker
+ *     (REQ-0281 §4-5, owner-approved: individual per-row trash was
+ *     replaced by a single set-wide operation because per-row deletion
+ *     contradicts the binary state model).
+ *
+ * Bundled Noto weights are never touched — their TTFs live in the
+ * installer payload (`resources/fonts/Noto_Sans_JP/static/`) which
+ * this process has no business modifying at runtime.
+ *
+ * Returns the list of fontIds that were actually removed (empty when
+ * the disk was already clean) so callers can log or toast a count.
+ */
+export function uninstallAllDownloaded(): FontId[] {
+  const removed: FontId[] = []
+  for (const meta of FONT_REGISTRY) {
+    if (meta.bundled) continue
+    const dir = getFontUserDir(meta.id)
+    if (!existsSync(dir)) continue
+    try {
+      rmSync(dir, { recursive: true, force: true })
+      removed.push(meta.id)
+    } catch (err) {
+      log.warn(`[font-downloader] uninstallAllDownloaded: failed to remove ${meta.id}: ${(err as Error).message}`)
+      // Continue with the rest — one failure shouldn't strand the others.
+    }
+  }
+  if (removed.length > 0) {
+    log.info(`[font-downloader] uninstallAllDownloaded removed ${removed.length} font(s): ${removed.join(', ')}`)
+  }
+  return removed
+}

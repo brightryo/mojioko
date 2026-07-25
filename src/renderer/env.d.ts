@@ -53,6 +53,8 @@ declare global {
       fontDownload: (fontId: FontId) => Promise<IpcResult<{ channelId: string }>>
       fontDownloadCancel: (channelId: string) => Promise<void>
       fontUninstall: (fontId: FontId) => Promise<IpcResult<FontsState>>
+      // REQ-0281 §4 — batch DL cancel cleanup + user-triggered "uninstall all".
+      fontUninstallAll: () => Promise<IpcResult<FontsState & { removedIds: FontId[] }>>
       fontSetActive: (fontId: FontId) => Promise<IpcResult<FontsState>>
       fontReadOfl: (fontId: FontId) => Promise<IpcResult<string>>
       fontReadBytes: (fontId: FontId) => Promise<IpcResult<ArrayBuffer>>

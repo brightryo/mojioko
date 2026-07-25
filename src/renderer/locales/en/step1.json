@@ -241,19 +241,11 @@
   },
   "fontPicker": {
     "title": "Select default subtitle font",
+    "section1Description": "Select the default subtitle font.",
+    "listSectionTitle": "Font list",
+    "listSectionDescription": "Adding and downloading fonts is a paid-version feature.",
     "description": "Click a font to set it as the default. Adding and downloading fonts is a paid-version feature.",
-    "status": {
-      "bundled": "Bundled",
-      "installed": "Installed",
-      "notInstalled": "Not installed",
-      "downloading": "Downloading…",
-      "active": "Active"
-    },
     "action": {
-      "download": "Download",
-      "cancel": "Cancel",
-      "uninstall": "Uninstall",
-      "select": "Use this font",
       "viewLicense": "View license",
       "lockedPaidOnly": "Paid-version only"
     },
@@ -262,34 +254,37 @@
       "missingRareKanjiHelp": "This font omits a small set of post-jōyō kanji (塡 剝 頰 and similar).  Subtitles containing those characters may fall back to another face mid-word."
     },
     "toast": {
-      "downloadComplete": "{{name}} downloaded",
-      "downloadFailed": "Download failed: {{error}}",
-      "downloadUnavailable": "{{name}} is not yet available — please try again later",
-      "uninstalled": "{{name}} uninstalled",
-      "uninstalledFallback": "{{name}} was removed — {{count}} subtitle(s) reverted to the default font",
       "activated": "Switched to {{name}}"
     },
-    "uninstallConfirm": {
-      "title": "Remove {{name}}?",
-      "body": "{{name}} is used by {{count}} subtitle(s). Removing it will revert them to the default font.",
-      "confirm": "Remove",
-      "cancel": "Cancel"
-    },
     "tofuNote": "Characters not included in the font appear as □ or ? (e.g. using Japanese with an English-only font).",
-    "upgradeNotice": "This update requires re-downloading your fonts. Please click \"Download all\" to refresh.",
+    "upgradeNotice": "This update requires re-downloading your fonts. Please click \"Download additional fonts\" to refresh.",
     "langLegend": {
       "en": "English support",
       "ja": "Japanese support"
     },
     "batchDownload": {
-      "button": "Download all",
-      "buttonTooltip": "Download every font that isn't installed yet",
+      "button": "Download additional fonts",
+      "buttonReinstall": "Re-download additional fonts",
+      "buttonTooltip": "Download the full additional-font set",
       "cancel": "Cancel",
-      "progress": "{{completed}} / {{total}} downloading…",
       "toast": {
-        "done": "Downloaded {{count}} font(s)",
-        "cancelled": "Batch download cancelled ({{completed}} / {{total}} downloaded)",
-        "partial": "Downloaded {{completed}} of {{total}} — {{failed}} failed"
+        "done": "Additional fonts downloaded successfully",
+        "cancelled": "Download cancelled — partially downloaded fonts were removed",
+        "failed": "Download failed — partially downloaded fonts were removed"
+      }
+    },
+    "uninstallAll": {
+      "button": "Uninstall additional fonts",
+      "buttonTooltip": "Remove all additional fonts (bundled fonts are not affected)",
+      "toast": {
+        "done": "Removed {{count}} additional font(s) — {{rows}} subtitle(s) reverted to the default font",
+        "failed": "Failed to remove additional fonts"
+      },
+      "confirm": {
+        "title": "Remove all additional fonts?",
+        "body": "{{count}} subtitle(s) in the current project use an additional font. Removing will revert them to the default font.",
+        "confirm": "Remove",
+        "cancel": "Cancel"
       }
     }
   }

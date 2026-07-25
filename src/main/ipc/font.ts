@@ -14,7 +14,8 @@ import {
 import {
   buildFontsState,
   downloadFont,
-  uninstallFont as removeFontDir
+  uninstallFont as removeFontDir,
+  uninstallAllDownloaded,
 } from '../services/font-downloader'
 import { downloadManager, type DownloadToken } from '../services/download-manager'
 import { getFontUserDir, getFontResolveDir, getBundledOflPath } from '../lib/paths'
@@ -105,6 +106,40 @@ export function registerFontHandlers(): void {
   ipcMain.handle(`${Channels.fontDownload}:cancel`, (_event, channelId: string): void => {
     activeDownloads.get(channelId)?.cancel()
     activeDownloads.delete(channelId)
+  })
+
+  // REQ-0281 §4 — "Uninstall all additional fonts" + batch-DL cancel cleanup.
+  // Deletes every non-bundled font directory AND clears
+  // `fontSetInstalledVersion` so the next `fontList` reports the whole
+  // set as `not-installed` (binary state model).  If the active font was
+  // a downloaded weight, it falls back to `DEFAULT_FONT_ID` — same
+  // policy as the per-font uninstall handler below.
+  ipcMain.handle(Channels.fontUninstallAll, async (): Promise<OkResult<FontsState & { removedIds: FontId[] }> | ErrResult> => {
+    try {
+      const removed = uninstallAllDownloaded()
+      const settings = await loadSettings()
+      // Clear the version stamp so the binary state pins to 0.  Even if
+      // `removed` was empty (disk already clean), we still reset here so
+      // callers can use this handler idempotently as "make sure we're at 0".
+      settings.fontSetInstalledVersion = undefined
+      // If the active font was one of the removed weights, fall back to
+      // the bundled default so no orphaned selection survives.
+      const activeStillOk =
+        settings.activeFontId
+        && isFontId(settings.activeFontId)
+        && !removed.includes(settings.activeFontId as FontId)
+      if (!activeStillOk) {
+        settings.activeFontId = DEFAULT_FONT_ID
+      }
+      await saveSettings(settings)
+      const active = settings.activeFontId as FontId
+      const state = buildFontsState(active, settings.fontSetInstalledVersion)
+      log.info(`[ipc/font] uninstallAll removed ${removed.length} font(s); fontSetInstalledVersion cleared`)
+      return { ok: true, data: { ...state, removedIds: removed } }
+    } catch (err) {
+      log.error('[ipc/font] uninstallAll error', err)
+      return { ok: false, error: { code: 'FONT_UNINSTALL_ALL_ERROR', message: (err as Error).message } }
+    }
   })
 
   ipcMain.handle(Channels.fontUninstall, async (_event, fontId: string): Promise<OkResult<FontsState> | ErrResult> => {

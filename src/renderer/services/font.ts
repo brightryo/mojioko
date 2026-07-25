@@ -11,6 +11,20 @@ export async function uninstallFont(fontId: FontId): Promise<IpcResult<FontsStat
   return window.electronAPI.fontUninstall(fontId)
 }
 
+/**
+ * REQ-0281 §4 — remove every downloaded (non-bundled) font AND reset
+ * `fontSetInstalledVersion` back to undefined so the binary set state
+ * pins at 0 (`not-installed`).  Called from the batch DL cancel/failure
+ * cleanup path AND from the FontPicker's "Uninstall all additional
+ * fonts" button (which replaced the per-row trash icons under the
+ * binary state model).  The `removedIds` array in the response lets
+ * the caller toast an accurate count and evict per-font renderer
+ * caches (font-registry, font-metrics) in one pass.
+ */
+export async function uninstallAllFonts(): Promise<IpcResult<FontsState & { removedIds: FontId[] }>> {
+  return window.electronAPI.fontUninstallAll()
+}
+
 export async function setActiveFont(fontId: FontId): Promise<IpcResult<FontsState>> {
   return window.electronAPI.fontSetActive(fontId)
 }
