@@ -1100,15 +1100,16 @@ export function TimelineBlockInspector({
               </div>
             </div>
             {/* REQ-0278 — glow row removed here (SPECIFICATION.md §11). */}
-            {/* REQ-0286 §5 — karaoke row.  Hidden entirely on free
-                tier (`showKaraokeUi = canUseKaraokeInTier(isMsix)`) so
-                no karaoke state can be created or stored from a free
-                build.  On paid tier: Switch + 2 colour pickers
-                (highlight = spoken/past, base = unspoken/future).
-                When `karaokeWordsValid` is false, we still render the
-                controls (so a user with a per-cue-edited entry can
-                toggle for future re-transcription) but attach a
-                muted hint noting per-word data is missing. */}
+            {/* REQ-0286 §5 / REQ-0289 — karaoke row.  Hidden entirely
+                on free tier (`showKaraokeUi = canUseKaraokeInTier
+                (isMsix)`) so no karaoke state can be created or stored
+                from a free build.  On paid tier: Switch + 2 colour
+                pickers (highlight = spoken/past, base = unspoken/
+                future).  When `karaokeWordsValid` is false the row
+                still renders per-unit karaoke via the equal-split
+                fallback (REQ-0289), and the label switches to
+                `karaokeOnNoWords` to communicate that the timing is
+                approximate rather than word-accurate. */}
             {showKaraokeUi && (
               <>
                 <div className="flex items-center justify-between gap-2">

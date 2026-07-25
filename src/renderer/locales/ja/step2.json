@@ -180,7 +180,7 @@
     "karaoke": "カラオケ",
     "karaokeOn": "有効",
     "karaokeOff": "無効",
-    "karaokeOnNoWords": "有効（この字幕はワード情報がないため通常表示になります）",
+    "karaokeOnNoWords": "有効（均等割り・ワード情報なし）",
     "karaokeHighlightColor": "発話済み色",
     "karaokeBaseColor": "未発話色",
     "karaokeSeededDefault": "既定色で開始",

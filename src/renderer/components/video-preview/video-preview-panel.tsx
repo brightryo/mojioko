@@ -499,25 +499,28 @@ export function VideoPreviewPanel() {
         // opacity = "1") does not invalidate style every frame.
         if (el.style.opacity !== next) el.style.opacity = next
 
-        // REQ-0286 §3 — karaoke per-word highlight, piggy-backed on the
-        // same rAF loop so we don't spin a second animation frame
-        // driver.  For each active karaoke cue, query its per-word
-        // spans (data-karaoke-word-idx) and write span.style.color
-        // directly.  Guarded on the outer entry's karaokeEnabled +
-        // words presence so we skip the query entirely for cues that
-        // don't have karaoke spans in the DOM.  The tier check
+        // REQ-0286 §3 / REQ-0289 — karaoke per-word highlight, piggy-
+        // backed on the same rAF loop so we don't spin a second
+        // animation frame driver.  For each active karaoke cue, query
+        // its per-unit spans (`data-karaoke-word-idx`) and write
+        // `span.style.color` directly.  Fast-path guard is just
+        // `entry.karaokeEnabled` — we NO LONGER gate on `entry.words`
+        // because REQ-0289 added an equal-split fallback whose units
+        // exist as DOM spans but NOT in `entry.words`.  The tier check
         // (`canUseKaraokeInTier`) already ran at render time in
         // subtitle-overlay — if it failed there, no
-        // data-karaoke-word-idx spans exist, so this branch is a
-        // no-op even without an explicit tier check here.
-        if (entry.karaokeEnabled && entry.words && entry.words.length > 0) {
+        // `data-karaoke-word-idx` spans exist and `querySelectorAll`
+        // returns empty, so this branch is a cheap no-op for free-tier
+        // and karaoke-off cues alike.
+        if (entry.karaokeEnabled) {
+          const wordSpans = el.querySelectorAll<HTMLElement>('[data-karaoke-word-idx]')
+          if (wordSpans.length === 0) continue
           const highlightColor = entry.karaokeHighlightColor ?? '#FFFF00'
           // REQ-0290 §1 — base colour inherits from `textColorHex` when
           // the user hasn't explicitly picked one, matching the burn-in
           // (`\2c`) and initial-render (subtitle-overlay) resolution
           // rules so all three paths agree.
           const baseColor = entry.karaokeBaseColor ?? entry.textColorHex
-          const wordSpans = el.querySelectorAll<HTMLElement>('[data-karaoke-word-idx]')
           for (const span of wordSpans) {
             const startSecAttr = span.getAttribute('data-karaoke-word-start-sec')
             if (startSecAttr === null) continue

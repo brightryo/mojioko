@@ -15,6 +15,8 @@ import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { areWordsValidForText } from '../../../shared/words-validity'
+import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
+import type { WordSpan } from '../../../shared/types'
 
 /**
  * REQ-0277 §2 — convert `#RRGGBB` + alpha (0-1 float) to an `rgba(...)`
@@ -472,18 +474,26 @@ export function SubtitleOverlay({
     ? substituteMissingGlyphs(rawText, cmapCoverage, tofuSubstitute)
     : rawText
 
-  // REQ-0286 §0 — karaoke gate: paid tier (`canUseKaraokeInTier`) +
-  // per-cue toggle-on + words-valid (`areWordsValidForText`).  All
-  // three must hold; any failing → this cue falls through to the
-  // pre-REQ-0286 plain rendering path.  The check runs on EVERY
-  // render but is cheap (three ANDs); the actual per-frame highlight
-  // update lives in the parent's rAF loop (video-preview-panel.tsx)
-  // which reads `data-karaoke-word-idx` attributes and writes span
-  // colours directly via the DOM.
-  const karaokeActive =
-    entry.karaokeEnabled === true
-    && canUseKaraokeInTier(isMsix)
-    && areWordsValidForText(entry.words, entry.text)
+  // REQ-0286 §0 / REQ-0289 — karaoke gate: paid tier
+  // (`canUseKaraokeInTier`) + per-cue toggle-on.  When the gate passes
+  // we resolve a `WordSpan[]` to render: real `entry.words` if they
+  // still align with `text` (Whisper timing), otherwise the
+  // equal-split fallback from `buildFallbackKaraokeUnits`.
+  // `karaokeActive` is only false when the toggle is off, the tier
+  // check fails, or the cue text has zero splittable units — those
+  // cases fall through to the pre-REQ-0286 plain-text render path.
+  // The parent's rAF loop (video-preview-panel.tsx) reads
+  // `data-karaoke-word-idx` attributes and writes span colours
+  // directly via the DOM regardless of which resolution path fed the
+  // spans.
+  const karaokeGateOn = entry.karaokeEnabled === true && canUseKaraokeInTier(isMsix)
+  const karaokeWordsValid = areWordsValidForText(entry.words, entry.text)
+  const karaokeWords: WordSpan[] = karaokeGateOn
+    ? (karaokeWordsValid
+        ? entry.words!
+        : buildFallbackKaraokeUnits(entry.text, entry.startSec, entry.endSec))
+    : []
+  const karaokeActive = karaokeWords.length > 0
   const karaokeHighlightColorResolved = entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR
   // REQ-0290 §1 — base (unspoken) colour inherits from `textColorHex`
   // when the user has not explicitly picked one.  Keeps the user's
@@ -578,13 +588,18 @@ export function SubtitleOverlay({
           preview↔burn-in parity rationale).
           When karaoke is inactive, we render the pre-REQ-0286
           single-text-node path unchanged (RES-0286 §4 fallback). */}
-      {karaokeActive && entry.words ? (
+      {karaokeActive ? (
         <span
           ref={spanRef}
           data-karaoke-cue-id={entry.id}
           style={textWrapperStyle}
         >
-          {entry.words.map((w, i) => (
+          {/* REQ-0289 — `karaokeWords` is the resolved WordSpan[] —
+              either the real per-word list (Whisper timing) or the
+              equal-split fallback units.  Same DOM shape either way
+              so the parent's rAF loop drives both without a code
+              path change. */}
+          {karaokeWords.map((w, i) => (
             <span
               key={i}
               data-karaoke-word-idx={i}

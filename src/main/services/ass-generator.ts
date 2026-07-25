@@ -1,9 +1,10 @@
-import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground } from '../../shared/types'
+import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground, WordSpan } from '../../shared/types'
 import { ASS_MARGIN_LR_PX } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../shared/karaoke-gate'
 import { buildKaraokeAssText } from '../../shared/karaoke-ass'
 import { areWordsValidForText } from '../../shared/words-validity'
+import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
 
 /**
  * REQ-20260613-016 Phase 2 — ass-generator no longer imports the main-process
@@ -256,10 +257,26 @@ export function generateAss(
       // The highlight half keeps `KARAOKE_DEFAULT_HIGHLIGHT_COLOR`
       // (yellow) because per REQ-0290 the accent colour intent is
       // uniform across cues.
-      const karaokeActive =
-        e.karaokeEnabled === true
-        && canUseKaraokeInTier(isMsix)
-        && areWordsValidForText(e.words, e.text)
+      //
+      // REQ-0289 — when the tier + toggle-on gate passes but the stored
+      // `words` no longer align with `text` (user edited the cue,
+      // imported SRT, etc.), we fall back to an EQUAL-SPLIT of the cue
+      // duration across visible units (JA chars / EN words) rather than
+      // silently disabling karaoke.  `karaokeActive` therefore becomes
+      // "gate passes AND some resolved word list has ≥1 unit"; only
+      // toggle-off or an empty cue text (`splitTextIntoKaraokeUnits`
+      // returned []) drops to plain rendering.  The two paths share the
+      // same `WordSpan[]` shape and flow through the identical
+      // `buildKaraokeAssText` emitter — the fallback is a data-source
+      // swap, not a separate rendering codepath.
+      const karaokeGateOn = e.karaokeEnabled === true && canUseKaraokeInTier(isMsix)
+      const karaokeWordsValid = areWordsValidForText(e.words, e.text)
+      const karaokeWords: WordSpan[] = karaokeGateOn
+        ? (karaokeWordsValid
+            ? e.words!
+            : buildFallbackKaraokeUnits(e.text, e.startSec, e.endSec))
+        : []
+      const karaokeActive = karaokeWords.length > 0
       const fillTag = karaokeActive
         ? `\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}`
         : `\\c${hexToAss(e.textColorHex)}`
@@ -376,12 +393,16 @@ export function generateAss(
       // Casing applies word-by-word via the escaper wrapper so
       // uppercase karaoke still works.
       let text: string
-      if (karaokeActive && e.words) {
+      if (karaokeActive) {
         const escapeWord = (s: string): string => {
           const cased = e.casing === 'uppercase' ? s.toUpperCase() : s
           return escapeAssText(cased)
         }
-        const karaokeBody = buildKaraokeAssText(e.words, e.startSec, e.endSec, escapeWord)
+        // REQ-0289 — `karaokeWords` is either the real per-word list
+        // (words valid) or the equal-split fallback list (words
+        // invalid); `buildKaraokeAssText` doesn't care which since
+        // both share the `WordSpan` shape.
+        const karaokeBody = buildKaraokeAssText(karaokeWords, e.startSec, e.endSec, escapeWord)
         text = `{${styleTag}}${karaokeBody}`
       } else {
         const rawText = e.casing === 'uppercase' ? e.text.toUpperCase() : e.text

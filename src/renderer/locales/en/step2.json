@@ -180,7 +180,7 @@
     "karaoke": "Karaoke",
     "karaokeOn": "On",
     "karaokeOff": "Off",
-    "karaokeOnNoWords": "On (no per-word data — this cue renders plain)",
+    "karaokeOnNoWords": "On (equal split — no per-word timing)",
     "karaokeHighlightColor": "Spoken",
     "karaokeBaseColor": "Unspoken",
     "karaokeSeededDefault": "Uses default colors",

@@ -97,31 +97,45 @@ describe('REQ-0286 §0 — tier gate at the emit path', () => {
     expect(line).not.toContain('\\2c')
   })
 
-  it('MSIX + karaokeEnabled + INVALID words → no karaoke tags (Layer 2 fallback)', () => {
-    // Text edited away from the transcribed words — words.map(w=>w.text)
-    // no longer matches text after normalisation.  Karaoke must fall
-    // through to plain rendering per REQ §0 fallback contract.
+  it('MSIX + karaokeEnabled + INVALID words → equal-split FALLBACK karaoke (REQ-0289 supersedes plain-fallback)', () => {
+    // REQ-0286 originally fell through to plain rendering on this
+    // path; REQ-0289 pivots to an equal-split fallback so karaoke
+    // stays visible when Whisper timing is unavailable.  This test
+    // now pins the REQ-0289 behaviour — karaoke tags ARE emitted
+    // (from the fallback units), NOT suppressed.  The precise-timing
+    // path still requires words-valid; that split is pinned by the
+    // "words VALID → Whisper timing preserved" test in the REQ-0289
+    // describe block below.
     const entry = makeEntry({
       text: 'completely different text',
       karaokeEnabled: true,
-      words: validWords, // still says "hello world"
+      words: validWords, // still says "hello world" — mismatch triggers fallback
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, true)
     const line = dialogueLineOf(ass)
-    expect(line).not.toContain('\\k')
-    expect(line).not.toContain('\\2c')
-    expect(line).toContain('completely different text')
+    expect(line).toContain('\\k')
+    expect(line).toContain('\\2c')
+    // Each Latin word becomes its own karaoke unit — `\k<dur>` tags
+    // interleave the words so the raw text is NOT contiguous.  Pin
+    // each unit's text presence individually.
+    expect(line).toContain('completely')
+    expect(line).toContain(' different')
+    expect(line).toContain(' text')
   })
 
-  it('MSIX + karaokeEnabled + no words → no karaoke tags (empty fallback)', () => {
+  it('MSIX + karaokeEnabled + no words → equal-split FALLBACK karaoke (REQ-0289)', () => {
+    // Same REQ-0289 pivot as above: `words === undefined` used to
+    // suppress karaoke entirely; now it drops into the equal-split
+    // fallback so a cue with the toggle ON always shows karaoke on
+    // paid tier.
     const entry = makeEntry({
       karaokeEnabled: true,
       words: undefined,
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, true)
     const line = dialogueLineOf(ass)
-    expect(line).not.toContain('\\k')
-    expect(line).not.toContain('\\2c')
+    expect(line).toContain('\\k')
+    expect(line).toContain('\\2c')
   })
 })
 
@@ -235,5 +249,127 @@ describe('REQ-0286 backward compat — pre-REQ-0286 entries render byte-identica
     // Baseline check: the plain white PrimaryColour is still there
     expect(line).toContain('\\c&H00FFFFFF&')
     expect(line).toContain('hello world')
+  })
+})
+
+describe('REQ-0289 — equal-split karaoke fallback', () => {
+  it('words invalid → equal-split fallback emits \\k tags (NOT plain rendering)', () => {
+    // Text was edited so words[].text no longer concatenates to `text`.
+    // Pre-REQ-0289 this fell through to plain rendering; REQ-0289
+    // pivots to an equal-split fallback so karaoke is still visible.
+    const entry = makeEntry({
+      text: 'edited text',        // 2 Latin units → [edited, ' text']
+      karaokeEnabled: true,
+      words: validWords,           // still says `hello world` — mismatch
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    expect(line).toContain('\\k')       // fallback karaoke ACTIVE
+    expect(line).toContain('\\2c')      // secondary colour also emitted
+    expect(line).toContain('edited')    // the current text is what's rendered
+    expect(line).toContain(' text')
+  })
+
+  it('words invalid + JA text → per-character equal split', () => {
+    // 5 Japanese chars over a 2-second cue → 0.4 s each → 40 cs each.
+    // `buildKaraokeAssText` calculates each \k from the NEXT unit's
+    // start, so the last char also gets ~40 cs (rounded).
+    const entry = makeEntry({
+      text: 'こんにちは',
+      startSec: 0,
+      endSec: 2,
+      karaokeEnabled: true,
+      words: undefined,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    // Each of the 5 chars gets \k40 (0.4 s = 40 cs).
+    expect(line).toContain('\\k40こ')
+    expect(line).toContain('\\k40ん')
+    expect(line).toContain('\\k40に')
+    expect(line).toContain('\\k40ち')
+    expect(line).toContain('\\k40は')
+  })
+
+  it('words invalid + EN text → per-word equal split', () => {
+    // `hello world` → 2 units (`hello` + ` world`) over 2 seconds →
+    // 1 s each → 100 cs each.
+    const entry = makeEntry({
+      text: 'hello world',
+      startSec: 0,
+      endSec: 2,
+      karaokeEnabled: true,
+      words: undefined,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    expect(line).toContain('\\k100hello')
+    expect(line).toContain('\\k100 world')
+  })
+
+  it('words VALID → Whisper timing preserved (fallback does NOT hijack the precise path)', () => {
+    // Words align with text → the existing REQ-0286 code path fires
+    // and `\k` durations come from Whisper offsets (50cs / 150cs for
+    // this fixture), NOT from an equal split (which would be 100/100).
+    const entry = makeEntry({
+      text: 'hello world',
+      startSec: 0,
+      endSec: 2,
+      karaokeEnabled: true,
+      words: validWords, // [{0,0.5,hello}, {0.5,1.0,' world'}]
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    // Whisper timing: 50cs + 150cs (word activation offsets), NOT
+    // 100cs + 100cs (equal split).
+    expect(line).toContain('\\k50hello')
+    expect(line).toContain('\\k150 world')
+    expect(line).not.toContain('\\k100')
+  })
+
+  it('empty text + karaoke ON → no fallback units → plain rendering (no \\k)', () => {
+    // `splitTextIntoKaraokeUnits('')` returns [] → karaokeWords.length
+    // === 0 → karaokeActive false → plain path.  Guards against
+    // zero-unit divide-by-zero and NaN centiseconds.
+    const entry = makeEntry({
+      text: '',
+      karaokeEnabled: true,
+      words: undefined,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    expect(line).not.toContain('\\k')
+    expect(line).not.toContain('\\2c')
+  })
+
+  it('free tier (NSIS) + words invalid → NO fallback emitted (tier gate wraps fallback too)', () => {
+    // The equal-split fallback lives INSIDE the tier gate, not
+    // outside — a free-tier build must still produce plain rendering
+    // even when the toggle + fallback would otherwise apply.
+    const entry = makeEntry({
+      text: 'edited text',
+      karaokeEnabled: true,
+      words: undefined,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, false /* NSIS */)
+    const line = dialogueLineOf(ass)
+    expect(line).not.toContain('\\k')
+    expect(line).not.toContain('\\2c')
+    expect(line).toContain('edited text')
+  })
+
+  it('karaoke OFF + words invalid → plain rendering (fallback only fires with toggle ON)', () => {
+    // Toggle-off short-circuits the whole karaoke branch — the
+    // fallback is a rescue for "karaoke was ON but words data is
+    // stale", not a way to force karaoke onto plain cues.
+    const entry = makeEntry({
+      text: 'edited text',
+      karaokeEnabled: false,
+      words: undefined,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    expect(line).not.toContain('\\k')
+    expect(line).not.toContain('\\2c')
   })
 })
