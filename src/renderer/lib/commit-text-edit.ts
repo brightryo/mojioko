@@ -73,23 +73,34 @@ export function commitTextEditWithHistory(params: CommitTextEditParams): boolean
   const undoState: SubtitleEntry = normalizedOnFocus !== null
     ? { ...snapshot, text: normalizedOnFocus }
     : snapshot
-  // REQ-0285 §4 — proactive words-invalidation on text edit.  The stored
-  // `entry.words` was captured against the pre-edit text; once the user
-  // changes the text those word timings are stale and would mis-highlight
-  // if a Phase B visual feature tried to consume them.  Clearing here
-  // (Layer 1 of the two-layer defence documented in
-  // `src/shared/words-validity.ts`) means Phase B renderers never see an
-  // edited row with lingering words — and the defensive
-  // `areWordsValidForText` (Layer 2) catches anything that slipped past
-  // this path.  Undo restores `words` alongside `text` because both are
-  // part of the atomic snapshot.
-  const redoState: SubtitleEntry = { ...snapshot, text: normalizedNew, isEdited: true, words: undefined }
+  // REQ-0288 — retained words on text edit.  The pre-REQ-0288 code
+  // proactively wrote `words: undefined` on every text mutation
+  // (RES-0285 §4 "Layer 1" defensive clear).  That created a
+  // reversibility bug: a user editing "テストです" → "テストです\n" →
+  // back to "テストです" landed at a state where text matches
+  // `original` (so Reset button greys out, timeline clip returns to
+  // "unedited" green) but `words` was gone, so karaoke stayed off.
+  // Three signals ("edited?", "reset available?", "karaoke on?")
+  // disagreed on whether the cue was in its original state.
+  //
+  // Fix (REQ-0288): stop the destructive clear.  `words` is preserved
+  // through every text edit.  Karaoke render (both preview and
+  // burn-in) already gates on the pure `areWordsValidForText(words,
+  // text)` predicate (Layer 2 in RES-0285 terms) — for the common
+  // "just added / removed a newline" edit, that predicate returns
+  // true after REQ-0287's strip-all-whitespace normaliser, so
+  // karaoke stays on.  For an edit that actually changes glyphs,
+  // Layer 2 correctly returns false and renderers fall through to
+  // plain — no wrong-glyph highlight risk.  The two-layer defence
+  // narrows to a single-layer defence, at the benefit of the
+  // "revert restores karaoke" invariant.
+  const redoState: SubtitleEntry = { ...snapshot, text: normalizedNew, isEdited: true }
 
   pushHistory({
     label,
     undo: () => updateEntry(entry.id, undoState),
     redo: () => updateEntry(entry.id, redoState),
   })
-  updateEntry(entry.id, { text: normalizedNew, isEdited: true, words: undefined })
+  updateEntry(entry.id, { text: normalizedNew, isEdited: true })
   return true
 }

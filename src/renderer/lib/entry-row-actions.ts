@@ -306,24 +306,22 @@ async function wrapRow(
     toast.info(labels.noChangeToast)
     return
   }
-  // REQ-0286 §4 — auto-line-break inserts `\N` sentinels into the
-  // text but leaves the words[] array untouched.  Under the
-  // REQ-0285 two-layer defence, Layer 2 (`areWordsValidForText`)
-  // tolerates `\N` for LINE BREAK positions that don't shift word
-  // boundaries — but if a line break lands where a word USED to be,
-  // the concatenation still matches (the words don't shift, the
-  // whitespace normaliser folds `\N` to space).  So we don't strictly
-  // NEED to clear here for correctness.  We clear ANYWAY (Layer 1
-  // defensive), following the same "any text mutation clears words"
-  // policy commit-text-edit uses, so a future change to the
-  // whitespace-normalisation rule can't silently break karaoke.
+  // REQ-0288 — retained words on auto-line-break.  Pre-REQ-0288 this
+  // path cleared `words: undefined` "defensively" (Layer 1).  Removed
+  // for the same reason as commit-text-edit's Layer 1 clear (see the
+  // REQ-0288 docblock there): the destructive clear breaks the
+  // "revert restores karaoke" invariant, and Layer 2
+  // (`areWordsValidForText`, REQ-0287's strip-all-whitespace
+  // normaliser) already tolerates `\N` insertion so karaoke stays on
+  // through wrap operations naturally.  Undo restores from the
+  // snapshot (which preserves the pre-edit words) exactly as before.
   const snapshot = { ...latest }
   pushHistory({
     label: labels.history,
     undo: () => projectStore.updateEntry(latest.id, snapshot),
-    redo: () => projectStore.updateEntry(latest.id, { ...snapshot, text: rewrapped, words: undefined })
+    redo: () => projectStore.updateEntry(latest.id, { ...snapshot, text: rewrapped })
   })
-  projectStore.updateEntry(latest.id, { text: rewrapped, words: undefined })
+  projectStore.updateEntry(latest.id, { text: rewrapped })
 }
 
 /**

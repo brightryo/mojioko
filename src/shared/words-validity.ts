@@ -1,7 +1,7 @@
 import type { WordSpan } from './types'
 
 /**
- * REQ-0285 §4 — words↔text validity helper.
+ * REQ-0285 §4 / REQ-0288 — words↔text validity helper.
  *
  * `SubtitleEntry.words` captures per-word timing at transcribe time.
  * If the user subsequently edits the cue's `text`, or splits/merges
@@ -10,23 +10,29 @@ import type { WordSpan } from './types'
  * word pill) MUST refuse to render per-word visuals on such rows or
  * they will highlight the wrong glyph, mid-word.
  *
- * ## Invalidation strategy (REQ-0285 §4 decision)
+ * ## Invalidation strategy (REQ-0288 update)
  *
- * TWO-LAYER defence:
+ * SINGLE-LAYER defence: `words` is preserved through every text edit
+ * (never proactively cleared), and Phase B renderers call
+ * `areWordsValidForText(words, text)` at RENDER TIME to decide whether
+ * per-word rendering is safe.
  *
- *   Layer 1 — proactive clear at commit time.  Every code path that
- *     mutates `entry.text` must set `entry.words = undefined`.  This
- *     is the primary defence; it turns most invalid states into
- *     the fully-safe "no words data" state before any renderer sees
- *     the row.  Wired at `src/renderer/lib/commit-text-edit.ts` for
- *     the text-cell / inspector flow; future cue split/merge REQs
- *     must follow the same pattern.
+ * This helper is that predicate.  It returns:
+ *   - `true`  → words align with text (after strip-all-whitespace
+ *               normalisation) → Phase B may render per-word visuals
+ *   - `false` → mismatch OR no words data → Phase B falls back to
+ *               plain rendering
  *
- *   Layer 2 — this defensive check.  Belt-and-braces for state that
- *     slipped past Layer 1: project files edited by hand, legacy
- *     projects with stale words, split/merge sites the future
- *     visual REQ hasn't audited yet.  `areWordsValidForText` returns
- *     `false` on any mismatch, and Phase B renderers gate on it.
+ * The pre-REQ-0288 design was two-layer: Layer 1 (proactive clear on
+ * every text mutation via `commit-text-edit.ts` / `entry-row-actions.ts`)
+ * + Layer 2 (this defensive check).  Layer 1 was removed by REQ-0288
+ * because it created a reversibility bug: "edit → revert to original
+ * text" cleared words then couldn't restore them, so karaoke stayed
+ * off even though the text was back to its transcribed form.  The
+ * Reset button and timeline-clip "edited" colour disagreed with the
+ * karaoke on/off state.  Removing Layer 1 collapses the three signals
+ * to one truth ("does the text still match the transcribed words?"),
+ * which this predicate answers.
  *
  * ## Validity rule (REQ-0287 §1-D — updated to strip-all-whitespace)
  *

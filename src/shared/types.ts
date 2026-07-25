@@ -198,13 +198,14 @@ export interface SubtitleEntryOriginal {
    *
    * `undefined` means "no per-word data available for this row" — either
    * a pre-REQ-0285 project file, or the entry was created outside a
-   * fresh transcribe (Add row, project import), or the entry's text
-   * was edited and the pre-edit words were invalidated (§4 in
-   * REQ-0285: `commit-text-edit.ts` clears `words` on any text
-   * mutation).  Empty array (`[]`) means "words WERE captured but
-   * the segment contained no timed word tokens" (silence-only chunk);
-   * Phase B visual features treat empty identically to undefined and
-   * fall back to plain rendering.
+   * fresh transcribe (Add row, project import).  REQ-0288 removed the
+   * pre-existing "text edit clears words" behaviour, so `undefined`
+   * is NO LONGER produced by text mutations — words persist through
+   * every edit and the render-time `areWordsValidForText` predicate
+   * decides whether they're currently usable.  Empty array (`[]`)
+   * means "words WERE captured but the segment contained no timed
+   * word tokens" (silence-only chunk); Phase B visual features treat
+   * empty identically to undefined and fall back to plain rendering.
    *
    * Validity: use `areWordsValidForText(words, text)` from
    * `src/shared/words-validity.ts` before consuming.  A cue whose
