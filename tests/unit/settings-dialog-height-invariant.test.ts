@@ -78,8 +78,14 @@ describe('REQ-0283 — settings dialog fixed-height invariant', () => {
     // Pin the current fixed height so a future refactor that changes
     // this value has to update both the source AND this test in the
     // same commit.  Bump both intentionally if you need a different
-    // frame size (and document why).
-    expect(fixedHeight![1]).toBe('640')
+    // frame size (and document why in the source docblock).
+    //
+    // History (bump entries here whenever the source value moves):
+    //   REQ-0283: 640px — original REQ-0283 landing.
+    //   REQ-0284: 720px — raised so Fonts tab fits without the outer
+    //     wrapper also scrolling (double-scroll cleanup).  See
+    //     RES-0284 §1 for the measurement breakdown.
+    expect(fixedHeight![1]).toBe('720')
   })
 
   it('DialogContent has max-h-[85vh] cap so tiny viewports still fit', () => {

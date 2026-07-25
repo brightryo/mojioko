@@ -78,11 +78,19 @@ export function SettingsDialog() {
           element on whatever opened the dialog; users can still Tab into
           the dialog normally for keyboard navigation.
           REQ-018 #1. */}
-      {/* REQ-0283 — the DialogContent frame is FIXED at 640px (capped
-          at 85vh on tiny viewports so it never overflows the screen).
-          Content that exceeds the panel area scrolls INSIDE the wrapper
-          `<div className="flex-1 min-h-0 overflow-y-auto">` below, so
-          the frame height never depends on the active tab.
+      {/* REQ-0283 / REQ-0284 — the DialogContent frame is FIXED at 720px
+          (capped at 85vh on tiny viewports so it never overflows the
+          screen).  Content that exceeds the panel area scrolls INSIDE
+          the wrapper `<div className="flex-1 min-h-0 overflow-y-auto">`
+          below, so the frame height never depends on the active tab.
+
+          The height was raised from 640 → 720 by REQ-0284 so the Fonts
+          tab fits with only its internal family-list scroll
+          (`max-h-[300px]` on the family list box).  At 640px the outer
+          wrapper ALSO scrolled on Fonts, producing an unpleasant
+          double-scroll.  720 clears the tallest current content
+          (Fonts with the upgrade-notice banner visible) with ~30 px of
+          slack.  See RES-0284 §1 for the measurement breakdown.
 
           ------------------------------------------------------------
           DO NOT (would reintroduce the REQ-018 → REQ-0164 → REQ-0283
@@ -93,25 +101,29 @@ export function SettingsDialog() {
               `<TabsContent>` (per-tab height pinning is what caused
               the whack-a-mole — each new tab had to remember, and
               tall content bypassed the min-h anyway).
-            – Replace `h-[640px]` with `min-h-[Xpx]` (min alone reverts
+            – Replace `h-[720px]` with `min-h-[Xpx]` (min alone reverts
               to content-driven above the floor).
           ------------------------------------------------------------
           The `tests/unit/settings-dialog-height-invariant.test.ts`
           suite enforces these rules at CI time — greping the TSX
           source for the anti-patterns above.  If you have a legit
           reason to change the fixed height, bump the pixel value here
-          AND update the test; if you're tempted to add per-tab
-          min-h/max-h, the frame is broken elsewhere — fix that
-          instead.
+          AND update the test's expected value in the SAME commit; if
+          you're tempted to add per-tab min-h/max-h, the frame is
+          broken elsewhere — fix that instead.
 
-          Height composition (approx):
-            DialogHeader   ~50px
-            + TabsList     ~44px
-            + Panel area   remaining (`flex-1 min-h-0 overflow-y-auto`)
-            + p-6 padding  48px total
-            = 640px, comfortably fits the tallest tab (fonts, shortcuts). */}
+          Height composition (approx, worst-case Fonts tab with the
+          RES-0276 upgrade notice visible):
+            DialogHeader                    ~30px
+            + TabsList                      ~40px
+            + TabsContent primitive mt-3    ~12px
+            + Panel content (Fonts tab)     ~574px
+              = Section 1 (~112) + gap-6 (24) + Section 2 (~438,
+                including the family-list max-h-[300])
+            + p-4 padding (top + bottom)    ~32px
+            = ~688px → 720 with ~32px slack. */}
       <DialogContent
-        className="max-w-[640px] h-[640px] max-h-[85vh] flex flex-col overflow-hidden"
+        className="max-w-[640px] h-[720px] max-h-[85vh] flex flex-col overflow-hidden"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader className="shrink-0">
