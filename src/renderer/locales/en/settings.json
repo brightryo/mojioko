@@ -54,6 +54,9 @@
     "developedBy": "This app was developed by BrightRyo.",
     "license": "License",
     "licenseValue": "Proprietary",
+    "edition": "Edition",
+    "editionMsix": "Microsoft Store (Paid)",
+    "editionNsis": "GitHub (Free)",
     "available": "Available",
     "notAvailable": "Not available"
   }
