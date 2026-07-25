@@ -28,26 +28,41 @@ import type { WordSpan } from './types'
  *     visual REQ hasn't audited yet.  `areWordsValidForText` returns
  *     `false` on any mismatch, and Phase B renderers gate on it.
  *
- * ## Validity rule
+ * ## Validity rule (REQ-0287 §1-D — updated to strip-all-whitespace)
  *
  * The word-text concatenation MUST match the cue text after
- * whitespace normalisation:
+ * whitespace STRIPPING:
  *
- *   normalise(text) === normalise(words.map(w => w.text).join(''))
+ *   stripAllWhitespace(text) === stripAllWhitespace(words.map(w => w.text).join(''))
  *
- * `normalise` collapses every run of whitespace (spaces, `\N`
- * hard-breaks from auto-line-break, `\n`, tabs) to a single space AND
- * trims the ends.  This tolerates:
- *   - the auto-line-break pass (adds `\N` between words)
- *   - display casing (renderer transform, doesn't mutate `text`)
- *   - faster-whisper's per-word leading spaces
+ * `stripAllWhitespace` removes every whitespace character (space,
+ * tab, newline, `\N` sentinel) entirely — NOT collapse-to-single-
+ * space.  This handles both Latin and CJK transcripts uniformly:
  *
- * It does NOT tolerate:
- *   - a word inserted / deleted / replaced
- *   - a punctuation change ("Hi" → "Hi.")
- *   - case changes if `text` is stored in the alt case (mojioko never
- *     stores case-transformed text — casing is a display effect only,
- *     per REQ-0277 §1 — so this case shouldn't arise in practice)
+ *   - Latin (faster-whisper prefixes non-first words with ' '):
+ *       cue text     = "hello\\Nworld"  (auto-line-break inserted \N)
+ *       words concat = "hello world"
+ *       stripped     = "helloworld"  ↔  "helloworld"  → match ✓
+ *
+ *   - CJK (faster-whisper emits words WITHOUT leading spaces):
+ *       cue text     = "こんにちは\\N世界"
+ *       words concat = "こんにちは世界"
+ *       stripped     = "こんにちは世界"  ↔  "こんにちは世界"  → match ✓
+ *
+ * The pre-REQ-0287 rule (`\N` → space + collapse) worked for Latin
+ * but broke CJK: it turned cue-text `\N` into a space that the
+ * word-concat had no counterpart for, and every JA karaoke cue
+ * silently fell back to plain rendering.  See REQ-0287 §1-D for
+ * the failure trace.
+ *
+ * ## What still counts as invalid (edit detection unchanged)
+ *
+ *   - a word inserted / deleted / replaced: stripped text differs
+ *     from stripped concat → false → plain fallback
+ *   - a punctuation change: "Hi" → "Hi." — stripped differs → false
+ *   - case change if text is stored in alt case (mojioko never
+ *     stores case-transformed text; casing is display-only per
+ *     REQ-0277 §1 — so this case shouldn't arise in practice)
  *
  * ## Why not fuzzy-match
  *
@@ -65,24 +80,38 @@ import type { WordSpan } from './types'
  */
 export function areWordsValidForText(words: readonly WordSpan[] | undefined, text: string): boolean {
   if (!words || words.length === 0) return false
-  const wordsConcat = normaliseWhitespace(words.map((w) => w.text).join(''))
-  const textNorm = normaliseWhitespace(text)
-  return wordsConcat === textNorm
+  const wordsConcat = stripAllWhitespace(words.map((w) => w.text).join(''))
+  const textStripped = stripAllWhitespace(text)
+  return wordsConcat === textStripped
 }
 
 /**
- * Collapse every run of whitespace (space, tab, newline, `\N` hard-
- * break sentinel from auto-line-break) to a single space AND trim
- * the ends.
+ * REQ-0287 §1-D — strip EVERY whitespace character (spaces, tabs,
+ * newlines, and the libass `\N` hard-break sentinel).  Chosen over
+ * collapse-to-single-space so CJK transcripts (no leading spaces
+ * on faster-whisper's word output) match after auto-line-break
+ * inserts `\N` sentinels into the cue text.  See the docstring on
+ * `areWordsValidForText` above for the full derivation.
  *
- * The literal string `\N` is treated as whitespace because that's the
- * libass hard-break sentinel that `applyAutoLineBreak` inserts into
- * cue text — the words themselves have no `\N`, so a raw string
- * comparison would falsely fail after auto-break has fired.
+ * Retains the old export name `normaliseWhitespace` as an alias so
+ * external tests (`tests/unit/words-validity.test.ts`) don't break
+ * from the semantic change alone — they get updated to assert the
+ * new behaviour explicitly.  The alias is documented as "prefer
+ * stripAllWhitespace for new code".
+ */
+export function stripAllWhitespace(s: string): string {
+  return s
+    .replace(/\\N/g, '')  // libass hard-break sentinel: remove entirely
+    .replace(/\s+/g, '')  // strip every whitespace run
+}
+
+/**
+ * Legacy alias — REQ-0285 named the helper `normaliseWhitespace` on
+ * the "collapse to single space" contract; REQ-0287 tightened it to
+ * "strip all whitespace" for CJK correctness.  The export is retained
+ * only so third-party test callers (if any) don't break unexpectedly;
+ * new code should call `stripAllWhitespace` directly.
  */
 export function normaliseWhitespace(s: string): string {
-  return s
-    .replace(/\\N/g, ' ')       // libass hard-break sentinel
-    .replace(/\s+/g, ' ')       // collapse whitespace runs
-    .trim()
+  return stripAllWhitespace(s)
 }

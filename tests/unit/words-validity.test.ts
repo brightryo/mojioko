@@ -115,22 +115,84 @@ describe('REQ-0285 §4 — areWordsValidForText', () => {
       expect(areWordsValidForText(words, 'one\\Ntwo three')).toBe(true)
     })
   })
+
+  // -------------------------------------------------------------------
+  // REQ-0287 §1-D — Japanese (no-leading-space) transcripts.  Owner-
+  // reported that karaoke never activated after re-transcription; the
+  // probe showed the pre-REQ-0287 collapse-to-space normaliser turned
+  // cue-text `\N` into a space that CJK word.text (no leading spaces)
+  // had no counterpart for, so every JA cue with auto-line-break fell
+  // to plain rendering.  These tests pin the strip-all-whitespace fix.
+  // -------------------------------------------------------------------
+  describe('REQ-0287 §1-D — CJK (Japanese) words match with strip-all normaliser', () => {
+    it('JA cue with NO \\N and no-space words: matches (baseline)', () => {
+      const words = [
+        { startSec: 0, endSec: 0.5, text: 'こんにちは' },
+        { startSec: 0.5, endSec: 1.0, text: '世界' },
+      ]
+      expect(areWordsValidForText(words, 'こんにちは世界')).toBe(true)
+    })
+
+    it('JA cue WITH \\N inserted mid-text: matches (the REQ-0287 fix)', () => {
+      // The failure the REQ was raised to fix.  Pre-REQ-0287 this
+      // returned false → every JA karaoke cue fell back to plain.
+      const words = [
+        { startSec: 0, endSec: 0.5, text: 'こんにちは' },
+        { startSec: 0.5, endSec: 1.0, text: '世界' },
+      ]
+      expect(areWordsValidForText(words, 'こんにちは\\N世界')).toBe(true)
+    })
+
+    it('JA cue with multiple \\N breaks (long sentence): still matches', () => {
+      const words = [
+        { startSec: 0, endSec: 0.3, text: '今日' },
+        { startSec: 0.3, endSec: 0.6, text: 'は' },
+        { startSec: 0.6, endSec: 0.9, text: '天気' },
+        { startSec: 0.9, endSec: 1.2, text: 'が' },
+        { startSec: 1.2, endSec: 1.5, text: 'いい' },
+      ]
+      expect(areWordsValidForText(words, '今日は\\N天気が\\Nいい')).toBe(true)
+    })
+
+    it('JA edit detection still works: one word changed → invalid', () => {
+      const words = [
+        { startSec: 0, endSec: 0.5, text: 'こんにちは' },
+        { startSec: 0.5, endSec: 1.0, text: '世界' },
+      ]
+      // "世界" replaced with "皆" — text differs on non-whitespace
+      // chars, so stripping whitespace still leaves a mismatch.
+      expect(areWordsValidForText(words, 'こんにちは皆')).toBe(false)
+    })
+
+    it('mixed JA + EN cue: matches (leading spaces on EN words + no spaces on JA)', () => {
+      // "Hello 世界" typical mixed-language snippet
+      const words = [
+        { startSec: 0, endSec: 0.5, text: 'Hello' },
+        { startSec: 0.5, endSec: 1.0, text: ' 世界' },  // whisper puts space before switching scripts
+      ]
+      expect(areWordsValidForText(words, 'Hello 世界')).toBe(true)
+      expect(areWordsValidForText(words, 'Hello\\N世界')).toBe(true)
+    })
+  })
 })
 
-describe('REQ-0285 §4 — normaliseWhitespace (unit helper)', () => {
-  it('collapses whitespace runs to single space', () => {
-    expect(normaliseWhitespace('a  b   c')).toBe('a b c')
-    expect(normaliseWhitespace('a\tb\nc')).toBe('a b c')
+describe('REQ-0287 §1-D — normaliseWhitespace / stripAllWhitespace (unit helper)', () => {
+  it('strips whitespace runs entirely (was: collapsed to single space pre-REQ-0287)', () => {
+    // Post-REQ-0287 semantics: every whitespace char removed.  This
+    // reflects the "compare glyph identity, ignore layout whitespace"
+    // rule that lets CJK match after auto-line-break.
+    expect(normaliseWhitespace('a  b   c')).toBe('abc')
+    expect(normaliseWhitespace('a\tb\nc')).toBe('abc')
   })
 
-  it('trims leading and trailing whitespace', () => {
+  it('trims leading and trailing whitespace (implicit — strip-all also strips ends)', () => {
     expect(normaliseWhitespace('  hello  ')).toBe('hello')
   })
 
-  it('treats \\N (literal backslash-N) as whitespace', () => {
-    expect(normaliseWhitespace('a\\Nb')).toBe('a b')
-    expect(normaliseWhitespace('a\\N\\Nb')).toBe('a b')
-    expect(normaliseWhitespace('a \\Nb')).toBe('a b')
+  it('strips \\N (literal backslash-N) — was collapse-to-space pre-REQ-0287', () => {
+    expect(normaliseWhitespace('a\\Nb')).toBe('ab')
+    expect(normaliseWhitespace('a\\N\\Nb')).toBe('ab')
+    expect(normaliseWhitespace('a \\Nb')).toBe('ab')
   })
 
   it('empty string yields empty string', () => {
