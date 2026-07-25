@@ -1,5 +1,5 @@
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground, WordSpan } from '../../shared/types'
-import { ASS_MARGIN_LR_PX } from '../../shared/constants'
+import { ASS_MARGIN_LR_PX, SHADOW_DEPTH_MAX_PX } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../shared/karaoke-gate'
 import { buildKaraokeAssText } from '../../shared/karaoke-ass'
@@ -300,7 +300,11 @@ export function generateAss(
       let shadowColorTag = ''
       let shadowAlphaTag = ''
       if (e.shadowEnabled && !rowBgEnabled) {
-        const depth = Math.max(0, Math.min(20, e.shadowDepth ?? 4))
+        // REQ-0292 §1 — shadow clamp raised from 20 → 100 in lockstep
+        // with the CSS preview clamp so preview and burn-in stay in
+        // sync at the new ceiling.  Both sides read
+        // `SHADOW_DEPTH_MAX_PX` from `src/shared/constants.ts`.
+        const depth = Math.max(0, Math.min(SHADOW_DEPTH_MAX_PX, e.shadowDepth ?? 4))
         const color = e.shadowColor ?? '#000000'
         const alphaPct = Math.max(0, Math.min(100, e.shadowAlpha ?? 100))
         shadowDepthTag = `\\shad${depth}`

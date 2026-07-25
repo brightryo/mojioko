@@ -1,7 +1,7 @@
 import type { Ref } from 'react'
 import { Move } from 'lucide-react'
 import type { SubtitleEntry } from '../../../shared/types'
-import { ASS_MARGIN_LR_PX } from '../../../shared/constants'
+import { ASS_MARGIN_LR_PX, SHADOW_DEPTH_MAX_PX } from '../../../shared/constants'
 import { getLibassScaleFor, getCmapCoverageFor, getTofuSubstituteFor, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { substituteMissingGlyphs } from '../../../shared/glyph-substitute'
 import { useFontCacheVersionStore } from '@/stores/font-cache-version-store'
@@ -408,8 +408,11 @@ export function SubtitleOverlay({
   // Skipped when the background box is enabled (matches ass-generator's
   // `\shad0` suppression on the bg path).
   const shadowEnabledResolved = entry.shadowEnabled === true && !bgEnabled
+  // REQ-0292 §1 — clamp raised from 20 → 100 (via SHADOW_DEPTH_MAX_PX).
+  // The `* scale` keeps the shadow proportional to preview zoom so
+  // large depths shrink alongside the type as the viewport does.
   const shadowDepthPx = shadowEnabledResolved
-    ? Math.max(0, Math.min(20, entry.shadowDepth ?? 4)) * scale
+    ? Math.max(0, Math.min(SHADOW_DEPTH_MAX_PX, entry.shadowDepth ?? 4)) * scale
     : 0
   const shadowColorCss = shadowEnabledResolved
     ? hexToRgba(entry.shadowColor ?? '#000000', (entry.shadowAlpha ?? 100) / 100)

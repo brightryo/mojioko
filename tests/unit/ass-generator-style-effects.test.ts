@@ -120,6 +120,32 @@ describe('REQ-0277 §2 — drop shadow', () => {
     expect(line).not.toContain('\\shad')
     expect(line).not.toContain('\\4c')
   })
+
+  it('REQ-0292 §1 — shadow depth up to 100 passes through (no clamp at 20)', () => {
+    // Pre-REQ-0292 the burn-in clamped shadow depth at 20; setting the
+    // CSS preview slider to 100 would silently emit `\shad20` and the
+    // preview would look 5× larger than the burn-in.  REQ-0292 raised
+    // the clamp to `SHADOW_DEPTH_MAX_PX = 100` in lockstep with the
+    // CSS side so both agree at the new ceiling.
+    const ass = generateAss([makeEntry({ shadowEnabled: true, shadowDepth: 100 })], video, burnin)
+    expect(dialogueLineOf(ass)).toContain('\\shad100')
+  })
+
+  it('REQ-0292 §1 — shadow depth above 100 still clamps to 100 (defensive upper cap)', () => {
+    const ass = generateAss([makeEntry({ shadowEnabled: true, shadowDepth: 250 })], video, burnin)
+    expect(dialogueLineOf(ass)).toContain('\\shad100')
+    expect(dialogueLineOf(ass)).not.toContain('\\shad250')
+  })
+
+  it('REQ-0292 §5 — outline thickness 20 passes through `\\bord20` (max raised from 10)', () => {
+    // REQ-0292 §5 raised OUTLINE_THICKNESS_MAX_PX from 10 to 20.  The
+    // ass-generator emits `\bord<value>` verbatim from the entry, so
+    // this test guards that a stored 20 renders as `\bord20` — proving
+    // the max bump propagated to the burn-in path without a lingering
+    // clamp anywhere downstream.
+    const ass = generateAss([makeEntry({ outlineThicknessPx: 20 })], video, burnin)
+    expect(dialogueLineOf(ass)).toContain('\\bord20')
+  })
 })
 
 // REQ-0278 — §3 glow tests were removed here.  The feature itself

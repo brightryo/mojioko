@@ -79,8 +79,29 @@ export const FONT_SIZE_MIN_PX = 30
  * are easy to hit accidentally via a typo, so the cap stops here.
  */
 export const FONT_SIZE_MAX_PX = 600
-/** Maximum outline thickness in pixels (inclusive, integer). Range is 0–OUTLINE_THICKNESS_MAX_PX. */
-export const OUTLINE_THICKNESS_MAX_PX = 10
+/**
+ * Maximum outline thickness in pixels (inclusive, integer). Range is
+ * 0–OUTLINE_THICKNESS_MAX_PX.
+ *
+ * REQ-0292 §5 raised the ceiling from 10 to 20 so users can build the
+ * heavier chunky-outline look common in short-form / kawaii captions.
+ * Every consumer (slider `max`, settings-store clamp, ass-generator
+ * `\bord`, subtitle-overlay `-webkit-text-stroke`) reads from this
+ * constant so bumping it here propagates end-to-end in one step.
+ */
+export const OUTLINE_THICKNESS_MAX_PX = 20
+
+/**
+ * Maximum drop-shadow depth in pixels (inclusive, integer).  Range is
+ * 0–SHADOW_DEPTH_MAX_PX.
+ *
+ * REQ-0292 §1 raised the ceiling from 20 to 100.  All three shadow
+ * paths (inspector slider max, ass-generator `\shad` clamp,
+ * subtitle-overlay CSS `text-shadow` depth clamp) must read from this
+ * constant so bumping it in one place cannot leave any path capped
+ * behind the others (a silent preview↔burn-in divergence).
+ */
+export const SHADOW_DEPTH_MAX_PX = 100
 
 /** Minimum vertical margin in pixels (inclusive, integer). */
 export const MARGIN_V_MIN_PX = 0

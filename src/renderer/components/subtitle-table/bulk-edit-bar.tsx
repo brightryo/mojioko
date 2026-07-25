@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
+import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
@@ -256,6 +257,29 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // where the user left it across selection changes.  Initial value
   // matches the legacy "fade OFF" semantics (= 0 = no fade).
   const [fadeSliderDraft, setFadeSliderDraft] = useState<number>(0)
+  // REQ-0292 §1 — bulk shadow-depth draft.  Same pattern as the other
+  // slider drafts: the thumb shows the last-applied value across the
+  // current selection session so the user can see "what I set on
+  // these rows".  Starts at the neutral default (4) which matches
+  // the ass-generator fallback and the inspector's toggle-on seed.
+  const [shadowSliderDraft, setShadowSliderDraft] = useState<number>(4)
+  // REQ-0292 §3 — bulk rotation draft.  Fixes the stuck-at-0 bug
+  // where `NumberStepperInput value={0}` never advanced past the
+  // first click: the stepper computes `next = clamp(value + step)`
+  // so with value permanently 0 every click applied 15° again and
+  // the minus button stayed disabled (value <= min).  Draft state
+  // increments alongside each commit so subsequent clicks step
+  // relative to the last-applied value, matching the size / margin
+  // bulk-draft pattern above.
+  const [rotationDraft, setRotationDraft] = useState<number>(0)
+  // REQ-0292 §2 — bulk karaoke colour drafts.  Match the inspector
+  // (highlight = KARAOKE_DEFAULT_HIGHLIGHT_COLOR yellow, base =
+  // resolved-textColorHex fallback via display resolver).  Bulk-set
+  // writes the explicit value so it becomes sticky per-row, matching
+  // REQ-0290's "explicit override wins over textColorHex inheritance"
+  // rule (still overridable per-cue via the inspector afterwards).
+  const [karaokeHighlightDraft, setKaraokeHighlightDraft] = useState<string>(KARAOKE_DEFAULT_HIGHLIGHT_COLOR)
+  const [karaokeBaseDraft, setKaraokeBaseDraft] = useState<string>('#FFFFFF')
 
   // REQ-047 #1: same persist-then-re-seed pattern as the colour drafts.
   // Previously the size input was uncontrolled and cleared on blur
@@ -297,6 +321,16 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftOutline(pickFirstSelectedColor(selectedRowIds, 'outline'))
     setOutlineSliderDraft(0)
     setFadeSliderDraft(0)
+    // REQ-0292 §1/§3/§2 — reset the new bulk-effect drafts on every
+    // selection change so the controls read as "fresh" for the newly
+    // selected rows.  Rotation resets to 0 (any drift from previous
+    // selection would be misleading), shadow depth to the same
+    // toggle-on default the inspector uses, karaoke colours to the
+    // same seeds the inspector shows before the user picks.
+    setShadowSliderDraft(4)
+    setRotationDraft(0)
+    setKaraokeHighlightDraft(KARAOKE_DEFAULT_HIGHLIGHT_COLOR)
+    setKaraokeBaseDraft('#FFFFFF')
     setSizeDraft(pickFirstSelectedSize(selectedRowIds))
     const layout = pickFirstSelectedLayout(selectedRowIds)
     if (layout !== null) {
@@ -539,13 +573,39 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   function handleShadowBulkToggle(on: boolean) {
     applyBulk(
       on
-        ? { shadowEnabled: true, shadowDepth: 4, shadowColor: '#000000', shadowAlpha: 100 }
+        ? {
+            shadowEnabled: true,
+            // Seed the current draft depth (not a hardcoded 4) so a
+            // user who set the slider to 60 and then flipped the
+            // switch OFF/ON keeps the intended depth on re-enable.
+            shadowDepth: shadowSliderDraft,
+            shadowColor: '#000000',
+            shadowAlpha: 100,
+          }
         : { shadowEnabled: false },
+      t('bulk.history.shadow', { count: selectedRowIds.size }),
+    )
+  }
+  // REQ-0292 §1 — bulk shadow-depth commit.  Applies to every
+  // selected row on drag-boundary and stashes the value in the draft
+  // so the slider thumb persists across gestures.  Only fires when
+  // the shadow toggle is ON — a disabled slider can't reach here.
+  function handleShadowDepthBulkCommit(depth: number) {
+    setShadowSliderDraft(depth)
+    applyBulk(
+      { shadowDepth: depth },
       t('bulk.history.shadow', { count: selectedRowIds.size }),
     )
   }
   function handleRotationBulk(deg: number) {
     const normalized = ((deg % 360) + 360) % 360
+    // REQ-0292 §3 — write the normalised value back into the local
+    // draft so the NumberStepperInput's `value` prop advances with
+    // each click.  Fixes the pre-REQ-0292 bug where `value={0}` was
+    // hardcoded, causing the stepper to compute `next = 0 + 15`
+    // every click (always applying 15) with the minus button
+    // permanently disabled (`value <= min`).
+    setRotationDraft(normalized)
     applyBulk(
       { rotation: normalized },
       t('bulk.history.rotation', { count: selectedRowIds.size }),
@@ -564,11 +624,79 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       on
         ? {
             karaokeEnabled: true,
-            karaokeHighlightColor: KARAOKE_DEFAULT_HIGHLIGHT_COLOR,
+            karaokeHighlightColor: karaokeHighlightDraft,
           }
         : { karaokeEnabled: false },
       t('bulk.history.karaoke', { count: selectedRowIds.size }),
     )
+  }
+
+  // REQ-0292 §2 — bulk karaoke colour pickers.  Same preview/commit
+  // pattern as the text / outline colour bulk pickers above so a drag
+  // in the popover streams live updates to every selected row's
+  // overlay, and one history op fires at popover close.  The commit
+  // writes an EXPLICIT value which becomes sticky per-row (matches
+  // REQ-0290's "user-set base colour overrides the textColorHex
+  // inheritance" rule — a bulk-set is a user pick applied N times).
+  const bulkKaraokeHighlightBeforeRef = useRef<Map<string, string | undefined> | null>(null)
+  const bulkKaraokeBaseBeforeRef = useRef<Map<string, string | undefined> | null>(null)
+
+  function handleKaraokeHighlightBulkPreview(hex: string) {
+    if (bulkKaraokeHighlightBeforeRef.current === null) {
+      const map = new Map<string, string | undefined>()
+      const all = useProjectStore.getState().entries
+      for (const id of selectedRowIds) {
+        const e = all.find((x) => x.id === id)
+        if (e) map.set(id, e.karaokeHighlightColor)
+      }
+      bulkKaraokeHighlightBeforeRef.current = map
+    }
+    setKaraokeHighlightDraft(hex)
+    updateEntriesPreview(Array.from(selectedRowIds), { karaokeHighlightColor: hex })
+  }
+  function handleKaraokeHighlightBulkCommit(hex: string) {
+    const beforeMap = bulkKaraokeHighlightBeforeRef.current
+    bulkKaraokeHighlightBeforeRef.current = null
+    const preSnapshots = beforeMap
+      ? new Map<string, Partial<SubtitleEntry>>(
+          Array.from(beforeMap.entries()).map(([id, v]) => [id, { karaokeHighlightColor: v }]),
+        )
+      : undefined
+    applyBulk(
+      { karaokeHighlightColor: hex },
+      t('bulk.history.karaoke', { count: selectedRowIds.size }),
+      preSnapshots,
+    )
+    setKaraokeHighlightDraft(hex)
+  }
+
+  function handleKaraokeBaseBulkPreview(hex: string) {
+    if (bulkKaraokeBaseBeforeRef.current === null) {
+      const map = new Map<string, string | undefined>()
+      const all = useProjectStore.getState().entries
+      for (const id of selectedRowIds) {
+        const e = all.find((x) => x.id === id)
+        if (e) map.set(id, e.karaokeBaseColor)
+      }
+      bulkKaraokeBaseBeforeRef.current = map
+    }
+    setKaraokeBaseDraft(hex)
+    updateEntriesPreview(Array.from(selectedRowIds), { karaokeBaseColor: hex })
+  }
+  function handleKaraokeBaseBulkCommit(hex: string) {
+    const beforeMap = bulkKaraokeBaseBeforeRef.current
+    bulkKaraokeBaseBeforeRef.current = null
+    const preSnapshots = beforeMap
+      ? new Map<string, Partial<SubtitleEntry>>(
+          Array.from(beforeMap.entries()).map(([id, v]) => [id, { karaokeBaseColor: v }]),
+        )
+      : undefined
+    applyBulk(
+      { karaokeBaseColor: hex },
+      t('bulk.history.karaoke', { count: selectedRowIds.size }),
+      preSnapshots,
+    )
+    setKaraokeBaseDraft(hex)
   }
 
   // REQ-20260613-016 Phase 5 — per-row layout / background bulk handlers.
@@ -947,28 +1075,80 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               />
             </div>
           </label>
-          {/* REQ-20260615-050 — fade slider replaces the legacy ON/OFF
-              Switch.  REQ-20260615-061 B: same w-[50%] + fullWidth
-              treatment as Outline width above so the two bars share
-              their start / end X and align with the inspector. */}
+          {/* REQ-0292 §4 — bulk-edit style-effect row order mirrors
+              the inspector: shadow, karaoke (+ colours), casing,
+              rotation, fade.  Bulk-edit intentionally has no text
+              input (text is per-cue) but every other row lines up
+              with the inspector so users switching between the two
+              surfaces don't relearn the layout.
+              REQ-0292 §1 — shadow row: Switch + ShadowDepthSlider
+              (0–100).  Replaces the old static "深度 4" label so the
+              user can set the target depth as part of the same bulk
+              operation.  Slider disabled until the toggle is ON so
+              the semantics stay "shadow toggle first, then depth".
+              REQ-0292 §2 — karaoke row: Switch + two ColorPickers
+              (highlight = spoken-word colour, base = unspoken-word
+              colour).  Bulk-set colours become sticky per-row per
+              REQ-0290's "explicit value overrides textColorHex
+              inheritance" rule.
+              REQ-0292 §3 — rotation NumberStepperInput now bound to
+              `rotationDraft` (was `value={0}` hardcoded).  Fixes the
+              stuck-at-0 bug where the input never advanced past the
+              first click. */}
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('bulk.fade')}</span>
-            <div className="w-[50%]">
-              <FadeDurationSlider
-                value={fadeSliderDraft}
-                onCommit={handleFadeDurationCommit}
-                ariaLabel={t('bulk.fade')}
-                fullWidth
-              />
+            <span>{t('styleCell.shadow')}</span>
+            <div className="flex items-center gap-2 w-[50%]">
+              <Switch onCheckedChange={handleShadowBulkToggle} aria-label={t('styleCell.shadow')} />
+              <div className="flex-1 min-w-0">
+                <ShadowDepthSlider
+                  value={shadowSliderDraft}
+                  onCommit={handleShadowDepthBulkCommit}
+                  ariaLabel={t('styleCell.shadowDepth')}
+                  fullWidth
+                />
+              </div>
             </div>
           </label>
-          {/* REQ-0277 Phase A — bulk-apply for the four new style
-              effects.  Each row is a compact toggle+control so the
-              bulk-edit column doesn't outgrow the inspector.  Bulk-
-              applied effects reset ALL selected rows to the same
-              value (no partial preserve; a Switch toggle inherently
-              coerces every row to the same state), matching the
-              existing bulk-fade / bulk-bg-enabled pattern. */}
+          {/* REQ-0278 — glow bulk-toggle removed here (SPECIFICATION.md §11). */}
+          {/* REQ-0286 §5 / REQ-0292 §2 — karaoke bulk cluster.  Hidden
+              on free tier (`canUseKaraokeInTier(isMsix)` returns
+              false) so no free-tier bulk state can be written.  Colour
+              pickers stay visible whenever the tier gate passes (not
+              conditional on toggle-ON) so the user can prepare
+              highlight / base values and then flip the switch — mirrors
+              the bulk-shadow flow above where the depth is settable
+              before the shadow is enabled. */}
+          {canUseKaraokeInTier(useAppEnvStore((s) => s.isMsix) ?? false) && (
+            <>
+              <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+                <span>{t('styleCell.karaoke')}</span>
+                <div className="flex items-center gap-2 w-[50%]">
+                  <Switch onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
+                  <span className="text-caption text-muted-foreground">{t('styleCell.karaokeSeededDefault')}</span>
+                </div>
+              </label>
+              <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+                <span>{t('styleCell.karaokeHighlightColor')}</span>
+                <ColorPicker
+                  value={karaokeHighlightDraft}
+                  onChange={handleKaraokeHighlightBulkPreview}
+                  onCommit={handleKaraokeHighlightBulkCommit}
+                  swatchOnly
+                  heading={t('styleCell.karaokeHighlightColor')}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+                <span>{t('styleCell.karaokeBaseColor')}</span>
+                <ColorPicker
+                  value={karaokeBaseDraft}
+                  onChange={handleKaraokeBaseBulkPreview}
+                  onCommit={handleKaraokeBaseBulkCommit}
+                  swatchOnly
+                  heading={t('styleCell.karaokeBaseColor')}
+                />
+              </label>
+            </>
+          )}
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('styleCell.casing')}</span>
             <div className="flex items-center gap-2 w-[50%]">
@@ -977,38 +1157,29 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             </div>
           </label>
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('styleCell.shadow')}</span>
-            <div className="flex items-center gap-2 w-[50%]">
-              <Switch onCheckedChange={handleShadowBulkToggle} aria-label={t('styleCell.shadow')} />
-              <span className="text-caption text-muted-foreground">{t('styleCell.shadowDepth')} 4</span>
-            </div>
-          </label>
-          {/* REQ-0278 — glow bulk-toggle removed here (SPECIFICATION.md §11). */}
-          {/* REQ-0286 §5 — karaoke bulk toggle.  Hidden on free tier
-              (`canUseKaraokeInTier(isMsix)` returns false) so no free-
-              tier bulk state can be written.  Colours are seeded to
-              the karaoke defaults; per-row colour tweaking happens in
-              the inspector (mirrors how bulk-shadow seeds neutral
-              defaults but exposes no per-colour controls). */}
-          {canUseKaraokeInTier(useAppEnvStore((s) => s.isMsix) ?? false) && (
-            <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-              <span>{t('styleCell.karaoke')}</span>
-              <div className="flex items-center gap-2 w-[50%]">
-                <Switch onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
-                <span className="text-caption text-muted-foreground">{t('styleCell.karaokeSeededDefault')}</span>
-              </div>
-            </label>
-          )}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('styleCell.rotation')}</span>
             <div className="w-[50%]">
               <NumberStepperInput
-                value={0}
+                value={rotationDraft}
                 min={0}
                 max={359}
                 step={15}
                 onCommit={handleRotationBulk}
                 ariaLabel={t('styleCell.rotation')}
+              />
+            </div>
+          </label>
+          {/* REQ-20260615-050 — fade slider replaces the legacy ON/OFF
+              Switch.  REQ-0292 §4 moved to end of style cluster
+              (matches inspector order). */}
+          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+            <span>{t('bulk.fade')}</span>
+            <div className="w-[50%]">
+              <FadeDurationSlider
+                value={fadeSliderDraft}
+                onCommit={handleFadeDurationCommit}
+                ariaLabel={t('bulk.fade')}
+                fullWidth
               />
             </div>
           </label>

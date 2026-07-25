@@ -11,6 +11,7 @@ import { ColorPicker } from '@/components/color-picker/color-picker'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
+import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
@@ -357,6 +358,14 @@ export function TimelineBlockInspector({
   }
   function handleShadowDepthCommit(depth: number) {
     applyStyleEdit(t('history.editShadow'), { shadowDepth: depth })
+  }
+  // REQ-0292 §1 — slider drag-preview: reflect the depth into the
+  // renderer on every onChange frame so the drop-shadow grows/shrinks
+  // in the video overlay live, matching the outline-thickness /
+  // colour-picker preview pattern.  History op still fires once at
+  // drag boundary via handleShadowDepthCommit.
+  function handleShadowDepthPreview(depth: number) {
+    updateEntryPreview(entry.id, { shadowDepth: depth })
   }
   // REQ-0278 — glow handlers removed (see SPECIFICATION.md §11).
 
@@ -1038,47 +1047,21 @@ export function TimelineBlockInspector({
                 />
               </div>
             </div>
-            {/* REQ-20260615-050 — fade duration slider (0–0.5 s, 0 = OFF).
-                Same visual rhythm as Outline width above so the two
-                slider rows form a consistent block within the 字幕
-                section.
-                REQ-0184 §4 — this row is the last child of the
+            {/* REQ-0292 §4 — style-effect row order (top → bottom):
+                shadow, karaoke (+ colours), casing, rotation, fade.
+                Fade sits at the very end so the primary style effects
+                cluster together and the temporal knob is separated
+                out.  Casing follows karaoke so ALL_CAPS applies AFTER
+                the sweep-colour cluster in reading order.
+                REQ-0292 §1 — shadow row now uses a slider (0–100)
+                matching outline width / fade above; the previous
+                NumberStepperInput capped at 20 which no longer aligns
+                with the burn-in clamp (`SHADOW_DEPTH_MAX_PX`).
+                REQ-0184 §4 — the fade row is the last child of the
                 collapsible subtitle-section wrapper `<div>` opened
                 right after the section-header button above; the
                 wrapper closes just before the `</div>` that closes
                 the outer `space-y-2 border-t` section. */}
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.fade')}</label>
-              <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
-                <FadeDurationSlider
-                  value={entry.fadeDurationSec}
-                  onCommit={handleFadeDurationCommit}
-                  disabled={isFrozen}
-                  ariaLabel={t('styleCell.fade')}
-                  fullWidth
-                />
-              </div>
-            </div>
-            {/* REQ-0277 Phase A — style effects row cluster.  Compact
-                layout (label + control, ~50 % column) matching the
-                Fade / Outline width rows above so the whole
-                字幕-section keeps a consistent visual rhythm.  Each row
-                is a single primary control; the color pickers for
-                shadow / glow are follow-up polish (see RES). */}
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.casing')}</label>
-              <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
-                <Switch
-                  checked={entry.casing === 'uppercase'}
-                  onCheckedChange={handleCasingToggle}
-                  disabled={isFrozen}
-                  aria-label={t('styleCell.casing')}
-                />
-                <span className="text-body-sm text-muted-foreground">
-                  {entry.casing === 'uppercase' ? t('styleCell.casingUppercase') : t('styleCell.casingNone')}
-                </span>
-              </div>
-            </div>
             <div className="flex items-center justify-between gap-2">
               <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.shadow')}</label>
               <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
@@ -1088,15 +1071,16 @@ export function TimelineBlockInspector({
                   disabled={isFrozen}
                   aria-label={t('styleCell.shadow')}
                 />
-                <NumberStepperInput
-                  value={entry.shadowDepth ?? 4}
-                  min={0}
-                  max={20}
-                  step={1}
-                  onCommit={handleShadowDepthCommit}
-                  disabled={isFrozen || !entry.shadowEnabled}
-                  ariaLabel={t('styleCell.shadowDepth')}
-                />
+                <div className="flex-1 min-w-0">
+                  <ShadowDepthSlider
+                    value={entry.shadowDepth ?? 4}
+                    onCommit={handleShadowDepthCommit}
+                    onPreview={handleShadowDepthPreview}
+                    disabled={isFrozen || !entry.shadowEnabled}
+                    ariaLabel={t('styleCell.shadowDepth')}
+                    fullWidth
+                  />
+                </div>
               </div>
             </div>
             {/* REQ-0278 — glow row removed here (SPECIFICATION.md §11). */}
@@ -1162,6 +1146,23 @@ export function TimelineBlockInspector({
                 )}
               </>
             )}
+            {/* Casing — REQ-0292 §4 moved BELOW karaoke (was above
+                shadow) so the "colour" cluster (shadow, karaoke)
+                stays visually contiguous. */}
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.casing')}</label>
+              <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
+                <Switch
+                  checked={entry.casing === 'uppercase'}
+                  onCheckedChange={handleCasingToggle}
+                  disabled={isFrozen}
+                  aria-label={t('styleCell.casing')}
+                />
+                <span className="text-body-sm text-muted-foreground">
+                  {entry.casing === 'uppercase' ? t('styleCell.casingUppercase') : t('styleCell.casingNone')}
+                </span>
+              </div>
+            </div>
             <div className="flex items-center justify-between gap-2">
               <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.rotation')}</label>
               <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
@@ -1173,6 +1174,20 @@ export function TimelineBlockInspector({
                   onCommit={handleRotationCommit}
                   disabled={isFrozen}
                   ariaLabel={t('styleCell.rotation')}
+                />
+              </div>
+            </div>
+            {/* Fade — REQ-0292 §4 moved to the end so the temporal
+                knob sits after all the visual style effects. */}
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.fade')}</label>
+              <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
+                <FadeDurationSlider
+                  value={entry.fadeDurationSec}
+                  onCommit={handleFadeDurationCommit}
+                  disabled={isFrozen}
+                  ariaLabel={t('styleCell.fade')}
+                  fullWidth
                 />
               </div>
             </div>
