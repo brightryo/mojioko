@@ -249,14 +249,15 @@ export function generateAss(
       // entries without karaoke, pinned by
       // `ass-generator-baseline-ac1fd67.test.ts`.
       //
-      // REQ-0290 §1 — the base (unspoken) colour falls back to the cue's
-      // `textColorHex`, NOT the hardcoded `KARAOKE_DEFAULT_BASE_COLOR`.
-      // Rationale: enabling karaoke should not silently discard the user's
-      // per-row text colour; the base half of the karaoke sweep inherits
-      // that colour until the user explicitly sets `karaokeBaseColor`.
-      // The highlight half keeps `KARAOKE_DEFAULT_HIGHLIGHT_COLOR`
-      // (yellow) because per REQ-0290 the accent colour intent is
-      // uniform across cues.
+      // REQ-0290 § / REQ-0293 §2 — the base (unspoken) colour is
+      // ALWAYS `textColorHex`; the per-cue `karaokeBaseColor`
+      // override was removed by REQ-0293 so the sweep swaps between
+      // "the cue's own text colour" and the user-picked accent
+      // (highlight).  The highlight half keeps
+      // `KARAOKE_DEFAULT_HIGHLIGHT_COLOR` (yellow) as its unset
+      // default because the accent-colour intent is uniform across
+      // cues.  Editing `textColorHex` therefore also updates the
+      // karaoke base half in one step — no divergence surface.
       //
       // REQ-0289 — when the tier + toggle-on gate passes but the stored
       // `words` no longer align with `text` (user edited the cue,
@@ -280,34 +281,46 @@ export function generateAss(
       const fillTag = karaokeActive
         ? `\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}`
         : `\\c${hexToAss(e.textColorHex)}`
+      // REQ-0293 §2 — base (unspoken) colour is ALWAYS `textColorHex`
+      // now.  The pre-REQ-0293 per-cue `karaokeBaseColor` override was
+      // removed: the owner-facing model is "pick the accent colour
+      // (highlight); unspoken text stays the cue's own colour."  This
+      // makes editing `textColorHex` also update the karaoke base
+      // half in one step — no divergence surface.  Legacy dev saves
+      // carrying `karaokeBaseColor` still hydrate because the field
+      // is silently dropped as an unknown key at load time.
       const karaokeSecondaryTag = karaokeActive
-        ? `\\2c${hexToAss(e.karaokeBaseColor ?? e.textColorHex)}`
+        ? `\\2c${hexToAss(e.textColorHex)}`
         : ''
       const outlineTag = `\\3c${hexToAss(e.outlineColorHex)}`
       const bordTag    = `\\bord${e.outlineThicknessPx}`
 
-      // REQ-0277 §2 — drop shadow.  libass' `\shad<depth>` draws the
-      // shadow with `\4c` (BackColour) at the fixed bottom-right
-      // offset; there is no angle control.  Skipped entirely when the
-      // row has a background box (the bg path emits its own `\shad0`
-      // to suppress bleed, and a user-toggled shadow would fight
-      // that intent, so bg wins).  When `shadowEnabled === undefined`
-      // OR false no tags are emitted at all — the Style header does
-      // not set a Shadow column so libass' default of 0 applies
-      // naturally, matching pre-REQ-0277 output byte-for-byte on
-      // rows without the effect.
+      // REQ-0277 §2 / REQ-0293 §1 — drop shadow.  libass' `\shad<depth>`
+      // draws the shadow with `\4c` (BackColour) at the fixed
+      // bottom-right offset; there is no angle control.  Skipped
+      // entirely when the row has a background box (the bg path
+      // emits its own `\shad0` to suppress bleed, and a user-toggled
+      // shadow would fight that intent, so bg wins).
+      //
+      // REQ-0293 §1 replaced the pre-existing `shadowEnabled` boolean
+      // gate with `depth > 0`: depth 0 emits no shadow tags at all
+      // (byte-identical to the old `shadowEnabled === false` path),
+      // depth > 0 emits `\shad<depth>` + colour + alpha.  Removes the
+      // duplicate ON/OFF surface that always shadowed the depth
+      // slider.  Legacy dev saves carrying `shadowEnabled` still
+      // hydrate because the field is silently dropped as an unknown
+      // key at load time; a save with `shadowEnabled: false,
+      // shadowDepth: 6` will now render depth 6 (was previously
+      // suppressed) — acceptable given no released version persisted
+      // the boolean.  Depth clamp: 0–`SHADOW_DEPTH_MAX_PX` (= 50).
       let shadowDepthTag = ''
       let shadowColorTag = ''
       let shadowAlphaTag = ''
-      if (e.shadowEnabled && !rowBgEnabled) {
-        // REQ-0292 §1 — shadow clamp raised from 20 → 100 in lockstep
-        // with the CSS preview clamp so preview and burn-in stay in
-        // sync at the new ceiling.  Both sides read
-        // `SHADOW_DEPTH_MAX_PX` from `src/shared/constants.ts`.
-        const depth = Math.max(0, Math.min(SHADOW_DEPTH_MAX_PX, e.shadowDepth ?? 4))
+      const rawDepth = Math.max(0, Math.min(SHADOW_DEPTH_MAX_PX, e.shadowDepth ?? 0))
+      if (rawDepth > 0 && !rowBgEnabled) {
         const color = e.shadowColor ?? '#000000'
         const alphaPct = Math.max(0, Math.min(100, e.shadowAlpha ?? 100))
-        shadowDepthTag = `\\shad${depth}`
+        shadowDepthTag = `\\shad${rawDepth}`
         shadowColorTag = `\\4c${hexToAss(color)}`
         shadowAlphaTag = `\\4a&H${opacityToAssAlpha(alphaPct)}&`
       }

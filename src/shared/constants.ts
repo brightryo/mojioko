@@ -93,15 +93,23 @@ export const OUTLINE_THICKNESS_MAX_PX = 20
 
 /**
  * Maximum drop-shadow depth in pixels (inclusive, integer).  Range is
- * 0–SHADOW_DEPTH_MAX_PX.
+ * 0–SHADOW_DEPTH_MAX_PX; depth of `0` means "no shadow".
  *
- * REQ-0292 §1 raised the ceiling from 20 to 100.  All three shadow
- * paths (inspector slider max, ass-generator `\shad` clamp,
- * subtitle-overlay CSS `text-shadow` depth clamp) must read from this
- * constant so bumping it in one place cannot leave any path capped
- * behind the others (a silent preview↔burn-in divergence).
+ * REQ-0293 §1 collapsed the shadow ON/OFF Switch into the depth
+ * itself: depth > 0 draws a shadow, depth = 0 draws nothing.  The
+ * ceiling dropped from 100 → 50 so the 0=OFF slider still has
+ * useful resolution near the low end (typical usable depths are
+ * 2–8 px; 50 covers the "as big as it gets before it becomes
+ * absurd" range the owner wanted, without wasting slider real
+ * estate on 51–100).
+ *
+ * All three shadow paths (inspector slider max, ass-generator
+ * `\shad` clamp, subtitle-overlay CSS `text-shadow` depth clamp)
+ * must read from this constant so bumping it in one place cannot
+ * leave any path capped behind the others (a silent
+ * preview↔burn-in divergence).
  */
-export const SHADOW_DEPTH_MAX_PX = 100
+export const SHADOW_DEPTH_MAX_PX = 50
 
 /** Minimum vertical margin in pixels (inclusive, integer). */
 export const MARGIN_V_MIN_PX = 0

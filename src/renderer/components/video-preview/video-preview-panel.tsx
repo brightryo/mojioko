@@ -516,11 +516,13 @@ export function VideoPreviewPanel() {
           const wordSpans = el.querySelectorAll<HTMLElement>('[data-karaoke-word-idx]')
           if (wordSpans.length === 0) continue
           const highlightColor = entry.karaokeHighlightColor ?? '#FFFF00'
-          // REQ-0290 §1 — base colour inherits from `textColorHex` when
-          // the user hasn't explicitly picked one, matching the burn-in
-          // (`\2c`) and initial-render (subtitle-overlay) resolution
-          // rules so all three paths agree.
-          const baseColor = entry.karaokeBaseColor ?? entry.textColorHex
+          // REQ-0293 §2 — base colour is ALWAYS `textColorHex` now.
+          // The pre-REQ-0293 per-cue `karaokeBaseColor` override was
+          // removed so the sweep swaps between "the cue's own text
+          // colour" and the user-picked accent (highlight).  Same
+          // rule mirrored in ass-generator's `\2c` emit and
+          // subtitle-overlay's `karaokeBaseColorResolved`.
+          const baseColor = entry.textColorHex
           for (const span of wordSpans) {
             const startSecAttr = span.getAttribute('data-karaoke-word-start-sec')
             if (startSecAttr === null) continue

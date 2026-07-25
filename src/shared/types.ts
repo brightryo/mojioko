@@ -131,12 +131,17 @@ export interface SubtitleEntryOriginal {
    * REQ-0277 §2 — drop shadow.  ASS `\shad<depth>` + `\4c` + `\4a`.
    * libass draws shadows at a fixed bottom-right offset (there is no
    * angle control in ASS); the depth in px is the offset magnitude.
-   * `undefined` on `shadowEnabled` OR `shadowEnabled === false` =
-   * disabled (ass-generator emits `\shad0`; preview writes no
-   * text-shadow).
+   *
+   * REQ-0293 §1 — the shadow's ON/OFF is now encoded in the depth
+   * itself: `undefined` OR `0` = disabled (no `\shad` / `\4c` / `\4a`
+   * emitted at all, and no CSS text-shadow), `> 0` = shadow drawn.
+   * The pre-REQ-0293 `shadowEnabled` boolean was removed because it
+   * duplicated the "depth is 0" state and made the UI need a Switch
+   * *and* a slider for what is really one control.  Legacy dev
+   * project files that carried `shadowEnabled` still hydrate cleanly
+   * — the unknown field is silently dropped, and rendering falls
+   * back to the depth alone.  Range: 0–`SHADOW_DEPTH_MAX_PX` (= 50).
    */
-  shadowEnabled?: boolean
-  /** Integer px, 0-20 (typical 2-8).  Depth = both X and Y offset in libass' fixed bottom-right direction. */
   shadowDepth?: number
   /** `#RRGGBB`; default `#000000`. */
   shadowColor?: string
@@ -173,16 +178,20 @@ export interface SubtitleEntryOriginal {
    * falls back to plain rendering (see the fallback contract in
    * REQ-0286 §0).
    *
-   * Colour resolution (REQ-0290 §1):
+   * Colour resolution:
    *   - `karaokeHighlightColor` unset → `KARAOKE_DEFAULT_HIGHLIGHT_COLOR`
    *     (yellow accent).  Also seeded into this field when the user
    *     toggles karaoke ON via inspector / bulk-edit so the picker has
    *     a starting swatch.
-   *   - `karaokeBaseColor` unset → `entry.textColorHex`.  NOT seeded at
-   *     toggle-ON so the user's per-row text colour is preserved as
-   *     the base half of the sweep after enabling karaoke.  Once the
-   *     user explicitly picks a base colour, the stored value wins over
-   *     the inheritance.
+   *   - Base (unspoken/future) colour is ALWAYS `entry.textColorHex`
+   *     (REQ-0293 §2).  The pre-REQ-0293 `karaokeBaseColor` per-cue
+   *     override was removed — the owner-facing model is now "pick
+   *     the accent colour; unspoken text stays the cue's own colour."
+   *     This makes editing `textColorHex` also update the karaoke
+   *     base half in one step (no divergence surface).  Legacy dev
+   *     saves carrying `karaokeBaseColor` still hydrate — the
+   *     unknown field is silently dropped, and rendering falls back
+   *     to `textColorHex` for the base.
    *
    * When karaoke is off the fields are ignored and the cue uses
    * `textColorHex` as usual.
@@ -194,8 +203,6 @@ export interface SubtitleEntryOriginal {
   karaokeEnabled?: boolean
   /** `#RRGGBB` — spoken/past words (maps to ASS PrimaryColour when karaoke on). */
   karaokeHighlightColor?: string
-  /** `#RRGGBB` — unspoken/future words (maps to ASS SecondaryColour when karaoke on). */
-  karaokeBaseColor?: string
 
   /**
    * REQ-0285 Phase B foundation — per-word timestamps captured by

@@ -81,19 +81,25 @@ describe('REQ-0277 §1 — casing', () => {
 // -----------------------------------------------------------------
 // §2 Drop shadow
 // -----------------------------------------------------------------
-describe('REQ-0277 §2 — drop shadow', () => {
-  it('shadow off (undefined) → NO shadow tags emitted (Style header has no Shadow column → libass defaults to 0)', () => {
+describe('REQ-0277 §2 / REQ-0293 §1 — drop shadow (depth-gated)', () => {
+  it('shadow depth undefined → NO shadow tags (byte-identical to pre-Phase-A output on shadowless rows)', () => {
     const ass = generateAss([makeEntry()], video, burnin)
     const line = dialogueLineOf(ass)
-    // Regression pin: pre-REQ-0277 output for shadowless non-bg rows
-    // must be byte-identical.  No `\shad`, no `\4c`, no `\4a`.
     expect(line).not.toContain('\\shad')
     expect(line).not.toContain('\\4c')
     expect(line).not.toContain('\\4a')
   })
-  it('shadow on → emits \\shad<depth>, \\4c<color>, \\4a<alpha>', () => {
+  it('REQ-0293 §1 — shadow depth 0 → NO shadow tags (0 = OFF)', () => {
+    // The Switch was removed; depth alone gates the tags.
+    const ass = generateAss([makeEntry({ shadowDepth: 0 })], video, burnin)
+    const line = dialogueLineOf(ass)
+    expect(line).not.toContain('\\shad')
+    expect(line).not.toContain('\\4c')
+    expect(line).not.toContain('\\4a')
+  })
+  it('shadow depth > 0 → emits \\shad<depth>, \\4c<color>, \\4a<alpha>', () => {
     const ass = generateAss([makeEntry({
-      shadowEnabled: true, shadowDepth: 6, shadowColor: '#112233', shadowAlpha: 75,
+      shadowDepth: 6, shadowColor: '#112233', shadowAlpha: 75,
     })], video, burnin)
     const line = dialogueLineOf(ass)
     expect(line).toContain('\\shad6')
@@ -103,7 +109,7 @@ describe('REQ-0277 §2 — drop shadow', () => {
   })
   it('shadow suppressed when subtitleBackground is enabled (bg path wins)', () => {
     const entry = makeEntry({
-      shadowEnabled: true, shadowDepth: 6,
+      shadowDepth: 6,
       subtitleBackground: { enabled: true, color: 'black', opacityPercent: 70 },
     })
     const ass = generateAss([entry], video, burnin)
@@ -114,26 +120,29 @@ describe('REQ-0277 §2 — drop shadow', () => {
     expect(line).not.toContain('\\4c')
     expect(line).not.toContain('\\4a')
   })
-  it('shadow off (explicit false) → no shadow tags', () => {
-    const ass = generateAss([makeEntry({ shadowEnabled: false })], video, burnin)
-    const line = dialogueLineOf(ass)
-    expect(line).not.toContain('\\shad')
-    expect(line).not.toContain('\\4c')
+
+  it('REQ-0293 §1 — legacy dev save with `shadowEnabled: false, shadowDepth: 6` still renders depth 6 (unknown field ignored)', () => {
+    // Pre-REQ-0293 the boolean gated tag emission; post-REQ-0293 depth
+    // alone drives it.  Any dev save with the removed boolean still
+    // hydrates because unknown fields are silently dropped, and depth
+    // takes over as the sole ON/OFF signal.  Cast to `any` because
+    // `shadowEnabled` is no longer in the type — proves the shape of
+    // an in-the-wild JSON with the extra key still works.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- `shadowEnabled` was removed from the type; test simulates a legacy dev save carrying the extra key.
+    const ass = generateAss([makeEntry({ shadowDepth: 6, shadowEnabled: false } as any)], video, burnin)
+    expect(dialogueLineOf(ass)).toContain('\\shad6')
   })
 
-  it('REQ-0292 §1 — shadow depth up to 100 passes through (no clamp at 20)', () => {
-    // Pre-REQ-0292 the burn-in clamped shadow depth at 20; setting the
-    // CSS preview slider to 100 would silently emit `\shad20` and the
-    // preview would look 5× larger than the burn-in.  REQ-0292 raised
-    // the clamp to `SHADOW_DEPTH_MAX_PX = 100` in lockstep with the
-    // CSS side so both agree at the new ceiling.
-    const ass = generateAss([makeEntry({ shadowEnabled: true, shadowDepth: 100 })], video, burnin)
-    expect(dialogueLineOf(ass)).toContain('\\shad100')
+  it('REQ-0293 §1 — shadow depth 50 passes through (new max = SHADOW_DEPTH_MAX_PX)', () => {
+    // REQ-0293 dropped the ceiling from 100 → 50.  50 is the new upper
+    // pass-through value; 51+ clamps down to 50.
+    const ass = generateAss([makeEntry({ shadowDepth: 50 })], video, burnin)
+    expect(dialogueLineOf(ass)).toContain('\\shad50')
   })
 
-  it('REQ-0292 §1 — shadow depth above 100 still clamps to 100 (defensive upper cap)', () => {
-    const ass = generateAss([makeEntry({ shadowEnabled: true, shadowDepth: 250 })], video, burnin)
-    expect(dialogueLineOf(ass)).toContain('\\shad100')
+  it('REQ-0293 §1 — shadow depth above 50 clamps to 50 (defensive upper cap)', () => {
+    const ass = generateAss([makeEntry({ shadowDepth: 250 })], video, burnin)
+    expect(dialogueLineOf(ass)).toContain('\\shad50')
     expect(dialogueLineOf(ass)).not.toContain('\\shad250')
   })
 

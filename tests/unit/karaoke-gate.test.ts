@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   canUseKaraokeInTier,
   KARAOKE_DEFAULT_HIGHLIGHT_COLOR,
-  KARAOKE_DEFAULT_BASE_COLOR,
 } from '../../src/shared/karaoke-gate'
 
 /**
@@ -31,17 +30,17 @@ describe('REQ-0286 §0 — canUseKaraokeInTier policy', () => {
   })
 })
 
-describe('REQ-0286 — hardcoded karaoke default colours', () => {
+describe('REQ-0286 — karaoke default highlight colour', () => {
   it('highlight defaults to yellow (#FFFF00, matches TikTok/short-form convention)', () => {
     expect(KARAOKE_DEFAULT_HIGHLIGHT_COLOR).toBe('#FFFF00')
   })
 
-  it('base defaults to white (#FFFFFF)', () => {
-    expect(KARAOKE_DEFAULT_BASE_COLOR).toBe('#FFFFFF')
+  it('is 6-hex uppercase — matches ColorPicker canonical form', () => {
+    expect(KARAOKE_DEFAULT_HIGHLIGHT_COLOR).toMatch(/^#[0-9A-F]{6}$/)
   })
 
-  it('both are 6-hex uppercase — matches ColorPicker canonical form', () => {
-    expect(KARAOKE_DEFAULT_HIGHLIGHT_COLOR).toMatch(/^#[0-9A-F]{6}$/)
-    expect(KARAOKE_DEFAULT_BASE_COLOR).toMatch(/^#[0-9A-F]{6}$/)
-  })
+  // REQ-0293 §2 removed the pre-existing `KARAOKE_DEFAULT_BASE_COLOR`
+  // constant — the base half of the karaoke sweep now always tracks
+  // each cue's `textColorHex` at render time, so no base default is
+  // needed.  See karaoke-gate.ts docstring for the full context.
 })

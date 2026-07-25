@@ -61,7 +61,6 @@ describe('REQ-0286 §0 — tier gate at the emit path', () => {
     const entry = makeEntry({
       karaokeEnabled: true,
       karaokeHighlightColor: '#FFFF00',
-      karaokeBaseColor: '#FFFFFF',
       words: validWords,
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, true /* isMsix */)
@@ -76,7 +75,6 @@ describe('REQ-0286 §0 — tier gate at the emit path', () => {
     const entry = makeEntry({
       karaokeEnabled: true,
       karaokeHighlightColor: '#FFFF00',
-      karaokeBaseColor: '#FFFFFF',
       words: validWords,
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, false /* NSIS */)
@@ -140,11 +138,14 @@ describe('REQ-0286 §0 — tier gate at the emit path', () => {
 })
 
 describe('REQ-0286 §2 — karaoke emit shape', () => {
-  it('emits \\c<highlight> + \\2c<base> in the styleTag (colour setup for karaoke)', () => {
+  it('emits \\c<highlight> + \\2c<textColorHex> in the styleTag (colour setup for karaoke)', () => {
+    // REQ-0293 §2 — base half of the sweep is now ALWAYS textColorHex.
+    // The pre-REQ-0293 per-cue `karaokeBaseColor` override was
+    // removed; setting a base explicitly is no longer possible.
     const entry = makeEntry({
+      textColorHex: '#00FF00',            // green (= what base picks up)
       karaokeEnabled: true,
-      karaokeHighlightColor: '#FF0000',  // red
-      karaokeBaseColor: '#00FF00',       // green
+      karaokeHighlightColor: '#FF0000',   // red highlight
       words: validWords,
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, true)
@@ -154,38 +155,40 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
     expect(line).toContain('\\2c&H0000FF00&')
   })
 
-  it('REQ-0290 §1 — base defaults to textColorHex when karaokeBaseColor unset; highlight defaults to yellow', () => {
-    // With a pink `textColorHex`, enabling karaoke without an explicit
-    // `karaokeBaseColor` MUST NOT drop back to white — the base half of
-    // the sweep should inherit the row's own text colour so the user's
-    // per-cue colour is not silently discarded.  Highlight stays on
-    // KARAOKE_DEFAULT_HIGHLIGHT_COLOR (#FFFF00 yellow) because the
-    // accent-colour intent is uniform (REQ-0290 §1 last bullet).
+  it('REQ-0293 §2 — base ALWAYS = textColorHex (no karaokeBaseColor override anymore)', () => {
+    // With a pink `textColorHex`, the base half of the karaoke sweep
+    // MUST be pink.  Highlight defaults to the yellow accent when
+    // `karaokeHighlightColor` is unset.
     const entry = makeEntry({
-      textColorHex: '#FF00FF', // pink — the owner's example
+      textColorHex: '#FF00FF', // pink — flows straight into `\2c`
       karaokeEnabled: true,
       words: validWords,
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, true)
     const line = dialogueLineOf(ass)
-    expect(line).toContain('\\c&H0000FFFF&')  // #FFFF00 (default highlight, yellow)
+    expect(line).toContain('\\c&H0000FFFF&')  // #FFFF00 (default highlight)
     expect(line).toContain('\\2c&H00FF00FF&') // #FF00FF (base = textColorHex, pink)
   })
 
-  it('REQ-0290 §1 — explicit karaokeBaseColor overrides the textColorHex inheritance', () => {
-    // After the user has picked a base colour, that value wins over the
-    // textColorHex fallback.  This is the "後から未発話色を変えれば効く"
-    // requirement — inheritance only fires when the field is undefined.
-    const entry = makeEntry({
-      textColorHex: '#FF00FF',       // pink
+  it('REQ-0293 §2 — legacy `karaokeBaseColor` on a dev save is silently ignored; base still tracks textColorHex', () => {
+    // Pre-REQ-0293 the `karaokeBaseColor` override would win.  Post-
+    // REQ-0293 the field is dropped and base falls back to
+    // `textColorHex`.  Any legacy dev save that still carries the
+    // old key hydrates cleanly (unknown key ignored) and renders as
+    // if the key were absent — pinned here with `as any` because
+    // `karaokeBaseColor` is no longer in the type.
+    const legacyPatch = {
+      textColorHex: '#FF00FF',                   // pink
       karaokeEnabled: true,
-      karaokeBaseColor: '#00FF00',   // user picked green
+      karaokeBaseColor: '#00FF00',               // legacy green — MUST be ignored
       words: validWords,
-    })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- `karaokeBaseColor` was removed from the type; test simulates a legacy dev save carrying the extra key.
+    } as any
+    const entry = makeEntry(legacyPatch)
     const ass = generateAss([entry], video, burnin, undefined, undefined, true)
     const line = dialogueLineOf(ass)
-    expect(line).toContain('\\2c&H0000FF00&') // green wins, pink is NOT emitted for base
-    expect(line).not.toContain('\\2c&H00FF00FF&')
+    expect(line).toContain('\\2c&H00FF00FF&')      // pink (textColorHex) wins
+    expect(line).not.toContain('\\2c&H0000FF00&')  // legacy green MUST NOT appear
   })
 
   it('REQ-0290 §3 — outline colour \\3c stays on `outlineColorHex` when karaoke is active', () => {

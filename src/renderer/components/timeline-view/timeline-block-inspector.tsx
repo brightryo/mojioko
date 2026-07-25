@@ -341,23 +341,18 @@ export function TimelineBlockInspector({
   function handleCasingToggle(on: boolean) {
     applyStyleEdit(t('history.editCasing'), { casing: on ? 'uppercase' : 'none' })
   }
-  function handleShadowToggle(on: boolean) {
-    // Seed neutral defaults when turning ON so the effect is visible
-    // immediately (depth 4 / black / fully opaque).  Turning off keeps
-    // the last depth/color/alpha in place so re-enabling restores it.
-    if (on) {
-      applyStyleEdit(t('history.editShadow'), {
-        shadowEnabled: true,
-        shadowDepth: entry.shadowDepth ?? 4,
-        shadowColor: entry.shadowColor ?? '#000000',
-        shadowAlpha: entry.shadowAlpha ?? 100,
-      })
-    } else {
-      applyStyleEdit(t('history.editShadow'), { shadowEnabled: false })
-    }
-  }
+  // REQ-0293 §1 — shadow ON/OFF is now encoded in the depth itself
+  // (depth 0 = OFF, depth > 0 = ON).  The pre-REQ-0293 Switch and
+  // `handleShadowToggle` handler were removed since they duplicated
+  // the "depth is 0" state.  `handleShadowDepthCommit` still seeds
+  // colour + alpha defaults on the first non-zero commit so a fresh
+  // slider drag from 0 lands on a visible black shadow rather than
+  // an invisible one.
   function handleShadowDepthCommit(depth: number) {
-    applyStyleEdit(t('history.editShadow'), { shadowDepth: depth })
+    const patch: Partial<SubtitleEntry> = { shadowDepth: depth }
+    if (depth > 0 && entry.shadowColor === undefined) patch.shadowColor = '#000000'
+    if (depth > 0 && entry.shadowAlpha === undefined) patch.shadowAlpha = 100
+    applyStyleEdit(t('history.editShadow'), patch)
   }
   // REQ-0292 §1 — slider drag-preview: reflect the depth into the
   // renderer on every onChange frame so the drop-shadow grows/shrinks
@@ -400,16 +395,12 @@ export function TimelineBlockInspector({
       { karaokeHighlightColor: hexOnOpen },
     )
   }
-  function handleKaraokeBasePreview(hex: string) {
-    updateEntryPreview(entry.id, { karaokeBaseColor: hex })
-  }
-  function handleKaraokeBaseCommit(hex: string, hexOnOpen: string) {
-    applyStyleEdit(
-      t('history.editKaraoke'),
-      { karaokeBaseColor: hex },
-      { karaokeBaseColor: hexOnOpen },
-    )
-  }
+  // REQ-0293 §2 — the base-colour handlers (`handleKaraokeBasePreview`
+  // / `handleKaraokeBaseCommit`) were removed along with the base
+  // colour picker.  The base half of the karaoke sweep now tracks
+  // `textColorHex` directly at render time; there is no per-cue
+  // override to store.  Users who want to change the base colour
+  // change the cue's text colour instead.
 
   function handleRotationCommit(deg: number) {
     // Normalise into [0, 360) so a runaway drag never accumulates
@@ -1062,25 +1053,21 @@ export function TimelineBlockInspector({
                 right after the section-header button above; the
                 wrapper closes just before the `</div>` that closes
                 the outer `space-y-2 border-t` section. */}
+            {/* REQ-0293 §1 — shadow row: single slider (0=OFF, >0=ON).
+                Pre-REQ-0293 had a separate Switch that duplicated the
+                "depth is 0" state; removing it lets the depth alone
+                drive both the tag emission and the ON/OFF affordance. */}
             <div className="flex items-center justify-between gap-2">
               <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.shadow')}</label>
-              <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
-                <Switch
-                  checked={entry.shadowEnabled === true}
-                  onCheckedChange={handleShadowToggle}
+              <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
+                <ShadowDepthSlider
+                  value={entry.shadowDepth ?? 0}
+                  onCommit={handleShadowDepthCommit}
+                  onPreview={handleShadowDepthPreview}
                   disabled={isFrozen}
-                  aria-label={t('styleCell.shadow')}
+                  ariaLabel={t('styleCell.shadowDepth')}
+                  fullWidth
                 />
-                <div className="flex-1 min-w-0">
-                  <ShadowDepthSlider
-                    value={entry.shadowDepth ?? 4}
-                    onCommit={handleShadowDepthCommit}
-                    onPreview={handleShadowDepthPreview}
-                    disabled={isFrozen || !entry.shadowEnabled}
-                    ariaLabel={t('styleCell.shadowDepth')}
-                    fullWidth
-                  />
-                </div>
               </div>
             </div>
             {/* REQ-0278 — glow row removed here (SPECIFICATION.md §11). */}
@@ -1115,34 +1102,23 @@ export function TimelineBlockInspector({
                   </div>
                 </div>
                 {entry.karaokeEnabled === true && (
-                  <>
-                    <div className="flex items-center justify-between gap-2">
-                      <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.karaokeHighlightColor')}</label>
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <ColorPicker
-                          value={entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR}
-                          onChange={handleKaraokeHighlightPreview}
-                          onCommit={handleKaraokeHighlightCommit}
-                          disabled={isFrozen}
-                          swatchOnly
-                          heading={t('styleCell.karaokeHighlightColor')}
-                        />
-                      </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.karaokeHighlightColor')}</label>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <ColorPicker
+                        value={entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR}
+                        onChange={handleKaraokeHighlightPreview}
+                        onCommit={handleKaraokeHighlightCommit}
+                        disabled={isFrozen}
+                        swatchOnly
+                        heading={t('styleCell.karaokeHighlightColor')}
+                      />
                     </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.karaokeBaseColor')}</label>
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <ColorPicker
-                          value={entry.karaokeBaseColor ?? entry.textColorHex}
-                          onChange={handleKaraokeBasePreview}
-                          onCommit={handleKaraokeBaseCommit}
-                          disabled={isFrozen}
-                          swatchOnly
-                          heading={t('styleCell.karaokeBaseColor')}
-                        />
-                      </div>
-                    </div>
-                  </>
+                  </div>
+                  /* REQ-0293 §2 — the base-colour picker row was removed
+                     here.  Unspoken text tracks the cue's own
+                     `textColorHex` at render time; users change the
+                     base colour by changing the cue's text colour. */
                 )}
               </>
             )}

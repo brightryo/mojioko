@@ -407,20 +407,24 @@ export function SubtitleOverlay({
   // way `strokeWidthPx = outlinePx * 2` scales the CSS-side outline.
   // Skipped when the background box is enabled (matches ass-generator's
   // `\shad0` suppression on the bg path).
-  const shadowEnabledResolved = entry.shadowEnabled === true && !bgEnabled
-  // REQ-0292 §1 — clamp raised from 20 → 100 (via SHADOW_DEPTH_MAX_PX).
+  // REQ-0293 §1 — shadow is gated on `depth > 0` (not the removed
+  // `shadowEnabled` boolean).  The bg-box path suppresses shadow as
+  // before because the box would otherwise carry an unwanted
+  // drop-shadow around its rectangle.  Clamp uses
+  // `SHADOW_DEPTH_MAX_PX` (= 50) — same ceiling as the ass-generator
+  // clamp so preview and burn-in stay in sync at the new range.
   // The `* scale` keeps the shadow proportional to preview zoom so
   // large depths shrink alongside the type as the viewport does.
-  const shadowDepthPx = shadowEnabledResolved
-    ? Math.max(0, Math.min(SHADOW_DEPTH_MAX_PX, entry.shadowDepth ?? 4)) * scale
-    : 0
-  const shadowColorCss = shadowEnabledResolved
+  const shadowDepthClamped = Math.max(0, Math.min(SHADOW_DEPTH_MAX_PX, entry.shadowDepth ?? 0))
+  const shadowActive = shadowDepthClamped > 0 && !bgEnabled
+  const shadowDepthPx = shadowActive ? shadowDepthClamped * scale : 0
+  const shadowColorCss = shadowActive
     ? hexToRgba(entry.shadowColor ?? '#000000', (entry.shadowAlpha ?? 100) / 100)
     : ''
 
   // REQ-0278 — glow (3-layer text-shadow stack) was removed here.
   // See SPECIFICATION.md §11 for the deletion rationale.
-  const dropShadow = shadowEnabledResolved && shadowDepthPx > 0
+  const dropShadow = shadowActive && shadowDepthPx > 0
     ? `${shadowDepthPx}px ${shadowDepthPx}px 0 ${shadowColorCss}`
     : ''
   const textShadowCombined = dropShadow || undefined
@@ -498,12 +502,13 @@ export function SubtitleOverlay({
     : []
   const karaokeActive = karaokeWords.length > 0
   const karaokeHighlightColorResolved = entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR
-  // REQ-0290 §1 — base (unspoken) colour inherits from `textColorHex`
-  // when the user has not explicitly picked one.  Keeps the user's
-  // per-cue text-colour choice visible after enabling karaoke; the
-  // ass-generator side uses the identical rule so preview matches
-  // burn-in.
-  const karaokeBaseColorResolved = entry.karaokeBaseColor ?? entry.textColorHex
+  // REQ-0293 §2 — base (unspoken) colour is ALWAYS `textColorHex`.
+  // The pre-REQ-0293 per-cue `karaokeBaseColor` override was removed;
+  // the karaoke sweep now simply swaps between "the cue's own text
+  // colour" (base) and the user-picked accent (highlight).  Same
+  // rule mirrored in ass-generator's `\2c` emit + the rAF loop's
+  // base-colour resolution in video-preview-panel.
+  const karaokeBaseColorResolved = entry.textColorHex
   // Silence "declared but never read" during the initial render — the
   // parent's rAF loop consumes the highlight colour via the entry
   // Map, not through a prop from here.  Keeping the local const
