@@ -38,6 +38,22 @@ import type { AppSettings } from '../../shared/types'
  * fields in the debounced-save payload, this makes both "set to a
  * folder" and "clear to null" survive a restart.
  *
+ * REQ-0279 — same class of bug applied to `fontSetInstalledVersion`.
+ * The field is written exclusively by main (via the `fontList:recordSetVersion`
+ * IPC that fires at the end of a successful bulk font download); the
+ * renderer's debounced-save payload has NEVER carried it.  Without a
+ * fallback here, any store change that scheduled a debounced save
+ * BEFORE recordSetVersion — and fired AFTER — silently wiped the
+ * version stamp back to `undefined`, and `deriveFontStatus` then
+ * reported every non-bundled font as `not-installed` in the very next
+ * `fontList` call.  Users saw "batch DL completed but inspector shows
+ * only the default font" and were forced to re-run the batch a second
+ * time (which usually worked because no fresh store change had
+ * scheduled a debounce that would fire between the 2nd DL and refresh).
+ * `'key' in incoming` semantics (not `?? existing`) so a hypothetical
+ * future "renderer clears the version to force a re-download" flow
+ * would still round-trip — even though no such flow exists today.
+ *
  * Step-3-only UI state (`burnin`, `subtitleBackground`, `audioMode`)
  * is stripped from the result — the renderer treats those as
  * session-only and resets them on Step 1 navigation.
@@ -56,6 +72,14 @@ export function mergeSettingsForSave(
     defaultOutputDir:  'defaultOutputDir' in incoming ? incoming.defaultOutputDir : existing.defaultOutputDir,
     // REQ-0194 — same `'key' in incoming` semantics as REQ-0158.
     defaultProjectDir: 'defaultProjectDir' in incoming ? incoming.defaultProjectDir : existing.defaultProjectDir,
+    // REQ-0279 — see the docblock above.  Same `'key' in incoming`
+    // semantics as REQ-0158/REQ-0194.  Today the renderer never sends
+    // this key, so this line always falls through to `existing` and
+    // preserves whatever value the `recordSetVersion` IPC last wrote.
+    fontSetInstalledVersion:
+      'fontSetInstalledVersion' in incoming
+        ? incoming.fontSetInstalledVersion
+        : existing.fontSetInstalledVersion,
   }
   delete merged.burnin
   delete merged.subtitleBackground
