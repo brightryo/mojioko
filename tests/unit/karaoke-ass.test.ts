@@ -3,7 +3,16 @@ import { buildKaraokeAssText } from '../../src/shared/karaoke-ass'
 import type { WordSpan } from '../../src/shared/types'
 
 /**
- * REQ-0286 §2 — pins the karaoke `\k` tag builder.  Fixtures cover:
+ * REQ-0286 §2 / REQ-0291 — pins the karaoke `\k` tag builder.
+ *
+ * Every `\k` tag MUST be enclosed in its own `{...}` override block so
+ * libass parses it as a tag rather than drawing it as literal text
+ * (REQ-0291 regression: pre-fix `buildKaraokeAssText` emitted bare
+ * `\k50hello` which libass rendered as the visible string "\k50hello"
+ * on the burn-in video).  Every assertion below pins the braced form
+ * `{\k<cs>}<text>`.
+ *
+ * Fixtures cover:
  *   - happy path (no gap, no leading offset)
  *   - leading offset (cue starts before first word)
  *   - trailing offset (cue ends after last word — held highlight)
@@ -12,22 +21,23 @@ import type { WordSpan } from '../../src/shared/types'
  *   - escaper application (custom escape function invoked per-word)
  *   - single-word cue
  *   - long-cue duration → cs conversion accuracy
+ *   - REQ-0291 well-formedness: no bare `\k` outside braces anywhere
  */
 
 // A no-op escaper for tests that don't care about escaping.
 const identity = (s: string) => s
 
-describe('REQ-0286 §2 — buildKaraokeAssText', () => {
+describe('REQ-0286 §2 / REQ-0291 — buildKaraokeAssText', () => {
   it('empty words → empty string', () => {
     expect(buildKaraokeAssText([], 0, 1, identity)).toBe('')
   })
 
-  it('single word, no offset, no trailing → `\\k<duration>{word}`', () => {
+  it('single word, no offset, no trailing → `{\\k<duration>}<word>` (REQ-0291 brace-enclosed)', () => {
     // Cue [1.0, 1.5], one word at [1.0, 1.5].
     // Leading offset = 0 → no leading tag.
     // Word's duration = cueEnd - word.startSec = 0.5s = 50cs.
     const words: WordSpan[] = [{ startSec: 1.0, endSec: 1.5, text: 'hello' }]
-    expect(buildKaraokeAssText(words, 1.0, 1.5, identity)).toBe('\\k50hello')
+    expect(buildKaraokeAssText(words, 1.0, 1.5, identity)).toBe('{\\k50}hello')
   })
 
   it('two words, no gap: word[i] duration = words[i+1].start - words[i].start', () => {
@@ -39,7 +49,7 @@ describe('REQ-0286 §2 — buildKaraokeAssText', () => {
       { startSec: 1.0, endSec: 1.5, text: 'hi' },
       { startSec: 1.5, endSec: 2.5, text: ' world' },
     ]
-    expect(buildKaraokeAssText(words, 1.0, 3.0, identity)).toBe('\\k50hi\\k150 world')
+    expect(buildKaraokeAssText(words, 1.0, 3.0, identity)).toBe('{\\k50}hi{\\k150} world')
   })
 
   it('two words with inter-word silence gap: gap absorbed into prior word', () => {
@@ -51,14 +61,15 @@ describe('REQ-0286 §2 — buildKaraokeAssText', () => {
       { startSec: 1.0, endSec: 1.5, text: 'hello' },
       { startSec: 1.7, endSec: 2.5, text: ' world' },
     ]
-    expect(buildKaraokeAssText(words, 1.0, 3.0, identity)).toBe('\\k70hello\\k130 world')
+    expect(buildKaraokeAssText(words, 1.0, 3.0, identity)).toBe('{\\k70}hello{\\k130} world')
   })
 
-  it('leading offset (cue starts BEFORE first word): emits leading `\\k<offset>`', () => {
+  it('leading offset (cue starts BEFORE first word): emits leading `{\\k<offset>}`', () => {
     // Cue [1.0, 2.0], first word starts at 1.2 → 0.2s leading offset = 20cs.
     // Word 1 duration = 2.0 - 1.2 = 0.8s = 80cs (last word, holds to cue end).
+    // Leading offset tag also brace-enclosed (REQ-0291).
     const words: WordSpan[] = [{ startSec: 1.2, endSec: 1.5, text: 'hi' }]
-    expect(buildKaraokeAssText(words, 1.0, 2.0, identity)).toBe('\\k20\\k80hi')
+    expect(buildKaraokeAssText(words, 1.0, 2.0, identity)).toBe('{\\k20}{\\k80}hi')
   })
 
   it('trailing silence after last word: last-word duration extends to cue end (held highlight)', () => {
@@ -66,18 +77,20 @@ describe('REQ-0286 §2 — buildKaraokeAssText', () => {
     // Last word's \k = cueEnd - word.startSec = 5s = 500cs, not word's own
     // duration.  This is the "words[last] stays lit until cue unmounts" case.
     const words: WordSpan[] = [{ startSec: 0, endSec: 1, text: 'held' }]
-    expect(buildKaraokeAssText(words, 0, 5, identity)).toBe('\\k500held')
+    expect(buildKaraokeAssText(words, 0, 5, identity)).toBe('{\\k500}held')
   })
 
   it('escaper is called per-word (round-trip through the caller\'s escapeAssText)', () => {
     // The generator's escaper transforms `{`, `}`, `\`, `\n` etc.  Here we
     // use a marker escaper to prove the invocation happens once per word.
+    // The `<...>` marker sits OUTSIDE the `{\k}` override block —
+    // proving the escaper is applied to word text, not to the tag syntax.
     const marker = (s: string) => `<${s}>`
     const words: WordSpan[] = [
       { startSec: 0, endSec: 0.5, text: 'a' },
       { startSec: 0.5, endSec: 1, text: 'b' },
     ]
-    expect(buildKaraokeAssText(words, 0, 1, marker)).toBe('\\k50<a>\\k50<b>')
+    expect(buildKaraokeAssText(words, 0, 1, marker)).toBe('{\\k50}<a>{\\k50}<b>')
   })
 
   it('centisecond rounding: 0.333s → 33cs (banker\'s / .5 up)', () => {
@@ -85,9 +98,9 @@ describe('REQ-0286 §2 — buildKaraokeAssText', () => {
     // conversion is Math.round(sec * 100).
     const words: WordSpan[] = [{ startSec: 0, endSec: 1, text: 'x' }]
     // Cue [0, 0.333] → last word duration = 0.333s → 33.3 → rounds to 33
-    expect(buildKaraokeAssText(words, 0, 0.333, identity)).toBe('\\k33x')
+    expect(buildKaraokeAssText(words, 0, 0.333, identity)).toBe('{\\k33}x')
     // Cue [0, 0.335] → 33.5 → rounds to 34
-    expect(buildKaraokeAssText(words, 0, 0.335, identity)).toBe('\\k34x')
+    expect(buildKaraokeAssText(words, 0, 0.335, identity)).toBe('{\\k34}x')
   })
 
   it('never produces negative durations (defensive clamp to 0)', () => {
@@ -99,14 +112,14 @@ describe('REQ-0286 §2 — buildKaraokeAssText', () => {
       { startSec: 0.5, endSec: 0.9, text: 'earlier' },  // deliberately wrong order
     ]
     // First word's \k should be 0 (max of negative and 0), second word
-    // holds until cueEnd.
+    // holds until cueEnd.  Still brace-enclosed.
     const out = buildKaraokeAssText(words, 0, 2, identity)
-    expect(out).toContain('\\k0later')  // clamped
+    expect(out).toContain('{\\k0}later')
   })
 
   it('long cue: 60-second duration rounds to 6000cs correctly', () => {
     const words: WordSpan[] = [{ startSec: 0, endSec: 60, text: 'long' }]
-    expect(buildKaraokeAssText(words, 0, 60, identity)).toBe('\\k6000long')
+    expect(buildKaraokeAssText(words, 0, 60, identity)).toBe('{\\k6000}long')
   })
 
   it('word text preserves faster-whisper leading spaces (concat = original transcript)', () => {
@@ -119,10 +132,91 @@ describe('REQ-0286 §2 — buildKaraokeAssText', () => {
       { startSec: 0.7, endSec: 1.0, text: ' everyone' },
     ]
     const out = buildKaraokeAssText(words, 0, 1.0, identity)
-    expect(out).toBe('\\k30Hello\\k40 world\\k30 everyone')
-    // Sanity: extracting the text portion (after the \k tags) reproduces
-    // the transcript.
-    const textOnly = out.replace(/\\k\d+/g, '')
+    expect(out).toBe('{\\k30}Hello{\\k40} world{\\k30} everyone')
+    // Sanity: extracting the text portion (after stripping every
+    // `{\k<cs>}` block) reproduces the transcript.
+    const textOnly = out.replace(/\{\\k\d+\}/g, '')
     expect(textOnly).toBe('Hello world everyone')
+  })
+})
+
+describe('REQ-0291 — no bare `\\k` outside `{...}` (regression pin)', () => {
+  // REQ-0291 root cause was `buildKaraokeAssText` emitting `\k50hello`
+  // (bare) instead of `{\k50}hello` (brace-enclosed).  libass draws
+  // bare override tags as literal text — the exact symptom the owner
+  // saw in the MP4 output.  These tests fail if a future change
+  // reintroduces bare `\k` anywhere in the output.
+
+  // A "bare \k" is `\k` NOT immediately preceded by `{` and NOT inside
+  // a `{...}` block.  We check this by:
+  //   1. Stripping every `{\k<digits>}` block → no `\k` should remain.
+  //   2. Asserting the input contains NO `\k` outside `{...}`.
+  function assertAllKTagsBraceEnclosed(s: string): void {
+    // Step 1: strip proper `{\k<cs>}` blocks (may repeat).
+    const strippedProper = s.replace(/\{\\k\d+\}/g, '')
+    // No `\k` should survive the strip.  If any does, it wasn't inside
+    // `{\k<digits>}` → it's a bare tag.
+    expect(strippedProper).not.toContain('\\k')
+  }
+
+  it('happy path (single word) — every `\\k` is brace-enclosed', () => {
+    const out = buildKaraokeAssText(
+      [{ startSec: 0, endSec: 1, text: 'hello' }],
+      0, 1, identity,
+    )
+    assertAllKTagsBraceEnclosed(out)
+  })
+
+  it('multi-word with inter-word gap and trailing hold — every `\\k` is brace-enclosed', () => {
+    const out = buildKaraokeAssText(
+      [
+        { startSec: 0, endSec: 0.5, text: 'a' },
+        { startSec: 0.7, endSec: 1.2, text: ' b' },
+        { startSec: 1.5, endSec: 1.9, text: ' c' },
+      ],
+      0, 3, identity,
+    )
+    assertAllKTagsBraceEnclosed(out)
+  })
+
+  it('leading offset — the `{\\k<offset>}` silent tag is ALSO brace-enclosed', () => {
+    const out = buildKaraokeAssText(
+      [{ startSec: 0.5, endSec: 1, text: 'delayed' }],
+      0, 1, identity,
+    )
+    // Both the leading `{\k50}` and the word's `{\k50}delayed` must be
+    // brace-enclosed.  If the leading offset regressed we'd see a bare
+    // `\k50` at the very start of the output.
+    assertAllKTagsBraceEnclosed(out)
+    expect(out.startsWith('{\\k50}')).toBe(true)
+  })
+
+  it('escaper output does not leak into the tag syntax (word text with `{` / `}` / `\\` stays outside braces)', () => {
+    // Words containing `{` / `}` / `\` would collide with tag syntax if
+    // the escaper failed to escape them.  Use the real escaper shape
+    // here (matching `escapeAssText`) so the pin catches escaper
+    // regressions too.  A word with an embedded backslash MUST NOT
+    // create a spurious `\k` sequence in the emitted string.
+    const escapeAss = (s: string): string => s
+      .replace(/\\N/g, '\n')
+      .replace(/\\/g, '\\\\')
+      .replace(/\{/g, '\\{')
+      .replace(/\}/g, '\\}')
+      .replace(/\n/g, '\\N')
+    const words: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'plain' },
+      { startSec: 0.5, endSec: 1, text: ' {brace}' },
+      { startSec: 1, endSec: 1.5, text: ' back\\slash' },
+    ]
+    const out = buildKaraokeAssText(words, 0, 1.5, escapeAss)
+    // Strip real karaoke tags — what remains is escaped text that MUST
+    // NOT contain any `\k` sequences (i.e. no bare karaoke tags mixed
+    // into the escaped body).
+    const strippedProper = out.replace(/\{\\k\d+\}/g, '')
+    expect(strippedProper).not.toContain('\\k')
+    // And the escaper's `\\{` / `\\}` escapes ARE present in the stripped
+    // body, proving braces in word text survived as escaped literals
+    // rather than being interpreted as tag delimiters.
+    expect(strippedProper).toContain('\\{brace\\}')
   })
 })

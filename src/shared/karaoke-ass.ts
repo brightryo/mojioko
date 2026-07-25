@@ -7,7 +7,7 @@ import type { WordSpan } from './types'
  *
  * A string of the form:
  *
- *   [<leading \k>][\k<dur_1>{word_1}][\k<dur_2>{word_2}]...[\k<dur_n>{word_n}]
+ *   [{\k<leading>}]{\k<dur_1>}word_1{\k<dur_2>}word_2...{\k<dur_n>}word_n
  *
  * where `dur_i` is the CENTISECOND (1/100 s) count for how long word i
  * stays "current" before word i+1 activates.  libass's `\k` tag switches
@@ -15,6 +15,18 @@ import type { WordSpan } from './types'
  * activation time is reached and leaves it there — so playing this text
  * back yields the "words light up as they're spoken" effect the REQ asks
  * for (§0 "words light up as spoken").
+ *
+ * ## ASS override-tag enclosure (REQ-0291 bugfix)
+ *
+ * Every `\k` tag MUST live inside its own `{...}` override block.
+ * libass parses override tags ONLY inside curly braces; a bare `\k50`
+ * in the text stream is treated as the literal five-character string
+ * "\k50" (the `\` gets escaped to `\\`) and gets DRAWN as text on the
+ * video — the exact regression REQ-0291 was filed to fix.  Do NOT
+ * merge the `\k` tag into the style-override block preceding the
+ * karaoke body: the caller emits `{style}` and immediately concatenates
+ * this function's output, so `{style}{\k<dur>}word` is the correct
+ * final shape (two adjacent `{}` blocks are legal libass syntax).
  *
  * ## Tag choice: \k (not \kf)
  *
@@ -126,21 +138,27 @@ export function buildKaraokeAssText(
   const parts: string[] = []
 
   // Leading offset — the cue starts before the first word.  Emit a
-  // silent `\k<offset>` so the first word's activation is delayed
-  // until its actual startSec.
+  // silent `{\k<offset>}` so the first word's activation is delayed
+  // until its actual startSec.  The braces MUST enclose the tag; see
+  // the "ASS override-tag enclosure" docstring section for why bare
+  // `\k` breaks libass.
   const leadingOffsetSec = words[0].startSec - cueStartSec
   if (leadingOffsetSec > 0) {
-    parts.push(`\\k${toCs(leadingOffsetSec)}`)
+    parts.push(`{\\k${toCs(leadingOffsetSec)}}`)
   }
 
-  // Each word: activation-until-next-word duration + escaped text.
+  // Each word: `{\k<duration>}` (override block) + escaped text
+  // (rendered as literal).  Word text passes through the caller's
+  // `escapeText` which handles `{` / `}` / `\` — the override braces
+  // wrapping the `\k` are added HERE (unescaped by design), never in
+  // the escaper.
   for (let i = 0; i < words.length; i++) {
     const nextActivationSec =
       i + 1 < words.length
         ? words[i + 1].startSec
         : cueEndSec // last word holds until cue ends
     const durationSec = Math.max(0, nextActivationSec - words[i].startSec)
-    parts.push(`\\k${toCs(durationSec)}${escapeText(words[i].text)}`)
+    parts.push(`{\\k${toCs(durationSec)}}${escapeText(words[i].text)}`)
   }
 
   return parts.join('')

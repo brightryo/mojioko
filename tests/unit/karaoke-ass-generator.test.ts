@@ -207,9 +207,11 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
     expect(line).toContain('\\3c&H00563412&')
   })
 
-  it('per-word \\k durations reflect the words[] activation offsets', () => {
+  it('per-word \\k durations reflect the words[] activation offsets (REQ-0291 brace-enclosed)', () => {
     // words[0] at [0, 0.5], words[1] at [0.5, 1.0]; cue [0, 2].
     // word[0]'s \k = 0.5 - 0 = 50cs; word[1]'s \k = 2.0 - 0.5 = 150cs.
+    // REQ-0291: each `\k` MUST live in its own `{...}` block or libass
+    // draws it as literal text on the burn-in.
     const entry = makeEntry({
       startSec: 0,
       endSec: 2,
@@ -218,8 +220,11 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, true)
     const line = dialogueLineOf(ass)
-    expect(line).toContain('\\k50hello')
-    expect(line).toContain('\\k150 world')
+    expect(line).toContain('{\\k50}hello')
+    expect(line).toContain('{\\k150} world')
+    // Negative pin — the pre-REQ-0291 bare-tag shape MUST NOT appear.
+    expect(line).not.toMatch(/[^{]\\k50/)
+    expect(line).not.toMatch(/[^{]\\k150/)
   })
 
   it('casing="uppercase" applies per word, karaoke tags still surround uppercased text', () => {
@@ -232,8 +237,14 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
     const line = dialogueLineOf(ass)
     expect(line).toContain('HELLO')
     expect(line).toContain(' WORLD')
+    // Casing MUST NOT bleed into the tag body (`\khello` etc.); the
+    // brace-enclosed form remains intact.
     expect(line).not.toContain('\\khello')
-    expect(line).not.toContain(' world')
+    expect(line).not.toContain('{\\khello')
+    // The lower-case text is fully consumed by the uppercase pass;
+    // check both bare and braced forms are absent.
+    expect(line).not.toContain('}hello')
+    expect(line).not.toContain('} world')
   })
 })
 
@@ -270,7 +281,7 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
     expect(line).toContain(' text')
   })
 
-  it('words invalid + JA text → per-character equal split', () => {
+  it('words invalid + JA text → per-character equal split (REQ-0291 brace-enclosed)', () => {
     // 5 Japanese chars over a 2-second cue → 0.4 s each → 40 cs each.
     // `buildKaraokeAssText` calculates each \k from the NEXT unit's
     // start, so the last char also gets ~40 cs (rounded).
@@ -283,15 +294,16 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, true)
     const line = dialogueLineOf(ass)
-    // Each of the 5 chars gets \k40 (0.4 s = 40 cs).
-    expect(line).toContain('\\k40こ')
-    expect(line).toContain('\\k40ん')
-    expect(line).toContain('\\k40に')
-    expect(line).toContain('\\k40ち')
-    expect(line).toContain('\\k40は')
+    // Each of the 5 chars gets `{\k40}` (0.4 s = 40 cs) — brace-
+    // enclosed so libass parses the tag instead of drawing it.
+    expect(line).toContain('{\\k40}こ')
+    expect(line).toContain('{\\k40}ん')
+    expect(line).toContain('{\\k40}に')
+    expect(line).toContain('{\\k40}ち')
+    expect(line).toContain('{\\k40}は')
   })
 
-  it('words invalid + EN text → per-word equal split', () => {
+  it('words invalid + EN text → per-word equal split (REQ-0291 brace-enclosed)', () => {
     // `hello world` → 2 units (`hello` + ` world`) over 2 seconds →
     // 1 s each → 100 cs each.
     const entry = makeEntry({
@@ -303,8 +315,8 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, true)
     const line = dialogueLineOf(ass)
-    expect(line).toContain('\\k100hello')
-    expect(line).toContain('\\k100 world')
+    expect(line).toContain('{\\k100}hello')
+    expect(line).toContain('{\\k100} world')
   })
 
   it('words VALID → Whisper timing preserved (fallback does NOT hijack the precise path)', () => {
@@ -321,10 +333,10 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
     const ass = generateAss([entry], video, burnin, undefined, undefined, true)
     const line = dialogueLineOf(ass)
     // Whisper timing: 50cs + 150cs (word activation offsets), NOT
-    // 100cs + 100cs (equal split).
-    expect(line).toContain('\\k50hello')
-    expect(line).toContain('\\k150 world')
-    expect(line).not.toContain('\\k100')
+    // 100cs + 100cs (equal split).  Both brace-enclosed (REQ-0291).
+    expect(line).toContain('{\\k50}hello')
+    expect(line).toContain('{\\k150} world')
+    expect(line).not.toContain('{\\k100}')
   })
 
   it('empty text + karaoke ON → no fallback units → plain rendering (no \\k)', () => {
@@ -371,5 +383,150 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
     const line = dialogueLineOf(ass)
     expect(line).not.toContain('\\k')
     expect(line).not.toContain('\\2c')
+  })
+})
+
+describe('REQ-0291 — ASS override-tag well-formedness (regression pin)', () => {
+  // Root cause: `buildKaraokeAssText` emitted bare `\k50hello` where it
+  // should have emitted `{\k50}hello`.  libass draws bare override tags
+  // as literal text so the owner saw `\k50hello` printed on the burn-in
+  // video.  These tests fail if any code path reintroduces a bare `\k`
+  // in the final Dialogue line — both Whisper timing (REQ-0286) and
+  // equal-split fallback (REQ-0289) share the same emitter so both are
+  // covered by the same well-formedness assertions.
+
+  /** Extract everything after the Effect column's trailing comma —
+   *  the ASS Text field where override tags actually live.
+   *  Mojioko emits the shape:
+   *    `Dialogue: 0,<start>,<end>,<style>,0,0,<mv>,,<text>`
+   *  That's 8 commas before the text field (Layer/Start/End/Style/
+   *  MarginL/MarginR/MarginV/Effect).  Sliced from position of the
+   *  8th comma + 1. */
+  function textFieldOf(dialogueLine: string): string {
+    const commas: number[] = []
+    for (let i = 0; i < dialogueLine.length; i++) {
+      if (dialogueLine[i] === ',') commas.push(i)
+      if (commas.length === 8) break
+    }
+    return dialogueLine.slice(commas[7] + 1)
+  }
+
+  /** Assert: after stripping every well-formed `{...}` block, NO `\`
+   *  (backslash) remains — meaning every override tag lived inside
+   *  braces and only literal text is left. */
+  function assertNoBareOverrideTags(dialogueLine: string): void {
+    const textField = textFieldOf(dialogueLine)
+    // Strip every `{...}` block (may repeat, may include multi-tag
+    // blocks like `{\an2\fs100...}`).  Non-greedy so adjacent blocks
+    // `{a}{b}` don't collapse into one.
+    const literalOnly = textField.replace(/\{[^}]*\}/g, '')
+    // Any `\` remaining in the literal text is either a bare override
+    // tag (bug) or an escaped-backslash literal (`\\`) — the latter
+    // shouldn't occur in these fixtures.
+    expect(literalOnly).not.toContain('\\')
+  }
+
+  /** Assert: braces are balanced (every `{` has a matching `}`). */
+  function assertBracesBalanced(dialogueLine: string): void {
+    const textField = textFieldOf(dialogueLine)
+    let depth = 0
+    for (const ch of textField) {
+      if (ch === '{') depth++
+      else if (ch === '}') depth--
+      // Depth must never go negative (unmatched `}`) or exceed 1
+      // (nested braces — ASS doesn't allow them).
+      expect(depth).toBeGreaterThanOrEqual(0)
+      expect(depth).toBeLessThanOrEqual(1)
+    }
+    expect(depth).toBe(0)
+  }
+
+  it('Whisper timing path — every `\\k` is inside `{...}`, braces balanced', () => {
+    const entry = makeEntry({
+      karaokeEnabled: true,
+      words: validWords,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    assertNoBareOverrideTags(line)
+    assertBracesBalanced(line)
+  })
+
+  it('equal-split fallback (JA) — every `\\k` is inside `{...}`, braces balanced', () => {
+    const entry = makeEntry({
+      text: 'テストです',
+      karaokeEnabled: true,
+      words: undefined,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    assertNoBareOverrideTags(line)
+    assertBracesBalanced(line)
+  })
+
+  it('equal-split fallback (EN, 3 words) — every `\\k` is inside `{...}`, braces balanced', () => {
+    const entry = makeEntry({
+      text: 'hello world edited',
+      karaokeEnabled: true,
+      words: undefined,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    assertNoBareOverrideTags(line)
+    assertBracesBalanced(line)
+  })
+
+  it('leading-offset case — the silent `{\\k<offset>}` is also brace-enclosed', () => {
+    // First word starts 0.5s AFTER cue start → buildKaraokeAssText
+    // emits an initial silent `{\k50}`.  Regression pin: the leading
+    // offset was previously emitted as bare `\k50` too.  Text must
+    // match words[].concat so the words-valid gate hits the Whisper
+    // path (not the equal-split fallback, which would produce a
+    // different leading-offset shape).
+    const entry = makeEntry({
+      startSec: 0,
+      endSec: 2,
+      text: 'delayed start',
+      karaokeEnabled: true,
+      words: [
+        { startSec: 0.5, endSec: 1.0, text: 'delayed' },
+        { startSec: 1.0, endSec: 1.5, text: ' start' },
+      ],
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    assertNoBareOverrideTags(line)
+    assertBracesBalanced(line)
+    expect(line).toContain('{\\k50}{\\k50}delayed') // silent-offset + word
+  })
+
+  it('style-override block and karaoke blocks are ADJACENT `{}` groups, not merged into one', () => {
+    // Pin the intended shape: `{style}{\k50}word1{\k100} word2`.
+    // A future refactor might be tempted to fold the first `\k` into
+    // the style block (`{style\k50}word1{\k100} word2`) — this test
+    // fails in that case, protecting the two-block layout that keeps
+    // buildKaraokeAssText independent of the caller's style tag.
+    const entry = makeEntry({
+      karaokeEnabled: true,
+      words: validWords,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    const textField = textFieldOf(line)
+    // The pattern `}{` marks the boundary between the style block and
+    // the first karaoke block.
+    expect(textField).toMatch(/\}\{\\k\d+\}/)
+  })
+
+  it('shape sanity — text field starts with an override block, not with bare text', () => {
+    const entry = makeEntry({
+      karaokeEnabled: true,
+      words: validWords,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    const textField = textFieldOf(line)
+    // First char MUST be `{` (opening the style override block).
+    expect(textField.startsWith('{')).toBe(true)
   })
 })
