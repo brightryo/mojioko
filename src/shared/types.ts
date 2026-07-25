@@ -162,6 +162,56 @@ export interface SubtitleEntryOriginal {
    * expectation).  ass-generator negates the value before emitting.
    */
   rotation?: number
+
+  /**
+   * REQ-0285 Phase B foundation — per-word timestamps captured by
+   * faster-whisper at transcribe time.  Absolute video seconds (same
+   * axis as `startSec` / `endSec`).  `text` retains faster-whisper's
+   * leading space where present (`" hello"`) so a future re-tokenise
+   * has the raw input.
+   *
+   * `undefined` means "no per-word data available for this row" — either
+   * a pre-REQ-0285 project file, or the entry was created outside a
+   * fresh transcribe (Add row, project import), or the entry's text
+   * was edited and the pre-edit words were invalidated (§4 in
+   * REQ-0285: `commit-text-edit.ts` clears `words` on any text
+   * mutation).  Empty array (`[]`) means "words WERE captured but
+   * the segment contained no timed word tokens" (silence-only chunk);
+   * Phase B visual features treat empty identically to undefined and
+   * fall back to plain rendering.
+   *
+   * Validity: use `areWordsValidForText(words, text)` from
+   * `src/shared/words-validity.ts` before consuming.  A cue whose
+   * `words` textual concatenation no longer matches `text` (project
+   * file was edited by hand, cue was split/merged without clearing
+   * words) MUST fall back to plain rendering — the visual features
+   * cannot safely animate mis-aligned word data.
+   *
+   * NOT reset on the row's Reset button — `original.words` mirrors
+   * `words` at creation time exactly like every other original-snapshot
+   * field, so Reset row also restores the initial word data.
+   */
+  words?: WordSpan[]
+}
+
+/**
+ * REQ-0285 — per-word timing.  Single source of truth: this file.
+ * `ipc-contracts.ts` re-exports the same symbol so the sidecar's
+ * `segment` event and `SubtitleEntry.words` share one declaration
+ * (no shape drift between wire and domain).
+ *
+ * Semantics:
+ *   - `startSec` / `endSec`: absolute video seconds, same axis as
+ *     `SubtitleEntry.startSec` / `endSec`.
+ *   - `text`: retains faster-whisper's leading space where present
+ *     (`" hello"`).  Visual renderers should trim per-render if they
+ *     display the word standalone; concatenation `.join('')` of a full
+ *     `words[]` reproduces the original transcript spacing.
+ */
+export interface WordSpan {
+  startSec: number
+  endSec: number
+  text: string
 }
 
 export interface SubtitleEntry extends SubtitleEntryOriginal {

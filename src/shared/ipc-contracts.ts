@@ -1,4 +1,4 @@
-import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams } from './types'
+import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams, WordSpan } from './types'
 import type { FontId } from './fonts'
 import type { Cut } from './cuts'
 export type { ModelsState }
@@ -143,9 +143,24 @@ export interface BuildInfo {
 // Streaming event shapes (pushed main → renderer via channelId)
 // ---------------------------------------------------------------------------
 
+// REQ-0285 — `WordSpan` (per-word timing carried on the `segment`
+// event and on `SubtitleEntry.words`) lives in `./types` so
+// domain-shape and wire-shape share a single declaration.  Re-exported
+// here as a convenience for consumers that import types via
+// `ipc-contracts.ts`.
+export type { WordSpan } from './types'
+
 export type TranscriptionEvent =
   | { event: 'started'; totalDurationSec: number }
-  | { event: 'segment'; segment: { startSec: number; endSec: number; text: string } }
+  /**
+   * REQ-0285 — segment gained an optional `words` array.  Always
+   * populated (possibly empty) when the sidecar is Post-REQ-0285;
+   * `undefined` for older builds or when faster-whisper produced no
+   * word data for the segment (silence-only chunk).  Renderers that
+   * don't consume it must simply ignore the field — the pre-existing
+   * `startSec / endSec / text` shape is unchanged.
+   */
+  | { event: 'segment'; segment: { startSec: number; endSec: number; text: string; words?: WordSpan[] } }
   | { event: 'progress'; percent: number }
   /**
    * REQ-086 / REQ-0142 — phase change.  Two distinct sources share this

@@ -373,7 +373,11 @@ export default function Step1Route(_: Step1RouteProps) {
     setDrawerErrorMessage('')
     window.electronAPI.menuSetTranscribing(true)
 
-    const segments: { startSec: number; endSec: number; text: string }[] = []
+    // REQ-0285 — collected segments now carry an optional `words` array
+    // (per-word timestamps from faster-whisper).  Type mirrors the IPC
+    // contract (`ipc-contracts.ts:TranscriptionEvent`) so the compiler
+    // catches any drift between wire shape and this local buffer.
+    const segments: { startSec: number; endSec: number; text: string; words?: import('../../shared/types').WordSpan[] }[] = []
     let previewMixUrl: string | null = null
 
     const run = runTranscription(
@@ -526,6 +530,13 @@ export default function Step1Route(_: Step1RouteProps) {
         outlineThicknessPx: runDefaults.outlineThicknessPx,
         fadeDurationSec: settingsFadeDurationSec,
         fontId: runFontId,
+        // REQ-0285 — attach per-word timestamps captured by the sidecar.
+        // `undefined` (rather than `[]`) when the segment carried no
+        // word data, so `areWordsValidForText` short-circuits on the
+        // truthiness check and downstream Phase B renderers can gate on
+        // a single value.  Deep-copied into `original.words` below via
+        // spread so Reset row restores the same array.
+        words: seg.words,
         ...makeEntryLayoutDefaults()
       }
       return {
@@ -536,6 +547,11 @@ export default function Step1Route(_: Step1RouteProps) {
         // Deep-copy the nested subtitleBackground so the live entry and
         // its `original` snapshot don't share object identity (otherwise
         // an inline edit would also mutate the reset target).
+        // REQ-0285 — `words` is intentionally aliased between live and
+        // original (arrays of WordSpan objects are immutable in practice;
+        // nothing in the codebase mutates a word span in-place).  Cost
+        // of a per-row `.map` copy is nontrivial for long transcripts;
+        // the alias is safe as long as the invariant holds.
         original: { ...base, subtitleBackground: { ...base.subtitleBackground } }
       }
     })
