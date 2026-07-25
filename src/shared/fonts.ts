@@ -936,6 +936,67 @@ export function deriveFamilyStatus(
 }
 
 /**
+ * REQ-0282 §1 / §2 — pure selectors that pin the "which family / weight
+ * is offered to the user" invariant.  Both take the same two predicates
+ * (`isInstalledOnDisk` + `isMsix`) so the free-tier gate (§C-3 —
+ * "無料版はウェイト機能なし、Noto Regular/Medium は登録するが選択不可")
+ * is applied consistently to both the family dropdown AND the weight
+ * dropdown across every consumer (FontPicker section 1, timeline
+ * inspector, bulk-edit bar — all three use the shared
+ * FamilyWeightSelector, which in turn delegates to these helpers).
+ *
+ * The invariant these helpers pin (verified by
+ * `tests/unit/weight-selector-tier-gate.test.ts`):
+ *
+ *   NSIS (free) + Noto Sans JP family     → weights offered = [SemiBold]
+ *                                            (Regular / Medium are bundled
+ *                                             on disk but tier-locked, so
+ *                                             `canSelectFontInTier(false, id)`
+ *                                             is false for anything other
+ *                                             than DEFAULT_FONT_ID)
+ *   NSIS + any non-Noto family            → weights offered = []
+ *                                            (whole family filtered out by
+ *                                             `selectableFamilies`)
+ *   MSIX (paid) + any family              → weights offered = every
+ *                                            installed weight
+ *
+ * Pure — no React, no store, no IO.  This makes the gate unit-testable
+ * without a jsdom scaffold and prevents a future "just filter by
+ * installed" refactor from silently regressing the tier gate.
+ */
+export function selectableWeightsForFamily(
+  family: FontFamily,
+  isInstalledOnDisk: (fontId: FontId) => boolean,
+  isMsix: boolean,
+): FontFamily['weights'] {
+  const canSelect = (id: FontId): boolean => {
+    // Duplicates the runtime `canSelectFontInTier` policy (paid tier =
+    // everything, free tier = DEFAULT_FONT_ID only).  Kept inline so
+    // this module stays free of a renderer-side lib dep; the
+    // `weight-selector-tier-gate` test pins that the two agree.
+    if (isMsix) return true
+    return id === DEFAULT_FONT_ID
+  }
+  return family.weights.filter((w) => isInstalledOnDisk(w.fontId) && canSelect(w.fontId))
+}
+
+/**
+ * REQ-0282 §1 / §2 — family-list companion to `selectableWeightsForFamily`.
+ * A family is offered iff at least one of its weights would be offered
+ * by the weight helper above.  Under NSIS this collapses to "only the
+ * Noto family, and even then only the SemiBold weight is offered".
+ */
+export function selectableFamilies(
+  families: readonly FontFamily[],
+  isInstalledOnDisk: (fontId: FontId) => boolean,
+  isMsix: boolean,
+): FontFamily[] {
+  return families.filter(
+    (fam) => selectableWeightsForFamily(fam, isInstalledOnDisk, isMsix).length > 0,
+  )
+}
+
+/**
  * REQ-0269 B — resolve the FontId that a given `(family, weight)` pair
  * points at.  Used by the weight selector's onChange path to translate
  * a numeric weight click into the concrete FontId to write into the

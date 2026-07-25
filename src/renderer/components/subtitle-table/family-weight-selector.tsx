@@ -4,7 +4,6 @@ import { ChevronDown } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
-import { canSelectFontInTier } from '@/lib/font-tier'
 import { cn } from '@/lib/utils'
 import {
   getFontMeta,
@@ -12,6 +11,8 @@ import {
   getFamilyDefaultFontId,
   getFontIdForFamilyAndWeight,
   stripFamilyNamespacePrefix,
+  selectableFamilies,
+  selectableWeightsForFamily,
   type FontId,
 } from '../../../shared/fonts'
 
@@ -62,11 +63,16 @@ export function FamilyWeightSelector({ value, onChange, disabled }: FamilyWeight
   const families = getFontFamilies()
   const currentFamily = families.find((f) => f.cssFontFamily === currentMeta.cssFontFamily)
 
-  // Selectable families: any family that has at least one selectable+installed weight.
-  const familiesUi = families.map((fam) => {
-    const anySelectable = fam.weights.some((w) => installed.has(w.fontId) && canSelectFontInTier(isMsix, w.fontId))
-    return { ...fam, isSelectable: anySelectable, displayLabel: stripFamilyNamespacePrefix(fam.cssFontFamily) }
-  }).filter((f) => f.isSelectable)
+  // REQ-0282 §1 — selectable families delegate to `selectableFamilies` (pure),
+  // which applies the same `installed && canSelectFontInTier` invariant
+  // the weight dropdown uses below.  Pinned by
+  // `tests/unit/weight-selector-tier-gate.test.ts`.
+  const isInstalled = (id: FontId) => installed.has(id)
+  const familiesUi = selectableFamilies(families, isInstalled, isMsix).map((fam) => ({
+    ...fam,
+    isSelectable: true as const,
+    displayLabel: stripFamilyNamespacePrefix(fam.cssFontFamily),
+  }))
 
   function pickFamily(family: typeof familiesUi[number]) {
     setFamilyOpen(false)
@@ -178,8 +184,14 @@ export function FamilyWeightSelector({ value, onChange, disabled }: FamilyWeight
             className="w-[240px] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
           >
             <div className="flex flex-col">
-              {currentFamily.weights
-                .filter((w) => installed.has(w.fontId) && canSelectFontInTier(isMsix, w.fontId))
+              {/* REQ-0282 §1 — delegate to `selectableWeightsForFamily`
+                  (pure) so the free-tier gate (§C-3 — "無料版はウェイト
+                  機能なし、Noto Regular/Medium は選択不可") is applied
+                  consistently.  In NSIS this collapses to
+                  `[SemiBold]` for the Noto family (Regular / Medium
+                  are bundled on disk but tier-locked).  Pinned by
+                  `tests/unit/weight-selector-tier-gate.test.ts`. */}
+              {selectableWeightsForFamily(currentFamily, isInstalled, isMsix)
                 .map((w) => {
                   const isCurrent = w.fontId === value
                   const label = w.displayName.startsWith(currentFamilyLabel)
