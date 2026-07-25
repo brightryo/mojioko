@@ -14,7 +14,7 @@ import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-i
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
-import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR, KARAOKE_DEFAULT_BASE_COLOR } from '../../../shared/karaoke-gate'
+import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { areWordsValidForText } from '../../../shared/words-validity'
 import { HelpIcon } from '@/components/help-icon'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
@@ -360,16 +360,17 @@ export function TimelineBlockInspector({
   }
   // REQ-0278 — glow handlers removed (see SPECIFICATION.md §11).
 
-  // REQ-0286 §5 — karaoke handlers.  Toggle-on seeds hardcoded default
-  // colours (yellow highlight + white base) so the effect is visible
-  // immediately; toggle-off keeps the last colours in place so re-
-  // enabling restores them.
+  // REQ-0286 §5 — karaoke handlers.  Toggle-on seeds ONLY the highlight
+  // colour (yellow accent) so the sweep is visible immediately; the
+  // base (unspoken) colour is deliberately left `undefined` so
+  // ass-generator / subtitle-overlay / preview rAF resolve it to
+  // `entry.textColorHex` at render time (REQ-0290 §1).  Toggle-off
+  // keeps the last colours in place so re-enabling restores them.
   function handleKaraokeToggle(on: boolean) {
     if (on) {
       applyStyleEdit(t('history.editKaraoke'), {
         karaokeEnabled: true,
         karaokeHighlightColor: entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR,
-        karaokeBaseColor: entry.karaokeBaseColor ?? KARAOKE_DEFAULT_BASE_COLOR,
       })
     } else {
       applyStyleEdit(t('history.editKaraoke'), { karaokeEnabled: false })
@@ -1147,7 +1148,7 @@ export function TimelineBlockInspector({
                       <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.karaokeBaseColor')}</label>
                       <div onClick={(e) => e.stopPropagation()}>
                         <ColorPicker
-                          value={entry.karaokeBaseColor ?? KARAOKE_DEFAULT_BASE_COLOR}
+                          value={entry.karaokeBaseColor ?? entry.textColorHex}
                           onChange={handleKaraokeBasePreview}
                           onCommit={handleKaraokeBaseCommit}
                           disabled={isFrozen}

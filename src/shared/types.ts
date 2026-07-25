@@ -173,11 +173,19 @@ export interface SubtitleEntryOriginal {
    * falls back to plain rendering (see the fallback contract in
    * REQ-0286 §0).
    *
-   * Colours are BOTH stored so bulk-toggling ON seeds sensible
-   * defaults (`KARAOKE_DEFAULT_HIGHLIGHT_COLOR` /
-   * `KARAOKE_DEFAULT_BASE_COLOR` in `karaoke-gate.ts`) without a
-   * separate defaults surface.  When karaoke is off the fields are
-   * ignored and the cue uses `textColorHex` as usual.
+   * Colour resolution (REQ-0290 §1):
+   *   - `karaokeHighlightColor` unset → `KARAOKE_DEFAULT_HIGHLIGHT_COLOR`
+   *     (yellow accent).  Also seeded into this field when the user
+   *     toggles karaoke ON via inspector / bulk-edit so the picker has
+   *     a starting swatch.
+   *   - `karaokeBaseColor` unset → `entry.textColorHex`.  NOT seeded at
+   *     toggle-ON so the user's per-row text colour is preserved as
+   *     the base half of the sweep after enabling karaoke.  Once the
+   *     user explicitly picks a base colour, the stored value wins over
+   *     the inheritance.
+   *
+   * When karaoke is off the fields are ignored and the cue uses
+   * `textColorHex` as usual.
    *
    * `undefined` / `false` on `karaokeEnabled` = disabled (default) —
    * pre-REQ-0286 project files load with no karaoke behaviour, matching

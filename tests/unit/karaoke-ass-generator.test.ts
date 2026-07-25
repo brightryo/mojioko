@@ -140,19 +140,57 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
     expect(line).toContain('\\2c&H0000FF00&')
   })
 
-  it('uses hardcoded defaults when karaokeHighlightColor / karaokeBaseColor unset', () => {
-    // Owner-toggled karaoke from a project file that only stored the
-    // boolean.  Should seed to the KARAOKE_DEFAULT_* constants
-    // (#FFFF00 yellow highlight + #FFFFFF white base) rather than
-    // silently rendering with the row's textColorHex.
+  it('REQ-0290 §1 — base defaults to textColorHex when karaokeBaseColor unset; highlight defaults to yellow', () => {
+    // With a pink `textColorHex`, enabling karaoke without an explicit
+    // `karaokeBaseColor` MUST NOT drop back to white — the base half of
+    // the sweep should inherit the row's own text colour so the user's
+    // per-cue colour is not silently discarded.  Highlight stays on
+    // KARAOKE_DEFAULT_HIGHLIGHT_COLOR (#FFFF00 yellow) because the
+    // accent-colour intent is uniform (REQ-0290 §1 last bullet).
     const entry = makeEntry({
+      textColorHex: '#FF00FF', // pink — the owner's example
       karaokeEnabled: true,
       words: validWords,
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, true)
     const line = dialogueLineOf(ass)
-    expect(line).toContain('\\c&H0000FFFF&')  // #FFFF00
-    expect(line).toContain('\\2c&H00FFFFFF&') // #FFFFFF
+    expect(line).toContain('\\c&H0000FFFF&')  // #FFFF00 (default highlight, yellow)
+    expect(line).toContain('\\2c&H00FF00FF&') // #FF00FF (base = textColorHex, pink)
+  })
+
+  it('REQ-0290 §1 — explicit karaokeBaseColor overrides the textColorHex inheritance', () => {
+    // After the user has picked a base colour, that value wins over the
+    // textColorHex fallback.  This is the "後から未発話色を変えれば効く"
+    // requirement — inheritance only fires when the field is undefined.
+    const entry = makeEntry({
+      textColorHex: '#FF00FF',       // pink
+      karaokeEnabled: true,
+      karaokeBaseColor: '#00FF00',   // user picked green
+      words: validWords,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    expect(line).toContain('\\2c&H0000FF00&') // green wins, pink is NOT emitted for base
+    expect(line).not.toContain('\\2c&H00FF00FF&')
+  })
+
+  it('REQ-0290 §3 — outline colour \\3c stays on `outlineColorHex` when karaoke is active', () => {
+    // Karaoke swaps the fill (\c) and secondary (\2c) colours to drive
+    // the sweep.  The outline (\3c) is independent and MUST still carry
+    // the user-configured `outlineColorHex` — the sweep does not touch
+    // the outline half of the glyph.  Pin so a future refactor cannot
+    // silently reroute \3c through the karaoke colour resolution.
+    const entry = makeEntry({
+      textColorHex: '#FF00FF',       // pink fill
+      outlineColorHex: '#123456',    // distinctive outline
+      karaokeEnabled: true,
+      karaokeHighlightColor: '#AABBCC',
+      words: validWords,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    // hexToAss(#123456) = &H00563412& (ASS is BGR)
+    expect(line).toContain('\\3c&H00563412&')
   })
 
   it('per-word \\k durations reflect the words[] activation offsets', () => {

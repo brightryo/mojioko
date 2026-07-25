@@ -10,7 +10,7 @@ import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-i
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
-import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR, KARAOKE_DEFAULT_BASE_COLOR } from '../../../shared/karaoke-gate'
+import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { HelpIcon } from '@/components/help-icon'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -552,17 +552,19 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     )
   }
 
-  // REQ-0286 §5 — karaoke bulk toggle.  Seeds hardcoded default
-  // colours on ON so every selected row gets a visible karaoke effect
-  // in one operation.  Free tier: the row is hidden entirely (tier
-  // gate above), so this handler is unreachable on NSIS builds.
+  // REQ-0286 §5 — karaoke bulk toggle.  Seeds ONLY the highlight
+  // colour (yellow accent) so every selected row gets a visible sweep
+  // in one operation.  Base (unspoken) colour is deliberately NOT set:
+  // each selected row falls back to its own `textColorHex` at render
+  // time (REQ-0290 §1) rather than being clobbered by a uniform
+  // default.  Free tier: the row is hidden entirely (tier gate above),
+  // so this handler is unreachable on NSIS builds.
   function handleKaraokeBulkToggle(on: boolean) {
     applyBulk(
       on
         ? {
             karaokeEnabled: true,
             karaokeHighlightColor: KARAOKE_DEFAULT_HIGHLIGHT_COLOR,
-            karaokeBaseColor: KARAOKE_DEFAULT_BASE_COLOR,
           }
         : { karaokeEnabled: false },
       t('bulk.history.karaoke', { count: selectedRowIds.size }),

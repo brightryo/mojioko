@@ -13,7 +13,7 @@ import { useAppEnvStore } from '@/stores/app-env-store'
 import { canSelectFontInTier } from '@/lib/font-tier'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
-import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR, KARAOKE_DEFAULT_BASE_COLOR } from '../../../shared/karaoke-gate'
+import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { areWordsValidForText } from '../../../shared/words-validity'
 
 /**
@@ -485,7 +485,12 @@ export function SubtitleOverlay({
     && canUseKaraokeInTier(isMsix)
     && areWordsValidForText(entry.words, entry.text)
   const karaokeHighlightColorResolved = entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR
-  const karaokeBaseColorResolved = entry.karaokeBaseColor ?? KARAOKE_DEFAULT_BASE_COLOR
+  // REQ-0290 §1 — base (unspoken) colour inherits from `textColorHex`
+  // when the user has not explicitly picked one.  Keeps the user's
+  // per-cue text-colour choice visible after enabling karaoke; the
+  // ass-generator side uses the identical rule so preview matches
+  // burn-in.
+  const karaokeBaseColorResolved = entry.karaokeBaseColor ?? entry.textColorHex
   // Silence "declared but never read" during the initial render — the
   // parent's rAF loop consumes the highlight colour via the entry
   // Map, not through a prop from here.  Keeping the local const

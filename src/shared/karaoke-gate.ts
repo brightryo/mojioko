@@ -44,12 +44,30 @@ export function canUseKaraokeInTier(isMsix: boolean): boolean {
 }
 
 /**
- * REQ-0286 — hardcoded seed colours applied when the user first toggles
- * karaoke ON for a cue (via inspector / bulk-edit).  Yellow highlight
- * (spoken/past words) + white base (unspoken/future words) matches the
- * TikTok / short-form-video convention users likely arrived expecting.
- * Both are per-cue overridable through the color pickers next to the
- * karaoke Switch.
+ * REQ-0286 / REQ-0290 — colour defaults used when the user first toggles
+ * karaoke ON for a cue.
+ *
+ * ## Highlight (spoken/past words → ASS PrimaryColour, `\c`)
+ *
+ * `KARAOKE_DEFAULT_HIGHLIGHT_COLOR = '#FFFF00'` — yellow accent, matches
+ * the TikTok / short-form-video convention users likely arrived
+ * expecting.  Seeded into `karaokeHighlightColor` at toggle-ON so the
+ * ColorPicker has a starting value; overridable per-cue.
+ *
+ * ## Base (unspoken/future words → ASS SecondaryColour, `\2c`)
+ *
+ * `KARAOKE_DEFAULT_BASE_COLOR = '#FFFFFF'` — kept as an exported constant
+ * for API stability, but **not seeded at toggle-ON anymore** (REQ-0290
+ * §1).  Instead every render path (`ass-generator`, `subtitle-overlay`,
+ * `video-preview-panel` rAF loop) resolves an unset `karaokeBaseColor`
+ * to the cue's `textColorHex`, so the user's per-row text colour is
+ * preserved as the base half of the sweep after enabling karaoke.
+ * The user can still explicitly pick a base colour via the ColorPicker;
+ * that overrides the inheritance.
+ *
+ * This constant remains useful for tests and any future feature that
+ * needs an absolute-white reference; nothing in the current code path
+ * consults it at render time.
  */
 export const KARAOKE_DEFAULT_HIGHLIGHT_COLOR = '#FFFF00'
 export const KARAOKE_DEFAULT_BASE_COLOR = '#FFFFFF'

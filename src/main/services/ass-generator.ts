@@ -1,7 +1,7 @@
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground } from '../../shared/types'
 import { ASS_MARGIN_LR_PX } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
-import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR, KARAOKE_DEFAULT_BASE_COLOR } from '../../shared/karaoke-gate'
+import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../shared/karaoke-gate'
 import { buildKaraokeAssText } from '../../shared/karaoke-ass'
 import { areWordsValidForText } from '../../shared/words-validity'
 
@@ -247,6 +247,15 @@ export function generateAss(
       // `\2c` is emitted — output is byte-identical to pre-REQ-0286 for
       // entries without karaoke, pinned by
       // `ass-generator-baseline-ac1fd67.test.ts`.
+      //
+      // REQ-0290 §1 — the base (unspoken) colour falls back to the cue's
+      // `textColorHex`, NOT the hardcoded `KARAOKE_DEFAULT_BASE_COLOR`.
+      // Rationale: enabling karaoke should not silently discard the user's
+      // per-row text colour; the base half of the karaoke sweep inherits
+      // that colour until the user explicitly sets `karaokeBaseColor`.
+      // The highlight half keeps `KARAOKE_DEFAULT_HIGHLIGHT_COLOR`
+      // (yellow) because per REQ-0290 the accent colour intent is
+      // uniform across cues.
       const karaokeActive =
         e.karaokeEnabled === true
         && canUseKaraokeInTier(isMsix)
@@ -255,7 +264,7 @@ export function generateAss(
         ? `\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}`
         : `\\c${hexToAss(e.textColorHex)}`
       const karaokeSecondaryTag = karaokeActive
-        ? `\\2c${hexToAss(e.karaokeBaseColor ?? KARAOKE_DEFAULT_BASE_COLOR)}`
+        ? `\\2c${hexToAss(e.karaokeBaseColor ?? e.textColorHex)}`
         : ''
       const outlineTag = `\\3c${hexToAss(e.outlineColorHex)}`
       const bordTag    = `\\bord${e.outlineThicknessPx}`

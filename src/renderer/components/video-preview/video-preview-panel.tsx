@@ -512,7 +512,11 @@ export function VideoPreviewPanel() {
         // no-op even without an explicit tier check here.
         if (entry.karaokeEnabled && entry.words && entry.words.length > 0) {
           const highlightColor = entry.karaokeHighlightColor ?? '#FFFF00'
-          const baseColor = entry.karaokeBaseColor ?? '#FFFFFF'
+          // REQ-0290 §1 — base colour inherits from `textColorHex` when
+          // the user hasn't explicitly picked one, matching the burn-in
+          // (`\2c`) and initial-render (subtitle-overlay) resolution
+          // rules so all three paths agree.
+          const baseColor = entry.karaokeBaseColor ?? entry.textColorHex
           const wordSpans = el.querySelectorAll<HTMLElement>('[data-karaoke-word-idx]')
           for (const span of wordSpans) {
             const startSecAttr = span.getAttribute('data-karaoke-word-start-sec')
