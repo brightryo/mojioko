@@ -411,38 +411,12 @@ export function SubtitleOverlay({
     ? hexToRgba(entry.shadowColor ?? '#000000', (entry.shadowAlpha ?? 100) / 100)
     : ''
 
-  // REQ-0277 §3 — glow.  CSS `filter: blur()` blurs the whole element
-  // (including the sharp glyph on top), so we instead stack multiple
-  // `text-shadow` layers with an increasing blur-radius, all in the
-  // glow colour, to build the halo.  The main text stays sharp on top
-  // because text-shadow is painted BEHIND the text fill.
-  //
-  // Tolerance criterion (REQ §3): "text is sharp; a coloured haze
-  // fringes the strokes".  Exact per-pixel match to libass' `\blur` is
-  // impossible — libass' blur is a proper Gaussian on the outline
-  // buffer while CSS text-shadow with blur-radius is a spread-and-fade
-  // approximation.  Both look correct at typical values (radius 4-12);
-  // preview may look slightly less soft than burn-in.  The
-  // "sharp text + coloured halo" invariant holds.
-  const glowEnabledResolved = entry.glowEnabled === true
-  const glowRadiusRaw = glowEnabledResolved
-    ? Math.max(0, Math.min(20, entry.glowRadius ?? 6))
-    : 0
-  const glowRadiusPx = glowRadiusRaw * scale
-  const glowColorCss = glowEnabledResolved
-    ? (entry.glowColor ?? '#FFFFFF')
-    : ''
-  const glowShadow = glowEnabledResolved && glowRadiusPx > 0
-    ? [
-        `0 0 ${glowRadiusPx * 0.5}px ${glowColorCss}`,
-        `0 0 ${glowRadiusPx}px ${glowColorCss}`,
-        `0 0 ${glowRadiusPx * 1.5}px ${glowColorCss}`,
-      ].join(', ')
-    : ''
+  // REQ-0278 — glow (3-layer text-shadow stack) was removed here.
+  // See SPECIFICATION.md §11 for the deletion rationale.
   const dropShadow = shadowEnabledResolved && shadowDepthPx > 0
     ? `${shadowDepthPx}px ${shadowDepthPx}px 0 ${shadowColorCss}`
     : ''
-  const textShadowCombined = [dropShadow, glowShadow].filter(Boolean).join(', ') || undefined
+  const textShadowCombined = dropShadow || undefined
 
   // REQ-20260613-016 Phase 6 — when the parent supplies onPointerDown the
   // overlay becomes interactive: cursor=move, pointer-events-auto, and the
@@ -543,11 +517,11 @@ export function SubtitleOverlay({
         // through unchanged.  Matches ass-generator's `.toUpperCase()`
         // on the emitted text.
         textTransform: entry.casing === 'uppercase' ? 'uppercase' : undefined,
-        // REQ-0277 §2 (drop shadow) + §3 (glow) — combined `text-shadow`
-        // stack.  Undefined when neither effect is enabled → falls back
-        // to no CSS text-shadow.  Order: drop shadow first (paints
-        // furthest back), then glow layers.  See variable
-        // `textShadowCombined` for the composition.
+        // REQ-0277 §2 — drop shadow.  Renders as a single CSS
+        // `text-shadow` when shadow is enabled AND the row has no bg
+        // box; `undefined` otherwise.  Glow used to layer additional
+        // shadows on top of this line (REQ-0277 §3) but was removed
+        // in REQ-0278 — see SPECIFICATION.md §11 for why.
         textShadow: textShadowCombined,
         // `opacity` is intentionally NOT set here — see comment above
         // the prop list; the parent's rAF loop writes it via DOM API

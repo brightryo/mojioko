@@ -142,17 +142,16 @@ export interface SubtitleEntryOriginal {
   shadowColor?: string
   /** Integer 0-100 (opacity %; higher = more opaque).  Default `100`. */
   shadowAlpha?: number
-  /**
-   * REQ-0277 §3 — glow / edge blur.  ASS `\blur<amount>`.  Preview
-   * approximates via stacked `text-shadow` with blur-radius (see
-   * subtitle-overlay for the recipe and tolerance criterion).
-   * `undefined` on `glowEnabled` OR `glowEnabled === false` = disabled.
-   */
-  glowEnabled?: boolean
-  /** Integer px, 0-20 (typical 4-12).  libass `\blur` value; also the CSS blur-radius. */
-  glowRadius?: number
-  /** `#RRGGBB`; default `#FFFFFF`. */
-  glowColor?: string
+  // REQ-0278 — glow (glowEnabled / glowRadius / glowColor) was
+  // removed here.  See SPECIFICATION.md §11: reason was "colour is
+  // the essence of a glow effect but the colour picker never made
+  // it into the UI, so the shipped feature had a white-only halo
+  // that was less useful than promised."  Fields deleted rather
+  // than deprecated because no released version persisted them —
+  // pre-REQ-0278 project files do not carry these keys, and any
+  // legacy JSON that hypothetically does will hit the standard
+  // "unknown key on parse" tolerance (see project-store hydrate)
+  // and be silently ignored.
   /**
    * REQ-0277 §4 — clockwise text rotation in degrees, 0-360.  ASS
    * `\frz<deg>`.  Preview: CSS `transform: rotate(<deg>deg)` with

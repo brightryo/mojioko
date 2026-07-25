@@ -252,27 +252,10 @@ export function generateAss(
         shadowAlphaTag = `\\4a&H${opacityToAssAlpha(alphaPct)}&`
       }
 
-      // REQ-0277 §3 — edge blur / glow.  libass' `\blur<amount>` blurs
-      // the outline (`\3c`) and shadow (`\4c`) layers, giving a
-      // uniform-radius glow around every stroke.  `glowEnabled ===
-      // undefined` OR false → skipped (libass defaults to `\blur0`).
-      // Range clamped defensively to 0-20 to match the CSS side.
-      const glowTag = e.glowEnabled
-        ? `\\blur${Math.max(0, Math.min(20, e.glowRadius ?? 6))}`
-        : ''
-      // Glow COLOR reuses `\3c` (outline colour) because that's what
-      // libass' blur radiates from.  When the user's outline colour is
-      // already set to something else (e.g. black outline), we override
-      // it inline with the glow colour AFTER the base outlineTag so
-      // libass' last-write-wins takes the glow colour for painting the
-      // blurred halo.  Trade-off: the sharp outline colour is
-      // sacrificed while glow is on — matches typical "glow-only" UX
-      // expectations (users don't usually want a sharp outline AND a
-      // separate coloured glow).  If they do, they can turn outline
-      // thickness to 0 and rely on the glow alone.
-      const glowColorTag = e.glowEnabled && e.glowColor
-        ? `\\3c${hexToAss(e.glowColor)}`
-        : ''
+      // REQ-0278 — glow (`\blur` + `\3c` override) was removed here.
+      // See SPECIFICATION.md §11 for the deletion rationale.  Byte-
+      // identity with pre-Phase-A ac1fd67 output is pinned by
+      // `tests/unit/ass-generator-baseline-ac1fd67.test.ts`.
 
       // REQ-0277 §4 — text rotation (Z axis, clockwise).  libass'
       // `\frz<deg>` measures counter-clockwise, so we negate the
@@ -328,11 +311,6 @@ export function generateAss(
         shadowDepthTag,
         shadowColorTag,
         shadowAlphaTag,
-        // REQ-0277 §3 — glow tags after outlineTag AND bg tags so a
-        // glow-enabled row overrides both outline color and bg tag
-        // colour for the blur halo (last-write-wins).
-        glowColorTag,
-        glowTag,
         // REQ-0277 §4 — rotation last (order irrelevant for libass
         // parsing but keeps the emitted string easy to read).
         rotTag,

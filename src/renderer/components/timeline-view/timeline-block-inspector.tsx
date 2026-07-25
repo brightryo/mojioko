@@ -355,20 +355,7 @@ export function TimelineBlockInspector({
   function handleShadowDepthCommit(depth: number) {
     applyStyleEdit(t('history.editShadow'), { shadowDepth: depth })
   }
-  function handleGlowToggle(on: boolean) {
-    if (on) {
-      applyStyleEdit(t('history.editGlow'), {
-        glowEnabled: true,
-        glowRadius: entry.glowRadius ?? 6,
-        glowColor: entry.glowColor ?? '#FFFFFF',
-      })
-    } else {
-      applyStyleEdit(t('history.editGlow'), { glowEnabled: false })
-    }
-  }
-  function handleGlowRadiusCommit(radius: number) {
-    applyStyleEdit(t('history.editGlow'), { glowRadius: radius })
-  }
+  // REQ-0278 — glow handlers removed (see SPECIFICATION.md §11).
   function handleRotationCommit(deg: number) {
     // Normalise into [0, 360) so a runaway drag never accumulates
     // beyond the ASS `\frz` legible range.
@@ -1050,26 +1037,7 @@ export function TimelineBlockInspector({
                 />
               </div>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.glow')}</label>
-              <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
-                <Switch
-                  checked={entry.glowEnabled === true}
-                  onCheckedChange={handleGlowToggle}
-                  disabled={isFrozen}
-                  aria-label={t('styleCell.glow')}
-                />
-                <NumberStepperInput
-                  value={entry.glowRadius ?? 6}
-                  min={0}
-                  max={20}
-                  step={1}
-                  onCommit={handleGlowRadiusCommit}
-                  disabled={isFrozen || !entry.glowEnabled}
-                  ariaLabel={t('styleCell.glowRadius')}
-                />
-              </div>
-            </div>
+            {/* REQ-0278 — glow row removed here (SPECIFICATION.md §11). */}
             <div className="flex items-center justify-between gap-2">
               <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.rotation')}</label>
               <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>

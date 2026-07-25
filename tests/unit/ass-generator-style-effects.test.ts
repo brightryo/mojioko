@@ -122,32 +122,9 @@ describe('REQ-0277 §2 — drop shadow', () => {
   })
 })
 
-// -----------------------------------------------------------------
-// §3 Glow
-// -----------------------------------------------------------------
-describe('REQ-0277 §3 — glow', () => {
-  it('glow off → no \\blur tag at all', () => {
-    const ass = generateAss([makeEntry()], video, burnin)
-    expect(dialogueLineOf(ass)).not.toContain('\\blur')
-  })
-  it('glow on → emits \\blur<radius>', () => {
-    const ass = generateAss([makeEntry({ glowEnabled: true, glowRadius: 8 })], video, burnin)
-    expect(dialogueLineOf(ass)).toContain('\\blur8')
-  })
-  it('glow on with color → emits glow color as \\3c (overriding outline color for the halo paint)', () => {
-    const ass = generateAss([makeEntry({
-      glowEnabled: true, glowRadius: 8, glowColor: '#FF00FF',
-    })], video, burnin)
-    const line = dialogueLineOf(ass)
-    expect(line).toContain('\\blur8')
-    // #FF00FF → ASS &H00FF00FF&
-    expect(line).toContain('\\3c&H00FF00FF&')
-  })
-  it('glow radius clamped to [0, 20]', () => {
-    const ass = generateAss([makeEntry({ glowEnabled: true, glowRadius: 99 })], video, burnin)
-    expect(dialogueLineOf(ass)).toContain('\\blur20')
-  })
-})
+// REQ-0278 — §3 glow tests were removed here.  The feature itself
+// was removed; the byte-identity of a plain entry's ASS to pre-Phase-A
+// output is now pinned by tests/unit/ass-generator-baseline-ac1fd67.test.ts.
 
 // -----------------------------------------------------------------
 // §4 Rotation
@@ -177,10 +154,13 @@ describe('REQ-0277 §4 — rotation', () => {
 // -----------------------------------------------------------------
 // §0-1 backward compat — entries without the new fields still work
 // -----------------------------------------------------------------
-describe('REQ-0277 §0-1 — pre-REQ-0277 entries hydrate as effect-off', () => {
-  it('entry with no effect fields renders no effect tags (\\blur / \\frz / \\shad / \\4c / \\4a all absent)', () => {
+describe('REQ-0277 §0-1 / REQ-0278 — pre-REQ-0277 entries hydrate as effect-off', () => {
+  it('entry with no effect fields renders no effect tags (\\frz / \\shad / \\4c / \\4a all absent — \\blur can never appear post-REQ-0278 either)', () => {
     const ass = generateAss([makeEntry()], video, burnin)
     const line = dialogueLineOf(ass)
+    // REQ-0278: `\blur` should be absent for ANY entry now (glow removed).
+    // Retained here as a defensive pin; the exact-string byte-identity
+    // check lives in ass-generator-baseline-ac1fd67.test.ts.
     expect(line).not.toContain('\\blur')
     expect(line).not.toContain('\\frz')
     expect(line).not.toContain('\\shad')

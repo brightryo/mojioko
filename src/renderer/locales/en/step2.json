@@ -177,8 +177,6 @@
     "casingUppercase": "ALL CAPS",
     "shadow": "Shadow",
     "shadowDepth": "Depth",
-    "glow": "Glow",
-    "glowRadius": "Radius",
     "rotation": "Rotation (deg)"
   },
   "history": {
@@ -195,7 +193,6 @@
     "editBackground": "Change background",
     "editCasing": "Change casing",
     "editShadow": "Change shadow",
-    "editGlow": "Change glow",
     "editRotation": "Change rotation",
     "dragPosition": "Drag position",
     "deleteRow": "Delete",
@@ -237,7 +234,6 @@
       "background": "Bulk background change ({{count}} rows)",
       "casing": "Bulk casing change ({{count}} rows)",
       "shadow": "Bulk shadow change ({{count}} rows)",
-      "glow": "Bulk glow change ({{count}} rows)",
       "rotation": "Bulk rotation change ({{count}} rows)"
     }
   },

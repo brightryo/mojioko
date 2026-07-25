@@ -177,8 +177,6 @@
     "casingUppercase": "ALL CAPS",
     "shadow": "影",
     "shadowDepth": "影の距離",
-    "glow": "グロー",
-    "glowRadius": "グロー幅",
     "rotation": "回転 (度)"
   },
   "history": {
@@ -195,7 +193,6 @@
     "editBackground": "背景を変更",
     "editCasing": "大文字化を変更",
     "editShadow": "影を変更",
-    "editGlow": "グローを変更",
     "editRotation": "回転を変更",
     "dragPosition": "位置をドラッグで変更",
     "deleteRow": "削除",
@@ -237,7 +234,6 @@
       "background": "背景を一括変更 ({{count}}件)",
       "casing": "大文字化を一括変更 ({{count}}件)",
       "shadow": "影を一括変更 ({{count}}件)",
-      "glow": "グローを一括変更 ({{count}}件)",
       "rotation": "回転を一括変更 ({{count}}件)"
     }
   },

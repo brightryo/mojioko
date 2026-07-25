@@ -521,12 +521,13 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     )
   }
 
-  // REQ-0277 Phase A — bulk-apply of the four new style effects.
-  // Each handler pushes a single applyBulk call so every selected
-  // row's fields flip together with one Undo entry.  Turning shadow /
-  // glow ON without specifying the sub-values seeds neutral defaults
-  // (depth 4, black, opaque; radius 6, white) so the effect is
-  // visible immediately — matches the inspector's toggle-on behaviour.
+  // REQ-0277 Phase A — bulk-apply of the style effects.  Each handler
+  // pushes a single applyBulk call so every selected row's fields flip
+  // together with one Undo entry.  Turning shadow ON without specifying
+  // the sub-values seeds neutral defaults (depth 4, black, opaque) so
+  // the effect is visible immediately — matches the inspector's
+  // toggle-on behaviour.  REQ-0278 dropped the glow bulk-toggle here
+  // (see SPECIFICATION.md §11).
   function handleCasingBulk(on: boolean) {
     applyBulk(
       { casing: on ? 'uppercase' : 'none' },
@@ -539,14 +540,6 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         ? { shadowEnabled: true, shadowDepth: 4, shadowColor: '#000000', shadowAlpha: 100 }
         : { shadowEnabled: false },
       t('bulk.history.shadow', { count: selectedRowIds.size }),
-    )
-  }
-  function handleGlowBulkToggle(on: boolean) {
-    applyBulk(
-      on
-        ? { glowEnabled: true, glowRadius: 6, glowColor: '#FFFFFF' }
-        : { glowEnabled: false },
-      t('bulk.history.glow', { count: selectedRowIds.size }),
     )
   }
   function handleRotationBulk(deg: number) {
@@ -969,13 +962,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               <span className="text-caption text-muted-foreground">{t('styleCell.shadowDepth')} 4</span>
             </div>
           </label>
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('styleCell.glow')}</span>
-            <div className="flex items-center gap-2 w-[50%]">
-              <Switch onCheckedChange={handleGlowBulkToggle} aria-label={t('styleCell.glow')} />
-              <span className="text-caption text-muted-foreground">{t('styleCell.glowRadius')} 6</span>
-            </div>
-          </label>
+          {/* REQ-0278 — glow bulk-toggle removed here (SPECIFICATION.md §11). */}
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('styleCell.rotation')}</span>
             <div className="w-[50%]">
