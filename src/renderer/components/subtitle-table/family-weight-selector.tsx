@@ -254,14 +254,19 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: 
   // inspector / bulk-edit row uses.  When `showLabels` is false
   // (FontPicker layout), stack the dropdowns bare inside the
   // caller-supplied outer container.
+  // REQ-0300 §2 — dropdowns are `w-full` inside StyleRow's fixed
+  // control column, so they fill the column width uniformly with
+  // sliders + pickers in the surrounding rows (and never truncate
+  // to "N…" like they did when the wrapper was a fractional width
+  // in a narrow pane).
   if (showLabels) {
     return (
       <>
         <StyleRow label={t('step2:styleCell.family')}>
-          <div className="w-[50%]">{familyDropdown}</div>
+          {familyDropdown}
         </StyleRow>
         <StyleRow label={t('step2:styleCell.weight')}>
-          <div className="w-[50%]">{weightDropdown}</div>
+          {weightDropdown}
         </StyleRow>
       </>
     )

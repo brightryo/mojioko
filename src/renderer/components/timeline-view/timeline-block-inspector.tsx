@@ -994,17 +994,18 @@ export function TimelineBlockInspector({
                 heading={t('common:colorPicker.headingOutline')}
               />
             </StyleRow>
-            {/* Outline width */}
+            {/* Outline width — REQ-0300 §2: control column width now
+                provided by StyleRow (INSPECTOR_CONTROL_COL_CLASS),
+                so drop the inner `w-[65%]` wrapper.  Every row's
+                control now starts at the same X. */}
             <StyleRow label={t('styleCell.outlineWidth')} stopControlClickPropagation>
-              <div className="w-[65%]">
-                <OutlineThicknessSlider
-                  value={entry.outlineThicknessPx}
-                  onCommit={handleOutlineThicknessCommit}
-                  disabled={isFrozen}
-                  ariaLabel={t('styleCell.outlineWidth')}
-                  fullWidth
-                />
-              </div>
+              <OutlineThicknessSlider
+                value={entry.outlineThicknessPx}
+                onCommit={handleOutlineThicknessCommit}
+                disabled={isFrozen}
+                ariaLabel={t('styleCell.outlineWidth')}
+                fullWidth
+              />
             </StyleRow>
             {/* REQ-0292 §4 — style-effect row order (top → bottom):
                 shadow, karaoke (+ colours), casing, rotation, fade.
@@ -1026,16 +1027,14 @@ export function TimelineBlockInspector({
                 "depth is 0" state; removing it lets the depth alone
                 drive both the tag emission and the ON/OFF affordance. */}
             <StyleRow label={t('styleCell.shadow')} stopControlClickPropagation>
-              <div className="w-[65%]">
-                <ShadowDepthSlider
-                  value={entry.shadowDepth ?? 0}
-                  onCommit={handleShadowDepthCommit}
-                  onPreview={handleShadowDepthPreview}
-                  disabled={isFrozen}
-                  ariaLabel={t('styleCell.shadowDepth')}
-                  fullWidth
-                />
-              </div>
+              <ShadowDepthSlider
+                value={entry.shadowDepth ?? 0}
+                onCommit={handleShadowDepthCommit}
+                onPreview={handleShadowDepthPreview}
+                disabled={isFrozen}
+                ariaLabel={t('styleCell.shadowDepth')}
+                fullWidth
+              />
             </StyleRow>
             {/* REQ-0278 — glow row removed here (SPECIFICATION.md §11). */}
             {/* REQ-0286 §5 / REQ-0289 — karaoke row.  Hidden entirely
@@ -1060,16 +1059,20 @@ export function TimelineBlockInspector({
                 `karaokeWordsValid` distinction is no longer surfaced
                 in copy either; equal-split fallback handles the
                 invalid case silently. */}
+            {/* REQ-0300 §1 — Switch + Picker are adjacent (no spacer).
+                Both sit at the LEFT of StyleRow's fixed control
+                column so the picker doesn't drift into a lonely
+                right-edge position; layout is
+                `[label] [dashed filler] [Switch][gap][Picker]`. */}
             {showKaraokeUi && (
               <StyleRow label={t('styleCell.karaokeRowLabel')} stopControlClickPropagation>
-                <div className="flex items-center gap-2 w-[50%]">
+                <div className="flex items-center gap-2">
                   <Switch
                     checked={entry.karaokeEnabled === true}
                     onCheckedChange={handleKaraokeToggle}
                     disabled={isFrozen}
                     aria-label={t('styleCell.karaoke')}
                   />
-                  <div className="flex-1" />
                   <ColorPicker
                     value={entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR}
                     onChange={handleKaraokeHighlightPreview}
@@ -1085,40 +1088,34 @@ export function TimelineBlockInspector({
                 — state text ("ALL CAPS"/"なし") removed; the Switch
                 itself surfaces the toggle state. */}
             <StyleRow label={t('styleCell.casing')} stopControlClickPropagation>
-              <div className="w-[65%]">
-                <Switch
-                  checked={entry.casing === 'uppercase'}
-                  onCheckedChange={handleCasingToggle}
-                  disabled={isFrozen}
-                  aria-label={t('styleCell.casing')}
-                />
-              </div>
+              <Switch
+                checked={entry.casing === 'uppercase'}
+                onCheckedChange={handleCasingToggle}
+                disabled={isFrozen}
+                aria-label={t('styleCell.casing')}
+              />
             </StyleRow>
             <StyleRow label={t('styleCell.rotation')} stopControlClickPropagation>
-              <div className="w-[65%]">
-                <NumberStepperInput
-                  value={entry.rotation ?? 0}
-                  min={0}
-                  max={359}
-                  step={15}
-                  onCommit={handleRotationCommit}
-                  disabled={isFrozen}
-                  ariaLabel={t('styleCell.rotation')}
-                />
-              </div>
+              <NumberStepperInput
+                value={entry.rotation ?? 0}
+                min={0}
+                max={359}
+                step={15}
+                onCommit={handleRotationCommit}
+                disabled={isFrozen}
+                ariaLabel={t('styleCell.rotation')}
+              />
             </StyleRow>
             {/* Fade — REQ-0292 §4 moved to the end so the temporal
                 knob sits after all the visual style effects. */}
             <StyleRow label={t('styleCell.fade')} stopControlClickPropagation>
-              <div className="w-[65%]">
-                <FadeDurationSlider
-                  value={entry.fadeDurationSec}
-                  onCommit={handleFadeDurationCommit}
-                  disabled={isFrozen}
-                  ariaLabel={t('styleCell.fade')}
-                  fullWidth
-                />
-              </div>
+              <FadeDurationSlider
+                value={entry.fadeDurationSec}
+                onCommit={handleFadeDurationCommit}
+                disabled={isFrozen}
+                ariaLabel={t('styleCell.fade')}
+                fullWidth
+              />
             </StyleRow>
           </>
         )}

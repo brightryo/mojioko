@@ -1053,16 +1053,15 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               heading={t('common:colorPicker.headingOutline')}
             />
           </StyleRow>
-          {/* Outline width */}
+          {/* Outline width — REQ-0300 §2 dropped inner `w-[65%]`;
+              StyleRow provides the fixed control column. */}
           <StyleRow label={t('bulk.outlineWidth')}>
-            <div className="w-[65%]">
-              <OutlineThicknessSlider
-                value={outlineSliderDraft}
-                onCommit={handleOutlineWidthCommit}
-                ariaLabel={t('bulk.outlineWidth')}
-                fullWidth
-              />
-            </div>
+            <OutlineThicknessSlider
+              value={outlineSliderDraft}
+              onCommit={handleOutlineWidthCommit}
+              ariaLabel={t('bulk.outlineWidth')}
+              fullWidth
+            />
           </StyleRow>
           {/* REQ-0292 §4 — bulk-edit style-effect row order mirrors
               the inspector: shadow, karaoke (+ colours), casing,
@@ -1084,14 +1083,12 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               REQ-0292 §3 — rotation NumberStepperInput bound to
               `rotationDraft` (was `value={0}` hardcoded pre-REQ-0292). */}
           <StyleRow label={t('styleCell.shadow')}>
-            <div className="w-[65%]">
-              <ShadowDepthSlider
-                value={shadowSliderDraft}
-                onCommit={handleShadowDepthBulkCommit}
-                ariaLabel={t('styleCell.shadowDepth')}
-                fullWidth
-              />
-            </div>
+            <ShadowDepthSlider
+              value={shadowSliderDraft}
+              onCommit={handleShadowDepthBulkCommit}
+              ariaLabel={t('styleCell.shadowDepth')}
+              fullWidth
+            />
           </StyleRow>
           {/* REQ-0278 — glow bulk-toggle removed here (SPECIFICATION.md §11). */}
           {/* REQ-0286 §5 / REQ-0293 §2 — karaoke bulk cluster.  Hidden
@@ -1108,11 +1105,12 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               Tier gate hides the entire row on free tier. */}
           {/* REQ-0299 §3 — karaoke state text ("既定色で開始") removed.
               Row is now `[label] [Switch] [ColorPicker]`. */}
+          {/* REQ-0300 §1 — Switch + Picker adjacent (no flex-1 spacer),
+              both left-aligned inside StyleRow's fixed control column. */}
           {canUseKaraokeInTier(useAppEnvStore((s) => s.isMsix) ?? false) && (
             <StyleRow label={t('styleCell.karaokeRowLabel')}>
-              <div className="flex items-center gap-2 w-[50%]">
+              <div className="flex items-center gap-2">
                 <Switch onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
-                <div className="flex-1" />
                 <ColorPicker
                   value={karaokeHighlightDraft}
                   onChange={handleKaraokeHighlightBulkPreview}
@@ -1125,32 +1123,26 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           )}
           {/* REQ-0299 §3 — casing state text ("ALL CAPS") removed. */}
           <StyleRow label={t('styleCell.casing')}>
-            <div className="w-[65%]">
-              <Switch onCheckedChange={handleCasingBulk} aria-label={t('styleCell.casing')} />
-            </div>
+            <Switch onCheckedChange={handleCasingBulk} aria-label={t('styleCell.casing')} />
           </StyleRow>
           <StyleRow label={t('styleCell.rotation')}>
-            <div className="w-[65%]">
-              <NumberStepperInput
-                value={rotationDraft}
-                min={0}
-                max={359}
-                step={15}
-                onCommit={handleRotationBulk}
-                ariaLabel={t('styleCell.rotation')}
-              />
-            </div>
+            <NumberStepperInput
+              value={rotationDraft}
+              min={0}
+              max={359}
+              step={15}
+              onCommit={handleRotationBulk}
+              ariaLabel={t('styleCell.rotation')}
+            />
           </StyleRow>
           {/* Fade — REQ-0292 §4 moved to end of style cluster (matches inspector order). */}
           <StyleRow label={t('bulk.fade')}>
-            <div className="w-[65%]">
-              <FadeDurationSlider
-                value={fadeSliderDraft}
-                onCommit={handleFadeDurationCommit}
-                ariaLabel={t('bulk.fade')}
-                fullWidth
-              />
-            </div>
+            <FadeDurationSlider
+              value={fadeSliderDraft}
+              onCommit={handleFadeDurationCommit}
+              ariaLabel={t('bulk.fade')}
+              fullWidth
+            />
           </StyleRow>
         </div>
 

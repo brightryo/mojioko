@@ -16,6 +16,39 @@ export const SHOW_DASHED_FILLER = true
 
 export type StyleRowLabelClass = 'inspector' | 'settings'
 
+/**
+ * REQ-0300 §2 — default control-column width used by inspector and
+ * bulk-edit callers.  A single fixed width (rather than a `%` of the
+ * row) guarantees the left edge of every row's control lines up on a
+ * common vertical — pre-REQ-0300 the mixed-width rows (some `w-[65%]`,
+ * some intrinsic ColorPicker / stepper widths) caused visible
+ * misalignment in inspector and bulk-edit.
+ *
+ * Sized to fit the narrowest allowed right-pane width (368 px min per
+ * `step2.tsx:OUTER_RIGHT_MIN_PX`).  Budget on a 368-px pane:
+ *
+ *   pane   368
+ *   -p-3     - 24  (inspector scroll wrapper `p-3`)
+ *   -mx-2    + 16  (StyleRow extends into padding via negative margin)
+ *   ------------
+ *   row    360
+ *   label     ≤ 100 (widest JA label ≈ "自動改行" / "アウトライン幅")
+ *   gap+filler+gap  = 32 (8 + 16 + 8)
+ *   ------------
+ *   control column budget: ≤ 228 px
+ *
+ * `w-56` = 224 px is the largest tailwind spacing token that fits with
+ * room to spare on the min pane.  On wider panes (typical > 400 px)
+ * the filler grows and everything still lines up because control is a
+ * hard fixed width.
+ *
+ * Settings' DefaultStyleControls uses its own `CONTROL_COL_CLASS`
+ * (`w-72` = 288 px) via SettingsStyleRow — the dialog is 640 px wide
+ * so it has more room and a larger fixed column looks better.  That
+ * override is passed via the `controlColClass` prop.
+ */
+export const INSPECTOR_CONTROL_COL_CLASS = 'w-56 shrink-0 min-w-0'
+
 interface StyleRowProps {
   /**
    * Left-column label.  Accepts a `ReactNode` (not just a string) so
@@ -53,6 +86,17 @@ interface StyleRowProps {
    * events bubbling (safe for non-inspector callers).
    */
   stopControlClickPropagation?: boolean
+  /**
+   * REQ-0300 §2 — width class for the control column wrapper.  A
+   * single fixed value across every row means every control lines up
+   * on the same vertical.  Defaults to
+   * `INSPECTOR_CONTROL_COL_CLASS` (= `w-56 shrink-0 min-w-0` /
+   * 224 px), which fits inspector + bulk-edit on the narrowest
+   * allowed right pane (368 px).  Settings' DefaultStyleControls
+   * overrides this with a wider `w-72` (288 px) because the settings
+   * dialog is 640 px wide.
+   */
+  controlColClass?: string
   children: React.ReactNode
 }
 
@@ -93,6 +137,7 @@ export function StyleRow({
   help,
   labelVariant = 'inspector',
   stopControlClickPropagation,
+  controlColClass = INSPECTOR_CONTROL_COL_CLASS,
   children,
 }: StyleRowProps) {
   const labelClass = labelVariant === 'inspector'
@@ -130,7 +175,7 @@ export function StyleRow({
       {SHOW_DASHED_FILLER && (
         <div className="flex-1 border-t border-dashed border-border min-w-[16px]" />
       )}
-      <div {...controlProps}>{children}</div>
+      <div className={controlColClass} {...controlProps}>{children}</div>
     </div>
   )
 }

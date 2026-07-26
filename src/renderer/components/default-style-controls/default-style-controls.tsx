@@ -39,13 +39,14 @@ const FONT_SIZE_STEP_PX = 10
 const CONTROL_COL_CLASS = 'w-72 shrink-0'
 
 /**
- * REQ-0298 §4 — StyleRow moved to `subtitle-table/style-row.tsx` so
- * inspector + bulk-edit + settings-default-style share the same shell.
- * The wrapper below just applies this file's `CONTROL_COL_CLASS`
- * (settings-tab-specific width) around the child so slider bars stay
- * uniformly wide inside the settings tab.  Other surfaces use the
- * shared StyleRow directly (control column width is whatever the
- * per-row wrapper sets, typically `w-[50%]` in the inspector).
+ * REQ-0298 §4 / REQ-0300 §2 — StyleRow lives in
+ * `subtitle-table/style-row.tsx` and now provides its own control-
+ * column wrapper.  Settings' 「字幕スタイル」 tab wants a wider
+ * column than the inspector default (`w-72` vs `w-56`), so this
+ * thin wrapper passes `controlColClass` explicitly and drops the
+ * pre-REQ-0300 inner `<div className={CONTROL_COL_CLASS}>` (which
+ * would double-wrap and produce a 288-px column inside the shared
+ * StyleRow's 288-px column).
  */
 function SettingsStyleRow({
   label,
@@ -57,8 +58,8 @@ function SettingsStyleRow({
   children: React.ReactNode
 }) {
   return (
-    <StyleRow label={label} help={help} labelVariant="settings">
-      <div className={CONTROL_COL_CLASS}>{children}</div>
+    <StyleRow label={label} help={help} labelVariant="settings" controlColClass={CONTROL_COL_CLASS}>
+      {children}
     </StyleRow>
   )
 }
@@ -202,8 +203,11 @@ export function DefaultStyleControls({
           highlight picker always visible). */}
       {showKaraokeUi && (
         <SettingsStyleRow label={t('step2:styleCell.karaokeRowLabel')}>
-          {/* REQ-0299 §3 — karaoke state text removed. */}
-          <div className="flex items-center gap-2 w-full">
+          {/* REQ-0299 §3 — karaoke state text removed.
+              REQ-0300 §1 — Switch + Picker adjacent (no flex-1 spacer);
+              both sit at the LEFT of the control column so there's
+              no unnatural gap between them. */}
+          <div className="flex items-center gap-2">
             <Switch
               checked={defaults.karaokeEnabled === true}
               onCheckedChange={(v) => onUpdateDefaults({
@@ -214,7 +218,6 @@ export function DefaultStyleControls({
               })}
               aria-label={t('step2:styleCell.karaoke')}
             />
-            <div className="flex-1" />
             <ColorPicker
               value={defaults.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR}
               onChange={(hex) => onUpdateDefaults({ karaokeHighlightColor: hex })}
