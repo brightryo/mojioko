@@ -11,6 +11,15 @@ import {
 } from './font-metrics'
 import type { SubtitleFont } from './font-metrics'
 import type { FontId } from '../../shared/fonts'
+import { computeEmphasisRanges, isEmphasizedAt, type EmphasisRange } from '../../shared/emphasis'
+
+/**
+ * REQ-0306 §2 — emphasis width descriptor threaded through the break finder.
+ * `ranges` are code-unit ranges into the ORIGINAL `text` (with `\N`), `scale`
+ * is the emphasis size multiplier (> 1).  `null` everywhere = pre-REQ-0306
+ * behaviour, byte-identical.
+ */
+type EmphAdvance = { ranges: readonly EmphasisRange[]; scale: number } | null
 
 /**
  * Insert ASS \N line breaks into `text` wherever a line would exceed the
@@ -47,7 +56,12 @@ export function applyAutoLineBreak(
   outlineThicknessPx: number,
   videoWidthPx: number,
   font?: SubtitleFont | null,
-  fontId?: FontId
+  fontId?: FontId,
+  // REQ-0306 §2 — when the cue has keyword emphasis, the emphasised glyphs
+  // are physically larger, so the break finder must measure them at `scale`
+  // to wrap correctly.  Omitted / no matches ⇒ pre-REQ-0306 behaviour,
+  // byte-identical (Japanese-only cues without emphasis are untouched).
+  emphasis?: { keywords: readonly string[]; scale: number }
 ): string {
   const f = fontId !== undefined
     ? getSubtitleFontFor(fontId)
@@ -63,12 +77,30 @@ export function applyAutoLineBreak(
   const cmap = getCmapCoverageFor(effectiveFontId)
   const tofu = getTofuSubstituteFor(effectiveFontId)
 
-  // Process each existing \N-separated segment independently,
-  // then rejoin — preserves intentional manual breaks already in the text.
-  return text
-    .split('\\N')
-    .map((seg) => breakSegment(seg, fontSizePx, effectivePx, f, libassScale, cmap, tofu))
-    .join('\\N')
+  // REQ-0306 — resolve emphasis ranges over the ORIGINAL text (with `\N`)
+  // once; `null` (no emphasis / no scale-up / no match) makes every path
+  // below byte-identical to the pre-REQ-0306 measurement.
+  const emph: EmphAdvance =
+    emphasis && emphasis.scale > 1 && emphasis.keywords.length > 0
+      ? ((): EmphAdvance => {
+          const ranges = computeEmphasisRanges(text, emphasis.keywords)
+          return ranges.length > 0 ? { ranges, scale: emphasis.scale } : null
+        })()
+      : null
+
+  // Process each existing \N-separated segment independently, then rejoin —
+  // preserves intentional manual breaks already in the text.  `base` tracks
+  // each segment's start offset in the ORIGINAL text so `emph.ranges`
+  // (original-text coords) map onto segment-local glyphs; the `+ 2` accounts
+  // for the stripped `\N` separator between segments.
+  const segments = text.split('\\N')
+  const out: string[] = []
+  let base = 0
+  for (const seg of segments) {
+    out.push(breakSegment(seg, fontSizePx, effectivePx, f, libassScale, cmap, tofu, emph, base))
+    base += seg.length + 2
+  }
+  return out.join('\\N')
 }
 
 // ---------------------------------------------------------------------------
@@ -145,10 +177,12 @@ function breakSegment(
   libassScale: number,
   cmap: Set<number> | null,
   tofu: string | null,
+  emph: EmphAdvance,
+  baseOffset: number,
 ): string {
   if (!seg) return seg
 
-  const breakPos = findBreakIndex(seg, fontSizePx, effectivePx, font, libassScale, cmap, tofu)
+  const breakPos = findBreakIndex(seg, fontSizePx, effectivePx, font, libassScale, cmap, tofu, emph, baseOffset)
   if (breakPos === -1) return seg  // entire segment fits
 
   const { leftEnd, rightStart } = adjustBreak(seg, breakPos)
@@ -160,7 +194,9 @@ function breakSegment(
   const left  = seg.slice(0, leftEnd)
   const right = seg.slice(rightStart)
   if (!right) return seg  // nothing left to move to the next line
-  return left + '\\N' + breakSegment(right, fontSizePx, effectivePx, font, libassScale, cmap, tofu)
+  // Recurse on the tail; its glyphs start at `baseOffset + rightStart` in the
+  // ORIGINAL text so emphasis ranges keep lining up (REQ-0306 §2).
+  return left + '\\N' + breakSegment(right, fontSizePx, effectivePx, font, libassScale, cmap, tofu, emph, baseOffset + rightStart)
 }
 
 /**
@@ -182,7 +218,14 @@ function findBreakIndex(
   libassScale: number,
   cmap: Set<number> | null,
   tofu: string | null,
+  emph: EmphAdvance,
+  baseOffset: number,
 ): number {
+  // REQ-0306 — advance multiplier for the glyph whose original-text offset is
+  // `off`.  1 (identity) when there is no emphasis or the glyph isn't in an
+  // emphasised range, so non-emphasised text measures exactly as before.
+  const mult = (off: number): number =>
+    emph !== null && isEmphasizedAt(off, emph.ranges) ? emph.scale : 1
   if (font) {
     const scale      = (fontSizePx / font.unitsPerEm) * libassScale
     // REQ-0160 — pre-fetch the tofu character's advance so per-character
@@ -213,7 +256,9 @@ function findBreakIndex(
       } else {
         advance = font.charToGlyph(ch).advanceWidth ?? 0
       }
-      cumulative += advance * scale
+      // REQ-0306 — inflate the emphasised glyph's advance so wrapping fires
+      // where the larger burn-in glyph actually overflows.
+      cumulative += advance * scale * mult(baseOffset + byteOffset)
 
       if (cumulative > effectivePx) {
         return byteOffset  // break BEFORE this glyph
@@ -246,9 +291,9 @@ function findBreakIndex(
     let i          = 0
     for (const char of seg) {
       const cp        = seg.codePointAt(i) ?? 0
-      const charWidth = isWideCp(cp)
+      const charWidth = (isWideCp(cp)
         ? fontSizePx * FALLBACK_LIBASS_SCALE
-        : fontSizePx * 0.55 * FALLBACK_LIBASS_SCALE
+        : fontSizePx * 0.55 * FALLBACK_LIBASS_SCALE) * mult(baseOffset + i)
       cumulative += charWidth
       if (cumulative > effectivePx) {
         return i  // break BEFORE this character

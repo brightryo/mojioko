@@ -1,25 +1,27 @@
 import { describe, it, expect } from 'vitest'
 import { generateAss } from '../../src/main/services/ass-generator'
-import { buildKaraokeAssText } from '../../src/shared/karaoke-ass'
 import {
   canUseKeywordEmphasisInTier,
   clampEmphasisScalePercent,
-  resolveEmphasisIndices,
-  toggleEmphasisIndex,
-  buildEmphasisAssText,
+  resolveEmphasisKeywords,
+  addEmphasisKeyword,
+  removeEmphasisKeyword,
+  toggleEmphasisKeyword,
+  computeEmphasisRanges,
+  tokenizeEmphasis,
+  emphasizedWordSet,
+  buildEmphasisBody,
   EMPHASIS_DEFAULT_SCALE_PERCENT,
 } from '../../src/shared/emphasis'
 import type { SubtitleEntry, VideoInfo, BurninPosition, WordSpan } from '../../src/shared/types'
 
 /**
- * REQ-0305 — Hormozi-style keyword emphasis.  Pins:
- *   - the pure helpers (index resolve/toggle, scale clamp, tier gate),
- *   - the ASS text builders (karaoke-OFF `buildEmphasisAssText` and the
- *     karaoke-ON fs overlay on `buildKaraokeAssText`),
- *   - override well-formedness (every tag brace-enclosed — REQ-0291),
- *   - end-to-end emission through `generateAss` including the
- *     words-invalid fallback, karaoke coexistence, and additive-optional
- *     back-compat (no emphasis fields ⇒ byte-identical to plain).
+ * REQ-0306 — keyword/text-based keyword emphasis (rework of REQ-0305).
+ * Pins: the keyword helpers + legacy migration, range/tokeniser, the
+ * karaoke-word mapping, override well-formedness, and end-to-end emission —
+ * crucially that emphasis works WITHOUT / with invalid `words` (the core fix)
+ * and that karaoke coexistence follows Option A (grow + emphasis colour when
+ * spoken).
  */
 
 const video: VideoInfo = {
@@ -65,13 +67,9 @@ function makeEntry(patch: Partial<SubtitleEntry> = {}): SubtitleEntry {
 const dialogueLineOf = (ass: string): string =>
   ass.split('\n').find((l) => l.startsWith('Dialogue:')) ?? ''
 
-/**
- * Well-formedness: after removing every `{...}` override block and the
- * `\N` line-break sentinel, no bare backslash (= stray override tag) may
- * remain.  Mirrors karaoke-ass.test.ts's `\k`-enclosure assertion but
- * generalised to any override.  (Test fixtures contain no literal
- * backslash / brace in their word text, so any survivor is a real bug.)
- */
+const bodyOf = (line: string): string => line.slice(line.indexOf(',,') + 2)
+
+/** No override tag may live outside a `{...}` block (REQ-0291); `\N` allowed. */
 function assertNoBareOverrides(body: string): void {
   const withoutBlocks = body.replace(/\{[^}]*\}/g, '')
   const withoutBreaks = withoutBlocks.replace(/\\N/g, '')
@@ -79,183 +77,196 @@ function assertNoBareOverrides(body: string): void {
 }
 
 // -----------------------------------------------------------------------
-// Pure helpers
+// Helpers
 // -----------------------------------------------------------------------
-describe('REQ-0305 helpers', () => {
-  it('canUseKeywordEmphasisInTier is free for every tier', () => {
+describe('REQ-0306 keyword helpers', () => {
+  it('tier gate is free', () => {
     expect(canUseKeywordEmphasisInTier(true)).toBe(true)
     expect(canUseKeywordEmphasisInTier(false)).toBe(true)
   })
 
-  it('clampEmphasisScalePercent clamps, rounds, and defaults', () => {
+  it('clampEmphasisScalePercent clamps/rounds/defaults', () => {
     expect(clampEmphasisScalePercent(undefined)).toBe(EMPHASIS_DEFAULT_SCALE_PERCENT)
-    expect(clampEmphasisScalePercent(130)).toBe(130)
-    expect(clampEmphasisScalePercent(50)).toBe(100)   // below min
-    expect(clampEmphasisScalePercent(999)).toBe(200)  // above max
-    expect(clampEmphasisScalePercent(133.7)).toBe(134) // rounds
+    expect(clampEmphasisScalePercent(50)).toBe(100)
+    expect(clampEmphasisScalePercent(999)).toBe(200)
     expect(clampEmphasisScalePercent(NaN)).toBe(EMPHASIS_DEFAULT_SCALE_PERCENT)
   })
 
-  it('resolveEmphasisIndices drops stale / invalid / duplicate indices', () => {
-    expect([...resolveEmphasisIndices(undefined, 3)]).toEqual([])
-    expect([...resolveEmphasisIndices([0, 2], 3)].sort()).toEqual([0, 2])
-    // out-of-range (word list shrank), negative, and non-integer dropped:
-    expect([...resolveEmphasisIndices([0, 5, -1, 1.5], 3)].sort()).toEqual([0])
-    // duplicates collapse:
-    expect([...resolveEmphasisIndices([1, 1, 1], 3)]).toEqual([1])
+  it('add/remove/toggle keep the list trimmed + de-duplicated', () => {
+    expect(addEmphasisKeyword([], '  fox ')).toEqual(['fox'])
+    expect(addEmphasisKeyword(['fox'], 'fox')).toEqual(['fox']) // dedupe
+    expect(removeEmphasisKeyword(['fox', 'cat'], ' fox ')).toEqual(['cat'])
+    expect(toggleEmphasisKeyword(['fox'], 'fox')).toEqual([])
+    expect(toggleEmphasisKeyword(['fox'], 'cat')).toEqual(['fox', 'cat'])
+    expect(toggleEmphasisKeyword([], '   ')).toEqual([]) // blank ignored
   })
 
-  it('toggleEmphasisIndex adds/removes and stays sorted', () => {
-    expect(toggleEmphasisIndex(undefined, 1, 3)).toEqual([1])
-    expect(toggleEmphasisIndex([0, 2], 1, 3)).toEqual([0, 1, 2])
-    expect(toggleEmphasisIndex([0, 1, 2], 1, 3)).toEqual([0, 2]) // remove
-    expect(toggleEmphasisIndex([0], 9, 3)).toEqual([0])          // out-of-range ignored
+  it('resolveEmphasisKeywords prefers keywords, else migrates legacy indices', () => {
+    // New format wins (even empty).
+    expect(resolveEmphasisKeywords(['fox'], [0], validWords)).toEqual(['fox'])
+    expect(resolveEmphasisKeywords([], [0], validWords)).toEqual([])
+    // Legacy migration: index 1 → words[1].text (' world') trimmed.
+    expect(resolveEmphasisKeywords(undefined, [1], validWords)).toEqual(['world'])
+    // Neither → empty.
+    expect(resolveEmphasisKeywords(undefined, undefined, undefined)).toEqual([])
+    // Legacy indices but no words → empty (no throw).
+    expect(resolveEmphasisKeywords(undefined, [0], undefined)).toEqual([])
   })
 })
 
 // -----------------------------------------------------------------------
-// buildEmphasisAssText (karaoke-OFF path)
+// Ranges + tokeniser
 // -----------------------------------------------------------------------
-describe('REQ-0305 buildEmphasisAssText', () => {
-  const escape = (s: string) => s // identity escaper for these fixtures
+describe('REQ-0306 ranges + tokeniser', () => {
+  it('finds every occurrence and merges overlaps', () => {
+    expect(computeEmphasisRanges('the fox and the fox', ['fox'])).toEqual([[4, 7], [16, 19]])
+    // Overlapping keywords merge into one range.
+    expect(computeEmphasisRanges('abcdef', ['abc', 'cde'])).toEqual([[0, 5]])
+    expect(computeEmphasisRanges('nothing here', ['xyz'])).toEqual([])
+  })
 
-  it('wraps only emphasised words; leaves others as plain escaped text', () => {
-    const body = buildEmphasisAssText(
-      validWords, 'hello world', escape,
-      new Set([0]),
+  it('a keyword never matches across a \\N sentinel', () => {
+    // "ab\Ncd" has no literal "bc" (the sentinel sits between b and c).
+    expect(computeEmphasisRanges('ab\\Ncd', ['bc'])).toEqual([])
+  })
+
+  it('tokenize round-trips the text and marks emphasised runs', () => {
+    const toks = tokenizeEmphasis('the fox ran', computeEmphasisRanges('the fox ran', ['fox']))
+    // Reconstruct → original.
+    const rebuilt = toks.map((t) => (t.kind === 'break' ? '\\N' : t.text)).join('')
+    expect(rebuilt).toBe('the fox ran')
+    expect(toks).toEqual([
+      { kind: 'text', text: 'the ', emphasized: false },
+      { kind: 'text', text: 'fox', emphasized: true },
+      { kind: 'text', text: ' ran', emphasized: false },
+    ])
+  })
+
+  it('tokenize emits breaks for \\N', () => {
+    const toks = tokenizeEmphasis('a\\Nb', [])
+    expect(toks).toEqual([
+      { kind: 'text', text: 'a', emphasized: false },
+      { kind: 'break' },
+      { kind: 'text', text: 'b', emphasized: false },
+    ])
+  })
+
+  it('emphasizedWordSet maps keywords onto karaoke word units (stripped)', () => {
+    // keyword "hello" → word 0; "world" → word 1.
+    expect([...emphasizedWordSet('hello world', validWords, ['hello'])]).toEqual([0])
+    expect([...emphasizedWordSet('hello world', validWords, ['world'])]).toEqual([1])
+    expect([...emphasizedWordSet('hello world', validWords, ['zzz'])]).toEqual([])
+  })
+})
+
+// -----------------------------------------------------------------------
+// buildEmphasisBody (karaoke-OFF)
+// -----------------------------------------------------------------------
+describe('REQ-0306 buildEmphasisBody', () => {
+  const esc = (s: string) => s
+  it('wraps emphasised runs, leaves the rest plain, well-formed', () => {
+    const body = buildEmphasisBody(
+      'the fox ran',
+      computeEmphasisRanges('the fox ran', ['fox']),
+      esc,
       '\\fs130\\c&H0000D4FF&',
       '\\fs100\\c&H00FFFFFF&',
     )
-    expect(body).toBe('{\\fs130\\c&H0000D4FF&}hello{\\fs100\\c&H00FFFFFF&} world')
+    expect(body).toBe('the {\\fs130\\c&H0000D4FF&}fox{\\fs100\\c&H00FFFFFF&} ran')
     assertNoBareOverrides(body)
   })
 
-  it('with no emphasised index reconstructs the plain cue text', () => {
-    const body = buildEmphasisAssText(
-      validWords, 'hello world', escape, new Set<number>(), '\\fs130', '\\fs100',
-    )
-    expect(body).toBe('hello world')
-  })
-
-  it('honours `\\N` line breaks and strips the post-break leading space', () => {
-    // cueText carries a break between the two words.
-    const body = buildEmphasisAssText(
-      validWords, 'hello\\Nworld', escape,
-      new Set([1]),
-      '\\fs130', '\\fs100',
-    )
-    // word 1 ("world") is preceded by \N, its leading space stripped, and
-    // it is emphasised → wrapped.
-    expect(body).toBe('hello\\N{\\fs130}world{\\fs100}')
-    assertNoBareOverrides(body)
-  })
-})
-
-// -----------------------------------------------------------------------
-// buildKaraokeAssText emphasis overlay (karaoke-ON path, fs only)
-// -----------------------------------------------------------------------
-describe('REQ-0305 karaoke + emphasis overlay (size only)', () => {
-  const escape = (s: string) => s
-
-  it('folds `\\fs` into the emphasised word\'s `\\k` block and restores after', () => {
-    const body = buildKaraokeAssText(
-      validWords, 0, 2, escape, 'hello world',
-      { indices: new Set([0]), openTag: '\\fs130', closeTag: '\\fs100' },
-    )
-    // emphasised word 0 → `\k` and `\fs130` in the SAME brace block, then
-    // a `{\fs100}` restore; the emphasis overlay adds NO colour tag.
-    expect(/\{\\k\d+\\fs130\}hello\{\\fs100\}/.test(body)).toBe(true)
-    // word 1 is a normal `\k` block, no fs:
-    expect(/\{\\k\d+\} world/.test(body)).toBe(true)
-    assertNoBareOverrides(body)
-  })
-
-  it('is byte-identical to the pre-REQ-0305 output when no emphasis passed', () => {
-    const withoutParam = buildKaraokeAssText(validWords, 0, 2, escape, 'hello world')
-    const withUndefined = buildKaraokeAssText(validWords, 0, 2, escape, 'hello world', undefined)
-    expect(withUndefined).toBe(withoutParam)
+  it('preserves \\N breaks', () => {
+    const body = buildEmphasisBody('a\\Nfox', computeEmphasisRanges('a\\Nfox', ['fox']), esc, '\\fs130', '\\fs100')
+    expect(body).toBe('a\\N{\\fs130}fox{\\fs100}')
   })
 })
 
 // -----------------------------------------------------------------------
 // End-to-end through generateAss
 // -----------------------------------------------------------------------
-describe('REQ-0305 generateAss integration', () => {
-  it('emphasis ON + valid words → emphasised word carries fs + colour, well-formed', () => {
+describe('REQ-0306 generateAss integration', () => {
+  it('emphasises a keyword with fs + colour (karaoke off), well-formed', () => {
     const entry = makeEntry({
       keywordEmphasisEnabled: true,
       emphasisColorHex: '#FFD400',
       emphasisScalePercent: 130,
-      emphasizedWordIndices: [0],
-      words: validWords,
+      emphasisKeywords: ['hello'],
     })
     const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
-    // 130% of fontSize 100 = 130 px; base restore = 100 px.
     expect(line).toContain('\\fs130')
     expect(line).toContain('\\fs100')
     expect(line).toContain('hello')
-    expect(line).toContain('world')
-    assertNoBareOverrides(line.slice(line.indexOf(',,') + 2))
+    assertNoBareOverrides(bodyOf(line))
   })
 
-  it('emphasis ON but words INVALID → plain render (no emphasis tags)', () => {
-    const off = dialogueLineOf(generateAss([makeEntry()], video, burnin, undefined, undefined, true))
-    const on = dialogueLineOf(generateAss(
-      [makeEntry({
-        keywordEmphasisEnabled: true,
-        emphasisColorHex: '#FFD400',
-        emphasizedWordIndices: [0],
-        // words do NOT match text → areWordsValidForText false
-        words: [{ startSec: 0, endSec: 1, text: 'different' }],
-      })],
-      video, burnin, undefined, undefined, true,
-    ))
-    expect(on).toBe(off)
+  it('§1 CORE — emphasis works with NO words at all', () => {
+    const entry = makeEntry({
+      text: 'jump over the fence',
+      words: undefined,
+      keywordEmphasisEnabled: true,
+      emphasisKeywords: ['fence'],
+    })
+    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
+    expect(line).toContain('\\fs130')
+    expect(line).toMatch(/\{\\fs130[^}]*\}fence\{/)
   })
 
-  it('emphasis ON but NO index selected → plain render', () => {
-    const off = dialogueLineOf(generateAss([makeEntry()], video, burnin, undefined, undefined, true))
-    const on = dialogueLineOf(generateAss(
-      [makeEntry({ keywordEmphasisEnabled: true, words: validWords, emphasizedWordIndices: [] })],
-      video, burnin, undefined, undefined, true,
-    ))
-    expect(on).toBe(off)
+  it('§1 CORE — emphasis works when words are INVALID (edited text)', () => {
+    // words no longer match text (user edited) — emphasis must still fire
+    // because it no longer depends on areWordsValidForText.
+    const entry = makeEntry({
+      text: 'the quick fox',
+      words: [{ startSec: 0, endSec: 1, text: 'completelyDifferent' }],
+      keywordEmphasisEnabled: true,
+      emphasisKeywords: ['fox'],
+    })
+    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
+    expect(line).toMatch(/\{\\fs130[^}]*\}fox\{/)
   })
 
-  it('no emphasis fields → byte-identical to a plain cue (additive/back-compat)', () => {
+  it('migrates legacy emphasizedWordIndices when no keywords present', () => {
+    const entry = makeEntry({
+      keywordEmphasisEnabled: true,
+      emphasizedWordIndices: [0], // → "hello"
+      words: validWords,
+    })
+    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
+    expect(line).toMatch(/\{\\fs130[^}]*\}hello\{/)
+  })
+
+  it('no emphasis fields → byte-identical to a plain cue', () => {
     const plain = dialogueLineOf(generateAss([makeEntry()], video, burnin, undefined, undefined, true))
-    const alsoPlain = dialogueLineOf(generateAss([makeEntry({ words: validWords })], video, burnin, undefined, undefined, true))
-    expect(alsoPlain).toBe(plain)
+    const off = dialogueLineOf(generateAss([makeEntry({ keywordEmphasisEnabled: false })], video, burnin, undefined, undefined, true))
+    expect(off).toBe(plain)
   })
 
-  it('karaoke + emphasis both ON → `\\k` present, emphasised word gets fs, colour stays karaoke', () => {
+  it('enabled but keyword matches nothing → plain render', () => {
+    const plain = dialogueLineOf(generateAss([makeEntry()], video, burnin, undefined, undefined, true))
+    const noMatch = dialogueLineOf(generateAss(
+      [makeEntry({ keywordEmphasisEnabled: true, emphasisKeywords: ['zzz'] })],
+      video, burnin, undefined, undefined, true,
+    ))
+    expect(noMatch).toBe(plain)
+  })
+
+  it('§3 karaoke + emphasis (Option A) — emphasised word gets fs + emphasis colour, restores highlight', () => {
     const entry = makeEntry({
       karaokeEnabled: true,
       karaokeHighlightColor: '#FFFF00',
       keywordEmphasisEnabled: true,
       emphasisColorHex: '#FFD400',
       emphasisScalePercent: 150,
-      emphasizedWordIndices: [0],
+      emphasisKeywords: ['hello'],
       words: validWords,
     })
     const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
-    expect(line).toContain('\\k')          // karaoke active
-    expect(line).toContain('\\2c')         // karaoke base colour
-    expect(line).toContain('\\fs150')      // emphasis size (150% of 100)
-    // fs folded into a \k block (size-only overlay), not a standalone colour swap:
-    expect(/\\k\d+\\fs150/.test(line)).toBe(true)
-    assertNoBareOverrides(line.slice(line.indexOf(',,') + 2))
-  })
-
-  it('emphasis honours uppercase casing on the emphasised word', () => {
-    const entry = makeEntry({
-      casing: 'uppercase',
-      keywordEmphasisEnabled: true,
-      emphasizedWordIndices: [0],
-      words: validWords,
-    })
-    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
-    expect(line).toContain('HELLO')
-    expect(line).toContain('WORLD')
+    expect(line).toContain('\\k')   // karaoke active
+    expect(line).toContain('\\2c')  // base (unspoken) colour
+    // emphasised word 0 → \k + \fs150 + \c<emph> in the same block.
+    expect(/\\k\d+\\fs150\\c&H[0-9A-F]{8}&/.test(line)).toBe(true)
+    // hexToAss('#FFD400') = &H0000D4FF& (BGR) — the emphasis colour.
+    expect(line).toContain('\\c&H0000D4FF&')
+    assertNoBareOverrides(bodyOf(line))
   })
 })

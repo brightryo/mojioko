@@ -15,6 +15,8 @@ import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import {
   canUseKeywordEmphasisInTier,
+  resolveEmphasisKeywords,
+  clampEmphasisScalePercent,
   EMPHASIS_DEFAULT_COLOR,
   EMPHASIS_DEFAULT_SCALE_PERCENT,
   EMPHASIS_SCALE_MIN_PERCENT,
@@ -928,7 +930,14 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         e.outlineThicknessPx,
         videoWidthPx,
         font,
-        e.fontId
+        e.fontId,
+        // REQ-0306 §2 — respect each row's keyword emphasis size when bulk-wrapping.
+        e.keywordEmphasisEnabled === true
+          ? {
+              keywords: resolveEmphasisKeywords(e.emphasisKeywords, e.emphasizedWordIndices, e.words),
+              scale: clampEmphasisScalePercent(e.emphasisScalePercent) / 100,
+            }
+          : undefined
       )
       if (rewrapped !== e.text) {
         snapshots.set(id, { ...e })

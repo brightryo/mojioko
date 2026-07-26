@@ -2,10 +2,10 @@
  * Shared palette displayed in every ColorPicker popover.
  *
  * Three groups:
- *  1. Basic colours (12) — neutrals + vivid, warm→cool.  High-saturation
- *     picks tuned for game / streaming short-form clips where the subtitle
- *     sits on top of a busy video.  REQ-0302 replaced the previous
- *     office/Excel-leaning palette with these vivid values.
+ *  1. Basic colours (16) — neutrals + vivid, warm→cool (REQ-0306, 8×2).
+ *     High-saturation picks tuned for game / streaming short-form clips where
+ *     the subtitle sits on top of a busy video.  REQ-0302 replaced the previous
+ *     office/Excel-leaning palette with vivid values; REQ-0306 grew it to 16.
  *  2. Recommended pairs (16) — text + outline combinations (REQ-0304,
  *     8 columns × 2 rows).  A single click on a pair applies BOTH halves
  *     to the calling context (only works in surfaces that can set text +
@@ -20,23 +20,32 @@
  * the current vivid contents come from REQ-0302.
  */
 
-// REQ-0302: order is neutrals → warm → cool so hues flow smoothly
-// left-to-right, top-to-bottom in color-picker.tsx's 6-column grid.
-// Do NOT sort alphabetically or reorder without owner review — the
-// visual rhythm of the swatch grid depends on this sequence.
+// REQ-0302 / REQ-0306: order is neutrals → warm → cool so hues flow smoothly
+// left-to-right, top-to-bottom in color-picker.tsx's 8-column grid (2 rows).
+// Do NOT sort alphabetically or reorder without owner review — the visual
+// rhythm of the swatch grid depends on this sequence.  REQ-0306 grew this
+// from 12 to 16 by inserting Gold (between yellow/orange), Indigo (between
+// purple/blue), Green (a pure green between mint/lime), and Navy (a dark
+// non-black outline colour).
 export const BASIC_COLORS: readonly string[] = [
+  // Row 1: neutrals + warm
   '#FFFFFF', // 白
   '#000000', // 黒
   '#FFE500', // イエロー
+  '#FFB300', // ゴールド
   '#FF8A00', // オレンジ
   '#FF3B30', // レッド
   '#FF2E88', // ピンク
   '#FF00E5', // マゼンタ
+  // Row 2: cool + dark
   '#A45CFF', // パープル
+  '#6D5BFF', // インディゴ
   '#2D8CFF', // ブルー
   '#00E5FF', // シアン
   '#00FFC2', // ミント
-  '#B4FF39'  // ライム
+  '#00D26A', // グリーン
+  '#B4FF39', // ライム
+  '#101A45'  // ネイビー（アウトライン用の濃色）
 ]
 
 /**
@@ -72,7 +81,7 @@ export const COLOR_PAIRS: readonly ColorPair[] = [
   { text: '#FF8A00', outline: '#000000' }, // 4  オレンジ / 黒
   { text: '#FF3B30', outline: '#FFFFFF' }, // 5  レッド / 白
   { text: '#FF2E88', outline: '#FFFFFF' }, // 6  ピンク / 白
-  { text: '#FF00E5', outline: '#000000' }, // 7  マゼンタ / 黒
+  { text: '#FF2E88', outline: '#000000' }, // 7  ピンク / 黒（REQ-0306: マゼンタ/黒 から差替）
   { text: '#A45CFF', outline: '#FFFFFF' }, // 8  パープル / 白
   // ── Row 2: cool rainbow + applied / neon ──
   { text: '#2D8CFF', outline: '#FFFFFF' }, // 9  ブルー / 白

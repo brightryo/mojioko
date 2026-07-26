@@ -341,10 +341,11 @@ export function ColorPicker({
         )}
       </div>
 
-      {/* Group 1: Basic colours (12) — REQ-0302: 6-col × 2 rows.  Previously
-          10-col × 1 row; bumped to 12 vivid values means a 2-row layout is
-          the natural fit (12 in 10-col wraps as 10 + 2 which reads poorly). */}
-      <div className="grid grid-cols-6 gap-1.5">
+      {/* Group 1: Basic colours (16) — REQ-0306: 8-col × 2 rows (was 12 in
+          6-col).  Plain swatches (no "Aa"), so the narrower 8-col tiles are
+          fine — the CUD group below already renders 10 columns in the same
+          300px popover width. */}
+      <div className="grid grid-cols-8 gap-1.5">
         {BASIC_COLORS.map((c) => (
           <ColorSwatch
             key={c}

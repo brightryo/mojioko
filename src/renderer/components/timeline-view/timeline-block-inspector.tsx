@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight, ChevronDown, RotateCcw } from 'lucide-react'
+import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight, ChevronDown, RotateCcw, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
@@ -21,8 +21,10 @@ import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../s
 import { areWordsValidForText } from '../../../shared/words-validity'
 import {
   canUseKeywordEmphasisInTier,
-  resolveEmphasisIndices,
-  toggleEmphasisIndex,
+  resolveEmphasisKeywords,
+  toggleEmphasisKeyword,
+  addEmphasisKeyword,
+  removeEmphasisKeyword,
   clampEmphasisScalePercent,
   EMPHASIS_DEFAULT_COLOR,
   EMPHASIS_DEFAULT_SCALE_PERCENT,
@@ -158,6 +160,9 @@ export function TimelineBlockInspector({
   const [subtitleSectionOpen, setSubtitleSectionOpen] = useState(true)
   const [layoutSectionOpen, setLayoutSectionOpen] = useState(true)
   const [backgroundSectionOpen, setBackgroundSectionOpen] = useState(false)
+  // REQ-0306 — draft text for the "add emphasis keyword" input.  Works for
+  // any cue (Japanese / edited / no-`words`) since it stores a substring.
+  const [emphasisDraft, setEmphasisDraft] = useState('')
   // REQ-20260612-004: same dirty / composing pattern as CellEditor in
   // subtitle-table.tsx.  The Inspector's textarea is always mounted
   // (unlike CellEditor, which is gated by `editingText`), so without
@@ -372,10 +377,11 @@ export function TimelineBlockInspector({
   // override to store.  Users who want to change the base colour
   // change the cue's text colour instead.
 
-  // REQ-0305 — keyword-emphasis handlers.  Same shapes as karaoke:
-  // toggle-on seeds the colour + size defaults so the effect is visible
-  // immediately; colour picker previews per-drag then commits one history
-  // op; size stepper commits directly; each word chip toggles its index.
+  // REQ-0306 — keyword-emphasis handlers.  Emphasis is now text/keyword-based
+  // (survives edits, works without `words`).  Toggle-on seeds colour + size
+  // defaults; colour previews per-drag then commits one history op; size
+  // commits directly.  Word chips and the keyword input both write the same
+  // `emphasisKeywords` list (migrating any legacy indices first).
   function handleEmphasisToggle(on: boolean) {
     if (on) {
       applyStyleEdit(t('history.editEmphasis'), {
@@ -400,13 +406,25 @@ export function TimelineBlockInspector({
   function handleEmphasisSizeCommit(v: number) {
     applyStyleEdit(t('history.editEmphasis'), { emphasisScalePercent: clampEmphasisScalePercent(v) })
   }
-  function handleEmphasisWordToggle(index: number) {
-    const next = toggleEmphasisIndex(
-      entry.emphasizedWordIndices,
-      index,
-      entry.words?.length ?? 0,
-    )
-    applyStyleEdit(t('history.editEmphasis'), { emphasizedWordIndices: next })
+  // Current keyword list (post-migration) for the chips / list rendering.
+  const emphasisKeywords = resolveEmphasisKeywords(
+    entry.emphasisKeywords,
+    entry.emphasizedWordIndices,
+    entry.words,
+  )
+  function handleEmphasisKeywordToggle(kw: string) {
+    const next = toggleEmphasisKeyword(emphasisKeywords, kw)
+    applyStyleEdit(t('history.editEmphasis'), { emphasisKeywords: next })
+  }
+  function handleEmphasisKeywordAdd(kw: string) {
+    const trimmed = kw.trim()
+    if (!trimmed) return
+    const next = addEmphasisKeyword(emphasisKeywords, trimmed)
+    applyStyleEdit(t('history.editEmphasis'), { emphasisKeywords: next })
+  }
+  function handleEmphasisKeywordRemove(kw: string) {
+    const next = removeEmphasisKeyword(emphasisKeywords, kw)
+    applyStyleEdit(t('history.editEmphasis'), { emphasisKeywords: next })
   }
 
   function handleRotationCommit(deg: number) {
@@ -684,18 +702,12 @@ export function TimelineBlockInspector({
   // flag; renderer + ass-generator fall through to plain rendering per
   // §0's Layer 2 defensive fallback) but the muted colour + hint
   // communicates why nothing visible happens.
-  // REQ-0299 §3 — karaokeWordsValid was previously surfaced as row
-  // copy ("有効（均等割り）") next to the Switch; that state text was
-  // removed for cleaner UI.  REQ-0305 rehoists it: the keyword-emphasis
-  // word-chip picker needs valid per-word data to render clickable chips.
+  // REQ-0306 — the keyword-emphasis word chips are a QUICK path shown only
+  // when the cue has valid per-word data (`words`).  The keyword text input
+  // below always works (Japanese / edited cues), so emphasis never depends on
+  // `words` — this only decides whether the convenience chips render.
   const wordsValid = areWordsValidForText(entry.words, entry.text)
-  // REQ-0305 — keyword-emphasis UI gate + resolved emphasised-index set
-  // (drops stale indices) for the word-chip picker below.
   const showEmphasisUi = canUseKeywordEmphasisInTier(isMsix)
-  const emphasisIndices = resolveEmphasisIndices(
-    entry.emphasizedWordIndices,
-    entry.words?.length ?? 0,
-  )
   // REQ-119 [2] — Reset is an EDIT (= wipe per-row overrides back to
   // `entry.original`).  A frozen row only accepts the Restore button
   // next to it; the table chrome already rejects the Reset for the
@@ -1136,11 +1148,13 @@ export function TimelineBlockInspector({
                 </div>
               </StyleRow>
             )}
-            {/* REQ-0305 — keyword emphasis: master Switch + emphasis
-                colour + size %, then (when enabled) a word-chip picker
-                so the user toggles exactly which words are emphasised.
-                Chips render only when the cue has valid per-word data;
-                otherwise a muted hint explains why. */}
+            {/* REQ-0306 — keyword emphasis: master Switch + colour + size %,
+                then (when enabled) the keyword picker.  Emphasis is now
+                text/keyword-based, so it works on ANY cue (Japanese, edited,
+                no `words`).  Three affordances: (1) removable chips for the
+                current keywords, (2) a text input to add an arbitrary
+                substring, (3) quick word chips when the cue has valid
+                per-word data. */}
             {showEmphasisUi && (
               <>
                 <StyleRow label={t('styleCell.emphasisRowLabel')} stopControlClickPropagation>
@@ -1172,20 +1186,74 @@ export function TimelineBlockInspector({
                   </div>
                 </StyleRow>
                 {entry.keywordEmphasisEnabled === true && (
-                  <div className="px-2 pb-1.5" onClick={(e) => e.stopPropagation()}>
-                    {wordsValid && entry.words && entry.words.length > 0 ? (
+                  <div className="px-2 pb-1.5 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                    {/* (1) current keyword chips — click × to remove */}
+                    {emphasisKeywords.length > 0 && (
+                      <div className="flex flex-wrap gap-1" role="group" aria-label={t('styleCell.emphasisKeywords')}>
+                        {emphasisKeywords.map((kw) => (
+                          <span
+                            key={kw}
+                            className="inline-flex items-center gap-1 rounded-[3px] bg-primary px-2 py-0.5 text-caption font-medium text-fg-inverse"
+                          >
+                            {kw}
+                            <button
+                              type="button"
+                              disabled={isFrozen}
+                              onClick={() => handleEmphasisKeywordRemove(kw)}
+                              aria-label={t('styleCell.emphasisRemove', { keyword: kw })}
+                              className={cn('opacity-80 hover:opacity-100', isFrozen && 'pointer-events-none opacity-40')}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {/* (2) add-keyword text input */}
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={emphasisDraft}
+                        onChange={(e) => setEmphasisDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleEmphasisKeywordAdd(emphasisDraft)
+                            setEmphasisDraft('')
+                          }
+                        }}
+                        disabled={isFrozen}
+                        placeholder={t('styleCell.emphasisAddPlaceholder')}
+                        aria-label={t('styleCell.emphasisAddPlaceholder')}
+                        className="h-7 flex-1 min-w-0 rounded-md border border-line-strong bg-surface-0 px-2 text-caption focus:outline-none focus-visible:outline-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={isFrozen || emphasisDraft.trim() === ''}
+                        onClick={() => { handleEmphasisKeywordAdd(emphasisDraft); setEmphasisDraft('') }}
+                        className={cn(
+                          'h-7 shrink-0 rounded-md px-2 text-caption font-medium transition-colors',
+                          'bg-primary text-fg-inverse hover:opacity-90',
+                          (isFrozen || emphasisDraft.trim() === '') && 'opacity-40 pointer-events-none',
+                        )}
+                      >
+                        {t('styleCell.emphasisAdd')}
+                      </button>
+                    </div>
+                    {/* (3) quick word chips (only when the cue has valid words) */}
+                    {wordsValid && entry.words && entry.words.length > 0 && (
                       <div className="flex flex-wrap gap-1" role="group" aria-label={t('styleCell.emphasisWords')}>
                         {entry.words.map((w, i) => {
                           const label = w.text.trim()
                           if (!label) return null
-                          const on = emphasisIndices.has(i)
+                          const on = emphasisKeywords.includes(label)
                           return (
                             <button
                               key={i}
                               type="button"
                               aria-pressed={on}
                               disabled={isFrozen}
-                              onClick={() => handleEmphasisWordToggle(i)}
+                              onClick={() => handleEmphasisKeywordToggle(label)}
                               className={cn(
                                 'rounded-[3px] px-2 py-0.5 text-caption font-medium transition-colors duration-150',
                                 'focus:outline-none focus-visible:outline-none',
@@ -1200,10 +1268,6 @@ export function TimelineBlockInspector({
                           )
                         })}
                       </div>
-                    ) : (
-                      <p className="text-caption text-muted-foreground">
-                        {t('styleCell.emphasisNoWords')}
-                      </p>
                     )}
                   </div>
                 )}

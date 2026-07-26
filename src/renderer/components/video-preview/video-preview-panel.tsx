@@ -532,7 +532,14 @@ export function VideoPreviewPanel() {
             // Paused case: honour the current playhead position too
             // so a scrub reveals the correct karaoke state instantly.
             const shouldHighlight = t >= wordStart
-            const targetColor = shouldHighlight ? highlightColor : baseColor
+            // REQ-0306 §3 (Option A) — an emphasised word (carries
+            // `data-karaoke-emph-color`) lights up in the emphasis colour when
+            // spoken instead of the karaoke highlight; unspoken it stays base
+            // like everyone else.  Mirrors the ass-generator `\c<emph>` overlay
+            // on the emphasised word's `\k` block.
+            const emphColor = span.getAttribute('data-karaoke-emph-color')
+            const spokenColor = emphColor ?? highlightColor
+            const targetColor = shouldHighlight ? spokenColor : baseColor
             // Guard CSSOM writes at steady state — same rationale as
             // opacity above.  A cue mid-plateau touches at most one
             // span per frame (the one that just flipped).

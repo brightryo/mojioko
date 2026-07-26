@@ -250,16 +250,31 @@ export interface SubtitleEntryOriginal {
    * indices refer to the specific real words the user picked, so
    * fabricating targets would emphasise the wrong tokens).
    *
-   * Coexistence with karaoke (REQ-0305 §2-2): when BOTH are on, karaoke
-   * owns the colour sweep and emphasis contributes size only (`\fs`);
-   * the emphasis colour is suppressed so the two effects never fight.
+   * REQ-0306 §3 coexistence with karaoke: when BOTH are on, the emphasised
+   * words grow AND recolour to `emphasisColorHex` when spoken (the karaoke
+   * sweep still animates them; their *spoken* colour becomes the emphasis
+   * colour instead of the karaoke highlight — owner-confirmed 2026-07-26).
    */
   keywordEmphasisEnabled?: boolean
-  /** `#RRGGBB` — colour applied to emphasised words (karaoke-off only). */
+  /** `#RRGGBB` — colour applied to emphasised text. */
   emphasisColorHex?: string
-  /** Emphasised-word font size as a percent of `fontSizePx` (e.g. 130 = 1.3×). */
+  /** Emphasised-text font size as a percent of `fontSizePx` (e.g. 130 = 1.3×). */
   emphasisScalePercent?: number
-  /** 0-based indices into `words` that are emphasised.  Out-of-range/stale indices are ignored at render time. */
+  /**
+   * REQ-0306 — emphasised keyword substrings.  At render time every
+   * occurrence of each keyword in the CURRENT `text` is emphasised, so
+   * emphasis survives text edits and works on cues with no / invalid
+   * `words`.  An empty array = "on the new model, nothing selected".
+   * `undefined` = fall back to the legacy `emphasizedWordIndices` (migrated
+   * on the fly by `resolveEmphasisKeywords`) or, if that is also absent, no
+   * emphasis.
+   */
+  emphasisKeywords?: string[]
+  /**
+   * @deprecated REQ-0305 word-index emphasis, superseded by
+   * `emphasisKeywords` (REQ-0306).  Retained only so legacy dev saves parse
+   * and migrate; never written by new code.  0-based indices into `words`.
+   */
   emphasizedWordIndices?: number[]
 }
 

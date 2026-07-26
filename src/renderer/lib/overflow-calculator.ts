@@ -11,6 +11,7 @@ import {
   type SubtitleFont
 } from './font-metrics'
 import type { FontId } from '../../shared/fonts'
+import { computeEmphasisRanges, isEmphasizedAt } from '../../shared/emphasis'
 
 export interface OverflowResult {
   /** -1 if entire text fits; otherwise the code-unit index where overflow begins. */
@@ -44,6 +45,14 @@ export interface OverflowArgs {
    * module-level active-font cache is used — matching the legacy behaviour.
    */
   fontId?: FontId
+  /**
+   * REQ-0306 §2 — keyword emphasis.  When the cue has emphasis keywords, the
+   * emphasised glyphs are physically larger, so the overflow judgement must
+   * measure them at `emphasisScale`.  Omitted / scale ≤ 1 / no match ⇒
+   * byte-identical to the pre-REQ-0306 measurement.
+   */
+  emphasisKeywords?: readonly string[]
+  emphasisScale?: number
 }
 
 /**
@@ -119,6 +128,16 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
   const effectiveFontId = fontId ?? getActiveFontId()
   const cmap = getCmapCoverageFor(effectiveFontId)
   const tofu = getTofuSubstituteFor(effectiveFontId)
+  // REQ-0306 — emphasis ranges over the SAME normalised text the loop walks,
+  // so `charOffset` lines up.  Empty ⇒ `mult` is always 1 (byte-identical).
+  const emphRanges =
+    args.emphasisKeywords && args.emphasisScale && args.emphasisScale > 1 && args.emphasisKeywords.length > 0
+      ? computeEmphasisRanges(normalizedText, args.emphasisKeywords)
+      : []
+  const emphScale = args.emphasisScale ?? 1
+  const mult = (off: number): number =>
+    emphRanges.length > 0 && isEmphasizedAt(off, emphRanges) ? emphScale : 1
+
   const lines = normalizedText.split('\n')
   let charOffset = 0
 
@@ -158,7 +177,7 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
         } else {
           advance = font.charToGlyph(ch).advanceWidth ?? 0
         }
-        cumulative += advance * scale
+        cumulative += advance * scale * mult(charOffset + byteOffset)
 
         // Overflow check: right edge of this glyph exceeds the budget.
         if (cumulative > effectivePx) {
@@ -197,9 +216,9 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
       let i = 0
       for (const char of line) {
         const cp = line.codePointAt(i) ?? 0
-        const charWidth = isWide(cp)
+        const charWidth = (isWide(cp)
           ? fontSizePx * FALLBACK_LIBASS_SCALE
-          : fontSizePx * 0.55 * FALLBACK_LIBASS_SCALE
+          : fontSizePx * 0.55 * FALLBACK_LIBASS_SCALE) * mult(charOffset + i)
         cumulative += charWidth
         if (cumulative > effectivePx) {
           return { overflowStartIndex: charOffset + i, measuredPx: cumulative, effectivePx }

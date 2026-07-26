@@ -8,8 +8,10 @@ import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
 import {
   canUseKeywordEmphasisInTier,
   clampEmphasisScalePercent,
-  resolveEmphasisIndices,
-  buildEmphasisAssText,
+  resolveEmphasisKeywords,
+  computeEmphasisRanges,
+  buildEmphasisBody,
+  emphasizedWordSet,
   EMPHASIS_DEFAULT_COLOR,
 } from '../../shared/emphasis'
 
@@ -300,23 +302,30 @@ export function generateAss(
         ? `\\2c${hexToAss(e.textColorHex)}`
         : ''
 
-      // REQ-0305 — keyword emphasis.  Gate = per-cue toggle-on AND the
-      // free-tier gate AND valid per-word data.  Emphasis targets the
-      // specific real words the user picked (chips), so — unlike karaoke —
-      // it is NOT applied to the equal-split fallback: when words are
-      // invalid the cue renders plain.  `emphasisIndices` drops any stale /
-      // out-of-range index (e.g. cue text edited after selection).
+      // REQ-0306 — keyword emphasis (text/keyword-based, NOT words-dependent).
+      // Gate = per-cue toggle-on AND the free-tier gate.  We resolve the
+      // keyword list (migrating the legacy REQ-0305 word indices on the fly)
+      // and match it against the CURRENT text — so emphasis survives edits and
+      // works on cues with no / invalid `words`.
       const emphasisGateOn = e.keywordEmphasisEnabled === true && canUseKeywordEmphasisInTier(isMsix)
-      const emphasisWordsValid = areWordsValidForText(e.words, e.text)
-      const emphasisIndices = emphasisGateOn && emphasisWordsValid && e.words
-        ? resolveEmphasisIndices(e.emphasizedWordIndices, e.words.length)
-        : new Set<number>()
-      const emphasisActive = emphasisIndices.size > 0
-      // Emphasised-word font size (rounded px) and the base to restore
-      // after each emphasised word.
+      const emphasisKeywords = emphasisGateOn
+        ? resolveEmphasisKeywords(e.emphasisKeywords, e.emphasizedWordIndices, e.words)
+        : []
+      const emphasisRanges = emphasisKeywords.length > 0
+        ? computeEmphasisRanges(e.text, emphasisKeywords)
+        : []
+      const emphasisActive = emphasisRanges.length > 0
+      // Emphasised font size (rounded px) and the base to restore after.
       const emphasisBigFs = Math.round(
         e.fontSizePx * (clampEmphasisScalePercent(e.emphasisScalePercent) / 100),
       )
+      // REQ-0306 §3 — which karaoke word units are emphasised (keyword ranges
+      // mapped onto the karaoke units via stripped-text alignment).  Works for
+      // real OR fallback karaoke words, so emphasis rides along with karaoke
+      // even on edited cues.  Only computed when both features are on.
+      const emphasisWordSet = emphasisActive && karaokeActive
+        ? emphasizedWordSet(e.text, karaokeWords, emphasisKeywords)
+        : new Set<number>()
       const emphasisColorHex = e.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR
 
       const outlineTag = `\\3c${hexToAss(e.outlineColorHex)}`
@@ -456,17 +465,18 @@ export function generateAss(
         // `buildKaraokeAssText` still maps `\N` to the right unit
         // boundary.
         //
-        // REQ-0305 — when emphasis is ALSO active (which only happens
-        // when words are valid, i.e. `karaokeWords === e.words`), pass
-        // the fs-only emphasis overlay so emphasised words render larger
-        // while the karaoke sweep keeps ownership of colour.  `\fs`
-        // switches to the emphasised size inside the same `\k` block and
-        // the base size is restored right after the word.
-        const emphasisOverlay = emphasisActive
+        // REQ-0306 §3 (Option A, owner-confirmed) — emphasised karaoke words
+        // grow AND, when spoken, light up in the emphasis colour instead of
+        // the karaoke highlight.  The overlay folds `\fs<big>\c<emph>` into
+        // the word's `\k` block (Primary/spoken colour → emphasis colour) and
+        // restores `\fs<base>\c<highlight>` after so the next word sweeps to
+        // the normal highlight.  `\2c` (unspoken) stays base for everyone, so
+        // the emphasised word looks like the others until it is spoken.
+        const emphasisOverlay = emphasisWordSet.size > 0
           ? {
-              indices: emphasisIndices,
-              openTag: `\\fs${emphasisBigFs}`,
-              closeTag: `\\fs${e.fontSizePx}`,
+              indices: emphasisWordSet,
+              openTag: `\\fs${emphasisBigFs}\\c${hexToAss(emphasisColorHex)}`,
+              closeTag: `\\fs${e.fontSizePx}\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}`,
             }
           : undefined
         const karaokeBody = buildKaraokeAssText(
@@ -479,16 +489,15 @@ export function generateAss(
         )
         text = `{${styleTag}}${karaokeBody}`
       } else if (emphasisActive) {
-        // REQ-0305 — karaoke OFF, emphasis ON.  Rebuild the cue body from
-        // the (valid) per-word list so emphasised words can carry their
-        // own `\c` + `\fs` override, restoring base colour/size after.
-        // Reconstruction matches the plain `e.text` wrap (REQ-0294
-        // invariant), so non-emphasised cues are unaffected.
-        const emphasisBody = buildEmphasisAssText(
-          e.words!,
+        // REQ-0306 — karaoke OFF, emphasis ON.  Build the body straight from
+        // the cue text + keyword ranges (no `words` needed), wrapping each
+        // emphasised run in `\fs<big>\c<emph>` and restoring base size/colour
+        // after.  Segment concatenation reproduces `e.text` exactly, so
+        // non-emphasised runs are byte-identical to the plain path.
+        const emphasisBody = buildEmphasisBody(
           e.text,
+          emphasisRanges,
           escapeWord,
-          emphasisIndices,
           `\\fs${emphasisBigFs}\\c${hexToAss(emphasisColorHex)}`,
           `\\fs${e.fontSizePx}\\c${hexToAss(e.textColorHex)}`,
         )

@@ -6,6 +6,7 @@ import { useUiStore } from '@/stores/ui-store'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { isFontId } from '../../shared/fonts'
+import { resolveEmphasisKeywords, clampEmphasisScalePercent } from '../../shared/emphasis'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 
 /**
@@ -294,13 +295,23 @@ async function wrapRow(
   // existing `\N` intact (applyAutoLineBreak then splits on `\N` and
   // measures each segment independently — see auto-line-break.ts:51).
   const input = mode === 'pack' ? latest.text.replace(/\\N/g, '') : latest.text
+  // REQ-0306 §2 — feed the row's keyword emphasis into the break finder so a
+  // cue whose emphasised words are enlarged actually wraps (pre-REQ-0306 the
+  // width was measured at base size and the wrap button reported "no change").
+  const emphasis = latest.keywordEmphasisEnabled === true
+    ? {
+        keywords: resolveEmphasisKeywords(latest.emphasisKeywords, latest.emphasizedWordIndices, latest.words),
+        scale: clampEmphasisScalePercent(latest.emphasisScalePercent) / 100,
+      }
+    : undefined
   const rewrapped = applyAutoLineBreak(
     input,
     latest.fontSizePx,
     latest.outlineThicknessPx,
     videoWidthPx,
     font,
-    latest.fontId
+    latest.fontId,
+    emphasis
   )
   if (rewrapped === latest.text) {
     toast.info(labels.noChangeToast)
