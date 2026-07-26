@@ -506,6 +506,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // commit so a fresh session snapshots afresh.
   const bulkTextColorBeforeRef = useRef<Map<string, string> | null>(null)
   const bulkOutlineColorBeforeRef = useRef<Map<string, string> | null>(null)
+  // REQ-0311 §5 — same per-row "before" bookkeeping for the opacity sliders, so
+  // a live drag still collapses to one undo entry.
+  const bulkTextAlphaBeforeRef = useRef<Map<string, number | undefined> | null>(null)
+  const bulkOutlineAlphaBeforeRef = useRef<Map<string, number | undefined> | null>(null)
 
   function handleTextColorPreview(hex: string) {
     if (bulkTextColorBeforeRef.current === null) {
@@ -583,24 +587,67 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftOutline(outlineHex)
   }
 
-  // REQ-0310 §1 — bulk opacity commits.  No preview stream here: the bulk bar's
-  // colour pickers snapshot per-row "before" values to collapse a drag into one
-  // undo, but the slider already fires `onCommit` exactly once per gesture, so a
-  // plain `applyBulk` gives the same one-op-per-gesture result without the
-  // bookkeeping.  Labelled with the existing colour history string.
+  // REQ-0311 §5 — bulk opacity now streams during the drag so the selection
+  // updates live in the preview, instead of only snapping on release.
+  //
+  // This adopts the colour pickers' per-row "before" snapshot: the preview
+  // stream writes through `updateEntriesPreview` (no history), and the single
+  // commit at the end carries `preSnapshots` so undo restores each row's own
+  // prior value in ONE history entry — not one per rAF frame, and not a single
+  // wrong value smeared across rows that started out different.
+  //
+  // `textAlpha` / `outlineAlpha` are optional (undefined === 100 %, REQ-0310),
+  // so the snapshot deliberately stores `undefined` rather than normalising to
+  // 100 — otherwise undo would rewrite an untouched row's field to a literal.
+  function snapshotAlpha(
+    ref: React.MutableRefObject<Map<string, number | undefined> | null>,
+    read: (e: SubtitleEntry) => number | undefined,
+  ) {
+    if (ref.current !== null) return
+    const map = new Map<string, number | undefined>()
+    const all = useProjectStore.getState().entries
+    for (const id of selectedRowIds) {
+      const e = all.find((x) => x.id === id)
+      if (e) map.set(id, read(e))
+    }
+    ref.current = map
+  }
+
+  function commitAlpha(
+    ref: React.MutableRefObject<Map<string, number | undefined> | null>,
+    key: 'textAlpha' | 'outlineAlpha',
+    v: number,
+    label: string,
+  ) {
+    const beforeMap = ref.current
+    ref.current = null
+    const preSnapshots = beforeMap
+      ? new Map<string, Partial<SubtitleEntry>>(
+          Array.from(beforeMap.entries()).map(([id, prev]) => [id, { [key]: prev }]),
+        )
+      : undefined
+    applyBulk({ [key]: v }, label, preSnapshots)
+  }
+
+  function handleTextAlphaBulkPreview(v: number) {
+    snapshotAlpha(bulkTextAlphaBeforeRef, (e) => e.textAlpha)
+    setTextAlphaDraft(v)
+    updateEntriesPreview(Array.from(selectedRowIds), { textAlpha: v })
+  }
   function handleTextAlphaBulkCommit(v: number) {
     setTextAlphaDraft(v)
-    applyBulk(
-      { textAlpha: v },
-      t('bulk.history.textColor', { count: selectedRowIds.size }),
-    )
+    commitAlpha(bulkTextAlphaBeforeRef, 'textAlpha', v,
+      t('bulk.history.textColor', { count: selectedRowIds.size }))
+  }
+  function handleOutlineAlphaBulkPreview(v: number) {
+    snapshotAlpha(bulkOutlineAlphaBeforeRef, (e) => e.outlineAlpha)
+    setOutlineAlphaDraft(v)
+    updateEntriesPreview(Array.from(selectedRowIds), { outlineAlpha: v })
   }
   function handleOutlineAlphaBulkCommit(v: number) {
     setOutlineAlphaDraft(v)
-    applyBulk(
-      { outlineAlpha: v },
-      t('bulk.history.outlineColor', { count: selectedRowIds.size }),
-    )
+    commitAlpha(bulkOutlineAlphaBeforeRef, 'outlineAlpha', v,
+      t('bulk.history.outlineColor', { count: selectedRowIds.size }))
   }
 
   function handleOutlineWidthCommit(v: number) {
@@ -1098,6 +1145,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               />
               <OpacityPercentSlider
                 value={textAlphaDraft}
+                onPreview={handleTextAlphaBulkPreview}
                 onCommit={handleTextAlphaBulkCommit}
                 ariaLabel={t('styleCell.textOpacity')}
                 fullWidth
@@ -1117,6 +1165,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               />
               <OpacityPercentSlider
                 value={outlineAlphaDraft}
+                onPreview={handleOutlineAlphaBulkPreview}
                 onCommit={handleOutlineAlphaBulkCommit}
                 ariaLabel={t('styleCell.outlineOpacity')}
                 fullWidth
