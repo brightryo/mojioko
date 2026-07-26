@@ -92,6 +92,19 @@ export const FONT_SIZE_MAX_PX = 600
 export const OUTLINE_THICKNESS_MAX_PX = 20
 
 /**
+ * REQ-0311 §2 — how far the inspector's subtitle `<textarea>` may be dragged
+ * open, as a multiple of its own default (`rows={3}`) height.  The floor is the
+ * default height itself, so the row can never be made smaller than it ships.
+ *
+ * Expressed as a ratio rather than a px cap because the default height is a
+ * product of the design tokens (`text-body` + `leading-snug` + `py-1.5`); a
+ * hardcoded px ceiling would silently drift the moment those tokens change.
+ * The bounds are applied imperatively from the measured natural height — see
+ * `timeline-block-inspector.tsx`.
+ */
+export const INSPECTOR_TEXTAREA_MAX_HEIGHT_RATIO = 2
+
+/**
  * Maximum drop-shadow depth in pixels (inclusive, integer).  Range is
  * 0–SHADOW_DEPTH_MAX_PX; depth of `0` means "no shadow".
  *

@@ -87,7 +87,16 @@ export function OpacityPercentSlider({
     <div
       className={cn(
         'flex items-center gap-1.5',
-        fullWidth && 'w-full',
+        // REQ-0311 §1 — `min-w-0` is load-bearing, not decoration.  When this
+        // root sits in a flex ROW beside the colour swatch (inspector + bulk
+        // bar), `w-full` gives it a base size of the whole control column, so
+        // it must shrink by swatch+gap to fit.  Without `min-w-0` its automatic
+        // minimum size is its min-content (~129px intrinsic range + gap + 48px
+        // readout ≈ 183px), it refuses to shrink at all, and the 32px excess is
+        // cut off by the inspector's `overflow-x-hidden` — which ate all but
+        // the "1" of "100%".  Measured before/after in
+        // tests/e2e/inspector-opacity-fit.spec.ts at the 1280x820 startup size.
+        fullWidth && 'w-full min-w-0',
         disabled && 'opacity-40 pointer-events-none',
       )}
     >
@@ -106,7 +115,11 @@ export function OpacityPercentSlider({
         style={{ accentColor: 'hsl(var(--primary))' }}
         aria-label={ariaLabel}
       />
-      <span className="w-12 text-caption text-muted-foreground font-mono tabular-nums text-right">
+      {/* REQ-0311 §1 — `shrink-0` so any remaining deficit is taken out of the
+          range track (which has `min-w-0`) instead of the readout.  The readout
+          is `text-right`, so losing width here truncates from the LEFT and
+          "100%" degrades to "1" — the exact reported symptom. */}
+      <span className="w-12 shrink-0 text-caption text-muted-foreground font-mono tabular-nums text-right">
         {draft}%
       </span>
     </div>

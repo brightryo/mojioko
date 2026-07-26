@@ -48,7 +48,13 @@ import { formatEditedTimecode, editedDurationOfEntry } from '@/lib/time'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { getAnchorAssPosition, clampAssPosition, recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 import { effectiveEntryState } from '../../../shared/cuts'
-import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, MARGIN_V_MIN_PX, MARGIN_V_MAX_PX } from '../../../shared/constants'
+import {
+  FONT_SIZE_MIN_PX,
+  FONT_SIZE_MAX_PX,
+  MARGIN_V_MIN_PX,
+  MARGIN_V_MAX_PX,
+  INSPECTOR_TEXTAREA_MAX_HEIGHT_RATIO,
+} from '../../../shared/constants'
 import type { FontId } from '../../../shared/fonts'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -144,6 +150,9 @@ export function TimelineBlockInspector({
   const initialDraft = entry.text.replace(/\\N/g, '\n')
   const [draft, setDraft] = useState(initialDraft)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // REQ-0311 §2 — the textarea's own default (`rows={3}`) height, measured once
+  // on first paint.  Null until measured.
+  const textareaNaturalHeightRef = useRef<number | null>(null)
   const [sizeOutOfRange, setSizeOutOfRange] = useState(false)
 
   // REQ-0184 §4 — per-section collapse state for the three inspector
@@ -159,6 +168,37 @@ export function TimelineBlockInspector({
   // ったら 開/開/閉 で始まる" spec — entering step2 fresh gives the
   // defaults; the user can toggle within a session.
   const [subtitleSectionOpen, setSubtitleSectionOpen] = useState(true)
+
+  /**
+   * REQ-0311 §2 — pin the drag-resize bounds to the textarea's OWN rendered
+   * height: floor = the default height (so it can never shrink below what it
+   * ships as), ceiling = `INSPECTOR_TEXTAREA_MAX_HEIGHT_RATIO` x that.
+   *
+   * Measured at runtime instead of hardcoded because the default height is a
+   * product of `text-body` + `leading-snug` + `py-1.5` + the border, and any
+   * token change would silently invalidate a px literal.
+   *
+   * Written imperatively rather than through the `style` prop on purpose: the
+   * browser stores a user drag as an inline `height` on the same style
+   * attribute, and a React-managed `style` object would fight it on the next
+   * render.  React never touches these properties, so the drag survives —
+   * the same division of labour the karaoke rAF loop uses for `style.color`.
+   *
+   * Runs when the section first opens (a collapsed section is `hidden`, so it
+   * measures 0) and latches after the first non-zero measurement, so a user
+   * resize is never mistaken for the natural height.
+   */
+  useEffect(() => {
+    if (!subtitleSectionOpen) return
+    if (textareaNaturalHeightRef.current !== null) return
+    const el = textareaRef.current
+    if (!el) return
+    const natural = el.getBoundingClientRect().height
+    if (natural <= 0) return
+    textareaNaturalHeightRef.current = natural
+    el.style.minHeight = `${natural}px`
+    el.style.maxHeight = `${natural * INSPECTOR_TEXTAREA_MAX_HEIGHT_RATIO}px`
+  }, [subtitleSectionOpen])
   const [layoutSectionOpen, setLayoutSectionOpen] = useState(true)
   const [backgroundSectionOpen, setBackgroundSectionOpen] = useState(false)
   // REQ-0307 §1 — the per-character emphasis picker lives behind the row's
@@ -964,7 +1004,10 @@ export function TimelineBlockInspector({
           aria-label={t('timeline.inspector.textLabel')}
           className={cn(
             'w-full rounded-md bg-surface-0 border border-line-strong px-2 py-1.5',
-            'text-body text-fg-primary leading-snug resize-none',
+            // REQ-0311 §2 — `resize-y` (vertical only) so the box can never be
+            // dragged wider and push the inspector into horizontal overflow.
+            // The min/max bounds are pinned imperatively below.
+            'text-body text-fg-primary leading-snug resize-y',
             'focus:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/30',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
