@@ -20,6 +20,9 @@ import { SegmentGroup } from '@/components/subtitle-table/segment-group'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { useSettingsStore } from '@/stores/settings-store'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+// REQ-0311 §4 — experimental karaoke sweep; delete with the feature.
+import { coerceKaraokeStyle } from '../../../shared/karaoke-style'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import {
@@ -110,6 +113,9 @@ export function TimelineBlockInspector({
   // FamilyWeightSelector's onChange (concrete FontId that equals
   // activeFontId is stored as `undefined` = inherit).
   const activeFontId = useSettingsStore((s) => s.activeFontId)
+  // REQ-0311 §4 — experimental karaoke sweep; delete with the feature.
+  const karaokeStyle = useSettingsStore((s) => s.karaokeStyle)
+  const setKaraokeStyle = useSettingsStore((s) => s.setKaraokeStyle)
   // REQ-0125 — history-less preview writer used from the color picker's
   // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
   const updateEntryPreview = useProjectStore((s) => s.updateEntryPreview)
@@ -1238,6 +1244,29 @@ export function TimelineBlockInspector({
                     heading={t('styleCell.karaokeHighlightColor')}
                   />
                 </div>
+              </StyleRow>
+            )}
+            {/* REQ-0311 §4 — EXPERIMENTAL karaoke sweep toggle.  App-wide (not
+                per-cue), so `SubtitleEntry` stays untouched; the trade-off is
+                that all karaoke cues share one style.  Shown only while the
+                cue actually has karaoke on, so the row doesn't advertise an
+                experiment on cues it cannot affect.
+                DELETE THIS WHOLE BLOCK with the feature. */}
+            {showKaraokeUi && entry.karaokeEnabled === true && (
+              <StyleRow label={t('styleCell.karaokeStyleRowLabel')} stopControlClickPropagation>
+                <Select
+                  value={karaokeStyle}
+                  onValueChange={(v) => setKaraokeStyle(coerceKaraokeStyle(v))}
+                  disabled={isFrozen}
+                >
+                  <SelectTrigger className="h-8 w-full" aria-label={t('styleCell.karaokeStyleRowLabel')}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="switch">{t('styleCell.karaokeStyleSwitch')}</SelectItem>
+                    <SelectItem value="sweep">{t('styleCell.karaokeStyleSweep')}</SelectItem>
+                  </SelectContent>
+                </Select>
               </StyleRow>
             )}
             {/* REQ-0307 §1 — keyword emphasis row: master Switch + 「編集」

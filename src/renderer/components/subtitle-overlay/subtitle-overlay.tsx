@@ -16,6 +16,8 @@ import { canSelectFontInTier } from '@/lib/font-tier'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
 import { computePreviewOutline } from '@/lib/preview-outline'
+// REQ-0311 §4 — experimental karaoke sweep; delete with the feature.
+import { sweepWordTimings } from '../../../shared/karaoke-sweep'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { areWordsValidForText } from '../../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
@@ -251,6 +253,8 @@ export function SubtitleOverlay({
 }: SubtitleOverlayProps) {
   bumpRenderCount('SubtitleOverlay')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
+  // REQ-0311 §4 — experimental sweep toggle; delete with the feature.
+  const karaokeStyle = useSettingsStore((s) => s.karaokeStyle)
   // REQ-0162 — subscribe to the font-cache version so this overlay
   // re-renders the moment ANY font finishes its opentype.js parse
   // and lands in the module-level `fontCache`.  Without this
@@ -530,6 +534,13 @@ export function SubtitleOverlay({
       )
     : []
   const karaokeActive = karaokeWords.length > 0
+  // REQ-0311 §4 — experimental sweep (`\kf`).  App-wide setting, default
+  // 'switch' = the shipping `\k` path.  Timings come from the SAME helper the
+  // emitter uses, so preview and burn-in cannot drift.
+  const sweepActive = karaokeActive && karaokeStyle === 'sweep'
+  const sweepTimings = sweepActive
+    ? sweepWordTimings(karaokeWords, entry.startSec, entry.endSec)
+    : []
   // REQ-0294 — compute the same word-index → break-before-me set the
   // ass-generator uses so the preview inserts `<br>` at the same word
   // boundaries libass wraps at.  Empty set for single-line cues, so
@@ -723,23 +734,38 @@ export function SubtitleOverlay({
             const runs = localRanges && localRanges.length > 0
               ? splitTextByLocalRanges(wordText, localRanges)
               : [{ text: wordText, emphasized: false }]
+            // REQ-0311 §4 — sweep mode wraps each word's runs in a positioned
+            // box so the rAF loop can give every run a gradient sized and
+            // offset to the WHOLE word.  That keeps the fill continuous across
+            // an emphasised run boundary (libass treats the word as one `\kf`
+            // syllable) while each run keeps its own spoken colour.  In switch
+            // mode no wrapper is emitted, so the shipping `\k` DOM is
+            // byte-identical to pre-REQ-0311.
+            const runSpans = runs.map((run, r) => (
+              <span
+                key={r}
+                data-karaoke-word-idx={i}
+                data-karaoke-word-start-sec={w.startSec}
+                data-karaoke-word-dur-sec={sweepActive ? sweepTimings[i]?.durationSec : undefined}
+                data-karaoke-emph-color={run.emphasized ? emphasisColorResolved : undefined}
+                style={{
+                  color: karaokeBaseColorResolved,
+                  fontSize: run.emphasized ? `${emphasisEm}em` : undefined,
+                }}
+              >
+                {run.text}
+              </span>
+            ))
             return (
               <Fragment key={i}>
                 {brokenHere && <br />}
-                {runs.map((run, r) => (
-                  <span
-                    key={r}
-                    data-karaoke-word-idx={i}
-                    data-karaoke-word-start-sec={w.startSec}
-                    data-karaoke-emph-color={run.emphasized ? emphasisColorResolved : undefined}
-                    style={{
-                      color: karaokeBaseColorResolved,
-                      fontSize: run.emphasized ? `${emphasisEm}em` : undefined,
-                    }}
-                  >
-                    {run.text}
+                {sweepActive ? (
+                  <span data-karaoke-word-box={i} style={{ position: 'relative' }}>
+                    {runSpans}
                   </span>
-                ))}
+                ) : (
+                  runSpans
+                )}
               </Fragment>
             )
           })}

@@ -550,6 +550,45 @@ export function VideoPreviewPanel() {
             // on the emphasised word's `\k` block.
             const emphColor = span.getAttribute('data-karaoke-emph-color')
             const spokenColor = emphColor ?? highlightColor
+            // REQ-0311 §4 — experimental sweep (`\kf`).  Instead of flipping
+            // the colour, paint a hard-stop gradient whose stop advances with
+            // the word's own speech duration — the same duration the emitter
+            // gives `\kf`, so preview and burn-in sweep together.
+            //
+            // The gradient is SIZED AND OFFSET TO THE WHOLE WORD, not to this
+            // run: an emphasised word is several runs, and libass sweeps the
+            // whole `\kf` syllable continuously.  `data-karaoke-word-box` is
+            // `position: relative`, so `offsetLeft` is already word-relative.
+            // Each run keeps its own spoken colour this way.
+            //
+            // DELETE THIS BLOCK with the sweep feature; the `else` arm below is
+            // the untouched shipping `\k` path.
+            const durAttr = span.getAttribute('data-karaoke-word-dur-sec')
+            if (durAttr !== null) {
+              const durSec = parseFloat(durAttr)
+              const p =
+                durSec > 0
+                  ? Math.min(1, Math.max(0, (t - wordStart) / durSec))
+                  : shouldHighlight
+                    ? 1
+                    : 0
+              const box = span.parentElement
+              const wordW = box?.offsetWidth ?? span.offsetWidth
+              const runX = box ? span.offsetLeft : 0
+              const pct = (p * 100).toFixed(2)
+              const image =
+                `linear-gradient(90deg, ${spokenColor} 0 ${pct}%, ${baseColor} ${pct}% 100%)`
+              if (span.style.backgroundImage !== image) {
+                span.style.backgroundImage = image
+                span.style.backgroundRepeat = 'no-repeat'
+                span.style.backgroundSize = `${wordW}px 100%`
+                span.style.backgroundPosition = `${-runX}px 0`
+                span.style.webkitBackgroundClip = 'text'
+                span.style.backgroundClip = 'text'
+                span.style.color = 'transparent'
+              }
+              continue
+            }
             const targetColor = shouldHighlight ? spokenColor : baseColor
             // Guard CSSOM writes at steady state — same rationale as
             // opacity above.  A cue mid-plateau touches at most one

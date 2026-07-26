@@ -5,6 +5,8 @@ import { BURNIN_DEFAULTS } from '../../shared/burnin-defaults'
 import { DEFAULT_LANGUAGE } from '../../shared/app-info'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, SHADOW_DEPTH_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
 import { DEFAULT_FONT_ID, isFontId, type FontId } from '../../shared/fonts'
+// REQ-0311 §4 — experimental karaoke sweep; delete with the feature.
+import { KARAOKE_STYLE_DEFAULT, coerceKaraokeStyle, type KaraokeStyle } from '../../shared/karaoke-style'
 
 interface SettingsStore {
   language: string
@@ -15,6 +17,8 @@ interface SettingsStore {
   transcriptionDefaults: TranscriptionDefaults
   transcriptionAdvanced: TranscriptionAdvancedParams
   autoLineBreak: boolean
+  /** REQ-0311 §4 — experimental karaoke sweep toggle (see shared/karaoke-style). */
+  karaokeStyle: KaraokeStyle
   encoder: EncoderSetting
   audioMode: AudioMode
   defaultAudioTrackIndex: number
@@ -74,6 +78,7 @@ interface SettingsStore {
   setTranscriptionAdvanced: (patch: Partial<TranscriptionAdvancedParams>) => void
   resetTranscriptionAdvanced: () => void
   setAutoLineBreak: (v: boolean) => void
+  setKaraokeStyle: (v: KaraokeStyle) => void
   setEncoder: (e: EncoderSetting) => void
   setAudioMode: (m: AudioMode) => void
   setDefaultAudioTrackIndex: (i: number) => void
@@ -118,6 +123,7 @@ export const useSettingsStore = create<SettingsStore>()(
       },
       transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS },
       autoLineBreak: true,
+      karaokeStyle: KARAOKE_STYLE_DEFAULT,
       encoder: BURNIN_DEFAULTS.encoder,
       audioMode: BURNIN_DEFAULTS.audioMode,
       defaultAudioTrackIndex: BURNIN_DEFAULTS.defaultAudioTrackIndex,
@@ -141,6 +147,7 @@ export const useSettingsStore = create<SettingsStore>()(
       resetTranscriptionAdvanced: () =>
         set({ transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS } }),
       setAutoLineBreak: (v) => set({ autoLineBreak: v }),
+      setKaraokeStyle: (v) => set({ karaokeStyle: v }),
       setEncoder: (e) => set({ encoder: e }),
       setAudioMode: (m) => set({ audioMode: m }),
       setDefaultAudioTrackIndex: (i) => set({ defaultAudioTrackIndex: i }),
@@ -254,6 +261,7 @@ export const useSettingsStore = create<SettingsStore>()(
           },
           transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS, ...ta },
           autoLineBreak: s.autoLineBreak ?? true,
+          karaokeStyle: coerceKaraokeStyle((s as { karaokeStyle?: unknown }).karaokeStyle),
           // Step 3 session-only state — ALWAYS reset to defaults regardless
           // of what settings.json contains.
           audioMode: BURNIN_DEFAULTS.audioMode,
@@ -286,6 +294,7 @@ export const useSettingsStore = create<SettingsStore>()(
         transcriptionDefaults: state.transcriptionDefaults,
         transcriptionAdvanced: state.transcriptionAdvanced,
         autoLineBreak: state.autoLineBreak,
+        karaokeStyle: state.karaokeStyle,
         encoder: state.encoder,
         defaultAudioTrackIndex: state.defaultAudioTrackIndex,
         fadeDurationSec: state.fadeDurationSec,

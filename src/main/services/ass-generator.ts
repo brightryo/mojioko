@@ -3,6 +3,9 @@ import { ASS_MARGIN_LR_PX, SHADOW_DEPTH_MAX_PX } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../shared/karaoke-gate'
 import { buildKaraokeAssText, splitWordsAtHardBreaks } from '../../shared/karaoke-ass'
+// REQ-0311 §4 — experimental sweep path; delete this import with the feature.
+import { buildKaraokeSweepAssText } from '../../shared/karaoke-sweep'
+import type { KaraokeStyle } from '../../shared/karaoke-style'
 import { areWordsValidForText } from '../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
 import { assAlphaValue, isFullyOpaque, OPACITY_MAX_PERCENT } from '../../shared/alpha'
@@ -172,6 +175,13 @@ export function generateAss(
    * pinned by `ass-generator-baseline-ac1fd67.test.ts`.
    */
   isMsix: boolean = false,
+  /**
+   * REQ-0311 §4 — karaoke rendering style, app-wide setting.  `'switch'` (the
+   * default) is the shipping `\k` path and is what every pre-REQ-0311 caller
+   * and unit test gets; `'sweep'` routes to the isolated `\kf` emitter in
+   * `karaoke-sweep.ts`.  Experimental — see that module for the deletion list.
+   */
+  karaokeStyle: KaraokeStyle = 'switch',
 ): string {
   // `burnin` / `subtitleBackground` are vestigial (see JSDoc above).  Reference
   // them once so `noUnusedParameters` stays quiet without disabling lint.
@@ -523,14 +533,27 @@ export function generateAss(
               closeTag: `\\fs${e.fontSizePx}\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}`,
             }
           : undefined
-        const karaokeBody = buildKaraokeAssText(
-          karaokeWords,
-          e.startSec,
-          e.endSec,
-          escapeWord,
-          e.text,
-          emphasisOverlay,
-        )
+        // REQ-0311 §4 — the ONE branch that selects the sweep emitter.  Both
+        // take the same arguments; only the tag and the duration rule differ.
+        // Deleting the sweep feature means deleting this ternary's false arm.
+        const karaokeBody =
+          karaokeStyle === 'sweep'
+            ? buildKaraokeSweepAssText(
+                karaokeWords,
+                e.startSec,
+                e.endSec,
+                escapeWord,
+                e.text,
+                emphasisOverlay,
+              )
+            : buildKaraokeAssText(
+                karaokeWords,
+                e.startSec,
+                e.endSec,
+                escapeWord,
+                e.text,
+                emphasisOverlay,
+              )
         text = `{${styleTag}}${karaokeBody}`
       } else if (emphasisActive) {
         // REQ-0307 — karaoke OFF, emphasis ON.  Build the body straight from

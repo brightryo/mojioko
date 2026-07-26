@@ -1,5 +1,6 @@
 import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams, WordSpan } from './types'
 import type { FontId } from './fonts'
+import type { KaraokeStyle } from './karaoke-style'
 import type { Cut } from './cuts'
 export type { ModelsState }
 
@@ -88,6 +89,12 @@ export interface BurninStartRequest {
    * caller predating Phase 1d).
    */
   cuts?: Cut[]
+  /**
+   * REQ-0311 §4 — EXPERIMENTAL karaoke rendering style, app-wide setting.
+   * Optional; omitted means `'switch'` (the shipping `\k` path), so every
+   * caller predating the experiment is unaffected.  Delete with the feature.
+   */
+  karaokeStyle?: KaraokeStyle
 }
 
 /**

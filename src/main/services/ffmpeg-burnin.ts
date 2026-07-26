@@ -97,7 +97,7 @@ export async function startBurnin(
   onEvent: BurninEventCallback,
   signal: AbortSignal
 ): Promise<void> {
-  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, subtitleBackground, outputContainer, fontId, cuts } = request
+  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, subtitleBackground, outputContainer, fontId, cuts, karaokeStyle } = request
 
   // REQ-074 1d: when cuts is non-empty the ffmpeg run is rebuilt around
   // filter_complex trim+concat (audio + video).  When empty / absent we
@@ -155,7 +155,7 @@ export async function startBurnin(
   // emit path.  Free builds get the plain path even when a project file
   // carries `karaokeEnabled=true` (defence-in-depth vs. tier bypass).
   const isMsix = isPackagedAsMsix(getCurrentProcessContext())
-  const assContent = generateAss(entriesForAss, video, burnin, subtitleBackground, fontMeta.assFontName, isMsix)
+  const assContent = generateAss(entriesForAss, video, burnin, subtitleBackground, fontMeta.assFontName, isMsix, karaokeStyle ?? 'switch')
   const assPath = join(tmpdir(), `mojioko-${randomUUID()}.ass`)
   await fs.writeFile(assPath, assContent, 'utf-8')
 

@@ -279,6 +279,8 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
       },
       outputContainer,
       fontId: activeFontId,
+      // REQ-0311 §4 — experimental karaoke sweep; delete with the feature.
+      karaokeStyle: useSettingsStore.getState().karaokeStyle,
       cuts
     }
 
