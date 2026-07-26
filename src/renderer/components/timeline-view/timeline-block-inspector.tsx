@@ -12,6 +12,8 @@ import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thic
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
+import { SegmentGroup } from '@/components/subtitle-table/segment-group'
+import { StyleRow } from '@/components/subtitle-table/style-row'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
@@ -55,53 +57,10 @@ interface TimelineBlockInspectorProps {
  * `flex-1` but drop `min-w-0` — without that escape hatch each pill's
  * content (the label text) sets its own minimum width.
  */
-function SegmentGroup<T extends string>({
-  value,
-  onChange,
-  options,
-  disabled,
-  ariaLabel,
-}: {
-  value: T
-  onChange: (next: T) => void
-  options: ReadonlyArray<{ value: T; label: string }>
-  disabled?: boolean
-  ariaLabel: string
-}) {
-  return (
-    <div
-      role="radiogroup"
-      aria-label={ariaLabel}
-      className={cn(
-        'flex h-7 w-[40%] min-w-fit items-stretch gap-0.5 rounded-md border border-line-strong bg-surface-0 p-0.5',
-        disabled && 'opacity-40 pointer-events-none'
-      )}
-    >
-      {options.map((o) => {
-        const selected = o.value === value
-        return (
-          <button
-            key={o.value}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            disabled={disabled}
-            onClick={() => onChange(o.value)}
-            className={cn(
-              'flex-1 inline-flex items-center justify-center rounded-[3px] px-2 text-caption font-medium transition-colors duration-150',
-              'focus:outline-none focus-visible:outline-none',
-              selected
-                ? 'bg-primary text-fg-inverse'
-                : 'text-fg-secondary hover:text-fg-primary hover:bg-surface-2'
-            )}
-          >
-            {o.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
+// REQ-0298 §4-1 — SegmentGroup extracted to
+// `@/components/subtitle-table/segment-group` so the settings
+// 「字幕スタイル」 tab uses the exact same pill styling.  Import
+// added above with the other shared components.
 
 /**
  * Editor body shown in STEP 2's always-on right-pane Inspector
@@ -999,8 +958,7 @@ export function TimelineBlockInspector({
               </div>
             </div>
             {/* Text colour */}
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.textColor')}</label>
+            <StyleRow label={t('styleCell.textColor')}>
               <ColorPicker
                 value={entry.textColorHex}
                 onChange={handleTextColorPreview}
@@ -1010,10 +968,9 @@ export function TimelineBlockInspector({
                 swatchOnly
                 heading={t('common:colorPicker.headingText')}
               />
-            </div>
+            </StyleRow>
             {/* Outline colour */}
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.outlineColor')}</label>
+            <StyleRow label={t('styleCell.outlineColor')}>
               <ColorPicker
                 value={entry.outlineColorHex}
                 onChange={handleOutlineColorPreview}
@@ -1023,15 +980,10 @@ export function TimelineBlockInspector({
                 swatchOnly
                 heading={t('common:colorPicker.headingOutline')}
               />
-            </div>
-            {/* Outline width — REQ-20260615-016: slider column narrowed to
-                ~50% so the row's left side has enough breathing room for
-                the "アウトライン幅" label to stay on a single line.  Label
-                gets `whitespace-nowrap` as a belt-and-braces against
-                inspector-pane width changes. */}
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.outlineWidth')}</label>
-              <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
+            </StyleRow>
+            {/* Outline width */}
+            <StyleRow label={t('styleCell.outlineWidth')} stopControlClickPropagation>
+              <div className="w-[50%]">
                 <OutlineThicknessSlider
                   value={entry.outlineThicknessPx}
                   onCommit={handleOutlineThicknessCommit}
@@ -1040,7 +992,7 @@ export function TimelineBlockInspector({
                   fullWidth
                 />
               </div>
-            </div>
+            </StyleRow>
             {/* REQ-0292 §4 — style-effect row order (top → bottom):
                 shadow, karaoke (+ colours), casing, rotation, fade.
                 Fade sits at the very end so the primary style effects
@@ -1060,9 +1012,8 @@ export function TimelineBlockInspector({
                 Pre-REQ-0293 had a separate Switch that duplicated the
                 "depth is 0" state; removing it lets the depth alone
                 drive both the tag emission and the ON/OFF affordance. */}
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.shadow')}</label>
-              <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
+            <StyleRow label={t('styleCell.shadow')} stopControlClickPropagation>
+              <div className="w-[50%]">
                 <ShadowDepthSlider
                   value={entry.shadowDepth ?? 0}
                   onCommit={handleShadowDepthCommit}
@@ -1072,7 +1023,7 @@ export function TimelineBlockInspector({
                   fullWidth
                 />
               </div>
-            </div>
+            </StyleRow>
             {/* REQ-0278 — glow row removed here (SPECIFICATION.md §11). */}
             {/* REQ-0286 §5 / REQ-0289 — karaoke row.  Hidden entirely
                 on free tier (`showKaraokeUi = canUseKaraokeInTier
@@ -1091,9 +1042,8 @@ export function TimelineBlockInspector({
                 stored; only used at render when karaoke is ON).  Tier
                 gate hides the entire row on free tier. */}
             {showKaraokeUi && (
-              <div className="flex items-center justify-between gap-2">
-                <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.karaokeRowLabel')}</label>
-                <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
+              <StyleRow label={t('styleCell.karaokeRowLabel')} stopControlClickPropagation>
+                <div className="flex items-center gap-2 w-[50%]">
                   <Switch
                     checked={entry.karaokeEnabled === true}
                     onCheckedChange={handleKaraokeToggle}
@@ -1116,14 +1066,13 @@ export function TimelineBlockInspector({
                     heading={t('styleCell.karaokeHighlightColor')}
                   />
                 </div>
-              </div>
+              </StyleRow>
             )}
             {/* Casing — REQ-0292 §4 moved BELOW karaoke (was above
                 shadow) so the "colour" cluster (shadow, karaoke)
                 stays visually contiguous. */}
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.casing')}</label>
-              <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
+            <StyleRow label={t('styleCell.casing')} stopControlClickPropagation>
+              <div className="flex items-center gap-2 w-[50%]">
                 <Switch
                   checked={entry.casing === 'uppercase'}
                   onCheckedChange={handleCasingToggle}
@@ -1134,10 +1083,9 @@ export function TimelineBlockInspector({
                   {entry.casing === 'uppercase' ? t('styleCell.casingUppercase') : t('styleCell.casingNone')}
                 </span>
               </div>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.rotation')}</label>
-              <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
+            </StyleRow>
+            <StyleRow label={t('styleCell.rotation')} stopControlClickPropagation>
+              <div className="w-[50%]">
                 <NumberStepperInput
                   value={entry.rotation ?? 0}
                   min={0}
@@ -1148,12 +1096,11 @@ export function TimelineBlockInspector({
                   ariaLabel={t('styleCell.rotation')}
                 />
               </div>
-            </div>
+            </StyleRow>
             {/* Fade — REQ-0292 §4 moved to the end so the temporal
                 knob sits after all the visual style effects. */}
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.fade')}</label>
-              <div className="w-[50%]" onClick={(e) => e.stopPropagation()}>
+            <StyleRow label={t('styleCell.fade')} stopControlClickPropagation>
+              <div className="w-[50%]">
                 <FadeDurationSlider
                   value={entry.fadeDurationSec}
                   onCommit={handleFadeDurationCommit}
@@ -1162,7 +1109,7 @@ export function TimelineBlockInspector({
                   fullWidth
                 />
               </div>
-            </div>
+            </StyleRow>
           </>
         )}
         </div>{/* REQ-0184 §4 — close subtitle-section collapse wrapper */}

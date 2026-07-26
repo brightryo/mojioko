@@ -1,13 +1,12 @@
 import { useTranslation } from 'react-i18next'
-import { HelpCircle } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
+import { StyleRow } from '@/components/subtitle-table/style-row'
+import { SegmentGroup } from '@/components/subtitle-table/segment-group'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, MARGIN_V_MIN_PX, MARGIN_V_MAX_PX } from '../../../shared/constants'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import type { TranscriptionDefaults } from '../../../shared/types'
@@ -25,21 +24,30 @@ const FONT_SIZE_STEP_PX = 10
  * class shared across every row keeps slider bars and stepper widths
  * visually aligned (previous layout let each control size itself,
  * which made the shadow / fade sliders look ~2× wider than outline
- * width).  `w-48` (=12rem, 192px) is the same footprint as the
- * inspector's `w-[50%]` when the inspector column is ~380px, so
- * inspector and settings surfaces read as siblings.
+ * width).
+ *
+ * REQ-0298 §2 — widened from `w-48` (192px) to `w-72` (288px) so the
+ * X/Y offset row (2 NumberStepperInputs + X/Y labels + gaps, ~280 px
+ * of intrinsic content) fits without overflowing.  Pre-REQ-0298 the
+ * offset row's content overflowed a 192-px wrapper, and the tab
+ * wrapper's implicit `overflow-x: auto` (Chromium's default when
+ * `overflow-y: auto` is set) surfaced a horizontal scrollbar on the
+ * whole 字幕スタイル tab.  Widening the column removes the
+ * overflow at source without touching dialog width or per-tab
+ * height classes (REQ-0283 invariant preserved).
  */
-const CONTROL_COL_CLASS = 'w-48 shrink-0'
+const CONTROL_COL_CLASS = 'w-72 shrink-0'
 
 /**
- * REQ-0296 §1 — shared row shape for the "字幕スタイル" tab, cloned
- * from `AdvancedParamRow` in `whisper-advanced-controls.tsx` (the
- * "Whisper設定" tab the owner referenced as the canonical layout).
- * Label on the left, dashed filler in the middle, control on the
- * right — same visual rhythm across both settings tabs so switching
- * between them doesn't require the user to relearn the grid.
+ * REQ-0298 §4 — StyleRow moved to `subtitle-table/style-row.tsx` so
+ * inspector + bulk-edit + settings-default-style share the same shell.
+ * The wrapper below just applies this file's `CONTROL_COL_CLASS`
+ * (settings-tab-specific width) around the child so slider bars stay
+ * uniformly wide inside the settings tab.  Other surfaces use the
+ * shared StyleRow directly (control column width is whatever the
+ * per-row wrapper sets, typically `w-[50%]` in the inspector).
  */
-function StyleRow({
+function SettingsStyleRow({
   label,
   help,
   children,
@@ -49,25 +57,9 @@ function StyleRow({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-accent/40 transition-colors duration-150">
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-body text-muted-foreground">{label}</span>
-        {help !== undefined && (
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <span className="inline-flex cursor-help text-muted-foreground/60 hover:text-muted-foreground transition-colors duration-150">
-                <HelpCircle className="h-3.5 w-3.5" />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[280px] text-left">
-              {help}
-            </TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-      <div className="flex-1 border-t border-dashed border-border min-w-[16px]" />
+    <StyleRow label={label} help={help} labelVariant="settings">
       <div className={CONTROL_COL_CLASS}>{children}</div>
-    </div>
+    </StyleRow>
   )
 }
 
@@ -145,17 +137,13 @@ export function DefaultStyleControls({
 }: DefaultStyleControlsProps) {
   const { t } = useTranslation(['step1', 'step2', 'common'])
   const showKaraokeUi = canUseKaraokeInTier(isMsix)
-
-  const segButton = (selected: boolean) => cn(
-    'px-2 h-7 rounded border text-body-sm transition-colors duration-150',
-    selected
-      ? 'border-primary text-fg-primary bg-primary/10'
-      : 'border-line-strong text-fg-secondary hover:text-fg-primary hover:bg-surface-2',
-  )
+  // REQ-0298 §4-1 — segButton removed; H/V rows use the shared
+  // SegmentGroup component from `@/components/subtitle-table/segment-group`
+  // so the settings tab matches the inspector's pill styling.
 
   return (
     <div className="space-y-0.5">
-      <StyleRow label={t('subtitleDefaults.size')} help={t('subtitleDefaults.helpSize')}>
+      <SettingsStyleRow label={t('subtitleDefaults.size')} help={t('subtitleDefaults.helpSize')}>
         <NumberStepperInput
           value={defaults.fontSizePx}
           min={FONT_SIZE_MIN_PX}
@@ -165,9 +153,9 @@ export function DefaultStyleControls({
           ariaLabel={t('subtitleDefaults.size')}
           title={t('subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
         />
-      </StyleRow>
+      </SettingsStyleRow>
 
-      <StyleRow label={t('subtitleDefaults.textColor')} help={t('subtitleDefaults.helpTextColor')}>
+      <SettingsStyleRow label={t('subtitleDefaults.textColor')} help={t('subtitleDefaults.helpTextColor')}>
         <ColorPicker
           value={defaults.textColorHex}
           onChange={(hex) => onUpdateDefaults({ textColorHex: hex })}
@@ -175,9 +163,9 @@ export function DefaultStyleControls({
             onUpdateDefaults({ textColorHex: text, outlineColorHex: outline })
           }
         />
-      </StyleRow>
+      </SettingsStyleRow>
 
-      <StyleRow label={t('subtitleDefaults.outlineColor')} help={t('subtitleDefaults.helpOutlineColor')}>
+      <SettingsStyleRow label={t('subtitleDefaults.outlineColor')} help={t('subtitleDefaults.helpOutlineColor')}>
         <ColorPicker
           value={defaults.outlineColorHex}
           onChange={(hex) => onUpdateDefaults({ outlineColorHex: hex })}
@@ -185,19 +173,19 @@ export function DefaultStyleControls({
             onUpdateDefaults({ textColorHex: text, outlineColorHex: outline })
           }
         />
-      </StyleRow>
+      </SettingsStyleRow>
 
-      <StyleRow label={t('subtitleDefaults.stroke')} help={t('subtitleDefaults.helpStroke')}>
+      <SettingsStyleRow label={t('subtitleDefaults.stroke')} help={t('subtitleDefaults.helpStroke')}>
         <OutlineThicknessSlider
           value={defaults.outlineThicknessPx}
           onCommit={(v) => onUpdateDefaults({ outlineThicknessPx: v })}
           ariaLabel={t('subtitleDefaults.stroke')}
           fullWidth
         />
-      </StyleRow>
+      </SettingsStyleRow>
 
       {/* Shadow (REQ-0293 final: 0–50 slider, 0=OFF). */}
-      <StyleRow label={t('step2:styleCell.shadow')}>
+      <SettingsStyleRow label={t('step2:styleCell.shadow')}>
         <ShadowDepthSlider
           value={defaults.shadowDepth ?? 0}
           onCommit={(v) => onUpdateDefaults({
@@ -208,12 +196,12 @@ export function DefaultStyleControls({
           ariaLabel={t('step2:styleCell.shadowDepth')}
           fullWidth
         />
-      </StyleRow>
+      </SettingsStyleRow>
 
       {/* Karaoke (REQ-0293 final + REQ-0296 §2: single row, Switch +
           highlight picker always visible). */}
       {showKaraokeUi && (
-        <StyleRow label={t('step2:styleCell.karaokeRowLabel')}>
+        <SettingsStyleRow label={t('step2:styleCell.karaokeRowLabel')}>
           <div className="flex items-center gap-2">
             <Switch
               checked={defaults.karaokeEnabled === true}
@@ -235,10 +223,10 @@ export function DefaultStyleControls({
               heading={t('step2:styleCell.karaokeHighlightColor')}
             />
           </div>
-        </StyleRow>
+        </SettingsStyleRow>
       )}
 
-      <StyleRow label={t('step2:styleCell.casing')}>
+      <SettingsStyleRow label={t('step2:styleCell.casing')}>
         <div className="flex items-center gap-2">
           <Switch
             checked={defaults.casing === 'uppercase'}
@@ -249,9 +237,9 @@ export function DefaultStyleControls({
             {defaults.casing === 'uppercase' ? t('step2:styleCell.casingUppercase') : t('step2:styleCell.casingNone')}
           </span>
         </div>
-      </StyleRow>
+      </SettingsStyleRow>
 
-      <StyleRow label={t('step2:styleCell.rotation')}>
+      <SettingsStyleRow label={t('step2:styleCell.rotation')}>
         <NumberStepperInput
           value={defaults.rotation ?? 0}
           min={0}
@@ -260,16 +248,16 @@ export function DefaultStyleControls({
           onCommit={(v) => onUpdateDefaults({ rotation: ((v % 360) + 360) % 360 })}
           ariaLabel={t('step2:styleCell.rotation')}
         />
-      </StyleRow>
+      </SettingsStyleRow>
 
-      <StyleRow label={t('step2:styleCell.fade')}>
+      <SettingsStyleRow label={t('step2:styleCell.fade')}>
         <FadeDurationSlider
           value={fadeDurationSec}
           onCommit={onSetFadeDurationSec}
           ariaLabel={t('step2:styleCell.fade')}
           fullWidth
         />
-      </StyleRow>
+      </SettingsStyleRow>
 
       {/* ── Layout section header ── */}
       <div className="pt-2 mt-2 border-t border-border/60">
@@ -277,37 +265,35 @@ export function DefaultStyleControls({
           {t('step2:timeline.inspector.layoutSection')}
         </p>
 
-        <StyleRow label={t('step2:styleCell.layoutH')}>
-          <div className="flex items-center gap-1">
-            {(['left', 'center', 'right'] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => onUpdateDefaults({ horizontalPosition: v })}
-                className={segButton((defaults.horizontalPosition ?? 'center') === v)}
-              >
-                {t(`step2:subtitlePosition.${v}`)}
-              </button>
-            ))}
-          </div>
-        </StyleRow>
+        <SettingsStyleRow label={t('step2:styleCell.layoutH')}>
+          <SegmentGroup<'left' | 'center' | 'right'>
+            value={defaults.horizontalPosition ?? 'center'}
+            onChange={(v) => onUpdateDefaults({ horizontalPosition: v })}
+            ariaLabel={t('step2:styleCell.layoutH')}
+            fullWidth
+            options={[
+              { value: 'left', label: t('step2:subtitlePosition.left') },
+              { value: 'center', label: t('step2:subtitlePosition.center') },
+              { value: 'right', label: t('step2:subtitlePosition.right') },
+            ]}
+          />
+        </SettingsStyleRow>
 
-        <StyleRow label={t('step2:styleCell.layoutV')}>
-          <div className="flex items-center gap-1">
-            {(['top', 'center', 'bottom'] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => onUpdateDefaults({ verticalPosition: v })}
-                className={segButton((defaults.verticalPosition ?? 'bottom') === v)}
-              >
-                {t(`step2:subtitlePosition.${v}`)}
-              </button>
-            ))}
-          </div>
-        </StyleRow>
+        <SettingsStyleRow label={t('step2:styleCell.layoutV')}>
+          <SegmentGroup<'top' | 'center' | 'bottom'>
+            value={defaults.verticalPosition ?? 'bottom'}
+            onChange={(v) => onUpdateDefaults({ verticalPosition: v })}
+            ariaLabel={t('step2:styleCell.layoutV')}
+            fullWidth
+            options={[
+              { value: 'top', label: t('step2:subtitlePosition.top') },
+              { value: 'center', label: t('step2:subtitlePosition.center') },
+              { value: 'bottom', label: t('step2:subtitlePosition.bottom') },
+            ]}
+          />
+        </SettingsStyleRow>
 
-        <StyleRow label={t('step2:styleCell.marginV')}>
+        <SettingsStyleRow label={t('step2:styleCell.marginV')}>
           <NumberStepperInput
             value={defaults.verticalMarginPx ?? 40}
             min={MARGIN_V_MIN_PX}
@@ -317,9 +303,9 @@ export function DefaultStyleControls({
             ariaLabel={t('step2:styleCell.marginV')}
             widthClass="w-16"
           />
-        </StyleRow>
+        </SettingsStyleRow>
 
-        <StyleRow label={t('step2:styleCell.offset')}>
+        <SettingsStyleRow label={t('step2:styleCell.offset')}>
           <div className="flex items-center gap-2">
             <span className="text-body-sm text-fg-tertiary">X</span>
             <NumberStepperInput
@@ -342,13 +328,13 @@ export function DefaultStyleControls({
               widthClass="w-16"
             />
           </div>
-        </StyleRow>
+        </SettingsStyleRow>
       </div>
 
       {/* Auto line break — separate section per the pre-REQ-0295
           convention (subtitle-formatting flag, not a per-cue style). */}
       <div className="pt-2 mt-2 border-t border-border/60">
-        <StyleRow label={t('advanced.autoLineBreak')} help={t('advanced.autoLineBreakHelp')}>
+        <SettingsStyleRow label={t('advanced.autoLineBreak')} help={t('advanced.autoLineBreakHelp')}>
           <div className="flex items-center gap-2">
             <Switch
               checked={autoLineBreak}
@@ -358,7 +344,7 @@ export function DefaultStyleControls({
               {autoLineBreak ? t('advanced.enabled') : t('advanced.disabled')}
             </span>
           </div>
-        </StyleRow>
+        </SettingsStyleRow>
       </div>
     </div>
   )

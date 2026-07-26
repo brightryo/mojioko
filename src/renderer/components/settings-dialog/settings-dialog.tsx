@@ -13,7 +13,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { FontPicker } from '@/components/font-picker/font-picker'
 import { DefaultStyleControls } from '@/components/default-style-controls/default-style-controls'
 import { WhisperAdvancedControls } from '@/components/whisper-advanced-controls/whisper-advanced-controls'
-import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
+// REQ-0298 §3 — FadeDurationSlider import removed with the General-tab
+// slider.  DefaultStyleControls (rendered in the 「字幕スタイル」 tab)
+// imports the slider itself; the setter + value are still subscribed
+// below and passed through to that component unchanged.
 import { FolderPathInput } from './folder-path-input'
 import { ShortcutsSettingsTab } from './shortcuts-settings-tab'
 
@@ -150,7 +153,7 @@ export function SettingsDialog() {
               Do not move `overflow-y-auto` INTO individual TabsContent —
               it must live on this wrapper so the frame stays fixed no
               matter which tab is active OR which tabs are added later. */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
 
           {/* ─ General ────────────────────────────────────────────── */}
           <TabsContent value="general">
@@ -220,22 +223,15 @@ export function SettingsDialog() {
                 </Select>
               </div>
 
-              {/* REQ-20260615-050 — fade duration slider.  Replaces the
-                  legacy number input.  0 = OFF, 0.1–0.5 s otherwise.
-                  This setting is the default for new entries; existing
-                  entries keep whatever per-row value they already hold. */}
-              <span className="whitespace-nowrap text-body text-fg-secondary self-start leading-none mt-2.5">
-                {t('general.fadeDuration')}
-              </span>
-              <div className="space-y-1 flex flex-col">
-                <FadeDurationSlider
-                  value={fadeDurationSec}
-                  onCommit={setFadeDurationSec}
-                  ariaLabel={t('general.fadeDuration')}
-                  fullWidth
-                />
-                <p className="text-body-sm text-fg-muted">{t('general.fadeDurationHint')}</p>
-              </div>
+              {/* REQ-0298 §3 — the fade-duration slider was removed from
+                  this tab.  REQ-0295 added the same slider to the
+                  「字幕スタイル」 tab (both surfaces write the SAME
+                  `settings.fadeDurationSec` store slot, so the value
+                  and behaviour are unchanged); exposing it in two
+                  tabs was confusing.  The store slot, its setter,
+                  and every downstream consumer (per-entry seed at
+                  transcription, style-defaults preview, etc.) stay
+                  as-is — this is a pure UI-visibility change. */}
 
               {/* REQ-0121 — default transcription audio track (1..6).  Fixed
                   1..6 dropdown regardless of the current video's track count

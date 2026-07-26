@@ -9,6 +9,7 @@ import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-sl
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
+import { StyleRow } from '@/components/subtitle-table/style-row'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
@@ -215,10 +216,17 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // `subtitleDefaults.sizeHint` string defined for STEP 1 (REQ-034 #3).
   const { t } = useTranslation(['step2', 'step1', 'common'])
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
-  // REQ-0275 §5 — FamilyWeightSelector seed value = project default,
-  // so a fresh bulk edit starts showing the same font+weight the
-  // freshly-transcribed rows carry.  Bulk apply still writes each
-  // selected row's fontId via `handleFontChange` → one Undo per bulk.
+  // REQ-0275 §5 / REQ-0298 §1 — the FamilyWeightSelector value is
+  // driven by a LOCAL draft (`fontDraft`) that seeds from the
+  // project's active font at mount / selection-change and updates
+  // itself whenever the user picks a new font.  Pre-REQ-0298 the
+  // selector was bound directly to `settingsStore.activeFontId`,
+  // which the bulk font-change handler never wrote to — so the
+  // display swatch stayed on the seed font forever even though the
+  // rows were correctly re-fonted via `applyBulk({ fontId })`.
+  // Same fix pattern as REQ-0292 §3 (bulk rotation stuck-at-0):
+  // the draft is the SOLE binding for what the user sees, and the
+  // handler updates BOTH the draft and the store.
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   // REQ-0125 — history-less preview writer used from the color picker's
   // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
@@ -289,6 +297,18 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     pickFirstSelectedSize(selectedRowIds)
   )
 
+  // REQ-0298 §1 — bulk font-and-weight draft.  Seeds from the project's
+  // active font at mount; the font-change handler writes back to this
+  // draft so the FamilyWeightSelector display reflects the last picked
+  // font.  Pre-REQ-0298 the selector was bound directly to
+  // `settingsStore.activeFontId` which never mutated during bulk font
+  // apply — so the swatch stayed on the seed font even though
+  // `applyBulk({ fontId })` did re-font every selected row correctly.
+  // The bug was purely display-side (identical to the REQ-0292 §3
+  // rotation stuck-at-0 bug: read-only binding to an unrelated
+  // source-of-truth).
+  const [fontDraft, setFontDraft] = useState<FontId>(activeFontId)
+
   // REQ-20260613-016 Phase 5 — per-row layout + background drafts.  Seed
   // from the first selected row so the initial values show "what the
   // selection currently has" and a re-pick of the seed is a genuine
@@ -332,6 +352,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setShadowSliderDraft(0)
     setRotationDraft(0)
     setKaraokeHighlightDraft(KARAOKE_DEFAULT_HIGHLIGHT_COLOR)
+    // REQ-0298 §1 — re-seed fontDraft from the project's active font
+    // on selection change.  Consistent with the "fresh selection ⇒
+    // fresh draft" convention every other bulk draft follows.
+    setFontDraft(activeFontId)
     setSizeDraft(pickFirstSelectedSize(selectedRowIds))
     const layout = pickFirstSelectedLayout(selectedRowIds)
     if (layout !== null) {
@@ -347,6 +371,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       setBgColorDraft(layout.bgColor)
       setBgOpacityDraft(String(layout.bgOpacityPercent))
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: activeFontId re-seed happens on selection change only, not on unrelated activeFont mutations.
   }, [selectedRowIds])
 
   // ---------------------------------------------------------------------
@@ -744,6 +769,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // have had heterogeneous overrides before the bulk apply.
   // REQ-022 step 2.
   function handleFontChange(next: FontId | undefined) {
+    // REQ-0298 §1 — update the draft so the FamilyWeightSelector
+    // reflects the newly picked font.  `undefined` means "fall back
+    // to project default" — visualise that as the project's active
+    // font (same seed we use at selection-change re-init).
+    setFontDraft(next ?? activeFontId)
     applyBulk(
       { fontId: next },
       t('bulk.history.font', { count: selectedRowIds.size })
@@ -980,21 +1010,14 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               (via handleFontChange) so a single Undo restores every
               affected row's prior fontId in one step. */}
           <FamilyWeightSelector
-            value={activeFontId}
+            value={fontDraft}
             onChange={(nextId) => handleFontChange(nextId)}
             // REQ-0296 §3 — show "フォント" / "ウェイト" left labels so
             // the two font rows line up with size / colours / etc.
             showLabels
           />
-          {/* Font size */}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('bulk.size')}</span>
-            {/* REQ-20260615-059 B — ±10 chevron stepper.  Numeric draft is
-                seeded from the first selected row at selection-change time
-                (`pickFirstSelectedSize`); the stepper commits-on-blur or
-                chevron-click via the existing `handleSizeCommit` so the
-                bulk-write path is unchanged.  When the seed is empty we
-                fall back to the default size from BURNIN_DEFAULTS. */}
+          {/* Font size — REQ-0298 §4-2 wrapped in shared StyleRow. */}
+          <StyleRow label={t('bulk.size')}>
             <NumberStepperInput
               value={parseInt(sizeDraft, 10) || 100}
               min={FONT_SIZE_MIN_PX}
@@ -1007,10 +1030,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               ariaLabel={t('bulk.size')}
               title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
             />
-          </label>
+          </StyleRow>
           {/* Text color */}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('bulk.textColor')}</span>
+          <StyleRow label={t('bulk.textColor')}>
             <ColorPicker
               value={colorDraftText ?? '#FFFFFF'}
               onChange={handleTextColorPreview}
@@ -1019,10 +1041,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               swatchOnly
               heading={t('common:colorPicker.headingText')}
             />
-          </label>
+          </StyleRow>
           {/* Outline color */}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('bulk.outlineColor')}</span>
+          <StyleRow label={t('bulk.outlineColor')}>
             <ColorPicker
               value={colorDraftOutline ?? '#000000'}
               onChange={handleOutlineColorPreview}
@@ -1031,13 +1052,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               swatchOnly
               heading={t('common:colorPicker.headingOutline')}
             />
-          </label>
-          {/* Outline width — REQ-20260615-061 B: slider now wrapped in
-              a w-[50%] cell + `fullWidth`, matching the inspector's
-              outline / fade rows so the bar's left and right edges
-              line up between this panel and the inspector. */}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('bulk.outlineWidth')}</span>
+          </StyleRow>
+          {/* Outline width */}
+          <StyleRow label={t('bulk.outlineWidth')}>
             <div className="w-[50%]">
               <OutlineThicknessSlider
                 value={outlineSliderDraft}
@@ -1046,7 +1063,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                 fullWidth
               />
             </div>
-          </label>
+          </StyleRow>
           {/* REQ-0292 §4 — bulk-edit style-effect row order mirrors
               the inspector: shadow, karaoke (+ colours), casing,
               rotation, fade.  Bulk-edit intentionally has no text
@@ -1066,8 +1083,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               colour.
               REQ-0292 §3 — rotation NumberStepperInput bound to
               `rotationDraft` (was `value={0}` hardcoded pre-REQ-0292). */}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('styleCell.shadow')}</span>
+          <StyleRow label={t('styleCell.shadow')}>
             <div className="w-[50%]">
               <ShadowDepthSlider
                 value={shadowSliderDraft}
@@ -1076,7 +1092,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                 fullWidth
               />
             </div>
-          </label>
+          </StyleRow>
           {/* REQ-0278 — glow bulk-toggle removed here (SPECIFICATION.md §11). */}
           {/* REQ-0286 §5 / REQ-0293 §2 — karaoke bulk cluster.  Hidden
               on free tier (`canUseKaraokeInTier(isMsix)` returns
@@ -1091,8 +1107,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               stable; the colour is applied when the Switch is ON.
               Tier gate hides the entire row on free tier. */}
           {canUseKaraokeInTier(useAppEnvStore((s) => s.isMsix) ?? false) && (
-            <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-              <span>{t('styleCell.karaokeRowLabel')}</span>
+            <StyleRow label={t('styleCell.karaokeRowLabel')}>
               <div className="flex items-center gap-2 w-[50%]">
                 <Switch onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
                 <span className="text-caption text-muted-foreground flex-1 min-w-0 truncate">
@@ -1106,17 +1121,15 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                   heading={t('styleCell.karaokeHighlightColor')}
                 />
               </div>
-            </label>
+            </StyleRow>
           )}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('styleCell.casing')}</span>
+          <StyleRow label={t('styleCell.casing')}>
             <div className="flex items-center gap-2 w-[50%]">
               <Switch onCheckedChange={handleCasingBulk} aria-label={t('styleCell.casing')} />
               <span className="text-caption text-muted-foreground">{t('styleCell.casingUppercase')}</span>
             </div>
-          </label>
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('styleCell.rotation')}</span>
+          </StyleRow>
+          <StyleRow label={t('styleCell.rotation')}>
             <div className="w-[50%]">
               <NumberStepperInput
                 value={rotationDraft}
@@ -1127,12 +1140,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                 ariaLabel={t('styleCell.rotation')}
               />
             </div>
-          </label>
-          {/* REQ-20260615-050 — fade slider replaces the legacy ON/OFF
-              Switch.  REQ-0292 §4 moved to end of style cluster
-              (matches inspector order). */}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('bulk.fade')}</span>
+          </StyleRow>
+          {/* Fade — REQ-0292 §4 moved to end of style cluster (matches inspector order). */}
+          <StyleRow label={t('bulk.fade')}>
             <div className="w-[50%]">
               <FadeDurationSlider
                 value={fadeSliderDraft}
@@ -1141,7 +1151,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                 fullWidth
               />
             </div>
-          </label>
+          </StyleRow>
         </div>
 
         {/* § レイアウト — Horizontal, Vertical, Margin. */}
