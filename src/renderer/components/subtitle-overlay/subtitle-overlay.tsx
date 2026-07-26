@@ -18,6 +18,12 @@ import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../s
 import { areWordsValidForText } from '../../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
 import { computeKaraokeBreaks } from '../../../shared/karaoke-ass'
+import {
+  canUseKeywordEmphasisInTier,
+  resolveEmphasisIndices,
+  clampEmphasisScalePercent,
+  EMPHASIS_DEFAULT_COLOR,
+} from '../../../shared/emphasis'
 import type { WordSpan } from '../../../shared/types'
 
 /**
@@ -546,6 +552,38 @@ export function SubtitleOverlay({
   // Map, not through a prop from here.  Keeping the local const
   // documents the resolution rule alongside the base colour.
   void karaokeHighlightColorResolved
+
+  // REQ-0305 — keyword emphasis.  Gate = per-cue toggle-on + free-tier
+  // gate + valid per-word data (same `areWordsValidForText` predicate as
+  // karaoke).  Emphasis targets the specific real words the user picked, so
+  // it is NOT applied to the equal-split fallback — when words are invalid
+  // the cue renders plain.  `emphasisIndices` drops stale/out-of-range
+  // indices so a shortened word list can't paint the wrong word.
+  const emphasisGateOn = entry.keywordEmphasisEnabled === true && canUseKeywordEmphasisInTier(isMsix)
+  const emphasisIndices = emphasisGateOn && karaokeWordsValid && entry.words
+    ? resolveEmphasisIndices(entry.emphasizedWordIndices, entry.words.length)
+    : new Set<number>()
+  const emphasisEm = clampEmphasisScalePercent(entry.emphasisScalePercent) / 100
+  const emphasisColorResolved = entry.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR
+  // Standalone emphasis render (karaoke OFF): split the cue into per-word
+  // spans so emphasised words get their own colour + size.  When karaoke is
+  // ON, emphasis is size-only and rides on the existing karaoke word spans
+  // (below) so we skip this second split.
+  const emphasisRenderActive = !karaokeActive && emphasisIndices.size > 0
+  const emphasisWords: WordSpan[] = emphasisRenderActive ? entry.words! : []
+  const emphasisBreaks = emphasisRenderActive
+    ? computeKaraokeBreaks(entry.text, emphasisWords)
+    : new Set<number>()
+  // Mirror the karaoke per-word tofu substitution (REQ-0297) so JA
+  // codepoints under a Latin-only font become the font-native placeholder
+  // instead of a browser fallback.
+  const emphasisWordsRendered = emphasisRenderActive && cmapCoverage !== null && tofuSubstitute !== null
+    ? emphasisWords.map((w) => {
+        const substituted = substituteMissingGlyphs(w.text, cmapCoverage, tofuSubstitute)
+        return substituted === w.text ? w : { ...w, text: substituted }
+      })
+    : emphasisWords
+
   // REQ-20260615-039 — always wrap the visible text in this inline span so
   // the parent's position-guide measurement is consistent across layouts.
   // The `display: inline` (default) keeps inline flow identical to writing
@@ -646,13 +684,49 @@ export function SubtitleOverlay({
           {karaokeWordsRendered.map((w, i) => {
             const brokenHere = karaokeBreaks.has(i)
             const wordText = brokenHere ? w.text.replace(/^\s+/, '') : w.text
+            // REQ-0305 — when emphasis co-exists with karaoke it is
+            // size-only (colour stays karaoke-driven via the rAF loop).
+            // The `em` multiplier scales relative to the outer span's
+            // already-scaled base font size, matching the ass-generator's
+            // `\fs` boost.
+            const emphasized = emphasisIndices.has(i)
             return (
               <Fragment key={i}>
                 {brokenHere && <br />}
                 <span
                   data-karaoke-word-idx={i}
                   data-karaoke-word-start-sec={w.startSec}
-                  style={{ color: karaokeBaseColorResolved }}
+                  style={{
+                    color: karaokeBaseColorResolved,
+                    fontSize: emphasized ? `${emphasisEm}em` : undefined,
+                  }}
+                >
+                  {wordText}
+                </span>
+              </Fragment>
+            )
+          })}
+        </span>
+      ) : emphasisRenderActive ? (
+        /* REQ-0305 — karaoke OFF, emphasis ON.  Split the cue into
+           per-word spans (same `\N`/break bookkeeping as karaoke) and
+           paint the picked words in the emphasis colour + size, restoring
+           base colour/size for the rest.  No `data-karaoke-*` attributes
+           so the rAF karaoke driver never touches these spans. */
+        <span ref={spanRef} style={textWrapperStyle}>
+          {emphasisWordsRendered.map((w, i) => {
+            const brokenHere = emphasisBreaks.has(i)
+            const wordText = brokenHere ? w.text.replace(/^\s+/, '') : w.text
+            const emphasized = emphasisIndices.has(i)
+            return (
+              <Fragment key={i}>
+                {brokenHere && <br />}
+                <span
+                  style={
+                    emphasized
+                      ? { color: emphasisColorResolved, fontSize: `${emphasisEm}em` }
+                      : undefined
+                  }
                 >
                   {wordText}
                 </span>

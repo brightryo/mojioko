@@ -185,6 +185,13 @@
     "karaokeHighlightColor": "Spoken",
     "karaokeBaseColor": "Unspoken",
     "karaokeSeededDefault": "Uses default colors",
+    "emphasis": "Emphasis",
+    "emphasisRowLabel": "Keyword emphasis",
+    "emphasisColor": "Emphasis color",
+    "emphasisSize": "Size %",
+    "emphasisWords": "Words",
+    "emphasisHint": "Tap a word to emphasize it",
+    "emphasisNoWords": "No per-word data for this cue",
     "rotation": "Rotation (deg)",
     "family": "Font",
     "weight": "Weight"
@@ -204,6 +211,7 @@
     "editCasing": "Change casing",
     "editShadow": "Change shadow",
     "editKaraoke": "Change karaoke",
+    "editEmphasis": "Change emphasis",
     "editRotation": "Change rotation",
     "dragPosition": "Drag position",
     "deleteRow": "Delete",
@@ -246,6 +254,7 @@
       "casing": "Bulk casing change ({{count}} rows)",
       "shadow": "Bulk shadow change ({{count}} rows)",
       "karaoke": "Bulk karaoke change ({{count}} rows)",
+      "emphasis": "Bulk emphasis change ({{count}} rows)",
       "rotation": "Bulk rotation change ({{count}} rows)"
     }
   },

@@ -19,6 +19,17 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { areWordsValidForText } from '../../../shared/words-validity'
+import {
+  canUseKeywordEmphasisInTier,
+  resolveEmphasisIndices,
+  toggleEmphasisIndex,
+  clampEmphasisScalePercent,
+  EMPHASIS_DEFAULT_COLOR,
+  EMPHASIS_DEFAULT_SCALE_PERCENT,
+  EMPHASIS_SCALE_MIN_PERCENT,
+  EMPHASIS_SCALE_MAX_PERCENT,
+  EMPHASIS_SCALE_STEP_PERCENT,
+} from '../../../shared/emphasis'
 import { HelpIcon } from '@/components/help-icon'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
@@ -361,6 +372,43 @@ export function TimelineBlockInspector({
   // override to store.  Users who want to change the base colour
   // change the cue's text colour instead.
 
+  // REQ-0305 — keyword-emphasis handlers.  Same shapes as karaoke:
+  // toggle-on seeds the colour + size defaults so the effect is visible
+  // immediately; colour picker previews per-drag then commits one history
+  // op; size stepper commits directly; each word chip toggles its index.
+  function handleEmphasisToggle(on: boolean) {
+    if (on) {
+      applyStyleEdit(t('history.editEmphasis'), {
+        keywordEmphasisEnabled: true,
+        emphasisColorHex: entry.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR,
+        emphasisScalePercent: entry.emphasisScalePercent ?? EMPHASIS_DEFAULT_SCALE_PERCENT,
+      })
+    } else {
+      applyStyleEdit(t('history.editEmphasis'), { keywordEmphasisEnabled: false })
+    }
+  }
+  function handleEmphasisColorPreview(hex: string) {
+    updateEntryPreview(entry.id, { emphasisColorHex: hex })
+  }
+  function handleEmphasisColorCommit(hex: string, hexOnOpen: string) {
+    applyStyleEdit(
+      t('history.editEmphasis'),
+      { emphasisColorHex: hex },
+      { emphasisColorHex: hexOnOpen },
+    )
+  }
+  function handleEmphasisSizeCommit(v: number) {
+    applyStyleEdit(t('history.editEmphasis'), { emphasisScalePercent: clampEmphasisScalePercent(v) })
+  }
+  function handleEmphasisWordToggle(index: number) {
+    const next = toggleEmphasisIndex(
+      entry.emphasizedWordIndices,
+      index,
+      entry.words?.length ?? 0,
+    )
+    applyStyleEdit(t('history.editEmphasis'), { emphasizedWordIndices: next })
+  }
+
   function handleRotationCommit(deg: number) {
     // Normalise into [0, 360) so a runaway drag never accumulates
     // beyond the ASS `\frz` legible range.
@@ -638,12 +686,16 @@ export function TimelineBlockInspector({
   // communicates why nothing visible happens.
   // REQ-0299 §3 — karaokeWordsValid was previously surfaced as row
   // copy ("有効（均等割り）") next to the Switch; that state text was
-  // removed for cleaner UI, so this variable is no longer read.  Kept
-  // computed here (even though currently unused) because it's a cheap
-  // pure call and future features (e.g. an inspector chip / tooltip
-  // that surfaces "words missing → equal-split fallback") will want
-  // to hoist it back in without redoing the plumbing.
-  void areWordsValidForText(entry.words, entry.text)
+  // removed for cleaner UI.  REQ-0305 rehoists it: the keyword-emphasis
+  // word-chip picker needs valid per-word data to render clickable chips.
+  const wordsValid = areWordsValidForText(entry.words, entry.text)
+  // REQ-0305 — keyword-emphasis UI gate + resolved emphasised-index set
+  // (drops stale indices) for the word-chip picker below.
+  const showEmphasisUi = canUseKeywordEmphasisInTier(isMsix)
+  const emphasisIndices = resolveEmphasisIndices(
+    entry.emphasizedWordIndices,
+    entry.words?.length ?? 0,
+  )
   // REQ-119 [2] — Reset is an EDIT (= wipe per-row overrides back to
   // `entry.original`).  A frozen row only accepts the Restore button
   // next to it; the table chrome already rejects the Reset for the
@@ -1083,6 +1135,79 @@ export function TimelineBlockInspector({
                   />
                 </div>
               </StyleRow>
+            )}
+            {/* REQ-0305 — keyword emphasis: master Switch + emphasis
+                colour + size %, then (when enabled) a word-chip picker
+                so the user toggles exactly which words are emphasised.
+                Chips render only when the cue has valid per-word data;
+                otherwise a muted hint explains why. */}
+            {showEmphasisUi && (
+              <>
+                <StyleRow label={t('styleCell.emphasisRowLabel')} stopControlClickPropagation>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={entry.keywordEmphasisEnabled === true}
+                      onCheckedChange={handleEmphasisToggle}
+                      disabled={isFrozen}
+                      aria-label={t('styleCell.emphasis')}
+                    />
+                    <ColorPicker
+                      value={entry.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR}
+                      onChange={handleEmphasisColorPreview}
+                      onCommit={handleEmphasisColorCommit}
+                      disabled={isFrozen}
+                      swatchOnly
+                      heading={t('styleCell.emphasisColor')}
+                    />
+                    <NumberStepperInput
+                      value={entry.emphasisScalePercent ?? EMPHASIS_DEFAULT_SCALE_PERCENT}
+                      min={EMPHASIS_SCALE_MIN_PERCENT}
+                      max={EMPHASIS_SCALE_MAX_PERCENT}
+                      step={EMPHASIS_SCALE_STEP_PERCENT}
+                      onCommit={handleEmphasisSizeCommit}
+                      disabled={isFrozen}
+                      ariaLabel={t('styleCell.emphasisSize')}
+                      widthClass="w-16"
+                    />
+                  </div>
+                </StyleRow>
+                {entry.keywordEmphasisEnabled === true && (
+                  <div className="px-2 pb-1.5" onClick={(e) => e.stopPropagation()}>
+                    {wordsValid && entry.words && entry.words.length > 0 ? (
+                      <div className="flex flex-wrap gap-1" role="group" aria-label={t('styleCell.emphasisWords')}>
+                        {entry.words.map((w, i) => {
+                          const label = w.text.trim()
+                          if (!label) return null
+                          const on = emphasisIndices.has(i)
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              aria-pressed={on}
+                              disabled={isFrozen}
+                              onClick={() => handleEmphasisWordToggle(i)}
+                              className={cn(
+                                'rounded-[3px] px-2 py-0.5 text-caption font-medium transition-colors duration-150',
+                                'focus:outline-none focus-visible:outline-none',
+                                isFrozen && 'opacity-40 pointer-events-none',
+                                on
+                                  ? 'bg-primary text-fg-inverse'
+                                  : 'bg-surface-0 border border-line-strong text-fg-secondary hover:text-fg-primary hover:bg-surface-2',
+                              )}
+                            >
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-caption text-muted-foreground">
+                        {t('styleCell.emphasisNoWords')}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
             )}
             {/* Casing — REQ-0292 §4 moved BELOW karaoke.  REQ-0299 §3
                 — state text ("ALL CAPS"/"なし") removed; the Switch

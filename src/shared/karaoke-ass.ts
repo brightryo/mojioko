@@ -154,6 +154,18 @@ export function buildKaraokeAssText(
   cueEndSec: number,
   escapeText: (s: string) => string,
   cueText?: string,
+  // REQ-0305 — optional keyword-emphasis overlay.  When both karaoke and
+  // emphasis are on, karaoke owns the colour sweep and emphasis contributes
+  // SIZE ONLY.  For each index in `emphasis.indices`, the word's `\k` block
+  // additionally carries `emphasis.openTag` (e.g. `\fs150`) and the word is
+  // followed by a `{emphasis.closeTag}` (e.g. `{\fs100}`) that restores the
+  // base size for subsequent words.  `undefined` → byte-identical to the
+  // pre-REQ-0305 output (existing callers/tests unaffected).
+  emphasis?: {
+    indices: ReadonlySet<number>
+    openTag: string
+    closeTag: string
+  },
 ): string {
   if (words.length === 0) return ''
 
@@ -204,7 +216,16 @@ export function buildKaraokeAssText(
     const rawWordText = breaks.has(i)
       ? words[i].text.replace(/^\s+/, '')
       : words[i].text
-    parts.push(`{\\k${toCs(durationSec)}}${escapeText(rawWordText)}`)
+    const escaped = escapeText(rawWordText)
+    // REQ-0305 — fold the emphasis size tag into the same `\k` override
+    // block when this word is emphasised, then restore the base size after
+    // it.  Both overrides stay brace-enclosed (REQ-0291).  Colour is left
+    // untouched so the karaoke sweep keeps ownership of it.
+    if (emphasis && emphasis.indices.has(i)) {
+      parts.push(`{\\k${toCs(durationSec)}${emphasis.openTag}}${escaped}{${emphasis.closeTag}}`)
+    } else {
+      parts.push(`{\\k${toCs(durationSec)}}${escaped}`)
+    }
   }
 
   return parts.join('')

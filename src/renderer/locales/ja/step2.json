@@ -185,6 +185,13 @@
     "karaokeHighlightColor": "発話済み色",
     "karaokeBaseColor": "未発話色",
     "karaokeSeededDefault": "既定色で開始",
+    "emphasis": "強調",
+    "emphasisRowLabel": "キーワード強調",
+    "emphasisColor": "強調色",
+    "emphasisSize": "サイズ %",
+    "emphasisWords": "単語",
+    "emphasisHint": "単語をタップして強調",
+    "emphasisNoWords": "この字幕にはワード情報がありません",
     "rotation": "回転 (度)",
     "family": "フォント",
     "weight": "ウェイト"
@@ -204,6 +211,7 @@
     "editCasing": "大文字化を変更",
     "editShadow": "影を変更",
     "editKaraoke": "カラオケを変更",
+    "editEmphasis": "強調を変更",
     "editRotation": "回転を変更",
     "dragPosition": "位置をドラッグで変更",
     "deleteRow": "削除",
@@ -246,6 +254,7 @@
       "casing": "大文字化を一括変更 ({{count}}件)",
       "shadow": "影を一括変更 ({{count}}件)",
       "karaoke": "カラオケを一括変更 ({{count}}件)",
+      "emphasis": "強調を一括変更 ({{count}}件)",
       "rotation": "回転を一括変更 ({{count}}件)"
     }
   },

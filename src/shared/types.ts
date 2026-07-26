@@ -234,6 +234,33 @@ export interface SubtitleEntryOriginal {
    * field, so Reset row also restores the initial word data.
    */
   words?: WordSpan[]
+
+  /**
+   * REQ-0305 Phase B — Hormozi-style keyword emphasis.  Additive,
+   * optional, default-OFF (mirrors the karaoke fields above).  When
+   * `keywordEmphasisEnabled` is true AND the cue's `words` are valid
+   * (`areWordsValidForText`), the word indices listed in
+   * `emphasizedWordIndices` are rendered in `emphasisColorHex` at
+   * `emphasisScalePercent` % of `fontSizePx`.
+   *
+   * `undefined` / `false` = disabled (pre-REQ-0305 project files load
+   * with no emphasis behaviour).  Emphasis requires valid per-word data:
+   * when words are absent/invalid the cue renders plain — indices are
+   * NOT applied to equal-split fallback units (unlike karaoke, the
+   * indices refer to the specific real words the user picked, so
+   * fabricating targets would emphasise the wrong tokens).
+   *
+   * Coexistence with karaoke (REQ-0305 §2-2): when BOTH are on, karaoke
+   * owns the colour sweep and emphasis contributes size only (`\fs`);
+   * the emphasis colour is suppressed so the two effects never fight.
+   */
+  keywordEmphasisEnabled?: boolean
+  /** `#RRGGBB` — colour applied to emphasised words (karaoke-off only). */
+  emphasisColorHex?: string
+  /** Emphasised-word font size as a percent of `fontSizePx` (e.g. 130 = 1.3×). */
+  emphasisScalePercent?: number
+  /** 0-based indices into `words` that are emphasised.  Out-of-range/stale indices are ignored at render time. */
+  emphasizedWordIndices?: number[]
 }
 
 /**
@@ -317,6 +344,21 @@ export interface TranscriptionDefaults {
   karaokeEnabled?: boolean
   /** Default karaoke highlight (spoken-word) colour.  `undefined` = yellow accent (`#FFFF00`). */
   karaokeHighlightColor?: string
+
+  /**
+   * REQ-0305 — default keyword-emphasis toggle for new cues.  When
+   * `true`, every transcribed row is created with
+   * `keywordEmphasisEnabled: true` (but no words are pre-emphasised —
+   * `emphasizedWordIndices` is per-cue and chosen by hand in the
+   * inspector).  `undefined` = OFF.  Per-word selection is NOT a
+   * default (it is inherently per-cue), so only the master toggle +
+   * colour + size multiplier have defaults here.
+   */
+  keywordEmphasisEnabled?: boolean
+  /** Default emphasis colour, `#RRGGBB`.  `undefined` = gold accent (`#FFD400`). */
+  emphasisColorHex?: string
+  /** Default emphasis size (percent of font size).  `undefined` = 130 (1.3×). */
+  emphasisScalePercent?: number
 
   /** REQ-0277 §1 — default casing transform.  `undefined` = `'none'`. */
   casing?: 'none' | 'uppercase'

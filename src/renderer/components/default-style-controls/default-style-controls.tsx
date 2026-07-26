@@ -9,6 +9,14 @@ import { StyleRow } from '@/components/subtitle-table/style-row'
 import { SegmentGroup } from '@/components/subtitle-table/segment-group'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, MARGIN_V_MIN_PX, MARGIN_V_MAX_PX } from '../../../shared/constants'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
+import {
+  canUseKeywordEmphasisInTier,
+  EMPHASIS_DEFAULT_COLOR,
+  EMPHASIS_DEFAULT_SCALE_PERCENT,
+  EMPHASIS_SCALE_MIN_PERCENT,
+  EMPHASIS_SCALE_MAX_PERCENT,
+  EMPHASIS_SCALE_STEP_PERCENT,
+} from '../../../shared/emphasis'
 import type { TranscriptionDefaults } from '../../../shared/types'
 
 /**
@@ -148,6 +156,7 @@ export function DefaultStyleControls({
 }: DefaultStyleControlsProps) {
   const { t } = useTranslation(['step1', 'step2', 'common'])
   const showKaraokeUi = canUseKaraokeInTier(isMsix)
+  const showEmphasisUi = canUseKeywordEmphasisInTier(isMsix)
   // REQ-0298 §4-1 — segButton removed; H/V rows use the shared
   // SegmentGroup component from `@/components/subtitle-table/segment-group`
   // so the settings tab matches the inspector's pill styling.
@@ -233,6 +242,44 @@ export function DefaultStyleControls({
               onChange={(hex) => onUpdateDefaults({ karaokeHighlightColor: hex })}
               swatchOnly
               heading={t('step2:styleCell.karaokeHighlightColor')}
+            />
+          </div>
+        </SettingsStyleRow>
+      )}
+
+      {/* REQ-0305 — keyword emphasis default (Switch + colour + size %).
+          Per-word selection is per-cue (inspector only); the settings
+          screen only exposes the master toggle + style defaults. */}
+      {showEmphasisUi && (
+        <SettingsStyleRow label={t('step2:styleCell.emphasisRowLabel')}>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={defaults.keywordEmphasisEnabled === true}
+              onCheckedChange={(v) => onUpdateDefaults({
+                keywordEmphasisEnabled: v,
+                ...(v && defaults.emphasisColorHex === undefined
+                  ? { emphasisColorHex: EMPHASIS_DEFAULT_COLOR }
+                  : {}),
+                ...(v && defaults.emphasisScalePercent === undefined
+                  ? { emphasisScalePercent: EMPHASIS_DEFAULT_SCALE_PERCENT }
+                  : {}),
+              })}
+              aria-label={t('step2:styleCell.emphasis')}
+            />
+            <ColorPicker
+              value={defaults.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR}
+              onChange={(hex) => onUpdateDefaults({ emphasisColorHex: hex })}
+              swatchOnly
+              heading={t('step2:styleCell.emphasisColor')}
+            />
+            <NumberStepperInput
+              value={defaults.emphasisScalePercent ?? EMPHASIS_DEFAULT_SCALE_PERCENT}
+              min={EMPHASIS_SCALE_MIN_PERCENT}
+              max={EMPHASIS_SCALE_MAX_PERCENT}
+              step={EMPHASIS_SCALE_STEP_PERCENT}
+              onCommit={(v) => onUpdateDefaults({ emphasisScalePercent: v })}
+              ariaLabel={t('step2:styleCell.emphasisSize')}
+              widthClass="w-16"
             />
           </div>
         </SettingsStyleRow>

@@ -581,6 +581,13 @@ export default function Step1Route(_: Step1RouteProps) {
         shadowAlpha: runDefaults.shadowAlpha,
         karaokeEnabled: runDefaults.karaokeEnabled,
         karaokeHighlightColor: runDefaults.karaokeHighlightColor,
+        // REQ-0305 — keyword-emphasis defaults.  The master toggle +
+        // colour + size seed from run defaults; per-word selection is
+        // inherently per-cue (chosen in the inspector), so no indices are
+        // seeded here.
+        keywordEmphasisEnabled: runDefaults.keywordEmphasisEnabled,
+        emphasisColorHex: runDefaults.emphasisColorHex,
+        emphasisScalePercent: runDefaults.emphasisScalePercent,
         casing: runDefaults.casing,
         rotation: runDefaults.rotation,
         // Offset → absolute posX/posY seeded once per run using this
