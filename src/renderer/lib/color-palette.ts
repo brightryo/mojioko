@@ -1,10 +1,12 @@
 /**
- * Shared 30-color palette displayed in every ColorPicker popover.
+ * Shared palette displayed in every ColorPicker popover.
  *
  * Three groups:
- *  1. Basic colours (10) — high-contrast singles usable as either text
- *     colour or outline colour.
- *  2. Recommended pairs (5) — text + outline combinations.  A single
+ *  1. Basic colours (12) — neutrals + vivid, warm→cool.  High-saturation
+ *     picks tuned for game / streaming short-form clips where the subtitle
+ *     sits on top of a busy video.  REQ-0302 replaced the previous
+ *     office/Excel-leaning palette with these vivid values.
+ *  2. Recommended pairs (10) — text + outline combinations.  A single
  *     click on a pair applies BOTH halves to the calling context (only
  *     works in surfaces that can set text + outline together; see the
  *     ColorPicker's `onPairApply` prop).
@@ -14,20 +16,27 @@
  *
  * Same constants are reused by every call site (subtitle-table per-row
  * pickers, bulk-edit-bar, default-style-controls) so the palette is
- * identical everywhere.  REQ-033.
+ * identical across all three surfaces.  Original grid was REQ-033;
+ * the current vivid contents come from REQ-0302.
  */
 
+// REQ-0302: order is neutrals → warm → cool so hues flow smoothly
+// left-to-right, top-to-bottom in color-picker.tsx's 6-column grid.
+// Do NOT sort alphabetically or reorder without owner review — the
+// visual rhythm of the swatch grid depends on this sequence.
 export const BASIC_COLORS: readonly string[] = [
   '#FFFFFF', // 白
   '#000000', // 黒
-  '#FF0000', // 赤
-  '#0000FF', // 青
-  '#00B000', // 緑
-  '#FFFF00', // 黄
-  '#FF8000', // オレンジ
-  '#FF40A0', // ピンク
-  '#00C0FF', // 水色
-  '#8000FF'  // 紫
+  '#FFE500', // イエロー
+  '#FF8A00', // オレンジ
+  '#FF3B30', // レッド
+  '#FF2E88', // ピンク
+  '#FF00E5', // マゼンタ
+  '#A45CFF', // パープル
+  '#2D8CFF', // ブルー
+  '#00E5FF', // シアン
+  '#00FFC2', // ミント
+  '#B4FF39'  // ライム
 ]
 
 /**

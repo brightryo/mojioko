@@ -341,8 +341,10 @@ export function ColorPicker({
         )}
       </div>
 
-      {/* Group 1: Basic colours (10) */}
-      <div className="grid grid-cols-10 gap-1.5">
+      {/* Group 1: Basic colours (12) — REQ-0302: 6-col × 2 rows.  Previously
+          10-col × 1 row; bumped to 12 vivid values means a 2-row layout is
+          the natural fit (12 in 10-col wraps as 10 + 2 which reads poorly). */}
+      <div className="grid grid-cols-6 gap-1.5">
         {BASIC_COLORS.map((c) => (
           <ColorSwatch
             key={c}
