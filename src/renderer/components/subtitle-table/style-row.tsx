@@ -17,37 +17,53 @@ export const SHOW_DASHED_FILLER = true
 export type StyleRowLabelClass = 'inspector' | 'settings'
 
 /**
- * REQ-0300 §2 — default control-column width used by inspector and
- * bulk-edit callers.  A single fixed width (rather than a `%` of the
- * row) guarantees the left edge of every row's control lines up on a
- * common vertical — pre-REQ-0300 the mixed-width rows (some `w-[65%]`,
- * some intrinsic ColorPicker / stepper widths) caused visible
- * misalignment in inspector and bulk-edit.
+ * REQ-0300 §2 / REQ-0301 §1 — default label + control column widths
+ * used by inspector and bulk-edit callers.  Both columns are fixed
+ * width so every row's control lines up on the SAME vertical (the
+ * REQ-0300 alignment requirement).  Control column is
+ * shrink-permitted with a `min-w` floor (REQ-0301 §1 — pre-REQ-0301
+ * `shrink-0` made the column always overflow at startup pane
+ * ~369px because "カラオケ（発話色）" label is ~145px wide, blowing
+ * past the ~100 px I budgeted for in RES-0300 §2).
  *
- * Sized to fit the narrowest allowed right-pane width (368 px min per
- * `step2.tsx:OUTER_RIGHT_MIN_PX`).  Budget on a 368-px pane:
+ * ## Budget (right pane 368 px minimum, step2.tsx:OUTER_RIGHT_MIN_PX)
  *
  *   pane   368
  *   -p-3     - 24  (inspector scroll wrapper `p-3`)
  *   -mx-2    + 16  (StyleRow extends into padding via negative margin)
  *   ------------
  *   row    360
- *   label     ≤ 100 (widest JA label ≈ "自動改行" / "アウトライン幅")
- *   gap+filler+gap  = 32 (8 + 16 + 8)
- *   ------------
- *   control column budget: ≤ 228 px
+ *   label     128 (fixed, `w-32`; long labels truncate)
+ *   gap × 2  16
+ *   filler   flex-1 (min 16)
+ *   control  w-56 basis 224, min 150, shrinks to fit
  *
- * `w-56` = 224 px is the largest tailwind spacing token that fits with
- * room to spare on the min pane.  On wider panes (typical > 400 px)
- * the filler grows and everything still lines up because control is a
- * hard fixed width.
+ * Wide pane (say 500 row): label 128 + gaps 16 + filler 132 +
+ * control 224 = 500.  Control at 224 — the "good" wide look owner
+ * approved in REQ-0299.
  *
- * Settings' DefaultStyleControls uses its own `CONTROL_COL_CLASS`
- * (`w-72` = 288 px) via SettingsStyleRow — the dialog is 640 px wide
- * so it has more room and a larger fixed column looks better.  That
- * override is passed via the `controlColClass` prop.
+ * Startup pane (row ~361): label 128 + gaps 16 + filler 16 (min) +
+ * control ≤ 201.  Control shrinks from basis 224 to 201; still
+ * comfortably above min 150.  All rows shrink by the same amount
+ * (same label + same basis + same shrink) → alignment holds.
+ *
+ * Extreme narrow (row 320): label 128 + gaps 16 + filler 16 + control
+ * ≤ 160.  Control shrinks to 160 (above min 150).  Alignment holds.
+ *
+ * Below row ~310: control hits min-w 150, row can no longer shrink
+ * and overflows visibly.  The `overflow-x-hidden` on the inspector
+ * scroll wrapper (added by REQ-0301 §3) hides the overflow so no
+ * horizontal scrollbar appears; the last few pixels of the control
+ * fall outside the visible pane.  Rare in practice because pane
+ * minimum is 368 px.
+ *
+ * Settings' DefaultStyleControls uses `CONTROL_COL_CLASS` (`w-72`
+ * = 288 px) + intrinsic labels via the `labelColClass` /
+ * `controlColClass` props — dialog is 640 px wide so the fixed
+ * larger column and natural labels always fit.
  */
-export const INSPECTOR_CONTROL_COL_CLASS = 'w-56 shrink-0 min-w-0'
+export const INSPECTOR_LABEL_COL_CLASS = 'w-32 shrink-0 min-w-0'
+export const INSPECTOR_CONTROL_COL_CLASS = 'w-56 min-w-[150px]'
 
 interface StyleRowProps {
   /**
@@ -87,16 +103,40 @@ interface StyleRowProps {
    */
   stopControlClickPropagation?: boolean
   /**
-   * REQ-0300 §2 — width class for the control column wrapper.  A
-   * single fixed value across every row means every control lines up
-   * on the same vertical.  Defaults to
-   * `INSPECTOR_CONTROL_COL_CLASS` (= `w-56 shrink-0 min-w-0` /
-   * 224 px), which fits inspector + bulk-edit on the narrowest
-   * allowed right pane (368 px).  Settings' DefaultStyleControls
-   * overrides this with a wider `w-72` (288 px) because the settings
-   * dialog is 640 px wide.
+   * REQ-0300 §2 / REQ-0301 §1 — width class for the control column
+   * wrapper.  A single value across every row means every control
+   * lines up on the same vertical.  Defaults to
+   * `INSPECTOR_CONTROL_COL_CLASS` (= `w-56 min-w-[150px]` / 224 px
+   * basis, shrinks to 150 px min).  Settings' DefaultStyleControls
+   * overrides this with `w-72` (288 px + `shrink-0`) because the
+   * settings dialog is 640 px wide.
    */
   controlColClass?: string
+  /**
+   * REQ-0301 §1/§2 — width class for the LEFT label column.  Defaults
+   * to `INSPECTOR_LABEL_COL_CLASS` (= `w-32 shrink-0 min-w-0` /
+   * 128 px).  A fixed label column is what makes control alignment
+   * work at every pane width: if labels have different intrinsic
+   * widths (short "影" vs long "カラオケ（発話色）"), the flex-1
+   * filler absorbs the difference and the control's LEFT edge
+   * stays put at any width IF (and only if) the control column is
+   * itself a hard fixed width.  When the control column shrinks to
+   * fit a narrow pane, each row must shrink IDENTICALLY, which
+   * requires the label column also be identical width (else long
+   * labels would eat more space, pushing the control further left
+   * on those rows only, breaking alignment).
+   *
+   * Long labels (currently only "カラオケ（発話色）" ≈ 145 px) are
+   * truncated by the label span's `truncate` class; a `title`
+   * attribute on the span holds the full text so users can see
+   * what was cut off on hover.
+   *
+   * Settings' DefaultStyleControls passes `labelColClass="shrink-0"`
+   * (intrinsic width) to keep the pre-REQ-0301 look — no fixed
+   * label column, no truncation, because the settings dialog is
+   * 640 px wide and doesn't need the shrinkage machinery.
+   */
+  labelColClass?: string
   children: React.ReactNode
 }
 
@@ -138,17 +178,31 @@ export function StyleRow({
   labelVariant = 'inspector',
   stopControlClickPropagation,
   controlColClass = INSPECTOR_CONTROL_COL_CLASS,
+  labelColClass = INSPECTOR_LABEL_COL_CLASS,
   children,
 }: StyleRowProps) {
-  const labelClass = labelVariant === 'inspector'
-    ? 'text-callout font-semibold text-fg-secondary whitespace-nowrap'
-    : 'text-body text-muted-foreground'
+  // REQ-0301 §2 — the label span gets `truncate` so a label wider
+  // than `labelColClass` (typically only "カラオケ（発話色）" at
+  // 145 px against the 128 px fixed column) shows an ellipsis
+  // instead of blowing past the column and pushing the control
+  // right.  When `label` is a plain string we also set it as a
+  // `title` on the wrapper so hover reveals the full text.
+  const labelClass = cn(
+    'truncate',
+    labelVariant === 'inspector'
+      ? 'text-callout font-semibold text-fg-secondary'
+      : 'text-body text-muted-foreground',
+  )
   const rowClass = cn(
     'flex items-center gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-accent/40 transition-colors duration-150',
     !SHOW_DASHED_FILLER && 'justify-between',
   )
+  const labelTitle = typeof label === 'string' ? label : undefined
   const labelBlock = typeof label === 'string' ? (
-    <div className="flex items-center gap-1.5 shrink-0">
+    <div
+      className={cn('flex items-center gap-1.5', labelColClass)}
+      title={labelTitle}
+    >
       <span className={labelClass}>{label}</span>
       {help !== undefined && (
         <Tooltip delayDuration={200}>
@@ -164,7 +218,7 @@ export function StyleRow({
       )}
     </div>
   ) : (
-    <div className="shrink-0">{label}</div>
+    <div className={labelColClass}>{label}</div>
   )
   const controlProps = stopControlClickPropagation
     ? { onClick: (e: React.MouseEvent) => e.stopPropagation() }

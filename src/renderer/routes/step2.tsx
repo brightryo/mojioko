@@ -1215,7 +1215,17 @@ export default function Step2Route(_: Step2RouteProps) {
       </div>
       <div
         ref={inspectorScrollRef}
-        className="flex-1 min-h-0 overflow-y-auto p-3"
+        // REQ-0301 §3 — `overflow-x-hidden` added defensively.  §1
+        // (fluid control column) + §2 (label truncate) already keep
+        // the row width within the pane at startup, but Chromium
+        // silently promotes `overflow-y-auto` elements to
+        // `overflow-x: auto` too, so any per-row px overshoot (from
+        // rounding, font-metric drift, hypothetical future controls
+        // with wider intrinsic widths) would resurface a horizontal
+        // scrollbar without the belt-and-braces.  REQ-0298 §2 added
+        // the same class to the settings-dialog scroll wrapper for
+        // the identical reason.
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3"
       >
         {inspectorBody}
       </div>

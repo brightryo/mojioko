@@ -57,8 +57,18 @@ function SettingsStyleRow({
   help?: string
   children: React.ReactNode
 }) {
+  // REQ-0301 §1 — settings dialog keeps its pre-REQ-0301 look
+  // (intrinsic-width labels + 288 px fixed control) since the 640 px
+  // dialog has room to spare.  Passing `labelColClass="shrink-0"`
+  // opts out of the inspector's 128 px fixed label column.
   return (
-    <StyleRow label={label} help={help} labelVariant="settings" controlColClass={CONTROL_COL_CLASS}>
+    <StyleRow
+      label={label}
+      help={help}
+      labelVariant="settings"
+      labelColClass="shrink-0"
+      controlColClass={CONTROL_COL_CLASS}
+    >
       {children}
     </StyleRow>
   )
