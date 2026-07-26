@@ -506,10 +506,33 @@ export function SubtitleOverlay({
   // REQ-0294 — compute the same word-index → break-before-me set the
   // ass-generator uses so the preview inserts `<br>` at the same word
   // boundaries libass wraps at.  Empty set for single-line cues, so
-  // no-break cues render identically to the pre-REQ-0294 output.
+  // no-break cues render identically to the pre-REQ-0294 output.  The
+  // break computation runs on the RAW cue text (`entry.text`) + raw
+  // words because the character-index invariant with
+  // `areWordsValidForText` holds on the pre-substitution shape;
+  // substitution below preserves the word COUNT, so break indices
+  // stay valid.
   const karaokeBreaks = karaokeActive
     ? computeKaraokeBreaks(entry.text, karaokeWords)
     : new Set<number>()
+  // REQ-0297 §2 — apply the same tofu-substitution to each karaoke
+  // word's text that the plain path (`renderedText` above) applies
+  // to the cue text.  Pre-REQ-0297 the karaoke render walked
+  // `karaokeWords.map(w => w.text)` verbatim, letting raw JA
+  // codepoints reach the browser under a Latin-only font — where
+  // the browser's system-font fallback drew them in Yu Gothic / etc.
+  // instead of the promised tofu (□ / ?).  Substituting per-word
+  // preserves the per-word timing (each word keeps its own
+  // startSec + break position) while forcing every unsupported
+  // codepoint to a font-native placeholder — matches the plain
+  // render and the burn-in tofu-substitution in
+  // `services/burnin.ts`.
+  const karaokeWordsRendered = karaokeActive && cmapCoverage !== null && tofuSubstitute !== null
+    ? karaokeWords.map((w) => {
+        const substituted = substituteMissingGlyphs(w.text, cmapCoverage, tofuSubstitute)
+        return substituted === w.text ? w : { ...w, text: substituted }
+      })
+    : karaokeWords
   const karaokeHighlightColorResolved = entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR
   // REQ-0293 §2 — base (unspoken) colour is ALWAYS `textColorHex`.
   // The pre-REQ-0293 per-cue `karaokeBaseColor` override was removed;
@@ -620,7 +643,7 @@ export function SubtitleOverlay({
               equal-split fallback units.  Same DOM shape either way
               so the parent's rAF loop drives both without a code
               path change. */}
-          {karaokeWords.map((w, i) => {
+          {karaokeWordsRendered.map((w, i) => {
             const brokenHere = karaokeBreaks.has(i)
             const wordText = brokenHere ? w.text.replace(/^\s+/, '') : w.text
             return (

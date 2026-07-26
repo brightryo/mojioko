@@ -122,18 +122,41 @@ export async function startBurnin(
     const substitutedText = (cmap !== null && tofu !== null)
       ? substituteMissingGlyphs(e.text, cmap, tofu)
       : e.text
+    // REQ-0297 §2 — substitute karaoke `words[i].text` too so the
+    // burn-in karaoke path preserves per-word Whisper timing while
+    // still forcing tofu on unsupported codepoints.  Pre-REQ-0297
+    // only `e.text` was substituted; `e.words` reached the ASS
+    // generator with raw JA glyphs, and libass would then either
+    // (a) fall back to a system JA font for those glyphs, or (b)
+    // desync from the substituted `e.text` and trigger REQ-0289's
+    // equal-split fallback (losing per-word timing).  Substituting
+    // both keeps `areWordsValidForText(newWords, newText)` true so
+    // the Whisper-timing path in ass-generator stays selected, and
+    // each per-word render emits a tofu char.
+    const substitutedWords = (cmap !== null && tofu !== null && e.words !== undefined)
+      ? e.words.map((w) => {
+          const nextText = substituteMissingGlyphs(w.text, cmap, tofu)
+          return nextText === w.text ? w : { ...w, text: nextText }
+        })
+      : e.words
     // Build a patch that ONLY writes fields when they actually change.
     // - fontId: only when the row had an explicit override AND that
     //   override was substituted.  Inherit rows (e.fontId undefined) stay
     //   inherit; the ass-generator picks up the fallback via opts.fontId
     //   which we've already resolved above.
     // - text: only when a code point had to be mapped to the tofu char.
+    // - words: only when substitution actually replaced a codepoint in
+    //   any word (identity check via `.some` avoids allocating for
+    //   the JA-font + JA-text hot path).
     const rowNeedsFontSubst = e.fontId !== undefined && rowFontId !== e.fontId
     const textChanged = substitutedText !== e.text
-    if (!rowNeedsFontSubst && !textChanged) return e
+    const wordsChanged = e.words !== undefined && substitutedWords !== e.words
+      && substitutedWords!.some((w, i) => w !== e.words![i])
+    if (!rowNeedsFontSubst && !textChanged && !wordsChanged) return e
     const patch: Partial<SubtitleEntry> = {}
     if (rowNeedsFontSubst) patch.fontId = rowFontId
     if (textChanged) patch.text = substitutedText
+    if (wordsChanged) patch.words = substitutedWords
     return { ...e, ...patch }
   })
 
