@@ -202,7 +202,8 @@ export function DefaultStyleControls({
           highlight picker always visible). */}
       {showKaraokeUi && (
         <SettingsStyleRow label={t('step2:styleCell.karaokeRowLabel')}>
-          <div className="flex items-center gap-2">
+          {/* REQ-0299 §3 — karaoke state text removed. */}
+          <div className="flex items-center gap-2 w-full">
             <Switch
               checked={defaults.karaokeEnabled === true}
               onCheckedChange={(v) => onUpdateDefaults({
@@ -213,9 +214,7 @@ export function DefaultStyleControls({
               })}
               aria-label={t('step2:styleCell.karaoke')}
             />
-            <span className="text-body-sm text-muted-foreground flex-1 min-w-0 truncate">
-              {defaults.karaokeEnabled === true ? t('step2:styleCell.karaokeOn') : t('step2:styleCell.karaokeOff')}
-            </span>
+            <div className="flex-1" />
             <ColorPicker
               value={defaults.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR}
               onChange={(hex) => onUpdateDefaults({ karaokeHighlightColor: hex })}
@@ -226,17 +225,13 @@ export function DefaultStyleControls({
         </SettingsStyleRow>
       )}
 
+      {/* REQ-0299 §3 — casing state text removed. */}
       <SettingsStyleRow label={t('step2:styleCell.casing')}>
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={defaults.casing === 'uppercase'}
-            onCheckedChange={(v) => onUpdateDefaults({ casing: v ? 'uppercase' : 'none' })}
-            aria-label={t('step2:styleCell.casing')}
-          />
-          <span className="text-body-sm text-muted-foreground truncate">
-            {defaults.casing === 'uppercase' ? t('step2:styleCell.casingUppercase') : t('step2:styleCell.casingNone')}
-          </span>
-        </div>
+        <Switch
+          checked={defaults.casing === 'uppercase'}
+          onCheckedChange={(v) => onUpdateDefaults({ casing: v ? 'uppercase' : 'none' })}
+          aria-label={t('step2:styleCell.casing')}
+        />
       </SettingsStyleRow>
 
       <SettingsStyleRow label={t('step2:styleCell.rotation')}>

@@ -5,6 +5,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { cn } from '@/lib/utils'
+import { StyleRow } from '@/components/subtitle-table/style-row'
 import {
   getFontMeta,
   getFontFamilies,
@@ -29,36 +30,46 @@ interface FamilyWeightSelectorProps {
   onChange: (next: FontId) => void
   disabled?: boolean
   /**
-   * REQ-0296 §3 — when `true`, prepend a left label ("フォント" /
-   * "ウェイト") to each dropdown so the row layout matches the other
-   * inspector / bulk-edit rows (size / colours / etc.).  Default
-   * `false` preserves the bare stacked-dropdowns look FontPicker uses
-   * (it has its own outer labelling).
+   * REQ-0296 §3 / REQ-0299 §2/§4/§6 — when `true`, render each dropdown
+   * inside a shared `StyleRow` (label left + dashed filler + control
+   * right).  Callers that pass this true (inspector, bulk-edit) get
+   * hover backdrop + dotted filler for free and match the surrounding
+   * rows exactly.  When `false` (FontPicker's legacy layout), the two
+   * dropdowns stack bare — FontPicker has its own outer heading so it
+   * doesn't want a per-dropdown label.
    */
   showLabels?: boolean
 }
 
 /**
- * REQ-0275 §5 — two-tier family + weight picker.  Stacks vertically so
- * it fits the inspector column and the bulk-edit column without
- * horizontal overflow.
+ * REQ-0275 §5 — two-tier family + weight picker.
  *
- *   ┌─────────────────────┐
- *   │ Family: Noto Sans JP ▾│   ← family dropdown
- *   ├─────────────────────┤
- *   │ Weight: SemiBold    ▾│   ← weight dropdown (hidden for single-weight families)
- *   └─────────────────────┘
+ * ## REQ-0299 §2/§4/§6 — always render BOTH rows
+ *
+ * Pre-REQ-0299 the weight row was hidden for single-weight families
+ * (Anton, Bebas Neue, Poppins-Regular, etc.).  This caused the
+ * inspector / bulk-edit column to shrink whenever the user picked
+ * one of those families and grow again when they picked a
+ * multi-weight one — a jumpy UI.  REQ-0299 §2 keeps the weight row
+ * ALWAYS visible; for single-weight families the trigger is greyed
+ * out and shows "—" (the default weight name still reads as
+ * "Regular" but the row is non-interactive).
+ *
+ * ## REQ-0299 §4/§6 — StyleRow integration
+ *
+ * When `showLabels === true` each dropdown lives inside a shared
+ * `StyleRow`, so the hover backdrop + dashed filler + label styling
+ * inherit from the same shell every other inspector / bulk-edit row
+ * uses.  Pre-REQ-0299 the selector rendered its own inline `[label |
+ * dropdown]` layout and skipped the shared filler/hover.
+ *
+ * ## Data flow (unchanged)
  *
  * Both dropdowns are `<Popover>`-based; opening one closes the other.
  * The family list hides fonts not installed / not selectable in the
- * current tier.  Weight list shows only the weights registered for the
- * chosen family (typically 9 for Noto / Poppins; hidden for the 11
- * single-weight families).
- *
- * User-facing labels strip the internal `MOJIOKO ` prefix
- * (REQ-0275 §2-2) via `stripFamilyNamespacePrefix`; the raw
- * `cssFontFamily` is only used for the `font-family: '…'` inline style
- * that renders each family name in its own face.
+ * current tier.  Weight list shows only the weights registered for
+ * the chosen family (tier-gated via `selectableWeightsForFamily`).
+ * User-facing labels strip the internal `MOJIOKO ` prefix.
  */
 export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: FamilyWeightSelectorProps) {
   const { t } = useTranslation(['step2', 'step1'])
@@ -71,10 +82,6 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: 
   const families = getFontFamilies()
   const currentFamily = families.find((f) => f.cssFontFamily === currentMeta.cssFontFamily)
 
-  // REQ-0282 §1 — selectable families delegate to `selectableFamilies` (pure),
-  // which applies the same `installed && canSelectFontInTier` invariant
-  // the weight dropdown uses below.  Pinned by
-  // `tests/unit/weight-selector-tier-gate.test.ts`.
   const isInstalled = (id: FontId) => installed.has(id)
   const familiesUi = selectableFamilies(families, isInstalled, isMsix).map((fam) => ({
     ...fam,
@@ -84,9 +91,6 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: 
 
   function pickFamily(family: typeof familiesUi[number]) {
     setFamilyOpen(false)
-    // REQ-0269 B-5 / REQ-0275 §5 — family switch always resets to the
-    // family default weight.  Passing the default FontId as one write
-    // keeps undo atomic.
     const nextId = getFamilyDefaultFontId(family.cssFontFamily)
     if (nextId !== value) onChange(nextId)
   }
@@ -99,10 +103,6 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: 
   }
 
   const currentFamilyLabel = stripFamilyNamespacePrefix(currentMeta.cssFontFamily)
-  // Extract the weight name from displayName by trimming the family
-  // display name off the front (e.g. "Noto Sans JP SemiBold" → "SemiBold").
-  // Falls back to "Regular" for single-weight fonts whose displayName
-  // is just the family name.
   const weightName = currentMeta.displayName.startsWith(currentFamilyLabel)
     ? (currentMeta.displayName.slice(currentFamilyLabel.length).trim() || 'Regular')
     : currentMeta.displayName
@@ -116,57 +116,98 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: 
     'text-fg-primary',
   )
 
-  // REQ-0296 §3 — when `showLabels` is true, each dropdown lives inside
-  // a `[label | dropdown]` row that matches the other inspector /
-  // bulk-edit rows.  When false, the dropdowns stack bare (FontPicker's
-  // legacy layout, which supplies its own outer heading).
-  const familyLabel = showLabels ? (
-    <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('step2:styleCell.family')}</label>
-  ) : null
-  const weightLabel = showLabels ? (
-    <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('step2:styleCell.weight')}</label>
-  ) : null
-  const rowClass = showLabels
-    ? 'flex items-center justify-between gap-2'
-    : 'contents'  // stacked flow inside the outer `flex-col`; no row shell
-  const controlWrapperClass = showLabels ? 'w-[50%]' : ''
-
-  return (
-    <div className="flex flex-col gap-1">
-      {/* Family dropdown */}
-      <div className={rowClass}>
-        {familyLabel}
-        <div className={controlWrapperClass}>
-      <Popover open={familyOpen} onOpenChange={setFamilyOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            disabled={disabled}
-            className={triggerBase}
-            aria-label={t('rowFont.tooltipOverride', { name: currentFamilyLabel })}
-          >
-            <span
-              className="truncate"
-              style={{ fontFamily: `'${currentMeta.cssFontFamily}'`, fontWeight: currentMeta.weight }}
-            >
-              {currentFamilyLabel}
-            </span>
-            <ChevronDown className="h-3 w-3 shrink-0 text-fg-muted" aria-hidden="true" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          collisionPadding={8}
-          className="w-[240px] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+  const familyDropdown = (
+    <Popover open={familyOpen} onOpenChange={setFamilyOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          className={triggerBase}
+          aria-label={t('rowFont.tooltipOverride', { name: currentFamilyLabel })}
         >
-          <div className="flex flex-col">
-            {familiesUi.map((fam) => {
-              const isCurrent = fam.cssFontFamily === currentMeta.cssFontFamily
+          <span
+            className="truncate"
+            style={{ fontFamily: `'${currentMeta.cssFontFamily}'`, fontWeight: currentMeta.weight }}
+          >
+            {currentFamilyLabel}
+          </span>
+          <ChevronDown className="h-3 w-3 shrink-0 text-fg-muted" aria-hidden="true" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        collisionPadding={8}
+        className="w-[240px] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+      >
+        <div className="flex flex-col">
+          {familiesUi.map((fam) => {
+            const isCurrent = fam.cssFontFamily === currentMeta.cssFontFamily
+            return (
+              <button
+                key={fam.cssFontFamily}
+                type="button"
+                onClick={() => pickFamily(fam)}
+                className={cn(
+                  'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
+                  'hover:bg-accent/40',
+                  isCurrent ? 'text-fg-primary' : 'text-fg-secondary',
+                )}
+              >
+                <span
+                  className={cn('h-2 w-2 rounded-full shrink-0', isCurrent ? 'bg-primary' : 'bg-surface-4')}
+                  aria-hidden="true"
+                />
+                <span
+                  className="flex-1 min-w-0 truncate"
+                  style={{ fontFamily: `'${fam.cssFontFamily}'`, fontWeight: fam.defaultFontId ? getFontMeta(fam.defaultFontId).weight : 400 }}
+                >
+                  {fam.displayLabel}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+
+  // REQ-0299 §2 — weight row is ALWAYS rendered.  When the current
+  // family has only one weight (Anton / Bebas / Poppins-single /
+  // etc.), we render the trigger as a disabled greyed-out button
+  // showing the sole weight name (typically "Regular") so the row
+  // still occupies the same vertical space — no jumpy column when
+  // switching families.
+  const hasMultipleWeights = !!currentFamily && currentFamily.hasMultipleWeights
+  const weightDropdown = hasMultipleWeights ? (
+    <Popover open={weightOpen} onOpenChange={setWeightOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          className={triggerBase}
+          aria-label={weightName}
+        >
+          <span className="truncate">{weightName}</span>
+          <ChevronDown className="h-3 w-3 shrink-0 text-fg-muted" aria-hidden="true" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        collisionPadding={8}
+        className="w-[240px] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+      >
+        <div className="flex flex-col">
+          {selectableWeightsForFamily(currentFamily!, isInstalled, isMsix)
+            .map((w) => {
+              const isCurrent = w.fontId === value
+              const label = w.displayName.startsWith(currentFamilyLabel)
+                ? (w.displayName.slice(currentFamilyLabel.length).trim() || 'Regular')
+                : w.displayName
               return (
                 <button
-                  key={fam.cssFontFamily}
+                  key={w.fontId}
                   type="button"
-                  onClick={() => pickFamily(fam)}
+                  onClick={() => pickWeight(w.weight)}
                   className={cn(
                     'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
                     'hover:bg-accent/40',
@@ -179,86 +220,57 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: 
                   />
                   <span
                     className="flex-1 min-w-0 truncate"
-                    style={{ fontFamily: `'${fam.cssFontFamily}'`, fontWeight: fam.defaultFontId ? getFontMeta(fam.defaultFontId).weight : 400 }}
+                    style={{ fontFamily: `'${currentMeta.cssFontFamily}'`, fontWeight: w.weight }}
                   >
-                    {fam.displayLabel}
+                    {label}
                   </span>
+                  <span className="text-caption text-fg-muted tabular-nums">{w.weight}</span>
                 </button>
               )
             })}
-          </div>
-        </PopoverContent>
-      </Popover>
         </div>
-      </div>
+      </PopoverContent>
+    </Popover>
+  ) : (
+    // REQ-0299 §2 — single-weight family: disabled placeholder trigger.
+    // Shows the sole weight name (typically "Regular") with no
+    // chevron so the affordance reads as "cannot expand".  The row
+    // still occupies the same vertical space as when a multi-weight
+    // family is selected → no column-height jump on family switch.
+    <button
+      type="button"
+      disabled
+      className={cn(triggerBase, 'cursor-not-allowed')}
+      aria-label={weightName}
+      title={weightName}
+    >
+      <span className="truncate text-fg-muted">{weightName}</span>
+    </button>
+  )
 
-      {/* Weight dropdown — hidden for single-weight families */}
-      {currentFamily && currentFamily.hasMultipleWeights && (
-        <div className={rowClass}>
-          {weightLabel}
-          <div className={controlWrapperClass}>
-        <Popover open={weightOpen} onOpenChange={setWeightOpen}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              disabled={disabled}
-              className={triggerBase}
-              aria-label={weightName}
-            >
-              <span className="truncate">{weightName}</span>
-              <ChevronDown className="h-3 w-3 shrink-0 text-fg-muted" aria-hidden="true" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="start"
-            collisionPadding={8}
-            className="w-[240px] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
-          >
-            <div className="flex flex-col">
-              {/* REQ-0282 §1 — delegate to `selectableWeightsForFamily`
-                  (pure) so the free-tier gate (§C-3 — "無料版はウェイト
-                  機能なし、Noto Regular/Medium は選択不可") is applied
-                  consistently.  In NSIS this collapses to
-                  `[SemiBold]` for the Noto family (Regular / Medium
-                  are bundled on disk but tier-locked).  Pinned by
-                  `tests/unit/weight-selector-tier-gate.test.ts`. */}
-              {selectableWeightsForFamily(currentFamily, isInstalled, isMsix)
-                .map((w) => {
-                  const isCurrent = w.fontId === value
-                  const label = w.displayName.startsWith(currentFamilyLabel)
-                    ? (w.displayName.slice(currentFamilyLabel.length).trim() || 'Regular')
-                    : w.displayName
-                  return (
-                    <button
-                      key={w.fontId}
-                      type="button"
-                      onClick={() => pickWeight(w.weight)}
-                      className={cn(
-                        'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
-                        'hover:bg-accent/40',
-                        isCurrent ? 'text-fg-primary' : 'text-fg-secondary',
-                      )}
-                    >
-                      <span
-                        className={cn('h-2 w-2 rounded-full shrink-0', isCurrent ? 'bg-primary' : 'bg-surface-4')}
-                        aria-hidden="true"
-                      />
-                      <span
-                        className="flex-1 min-w-0 truncate"
-                        style={{ fontFamily: `'${currentMeta.cssFontFamily}'`, fontWeight: w.weight }}
-                      >
-                        {label}
-                      </span>
-                      <span className="text-caption text-fg-muted tabular-nums">{w.weight}</span>
-                    </button>
-                  )
-                })}
-            </div>
-          </PopoverContent>
-        </Popover>
-          </div>
-        </div>
-      )}
+  // REQ-0299 §4/§6 — when `showLabels` is true, wrap each dropdown
+  // in a shared `StyleRow` so the hover backdrop + dashed filler +
+  // label styling are inherited from the same shell every other
+  // inspector / bulk-edit row uses.  When `showLabels` is false
+  // (FontPicker layout), stack the dropdowns bare inside the
+  // caller-supplied outer container.
+  if (showLabels) {
+    return (
+      <>
+        <StyleRow label={t('step2:styleCell.family')}>
+          <div className="w-[50%]">{familyDropdown}</div>
+        </StyleRow>
+        <StyleRow label={t('step2:styleCell.weight')}>
+          <div className="w-[50%]">{weightDropdown}</div>
+        </StyleRow>
+      </>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      {familyDropdown}
+      {weightDropdown}
     </div>
   )
 }

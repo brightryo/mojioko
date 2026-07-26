@@ -636,7 +636,14 @@ export function TimelineBlockInspector({
   // flag; renderer + ass-generator fall through to plain rendering per
   // §0's Layer 2 defensive fallback) but the muted colour + hint
   // communicates why nothing visible happens.
-  const karaokeWordsValid = areWordsValidForText(entry.words, entry.text)
+  // REQ-0299 §3 — karaokeWordsValid was previously surfaced as row
+  // copy ("有効（均等割り）") next to the Switch; that state text was
+  // removed for cleaner UI, so this variable is no longer read.  Kept
+  // computed here (even though currently unused) because it's a cheap
+  // pure call and future features (e.g. an inspector chip / tooltip
+  // that surfaces "words missing → equal-split fallback") will want
+  // to hoist it back in without redoing the plumbing.
+  void areWordsValidForText(entry.words, entry.text)
   // REQ-119 [2] — Reset is an EDIT (= wipe per-row overrides back to
   // `entry.original`).  A frozen row only accepts the Restore button
   // next to it; the table chrome already rejects the Reset for the
@@ -897,11 +904,17 @@ export function TimelineBlockInspector({
               showLabels
             />
             {/* Size — REQ-20260615-017: ±10 chevron stepper flanks the
-                number input.  Direct typing still works (input keeps its
-                onChange / onBlur), and both the buttons and the typed
-                value clamp to [FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX]. */}
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.size')}</label>
+                number input.  Direct typing still works (input keeps
+                its onChange / onBlur), and both the buttons and the
+                typed value clamp to [FONT_SIZE_MIN_PX,
+                FONT_SIZE_MAX_PX].  REQ-0299 §4/§6 — wrapped in
+                StyleRow so this row gets the shared hover backdrop +
+                dashed filler like every other 字幕 row.  The custom
+                chevron+input+chevron cluster is preserved verbatim
+                inside StyleRow's control column (StyleRow doesn't
+                impose a control shape, so the existing handlers/
+                out-of-range styling still work). */}
+            <StyleRow label={t('styleCell.size')}>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -956,7 +969,7 @@ export function TimelineBlockInspector({
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>
-            </div>
+            </StyleRow>
             {/* Text colour */}
             <StyleRow label={t('styleCell.textColor')}>
               <ColorPicker
@@ -983,7 +996,7 @@ export function TimelineBlockInspector({
             </StyleRow>
             {/* Outline width */}
             <StyleRow label={t('styleCell.outlineWidth')} stopControlClickPropagation>
-              <div className="w-[50%]">
+              <div className="w-[65%]">
                 <OutlineThicknessSlider
                   value={entry.outlineThicknessPx}
                   onCommit={handleOutlineThicknessCommit}
@@ -1013,7 +1026,7 @@ export function TimelineBlockInspector({
                 "depth is 0" state; removing it lets the depth alone
                 drive both the tag emission and the ON/OFF affordance. */}
             <StyleRow label={t('styleCell.shadow')} stopControlClickPropagation>
-              <div className="w-[50%]">
+              <div className="w-[65%]">
                 <ShadowDepthSlider
                   value={entry.shadowDepth ?? 0}
                   onCommit={handleShadowDepthCommit}
@@ -1041,6 +1054,12 @@ export function TimelineBlockInspector({
                 works whether the toggle is on or off (colour is just
                 stored; only used at render when karaoke is ON).  Tier
                 gate hides the entire row on free tier. */}
+            {/* REQ-0299 §3 — karaoke state text ("有効"/"無効") removed.
+                Row is now `[label] [Switch] [ColorPicker]` — the
+                Switch itself surfaces the toggle state.  The
+                `karaokeWordsValid` distinction is no longer surfaced
+                in copy either; equal-split fallback handles the
+                invalid case silently. */}
             {showKaraokeUi && (
               <StyleRow label={t('styleCell.karaokeRowLabel')} stopControlClickPropagation>
                 <div className="flex items-center gap-2 w-[50%]">
@@ -1050,13 +1069,7 @@ export function TimelineBlockInspector({
                     disabled={isFrozen}
                     aria-label={t('styleCell.karaoke')}
                   />
-                  <span className="text-body-sm text-muted-foreground flex-1 min-w-0 truncate">
-                    {entry.karaokeEnabled === true
-                      ? (karaokeWordsValid
-                          ? t('styleCell.karaokeOn')
-                          : t('styleCell.karaokeOnNoWords'))
-                      : t('styleCell.karaokeOff')}
-                  </span>
+                  <div className="flex-1" />
                   <ColorPicker
                     value={entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR}
                     onChange={handleKaraokeHighlightPreview}
@@ -1068,24 +1081,21 @@ export function TimelineBlockInspector({
                 </div>
               </StyleRow>
             )}
-            {/* Casing — REQ-0292 §4 moved BELOW karaoke (was above
-                shadow) so the "colour" cluster (shadow, karaoke)
-                stays visually contiguous. */}
+            {/* Casing — REQ-0292 §4 moved BELOW karaoke.  REQ-0299 §3
+                — state text ("ALL CAPS"/"なし") removed; the Switch
+                itself surfaces the toggle state. */}
             <StyleRow label={t('styleCell.casing')} stopControlClickPropagation>
-              <div className="flex items-center gap-2 w-[50%]">
+              <div className="w-[65%]">
                 <Switch
                   checked={entry.casing === 'uppercase'}
                   onCheckedChange={handleCasingToggle}
                   disabled={isFrozen}
                   aria-label={t('styleCell.casing')}
                 />
-                <span className="text-body-sm text-muted-foreground">
-                  {entry.casing === 'uppercase' ? t('styleCell.casingUppercase') : t('styleCell.casingNone')}
-                </span>
               </div>
             </StyleRow>
             <StyleRow label={t('styleCell.rotation')} stopControlClickPropagation>
-              <div className="w-[50%]">
+              <div className="w-[65%]">
                 <NumberStepperInput
                   value={entry.rotation ?? 0}
                   min={0}
@@ -1100,7 +1110,7 @@ export function TimelineBlockInspector({
             {/* Fade — REQ-0292 §4 moved to the end so the temporal
                 knob sits after all the visual style effects. */}
             <StyleRow label={t('styleCell.fade')} stopControlClickPropagation>
-              <div className="w-[50%]">
+              <div className="w-[65%]">
                 <FadeDurationSlider
                   value={entry.fadeDurationSec}
                   onCommit={handleFadeDurationCommit}

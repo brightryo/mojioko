@@ -4,43 +4,34 @@
  * renderer consults this ONE function to decide whether karaoke is
  * available in the current build.
  *
- * ## Current policy: paid (MSIX) only
+ * ## Current policy: available to every tier (REQ-0299 §1)
  *
- * Karaoke ships paid-only for v1.3.6 because:
- *   - It is a marquee Phase B feature that motivates paid-tier adoption.
- *   - word_timestamps=True (RES-0285) adds ~10-25 % transcribe overhead
- *     for EVERY transcribe run; making karaoke paid-only aligns "who
- *     pays the cost" with "who gets the value".
+ * v1.3.6 originally shipped karaoke as paid-only (the argument was
+ * that word_timestamps=True adds ~10-25 % transcribe overhead so
+ * "who pays the cost gets the value" felt fair).  REQ-0299 §1
+ * reverses that decision: owner made karaoke a general-use feature.
+ * The paid-tier differentiation now lives entirely in the additional-
+ * fonts + weight-selection package (`canSelectFontInTier`).
  *
- * ## Flipping to free-tier: one-line change
+ * The `isMsix` parameter is retained in the signature so consumers
+ * that already pass it don't need to be edited — the value is
+ * ignored for karaoke gating.  If a FUTURE REQ ever needs
+ * per-tier karaoke behaviour again, uncomment the `return isMsix`
+ * line below.
  *
- * If a future REQ decides karaoke should be free too, change:
+ * ## Why this remains a helper (single decision surface)
  *
- *   return isMsix
- *
- * to:
- *
- *   return true
- *
- * Every consumer (inspector / bulk-edit / DefaultStyleControls / ass-
- * generator / subtitle-overlay) reads through this function, so the
- * flip takes effect everywhere at once with no per-site edit.  A
- * regression test (`karaoke-gate.test.ts`) pins that this function is
- * the SOLE decision surface — if a future contributor bypasses it
- * with an inline `isMsix` check somewhere, that test breaks.
- *
- * ## Why not use canSelectFontInTier's shape
- *
- * `canSelectFontInTier(isMsix, fontId)` gates per-item (each font
- * declares its own eligibility).  Karaoke has no per-cue tier
- * variation — it is either enabled for the whole build or not — so
- * the interface is simply `(isMsix) => boolean` with no second
- * parameter.  A future per-cue variant (e.g. "karaoke only on cues
- * matching some criterion") would extend the signature, but the
- * flip-point stays in this one file.
+ * Callers (inspector / bulk-edit / DefaultStyleControls / ass-
+ * generator / subtitle-overlay) all read through this function so
+ * any future policy flip takes effect everywhere at once with no
+ * per-site edit.  `karaoke-gate.test.ts` pins the current policy
+ * and pins that this is the SOLE decision surface — if a future
+ * contributor bypasses it with an inline `isMsix` check somewhere,
+ * that test breaks.
  */
-export function canUseKaraokeInTier(isMsix: boolean): boolean {
-  return isMsix
+export function canUseKaraokeInTier(_isMsix: boolean): boolean {
+  // REQ-0299 §1 — karaoke available to every tier.
+  return true
 }
 
 /**

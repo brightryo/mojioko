@@ -69,9 +69,12 @@ describe('REQ-0286 §0 — tier gate at the emit path', () => {
     expect(line).toContain('\\2c') // secondary colour (base) emitted
   })
 
-  it('NSIS + karaokeEnabled + valid words → NO karaoke tags (tier fallback to plain)', () => {
-    // The critical tier-gate pin.  A free-tier build must produce the
-    // plain rendering even when the project file requests karaoke.
+  it('REQ-0299 §1 — NSIS + karaokeEnabled + valid words → karaoke tags EMITTED (free tier now allowed)', () => {
+    // Pre-REQ-0299 this pinned suppression on free tier.  REQ-0299 §1
+    // opened karaoke to every tier, so the NSIS build now emits the
+    // same karaoke tags as MSIX.  If a future policy reverts karaoke
+    // to paid-only, flip this expectation together with the
+    // canUseKaraokeInTier body.
     const entry = makeEntry({
       karaokeEnabled: true,
       karaokeHighlightColor: '#FFFF00',
@@ -79,9 +82,8 @@ describe('REQ-0286 §0 — tier gate at the emit path', () => {
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, false /* NSIS */)
     const line = dialogueLineOf(ass)
-    expect(line).not.toContain('\\k')  // no karaoke tags
-    expect(line).not.toContain('\\2c') // no secondary colour
-    expect(line).toContain('hello world') // plain text
+    expect(line).toContain('\\k')  // karaoke tags emitted
+    expect(line).toContain('\\2c') // secondary colour emitted
   })
 
   it('MSIX + karaokeEnabled=false → no karaoke tags (toggle-off path)', () => {
@@ -357,10 +359,11 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
     expect(line).not.toContain('\\2c')
   })
 
-  it('free tier (NSIS) + words invalid → NO fallback emitted (tier gate wraps fallback too)', () => {
-    // The equal-split fallback lives INSIDE the tier gate, not
-    // outside — a free-tier build must still produce plain rendering
-    // even when the toggle + fallback would otherwise apply.
+  it('REQ-0299 §1 — free tier (NSIS) + words invalid → equal-split fallback IS emitted (karaoke now open to every tier)', () => {
+    // Pre-REQ-0299 the tier gate suppressed karaoke on NSIS builds so
+    // the fallback never fired.  Post-REQ-0299 the tier gate is
+    // tier-agnostic, so the fallback fires on NSIS exactly as it does
+    // on MSIX.  A future re-tightening would flip this expectation.
     const entry = makeEntry({
       text: 'edited text',
       karaokeEnabled: true,
@@ -368,9 +371,10 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, false /* NSIS */)
     const line = dialogueLineOf(ass)
-    expect(line).not.toContain('\\k')
-    expect(line).not.toContain('\\2c')
-    expect(line).toContain('edited text')
+    expect(line).toContain('\\k')
+    expect(line).toContain('\\2c')
+    // Text still visible in fallback units.
+    expect(line).toContain('edited')
   })
 
   it('karaoke OFF + words invalid → plain rendering (fallback only fires with toggle ON)', () => {

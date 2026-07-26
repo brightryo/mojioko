@@ -1055,7 +1055,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           </StyleRow>
           {/* Outline width */}
           <StyleRow label={t('bulk.outlineWidth')}>
-            <div className="w-[50%]">
+            <div className="w-[65%]">
               <OutlineThicknessSlider
                 value={outlineSliderDraft}
                 onCommit={handleOutlineWidthCommit}
@@ -1084,7 +1084,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               REQ-0292 §3 — rotation NumberStepperInput bound to
               `rotationDraft` (was `value={0}` hardcoded pre-REQ-0292). */}
           <StyleRow label={t('styleCell.shadow')}>
-            <div className="w-[50%]">
+            <div className="w-[65%]">
               <ShadowDepthSlider
                 value={shadowSliderDraft}
                 onCommit={handleShadowDepthBulkCommit}
@@ -1106,13 +1106,13 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               regardless of Switch state so the row height is
               stable; the colour is applied when the Switch is ON.
               Tier gate hides the entire row on free tier. */}
+          {/* REQ-0299 §3 — karaoke state text ("既定色で開始") removed.
+              Row is now `[label] [Switch] [ColorPicker]`. */}
           {canUseKaraokeInTier(useAppEnvStore((s) => s.isMsix) ?? false) && (
             <StyleRow label={t('styleCell.karaokeRowLabel')}>
               <div className="flex items-center gap-2 w-[50%]">
                 <Switch onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
-                <span className="text-caption text-muted-foreground flex-1 min-w-0 truncate">
-                  {t('styleCell.karaokeSeededDefault')}
-                </span>
+                <div className="flex-1" />
                 <ColorPicker
                   value={karaokeHighlightDraft}
                   onChange={handleKaraokeHighlightBulkPreview}
@@ -1123,14 +1123,14 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               </div>
             </StyleRow>
           )}
+          {/* REQ-0299 §3 — casing state text ("ALL CAPS") removed. */}
           <StyleRow label={t('styleCell.casing')}>
-            <div className="flex items-center gap-2 w-[50%]">
+            <div className="w-[65%]">
               <Switch onCheckedChange={handleCasingBulk} aria-label={t('styleCell.casing')} />
-              <span className="text-caption text-muted-foreground">{t('styleCell.casingUppercase')}</span>
             </div>
           </StyleRow>
           <StyleRow label={t('styleCell.rotation')}>
-            <div className="w-[50%]">
+            <div className="w-[65%]">
               <NumberStepperInput
                 value={rotationDraft}
                 min={0}
@@ -1143,7 +1143,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           </StyleRow>
           {/* Fade — REQ-0292 §4 moved to end of style cluster (matches inspector order). */}
           <StyleRow label={t('bulk.fade')}>
-            <div className="w-[50%]">
+            <div className="w-[65%]">
               <FadeDurationSlider
                 value={fadeSliderDraft}
                 onCommit={handleFadeDurationCommit}

@@ -20,13 +20,25 @@ import {
  * such an inline check breaks the test at CI time.
  */
 
-describe('REQ-0286 §0 — canUseKaraokeInTier policy', () => {
+describe('REQ-0286 §0 / REQ-0299 §1 — canUseKaraokeInTier policy', () => {
   it('returns true for MSIX (paid tier)', () => {
     expect(canUseKaraokeInTier(true)).toBe(true)
   })
 
-  it('returns false for NSIS (free tier) — current v1.3.6 policy', () => {
-    expect(canUseKaraokeInTier(false)).toBe(false)
+  it('REQ-0299 §1 — returns TRUE for NSIS (free tier) too — karaoke now available to every tier', () => {
+    // Pre-REQ-0299 (v1.3.6 initial) shipped karaoke paid-only.  REQ-0299
+    // §1 reversed that decision: karaoke is a general-use feature and the
+    // paid tier differentiates through additional fonts / weight
+    // selection only.  Flipping this back to `false` would silently
+    // suppress karaoke in the NSIS build again — this pin trips first.
+    expect(canUseKaraokeInTier(false)).toBe(true)
+  })
+
+  it('REQ-0299 §1 — the isMsix arg is ignored (both values produce true)', () => {
+    // Documents that karaoke policy is currently tier-agnostic.  A
+    // future REQ that reintroduces tier gating for karaoke would flip
+    // this and the "NSIS is TRUE" test above in the same commit.
+    expect(canUseKaraokeInTier(true)).toBe(canUseKaraokeInTier(false))
   })
 })
 
