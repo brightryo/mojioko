@@ -15,6 +15,7 @@ import { useAppEnvStore } from '@/stores/app-env-store'
 import { canSelectFontInTier } from '@/lib/font-tier'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
+import { computePreviewOutline } from '@/lib/preview-outline'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { areWordsValidForText } from '../../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
@@ -48,11 +49,8 @@ function hexToRgba(hex: string, alpha01: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha01})`
 }
 
-/** Floor (in OUTPUT pixels, not on the scale factor) applied to the visible
- *  outline so the thinnest setting (= 1) remains discernible at small preview
- *  sizes.  Larger values pass through with their natural proportional scale,
- *  matching the libass output. */
-const MIN_VISIBLE_OUTLINE_PX = 0.5
+// REQ-0311 §3 — `MIN_VISIBLE_OUTLINE_PX` moved to `@/lib/preview-outline`
+// alongside the rest of the outline geometry.  Value and behaviour unchanged.
 
 /**
  * REQ-20260614-001 補遺⑳ — empirically-derived libass line-height formula.
@@ -314,12 +312,19 @@ export function SubtitleOverlay({
 
   // Outline width (visible outside the glyph), in preview pixels.  Scaled by
   // the same `scale` as the text so the outline/glyph ratio matches the libass
-  // output.  Only the absolute minimum is floored — see JSDoc.
-  const outlineRaw    = entry.outlineThicknessPx * scale
-  const outlinePx     = outlineRaw > 0 ? Math.max(outlineRaw, MIN_VISIBLE_OUTLINE_PX) : 0
-  // 2× because paint-order: stroke fill paints fill on top of the centered
-  // stroke, hiding the inside half — only outlinePx is visible outside.
-  const strokeWidthPx = outlinePx * 2
+  // output.
+  //
+  // REQ-0311 §3 — the geometry moved to `computePreviewOutline` so it can be
+  // unit-tested.  Unchanged at textAlpha 100 % (measured exact against libass);
+  // below that it clamps the inward bleed so hollow text cannot render solid.
+  // See that module's header for the measurements and for why this is a
+  // stopgap rather than a fix.
+  const { outlinePx, strokeWidthPx } = computePreviewOutline({
+    outlineThicknessPx: entry.outlineThicknessPx,
+    scale,
+    fontSizeCssPx: fontSizePx,
+    textAlphaPercent: entry.textAlpha,
+  })
 
   // REQ-20260613-016 Phase 6 — pinned rows render at their own ASS-space
   // (posX, posY), independent of MarginV / alignment.  The alignment
