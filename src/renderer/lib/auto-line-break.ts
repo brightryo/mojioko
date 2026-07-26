@@ -22,6 +22,12 @@ import type { FontId } from '../../shared/fonts'
  * - Existing \N separators are preserved; each sub-line is processed independently.
  * - Recursive: a single line that needs more than one break is handled correctly.
  * - Falls back to character-class width estimates when the font is not loaded.
+ * - REQ-0303 — script-aware break placement.  The pixel budget still decides
+ *   *how much* fits on a line, but where that budget lands inside a Latin word
+ *   the break is moved back to the preceding word boundary so English words are
+ *   never split (`wonder` → `won` / `der`).  CJK runs have no whitespace, so
+ *   they keep the character-level behaviour byte-for-byte — Japanese-only cues
+ *   wrap at exactly the same positions as before REQ-0303.  See `adjustBreak`.
  *
  * @param text               Raw subtitle text (may already contain \N).
  * @param fontSizePx         Subtitle font size in pixels.
@@ -70,8 +76,66 @@ export function applyAutoLineBreak(
 // ---------------------------------------------------------------------------
 
 /**
+ * REQ-0303 — a "word character" for the purpose of *not* splitting a Latin
+ * word across a line break.  Covers ASCII letters + digits, the Latin-1 /
+ * Latin-Extended letter blocks (accented Latin, IPA), and the two apostrophe
+ * forms so `don't` / `l'ami` stay intact.  Deliberately excludes:
+ *   - whitespace (that's where we *want* to break);
+ *   - the hyphen / other punctuation (breaking after `state-of-` reads fine);
+ *   - every CJK / wide code point (those match none of these ranges, so a
+ *     CJK boundary is never treated as "mid-word" and keeps character-level
+ *     wrapping — this is what preserves the pre-REQ-0303 Japanese positions).
+ */
+const WORD_CHAR = /[0-9A-Za-zÀ-ɏɐ-ʯ'’]/
+
+/**
+ * REQ-0303 — translate the pixel-accurate break index into the break that is
+ * actually used, respecting Latin word boundaries.
+ *
+ * `hardBreak` is the index BEFORE which `seg` would overflow (the position the
+ * pre-REQ-0303 algorithm broke at unconditionally).  Returns the code-unit
+ * offsets `{ leftEnd, rightStart }` at which to split — `leftEnd < rightStart`
+ * means the whitespace at `leftEnd` is consumed by the break (the standard
+ * word-wrap behaviour where the wrapping space disappears).
+ *
+ * Rules:
+ *   - If the split at `hardBreak` does NOT fall between two Latin word
+ *     characters — i.e. either side is whitespace, punctuation, or a CJK /
+ *     wide glyph — the position is returned unchanged.  Pure-CJK text always
+ *     hits this branch (no `WORD_CHAR` ever matches a kana / kanji), so its
+ *     break positions stay byte-identical to before REQ-0303.
+ *   - Otherwise the break is mid-word: scan back to the last whitespace and
+ *     break there, moving the whole word to the next line and consuming that
+ *     one space.
+ *   - If there is no whitespace before the break, the segment is a single word
+ *     longer than one line — the forced mid-word split is kept as the
+ *     unavoidable fallback (REQ-0303 §1 exception, "はみ出させない").
+ */
+function adjustBreak(seg: string, hardBreak: number): { leftEnd: number; rightStart: number } {
+  const before = seg[hardBreak - 1]
+  const after  = seg[hardBreak]
+  // Not a Latin word split → keep the pixel-accurate position verbatim.
+  if (!before || !after || !WORD_CHAR.test(before) || !WORD_CHAR.test(after)) {
+    return { leftEnd: hardBreak, rightStart: hardBreak }
+  }
+  // Mid-word: back off to the last whitespace so the word is not cut.  `w >= 1`
+  // keeps the left line non-empty (a leading space is never a break point).
+  for (let w = hardBreak - 1; w >= 1; w--) {
+    if (/\s/.test(seg[w])) {
+      return { leftEnd: w, rightStart: w + 1 }
+    }
+  }
+  // Single over-long word → unavoidable mid-word break (fallback).
+  return { leftEnd: hardBreak, rightStart: hardBreak }
+}
+
+/**
  * Recursively insert \N into a single segment (no existing \N) until every
  * resulting sub-line fits within `effectivePx`.
+ *
+ * The pixel budget (`findBreakIndex`) decides how many glyphs fit; REQ-0303's
+ * `adjustBreak` then nudges the split to a Latin word boundary when it would
+ * otherwise fall inside a word.  CJK segments are unaffected by the nudge.
  */
 function breakSegment(
   seg: string,
@@ -87,8 +151,15 @@ function breakSegment(
   const breakPos = findBreakIndex(seg, fontSizePx, effectivePx, font, libassScale, cmap, tofu)
   if (breakPos === -1) return seg  // entire segment fits
 
-  const left  = seg.slice(0, breakPos)
-  const right = seg.slice(breakPos)
+  const { leftEnd, rightStart } = adjustBreak(seg, breakPos)
+  // Defensive: an empty left line would recurse forever (only reachable if a
+  // single glyph is wider than the whole line — impossible at real video
+  // widths).  Leave the segment unbroken rather than loop.
+  if (leftEnd <= 0) return seg
+
+  const left  = seg.slice(0, leftEnd)
+  const right = seg.slice(rightStart)
+  if (!right) return seg  // nothing left to move to the next line
   return left + '\\N' + breakSegment(right, fontSizePx, effectivePx, font, libassScale, cmap, tofu)
 }
 
