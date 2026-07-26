@@ -272,6 +272,137 @@ export function buildKaraokeAssText(
 }
 
 /**
+ * `out[i] === true` iff a `\N` in `cueText` sits between stripped char `i`
+ * and stripped char `i + 1`.  Whitespace (any Unicode whitespace) and the
+ * two-character `\N` sentinel are skipped transparently, so the indices
+ * line up with the whitespace-stripped cue that the word texts concatenate
+ * to (the `areWordsValidForText` invariant).
+ *
+ * Indices are per CODE UNIT, matching `emphasizedWordRanges` and the rest
+ * of the karaoke/emphasis mapping code — a surrogate pair therefore
+ * occupies two positions and a break can never be flagged between its
+ * halves.
+ *
+ * A `\N` before the first visible character has nothing to attach to and
+ * is ignored (leading blank lines are not a thing libass renders here).
+ */
+function buildBreakAfterStripped(cueText: string): boolean[] {
+  const out: boolean[] = []
+  let i = 0
+  while (i < cueText.length) {
+    if (cueText[i] === '\\' && cueText[i + 1] === 'N') {
+      if (out.length > 0) out[out.length - 1] = true
+      i += 2
+      continue
+    }
+    if (/\s/.test(cueText[i])) {
+      i++
+      continue
+    }
+    out.push(false)
+    i++
+  }
+  return out
+}
+
+/** Count of non-whitespace code units in `s` (its "stripped length"). */
+function visibleLength(s: string): number {
+  let n = 0
+  for (let i = 0; i < s.length; i++) {
+    if (!/\s/.test(s[i])) n++
+  }
+  return n
+}
+
+/**
+ * REQ-0308 §1 — split any karaoke unit that a `\N` falls INSIDE, so every
+ * hard break in `cueText` lands on a unit boundary.
+ *
+ * ## Why this is needed
+ *
+ * `computeKaraokeBreaks` can only express "break before word w", so a `\N`
+ * in the middle of a word had nowhere to go and was dropped — the cue then
+ * rendered with fewer lines than its own `text`, overflowing the frame,
+ * while the editor and the table showed the correctly-wrapped text.  This
+ * is not the rare edge case the original REQ-0294 note assumed: REQ-0303
+ * only protects **Latin** word boundaries, so a Japanese cue's auto-wrap
+ * lands mid-word nearly every time.
+ *
+ * ## What it does
+ *
+ * Each unit whose interior is crossed by a `\N` is cut at that point and
+ * the unit's time span is divided between the pieces **in proportion to
+ * their visible character counts**.  Linear interpolation inside a word is
+ * the same approximation `buildFallbackKaraokeUnits` already makes for a
+ * whole cue, and it is the best available: Whisper gives no sub-word
+ * timing.  The `\k` highlight therefore advances across the two lines at
+ * roughly the speaking rate instead of lighting both at once.
+ *
+ * ## Invariants preserved
+ *
+ * - `stripAllWhitespace(concat(result)) === stripAllWhitespace(concat(words))`
+ *   — pieces only ever cut, never rewrite, so the
+ *   `areWordsValidForText` lockstep assumption still holds and
+ *   `emphasizedWordRanges` keeps mapping onto the same characters.
+ * - Times stay ascending and stay within the original unit's span.
+ * - **A cue with no mid-word `\N` returns the input array reference
+ *   unchanged**, so the common case (Latin cues, unwrapped cues, cues
+ *   whose breaks already sit on boundaries) is byte-identical to the
+ *   pre-REQ-0308 output — no karaoke timing or ASS text moves.
+ */
+export function splitWordsAtHardBreaks(
+  cueText: string,
+  words: readonly WordSpan[],
+): readonly WordSpan[] {
+  if (words.length === 0) return words
+  const breakAfter = buildBreakAfterStripped(cueText)
+  if (!breakAfter.includes(true)) return words
+
+  const out: WordSpan[] = []
+  let cursor = 0
+  let changed = false
+
+  for (const w of words) {
+    const total = visibleLength(w.text)
+    if (total === 0) {
+      out.push(w)
+      continue
+    }
+    // Raw offsets to cut at: just after a visible char that a `\N` follows,
+    // excluding the word's LAST visible char (a break there is already a unit
+    // boundary and `computeKaraokeBreaks` handles it).
+    const cuts: number[] = []
+    let seen = 0
+    for (let i = 0; i < w.text.length; i++) {
+      if (/\s/.test(w.text[i])) continue
+      seen++
+      if (seen < total && breakAfter[cursor + seen - 1]) cuts.push(i + 1)
+    }
+    cursor += total
+
+    if (cuts.length === 0) {
+      out.push(w)
+      continue
+    }
+    changed = true
+    // Divide [startSec, endSec] across the pieces by visible-char proportion.
+    const span = Math.max(0, w.endSec - w.startSec)
+    const bounds = [0, ...cuts, w.text.length]
+    let consumed = 0
+    for (let p = 0; p + 1 < bounds.length; p++) {
+      const piece = w.text.slice(bounds[p], bounds[p + 1])
+      const pieceVisible = visibleLength(piece)
+      const start = w.startSec + (span * consumed) / total
+      consumed += pieceVisible
+      const end = w.startSec + (span * consumed) / total
+      out.push({ ...w, text: piece, startSec: start, endSec: end })
+    }
+  }
+
+  return changed ? out : words
+}
+
+/**
  * REQ-0294 — figure out which word indices should be preceded by a
  * `\N` line break so the karaoke render matches the plain (karaoke-
  * off) render's wrap positions.
@@ -299,16 +430,23 @@ export function buildKaraokeAssText(
  * replaced by whitespace for tokenisation), so their stripped
  * concat equals the stripped cue.
  *
- * ## Mid-word `\N` (edge case)
+ * ## Mid-word `\N`
  *
- * If a `\N` in `cueText` falls in the middle of a word (uncommon —
- * auto-line-break inserts `\N` at safe boundaries between words),
- * this function silently drops the break at that position.  The
- * karaoke render then has no line break at that word, matching the
- * pre-REQ-0294 behaviour for that specific case.  A future REQ
- * could split the affected word into two `\k` blocks separated by
- * `\N` if the owner ever needs it; not worth the complexity for
- * v1.3.6.
+ * A `\N` that falls in the MIDDLE of a word has no word index to attach
+ * to, so this function cannot represent it and drops it.  Callers must
+ * therefore pass units that already have a boundary at every `\N` —
+ * i.e. run `splitWordsAtHardBreaks` first.  Both live call sites (the
+ * ass-generator and subtitle-overlay) do exactly that.
+ *
+ * REQ-0308 §1 — this used to be documented as a tolerable edge case on
+ * the premise that "auto-line-break inserts `\N` at safe boundaries
+ * between words".  That premise is false for Japanese: REQ-0303 made
+ * word-boundary protection **Latin-only**, so a CJK cue wraps at a
+ * character boundary that lands mid-word almost every time.  The break
+ * was then silently dropped and the cue rendered with fewer lines than
+ * its own `text` — visibly overflowing the frame in both preview and
+ * burn-in while the editor and the table showed the wrapped text.  See
+ * `splitWordsAtHardBreaks` for the fix.
  *
  * ## Return value
  *
@@ -321,27 +459,7 @@ export function computeKaraokeBreaks(
   words: readonly WordSpan[],
 ): Set<number> {
   const breaks = new Set<number>()
-
-  // Build `nAfterStripped[i] = true` iff a `\N` in `cueText` sits
-  // between stripped char `i` and stripped char `i+1`.  Whitespace
-  // (any Unicode whitespace) is skipped over transparently.
-  const nAfterStripped: boolean[] = []
-  let i = 0
-  while (i < cueText.length) {
-    if (cueText[i] === '\\' && cueText[i + 1] === 'N') {
-      if (nAfterStripped.length > 0) {
-        nAfterStripped[nAfterStripped.length - 1] = true
-      }
-      i += 2
-      continue
-    }
-    if (/\s/.test(cueText[i])) {
-      i++
-      continue
-    }
-    nAfterStripped.push(false)
-    i++
-  }
+  const nAfterStripped = buildBreakAfterStripped(cueText)
 
   // Walk words in order, matching each word's stripped characters
   // against the global cursor into `nAfterStripped`.  Before

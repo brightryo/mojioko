@@ -16,7 +16,8 @@ import { isEmphasizedAt, type EmphasisRange } from '../../shared/emphasis'
 /**
  * REQ-0306 §2 — emphasis width descriptor threaded through the break finder.
  * `ranges` are code-unit ranges into the ORIGINAL `text` (with `\N`), `scale`
- * is the emphasis size multiplier (> 1).  `null` everywhere = pre-REQ-0306
+ * is the emphasis size multiplier — REQ-0308 §4-4 allows 0.5–2.0, so it may be
+ * BELOW 1 (a shrunk span measures narrower).  `null` everywhere = pre-REQ-0306
  * behaviour, byte-identical.
  */
 type EmphAdvance = { ranges: readonly EmphasisRange[]; scale: number } | null
@@ -81,10 +82,13 @@ export function applyAutoLineBreak(
   const cmap = getCmapCoverageFor(effectiveFontId)
   const tofu = getTofuSubstituteFor(effectiveFontId)
 
-  // REQ-0306 §2 — `null` (no emphasis / no scale-up / no surviving span) makes
-  // every path below byte-identical to the pre-REQ-0306 measurement.
+  // REQ-0306 §2 — `null` (no emphasis / no surviving span / scale exactly 1)
+  // makes every path below byte-identical to the pre-REQ-0306 measurement.
+  // REQ-0308 §4-4 — the guard is `!== 1` rather than `> 1`, because emphasis can
+  // now shrink a span as well as grow it (50–200 %).  Measuring a shrunk span at
+  // base size would break the line earlier than the burn-in needs.
   const emph: EmphAdvance =
-    emphasis && emphasis.scale > 1 && emphasis.ranges.length > 0
+    emphasis && emphasis.scale > 0 && emphasis.scale !== 1 && emphasis.ranges.length > 0
       ? { ranges: emphasis.ranges, scale: emphasis.scale }
       : null
 

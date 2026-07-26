@@ -281,6 +281,11 @@ export function DefaultStyleControls({
               ariaLabel={t('step2:styleCell.emphasisSize')}
               widthClass="w-16"
             />
+            {/* REQ-0308 §4-3 — mark the value as a multiplier, matching the
+                inspector.  This row has no 「編集」 button so its four
+                controls still fit on one line in the wider settings column;
+                only the inspector needed the two-line restack. */}
+            <span className="text-caption text-fg-secondary">%</span>
           </div>
         </SettingsStyleRow>
       )}

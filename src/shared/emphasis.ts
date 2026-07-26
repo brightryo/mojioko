@@ -50,14 +50,34 @@ import { stripAllWhitespace } from './words-validity'
  * correctly (REQ-0307 §4) — see `emphasizedWordRanges` + `splitTextByLocalRanges`.
  */
 
-/** Default emphasis colour — gold accent, distinct from karaoke yellow. */
-export const EMPHASIS_DEFAULT_COLOR = '#FFD400'
+/**
+ * Default emphasis colour — pink accent, distinct from the karaoke lime.
+ *
+ * REQ-0308 §5 — was `'#FFD400'` (gold).  Changed to a member of the REQ-0306
+ * 16-colour `BASIC_COLORS` palette so the picker shows the default as a
+ * selected swatch; the old gold was off-palette and always rendered with no
+ * selection highlight.
+ *
+ * FALLBACK + toggle-ON seed only.  Colours already persisted in user settings
+ * or in existing project cues are NOT migrated and keep their old value.
+ */
+export const EMPHASIS_DEFAULT_COLOR = '#FF2E88'
 
 /** Default emphasis size as a percent of the cue font size (130 = 1.3×). */
 export const EMPHASIS_DEFAULT_SCALE_PERCENT = 130
 
-/** Emphasis size multiplier clamp range (percent). */
-export const EMPHASIS_SCALE_MIN_PERCENT = 100
+/**
+ * Emphasis size multiplier clamp range (percent).
+ *
+ * REQ-0308 §4-4 — the floor was 100 (grow-only).  It is now 50 so a span can
+ * also SHRINK, which the owner wants for "said quietly" nuance.  Because
+ * `scale < 1` is now reachable, every width measurer must reflect the
+ * multiplier in BOTH directions — see the `scale !== 1` guards in
+ * `overflow-calculator.ts` and `auto-line-break.ts`.  The pre-REQ-0308 guards
+ * tested `scale > 1`, which would have measured a shrunk span at full size and
+ * wrapped it earlier than the burn-in needs.
+ */
+export const EMPHASIS_SCALE_MIN_PERCENT = 50
 export const EMPHASIS_SCALE_MAX_PERCENT = 200
 
 /** ± step for the size-multiplier stepper. */

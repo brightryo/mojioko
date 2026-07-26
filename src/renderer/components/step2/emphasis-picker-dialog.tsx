@@ -204,7 +204,10 @@ export function EmphasisPickerDialog({
     onOpenChange(false)
   }
 
-  const emphasisEm = Math.max(1, scalePercent / 100)
+  // REQ-0308 §4-4 — no `Math.max(1, …)` floor any more: emphasis can shrink a
+  // span (50–200 %), and the picker must show that faithfully or the user picks
+  // characters against a preview that lies about the result.
+  const emphasisEm = scalePercent / 100
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -270,6 +273,21 @@ export function EmphasisPickerDialog({
             ))
           )}
         </div>
+
+        {/* REQ-0308 §2 — tell the user what an edit does to their selection.
+            The wording matches `resolveEmphasisSpans` exactly (verified against
+            it): a span is re-anchored whenever its text is still uniquely
+            findable, and dropped only when that text is gone, rewritten, or has
+            become ambiguous.  Deliberately not phrased as "editing clears
+            emphasis" — that would be wrong in the common case and would push
+            users into avoiding edits they can safely make. */}
+        <p className="text-caption leading-relaxed text-fg-secondary">
+          <span className="font-medium text-fg-primary">
+            {t('step2:emphasisPicker.editNoteLabel')}
+          </span>
+          {' — '}
+          {t('step2:emphasisPicker.editNote')}
+        </p>
 
         <div className="flex items-center justify-between gap-2">
           <span className="text-caption text-fg-secondary">

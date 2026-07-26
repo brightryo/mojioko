@@ -1143,43 +1143,59 @@ export function TimelineBlockInspector({
                 REQ-0306 keyword chips are gone because a repeated keyword
                 could not be disambiguated. */}
             {showEmphasisUi && (
+              /* REQ-0308 §4-2 — this row carries FOUR controls (switch, Edit,
+                 colour, stepper ≈ 252 px) but shares the 224 px control column
+                 every other row uses, and the inspector pane is
+                 `overflow-x-hidden`, so the stepper's right chevron was clipped
+                 off.  Widening the shared column would move every other row, so
+                 the fix is local: stack this row's controls in TWO lines inside
+                 the same column.  StyleRow's label/filler/control structure is
+                 untouched, so row alignment is unaffected. */
               <StyleRow label={t('styleCell.emphasisRowLabel')} stopControlClickPropagation>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={entry.keywordEmphasisEnabled === true}
-                    onCheckedChange={handleEmphasisToggle}
-                    disabled={isFrozen}
-                    aria-label={t('styleCell.emphasis')}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={isFrozen || entry.keywordEmphasisEnabled !== true}
-                    onClick={() => setEmphasisPickerOpen(true)}
-                    aria-label={t('styleCell.emphasisEdit')}
-                  >
-                    <Pencil className="h-3 w-3" />
-                    {t('styleCell.emphasisEdit')}
-                  </Button>
-                  <ColorPicker
-                    value={entry.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR}
-                    onChange={handleEmphasisColorPreview}
-                    onCommit={handleEmphasisColorCommit}
-                    disabled={isFrozen}
-                    swatchOnly
-                    heading={t('styleCell.emphasisColor')}
-                  />
-                  <NumberStepperInput
-                    value={entry.emphasisScalePercent ?? EMPHASIS_DEFAULT_SCALE_PERCENT}
-                    min={EMPHASIS_SCALE_MIN_PERCENT}
-                    max={EMPHASIS_SCALE_MAX_PERCENT}
-                    step={EMPHASIS_SCALE_STEP_PERCENT}
-                    onCommit={handleEmphasisSizeCommit}
-                    disabled={isFrozen}
-                    ariaLabel={t('styleCell.emphasisSize')}
-                    widthClass="w-16"
-                  />
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={entry.keywordEmphasisEnabled === true}
+                      onCheckedChange={handleEmphasisToggle}
+                      disabled={isFrozen}
+                      aria-label={t('styleCell.emphasis')}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={isFrozen || entry.keywordEmphasisEnabled !== true}
+                      onClick={() => setEmphasisPickerOpen(true)}
+                      aria-label={t('styleCell.emphasisEdit')}
+                    >
+                      <Pencil className="h-3 w-3" />
+                      {t('styleCell.emphasisEdit')}
+                    </Button>
+                    <ColorPicker
+                      value={entry.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR}
+                      onChange={handleEmphasisColorPreview}
+                      onCommit={handleEmphasisColorCommit}
+                      disabled={isFrozen}
+                      swatchOnly
+                      heading={t('styleCell.emphasisColor')}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <NumberStepperInput
+                      value={entry.emphasisScalePercent ?? EMPHASIS_DEFAULT_SCALE_PERCENT}
+                      min={EMPHASIS_SCALE_MIN_PERCENT}
+                      max={EMPHASIS_SCALE_MAX_PERCENT}
+                      step={EMPHASIS_SCALE_STEP_PERCENT}
+                      onCommit={handleEmphasisSizeCommit}
+                      disabled={isFrozen}
+                      ariaLabel={t('styleCell.emphasisSize')}
+                      widthClass="w-16"
+                    />
+                    {/* REQ-0308 §4-3 — the number is a MULTIPLIER of the cue's
+                        font size (200 = 2×), not an absolute px size.  Without
+                        the unit it reads as a point size. */}
+                    <span className="text-caption text-fg-secondary">%</span>
+                  </div>
                 </div>
               </StyleRow>
             )}

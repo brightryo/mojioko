@@ -252,7 +252,6 @@
       "casing": "Bulk casing change ({{count}} rows)",
       "shadow": "Bulk shadow change ({{count}} rows)",
       "karaoke": "Bulk karaoke change ({{count}} rows)",
-      "emphasis": "Bulk emphasis change ({{count}} rows)",
       "rotation": "Bulk rotation change ({{count}} rows)"
     }
   },
@@ -416,6 +415,8 @@
     "selectedCount": "{{count}} selected",
     "emptyText": "This subtitle has no text.",
     "emptyLine": "(empty line)",
-    "spaceChar": "Space"
+    "spaceChar": "Space",
+    "editNote": "Emphasis follows your text edits automatically. It is cleared only where the emphasised characters are deleted or rewritten, or where the same text ends up appearing more than once and can no longer be told apart.",
+    "editNoteLabel": "When you edit the text"
   }
 }

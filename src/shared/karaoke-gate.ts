@@ -39,10 +39,20 @@ export function canUseKaraokeInTier(_isMsix: boolean): boolean {
  *
  * ## Highlight (spoken/past words → ASS PrimaryColour, `\c`)
  *
- * `KARAOKE_DEFAULT_HIGHLIGHT_COLOR = '#FFFF00'` — yellow accent, matches
- * the TikTok / short-form-video convention users likely arrived
- * expecting.  Seeded into `karaokeHighlightColor` at toggle-ON so the
- * ColorPicker has a starting value; overridable per-cue.
+ * `KARAOKE_DEFAULT_HIGHLIGHT_COLOR = '#B4FF39'` — lime accent.  Seeded
+ * into `karaokeHighlightColor` at toggle-ON so the ColorPicker has a
+ * starting value; overridable per-cue.
+ *
+ * REQ-0308 §5 — was `'#FFFF00'` (pure yellow, the TikTok / short-form
+ * convention).  Changed to the lime already in the REQ-0306 16-colour
+ * `BASIC_COLORS` palette, which also fixes a papercut: `#FFFF00` was not a
+ * palette entry (the palette's yellow is `#FFE500`), so opening the picker
+ * showed NO swatch selected even on an untouched cue.
+ *
+ * This constant is only a FALLBACK and a toggle-ON seed.  Changing it does
+ * not touch colours already saved in user settings or in existing projects,
+ * and no migration rewrites them — a user who has saved a karaoke colour
+ * keeps it and must change it by hand if they want the new default.
  *
  * ## Base colour (unspoken/future words → ASS SecondaryColour, `\2c`)
  *
@@ -54,4 +64,4 @@ export function canUseKaraokeInTier(_isMsix: boolean): boolean {
  * colour itself.  The old `KARAOKE_DEFAULT_BASE_COLOR` constant (=
  * `'#FFFFFF'`) was removed along with the field it seeded.
  */
-export const KARAOKE_DEFAULT_HIGHLIGHT_COLOR = '#FFFF00'
+export const KARAOKE_DEFAULT_HIGHLIGHT_COLOR = '#B4FF39'

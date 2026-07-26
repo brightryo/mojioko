@@ -13,16 +13,12 @@ import { StyleRow } from '@/components/subtitle-table/style-row'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
+// REQ-0308 §3 — only the wrap-measurement helpers are imported now; the bulk
+// emphasis controls (and the constants they needed) are gone.
 import {
-  canUseKeywordEmphasisInTier,
   resolveEmphasisRanges,
   mapRangesAcrossBreakCollapse,
   clampEmphasisScalePercent,
-  EMPHASIS_DEFAULT_COLOR,
-  EMPHASIS_DEFAULT_SCALE_PERCENT,
-  EMPHASIS_SCALE_MIN_PERCENT,
-  EMPHASIS_SCALE_MAX_PERCENT,
-  EMPHASIS_SCALE_STEP_PERCENT,
 } from '../../../shared/emphasis'
 import { HelpIcon } from '@/components/help-icon'
 import { useProjectStore } from '@/stores/project-store'
@@ -296,11 +292,6 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // the karaoke sweep now always uses each row's own `textColorHex`
   // for the unspoken half — there's no per-cue override to bulk-set.
   const [karaokeHighlightDraft, setKaraokeHighlightDraft] = useState<string>(KARAOKE_DEFAULT_HIGHLIGHT_COLOR)
-  // REQ-0305 — bulk keyword-emphasis colour + size drafts (no per-word
-  // chips in bulk — word selection is per-cue).  Re-seeded on selection
-  // change like every other bulk draft.
-  const [emphasisColorDraft, setEmphasisColorDraft] = useState<string>(EMPHASIS_DEFAULT_COLOR)
-  const [emphasisSizeDraft, setEmphasisSizeDraft] = useState<number>(EMPHASIS_DEFAULT_SCALE_PERCENT)
 
   // REQ-047 #1: same persist-then-re-seed pattern as the colour drafts.
   // Previously the size input was uncontrolled and cleared on blur
@@ -368,8 +359,6 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setShadowSliderDraft(0)
     setRotationDraft(0)
     setKaraokeHighlightDraft(KARAOKE_DEFAULT_HIGHLIGHT_COLOR)
-    setEmphasisColorDraft(EMPHASIS_DEFAULT_COLOR)
-    setEmphasisSizeDraft(EMPHASIS_DEFAULT_SCALE_PERCENT)
     // REQ-0298 §1 — re-seed fontDraft from the project's active font
     // on selection change.  Consistent with the "fresh selection ⇒
     // fresh draft" convention every other bulk draft follows.
@@ -711,59 +700,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // tracks each row's `textColorHex` at render time; there is no
   // per-cue override to bulk-set.
 
-  // REQ-0305 — bulk keyword-emphasis.  Toggle-on stamps the master
-  // flag + the current colour/size drafts across the selection; the
-  // colour picker streams a live preview and commits one history op;
-  // the size stepper commits directly.  Per-word selection is per-cue
-  // (inspector only) so the bulk bar exposes only the style knobs.
-  function handleEmphasisBulkToggle(on: boolean) {
-    applyBulk(
-      on
-        ? {
-            keywordEmphasisEnabled: true,
-            emphasisColorHex: emphasisColorDraft,
-            emphasisScalePercent: emphasisSizeDraft,
-          }
-        : { keywordEmphasisEnabled: false },
-      t('bulk.history.emphasis', { count: selectedRowIds.size }),
-    )
-  }
-  const bulkEmphasisColorBeforeRef = useRef<Map<string, string | undefined> | null>(null)
-  function handleEmphasisColorBulkPreview(hex: string) {
-    if (bulkEmphasisColorBeforeRef.current === null) {
-      const map = new Map<string, string | undefined>()
-      const all = useProjectStore.getState().entries
-      for (const id of selectedRowIds) {
-        const e = all.find((x) => x.id === id)
-        if (e) map.set(id, e.emphasisColorHex)
-      }
-      bulkEmphasisColorBeforeRef.current = map
-    }
-    setEmphasisColorDraft(hex)
-    updateEntriesPreview(Array.from(selectedRowIds), { emphasisColorHex: hex })
-  }
-  function handleEmphasisColorBulkCommit(hex: string) {
-    const beforeMap = bulkEmphasisColorBeforeRef.current
-    bulkEmphasisColorBeforeRef.current = null
-    const preSnapshots = beforeMap
-      ? new Map<string, Partial<SubtitleEntry>>(
-          Array.from(beforeMap.entries()).map(([id, v]) => [id, { emphasisColorHex: v }]),
-        )
-      : undefined
-    applyBulk(
-      { emphasisColorHex: hex },
-      t('bulk.history.emphasis', { count: selectedRowIds.size }),
-      preSnapshots,
-    )
-    setEmphasisColorDraft(hex)
-  }
-  function handleEmphasisSizeBulkCommit(v: number) {
-    setEmphasisSizeDraft(v)
-    applyBulk(
-      { emphasisScalePercent: v },
-      t('bulk.history.emphasis', { count: selectedRowIds.size }),
-    )
-  }
+  // REQ-0308 §3 — the bulk keyword-emphasis handlers were removed along with
+  // their row.  See the comment at the (now absent) row in the JSX below.
 
   // REQ-20260613-016 Phase 5 — per-row layout / background bulk handlers.
   // Layout fields (horizontal / vertical / margin) commit independently
@@ -1204,32 +1142,14 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               </div>
             </StyleRow>
           )}
-          {/* REQ-0305 — bulk keyword-emphasis: master Switch + colour +
-              size %.  Per-word chip selection is per-cue (inspector only),
-              so the bulk bar exposes only the style knobs. */}
-          {canUseKeywordEmphasisInTier(useAppEnvStore((s) => s.isMsix) ?? false) && (
-            <StyleRow label={t('styleCell.emphasisRowLabel')}>
-              <div className="flex items-center gap-2">
-                <Switch onCheckedChange={handleEmphasisBulkToggle} aria-label={t('styleCell.emphasis')} />
-                <ColorPicker
-                  value={emphasisColorDraft}
-                  onChange={handleEmphasisColorBulkPreview}
-                  onCommit={handleEmphasisColorBulkCommit}
-                  swatchOnly
-                  heading={t('styleCell.emphasisColor')}
-                />
-                <NumberStepperInput
-                  value={emphasisSizeDraft}
-                  min={EMPHASIS_SCALE_MIN_PERCENT}
-                  max={EMPHASIS_SCALE_MAX_PERCENT}
-                  step={EMPHASIS_SCALE_STEP_PERCENT}
-                  onCommit={handleEmphasisSizeBulkCommit}
-                  ariaLabel={t('styleCell.emphasisSize')}
-                  widthClass="w-16"
-                />
-              </div>
-            </StyleRow>
-          )}
+          {/* REQ-0308 §3 — the bulk keyword-emphasis row was REMOVED.  Which
+              characters get emphasised is a per-cue choice (REQ-0307's picker),
+              so there was nothing meaningful to bulk-apply: toggling emphasis on
+              across a selection lit up nothing, and the colour / size knobs only
+              restyled whatever each cue had already been given individually.
+              The inspector and 設定 > 字幕スタイル keep the full emphasis UI.
+              Per-row emphasis is still honoured by the two wrap buttons above
+              (they read each row's own spans when measuring). */}
           {/* REQ-0299 §3 — casing state text ("ALL CAPS") removed. */}
           <StyleRow label={t('styleCell.casing')}>
             <Switch onCheckedChange={handleCasingBulk} aria-label={t('styleCell.casing')} />

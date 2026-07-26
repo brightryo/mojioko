@@ -99,7 +99,11 @@ describe('REQ-0307 emphasis helpers', () => {
 
   it('clampEmphasisScalePercent clamps/rounds/defaults', () => {
     expect(clampEmphasisScalePercent(undefined)).toBe(EMPHASIS_DEFAULT_SCALE_PERCENT)
-    expect(clampEmphasisScalePercent(50)).toBe(100)
+    // REQ-0308 §4-4 — the floor is 50 now (shrink allowed), so 50 passes
+    // through and only values below it clamp.
+    expect(clampEmphasisScalePercent(50)).toBe(50)
+    expect(clampEmphasisScalePercent(10)).toBe(50)
+    expect(clampEmphasisScalePercent(0)).toBe(50)
     expect(clampEmphasisScalePercent(999)).toBe(200)
     expect(clampEmphasisScalePercent(NaN)).toBe(EMPHASIS_DEFAULT_SCALE_PERCENT)
   })

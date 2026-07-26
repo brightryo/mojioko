@@ -17,7 +17,7 @@ import { pinnedAnchorTransform } from '@/lib/preview-coords'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { areWordsValidForText } from '../../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
-import { computeKaraokeBreaks } from '../../../shared/karaoke-ass'
+import { computeKaraokeBreaks, splitWordsAtHardBreaks } from '../../../shared/karaoke-ass'
 import {
   canUseKeywordEmphasisInTier,
   resolveEmphasisRanges,
@@ -507,10 +507,21 @@ export function SubtitleOverlay({
   // spans.
   const karaokeGateOn = entry.karaokeEnabled === true && canUseKaraokeInTier(isMsix)
   const karaokeWordsValid = areWordsValidForText(entry.words, entry.text)
-  const karaokeWords: WordSpan[] = karaokeGateOn
-    ? (karaokeWordsValid
-        ? entry.words!
-        : buildFallbackKaraokeUnits(entry.text, entry.startSec, entry.endSec))
+  // REQ-0308 §1 — `splitWordsAtHardBreaks` gives every `\N` in the cue text a
+  // unit boundary to attach to.  Without it a break landing mid-word (the norm
+  // for Japanese, where REQ-0303 does NOT protect word boundaries) was silently
+  // dropped by `computeKaraokeBreaks` and this overlay rendered FEWER lines
+  // than `entry.text` contains — the cue overflowed the frame while the editor
+  // and the table showed the wrapped text.  The ass-generator applies the same
+  // split, so preview and burn-in stay in agreement.  A no-op (same array
+  // reference) for cues whose breaks already sit on unit boundaries.
+  const karaokeWords: readonly WordSpan[] = karaokeGateOn
+    ? splitWordsAtHardBreaks(
+        entry.text,
+        karaokeWordsValid
+          ? entry.words!
+          : buildFallbackKaraokeUnits(entry.text, entry.startSec, entry.endSec),
+      )
     : []
   const karaokeActive = karaokeWords.length > 0
   // REQ-0294 — compute the same word-index → break-before-me set the

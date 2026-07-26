@@ -16,6 +16,7 @@ import { SubtitleOverlay, estimateOverlayHeightPx } from '@/components/subtitle-
 import { PositionGuideOverlay } from '@/components/subtitle-overlay/position-guide-overlay'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
+import { KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { findActiveEntryId, findActiveEntryIds, computeFixedStackOffsets } from '@/lib/active-entry'
 import {
   previewPxToAss,
@@ -515,7 +516,11 @@ export function VideoPreviewPanel() {
         if (entry.karaokeEnabled) {
           const wordSpans = el.querySelectorAll<HTMLElement>('[data-karaoke-word-idx]')
           if (wordSpans.length === 0) continue
-          const highlightColor = entry.karaokeHighlightColor ?? '#FFFF00'
+          // REQ-0308 §5 — was a hardcoded '#FFFF00' duplicating the constant's
+          // old value.  It now reads the constant, so changing the default
+          // cannot make this rAF loop disagree with subtitle-overlay and the
+          // ass-generator (both of which already used the constant).
+          const highlightColor = entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR
           // REQ-0293 §2 — base colour is ALWAYS `textColorHex` now.
           // The pre-REQ-0293 per-cue `karaokeBaseColor` override was
           // removed so the sweep swaps between "the cue's own text

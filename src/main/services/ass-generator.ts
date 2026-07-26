@@ -2,7 +2,7 @@ import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground, Word
 import { ASS_MARGIN_LR_PX, SHADOW_DEPTH_MAX_PX } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../shared/karaoke-gate'
-import { buildKaraokeAssText } from '../../shared/karaoke-ass'
+import { buildKaraokeAssText, splitWordsAtHardBreaks } from '../../shared/karaoke-ass'
 import { areWordsValidForText } from '../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
 import {
@@ -281,10 +281,20 @@ export function generateAss(
       // swap, not a separate rendering codepath.
       const karaokeGateOn = e.karaokeEnabled === true && canUseKaraokeInTier(isMsix)
       const karaokeWordsValid = areWordsValidForText(e.words, e.text)
-      const karaokeWords: WordSpan[] = karaokeGateOn
-        ? (karaokeWordsValid
-            ? e.words!
-            : buildFallbackKaraokeUnits(e.text, e.startSec, e.endSec))
+      // REQ-0308 §1 — split any unit a `\N` falls inside so every hard break
+      // has a unit boundary to attach to.  A mid-word break (the norm for
+      // Japanese — REQ-0303 protects Latin word boundaries only) was otherwise
+      // dropped by `computeKaraokeBreaks`, burning in fewer lines than the cue
+      // text contains.  subtitle-overlay applies the identical split so the
+      // preview matches.  No-op for cues whose breaks already sit on
+      // boundaries, keeping existing output byte-identical.
+      const karaokeWords: readonly WordSpan[] = karaokeGateOn
+        ? splitWordsAtHardBreaks(
+            e.text,
+            karaokeWordsValid
+              ? e.words!
+              : buildFallbackKaraokeUnits(e.text, e.startSec, e.endSec),
+          )
         : []
       const karaokeActive = karaokeWords.length > 0
       const fillTag = karaokeActive
@@ -312,7 +322,9 @@ export function generateAss(
       const emphasisRanges = emphasisGateOn ? resolveEmphasis(e).ranges : []
       const emphasisActive = emphasisRanges.length > 0
       // Emphasised font size (rounded px) and the base to restore after.
-      const emphasisBigFs = Math.round(
+      // REQ-0308 §4-4 — the multiplier range is 50–200 %, so this can be SMALLER
+      // than `fontSizePx` (a shrunk span); the arithmetic needs no special case.
+      const emphasisScaledFs = Math.round(
         e.fontSizePx * (clampEmphasisScalePercent(e.emphasisScalePercent) / 100),
       )
       // REQ-0307 §4 — emphasis ranges projected onto the karaoke word units at
@@ -472,7 +484,7 @@ export function generateAss(
         const emphasisOverlay = emphasisKaraokeRanges.size > 0
           ? {
               ranges: emphasisKaraokeRanges,
-              openTag: `\\fs${emphasisBigFs}\\c${hexToAss(emphasisColorHex)}`,
+              openTag: `\\fs${emphasisScaledFs}\\c${hexToAss(emphasisColorHex)}`,
               closeTag: `\\fs${e.fontSizePx}\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}`,
             }
           : undefined
@@ -497,7 +509,7 @@ export function generateAss(
           e.text,
           emphasisRanges,
           escapeWord,
-          `\\fs${emphasisBigFs}\\c${hexToAss(emphasisColorHex)}`,
+          `\\fs${emphasisScaledFs}\\c${hexToAss(emphasisColorHex)}`,
           `\\fs${e.fontSizePx}\\c${hexToAss(e.textColorHex)}`,
         )
         text = `{${styleTag}}${emphasisBody}`

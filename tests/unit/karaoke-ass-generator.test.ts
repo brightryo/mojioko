@@ -159,8 +159,8 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
 
   it('REQ-0293 §2 — base ALWAYS = textColorHex (no karaokeBaseColor override anymore)', () => {
     // With a pink `textColorHex`, the base half of the karaoke sweep
-    // MUST be pink.  Highlight defaults to the yellow accent when
-    // `karaokeHighlightColor` is unset.
+    // MUST be pink.  Highlight defaults to the lime accent when
+    // `karaokeHighlightColor` is unset (REQ-0308 §5).
     const entry = makeEntry({
       textColorHex: '#FF00FF', // pink — flows straight into `\2c`
       karaokeEnabled: true,
@@ -168,7 +168,8 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
     })
     const ass = generateAss([entry], video, burnin, undefined, undefined, true)
     const line = dialogueLineOf(ass)
-    expect(line).toContain('\\c&H0000FFFF&')  // #FFFF00 (default highlight)
+    // ASS colours are &H00BBGGRR&, so #B4FF39 → &H0039FFB4&.
+    expect(line).toContain('\\c&H0039FFB4&')  // #B4FF39 (default highlight)
     expect(line).toContain('\\2c&H00FF00FF&') // #FF00FF (base = textColorHex, pink)
   })
 

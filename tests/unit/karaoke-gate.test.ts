@@ -43,8 +43,10 @@ describe('REQ-0286 §0 / REQ-0299 §1 — canUseKaraokeInTier policy', () => {
 })
 
 describe('REQ-0286 — karaoke default highlight colour', () => {
-  it('highlight defaults to yellow (#FFFF00, matches TikTok/short-form convention)', () => {
-    expect(KARAOKE_DEFAULT_HIGHLIGHT_COLOR).toBe('#FFFF00')
+  // REQ-0308 §5 — was '#FFFF00'.  The lime is a member of the REQ-0306
+  // BASIC_COLORS palette, so the picker now shows the default as selected.
+  it('highlight defaults to the lime accent (#B4FF39, a BASIC_COLORS member)', () => {
+    expect(KARAOKE_DEFAULT_HIGHLIGHT_COLOR).toBe('#B4FF39')
   })
 
   it('is 6-hex uppercase — matches ColorPicker canonical form', () => {

@@ -135,8 +135,16 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
   // `normalizedText`, where it is one.  Re-map so `charOffset` lines up
   // instead of drifting by one per preceding break.  Empty ⇒ `mult` is
   // always 1 (byte-identical to the pre-REQ-0306 measurement).
+  // REQ-0308 §4-4 — the guard is `!== 1`, not `> 1`: emphasis can now SHRINK a
+  // span (50–200 %), and a shrunk span must be measured narrower or the row
+  // wraps earlier than the burn-in requires.  `scale === 1` still short-circuits
+  // to the identity path so an un-scaled cue is byte-identical.
   const emphRanges =
-    args.emphasisRanges && args.emphasisScale && args.emphasisScale > 1 && args.emphasisRanges.length > 0
+    args.emphasisRanges &&
+    args.emphasisScale !== undefined &&
+    args.emphasisScale > 0 &&
+    args.emphasisScale !== 1 &&
+    args.emphasisRanges.length > 0
       ? mapRangesAcrossBreakCollapse(text, args.emphasisRanges, 1)
       : []
   const emphScale = args.emphasisScale ?? 1
