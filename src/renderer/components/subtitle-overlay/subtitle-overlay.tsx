@@ -1,4 +1,5 @@
 import type { Ref } from 'react'
+import { Fragment } from 'react'
 import { Move } from 'lucide-react'
 import type { SubtitleEntry } from '../../../shared/types'
 import { ASS_MARGIN_LR_PX, SHADOW_DEPTH_MAX_PX } from '../../../shared/constants'
@@ -16,6 +17,7 @@ import { pinnedAnchorTransform } from '@/lib/preview-coords'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { areWordsValidForText } from '../../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
+import { computeKaraokeBreaks } from '../../../shared/karaoke-ass'
 import type { WordSpan } from '../../../shared/types'
 
 /**
@@ -501,6 +503,13 @@ export function SubtitleOverlay({
         : buildFallbackKaraokeUnits(entry.text, entry.startSec, entry.endSec))
     : []
   const karaokeActive = karaokeWords.length > 0
+  // REQ-0294 — compute the same word-index → break-before-me set the
+  // ass-generator uses so the preview inserts `<br>` at the same word
+  // boundaries libass wraps at.  Empty set for single-line cues, so
+  // no-break cues render identically to the pre-REQ-0294 output.
+  const karaokeBreaks = karaokeActive
+    ? computeKaraokeBreaks(entry.text, karaokeWords)
+    : new Set<number>()
   const karaokeHighlightColorResolved = entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR
   // REQ-0293 §2 — base (unspoken) colour is ALWAYS `textColorHex`.
   // The pre-REQ-0293 per-cue `karaokeBaseColor` override was removed;
@@ -591,9 +600,13 @@ export function SubtitleOverlay({
           "unspoken" preview, which is a reasonable fallback for a
           non-playback context.  All karaoke word.text values keep
           faster-whisper's leading spaces so the rendered token
-          spacing matches natural word wrap; the cue's `\N` breaks
-          are NOT applied here (see karaoke-ass.ts docstring for the
-          preview↔burn-in parity rationale).
+          spacing matches natural word wrap.
+          REQ-0294 — the cue's `\N` breaks ARE now applied: a `<br>`
+          is inserted before every word whose index is in
+          `karaokeBreaks` (same set the ass-generator uses for its
+          `\N` emit), and the leading whitespace of that word is
+          stripped so line 2 doesn't render an indent.  Karaoke ON
+          and OFF therefore wrap at the same positions.
           When karaoke is inactive, we render the pre-REQ-0286
           single-text-node path unchanged (RES-0286 §4 fallback). */}
       {karaokeActive ? (
@@ -607,16 +620,22 @@ export function SubtitleOverlay({
               equal-split fallback units.  Same DOM shape either way
               so the parent's rAF loop drives both without a code
               path change. */}
-          {karaokeWords.map((w, i) => (
-            <span
-              key={i}
-              data-karaoke-word-idx={i}
-              data-karaoke-word-start-sec={w.startSec}
-              style={{ color: karaokeBaseColorResolved }}
-            >
-              {w.text}
-            </span>
-          ))}
+          {karaokeWords.map((w, i) => {
+            const brokenHere = karaokeBreaks.has(i)
+            const wordText = brokenHere ? w.text.replace(/^\s+/, '') : w.text
+            return (
+              <Fragment key={i}>
+                {brokenHere && <br />}
+                <span
+                  data-karaoke-word-idx={i}
+                  data-karaoke-word-start-sec={w.startSec}
+                  style={{ color: karaokeBaseColorResolved }}
+                >
+                  {wordText}
+                </span>
+              </Fragment>
+            )
+          })}
         </span>
       ) : (
         <span ref={spanRef} style={textWrapperStyle}>

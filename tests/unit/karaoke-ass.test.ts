@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildKaraokeAssText } from '../../src/shared/karaoke-ass'
+import { buildKaraokeAssText, computeKaraokeBreaks } from '../../src/shared/karaoke-ass'
 import type { WordSpan } from '../../src/shared/types'
 
 /**
@@ -218,5 +218,137 @@ describe('REQ-0291 — no bare `\\k` outside `{...}` (regression pin)', () => {
     // body, proving braces in word text survived as escaped literals
     // rather than being interpreted as tag delimiters.
     expect(strippedProper).toContain('\\{brace\\}')
+  })
+})
+
+describe('REQ-0294 — computeKaraokeBreaks (\\N → word-index mapping)', () => {
+  it('no `\\N` in cueText → empty set (single-line cue, no wraps)', () => {
+    const words: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'hello' },
+      { startSec: 0.5, endSec: 1, text: ' world' },
+    ]
+    expect(Array.from(computeKaraokeBreaks('hello world', words))).toEqual([])
+  })
+
+  it('EN 2-word cue with `\\N` between words → break before word 1', () => {
+    const words: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'hello' },
+      { startSec: 0.5, endSec: 1, text: ' world' },
+    ]
+    expect(Array.from(computeKaraokeBreaks('hello\\Nworld', words))).toEqual([1])
+  })
+
+  it('JA 2-word cue with `\\N` between words → break before word 1', () => {
+    const words: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'こんにちは' },
+      { startSec: 0.5, endSec: 1, text: '世界' },
+    ]
+    expect(Array.from(computeKaraokeBreaks('こんにちは\\N世界', words))).toEqual([1])
+  })
+
+  it('JA per-character (fallback) cue with `\\N` mid-string → break at the exact char boundary', () => {
+    // Simulates the fallback splitter output for "テストです\Nこんにちは":
+    // 10 single-char units, with \N between position 4 (す) and 5 (こ).
+    const chars = ['テ', 'ス', 'ト', 'で', 'す', 'こ', 'ん', 'に', 'ち', 'は']
+    const words: WordSpan[] = chars.map((text, i) => ({
+      startSec: i * 0.1, endSec: (i + 1) * 0.1, text,
+    }))
+    expect(Array.from(computeKaraokeBreaks('テストです\\Nこんにちは', words))).toEqual([5])
+  })
+
+  it('multiple `\\N` breaks in one cue → break set for each following word', () => {
+    // 3-line cue: "hello\Nworld\Nagain" with 3 whisper words.
+    const words: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'hello' },
+      { startSec: 0.5, endSec: 1, text: ' world' },
+      { startSec: 1, endSec: 1.5, text: ' again' },
+    ]
+    expect(Array.from(computeKaraokeBreaks('hello\\Nworld\\Nagain', words))).toEqual([1, 2])
+  })
+
+  it('leading `\\N` in cueText → no break added (degenerate case, no chars before to bind to)', () => {
+    const words: WordSpan[] = [{ startSec: 0, endSec: 1, text: 'hello' }]
+    expect(Array.from(computeKaraokeBreaks('\\Nhello', words))).toEqual([])
+  })
+
+  it('trailing `\\N` in cueText → no break added (no word follows the break)', () => {
+    const words: WordSpan[] = [{ startSec: 0, endSec: 1, text: 'hello' }]
+    expect(Array.from(computeKaraokeBreaks('hello\\N', words))).toEqual([])
+  })
+
+  it('mid-word `\\N` (uncommon, user hand-edit) → silently drops the break', () => {
+    // Cue "hel\Nlo world" — `\N` sits BETWEEN two chars of word[0].
+    // computeKaraokeBreaks only checks the first char of each word,
+    // so a mid-word `\N` doesn't mark any word.  Documented edge case.
+    const words: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'hello' },
+      { startSec: 0.5, endSec: 1, text: ' world' },
+    ]
+    expect(Array.from(computeKaraokeBreaks('hel\\Nlo world', words))).toEqual([])
+  })
+})
+
+describe('REQ-0294 — buildKaraokeAssText with cueText emits `\\N` in-body', () => {
+  it('EN 2-line: `hello\\Nworld` → `{\\k50}hello\\N{\\k150}world` (space stripped from " world" after break)', () => {
+    const words: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'hello' },
+      { startSec: 0.5, endSec: 1, text: ' world' },
+    ]
+    const out = buildKaraokeAssText(words, 0, 2, identity, 'hello\\Nworld')
+    expect(out).toBe('{\\k50}hello\\N{\\k150}world')
+  })
+
+  it('JA 2-line: `こんにちは\\N世界` → `{\\k50}こんにちは\\N{\\k150}世界`', () => {
+    const words: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'こんにちは' },
+      { startSec: 0.5, endSec: 1, text: '世界' },
+    ]
+    const out = buildKaraokeAssText(words, 0, 2, identity, 'こんにちは\\N世界')
+    expect(out).toBe('{\\k50}こんにちは\\N{\\k150}世界')
+  })
+
+  it('single-line cue: cueText without `\\N` → output identical to no-cueText call (regression pin)', () => {
+    const words: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'hello' },
+      { startSec: 0.5, endSec: 1, text: ' world' },
+    ]
+    const withCue = buildKaraokeAssText(words, 0, 2, identity, 'hello world')
+    const noCue = buildKaraokeAssText(words, 0, 2, identity)
+    expect(withCue).toBe(noCue)
+    expect(withCue).toBe('{\\k50}hello{\\k150} world')
+  })
+
+  it('cueText omitted → pre-REQ-0294 single-line output preserved (backward compat)', () => {
+    const words: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'hello' },
+      { startSec: 0.5, endSec: 1, text: ' world' },
+    ]
+    // Even if cue text WOULD contain \N, callers that don't pass it
+    // get the legacy no-break behaviour — no regressions in old
+    // test fixtures that use the 4-arg call.
+    const out = buildKaraokeAssText(words, 0, 2, identity)
+    expect(out).not.toContain('\\N')
+  })
+
+  it('3-line cue: two breaks emit two `\\N` in-body', () => {
+    const words: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'hello' },
+      { startSec: 0.5, endSec: 1, text: ' world' },
+      { startSec: 1, endSec: 1.5, text: ' again' },
+    ]
+    const out = buildKaraokeAssText(words, 0, 2, identity, 'hello\\Nworld\\Nagain')
+    expect(out).toBe('{\\k50}hello\\N{\\k50}world\\N{\\k100}again')
+  })
+
+  it('every `\\k` remains brace-enclosed even with `\\N` interleaved (REQ-0291 well-formedness preserved)', () => {
+    const words: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'hello' },
+      { startSec: 0.5, endSec: 1, text: ' world' },
+    ]
+    const out = buildKaraokeAssText(words, 0, 2, identity, 'hello\\Nworld')
+    // Strip proper `{\k<cs>}` blocks AND the `\N` line-break literal.
+    // What remains should be pure word text — no `\k` residue.
+    const strippedProper = out.replace(/\{\\k\d+\}/g, '').replace(/\\N/g, '')
+    expect(strippedProper).not.toContain('\\k')
   })
 })

@@ -400,13 +400,15 @@ export function generateAss(
       // e.text (the stored transcript) is unchanged.  SRT export
       // continues to see the original text.  `casing === undefined`
       // OR `'none'` → no transform.
-      // REQ-0286 §2 — when karaoke is active, the text portion is
-      // built from `words` via `buildKaraokeAssText`, which inserts
-      // `\k<duration>` between each word and preserves the words'
-      // own leading spaces.  The cue's `\N` auto-line-break positions
-      // are INTENTIONALLY not applied here (see karaoke-ass.ts docstring
-      // "What this DOES NOT do") — karaoke cues use natural word-wrap
-      // on both preview and burn-in so the two stay pixel-consistent.
+      // REQ-0286 §2 / REQ-0294 — when karaoke is active, the text
+      // portion is built from `words` via `buildKaraokeAssText`,
+      // which inserts `{\k<duration>}` before each word.  We now
+      // ALSO pass `e.text` as the 5th arg so `\N` line breaks in
+      // the cue text are honoured — the karaoke body emits `\N` at
+      // the right position between words, so a 2-line cue stays
+      // 2 lines when karaoke turns on.  Pre-REQ-0294 the `\N` was
+      // silently dropped and karaoke collapsed every cue to one
+      // line (REQ-0294 §1 bug).
       // Casing applies word-by-word via the escaper wrapper so
       // uppercase karaoke still works.
       let text: string
@@ -418,8 +420,13 @@ export function generateAss(
         // REQ-0289 — `karaokeWords` is either the real per-word list
         // (words valid) or the equal-split fallback list (words
         // invalid); `buildKaraokeAssText` doesn't care which since
-        // both share the `WordSpan` shape.
-        const karaokeBody = buildKaraokeAssText(karaokeWords, e.startSec, e.endSec, escapeWord)
+        // both share the `WordSpan` shape.  For the fallback the
+        // stripped concat of `karaokeWords` matches the stripped
+        // `e.text` because the fallback splitter is derived from
+        // that same cue text, so `computeKaraokeBreaks` inside
+        // `buildKaraokeAssText` still maps `\N` to the right unit
+        // boundary.
+        const karaokeBody = buildKaraokeAssText(karaokeWords, e.startSec, e.endSec, escapeWord, e.text)
         text = `{${styleTag}}${karaokeBody}`
       } else {
         const rawText = e.casing === 'uppercase' ? e.text.toUpperCase() : e.text

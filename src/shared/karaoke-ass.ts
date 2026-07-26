@@ -109,14 +109,37 @@ import type { WordSpan } from './types'
  * - Doesn't emit `\c` / `\2c` (Primary/Secondary colour).  Caller
  *   emits those separately at the start of the styleTag so the
  *   colours are established BEFORE the first `\k` applies.
- * - Doesn't apply casing / auto-line-break — the text baked into each
- *   word comes from `words[i].text` verbatim, so the karaoke render
- *   is unaffected by the cue's `\N` breaks.  This is a deliberate
- *   trade-off (REQ-0286 §3 note on preview↔burn-in parity): karaoke
- *   cues use natural word-wrap on both sides rather than the
- *   auto-line-break `\N` positions of the plain cue text.
+ * - Doesn't apply casing — the text baked into each word comes from
+ *   `words[i].text` verbatim; casing is applied by the caller's
+ *   `escapeText` callback so uppercase karaoke still works.
  * - Doesn't validate word ordering.  Caller must supply `words` sorted
  *   by `startSec` ascending (the sidecar always does).
+ *
+ * ## `\N` (line-break) handling — REQ-0294
+ *
+ * When the caller passes the cue's `text` as the optional 5th
+ * argument, `\N` breaks are HONOURED: a `\N` literal is inserted
+ * into the emitted karaoke body at the position corresponding to
+ * each `\N` in `text`, and the leading whitespace of any word that
+ * lands right after a break is stripped so the second line doesn't
+ * indent by a stray space.  This lets karaoke cues wrap identically
+ * to their plain (karaoke-off) counterparts — pre-REQ-0294 this
+ * function silently collapsed every karaoke cue to one line
+ * (RES-0286 §3 documented that as an intentional trade-off, but
+ * REQ-0294 reversed the call because two-line karaoke was
+ * important enough to justify the extra bookkeeping).
+ *
+ * When `cueText` is omitted (legacy call shape), the function
+ * behaves exactly like the pre-REQ-0294 emitter: no `\N` in the
+ * output, everything on a single line.  Existing tests that don't
+ * care about line breaks keep passing.  Callers that care (the
+ * ass-generator, and the subtitle-overlay via `computeKaraokeBreaks`
+ * on its own) MUST pass `cueText` to get the correct layout.
+ *
+ * The break-position mapping is delegated to
+ * `computeKaraokeBreaks` — see that function's docstring for the
+ * character-walking algorithm and the edge case where a `\N` falls
+ * mid-word (gracefully collapses to "no break at that word").
  *
  * ## Empty edge cases
  *
@@ -130,10 +153,20 @@ export function buildKaraokeAssText(
   cueStartSec: number,
   cueEndSec: number,
   escapeText: (s: string) => string,
+  cueText?: string,
 ): string {
   if (words.length === 0) return ''
 
   const toCs = (sec: number): number => Math.max(0, Math.round(sec * 100))
+
+  // REQ-0294 — when the caller supplies `cueText`, look up which word
+  // indices should be preceded by a `\N` line break.  Empty set when
+  // `cueText` is omitted OR contains no `\N`, which keeps the pre-
+  // REQ-0294 single-line behaviour byte-identical for callers that
+  // don't need multiline karaoke (existing unit tests hit this path).
+  const breaks = cueText !== undefined
+    ? computeKaraokeBreaks(cueText, words)
+    : new Set<number>()
 
   const parts: string[] = []
 
@@ -147,19 +180,125 @@ export function buildKaraokeAssText(
     parts.push(`{\\k${toCs(leadingOffsetSec)}}`)
   }
 
-  // Each word: `{\k<duration>}` (override block) + escaped text
-  // (rendered as literal).  Word text passes through the caller's
-  // `escapeText` which handles `{` / `}` / `\` — the override braces
-  // wrapping the `\k` are added HERE (unescaped by design), never in
-  // the escaper.
+  // Each word: optional `\N` (REQ-0294 line-break, unescaped literal
+  // — libass parses `\N` in the text field as a hard line break) +
+  // `{\k<duration>}` (override block) + escaped text (rendered as
+  // literal).  Word text passes through the caller's `escapeText`
+  // which handles `{` / `}` / `\` — the override braces wrapping
+  // the `\k` and the `\N` line-break sentinel are added HERE
+  // (unescaped by design), never in the escaper.
+  //
+  // When a word lands right after a break, its leading whitespace
+  // is stripped so the second line doesn't render an indent from
+  // faster-whisper's " word" convention.  For CJK words (no leading
+  // whitespace anyway) the strip is a no-op.
   for (let i = 0; i < words.length; i++) {
     const nextActivationSec =
       i + 1 < words.length
         ? words[i + 1].startSec
         : cueEndSec // last word holds until cue ends
     const durationSec = Math.max(0, nextActivationSec - words[i].startSec)
-    parts.push(`{\\k${toCs(durationSec)}}${escapeText(words[i].text)}`)
+    if (breaks.has(i)) {
+      parts.push('\\N')
+    }
+    const rawWordText = breaks.has(i)
+      ? words[i].text.replace(/^\s+/, '')
+      : words[i].text
+    parts.push(`{\\k${toCs(durationSec)}}${escapeText(rawWordText)}`)
   }
 
   return parts.join('')
+}
+
+/**
+ * REQ-0294 — figure out which word indices should be preceded by a
+ * `\N` line break so the karaoke render matches the plain (karaoke-
+ * off) render's wrap positions.
+ *
+ * ## Algorithm
+ *
+ * Walk `cueText` character-by-character, skipping whitespace and
+ * skipping the two-character `\N` sentinel (marking the position it
+ * lands at).  In parallel, walk each word's stripped characters
+ * (whitespace removed, `\N` never appears in word text) and
+ * accumulate a global cursor into the stripped cue.  Just before
+ * consuming the FIRST character of word `w` (for `w > 0`), check
+ * whether the position just before that character was tagged as
+ * "followed by `\N`" during the cueText walk.  If so, `w` is
+ * marked for a leading break.
+ *
+ * ## Correctness assumption
+ *
+ * The `areWordsValidForText` predicate (REQ-0287) guarantees that
+ * `stripAllWhitespace(cueText) === stripAllWhitespace(words concat)`
+ * when the caller decides karaoke is active.  That means walking
+ * both in stripped-char lockstep is a valid one-to-one mapping.
+ * When called from the fallback path the same invariant holds —
+ * fallback units are literally derived from `cueText` (with `\N`
+ * replaced by whitespace for tokenisation), so their stripped
+ * concat equals the stripped cue.
+ *
+ * ## Mid-word `\N` (edge case)
+ *
+ * If a `\N` in `cueText` falls in the middle of a word (uncommon —
+ * auto-line-break inserts `\N` at safe boundaries between words),
+ * this function silently drops the break at that position.  The
+ * karaoke render then has no line break at that word, matching the
+ * pre-REQ-0294 behaviour for that specific case.  A future REQ
+ * could split the affected word into two `\k` blocks separated by
+ * `\N` if the owner ever needs it; not worth the complexity for
+ * v1.3.6.
+ *
+ * ## Return value
+ *
+ * A `Set` of word indices (0-based).  `breaks.has(w) === true`
+ * means "emit `\N` right before word[w] in the karaoke output."
+ * The set is always empty when `cueText` contains no `\N`.
+ */
+export function computeKaraokeBreaks(
+  cueText: string,
+  words: readonly WordSpan[],
+): Set<number> {
+  const breaks = new Set<number>()
+
+  // Build `nAfterStripped[i] = true` iff a `\N` in `cueText` sits
+  // between stripped char `i` and stripped char `i+1`.  Whitespace
+  // (any Unicode whitespace) is skipped over transparently.
+  const nAfterStripped: boolean[] = []
+  let i = 0
+  while (i < cueText.length) {
+    if (cueText[i] === '\\' && cueText[i + 1] === 'N') {
+      if (nAfterStripped.length > 0) {
+        nAfterStripped[nAfterStripped.length - 1] = true
+      }
+      i += 2
+      continue
+    }
+    if (/\s/.test(cueText[i])) {
+      i++
+      continue
+    }
+    nAfterStripped.push(false)
+    i++
+  }
+
+  // Walk words in order, matching each word's stripped characters
+  // against the global cursor into `nAfterStripped`.  Before
+  // consuming the first char of word `w > 0`, check whether the
+  // char at `cursor - 1` was flagged as "\N follows".
+  let cursor = 0
+  for (let w = 0; w < words.length; w++) {
+    // Strip whitespace from word text.  Word text should never
+    // contain a literal `\N` (faster-whisper doesn't emit them,
+    // fallback splitter drops them), but strip defensively.
+    const stripped = words[w].text.replace(/\\N/g, '').replace(/\s+/g, '')
+    for (let c = 0; c < stripped.length; c++) {
+      if (c === 0 && w > 0 && cursor > 0 && nAfterStripped[cursor - 1]) {
+        breaks.add(w)
+      }
+      cursor++
+    }
+  }
+
+  return breaks
 }

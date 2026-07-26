@@ -414,18 +414,21 @@ describe('REQ-0291 — ASS override-tag well-formedness (regression pin)', () =>
     return dialogueLine.slice(commas[7] + 1)
   }
 
-  /** Assert: after stripping every well-formed `{...}` block, NO `\`
-   *  (backslash) remains — meaning every override tag lived inside
-   *  braces and only literal text is left. */
+  /** Assert: after stripping every well-formed `{...}` block AND the
+   *  REQ-0294 `\N` line-break sentinels, NO `\` (backslash) remains
+   *  — meaning every override tag lived inside braces and only
+   *  literal text (or a legitimate `\N` line break) is left. */
   function assertNoBareOverrideTags(dialogueLine: string): void {
     const textField = textFieldOf(dialogueLine)
     // Strip every `{...}` block (may repeat, may include multi-tag
     // blocks like `{\an2\fs100...}`).  Non-greedy so adjacent blocks
-    // `{a}{b}` don't collapse into one.
-    const literalOnly = textField.replace(/\{[^}]*\}/g, '')
-    // Any `\` remaining in the literal text is either a bare override
-    // tag (bug) or an escaped-backslash literal (`\\`) — the latter
-    // shouldn't occur in these fixtures.
+    // `{a}{b}` don't collapse into one.  Also strip the REQ-0294
+    // `\N` sentinel — those are legitimate line-break literals in
+    // the Dialogue text field, not stray override tags.
+    const literalOnly = textField.replace(/\{[^}]*\}/g, '').replace(/\\N/g, '')
+    // Any `\` remaining in the literal text is a bare override tag
+    // (bug).  Escaped-backslash literals (`\\`) shouldn't occur in
+    // these fixtures.
     expect(literalOnly).not.toContain('\\')
   }
 
@@ -531,5 +534,128 @@ describe('REQ-0291 — ASS override-tag well-formedness (regression pin)', () =>
     const textField = textFieldOf(line)
     // First char MUST be `{` (opening the style override block).
     expect(textField.startsWith('{')).toBe(true)
+  })
+})
+
+describe('REQ-0294 — multiline karaoke (\\N preserved through the emit)', () => {
+  // Extract the karaoke text field (drops the leading `Dialogue: …,`
+  // header + trailing MarginV columns) for line-shape assertions.
+  function textFieldOfDialogue(dialogueLine: string): string {
+    const commas: number[] = []
+    for (let i = 0; i < dialogueLine.length; i++) {
+      if (dialogueLine[i] === ',') commas.push(i)
+      if (commas.length === 8) break
+    }
+    return dialogueLine.slice(commas[7] + 1)
+  }
+
+  it('Whisper timing + 2-line cue: `\\N` emitted between the two words', () => {
+    // Cue `hello\Nworld` with two Whisper words.  Pre-REQ-0294 the
+    // karaoke body was `{\k50}hello{\k150} world` (1 line, `\N`
+    // silently dropped).  Post-REQ-0294 it's `{\k50}hello\N{\k150}
+    // world` (2 lines, `world`'s leading space stripped).
+    const entry = makeEntry({
+      startSec: 0, endSec: 2,
+      text: 'hello\\Nworld',
+      karaokeEnabled: true,
+      words: validWords, // [{0,0.5,hello}, {0.5,1.0,' world'}]
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    // The literal `\N` MUST appear between the two `{\k}` blocks.
+    expect(line).toMatch(/\{\\k\d+\}hello\\N\{\\k\d+\}world/)
+    // And the leading space of the original ' world' MUST have been
+    // stripped when the break was inserted.
+    expect(line).not.toMatch(/\\N\{\\k\d+\} world/)
+  })
+
+  it('Whisper timing + JA 2-line cue: `\\N` emitted between the two words', () => {
+    const jaWords: WordSpan[] = [
+      { startSec: 0, endSec: 0.5, text: 'こんにちは' },
+      { startSec: 0.5, endSec: 1.0, text: '世界' },
+    ]
+    const entry = makeEntry({
+      startSec: 0, endSec: 2,
+      text: 'こんにちは\\N世界',
+      karaokeEnabled: true,
+      words: jaWords,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    expect(line).toMatch(/\{\\k\d+\}こんにちは\\N\{\\k\d+\}世界/)
+  })
+
+  it('Equal-split fallback + 2-line cue: `\\N` emitted at the right unit boundary', () => {
+    // `hello world\Nedited again` with no valid Whisper words → 4
+    // fallback units [hello,  world,  edited,  again].  The `\N`
+    // sits between "world" (unit 1) and "edited" (unit 2), so break
+    // is before unit 2.
+    const entry = makeEntry({
+      startSec: 0, endSec: 4,
+      text: 'hello world\\Nedited again',
+      karaokeEnabled: true,
+      words: undefined,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    expect(line).toMatch(/\{\\k\d+\}hello\{\\k\d+\} world\\N\{\\k\d+\}edited\{\\k\d+\} again/)
+  })
+
+  it('Equal-split fallback + JA 2-line cue: `\\N` between the two CJK runs', () => {
+    // 10 single-char units, `\N` between positions 4 (す) and 5 (こ).
+    const entry = makeEntry({
+      startSec: 0, endSec: 2,
+      text: 'テストです\\Nこんにちは',
+      karaokeEnabled: true,
+      words: undefined,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    // 5 CJK chars per line: テストです\Nこんにちは
+    expect(line).toMatch(/\{\\k\d+\}テ\{\\k\d+\}ス\{\\k\d+\}ト\{\\k\d+\}で\{\\k\d+\}す\\N\{\\k\d+\}こ/)
+  })
+
+  it('Karaoke ON and OFF wrap at the same position (parity pin, REQ-0294 §3)', () => {
+    // Both renders MUST place `\N` at the same character boundary in
+    // the emitted text field.  Verified structurally: after
+    // stripping every `{...}` override block and dropping the `\N`
+    // line-break sentinel, both should yield the same visible-text
+    // concatenation ("helloworld" here) and both should contain
+    // exactly one `\N`.
+    const offEntry = makeEntry({ text: 'hello\\Nworld', karaokeEnabled: false })
+    const onEntry = makeEntry({
+      text: 'hello\\Nworld',
+      karaokeEnabled: true,
+      words: validWords,
+    })
+    const offField = textFieldOfDialogue(dialogueLineOf(generateAss([offEntry], video, burnin, undefined, undefined, true)))
+    const onField = textFieldOfDialogue(dialogueLineOf(generateAss([onEntry], video, burnin, undefined, undefined, true)))
+    // OFF field: `{style}hello\Nworld`.  ON field: `{style}{\k}hello\N{\k}world`.
+    // Both must contain exactly one `\N` at a position that maps to
+    // the same word boundary.
+    const countBackslashN = (s: string) => (s.match(/\\N/g) ?? []).length
+    expect(countBackslashN(offField)).toBe(1)
+    expect(countBackslashN(onField)).toBe(1)
+    // Same visible text after stripping tags + \N.
+    const visibleOff = offField.replace(/\{[^}]*\}/g, '').replace(/\\N/g, '')
+    const visibleOn = onField.replace(/\{[^}]*\}/g, '').replace(/\\N/g, '')
+    expect(visibleOff).toBe(visibleOn)
+  })
+
+  it('Single-line cue: NO `\\N` in body (no regression on non-multiline cues)', () => {
+    // Guards against a bug where computeKaraokeBreaks might return a
+    // spurious break for a cue that has no `\N` at all.
+    const entry = makeEntry({
+      startSec: 0, endSec: 2,
+      text: 'hello world',
+      karaokeEnabled: true,
+      words: validWords,
+    })
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const line = dialogueLineOf(ass)
+    // The style block's `\an2` starts with `\` inside `{...}` but is
+    // never `\N`.  Only real `\N` occurrences count.
+    const bodyOnly = line.slice(line.indexOf(',,') + 2)  // strip Dialogue header
+    expect(bodyOnly).not.toContain('\\N')
   })
 })
