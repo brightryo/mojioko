@@ -416,7 +416,7 @@
     "emptyText": "This subtitle has no text.",
     "emptyLine": "(empty line)",
     "spaceChar": "Space",
-    "editNote": "Emphasis follows your text edits automatically. It is cleared only where the emphasised characters are deleted or rewritten, or where the same text ends up appearing more than once and can no longer be told apart.",
+    "editNote": "Emphasis follows your text edits automatically. A line break falling inside an emphasised run does not clear it — both lines stay emphasised. It is cleared only where the emphasised characters are deleted or rewritten, or where the same text ends up appearing more than once and can no longer be told apart.",
     "editNoteLabel": "When you edit the text"
   }
 }

@@ -166,6 +166,37 @@ function adjustBreak(seg: string, hardBreak: number): { leftEnd: number; rightSt
 }
 
 /**
+ * REQ-0309 §3(B) — if the pixel-accurate break falls strictly INSIDE an
+ * emphasised range, return the segment-local offset of that range's start so
+ * the whole run moves to the next line together.  Returns `null` when there is
+ * no emphasis, when the break already sits on a range boundary, or when pulling
+ * back is impossible (the range starts at or before the segment's start — i.e.
+ * the run is wider than one line, and the caller keeps the original break).
+ *
+ * `emph.ranges` are ORIGINAL-text offsets, so the segment's `baseOffset` is
+ * added before testing and subtracted from the result.  Byte-identical to
+ * pre-REQ-0309 when `emph` is null — which is every cue without emphasis, so
+ * the REQ-0303 Japanese wrap positions are untouched.
+ */
+function pullBreakOutOfEmphasis(
+  seg: string,
+  hardBreak: number,
+  emph: EmphAdvance,
+  baseOffset: number,
+): number | null {
+  if (emph === null) return null
+  const abs = baseOffset + hardBreak
+  for (const [s, e] of emph.ranges) {
+    // Strictly inside: a break exactly at `s` or `e` already keeps the run whole.
+    if (abs > s && abs < e) {
+      const local = s - baseOffset
+      return local > 0 ? local : null
+    }
+  }
+  return null
+}
+
+/**
  * Recursively insert \N into a single segment (no existing \N) until every
  * resulting sub-line fits within `effectivePx`.
  *
@@ -189,7 +220,19 @@ function breakSegment(
   const breakPos = findBreakIndex(seg, fontSizePx, effectivePx, font, libassScale, cmap, tofu, emph, baseOffset)
   if (breakPos === -1) return seg  // entire segment fits
 
-  const { leftEnd, rightStart } = adjustBreak(seg, breakPos)
+  // REQ-0309 §3(B) — prefer not to split an emphasised run across lines.  Pull
+  // the break back to the start of the range, then let the Latin word rule run
+  // on that position too (the range may itself begin mid-word).  When pulling
+  // back would empty the left line — i.e. the emphasised run is wider than a
+  // whole line — fall through to the pixel-accurate break and split inside the
+  // range; §3(A) means the emphasis survives that, so this is only ever a
+  // cosmetic compromise, never data loss.
+  let { leftEnd, rightStart } = adjustBreak(seg, breakPos)
+  const pulled = pullBreakOutOfEmphasis(seg, breakPos, emph, baseOffset)
+  if (pulled !== null) {
+    const adjusted = adjustBreak(seg, pulled)
+    if (adjusted.leftEnd > 0) ({ leftEnd, rightStart } = adjusted)
+  }
   // Defensive: an empty left line would recurse forever (only reachable if a
   // single glyph is wider than the whole line — impossible at real video
   // widths).  Leave the segment unbroken rather than loop.

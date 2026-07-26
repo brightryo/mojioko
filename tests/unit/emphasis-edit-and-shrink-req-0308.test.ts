@@ -57,8 +57,24 @@ describe('REQ-0308 §2 — what a text edit does to an emphasis span', () => {
     expect(survives('今日はとっても良い天気')).toBe(false)
   })
 
-  it('DROPS when a `\\N` is inserted inside the emphasised text', () => {
-    expect(survives('今日はとて\\Nも良い天気')).toBe(false)
+  // REQ-0309 §3(A) — this used to DROP, and that was the root of the wrap
+  // feedback loop: auto line-break put a `\N` inside the emphasised run, the
+  // emphasis vanished, the cue then measured narrower than when the break was
+  // chosen, and a second press produced a different wrap.  Anchors are now
+  // matched with `\N` ignored, so a break inside the run is harmless.
+  it('SURVIVES when a `\\N` is inserted inside the emphasised text (REQ-0309)', () => {
+    expect(survives('今日はとて\\Nも良い天気')).toBe(true)
+  })
+
+  it('the surviving range spans the break so BOTH lines get emphasised', () => {
+    const edited = '今日はとて\\Nも良い天気'
+    const start = CUE.indexOf(ANCHOR)
+    const { ranges } = resolveEmphasisSpans(edited, [
+      { start, end: start + ANCHOR.length, text: ANCHOR },
+    ])
+    // 'とて' at 3..5, the sentinel at 5..7, 'も' at 7 → one range covering 3..8.
+    expect(ranges).toEqual([[3, 8]])
+    expect(edited.slice(3, 8)).toBe('とて\\Nも')
   })
 
   it('DROPS when the edit makes the emphasised text ambiguous (now appears twice)', () => {

@@ -250,6 +250,53 @@ export interface EmphasisResolution {
   changed: boolean
 }
 
+/** Remove every `\N` hard-break sentinel from `s`. */
+function stripHardBreaks(s: string): string {
+  return s.replace(/\\N/g, '')
+}
+
+/**
+ * REQ-0309 §3(A) — `text` with every `\N` removed, plus the two index maps that
+ * move offsets between the original and the break-free coordinate systems.
+ *
+ * - `origToNorm[i]` — position in `norm` of original code unit `i`.  Both code
+ *   units of a `\N` map to the position the sentinel was removed from, so an
+ *   offset pointing at a break resolves to the character that follows it.
+ * - `normToOrig[j]` — original offset of `norm[j]`.  Has one extra trailing
+ *   entry (`text.length`) so `normToOrig[norm.length]` is a valid end sentinel.
+ *
+ * Indices are per CODE UNIT throughout, matching the rest of the emphasis and
+ * karaoke mapping code (a surrogate pair occupies two positions on both axes,
+ * and `\N` can never be inserted between its halves).
+ */
+interface BreakFreeProjection {
+  norm: string
+  origToNorm: number[]
+  normToOrig: number[]
+}
+
+function breakFreeProjection(text: string): BreakFreeProjection {
+  const origToNorm = new Array<number>(text.length + 1)
+  const normToOrig: number[] = []
+  let norm = ''
+  let i = 0
+  while (i < text.length) {
+    if (text[i] === '\\' && text[i + 1] === 'N') {
+      origToNorm[i] = norm.length
+      origToNorm[i + 1] = norm.length
+      i += 2
+      continue
+    }
+    origToNorm[i] = norm.length
+    normToOrig.push(i)
+    norm += text[i]
+    i += 1
+  }
+  origToNorm[text.length] = norm.length
+  normToOrig.push(text.length)
+  return { norm, origToNorm, normToOrig }
+}
+
 /** Structural guard — a corrupt / legacy save must never throw (REQ-0307 §3). */
 function isEmphasisSpan(v: unknown): v is EmphasisSpan {
   if (typeof v !== 'object' || v === null) return false
@@ -278,10 +325,28 @@ function sameSpans(a: readonly EmphasisSpan[], b: readonly EmphasisSpan[]): bool
  *   1. the stored range still holds the stored anchor → keep it verbatim.
  *      **This is what makes duplicate substrings safe**: the offsets pick the
  *      occurrence the user clicked, not "every occurrence of this string".
- *   2. else, the anchor occurs exactly once in the text → re-anchor there
- *      (the user edited earlier in the cue and everything shifted).
+ *   1′. (REQ-0309 §3(A)) the stored offsets still cover the same characters once
+ *      `\N` is ignored → keep the range, widened across the break(s).
+ *   2. else, the anchor occurs exactly once in the `\N`-free text → re-anchor
+ *      there (the user edited earlier in the cue and everything shifted).
  *   3. else (absent, or two-plus candidates and therefore ambiguous) → drop
  *      that span.  Every other span survives.
+ *
+ * ## Why `\N` is ignored when matching (REQ-0309 §3(A))
+ *
+ * Auto line-break inserts `\N` wherever the line runs out of width, which can
+ * land in the middle of an emphasised run.  Pre-REQ-0309 that broke the anchor
+ * and dropped the span, which fed a genuine feedback loop: the emphasis
+ * vanished, the cue therefore measured NARROWER than when the break position
+ * was chosen, so a second press produced a different wrap and the user had to
+ * re-emphasise the text around the break by hand (REQ-0309 §1).
+ *
+ * Comparing on a `\N`-free footing removes the loop at its root, and it is the
+ * same tactic `areWordsValidForText` already uses so karaoke survives breaks.
+ * A span may therefore SPAN a `\N`; every consumer handles that:
+ * `tokenizeEmphasis` / `buildEmphasisBody` emit the break between two
+ * emphasised runs, and `emphasizedWordRanges` skips the sentinel because it
+ * carries no stripped index.
  *
  * Never throws: non-object / NaN / negative / inverted entries are treated as
  * unresolvable and dropped.
@@ -292,6 +357,10 @@ export function resolveEmphasisSpans(
 ): EmphasisResolution {
   const input: EmphasisSpan[] = []
   const resolved: EmphasisSpan[] = []
+  // REQ-0309 §3(A) — built lazily so a cue whose spans all hit rule 1 (the
+  // overwhelmingly common case) pays nothing for the normalisation machinery.
+  let proj: BreakFreeProjection | null = null
+  const projection = (): BreakFreeProjection => (proj ??= breakFreeProjection(text))
   for (const raw of spans ?? []) {
     if (!isEmphasisSpan(raw)) continue
     input.push({ start: raw.start, end: raw.end, text: raw.text })
@@ -306,11 +375,47 @@ export function resolveEmphasisSpans(
       resolved.push({ start: raw.start, end: raw.end, text: anchor })
       continue
     }
+    // REQ-0309 §3(A) — retry rules 1 and 2 against the text with every `\N`
+    // removed.  A line break inserted INSIDE an emphasised run must not destroy
+    // the emphasis: pre-REQ-0309 it did, and that fed a loop where wrapping
+    // cleared the emphasis, the cue then measured narrower, and the next press
+    // produced a different wrap (REQ-0309 §1/§2).  Anchors are compared on the
+    // same `\N`-free footing that `areWordsValidForText` already uses for
+    // karaoke, so emphasis now survives a break exactly like karaoke does.
+    const { norm, origToNorm, normToOrig } = projection()
+    const a = stripHardBreaks(anchor)
+    if (a.length === 0) continue
+
+    /** Original-text `[start, end)` for a match at `normStart` in `norm`. */
+    const toOriginal = (normStart: number): EmphasisSpan | null => {
+      const s = normToOrig[normStart]
+      // `end` is one past the LAST matched character, so a `\N` sitting just
+      // after the run is NOT swallowed into the range.
+      const lastOrig = normToOrig[normStart + a.length - 1]
+      if (s === undefined || lastOrig === undefined) return null
+      const e = lastOrig + 1
+      return e > s ? { start: s, end: e, text: a } : null
+    }
+
+    // Rule 1′ — the stored offsets still cover the same characters; one or more
+    // hard breaks have simply moved inside the range.
+    if (raw.start >= 0 && raw.start <= text.length) {
+      const ns = origToNorm[raw.start]
+      if (ns !== undefined && norm.slice(ns, ns + a.length) === a) {
+        const span = toOriginal(ns)
+        if (span !== null) {
+          resolved.push(span)
+          continue
+        }
+      }
+    }
     // Rule 2 — unique occurrence elsewhere → follow the edit.
-    const first = text.indexOf(anchor)
+    const first = norm.indexOf(a)
     if (first === -1) continue                      // rule 3 (absent)
-    if (text.indexOf(anchor, first + 1) !== -1) continue  // rule 3 (ambiguous)
-    resolved.push({ start: first, end: first + anchor.length, text: anchor })
+    if (norm.indexOf(a, first + 1) !== -1) continue  // rule 3 (ambiguous)
+    const span = toOriginal(first)
+    if (span === null) continue
+    resolved.push(span)
   }
   resolved.sort((a, b) => a.start - b.start || a.end - b.end)
   // Two spans can resolve onto the identical range (e.g. duplicated storage);
@@ -398,7 +503,12 @@ export function spansFromSelection(
   let runStart = -1
   let runEnd = -1
   const flush = (): void => {
-    if (runStart >= 0) spans.push({ start: runStart, end: runEnd, text: text.slice(runStart, runEnd) })
+    // REQ-0309 §3(A) — the anchor is stored `\N`-free so it never contains a
+    // backslash even when the run straddles a break, and so it stays as long
+    // (and therefore as unambiguous) as what the user actually selected.
+    if (runStart >= 0) {
+      spans.push({ start: runStart, end: runEnd, text: stripHardBreaks(text.slice(runStart, runEnd)) })
+    }
     runStart = -1
     runEnd = -1
   }
@@ -407,7 +517,14 @@ export function spansFromSelection(
       flush()
       continue
     }
-    if (runStart >= 0 && runEnd === cell.start) {
+    // REQ-0309 §3(A) — treat a run as continuing across any gap that is made up
+    // purely of `\N` sentinels.  A selection the user swept over a wrapped word
+    // is ONE emphasis, not two: splitting it here would leave two short anchors
+    // (e.g. "プレ" + "イ") that are far easier to render ambiguous by a later
+    // edit than the single "プレイ".
+    const gapIsBreaksOnly =
+      runStart >= 0 && cell.start > runEnd && /^(?:\\N)+$/.test(text.slice(runEnd, cell.start))
+    if (runStart >= 0 && (runEnd === cell.start || gapIsBreaksOnly)) {
       runEnd = cell.start + cell.length
     } else {
       flush()

@@ -74,15 +74,17 @@ describe('REQ-0307 §1 — picker cells → spans → render ranges, end to end'
     expect(resolveEmphasisSpans(text, spans).ranges).toEqual([[8, 11]])
   })
 
-  it('a selection across a line break becomes two spans, neither holding a backslash', () => {
+  // REQ-0309 §3(A) — was "becomes two spans".  A run swept across a line break
+  // is now kept as ONE span (range crosses the `\N`, anchor stored break-free),
+  // so the emphasis survives the wrap that inserted that break.
+  it('a selection across a line break stays ONE span, with no backslash in the anchor', () => {
     const text = 'ab\\Ncd'
     const cells = flat(text)
     const spans = spansFromSelection(text, cells, new Set([1, 4]))
-    expect(spans).toEqual([
-      { start: 1, end: 2, text: 'b' },
-      { start: 4, end: 5, text: 'c' },
-    ])
-    // Round-trips back to the same cells.
+    expect(spans).toEqual([{ start: 1, end: 5, text: 'bc' }])
+    expect(spans[0].text).not.toContain('\\')
+    // Round-trips back to the same cells — the sentinel is not a cell, so the
+    // widened range selects exactly the two characters the user picked.
     const { ranges } = resolveEmphasisSpans(text, spans)
     expect(selectionFromRanges(cells, ranges)).toEqual(new Set([1, 4]))
   })

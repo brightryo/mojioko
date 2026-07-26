@@ -235,7 +235,11 @@ describe('REQ-0307 §1 — selection ↔ spans', () => {
     ])
   })
 
-  it('a `\\N` between selected characters splits the span (no backslash anchors)', () => {
+  // REQ-0309 §3(A) — this used to produce TWO spans.  A selection swept across a
+  // line break is one emphasis, and splitting it left two short anchors that a
+  // later edit could far too easily render ambiguous.  It is now one span whose
+  // range crosses the `\N` and whose anchor is stored break-free.
+  it('a `\\N` between selected characters keeps ONE span, with a backslash-free anchor', () => {
     const text = 'ab\\Ncd'
     // Cells skip the two-character sentinel, exactly like the dialog does.
     const cells = [
@@ -243,11 +247,24 @@ describe('REQ-0307 §1 — selection ↔ spans', () => {
       { start: 4, length: 1 }, { start: 5, length: 1 },
     ]
     const spans = spansFromSelection(text, cells, new Set([1, 4]))
-    expect(spans).toEqual([
-      { start: 1, end: 2, text: 'b' },
-      { start: 4, end: 5, text: 'c' },
-    ])
+    expect(spans).toEqual([{ start: 1, end: 5, text: 'bc' }])
     for (const s of spans) expect(s.text).not.toContain('\\')
+    // Resolves back onto both sides of the break, and nothing else.
+    expect(resolveEmphasisSpans(text, spans).ranges).toEqual([[1, 5]])
+  })
+
+  it('a non-adjacent selection still yields separate spans', () => {
+    // Guard the merge above from over-reaching: only a gap made purely of `\N`
+    // is bridged.  Here the gap is a real character, so the run must break.
+    const text = 'abcd'
+    const cells = [
+      { start: 0, length: 1 }, { start: 1, length: 1 },
+      { start: 2, length: 1 }, { start: 3, length: 1 },
+    ]
+    expect(spansFromSelection(text, cells, new Set([0, 2]))).toEqual([
+      { start: 0, end: 1, text: 'a' },
+      { start: 2, end: 3, text: 'c' },
+    ])
   })
 
   it('selectionFromRanges round-trips through spansFromSelection', () => {
