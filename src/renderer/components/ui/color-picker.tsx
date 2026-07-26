@@ -355,9 +355,10 @@ export function ColorPicker({
         ))}
       </div>
 
-      {/* Group 2: Recommended pairs (5).  Only rendered when the caller
-          owns both text + outline setters; otherwise omitted entirely so
-          users don't get a half-functional control. */}
+      {/* Group 2: Recommended pairs (16 — REQ-0304, 8-col × 2 rows).
+          Only rendered when the caller owns both text + outline setters;
+          otherwise omitted entirely so users don't get a half-functional
+          control. */}
       {onPairApply && (
         <div>
           <div className="mb-1.5 flex items-baseline gap-2">
@@ -366,7 +367,7 @@ export function ColorPicker({
             </p>
             <span className="text-caption text-fg-disabled">{t('colorPicker.pairsHint')}</span>
           </div>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-8 gap-1.5">
             {COLOR_PAIRS.map((p) => (
               <PairSwatch
                 key={`${p.text}-${p.outline}`}
@@ -627,9 +628,11 @@ function PairSwatch({ pair, tooltip, onClick }: PairSwatchProps) {
       {/* Subtitle-style preview text — text colour with outline-colour
           stroke, exactly how the burn-in renders.  paint-order: stroke
           fill mirrors SubtitleOverlay so the visible stroke is the
-          OUTSIDE half. */}
+          OUTSIDE half.  REQ-0304 — dropped from `text-body` (15px) to
+          `text-callout` (13px) so "Aa" keeps clear margins in the
+          narrower 8-column tile (~29px wide vs the old 5-column ~50px). */}
       <span
-        className="text-body font-bold leading-none"
+        className="text-callout font-bold leading-none"
         style={{
           color: pair.text,
           WebkitTextStrokeWidth: '1.5px',

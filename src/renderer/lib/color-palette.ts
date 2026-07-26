@@ -6,10 +6,10 @@
  *     picks tuned for game / streaming short-form clips where the subtitle
  *     sits on top of a busy video.  REQ-0302 replaced the previous
  *     office/Excel-leaning palette with these vivid values.
- *  2. Recommended pairs (10) — text + outline combinations.  A single
- *     click on a pair applies BOTH halves to the calling context (only
- *     works in surfaces that can set text + outline together; see the
- *     ColorPicker's `onPairApply` prop).
+ *  2. Recommended pairs (16) — text + outline combinations (REQ-0304,
+ *     8 columns × 2 rows).  A single click on a pair applies BOTH halves
+ *     to the calling context (only works in surfaces that can set text +
+ *     outline together; see the ColorPicker's `onPairApply` prop).
  *  3. Colour-vision-deficiency (CUD) friendly (10) — the canonical
  *     "Color Universal Design" recommended set.  Values are taken
  *     verbatim from the CUD reference and must not be tweaked.
@@ -49,32 +49,40 @@ export interface ColorPair {
   outline: string
 }
 
-// REQ-039 #1: expanded from 5 to 10 pairs.  Pairs 1-5 unchanged; pairs 6-10
-// added below.  Pairs 6-8 are provisional values pending owner finalisation;
-// pairs 9-10 (white×black / black×white) are confirmed.  Layout in the
-// ColorPicker popover stays compact at grid-cols-5 (5 columns × 2 rows)
-// to avoid breaking REQ-035's "fits in Settings dialog" constraint.
+// REQ-0304: expanded from 10 to 16 pairs (8 columns × 2 rows in the
+// ColorPicker popover).  The whole set was reworked around a "rainbow,
+// balanced, pop" brief: every text colour is drawn from BASIC_COLORS
+// (REQ-0302) so the recommended pairs never drift from the swatch grid.
+//
+// Ordering (do NOT reorder without owner review — the swatch grid's
+// visual rhythm depends on it):
+//   Row 1 (pairs 1-8):  neutrals + a warm→magenta→purple rainbow, each
+//                       vivid text over a plain black/white outline for
+//                       maximum readability on busy footage.
+//   Row 2 (pairs 9-16): a cool rainbow (blue→cyan→mint→lime) over
+//                       black/white, then four "applied" looks —
+//                       white text over a vivid outline (13-14, the
+//                       classic short-form style) and two neon
+//                       text×outline combos (15-16) for eye-catch.
 export const COLOR_PAIRS: readonly ColorPair[] = [
-  { text: '#FFFF00', outline: '#001040' },
-  // REQ-034 #2: pair 2 reworked to be red-on-orange with strong luminance
-  // contrast.  Earlier value (#FF4B00 × #FFF8E0) was orange-on-cream and
-  // didn't match the "red text, orange outline" intent.  L*(#E00000) ≈ 36,
-  // L*(#FFB000) ≈ 76 — ~40 L* gap gives the outline a clearly visible
-  // halo without losing the warm red identity.
-  { text: '#E00000', outline: '#FFB000' },
-  { text: '#4DC4FF', outline: '#003060' },
-  { text: '#AEEA00', outline: '#0A3D1E' },
-  { text: '#FF80A0', outline: '#3A0A4A' },
-  // REQ-041 #3: pairs 6-8 rebalanced.  Previous provisional values
-  // (white×darkRed / black×yellow / cyan×black) overlapped with pairs
-  // 1-5 (red, yellow, cyan-ish) and produced clumped hue coverage.
-  // New values add three missing hues (orange / cyan-teal / purple)
-  // with dark-on-text or light-on-text contrast pairings.
-  { text: '#FF7A00', outline: '#3A1A00' }, // pair 6 ★: 鮮やかオレンジ×濃茶
-  { text: '#00E0D0', outline: '#00303A' }, // pair 7 ★: シアン×濃青緑
-  { text: '#B060FF', outline: '#FFFFFF' }, // pair 8 ★: 明るい紫×白
-  { text: '#FFFFFF', outline: '#000000' }, // pair 9 ★確定: 白×黒
-  { text: '#000000', outline: '#FFFFFF' }  // pair 10 ★確定: 黒×白
+  // ── Row 1: neutrals + warm rainbow ──
+  { text: '#FFFFFF', outline: '#000000' }, // 1  白 / 黒
+  { text: '#000000', outline: '#FFFFFF' }, // 2  黒 / 白
+  { text: '#FFE500', outline: '#000000' }, // 3  イエロー / 黒
+  { text: '#FF8A00', outline: '#000000' }, // 4  オレンジ / 黒
+  { text: '#FF3B30', outline: '#FFFFFF' }, // 5  レッド / 白
+  { text: '#FF2E88', outline: '#FFFFFF' }, // 6  ピンク / 白
+  { text: '#FF00E5', outline: '#000000' }, // 7  マゼンタ / 黒
+  { text: '#A45CFF', outline: '#FFFFFF' }, // 8  パープル / 白
+  // ── Row 2: cool rainbow + applied / neon ──
+  { text: '#2D8CFF', outline: '#FFFFFF' }, // 9  ブルー / 白
+  { text: '#00E5FF', outline: '#000000' }, // 10 シアン / 黒
+  { text: '#00FFC2', outline: '#000000' }, // 11 ミント / 黒
+  { text: '#B4FF39', outline: '#000000' }, // 12 ライム / 黒
+  { text: '#FFFFFF', outline: '#FF00E5' }, // 13 白 / マゼンタ
+  { text: '#FFFFFF', outline: '#2D8CFF' }, // 14 白 / ブルー
+  { text: '#FFE500', outline: '#FF00E5' }, // 15 イエロー / マゼンタ（ネオン）
+  { text: '#00E5FF', outline: '#A45CFF' }  // 16 シアン / パープル（ネオン）
 ]
 
 /**
