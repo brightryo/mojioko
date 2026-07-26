@@ -579,6 +579,11 @@ export default function Step1Route(_: Step1RouteProps) {
         shadowDepth: runDefaults.shadowDepth,
         shadowColor: runDefaults.shadowColor,
         shadowAlpha: runDefaults.shadowAlpha,
+        // REQ-0310 — text / outline opacity.  Copied raw like the rest of this
+        // block, so an untouched setting leaves the cue field `undefined` and
+        // the renderers fall back to fully opaque.
+        textAlpha: runDefaults.textAlpha,
+        outlineAlpha: runDefaults.outlineAlpha,
         karaokeEnabled: runDefaults.karaokeEnabled,
         karaokeHighlightColor: runDefaults.karaokeHighlightColor,
         // REQ-0305 — keyword-emphasis defaults.  The master toggle +

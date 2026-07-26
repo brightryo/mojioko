@@ -181,6 +181,13 @@ export function StyleSamplePreview({
       textColorHex: defaults.textColorHex,
       outlineColorHex: defaults.outlineColorHex,
       outlineThicknessPx: defaults.outlineThicknessPx,
+      // REQ-0310 — carry the opacity defaults so dragging either slider in
+      // 設定 > 字幕スタイル gives immediate visual feedback.  This preview is
+      // deliberately minimal (no shadow / karaoke / emphasis), but opacity is a
+      // purely visual setting, so a slider with no visible effect would be the
+      // worst case for it.
+      textAlpha: defaults.textAlpha,
+      outlineAlpha: defaults.outlineAlpha,
       // REQ-20260615-050 — fade is irrelevant for a static settings
       // preview (no playhead, no ramp); seed with `0` (= no fade).
       fadeDurationSec: 0,
@@ -208,7 +215,9 @@ export function StyleSamplePreview({
     defaults.fontSizePx,
     defaults.textColorHex,
     defaults.outlineColorHex,
-    defaults.outlineThicknessPx
+    defaults.outlineThicknessPx,
+    defaults.textAlpha,
+    defaults.outlineAlpha
   ])
 
   return (

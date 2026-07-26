@@ -150,6 +150,30 @@ export interface SubtitleEntryOriginal {
   shadowColor?: string
   /** Integer 0-100 (opacity %; higher = more opaque).  Default `100`. */
   shadowAlpha?: number
+  /**
+   * REQ-0310 — opacity of the TEXT FILL, 0–100 % (higher = more opaque).
+   * `undefined` = 100 (fully opaque), which emits no ASS alpha tag at all, so
+   * a cue that never touched the control renders byte-identically to
+   * pre-REQ-0310.
+   *
+   * Which ASS colour this modifies depends on karaoke, because the two
+   * features share the same colour slots: karaoke OFF → `\1a`
+   * (PrimaryColour = the fill); karaoke ON → `\2a` (SecondaryColour = the
+   * UNSPOKEN half).  The spoken half is never given an alpha, so setting this
+   * to 0 with karaoke on makes each word appear as it is spoken — the effect
+   * this field was added for.  0 is intentionally legal and never clamped
+   * away (REQ-0310 §2).
+   */
+  textAlpha?: number
+  /**
+   * REQ-0310 — opacity of the OUTLINE, 0–100 % (higher = more opaque).
+   * `undefined` = 100.  Always maps to `\3a`, regardless of karaoke.
+   *
+   * On a row with a background box the box is itself painted with `\3c`/`\3a`,
+   * so the box's own opacity still wins (its tags are emitted later on a
+   * last-write-wins basis) — REQ-0310 must not change existing box behaviour.
+   */
+  outlineAlpha?: number
   // REQ-0278 — glow (glowEnabled / glowRadius / glowColor) was
   // removed here.  See SPECIFICATION.md §11: reason was "colour is
   // the essence of a glow effect but the colour picker never made
@@ -362,6 +386,15 @@ export interface TranscriptionDefaults {
   shadowColor?: string
   /** Default drop-shadow opacity (0–100 %).  `undefined` = `100`. */
   shadowAlpha?: number
+  /**
+   * REQ-0310 — default text-fill / outline opacity for new cues (0–100 %).
+   * `undefined` = `100` (fully opaque), so pre-REQ-0310 saved settings hydrate
+   * without migration and keep the existing look.  Seeded verbatim into every
+   * transcribed row, `undefined` included, so an untouched setting leaves the
+   * cue field unset too.
+   */
+  textAlpha?: number
+  outlineAlpha?: number
 
   /**
    * REQ-0293 §2 — default karaoke toggle for new cues.  When `true`,

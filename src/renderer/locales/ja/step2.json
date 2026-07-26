@@ -160,6 +160,8 @@
     "size": "サイズ",
     "textColor": "文字色",
     "outlineColor": "アウトライン色",
+    "textOpacity": "文字の透過率",
+    "outlineOpacity": "アウトラインの透過率",
     "outlineWidth": "アウトライン幅",
     "fade": "フェード",
     "layoutH": "水平",

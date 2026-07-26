@@ -17,6 +17,7 @@ import { PositionGuideOverlay } from '@/components/subtitle-overlay/position-gui
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
+import { hexWithOpacity } from '../../../shared/alpha'
 import { findActiveEntryId, findActiveEntryIds, computeFixedStackOffsets } from '@/lib/active-entry'
 import {
   previewPxToAss,
@@ -527,7 +528,12 @@ export function VideoPreviewPanel() {
           // colour" and the user-picked accent (highlight).  Same
           // rule mirrored in ass-generator's `\2c` emit and
           // subtitle-overlay's `karaokeBaseColorResolved`.
-          const baseColor = entry.textColorHex
+          // REQ-0310 — the unspoken half carries the cue's text opacity (the
+          // preview's counterpart to `\2a`); the spoken half stays opaque so a
+          // 0 % cue reads as words appearing exactly as they are spoken.
+          // Emphasised runs also stay opaque, matching the ass-generator's
+          // `\1a`-reset inside the emphasis override.
+          const baseColor = hexWithOpacity(entry.textColorHex, entry.textAlpha)
           for (const span of wordSpans) {
             const startSecAttr = span.getAttribute('data-karaoke-word-start-sec')
             if (startSecAttr === null) continue

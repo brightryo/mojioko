@@ -223,6 +223,17 @@ export const useSettingsStore = create<SettingsStore>()(
             shadowAlpha: td.shadowAlpha === undefined
               ? undefined
               : Math.min(100, Math.max(0, td.shadowAlpha)),
+            // REQ-0310 — text / outline opacity.  `undefined` MUST stay
+            // `undefined`: writing `?? 100` here would turn "the user never
+            // touched this" into a persisted 100 and defeat the
+            // additive-optional contract (the REQ-0279 clobber class).  0 is a
+            // legal saved value and is clamped only against out-of-range junk.
+            textAlpha: td.textAlpha === undefined
+              ? undefined
+              : Math.min(100, Math.max(0, td.textAlpha)),
+            outlineAlpha: td.outlineAlpha === undefined
+              ? undefined
+              : Math.min(100, Math.max(0, td.outlineAlpha)),
             karaokeEnabled: td.karaokeEnabled,
             karaokeHighlightColor: td.karaokeHighlightColor,
             casing: td.casing === 'uppercase' ? 'uppercase' : td.casing === 'none' ? 'none' : undefined,

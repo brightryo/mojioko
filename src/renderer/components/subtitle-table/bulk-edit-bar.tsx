@@ -20,6 +20,8 @@ import {
   mapRangesAcrossBreakCollapse,
   clampEmphasisScalePercent,
 } from '../../../shared/emphasis'
+import { OpacityPercentSlider } from '@/components/subtitle-table/opacity-percent-slider'
+import { OPACITY_DEFAULT_PERCENT } from '../../../shared/alpha'
 import { HelpIcon } from '@/components/help-icon'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -267,6 +269,12 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // current selection session so the slider thumb stays where the user
   // left it (same pattern as colorDraftText/Outline above).
   const [outlineSliderDraft, setOutlineSliderDraft] = useState<number>(0)
+  // REQ-0310 §1 — bulk opacity drafts.  These seed at 100 (fully opaque, the
+  // field's own default) rather than 0 like the outline/fade drafts, because
+  // 0 % here means "invisible" and a bar that opened on 0 would read as
+  // "everything is about to disappear".
+  const [textAlphaDraft, setTextAlphaDraft] = useState<number>(OPACITY_DEFAULT_PERCENT)
+  const [outlineAlphaDraft, setOutlineAlphaDraft] = useState<number>(OPACITY_DEFAULT_PERCENT)
   // REQ-20260615-050 — bulk fade draft.  Same "remember last applied"
   // semantics as the colour / outline drafts so the slider thumb stays
   // where the user left it across selection changes.  Initial value
@@ -345,6 +353,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftOutline(pickFirstSelectedColor(selectedRowIds, 'outline'))
     setOutlineSliderDraft(0)
     setFadeSliderDraft(0)
+    // REQ-0310 §1 — back to fully opaque on every selection change, matching
+    // the field default so the bar never opens primed to hide the subtitles.
+    setTextAlphaDraft(OPACITY_DEFAULT_PERCENT)
+    setOutlineAlphaDraft(OPACITY_DEFAULT_PERCENT)
     // REQ-0292 §1/§3/§2 — reset the new bulk-effect drafts on every
     // selection change so the controls read as "fresh" for the newly
     // selected rows.  Rotation resets to 0 (any drift from previous
@@ -569,6 +581,26 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     )
     setColorDraftText(textHex)
     setColorDraftOutline(outlineHex)
+  }
+
+  // REQ-0310 §1 — bulk opacity commits.  No preview stream here: the bulk bar's
+  // colour pickers snapshot per-row "before" values to collapse a drag into one
+  // undo, but the slider already fires `onCommit` exactly once per gesture, so a
+  // plain `applyBulk` gives the same one-op-per-gesture result without the
+  // bookkeeping.  Labelled with the existing colour history string.
+  function handleTextAlphaBulkCommit(v: number) {
+    setTextAlphaDraft(v)
+    applyBulk(
+      { textAlpha: v },
+      t('bulk.history.textColor', { count: selectedRowIds.size }),
+    )
+  }
+  function handleOutlineAlphaBulkCommit(v: number) {
+    setOutlineAlphaDraft(v)
+    applyBulk(
+      { outlineAlpha: v },
+      t('bulk.history.outlineColor', { count: selectedRowIds.size }),
+    )
   }
 
   function handleOutlineWidthCommit(v: number) {
@@ -1052,27 +1084,44 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
             />
           </StyleRow>
-          {/* Text color */}
+          {/* Text color + opacity (REQ-0310 §1) — same one-line shape as the
+              inspector, in the same shared 224px control column. */}
           <StyleRow label={t('bulk.textColor')}>
-            <ColorPicker
-              value={colorDraftText ?? '#FFFFFF'}
-              onChange={handleTextColorPreview}
-              onCommit={handleTextColorCommit}
-              onPairApply={handleColorPairCommit}
-              swatchOnly
-              heading={t('common:colorPicker.headingText')}
-            />
+            <div className="flex items-center gap-2">
+              <ColorPicker
+                value={colorDraftText ?? '#FFFFFF'}
+                onChange={handleTextColorPreview}
+                onCommit={handleTextColorCommit}
+                onPairApply={handleColorPairCommit}
+                swatchOnly
+                heading={t('common:colorPicker.headingText')}
+              />
+              <OpacityPercentSlider
+                value={textAlphaDraft}
+                onCommit={handleTextAlphaBulkCommit}
+                ariaLabel={t('styleCell.textOpacity')}
+                fullWidth
+              />
+            </div>
           </StyleRow>
-          {/* Outline color */}
+          {/* Outline color + opacity (REQ-0310 §1). */}
           <StyleRow label={t('bulk.outlineColor')}>
-            <ColorPicker
-              value={colorDraftOutline ?? '#000000'}
-              onChange={handleOutlineColorPreview}
-              onCommit={handleOutlineColorCommit}
-              onPairApply={handleColorPairCommit}
-              swatchOnly
-              heading={t('common:colorPicker.headingOutline')}
-            />
+            <div className="flex items-center gap-2">
+              <ColorPicker
+                value={colorDraftOutline ?? '#000000'}
+                onChange={handleOutlineColorPreview}
+                onCommit={handleOutlineColorCommit}
+                onPairApply={handleColorPairCommit}
+                swatchOnly
+                heading={t('common:colorPicker.headingOutline')}
+              />
+              <OpacityPercentSlider
+                value={outlineAlphaDraft}
+                onCommit={handleOutlineAlphaBulkCommit}
+                ariaLabel={t('styleCell.outlineOpacity')}
+                fullWidth
+              />
+            </div>
           </StyleRow>
           {/* Outline width — REQ-0300 §2 dropped inner `w-[65%]`;
               StyleRow provides the fixed control column. */}

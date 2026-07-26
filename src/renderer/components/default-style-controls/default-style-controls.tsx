@@ -4,6 +4,8 @@ import { ColorPicker } from '@/components/color-picker/color-picker'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
+import { OpacityPercentSlider } from '@/components/subtitle-table/opacity-percent-slider'
+import { clampOpacityPercent } from '../../../shared/alpha'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 import { SegmentGroup } from '@/components/subtitle-table/segment-group'
@@ -175,24 +177,46 @@ export function DefaultStyleControls({
         />
       </SettingsStyleRow>
 
+      {/* REQ-0310 §1 — colour + opacity.  This surface's ColorPicker is the
+          full-width variant (it shows the hex, which is worth keeping here), so
+          the row is stacked in TWO lines inside its control column rather than
+          squeezed onto one — the same local restack the emphasis row uses.
+          `SettingsStyleRow`'s label / filler / control structure is untouched,
+          so alignment with every other settings row is unaffected. */}
       <SettingsStyleRow label={t('subtitleDefaults.textColor')} help={t('subtitleDefaults.helpTextColor')}>
-        <ColorPicker
-          value={defaults.textColorHex}
-          onChange={(hex) => onUpdateDefaults({ textColorHex: hex })}
-          onPairApply={(text, outline) =>
-            onUpdateDefaults({ textColorHex: text, outlineColorHex: outline })
-          }
-        />
+        <div className="flex flex-col gap-1.5">
+          <ColorPicker
+            value={defaults.textColorHex}
+            onChange={(hex) => onUpdateDefaults({ textColorHex: hex })}
+            onPairApply={(text, outline) =>
+              onUpdateDefaults({ textColorHex: text, outlineColorHex: outline })
+            }
+          />
+          <OpacityPercentSlider
+            value={clampOpacityPercent(defaults.textAlpha)}
+            onCommit={(v) => onUpdateDefaults({ textAlpha: v })}
+            ariaLabel={t('step2:styleCell.textOpacity')}
+            fullWidth
+          />
+        </div>
       </SettingsStyleRow>
 
       <SettingsStyleRow label={t('subtitleDefaults.outlineColor')} help={t('subtitleDefaults.helpOutlineColor')}>
-        <ColorPicker
-          value={defaults.outlineColorHex}
-          onChange={(hex) => onUpdateDefaults({ outlineColorHex: hex })}
-          onPairApply={(text, outline) =>
-            onUpdateDefaults({ textColorHex: text, outlineColorHex: outline })
-          }
-        />
+        <div className="flex flex-col gap-1.5">
+          <ColorPicker
+            value={defaults.outlineColorHex}
+            onChange={(hex) => onUpdateDefaults({ outlineColorHex: hex })}
+            onPairApply={(text, outline) =>
+              onUpdateDefaults({ textColorHex: text, outlineColorHex: outline })
+            }
+          />
+          <OpacityPercentSlider
+            value={clampOpacityPercent(defaults.outlineAlpha)}
+            onCommit={(v) => onUpdateDefaults({ outlineAlpha: v })}
+            ariaLabel={t('step2:styleCell.outlineOpacity')}
+            fullWidth
+          />
+        </div>
       </SettingsStyleRow>
 
       <SettingsStyleRow label={t('subtitleDefaults.stroke')} help={t('subtitleDefaults.helpStroke')}>

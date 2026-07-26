@@ -160,6 +160,8 @@
     "size": "Size",
     "textColor": "Text color",
     "outlineColor": "Outline color",
+    "textOpacity": "Text opacity",
+    "outlineOpacity": "Outline opacity",
     "outlineWidth": "Outline width",
     "fade": "Fade",
     "layoutH": "Horizontal",

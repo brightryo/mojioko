@@ -5,6 +5,7 @@ import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../shar
 import { buildKaraokeAssText, splitWordsAtHardBreaks } from '../../shared/karaoke-ass'
 import { areWordsValidForText } from '../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
+import { assAlphaValue, isFullyOpaque, OPACITY_MAX_PERCENT } from '../../shared/alpha'
 import {
   canUseKeywordEmphasisInTier,
   clampEmphasisScalePercent,
@@ -340,6 +341,32 @@ export function generateAss(
       const outlineTag = `\\3c${hexToAss(e.outlineColorHex)}`
       const bordTag    = `\\bord${e.outlineThicknessPx}`
 
+      // REQ-0310 §2 — per-cue opacity for the text fill and the outline.
+      //
+      // The fill alpha targets a DIFFERENT ASS colour depending on karaoke,
+      // because the two features share the same two colour slots:
+      //   - karaoke OFF → the fill is PrimaryColour        → `\1a`
+      //   - karaoke ON  → the fill is the UNSPOKEN half,
+      //                   i.e. SecondaryColour (`\2c` above) → `\2a`
+      // The spoken half deliberately gets NO alpha override, so it stays
+      // opaque.  That is what produces the effect this REQ was filed for: set
+      // the text opacity to 0 with karaoke on and unspoken words are invisible,
+      // so each word appears as it is spoken.
+      //
+      // Both tags are emitted ONLY when the value is below 100 %.  The Style
+      // header already declares opaque PrimaryColour / OutlineColour
+      // (`&H00…`), so skipping the tag is exactly equivalent to "opaque" and
+      // keeps an untouched cue byte-identical to the pre-REQ-0310 output.
+      //
+      // 0 % is intentionally reachable (REQ-0310 §2): fill 0 % + opaque outline
+      // is hollow text, and both at 0 % is an invisible cue the user asked for.
+      const textAlphaTag = isFullyOpaque(e.textAlpha)
+        ? ''
+        : `${karaokeActive ? '\\2a' : '\\1a'}${assAlphaValue(e.textAlpha)}`
+      const outlineAlphaTag = isFullyOpaque(e.outlineAlpha)
+        ? ''
+        : `\\3a${assAlphaValue(e.outlineAlpha)}`
+
       // REQ-0277 §2 / REQ-0293 §1 — drop shadow.  libass' `\shad<depth>`
       // draws the shadow with `\4c` (BackColour) at the fixed
       // bottom-right offset; there is no angle control.  Skipped
@@ -422,8 +449,16 @@ export function generateAss(
         // karaoke is inactive; `.filter(Boolean).join('')` drops it
         // cleanly with no whitespace drift.
         karaokeSecondaryTag,
+        // REQ-0310 — fill alpha right after the two fill colours it modifies.
+        textAlphaTag,
         outlineTag,
         bordTag,
+        // REQ-0310 — outline alpha after `\3c`, but BEFORE the bg tags below so
+        // a background-box row still has its own `\3a` win on last-write.  The
+        // box IS painted with `\3c`/`\3a`, so letting the per-cue outline alpha
+        // override it would silently change the box's existing opacity — which
+        // this REQ explicitly must not touch.
+        outlineAlphaTag,
         // bg tags MUST come AFTER outlineTag so libass takes the bg color
         // as the final \3c / \3a value (last-write-wins).
         bgFillTag,
@@ -505,12 +540,26 @@ export function generateAss(
         // align with a word boundary.  Segment concatenation reproduces
         // `e.text` exactly, so non-emphasised runs are byte-identical to the
         // plain path.
+        // REQ-0310 §2 — the emphasis colour is deliberately NOT alpha-aware, so
+        // an emphasised run stays opaque even when the cue's fill is
+        // translucent.  `\1a` is a cue-wide state, so the run has to reset it to
+        // opaque on open and restore the cue's value on close; without that the
+        // run would inherit the translucent fill and vanish along with the rest
+        // of the text.  Both fragments stay inside the `{}` the caller adds
+        // (REQ-0291).  Empty when the cue is fully opaque, keeping the emitted
+        // tags byte-identical to pre-REQ-0310.
+        const emphasisOpaqueTag = isFullyOpaque(e.textAlpha)
+          ? ''
+          : `\\1a${assAlphaValue(OPACITY_MAX_PERCENT)}`
+        const emphasisRestoreAlphaTag = isFullyOpaque(e.textAlpha)
+          ? ''
+          : `\\1a${assAlphaValue(e.textAlpha)}`
         const emphasisBody = buildEmphasisBody(
           e.text,
           emphasisRanges,
           escapeWord,
-          `\\fs${emphasisScaledFs}\\c${hexToAss(emphasisColorHex)}`,
-          `\\fs${e.fontSizePx}\\c${hexToAss(e.textColorHex)}`,
+          `\\fs${emphasisScaledFs}\\c${hexToAss(emphasisColorHex)}${emphasisOpaqueTag}`,
+          `\\fs${e.fontSizePx}\\c${hexToAss(e.textColorHex)}${emphasisRestoreAlphaTag}`,
         )
         text = `{${styleTag}}${emphasisBody}`
       } else {

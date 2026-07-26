@@ -5,6 +5,7 @@ import type { SubtitleEntry } from '../../../shared/types'
 import { ASS_MARGIN_LR_PX, SHADOW_DEPTH_MAX_PX } from '../../../shared/constants'
 import { getLibassScaleFor, getCmapCoverageFor, getTofuSubstituteFor, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { substituteMissingGlyphs } from '../../../shared/glyph-substitute'
+import { hexWithOpacity } from '../../../shared/alpha'
 import { useFontCacheVersionStore } from '@/stores/font-cache-version-store'
 import { useEffect } from 'react'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -561,7 +562,11 @@ export function SubtitleOverlay({
   // colour" (base) and the user-picked accent (highlight).  Same
   // rule mirrored in ass-generator's `\2c` emit + the rAF loop's
   // base-colour resolution in video-preview-panel.
-  const karaokeBaseColorResolved = entry.textColorHex
+  // REQ-0310 — the karaoke base (unspoken) half carries the cue's text opacity,
+  // mirroring the ass-generator's `\2a`.  The SPOKEN half stays opaque, which is
+  // what makes "text opacity 0 + karaoke" read as words appearing as they are
+  // spoken.  The parent's rAF loop resolves the same pair of colours.
+  const karaokeBaseColorResolved = hexWithOpacity(entry.textColorHex, entry.textAlpha)
   // Silence "declared but never read" during the initial render — the
   // parent's rAF loop consumes the highlight colour via the entry
   // Map, not through a prop from here.  Keeping the local const
@@ -635,9 +640,17 @@ export function SubtitleOverlay({
         // the outer to base colour so any residual leaves the cue
         // consistent with "unspoken words are base colour" until the
         // rAF paints its first frame.
-        color:      karaokeActive ? karaokeBaseColorResolved : entry.textColorHex,
+        // REQ-0310 — both colours carry their own opacity (`\1a` / `\2a` and
+        // `\3a` on the burn-in side).  `hexWithOpacity` returns the plain hex
+        // unchanged at 100 %, so an untouched cue emits exactly the CSS it did
+        // before.
+        color:      karaokeActive
+          ? karaokeBaseColorResolved
+          : hexWithOpacity(entry.textColorHex, entry.textAlpha),
         WebkitTextStrokeWidth: showOutline ? `${strokeWidthPx}px` : undefined,
-        WebkitTextStrokeColor: showOutline ? entry.outlineColorHex : undefined,
+        WebkitTextStrokeColor: showOutline
+          ? hexWithOpacity(entry.outlineColorHex, entry.outlineAlpha)
+          : undefined,
         paintOrder: 'stroke fill',
         whiteSpace: 'pre',
         transform,

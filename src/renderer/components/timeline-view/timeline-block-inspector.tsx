@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { EmphasisPickerDialog } from '@/components/step2/emphasis-picker-dialog'
 import { ColorPicker } from '@/components/color-picker/color-picker'
+import { OpacityPercentSlider } from '@/components/subtitle-table/opacity-percent-slider'
+import { clampOpacityPercent } from '../../../shared/alpha'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
@@ -285,6 +287,41 @@ export function TimelineBlockInspector({
       { outlineColorHex: hexOnOpen }
     )
   }
+  // REQ-0310 §1 — opacity sliders.  Same preview/commit split the colour
+  // pickers use: `onPreview` streams into the history-less store write so the
+  // video overlay follows the thumb, and `onCommit` (fired once at the gesture
+  // boundary) pushes ONE history op whose undo target is the pre-drag value.
+  // Labelled with the existing colour-edit history string — from the user's
+  // point of view this is still "changed the colour".
+  const textAlphaBeforeRef = useRef<number | undefined>(undefined)
+  function handleTextAlphaPreview(v: number) {
+    if (textAlphaBeforeRef.current === undefined) textAlphaBeforeRef.current = clampOpacityPercent(entry.textAlpha)
+    updateEntryPreview(entry.id, { textAlpha: v })
+  }
+  function handleTextAlphaCommit(v: number) {
+    const before = textAlphaBeforeRef.current
+    textAlphaBeforeRef.current = undefined
+    applyStyleEdit(
+      t('history.editColor'),
+      { textAlpha: v },
+      before === undefined ? undefined : { textAlpha: before },
+    )
+  }
+  const outlineAlphaBeforeRef = useRef<number | undefined>(undefined)
+  function handleOutlineAlphaPreview(v: number) {
+    if (outlineAlphaBeforeRef.current === undefined) outlineAlphaBeforeRef.current = clampOpacityPercent(entry.outlineAlpha)
+    updateEntryPreview(entry.id, { outlineAlpha: v })
+  }
+  function handleOutlineAlphaCommit(v: number) {
+    const before = outlineAlphaBeforeRef.current
+    outlineAlphaBeforeRef.current = undefined
+    applyStyleEdit(
+      t('history.editColor'),
+      { outlineAlpha: v },
+      before === undefined ? undefined : { outlineAlpha: before },
+    )
+  }
+
   function handleColorPairApply(text: string, outline: string) {
     // Pair clicks are a single deterministic action, not a drag, so
     // they push their history op directly through applyStyleEdit.
@@ -1020,29 +1057,55 @@ export function TimelineBlockInspector({
                 </button>
               </div>
             </StyleRow>
-            {/* Text colour */}
-            <StyleRow label={t('styleCell.textColor')}>
-              <ColorPicker
-                value={entry.textColorHex}
-                onChange={handleTextColorPreview}
-                onCommit={handleTextColorCommit}
-                onPairApply={handleColorPairApply}
-                disabled={isFrozen}
-                swatchOnly
-                heading={t('common:colorPicker.headingText')}
-              />
+            {/* Text colour — REQ-0310 §1 adds the opacity slider beside the
+                swatch.  One line: the 24px swatch + gap leaves ~146px of track
+                inside the shared 224px control column (the outline-width row
+                already runs a fullWidth slider in the same space), so nothing
+                is clipped and no restack is needed.  `stopControlClickPropagation`
+                is required now that the row contains a slider — a drag would
+                otherwise bubble to the timeline block's click-to-select. */}
+            <StyleRow label={t('styleCell.textColor')} stopControlClickPropagation>
+              <div className="flex items-center gap-2">
+                <ColorPicker
+                  value={entry.textColorHex}
+                  onChange={handleTextColorPreview}
+                  onCommit={handleTextColorCommit}
+                  onPairApply={handleColorPairApply}
+                  disabled={isFrozen}
+                  swatchOnly
+                  heading={t('common:colorPicker.headingText')}
+                />
+                <OpacityPercentSlider
+                  value={clampOpacityPercent(entry.textAlpha)}
+                  onPreview={handleTextAlphaPreview}
+                  onCommit={handleTextAlphaCommit}
+                  disabled={isFrozen}
+                  ariaLabel={t('styleCell.textOpacity')}
+                  fullWidth
+                />
+              </div>
             </StyleRow>
-            {/* Outline colour */}
-            <StyleRow label={t('styleCell.outlineColor')}>
-              <ColorPicker
-                value={entry.outlineColorHex}
-                onChange={handleOutlineColorPreview}
-                onCommit={handleOutlineColorCommit}
-                onPairApply={handleColorPairApply}
-                disabled={isFrozen}
-                swatchOnly
-                heading={t('common:colorPicker.headingOutline')}
-              />
+            {/* Outline colour + opacity (REQ-0310 §1). */}
+            <StyleRow label={t('styleCell.outlineColor')} stopControlClickPropagation>
+              <div className="flex items-center gap-2">
+                <ColorPicker
+                  value={entry.outlineColorHex}
+                  onChange={handleOutlineColorPreview}
+                  onCommit={handleOutlineColorCommit}
+                  onPairApply={handleColorPairApply}
+                  disabled={isFrozen}
+                  swatchOnly
+                  heading={t('common:colorPicker.headingOutline')}
+                />
+                <OpacityPercentSlider
+                  value={clampOpacityPercent(entry.outlineAlpha)}
+                  onPreview={handleOutlineAlphaPreview}
+                  onCommit={handleOutlineAlphaCommit}
+                  disabled={isFrozen}
+                  ariaLabel={t('styleCell.outlineOpacity')}
+                  fullWidth
+                />
+              </div>
             </StyleRow>
             {/* Outline width — REQ-0300 §2: control column width now
                 provided by StyleRow (INSPECTOR_CONTROL_COL_CLASS),
