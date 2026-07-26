@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { TranscriptionDefaults, TranscriptionAdvancedParams, AppSettings, AppTheme, BaseColor, EncoderSetting, AudioMode, OutputContainer } from '../../shared/types'
 import { BURNIN_DEFAULTS } from '../../shared/burnin-defaults'
 import { DEFAULT_LANGUAGE } from '../../shared/app-info'
-import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
+import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, SHADOW_DEPTH_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
 import { DEFAULT_FONT_ID, isFontId, type FontId } from '../../shared/fonts'
 
 interface SettingsStore {
@@ -191,9 +191,55 @@ export const useSettingsStore = create<SettingsStore>()(
             ? (s.baseColor as BaseColor)
             : 'neutral',
           transcriptionDefaults: {
+            // REQ-0295 — explicit field-by-field passthrough of every
+            // TranscriptionDefaults key, driven by
+            // `Object.prototype.hasOwnProperty` semantics via the `td.<key>`
+            // reads.  The trailing `...tdCleaned` spread ONLY appears to
+            // preserve `whisperModel` (the one required field the code
+            // above doesn't clamp explicitly).  A future refactor that
+            // introduces `AppSettings.transcriptionDefaults` schema
+            // migration should replace this with a proper allowlist —
+            // REQ-0279 documented the class of clobber bug that happens
+            // when nested-object hydrate silently drops fields.  For
+            // v1.3.6 the additive-optional contract + the trailing
+            // spread is enough: any legacy save that has more keys than
+            // the current type declares still flows through, and any
+            // new key added here is preserved because the ALL-optional
+            // fields hydrate via the explicit line below.
             ...tdCleaned,
             fontSizePx: Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, td.fontSizePx ?? 100)),
-            outlineThicknessPx: Math.min(OUTLINE_THICKNESS_MAX_PX, Math.max(0, td.outlineThicknessPx ?? 3))
+            outlineThicknessPx: Math.min(OUTLINE_THICKNESS_MAX_PX, Math.max(0, td.outlineThicknessPx ?? 3)),
+
+            // REQ-0295 — additive optional fields.  Clamp what needs
+            // clamping (shadowDepth, shadowAlpha, rotation) and pass
+            // string / boolean fields through unchanged.  `undefined`
+            // stays `undefined` (falls back to the per-cue neutral
+            // default at render time — see TranscriptionDefaults
+            // docstring for the mapping).
+            shadowDepth: td.shadowDepth === undefined
+              ? undefined
+              : Math.min(SHADOW_DEPTH_MAX_PX, Math.max(0, td.shadowDepth)),
+            shadowColor: td.shadowColor,
+            shadowAlpha: td.shadowAlpha === undefined
+              ? undefined
+              : Math.min(100, Math.max(0, td.shadowAlpha)),
+            karaokeEnabled: td.karaokeEnabled,
+            karaokeHighlightColor: td.karaokeHighlightColor,
+            casing: td.casing === 'uppercase' ? 'uppercase' : td.casing === 'none' ? 'none' : undefined,
+            rotation: td.rotation === undefined
+              ? undefined
+              : (((td.rotation % 360) + 360) % 360),
+            horizontalPosition: td.horizontalPosition === 'left' || td.horizontalPosition === 'center' || td.horizontalPosition === 'right'
+              ? td.horizontalPosition
+              : undefined,
+            verticalPosition: td.verticalPosition === 'top' || td.verticalPosition === 'center' || td.verticalPosition === 'bottom'
+              ? td.verticalPosition
+              : undefined,
+            verticalMarginPx: td.verticalMarginPx === undefined
+              ? undefined
+              : Math.max(0, Math.floor(td.verticalMarginPx)),
+            posOffsetX: td.posOffsetX === undefined ? undefined : Math.floor(td.posOffsetX),
+            posOffsetY: td.posOffsetY === undefined ? undefined : Math.floor(td.posOffsetY),
           },
           transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS, ...ta },
           autoLineBreak: s.autoLineBreak ?? true,

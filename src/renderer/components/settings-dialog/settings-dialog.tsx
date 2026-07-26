@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,11 @@ export function SettingsDialog() {
   const setBaseColor = useSettingsStore((s) => s.setBaseColor)
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   const setFadeDurationSec = useSettingsStore((s) => s.setFadeDurationSec)
+  // REQ-0295 — needed by DefaultStyleControls to hide the karaoke row
+  // on free (NSIS) tier.  Falsey when the env store hasn't hydrated
+  // yet; `canUseKaraokeInTier(false)` returns false so the row stays
+  // hidden until MSIX detection settles.
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
   // REQ-0121 — audio track selector + input/output folder inputs.
   const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
   const setDefaultAudioTrackIndex = useSettingsStore((s) => s.setDefaultAudioTrackIndex)
@@ -317,13 +323,13 @@ export function SettingsDialog() {
           <TabsContent value="defaultStyle" className="space-y-2">
             <p className="text-body-sm text-muted-foreground">{t('defaultStyle.hint')}</p>
             <DefaultStyleControls
-              fontSizePx={transcriptionDefaults.fontSizePx}
-              textColorHex={transcriptionDefaults.textColorHex}
-              outlineColorHex={transcriptionDefaults.outlineColorHex}
-              outlineThicknessPx={transcriptionDefaults.outlineThicknessPx}
-              autoLineBreak={autoLineBreak}
+              defaults={transcriptionDefaults}
               onUpdateDefaults={updateTranscriptionDefaults}
+              autoLineBreak={autoLineBreak}
               onSetAutoLineBreak={setAutoLineBreak}
+              fadeDurationSec={fadeDurationSec}
+              onSetFadeDurationSec={setFadeDurationSec}
+              isMsix={isMsix}
             />
           </TabsContent>
 

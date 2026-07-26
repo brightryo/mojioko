@@ -283,6 +283,67 @@ export interface TranscriptionDefaults {
   /** Integer, 0–5 px. */
   outlineThicknessPx: number
   whisperModel: WhisperModelId
+
+  // ------------------------------------------------------------------
+  // REQ-0295 — Phase A / Phase B style defaults exposed via the
+  // Settings > "字幕スタイル" tab (DefaultStyleControls).  All optional
+  // + neutral-default so pre-REQ-0295 saved settings hydrate as
+  // "no effect / off / neutral value" without migration.  Every new
+  // field maps 1:1 to a per-cue field on `SubtitleEntry`; entry
+  // creation in `step1.tsx` copies these onto each transcribed row
+  // (via the same `runDefaults` snapshot used for the four legacy
+  // style fields above).
+  // ------------------------------------------------------------------
+
+  /**
+   * REQ-0293 §1 — default drop-shadow depth (0–50 px).  `0` = no
+   * shadow (matches the shadow ON/OFF encoded in the depth itself).
+   * `undefined` on load = 0 (no shadow) so pre-REQ-0295 setups keep
+   * their shadowless look.
+   */
+  shadowDepth?: number
+  /** Default drop-shadow colour, `#RRGGBB`.  `undefined` = `#000000`. */
+  shadowColor?: string
+  /** Default drop-shadow opacity (0–100 %).  `undefined` = `100`. */
+  shadowAlpha?: number
+
+  /**
+   * REQ-0293 §2 — default karaoke toggle for new cues.  When `true`,
+   * every transcribed row is created with `karaokeEnabled: true`.
+   * `undefined` = OFF.  Base (unspoken) colour is ALWAYS
+   * `textColorHex` (per REQ-0293), so there is no default for base;
+   * only the highlight colour is user-configurable.
+   */
+  karaokeEnabled?: boolean
+  /** Default karaoke highlight (spoken-word) colour.  `undefined` = yellow accent (`#FFFF00`). */
+  karaokeHighlightColor?: string
+
+  /** REQ-0277 §1 — default casing transform.  `undefined` = `'none'`. */
+  casing?: 'none' | 'uppercase'
+
+  /** REQ-0277 §4 — default rotation in degrees clockwise (0–359).  `undefined` = 0. */
+  rotation?: number
+
+  // Layout defaults — currently seeded from `makeEntryLayoutDefaults()`
+  // (= BURNIN_DEFAULTS).  When present in TranscriptionDefaults, these
+  // override the BURNIN_DEFAULTS values at entry-creation time so users
+  // can set a project-wide default anchor + margin from the Settings tab.
+  horizontalPosition?: 'left' | 'center' | 'right'
+  verticalPosition?: 'top' | 'center' | 'bottom'
+  verticalMarginPx?: number
+
+  /**
+   * REQ-0295 §1 「オフセット」— default per-cue pin offset in pixels
+   * from the alignment anchor.  When either `posOffsetX` or
+   * `posOffsetY` is non-zero, new cues are created with an absolute
+   * `posX` / `posY` computed as `anchor + offset` (video-dimensions
+   * resolved at entry-creation time in step1.tsx).  When both are 0
+   * (or undefined), new cues use pure alignment-based positioning
+   * (no `\pos` tag) exactly like pre-REQ-0295.  Range: any integer;
+   * negative values push the caption up/left, positive down/right.
+   */
+  posOffsetX?: number
+  posOffsetY?: number
 }
 
 export interface ProjectState {

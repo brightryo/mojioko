@@ -35,6 +35,7 @@ import { formatDuration } from '@/lib/time'
 import { formatBytes } from '@/lib/format'
 import type { SubtitleEntry as SubtitleEntryType, WhisperModelId } from '../../shared/types'
 import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
+import { getAnchorAssPosition } from '@/lib/preview-coords'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
@@ -514,12 +515,34 @@ export default function Step1Route(_: Step1RouteProps) {
     const runFontId = useSettingsStore.getState().activeFontId
 
     // Build SubtitleEntry array from collected segments
+    // REQ-0295 — expanded seeding: on top of the four legacy style
+    // fields (font size / colours / outline), every new REQ-0295
+    // TranscriptionDefaults field is copied onto each transcribed
+    // row when the user has set it in Settings > "字幕スタイル".
+    // Fields left `undefined` in defaults stay `undefined` on the
+    // row (i.e. the renderer's neutral "off / default" behaviour
+    // for that field) so pre-REQ-0295 setups produce byte-identical
+    // entries to before.
+    const layoutH = runDefaults.horizontalPosition ?? makeEntryLayoutDefaults().horizontalPosition
+    const layoutV = runDefaults.verticalPosition ?? makeEntryLayoutDefaults().verticalPosition
+    const layoutMV = runDefaults.verticalMarginPx ?? makeEntryLayoutDefaults().verticalMarginPx
+    // REQ-0295 §1 「オフセット」— when the user configured a non-zero
+    // default offset, seed `posX` / `posY` on every new row by adding
+    // the offset to the alignment anchor for the current video
+    // dimensions.  When both offsets are 0 (or undefined), leave
+    // `posX` / `posY` undefined so the row uses pure alignment-based
+    // positioning (no `\pos` tag) — byte-identical to pre-REQ-0295.
+    const offX = runDefaults.posOffsetX ?? 0
+    const offY = runDefaults.posOffsetY ?? 0
+    let seededPosX: number | undefined
+    let seededPosY: number | undefined
+    if ((offX !== 0 || offY !== 0) && video?.widthPx && video?.heightPx) {
+      const anchor = getAnchorAssPosition(layoutH, layoutV, layoutMV, video.widthPx, video.heightPx)
+      seededPosX = anchor.x + offX
+      seededPosY = anchor.y + offY
+    }
+
     const entries: SubtitleEntryType[] = segments.map((seg, i) => {
-      // REQ-20260613-016 / v1.2.2 機能A: every transcribed row carries its
-      // own layout + background values seeded from ENTRY_LAYOUT_DEFAULTS
-      // (= BURNIN_DEFAULTS).  `makeEntryLayoutDefaults` returns a fresh
-      // object literal per call so each row owns its own subtitleBackground
-      // — mutating one row never aliases another.
       const base = {
         startSec: seg.startSec,
         endSec: seg.endSec,
@@ -537,7 +560,33 @@ export default function Step1Route(_: Step1RouteProps) {
         // a single value.  Deep-copied into `original.words` below via
         // spread so Reset row restores the same array.
         words: seg.words,
-        ...makeEntryLayoutDefaults()
+        // REQ-20260613-016 / v1.2.2 機能A: layout + background values
+        // seeded from ENTRY_LAYOUT_DEFAULTS.  `makeEntryLayoutDefaults`
+        // returns a fresh object literal per call so each row owns its
+        // own subtitleBackground — mutating one row never aliases
+        // another.  REQ-0295 — the layout triple (H / V / margin) is
+        // OVERRIDDEN by the user's TranscriptionDefaults when set, so
+        // the makeEntryLayoutDefaults call is only for the background
+        // sub-object (background stays BURNIN_DEFAULTS since it's not
+        // a REQ-0295 field per owner decision 2026-07-26).
+        ...makeEntryLayoutDefaults(),
+        horizontalPosition: layoutH,
+        verticalPosition: layoutV,
+        verticalMarginPx: layoutMV,
+        // REQ-0295 — additive Phase A / Phase B defaults.  Copy raw
+        // (undefined stays undefined so renderers fall back to their
+        // per-field neutral defaults).
+        shadowDepth: runDefaults.shadowDepth,
+        shadowColor: runDefaults.shadowColor,
+        shadowAlpha: runDefaults.shadowAlpha,
+        karaokeEnabled: runDefaults.karaokeEnabled,
+        karaokeHighlightColor: runDefaults.karaokeHighlightColor,
+        casing: runDefaults.casing,
+        rotation: runDefaults.rotation,
+        // Offset → absolute posX/posY seeded once per run using this
+        // video's dimensions (see `seededPosX/Y` above).
+        posX: seededPosX,
+        posY: seededPosY,
       }
       return {
         id: `t-${i}-${Date.now()}`,
