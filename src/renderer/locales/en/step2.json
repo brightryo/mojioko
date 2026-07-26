@@ -178,13 +178,16 @@
     "shadow": "Shadow",
     "shadowDepth": "Depth",
     "karaoke": "Karaoke",
+    "karaokeRowLabel": "Karaoke (spoken color)",
     "karaokeOn": "On",
     "karaokeOff": "Off",
     "karaokeOnNoWords": "On (equal split — no per-word timing)",
     "karaokeHighlightColor": "Spoken",
     "karaokeBaseColor": "Unspoken",
     "karaokeSeededDefault": "Uses default colors",
-    "rotation": "Rotation (deg)"
+    "rotation": "Rotation (deg)",
+    "family": "Font",
+    "weight": "Weight"
   },
   "history": {
     "editText": "Edit text",

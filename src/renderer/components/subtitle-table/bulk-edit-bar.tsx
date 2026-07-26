@@ -982,6 +982,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           <FamilyWeightSelector
             value={activeFontId}
             onChange={(nextId) => handleFontChange(nextId)}
+            // REQ-0296 §3 — show "フォント" / "ウェイト" left labels so
+            // the two font rows line up with size / colours / etc.
+            showLabels
           />
           {/* Font size */}
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
@@ -1081,17 +1084,20 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               gate passes so the user can prepare an accent colour and
               then flip the switch.  Base picker was removed with
               REQ-0293 — base always tracks each row's `textColorHex`. */}
+          {/* REQ-0296 §2 — single-row karaoke: Switch + highlight
+              ColorPicker on the same row as the label.  Matches the
+              inspector layout post-REQ-0296.  Picker stays visible
+              regardless of Switch state so the row height is
+              stable; the colour is applied when the Switch is ON.
+              Tier gate hides the entire row on free tier. */}
           {canUseKaraokeInTier(useAppEnvStore((s) => s.isMsix) ?? false) && (
-            <>
-              <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-                <span>{t('styleCell.karaoke')}</span>
-                <div className="flex items-center gap-2 w-[50%]">
-                  <Switch onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
-                  <span className="text-caption text-muted-foreground">{t('styleCell.karaokeSeededDefault')}</span>
-                </div>
-              </label>
-              <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-                <span>{t('styleCell.karaokeHighlightColor')}</span>
+            <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
+              <span>{t('styleCell.karaokeRowLabel')}</span>
+              <div className="flex items-center gap-2 w-[50%]">
+                <Switch onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
+                <span className="text-caption text-muted-foreground flex-1 min-w-0 truncate">
+                  {t('styleCell.karaokeSeededDefault')}
+                </span>
                 <ColorPicker
                   value={karaokeHighlightDraft}
                   onChange={handleKaraokeHighlightBulkPreview}
@@ -1099,8 +1105,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                   swatchOnly
                   heading={t('styleCell.karaokeHighlightColor')}
                 />
-              </label>
-            </>
+              </div>
+            </label>
           )}
           <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
             <span>{t('styleCell.casing')}</span>

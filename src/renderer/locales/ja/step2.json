@@ -178,13 +178,16 @@
     "shadow": "影",
     "shadowDepth": "影の距離",
     "karaoke": "カラオケ",
+    "karaokeRowLabel": "カラオケ（発話色）",
     "karaokeOn": "有効",
     "karaokeOff": "無効",
     "karaokeOnNoWords": "有効（均等割り・ワード情報なし）",
     "karaokeHighlightColor": "発話済み色",
     "karaokeBaseColor": "未発話色",
     "karaokeSeededDefault": "既定色で開始",
-    "rotation": "回転 (度)"
+    "rotation": "回転 (度)",
+    "family": "フォント",
+    "weight": "ウェイト"
   },
   "history": {
     "editText": "テキストを編集",

@@ -28,6 +28,14 @@ interface FamilyWeightSelectorProps {
    */
   onChange: (next: FontId) => void
   disabled?: boolean
+  /**
+   * REQ-0296 §3 — when `true`, prepend a left label ("フォント" /
+   * "ウェイト") to each dropdown so the row layout matches the other
+   * inspector / bulk-edit rows (size / colours / etc.).  Default
+   * `false` preserves the bare stacked-dropdowns look FontPicker uses
+   * (it has its own outer labelling).
+   */
+  showLabels?: boolean
 }
 
 /**
@@ -52,7 +60,7 @@ interface FamilyWeightSelectorProps {
  * `cssFontFamily` is only used for the `font-family: '…'` inline style
  * that renders each family name in its own face.
  */
-export function FamilyWeightSelector({ value, onChange, disabled }: FamilyWeightSelectorProps) {
+export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: FamilyWeightSelectorProps) {
   const { t } = useTranslation(['step2', 'step1'])
   const [familyOpen, setFamilyOpen] = useState(false)
   const [weightOpen, setWeightOpen] = useState(false)
@@ -108,9 +116,27 @@ export function FamilyWeightSelector({ value, onChange, disabled }: FamilyWeight
     'text-fg-primary',
   )
 
+  // REQ-0296 §3 — when `showLabels` is true, each dropdown lives inside
+  // a `[label | dropdown]` row that matches the other inspector /
+  // bulk-edit rows.  When false, the dropdowns stack bare (FontPicker's
+  // legacy layout, which supplies its own outer heading).
+  const familyLabel = showLabels ? (
+    <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('step2:styleCell.family')}</label>
+  ) : null
+  const weightLabel = showLabels ? (
+    <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('step2:styleCell.weight')}</label>
+  ) : null
+  const rowClass = showLabels
+    ? 'flex items-center justify-between gap-2'
+    : 'contents'  // stacked flow inside the outer `flex-col`; no row shell
+  const controlWrapperClass = showLabels ? 'w-[50%]' : ''
+
   return (
     <div className="flex flex-col gap-1">
       {/* Family dropdown */}
+      <div className={rowClass}>
+        {familyLabel}
+        <div className={controlWrapperClass}>
       <Popover open={familyOpen} onOpenChange={setFamilyOpen}>
         <PopoverTrigger asChild>
           <button
@@ -163,9 +189,14 @@ export function FamilyWeightSelector({ value, onChange, disabled }: FamilyWeight
           </div>
         </PopoverContent>
       </Popover>
+        </div>
+      </div>
 
       {/* Weight dropdown — hidden for single-weight families */}
       {currentFamily && currentFamily.hasMultipleWeights && (
+        <div className={rowClass}>
+          {weightLabel}
+          <div className={controlWrapperClass}>
         <Popover open={weightOpen} onOpenChange={setWeightOpen}>
           <PopoverTrigger asChild>
             <button
@@ -225,6 +256,8 @@ export function FamilyWeightSelector({ value, onChange, disabled }: FamilyWeight
             </div>
           </PopoverContent>
         </Popover>
+          </div>
+        </div>
       )}
     </div>
   )

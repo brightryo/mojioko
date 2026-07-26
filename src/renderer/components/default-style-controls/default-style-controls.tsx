@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next'
-import { Label } from '@/components/ui/label'
+import { HelpCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ColorPicker } from '@/components/color-picker/color-picker'
-import { HelpIcon } from '@/components/help-icon'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
@@ -18,6 +19,57 @@ import type { TranscriptionDefaults } from '../../../shared/types'
  * consistent.
  */
 const FONT_SIZE_STEP_PX = 10
+
+/**
+ * REQ-0296 §1 — right-column width for every row's control.  A single
+ * class shared across every row keeps slider bars and stepper widths
+ * visually aligned (previous layout let each control size itself,
+ * which made the shadow / fade sliders look ~2× wider than outline
+ * width).  `w-48` (=12rem, 192px) is the same footprint as the
+ * inspector's `w-[50%]` when the inspector column is ~380px, so
+ * inspector and settings surfaces read as siblings.
+ */
+const CONTROL_COL_CLASS = 'w-48 shrink-0'
+
+/**
+ * REQ-0296 §1 — shared row shape for the "字幕スタイル" tab, cloned
+ * from `AdvancedParamRow` in `whisper-advanced-controls.tsx` (the
+ * "Whisper設定" tab the owner referenced as the canonical layout).
+ * Label on the left, dashed filler in the middle, control on the
+ * right — same visual rhythm across both settings tabs so switching
+ * between them doesn't require the user to relearn the grid.
+ */
+function StyleRow({
+  label,
+  help,
+  children,
+}: {
+  label: string
+  help?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-accent/40 transition-colors duration-150">
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="text-body text-muted-foreground">{label}</span>
+        {help !== undefined && (
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <span className="inline-flex cursor-help text-muted-foreground/60 hover:text-muted-foreground transition-colors duration-150">
+                <HelpCircle className="h-3.5 w-3.5" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[280px] text-left">
+              {help}
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+      <div className="flex-1 border-t border-dashed border-border min-w-[16px]" />
+      <div className={CONTROL_COL_CLASS}>{children}</div>
+    </div>
+  )
+}
 
 interface DefaultStyleControlsProps {
   /**
@@ -64,11 +116,12 @@ interface DefaultStyleControlsProps {
 /**
  * Default-style controls shared by Step 1's SubtitleStyleDialog and the
  * Settings dialog's "字幕スタイル" tab.  REQ-0295 grew this from the
- * original 4 fields (font size / text colour / outline colour / outline
- * thickness) into the full inspector-parity list minus font/weight/text
- * (owned by the Fonts tab) and background (owner declined
- * 2026-07-26).  Row order matches the inspector post-REQ-0292 so users
- * switching between the two surfaces don't relearn the layout.
+ * original 4 fields into the full inspector-parity list minus
+ * font/weight/text (owned by the Fonts tab) and background (owner
+ * declined 2026-07-26).  REQ-0296 §1 rewrote the layout from stacked
+ * `[label above / control below]` to `[label | control]` rows so it
+ * matches the "Whisper設定" tab; every slider now sits in the same
+ * `CONTROL_COL_CLASS` right column so bar widths are visually equal.
  *
  * The component stays presentational: no store subscription, no local
  * draft.  Every control commits through `onUpdateDefaults` (or the
@@ -77,8 +130,9 @@ interface DefaultStyleControlsProps {
  *
  * REQ-0293 final shape enforced:
  *   - Shadow: single 0–50 slider, 0=OFF (no separate Switch).
- *   - Karaoke: Switch + highlight ColorPicker ONLY (base = textColor
- *     always, no per-cue base override, so no default to configure).
+ *   - Karaoke: Switch + highlight ColorPicker on ONE row, both
+ *     always visible (REQ-0296 §2 unification).  Base = textColor
+ *     always, no per-cue base override.
  */
 export function DefaultStyleControls({
   defaults,
@@ -92,14 +146,16 @@ export function DefaultStyleControls({
   const { t } = useTranslation(['step1', 'step2', 'common'])
   const showKaraokeUi = canUseKaraokeInTier(isMsix)
 
+  const segButton = (selected: boolean) => cn(
+    'px-2 h-7 rounded border text-body-sm transition-colors duration-150',
+    selected
+      ? 'border-primary text-fg-primary bg-primary/10'
+      : 'border-line-strong text-fg-secondary hover:text-fg-primary hover:bg-surface-2',
+  )
+
   return (
-    <div className="space-y-3">
-      {/* ────────── Size ────────── */}
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-1">
-          <Label>{t('subtitleDefaults.size')}</Label>
-          <HelpIcon content={t('subtitleDefaults.helpSize')} />
-        </div>
+    <div className="space-y-0.5">
+      <StyleRow label={t('subtitleDefaults.size')} help={t('subtitleDefaults.helpSize')}>
         <NumberStepperInput
           value={defaults.fontSizePx}
           min={FONT_SIZE_MIN_PX}
@@ -109,17 +165,9 @@ export function DefaultStyleControls({
           ariaLabel={t('subtitleDefaults.size')}
           title={t('subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
         />
-        <p className="text-body-sm text-muted-foreground">
-          {t('subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
-        </p>
-      </div>
+      </StyleRow>
 
-      {/* ────────── Text colour ────────── */}
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-1">
-          <Label>{t('subtitleDefaults.textColor')}</Label>
-          <HelpIcon content={t('subtitleDefaults.helpTextColor')} />
-        </div>
+      <StyleRow label={t('subtitleDefaults.textColor')} help={t('subtitleDefaults.helpTextColor')}>
         <ColorPicker
           value={defaults.textColorHex}
           onChange={(hex) => onUpdateDefaults({ textColorHex: hex })}
@@ -127,14 +175,9 @@ export function DefaultStyleControls({
             onUpdateDefaults({ textColorHex: text, outlineColorHex: outline })
           }
         />
-      </div>
+      </StyleRow>
 
-      {/* ────────── Outline colour ────────── */}
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-1">
-          <Label>{t('subtitleDefaults.outlineColor')}</Label>
-          <HelpIcon content={t('subtitleDefaults.helpOutlineColor')} />
-        </div>
+      <StyleRow label={t('subtitleDefaults.outlineColor')} help={t('subtitleDefaults.helpOutlineColor')}>
         <ColorPicker
           value={defaults.outlineColorHex}
           onChange={(hex) => onUpdateDefaults({ outlineColorHex: hex })}
@@ -142,95 +185,73 @@ export function DefaultStyleControls({
             onUpdateDefaults({ textColorHex: text, outlineColorHex: outline })
           }
         />
-      </div>
+      </StyleRow>
 
-      {/* ────────── Outline thickness ────────── */}
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-1">
-          <Label>{t('subtitleDefaults.stroke')}</Label>
-          <HelpIcon content={t('subtitleDefaults.helpStroke')} />
-        </div>
+      <StyleRow label={t('subtitleDefaults.stroke')} help={t('subtitleDefaults.helpStroke')}>
         <OutlineThicknessSlider
           value={defaults.outlineThicknessPx}
           onCommit={(v) => onUpdateDefaults({ outlineThicknessPx: v })}
           ariaLabel={t('subtitleDefaults.stroke')}
+          fullWidth
         />
-      </div>
+      </StyleRow>
 
-      {/* ────────── Shadow (REQ-0293 final: 0–50 slider, 0=OFF) ────────── */}
-      <div className="space-y-1.5">
-        <Label>{t('step2:styleCell.shadow')}</Label>
+      {/* Shadow (REQ-0293 final: 0–50 slider, 0=OFF). */}
+      <StyleRow label={t('step2:styleCell.shadow')}>
         <ShadowDepthSlider
           value={defaults.shadowDepth ?? 0}
           onCommit={(v) => onUpdateDefaults({
             shadowDepth: v,
-            // Seed neutral colour + alpha the first time the user drags
-            // past 0 so the shadow is visible immediately (matches the
-            // inspector's REQ-0293 behaviour).
             ...(v > 0 && defaults.shadowColor === undefined ? { shadowColor: '#000000' } : {}),
             ...(v > 0 && defaults.shadowAlpha === undefined ? { shadowAlpha: 100 } : {}),
           })}
           ariaLabel={t('step2:styleCell.shadowDepth')}
           fullWidth
         />
-      </div>
+      </StyleRow>
 
-      {/* ────────── Karaoke (REQ-0293 final: Switch + highlight only) ────────── */}
+      {/* Karaoke (REQ-0293 final + REQ-0296 §2: single row, Switch +
+          highlight picker always visible). */}
       {showKaraokeUi && (
-        <div className="space-y-1.5">
-          <Label>{t('step2:styleCell.karaoke')}</Label>
-          <div className="flex items-center gap-3">
+        <StyleRow label={t('step2:styleCell.karaokeRowLabel')}>
+          <div className="flex items-center gap-2">
             <Switch
               checked={defaults.karaokeEnabled === true}
               onCheckedChange={(v) => onUpdateDefaults({
                 karaokeEnabled: v,
-                // Seed the highlight colour default on the first ON so the
-                // picker below has a starting swatch — mirrors the
-                // inspector's toggle-on behaviour.
                 ...(v && defaults.karaokeHighlightColor === undefined
                   ? { karaokeHighlightColor: KARAOKE_DEFAULT_HIGHLIGHT_COLOR }
                   : {}),
               })}
               aria-label={t('step2:styleCell.karaoke')}
             />
-            <span className="text-body-sm text-muted-foreground">
+            <span className="text-body-sm text-muted-foreground flex-1 min-w-0 truncate">
               {defaults.karaokeEnabled === true ? t('step2:styleCell.karaokeOn') : t('step2:styleCell.karaokeOff')}
             </span>
+            <ColorPicker
+              value={defaults.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR}
+              onChange={(hex) => onUpdateDefaults({ karaokeHighlightColor: hex })}
+              swatchOnly
+              heading={t('step2:styleCell.karaokeHighlightColor')}
+            />
           </div>
-          {defaults.karaokeEnabled === true && (
-            <div className="flex items-center justify-between gap-2 pl-2">
-              <Label className="text-body-sm font-normal">
-                {t('step2:styleCell.karaokeHighlightColor')}
-              </Label>
-              <ColorPicker
-                value={defaults.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR}
-                onChange={(hex) => onUpdateDefaults({ karaokeHighlightColor: hex })}
-                swatchOnly
-                heading={t('step2:styleCell.karaokeHighlightColor')}
-              />
-            </div>
-          )}
-        </div>
+        </StyleRow>
       )}
 
-      {/* ────────── Casing ────────── */}
-      <div className="space-y-1.5">
-        <Label>{t('step2:styleCell.casing')}</Label>
-        <div className="flex items-center gap-3">
+      <StyleRow label={t('step2:styleCell.casing')}>
+        <div className="flex items-center gap-2">
           <Switch
             checked={defaults.casing === 'uppercase'}
             onCheckedChange={(v) => onUpdateDefaults({ casing: v ? 'uppercase' : 'none' })}
             aria-label={t('step2:styleCell.casing')}
           />
-          <span className="text-body-sm text-muted-foreground">
+          <span className="text-body-sm text-muted-foreground truncate">
             {defaults.casing === 'uppercase' ? t('step2:styleCell.casingUppercase') : t('step2:styleCell.casingNone')}
           </span>
         </div>
-      </div>
+      </StyleRow>
 
-      {/* ────────── Rotation ────────── */}
-      <div className="space-y-1.5">
-        <Label>{t('step2:styleCell.rotation')}</Label>
+      <StyleRow label={t('step2:styleCell.rotation')}>
         <NumberStepperInput
           value={defaults.rotation ?? 0}
           min={0}
@@ -239,72 +260,54 @@ export function DefaultStyleControls({
           onCommit={(v) => onUpdateDefaults({ rotation: ((v % 360) + 360) % 360 })}
           ariaLabel={t('step2:styleCell.rotation')}
         />
-      </div>
+      </StyleRow>
 
-      {/* ────────── Fade (settings.fadeDurationSec, not TranscriptionDefaults) ────────── */}
-      <div className="space-y-1.5">
-        <Label>{t('step2:styleCell.fade')}</Label>
+      <StyleRow label={t('step2:styleCell.fade')}>
         <FadeDurationSlider
           value={fadeDurationSec}
           onCommit={onSetFadeDurationSec}
           ariaLabel={t('step2:styleCell.fade')}
           fullWidth
         />
-      </div>
+      </StyleRow>
 
-      {/* ────────── Layout section header ────────── */}
-      <div className="pt-2 border-t border-border/60">
-        <p className="text-body-sm font-semibold text-fg-secondary mb-2">
+      {/* ── Layout section header ── */}
+      <div className="pt-2 mt-2 border-t border-border/60">
+        <p className="text-label font-medium uppercase tracking-wider text-foreground mb-1 px-2">
           {t('step2:timeline.inspector.layoutSection')}
         </p>
 
-        {/* ── Horizontal ── */}
-        <div className="space-y-1.5">
-          <Label>{t('step2:styleCell.layoutH')}</Label>
-          <div className="flex items-center gap-2 text-body-sm">
+        <StyleRow label={t('step2:styleCell.layoutH')}>
+          <div className="flex items-center gap-1">
             {(['left', 'center', 'right'] as const).map((v) => (
               <button
                 key={v}
                 type="button"
                 onClick={() => onUpdateDefaults({ horizontalPosition: v })}
-                className={
-                  'px-2 py-1 rounded border text-body-sm ' +
-                  ((defaults.horizontalPosition ?? 'center') === v
-                    ? 'border-primary text-fg-primary bg-primary/10'
-                    : 'border-line-strong text-fg-secondary hover:text-fg-primary hover:bg-surface-2')
-                }
+                className={segButton((defaults.horizontalPosition ?? 'center') === v)}
               >
                 {t(`step2:subtitlePosition.${v}`)}
               </button>
             ))}
           </div>
-        </div>
+        </StyleRow>
 
-        {/* ── Vertical ── */}
-        <div className="space-y-1.5 mt-2">
-          <Label>{t('step2:styleCell.layoutV')}</Label>
-          <div className="flex items-center gap-2 text-body-sm">
+        <StyleRow label={t('step2:styleCell.layoutV')}>
+          <div className="flex items-center gap-1">
             {(['top', 'center', 'bottom'] as const).map((v) => (
               <button
                 key={v}
                 type="button"
                 onClick={() => onUpdateDefaults({ verticalPosition: v })}
-                className={
-                  'px-2 py-1 rounded border text-body-sm ' +
-                  ((defaults.verticalPosition ?? 'bottom') === v
-                    ? 'border-primary text-fg-primary bg-primary/10'
-                    : 'border-line-strong text-fg-secondary hover:text-fg-primary hover:bg-surface-2')
-                }
+                className={segButton((defaults.verticalPosition ?? 'bottom') === v)}
               >
                 {t(`step2:subtitlePosition.${v}`)}
               </button>
             ))}
           </div>
-        </div>
+        </StyleRow>
 
-        {/* ── Margin (verticalMarginPx) ── */}
-        <div className="space-y-1.5 mt-2">
-          <Label>{t('step2:styleCell.marginV')}</Label>
+        <StyleRow label={t('step2:styleCell.marginV')}>
           <NumberStepperInput
             value={defaults.verticalMarginPx ?? 40}
             min={MARGIN_V_MIN_PX}
@@ -314,13 +317,11 @@ export function DefaultStyleControls({
             ariaLabel={t('step2:styleCell.marginV')}
             widthClass="w-16"
           />
-        </div>
+        </StyleRow>
 
-        {/* ── Offset (posOffsetX / posOffsetY) ── */}
-        <div className="space-y-1.5 mt-2">
-          <Label>{t('step2:styleCell.offset')}</Label>
+        <StyleRow label={t('step2:styleCell.offset')}>
           <div className="flex items-center gap-2">
-            <span className="text-body-sm text-fg-tertiary w-4">X</span>
+            <span className="text-body-sm text-fg-tertiary">X</span>
             <NumberStepperInput
               value={defaults.posOffsetX ?? 0}
               min={-9999}
@@ -330,7 +331,7 @@ export function DefaultStyleControls({
               ariaLabel={t('step2:styleCell.offsetX')}
               widthClass="w-16"
             />
-            <span className="text-body-sm text-fg-tertiary w-4 ml-2">Y</span>
+            <span className="text-body-sm text-fg-tertiary">Y</span>
             <NumberStepperInput
               value={defaults.posOffsetY ?? 0}
               min={-9999}
@@ -341,24 +342,23 @@ export function DefaultStyleControls({
               widthClass="w-16"
             />
           </div>
-        </div>
+        </StyleRow>
       </div>
 
-      {/* ────────── Auto line break ────────── */}
-      <div className="space-y-1.5 pt-2 border-t border-border/60">
-        <div className="flex items-center gap-1">
-          <Label>{t('advanced.autoLineBreak')}</Label>
-          <HelpIcon content={t('advanced.autoLineBreakHelp')} />
-        </div>
-        <div className="flex items-center gap-2 h-9">
-          <Switch
-            checked={autoLineBreak}
-            onCheckedChange={(v) => onSetAutoLineBreak(v)}
-          />
-          <span className="text-body-sm text-muted-foreground">
-            {autoLineBreak ? t('advanced.enabled') : t('advanced.disabled')}
-          </span>
-        </div>
+      {/* Auto line break — separate section per the pre-REQ-0295
+          convention (subtitle-formatting flag, not a per-cue style). */}
+      <div className="pt-2 mt-2 border-t border-border/60">
+        <StyleRow label={t('advanced.autoLineBreak')} help={t('advanced.autoLineBreakHelp')}>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={autoLineBreak}
+              onCheckedChange={(v) => onSetAutoLineBreak(v)}
+            />
+            <span className="text-body-sm text-muted-foreground">
+              {autoLineBreak ? t('advanced.enabled') : t('advanced.disabled')}
+            </span>
+          </div>
+        </StyleRow>
       </div>
     </div>
   )

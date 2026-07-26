@@ -933,6 +933,9 @@ export function TimelineBlockInspector({
               value={entry.fontId ?? activeFontId}
               onChange={(nextId) => handleFontChange(nextId === activeFontId ? undefined : nextId)}
               disabled={isFrozen}
+              // REQ-0296 §3 — show "フォント" / "ウェイト" left labels so
+              // the two font rows line up with size / colours / etc.
+              showLabels
             />
             {/* Size — REQ-20260615-017: ±10 chevron stepper flanks the
                 number input.  Direct typing still works (input keeps its
@@ -1081,46 +1084,39 @@ export function TimelineBlockInspector({
                 fallback (REQ-0289), and the label switches to
                 `karaokeOnNoWords` to communicate that the timing is
                 approximate rather than word-accurate. */}
+            {/* REQ-0296 §2 — single karaoke row: label + Switch +
+                highlight ColorPicker, all always visible so the row
+                height doesn't jump when the toggle flips.  Picker
+                works whether the toggle is on or off (colour is just
+                stored; only used at render when karaoke is ON).  Tier
+                gate hides the entire row on free tier. */}
             {showKaraokeUi && (
-              <>
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.karaoke')}</label>
-                  <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
-                    <Switch
-                      checked={entry.karaokeEnabled === true}
-                      onCheckedChange={handleKaraokeToggle}
-                      disabled={isFrozen}
-                      aria-label={t('styleCell.karaoke')}
-                    />
-                    <span className="text-body-sm text-muted-foreground">
-                      {entry.karaokeEnabled === true
-                        ? (karaokeWordsValid
-                            ? t('styleCell.karaokeOn')
-                            : t('styleCell.karaokeOnNoWords'))
-                        : t('styleCell.karaokeOff')}
-                    </span>
-                  </div>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.karaokeRowLabel')}</label>
+                <div className="flex items-center gap-2 w-[50%]" onClick={(e) => e.stopPropagation()}>
+                  <Switch
+                    checked={entry.karaokeEnabled === true}
+                    onCheckedChange={handleKaraokeToggle}
+                    disabled={isFrozen}
+                    aria-label={t('styleCell.karaoke')}
+                  />
+                  <span className="text-body-sm text-muted-foreground flex-1 min-w-0 truncate">
+                    {entry.karaokeEnabled === true
+                      ? (karaokeWordsValid
+                          ? t('styleCell.karaokeOn')
+                          : t('styleCell.karaokeOnNoWords'))
+                      : t('styleCell.karaokeOff')}
+                  </span>
+                  <ColorPicker
+                    value={entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR}
+                    onChange={handleKaraokeHighlightPreview}
+                    onCommit={handleKaraokeHighlightCommit}
+                    disabled={isFrozen}
+                    swatchOnly
+                    heading={t('styleCell.karaokeHighlightColor')}
+                  />
                 </div>
-                {entry.karaokeEnabled === true && (
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="text-callout font-semibold text-fg-secondary whitespace-nowrap">{t('styleCell.karaokeHighlightColor')}</label>
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <ColorPicker
-                        value={entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR}
-                        onChange={handleKaraokeHighlightPreview}
-                        onCommit={handleKaraokeHighlightCommit}
-                        disabled={isFrozen}
-                        swatchOnly
-                        heading={t('styleCell.karaokeHighlightColor')}
-                      />
-                    </div>
-                  </div>
-                  /* REQ-0293 §2 — the base-colour picker row was removed
-                     here.  Unspoken text tracks the cue's own
-                     `textColorHex` at render time; users change the
-                     base colour by changing the cue's text colour. */
-                )}
-              </>
+              </div>
             )}
             {/* Casing — REQ-0292 §4 moved BELOW karaoke (was above
                 shadow) so the "colour" cluster (shadow, karaoke)
