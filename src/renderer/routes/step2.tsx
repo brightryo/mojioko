@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils'
 import { saveFileDialog, writeTextFile, openSrtDialog, readTextFile } from '@/services/dialog'
 import { parseSrt } from '@/lib/srt-parse'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
-import { resolveEmphasisKeywords, clampEmphasisScalePercent } from '../../shared/emphasis'
+import { resolveEmphasisRanges, clampEmphasisScalePercent } from '../../shared/emphasis'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { computeEntryWarnings, hasAnyError, hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
@@ -403,10 +403,10 @@ export default function Step2Route(_: Step2RouteProps) {
         // up that font's own Font + libassScale instead of falling back
         // to the active selection.  Undefined → row inherits active.
         fontId: e.fontId,
-        // REQ-0306 §2 — measure emphasised keywords at their enlarged size so
-        // the overflow warning fires when an emphasised cue overflows.
-        emphasisKeywords: e.keywordEmphasisEnabled === true
-          ? resolveEmphasisKeywords(e.emphasisKeywords, e.emphasizedWordIndices, e.words)
+        // REQ-0306 §2 / REQ-0307 — measure emphasised spans at their enlarged
+        // size so the overflow warning fires when an emphasised cue overflows.
+        emphasisRanges: e.keywordEmphasisEnabled === true
+          ? resolveEmphasisRanges(e)
           : undefined,
         emphasisScale: e.keywordEmphasisEnabled === true
           ? clampEmphasisScalePercent(e.emphasisScalePercent) / 100

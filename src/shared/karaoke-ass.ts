@@ -1,4 +1,5 @@
 import type { WordSpan } from './types'
+import { splitTextByLocalRanges, type EmphasisRange } from './emphasis'
 
 /**
  * REQ-0286 §2 — build the karaoke text for one cue's ASS Dialogue line.
@@ -154,15 +155,23 @@ export function buildKaraokeAssText(
   cueEndSec: number,
   escapeText: (s: string) => string,
   cueText?: string,
-  // REQ-0305 — optional keyword-emphasis overlay.  When both karaoke and
-  // emphasis are on, karaoke owns the colour sweep and emphasis contributes
-  // SIZE ONLY.  For each index in `emphasis.indices`, the word's `\k` block
-  // additionally carries `emphasis.openTag` (e.g. `\fs150`) and the word is
-  // followed by a `{emphasis.closeTag}` (e.g. `{\fs100}`) that restores the
-  // base size for subsequent words.  `undefined` → byte-identical to the
-  // pre-REQ-0305 output (existing callers/tests unaffected).
+  // REQ-0305 / REQ-0307 — optional keyword-emphasis overlay.
+  //
+  // `ranges` maps a word index to the emphasised `[start, end)` ranges in that
+  // word's whitespace-stripped character coordinates (produced by
+  // `emphasizedWordRanges`).  Because REQ-0307 lets the user select individual
+  // CHARACTERS, an emphasis span can begin mid-word and can straddle two `\k`
+  // blocks; the caller has already clipped it per word, and we split the word
+  // text here so the `{openTag}` … `{closeTag}` pair sits exactly around the
+  // emphasised characters.  Both stay brace-enclosed (REQ-0291).
+  //
+  // When a word is emphasised from its first visible character, the open tag is
+  // folded into that word's `{\k…}` block (one block instead of two adjacent
+  // ones) — this is also what keeps whole-word emphasis byte-identical to the
+  // REQ-0306 output.  `undefined` → byte-identical to the pre-REQ-0305 output
+  // (existing callers/tests unaffected).
   emphasis?: {
-    indices: ReadonlySet<number>
+    ranges: ReadonlyMap<number, readonly EmphasisRange[]>
     openTag: string
     closeTag: string
   },
@@ -216,16 +225,47 @@ export function buildKaraokeAssText(
     const rawWordText = breaks.has(i)
       ? words[i].text.replace(/^\s+/, '')
       : words[i].text
-    const escaped = escapeText(rawWordText)
-    // REQ-0305 — fold the emphasis size tag into the same `\k` override
-    // block when this word is emphasised, then restore the base size after
-    // it.  Both overrides stay brace-enclosed (REQ-0291).  Colour is left
-    // untouched so the karaoke sweep keeps ownership of it.
-    if (emphasis && emphasis.indices.has(i)) {
-      parts.push(`{\\k${toCs(durationSec)}${emphasis.openTag}}${escaped}{${emphasis.closeTag}}`)
-    } else {
-      parts.push(`{\\k${toCs(durationSec)}}${escaped}`)
+    const kTag = `\\k${toCs(durationSec)}`
+    // REQ-0307 §4 — character-level emphasis inside this `\k` block.  The word
+    // is split into alternating plain / emphasised runs; each emphasised run is
+    // opened with `{openTag}` and closed with `{closeTag}` so the style always
+    // returns to the karaoke baseline before the next run (and the next word).
+    // A run that starts at the word's first visible character folds its open
+    // tag into the `\k` block, keeping the common whole-word case to a single
+    // override block.
+    const localRanges = emphasis?.ranges.get(i)
+    if (!localRanges || localRanges.length === 0) {
+      parts.push(`{${kTag}}${escapeText(rawWordText)}`)
+      continue
     }
+    const runs = splitTextByLocalRanges(rawWordText, localRanges)
+    if (runs.length === 0) {
+      // Empty word text — still emit the `\k` block so the timeline is intact.
+      parts.push(`{${kTag}}`)
+      continue
+    }
+    let opened = false
+    for (let r = 0; r < runs.length; r++) {
+      const run = runs[r]
+      if (run.emphasized) {
+        if (r === 0) {
+          // Fold into the `\k` block — `{\k70\fs150\c…}TEXT`.
+          parts.push(`{${kTag}${emphasis!.openTag}}`)
+        } else {
+          parts.push(`{${emphasis!.openTag}}`)
+        }
+        parts.push(escapeText(run.text))
+        opened = true
+      } else {
+        if (r === 0) parts.push(`{${kTag}}`)
+        if (opened) {
+          parts.push(`{${emphasis!.closeTag}}`)
+          opened = false
+        }
+        parts.push(escapeText(run.text))
+      }
+    }
+    if (opened) parts.push(`{${emphasis!.closeTag}}`)
   }
 
   return parts.join('')

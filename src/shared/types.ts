@@ -1,5 +1,8 @@
 import type { WhisperModelId } from './burnin-defaults'
 import type { FontId } from './fonts'
+// REQ-0307 — the emphasis storage shape lives with its resolution logic in
+// `emphasis.ts`.  Type-only, so this does not create a runtime import cycle.
+import type { EmphasisSpan } from './emphasis'
 export type { WhisperModelId }
 
 // ---------------------------------------------------------------------------
@@ -236,24 +239,23 @@ export interface SubtitleEntryOriginal {
   words?: WordSpan[]
 
   /**
-   * REQ-0305 Phase B — Hormozi-style keyword emphasis.  Additive,
+   * REQ-0305 Phase B / REQ-0307 — Hormozi-style keyword emphasis.  Additive,
    * optional, default-OFF (mirrors the karaoke fields above).  When
-   * `keywordEmphasisEnabled` is true AND the cue's `words` are valid
-   * (`areWordsValidForText`), the word indices listed in
-   * `emphasizedWordIndices` are rendered in `emphasisColorHex` at
+   * `keywordEmphasisEnabled` is true, the character spans listed in
+   * `emphasisSpans` are rendered in `emphasisColorHex` at
    * `emphasisScalePercent` % of `fontSizePx`.
    *
-   * `undefined` / `false` = disabled (pre-REQ-0305 project files load
-   * with no emphasis behaviour).  Emphasis requires valid per-word data:
-   * when words are absent/invalid the cue renders plain — indices are
-   * NOT applied to equal-split fallback units (unlike karaoke, the
-   * indices refer to the specific real words the user picked, so
-   * fabricating targets would emphasise the wrong tokens).
+   * `undefined` / `false` = disabled (pre-REQ-0305 project files load with no
+   * emphasis behaviour).  Emphasis does NOT consult `words` in any way
+   * (REQ-0306 §1 / REQ-0307 §3): it works on cues with no or invalid per-word
+   * data, and survives text edits.
    *
    * REQ-0306 §3 coexistence with karaoke: when BOTH are on, the emphasised
-   * words grow AND recolour to `emphasisColorHex` when spoken (the karaoke
-   * sweep still animates them; their *spoken* colour becomes the emphasis
-   * colour instead of the karaoke highlight — owner-confirmed 2026-07-26).
+   * text grows AND recolours to `emphasisColorHex` when spoken (the karaoke
+   * sweep still animates it; its *spoken* colour becomes the emphasis colour
+   * instead of the karaoke highlight — owner-confirmed 2026-07-26).  REQ-0307
+   * §4 extends that to spans which straddle `\k` block boundaries: the span is
+   * split at the boundary so timing and emphasis coexist.
    */
   keywordEmphasisEnabled?: boolean
   /** `#RRGGBB` — colour applied to emphasised text. */
@@ -261,19 +263,31 @@ export interface SubtitleEntryOriginal {
   /** Emphasised-text font size as a percent of `fontSizePx` (e.g. 130 = 1.3×). */
   emphasisScalePercent?: number
   /**
-   * REQ-0306 — emphasised keyword substrings.  At render time every
-   * occurrence of each keyword in the CURRENT `text` is emphasised, so
-   * emphasis survives text edits and works on cues with no / invalid
-   * `words`.  An empty array = "on the new model, nothing selected".
-   * `undefined` = fall back to the legacy `emphasizedWordIndices` (migrated
-   * on the fly by `resolveEmphasisKeywords`) or, if that is also absent, no
-   * emphasis.
+   * REQ-0307 — emphasised character spans, chosen per character in the
+   * emphasis picker dialog.  Each span carries `{ start, end }` (code-unit
+   * offsets into `text`) AND `text` (the anchor substring), so the exact
+   * occurrence the user picked is emphasised even when the same substring
+   * appears elsewhere in the cue, while a text edit re-anchors rather than
+   * silently emphasising the wrong glyphs.  See `shared/emphasis.ts`
+   * `resolveEmphasisSpans` for the three-step resolution order.
+   *
+   * An empty array = "on the current model, nothing selected".  `undefined` =
+   * fall back to the legacy `emphasisKeywords` / `emphasizedWordIndices`,
+   * migrated on read by `resolveEmphasis`; if both are absent, no emphasis.
+   */
+  emphasisSpans?: EmphasisSpan[]
+  /**
+   * @deprecated REQ-0306 keyword-substring emphasis, superseded by
+   * `emphasisSpans` (REQ-0307) because a repeated keyword emphasised every
+   * occurrence with no way to pick one.  Retained only so legacy dev saves
+   * parse and migrate; never written by new code.
    */
   emphasisKeywords?: string[]
   /**
    * @deprecated REQ-0305 word-index emphasis, superseded by
-   * `emphasisKeywords` (REQ-0306).  Retained only so legacy dev saves parse
-   * and migrate; never written by new code.  0-based indices into `words`.
+   * `emphasisKeywords` (REQ-0306) then `emphasisSpans` (REQ-0307).  Retained
+   * only so legacy dev saves parse and migrate; never written by new code.
+   * 0-based indices into `words`.
    */
   emphasizedWordIndices?: number[]
 }

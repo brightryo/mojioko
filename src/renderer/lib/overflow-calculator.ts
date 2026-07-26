@@ -11,7 +11,7 @@ import {
   type SubtitleFont
 } from './font-metrics'
 import type { FontId } from '../../shared/fonts'
-import { computeEmphasisRanges, isEmphasizedAt } from '../../shared/emphasis'
+import { isEmphasizedAt, mapRangesAcrossBreakCollapse, type EmphasisRange } from '../../shared/emphasis'
 
 export interface OverflowResult {
   /** -1 if entire text fits; otherwise the code-unit index where overflow begins. */
@@ -46,12 +46,14 @@ export interface OverflowArgs {
    */
   fontId?: FontId
   /**
-   * REQ-0306 §2 — keyword emphasis.  When the cue has emphasis keywords, the
-   * emphasised glyphs are physically larger, so the overflow judgement must
-   * measure them at `emphasisScale`.  Omitted / scale ≤ 1 / no match ⇒
-   * byte-identical to the pre-REQ-0306 measurement.
+   * REQ-0306 §2 / REQ-0307 — keyword emphasis.  When the cue has emphasised
+   * spans, those glyphs are physically larger, so the overflow judgement must
+   * measure them at `emphasisScale`.  `emphasisRanges` are the caller's
+   * already-resolved ranges in ORIGINAL-`text` coordinates (i.e. before `\N`
+   * is collapsed to `\n`); they are re-mapped internally.  Omitted / empty /
+   * scale ≤ 1 ⇒ byte-identical to the pre-REQ-0306 measurement.
    */
-  emphasisKeywords?: readonly string[]
+  emphasisRanges?: readonly EmphasisRange[]
   emphasisScale?: number
 }
 
@@ -128,11 +130,14 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
   const effectiveFontId = fontId ?? getActiveFontId()
   const cmap = getCmapCoverageFor(effectiveFontId)
   const tofu = getTofuSubstituteFor(effectiveFontId)
-  // REQ-0306 — emphasis ranges over the SAME normalised text the loop walks,
-  // so `charOffset` lines up.  Empty ⇒ `mult` is always 1 (byte-identical).
+  // REQ-0306 §2 / REQ-0307 — the caller's ranges are in ORIGINAL-text
+  // coordinates, where each `\N` is two code units; the loop below walks
+  // `normalizedText`, where it is one.  Re-map so `charOffset` lines up
+  // instead of drifting by one per preceding break.  Empty ⇒ `mult` is
+  // always 1 (byte-identical to the pre-REQ-0306 measurement).
   const emphRanges =
-    args.emphasisKeywords && args.emphasisScale && args.emphasisScale > 1 && args.emphasisKeywords.length > 0
-      ? computeEmphasisRanges(normalizedText, args.emphasisKeywords)
+    args.emphasisRanges && args.emphasisScale && args.emphasisScale > 1 && args.emphasisRanges.length > 0
+      ? mapRangesAcrossBreakCollapse(text, args.emphasisRanges, 1)
       : []
   const emphScale = args.emphasisScale ?? 1
   const mult = (off: number): number =>

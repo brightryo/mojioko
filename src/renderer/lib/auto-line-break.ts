@@ -11,7 +11,7 @@ import {
 } from './font-metrics'
 import type { SubtitleFont } from './font-metrics'
 import type { FontId } from '../../shared/fonts'
-import { computeEmphasisRanges, isEmphasizedAt, type EmphasisRange } from '../../shared/emphasis'
+import { isEmphasizedAt, type EmphasisRange } from '../../shared/emphasis'
 
 /**
  * REQ-0306 §2 — emphasis width descriptor threaded through the break finder.
@@ -57,11 +57,15 @@ export function applyAutoLineBreak(
   videoWidthPx: number,
   font?: SubtitleFont | null,
   fontId?: FontId,
-  // REQ-0306 §2 — when the cue has keyword emphasis, the emphasised glyphs
-  // are physically larger, so the break finder must measure them at `scale`
-  // to wrap correctly.  Omitted / no matches ⇒ pre-REQ-0306 behaviour,
-  // byte-identical (Japanese-only cues without emphasis are untouched).
-  emphasis?: { keywords: readonly string[]; scale: number }
+  // REQ-0306 §2 / REQ-0307 — when the cue has keyword emphasis, the emphasised
+  // glyphs are physically larger, so the break finder must measure them at
+  // `scale` to wrap correctly.  `ranges` are the caller's already-resolved
+  // emphasis ranges in ORIGINAL-`text` coordinates (REQ-0307 moved resolution
+  // to `shared/emphasis.ts:resolveEmphasis` so the anchored spans are matched
+  // once, consistently, everywhere).  Omitted / empty ⇒ pre-REQ-0306
+  // behaviour, byte-identical (Japanese-only cues without emphasis are
+  // untouched).
+  emphasis?: { ranges: readonly EmphasisRange[]; scale: number }
 ): string {
   const f = fontId !== undefined
     ? getSubtitleFontFor(fontId)
@@ -77,15 +81,11 @@ export function applyAutoLineBreak(
   const cmap = getCmapCoverageFor(effectiveFontId)
   const tofu = getTofuSubstituteFor(effectiveFontId)
 
-  // REQ-0306 — resolve emphasis ranges over the ORIGINAL text (with `\N`)
-  // once; `null` (no emphasis / no scale-up / no match) makes every path
-  // below byte-identical to the pre-REQ-0306 measurement.
+  // REQ-0306 §2 — `null` (no emphasis / no scale-up / no surviving span) makes
+  // every path below byte-identical to the pre-REQ-0306 measurement.
   const emph: EmphAdvance =
-    emphasis && emphasis.scale > 1 && emphasis.keywords.length > 0
-      ? ((): EmphAdvance => {
-          const ranges = computeEmphasisRanges(text, emphasis.keywords)
-          return ranges.length > 0 ? { ranges, scale: emphasis.scale } : null
-        })()
+    emphasis && emphasis.scale > 1 && emphasis.ranges.length > 0
+      ? { ranges: emphasis.ranges, scale: emphasis.scale }
       : null
 
   // Process each existing \N-separated segment independently, then rejoin —

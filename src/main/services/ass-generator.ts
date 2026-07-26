@@ -8,11 +8,11 @@ import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
 import {
   canUseKeywordEmphasisInTier,
   clampEmphasisScalePercent,
-  resolveEmphasisKeywords,
-  computeEmphasisRanges,
+  resolveEmphasis,
   buildEmphasisBody,
-  emphasizedWordSet,
+  emphasizedWordRanges,
   EMPHASIS_DEFAULT_COLOR,
+  type EmphasisRange,
 } from '../../shared/emphasis'
 
 /**
@@ -302,30 +302,27 @@ export function generateAss(
         ? `\\2c${hexToAss(e.textColorHex)}`
         : ''
 
-      // REQ-0306 — keyword emphasis (text/keyword-based, NOT words-dependent).
-      // Gate = per-cue toggle-on AND the free-tier gate.  We resolve the
-      // keyword list (migrating the legacy REQ-0305 word indices on the fly)
-      // and match it against the CURRENT text — so emphasis survives edits and
-      // works on cues with no / invalid `words`.
+      // REQ-0307 — keyword emphasis (anchored character spans, NOT
+      // words-dependent).  Gate = per-cue toggle-on AND the free-tier gate.
+      // `resolveEmphasis` migrates the legacy REQ-0305 word indices / REQ-0306
+      // keyword list on the fly and resolves each span against the CURRENT
+      // text, so emphasis survives edits, works on cues with no / invalid
+      // `words`, and hits only the occurrence the user picked.
       const emphasisGateOn = e.keywordEmphasisEnabled === true && canUseKeywordEmphasisInTier(isMsix)
-      const emphasisKeywords = emphasisGateOn
-        ? resolveEmphasisKeywords(e.emphasisKeywords, e.emphasizedWordIndices, e.words)
-        : []
-      const emphasisRanges = emphasisKeywords.length > 0
-        ? computeEmphasisRanges(e.text, emphasisKeywords)
-        : []
+      const emphasisRanges = emphasisGateOn ? resolveEmphasis(e).ranges : []
       const emphasisActive = emphasisRanges.length > 0
       // Emphasised font size (rounded px) and the base to restore after.
       const emphasisBigFs = Math.round(
         e.fontSizePx * (clampEmphasisScalePercent(e.emphasisScalePercent) / 100),
       )
-      // REQ-0306 §3 — which karaoke word units are emphasised (keyword ranges
-      // mapped onto the karaoke units via stripped-text alignment).  Works for
+      // REQ-0307 §4 — emphasis ranges projected onto the karaoke word units at
+      // CHARACTER granularity, so a span that straddles a `\k` boundary is
+      // split at that boundary instead of swallowing whole words.  Works for
       // real OR fallback karaoke words, so emphasis rides along with karaoke
       // even on edited cues.  Only computed when both features are on.
-      const emphasisWordSet = emphasisActive && karaokeActive
-        ? emphasizedWordSet(e.text, karaokeWords, emphasisKeywords)
-        : new Set<number>()
+      const emphasisKaraokeRanges = emphasisActive && karaokeActive
+        ? emphasizedWordRanges(e.text, karaokeWords, emphasisRanges)
+        : new Map<number, EmphasisRange[]>()
       const emphasisColorHex = e.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR
 
       const outlineTag = `\\3c${hexToAss(e.outlineColorHex)}`
@@ -472,9 +469,9 @@ export function generateAss(
         // restores `\fs<base>\c<highlight>` after so the next word sweeps to
         // the normal highlight.  `\2c` (unspoken) stays base for everyone, so
         // the emphasised word looks like the others until it is spoken.
-        const emphasisOverlay = emphasisWordSet.size > 0
+        const emphasisOverlay = emphasisKaraokeRanges.size > 0
           ? {
-              indices: emphasisWordSet,
+              ranges: emphasisKaraokeRanges,
               openTag: `\\fs${emphasisBigFs}\\c${hexToAss(emphasisColorHex)}`,
               closeTag: `\\fs${e.fontSizePx}\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}`,
             }
@@ -489,11 +486,13 @@ export function generateAss(
         )
         text = `{${styleTag}}${karaokeBody}`
       } else if (emphasisActive) {
-        // REQ-0306 — karaoke OFF, emphasis ON.  Build the body straight from
-        // the cue text + keyword ranges (no `words` needed), wrapping each
-        // emphasised run in `\fs<big>\c<emph>` and restoring base size/colour
-        // after.  Segment concatenation reproduces `e.text` exactly, so
-        // non-emphasised runs are byte-identical to the plain path.
+        // REQ-0307 — karaoke OFF, emphasis ON.  Build the body straight from
+        // the cue text + resolved span ranges (no `words` needed), wrapping
+        // each emphasised run in `\fs<big>\c<emph>` and restoring base
+        // size/colour after.  Ranges are character-level, so a run need not
+        // align with a word boundary.  Segment concatenation reproduces
+        // `e.text` exactly, so non-emphasised runs are byte-identical to the
+        // plain path.
         const emphasisBody = buildEmphasisBody(
           e.text,
           emphasisRanges,

@@ -189,16 +189,10 @@
     "emphasisRowLabel": "キーワード強調",
     "emphasisColor": "強調色",
     "emphasisSize": "サイズ %",
-    "emphasisWords": "単語",
-    "emphasisKeywords": "強調キーワード",
-    "emphasisAdd": "追加",
-    "emphasisAddPlaceholder": "強調する語を入力",
-    "emphasisRemove": "{{keyword}} を削除",
-    "emphasisHint": "単語をタップして強調",
-    "emphasisNoWords": "この字幕にはワード情報がありません",
     "rotation": "回転 (度)",
     "family": "フォント",
-    "weight": "ウェイト"
+    "weight": "ウェイト",
+    "emphasisEdit": "編集"
   },
   "history": {
     "editText": "テキストを編集",
@@ -414,5 +408,14 @@
         "reviveFailedStillCut": "{{count}} 件の字幕は、 別のトリミングが残っているため戻せませんでした"
       }
     }
+  },
+  "emphasisPicker": {
+    "title": "強調する文字を選択",
+    "description": "強調したい文字をクリックして選びます。ドラッグでまとめて選択、Shift+クリックで範囲選択ができます。",
+    "clear": "すべて解除",
+    "selectedCount": "{{count}} 文字を選択中",
+    "emptyText": "この字幕にはテキストがありません。",
+    "emptyLine": "（空行）",
+    "spaceChar": "スペース"
   }
 }

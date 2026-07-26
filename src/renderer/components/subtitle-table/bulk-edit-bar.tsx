@@ -15,7 +15,8 @@ import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import {
   canUseKeywordEmphasisInTier,
-  resolveEmphasisKeywords,
+  resolveEmphasisRanges,
+  mapRangesAcrossBreakCollapse,
   clampEmphasisScalePercent,
   EMPHASIS_DEFAULT_COLOR,
   EMPHASIS_DEFAULT_SCALE_PERCENT,
@@ -931,10 +932,14 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         videoWidthPx,
         font,
         e.fontId,
-        // REQ-0306 §2 — respect each row's keyword emphasis size when bulk-wrapping.
+        // REQ-0306 §2 / REQ-0307 — respect each row's keyword emphasis size
+        // when bulk-wrapping.  In "pack" mode `input` has had every `\N`
+        // deleted, so the span ranges are shifted onto packed coordinates.
         e.keywordEmphasisEnabled === true
           ? {
-              keywords: resolveEmphasisKeywords(e.emphasisKeywords, e.emphasizedWordIndices, e.words),
+              ranges: mode === 'pack'
+                ? mapRangesAcrossBreakCollapse(e.text, resolveEmphasisRanges(e), 0)
+                : resolveEmphasisRanges(e),
               scale: clampEmphasisScalePercent(e.emphasisScalePercent) / 100,
             }
           : undefined

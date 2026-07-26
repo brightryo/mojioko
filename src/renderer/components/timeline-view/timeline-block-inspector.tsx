@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight, ChevronDown, RotateCcw, X } from 'lucide-react'
+import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight, ChevronDown, RotateCcw, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { EmphasisPickerDialog } from '@/components/step2/emphasis-picker-dialog'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
@@ -18,14 +20,11 @@ import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
-import { areWordsValidForText } from '../../../shared/words-validity'
 import {
   canUseKeywordEmphasisInTier,
-  resolveEmphasisKeywords,
-  toggleEmphasisKeyword,
-  addEmphasisKeyword,
-  removeEmphasisKeyword,
+  resolveEmphasis,
   clampEmphasisScalePercent,
+  type EmphasisSpan,
   EMPHASIS_DEFAULT_COLOR,
   EMPHASIS_DEFAULT_SCALE_PERCENT,
   EMPHASIS_SCALE_MIN_PERCENT,
@@ -160,9 +159,9 @@ export function TimelineBlockInspector({
   const [subtitleSectionOpen, setSubtitleSectionOpen] = useState(true)
   const [layoutSectionOpen, setLayoutSectionOpen] = useState(true)
   const [backgroundSectionOpen, setBackgroundSectionOpen] = useState(false)
-  // REQ-0306 — draft text for the "add emphasis keyword" input.  Works for
-  // any cue (Japanese / edited / no-`words`) since it stores a substring.
-  const [emphasisDraft, setEmphasisDraft] = useState('')
+  // REQ-0307 §1 — the per-character emphasis picker lives behind the row's
+  // 「編集」 button, so the inspector row itself stays one line tall.
+  const [emphasisPickerOpen, setEmphasisPickerOpen] = useState(false)
   // REQ-20260612-004: same dirty / composing pattern as CellEditor in
   // subtitle-table.tsx.  The Inspector's textarea is always mounted
   // (unlike CellEditor, which is gated by `editingText`), so without
@@ -377,11 +376,11 @@ export function TimelineBlockInspector({
   // override to store.  Users who want to change the base colour
   // change the cue's text colour instead.
 
-  // REQ-0306 — keyword-emphasis handlers.  Emphasis is now text/keyword-based
-  // (survives edits, works without `words`).  Toggle-on seeds colour + size
-  // defaults; colour previews per-drag then commits one history op; size
-  // commits directly.  Word chips and the keyword input both write the same
-  // `emphasisKeywords` list (migrating any legacy indices first).
+  // REQ-0307 — keyword-emphasis handlers.  Emphasis is span-based (survives
+  // edits, works without `words`, no duplicate-match ambiguity).  Toggle-on
+  // seeds colour + size defaults; colour previews per-drag then commits one
+  // history op; size commits directly.  The character selection itself is
+  // owned by the picker dialog and lands as a single `emphasisSpans` write.
   function handleEmphasisToggle(on: boolean) {
     if (on) {
       applyStyleEdit(t('history.editEmphasis'), {
@@ -406,25 +405,13 @@ export function TimelineBlockInspector({
   function handleEmphasisSizeCommit(v: number) {
     applyStyleEdit(t('history.editEmphasis'), { emphasisScalePercent: clampEmphasisScalePercent(v) })
   }
-  // Current keyword list (post-migration) for the chips / list rendering.
-  const emphasisKeywords = resolveEmphasisKeywords(
-    entry.emphasisKeywords,
-    entry.emphasizedWordIndices,
-    entry.words,
-  )
-  function handleEmphasisKeywordToggle(kw: string) {
-    const next = toggleEmphasisKeyword(emphasisKeywords, kw)
-    applyStyleEdit(t('history.editEmphasis'), { emphasisKeywords: next })
-  }
-  function handleEmphasisKeywordAdd(kw: string) {
-    const trimmed = kw.trim()
-    if (!trimmed) return
-    const next = addEmphasisKeyword(emphasisKeywords, trimmed)
-    applyStyleEdit(t('history.editEmphasis'), { emphasisKeywords: next })
-  }
-  function handleEmphasisKeywordRemove(kw: string) {
-    const next = removeEmphasisKeyword(emphasisKeywords, kw)
-    applyStyleEdit(t('history.editEmphasis'), { emphasisKeywords: next })
+  // REQ-0307 §2 — the picker seeds itself from the RESOLVED spans, so a legacy
+  // keyword list / word-index list is migrated on open and a span that no
+  // longer resolves simply doesn't come back pre-selected.  Applying writes
+  // the explicit span list, which pins the migration.
+  const emphasisResolvedSpans = resolveEmphasis(entry).spans
+  function handleEmphasisSpansCommit(spans: EmphasisSpan[]) {
+    applyStyleEdit(t('history.editEmphasis'), { emphasisSpans: spans })
   }
 
   function handleRotationCommit(deg: number) {
@@ -702,11 +689,10 @@ export function TimelineBlockInspector({
   // flag; renderer + ass-generator fall through to plain rendering per
   // §0's Layer 2 defensive fallback) but the muted colour + hint
   // communicates why nothing visible happens.
-  // REQ-0306 — the keyword-emphasis word chips are a QUICK path shown only
-  // when the cue has valid per-word data (`words`).  The keyword text input
-  // below always works (Japanese / edited cues), so emphasis never depends on
-  // `words` — this only decides whether the convenience chips render.
-  const wordsValid = areWordsValidForText(entry.words, entry.text)
+  // REQ-0307 §3 — emphasis has NO `words` gate at all: the picker selects
+  // characters straight out of the cue text, so it works on Japanese cues,
+  // edited cues, and cues that never had per-word data.  Only the tier gate
+  // remains (currently free for everyone — see `canUseKeywordEmphasisInTier`).
   const showEmphasisUi = canUseKeywordEmphasisInTier(isMsix)
   // REQ-119 [2] — Reset is an EDIT (= wipe per-row overrides back to
   // `entry.original`).  A frozen row only accepts the Restore button
@@ -1148,130 +1134,54 @@ export function TimelineBlockInspector({
                 </div>
               </StyleRow>
             )}
-            {/* REQ-0306 — keyword emphasis: master Switch + colour + size %,
-                then (when enabled) the keyword picker.  Emphasis is now
-                text/keyword-based, so it works on ANY cue (Japanese, edited,
-                no `words`).  Three affordances: (1) removable chips for the
-                current keywords, (2) a text input to add an arbitrary
-                substring, (3) quick word chips when the cue has valid
-                per-word data. */}
+            {/* REQ-0307 §1 — keyword emphasis row: master Switch + 「編集」
+                (opens the per-character picker) + colour + size %.  The Edit
+                button is disabled while the toggle is OFF, so the row reads
+                as "turn it on, then choose what to emphasise".  Emphasis is
+                span-based, so it works on ANY cue (Japanese, edited, no
+                `words`) and hits only the occurrence the user picked — the
+                REQ-0306 keyword chips are gone because a repeated keyword
+                could not be disambiguated. */}
             {showEmphasisUi && (
-              <>
-                <StyleRow label={t('styleCell.emphasisRowLabel')} stopControlClickPropagation>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={entry.keywordEmphasisEnabled === true}
-                      onCheckedChange={handleEmphasisToggle}
-                      disabled={isFrozen}
-                      aria-label={t('styleCell.emphasis')}
-                    />
-                    <ColorPicker
-                      value={entry.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR}
-                      onChange={handleEmphasisColorPreview}
-                      onCommit={handleEmphasisColorCommit}
-                      disabled={isFrozen}
-                      swatchOnly
-                      heading={t('styleCell.emphasisColor')}
-                    />
-                    <NumberStepperInput
-                      value={entry.emphasisScalePercent ?? EMPHASIS_DEFAULT_SCALE_PERCENT}
-                      min={EMPHASIS_SCALE_MIN_PERCENT}
-                      max={EMPHASIS_SCALE_MAX_PERCENT}
-                      step={EMPHASIS_SCALE_STEP_PERCENT}
-                      onCommit={handleEmphasisSizeCommit}
-                      disabled={isFrozen}
-                      ariaLabel={t('styleCell.emphasisSize')}
-                      widthClass="w-16"
-                    />
-                  </div>
-                </StyleRow>
-                {entry.keywordEmphasisEnabled === true && (
-                  <div className="px-2 pb-1.5 space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                    {/* (1) current keyword chips — click × to remove */}
-                    {emphasisKeywords.length > 0 && (
-                      <div className="flex flex-wrap gap-1" role="group" aria-label={t('styleCell.emphasisKeywords')}>
-                        {emphasisKeywords.map((kw) => (
-                          <span
-                            key={kw}
-                            className="inline-flex items-center gap-1 rounded-[3px] bg-primary px-2 py-0.5 text-caption font-medium text-fg-inverse"
-                          >
-                            {kw}
-                            <button
-                              type="button"
-                              disabled={isFrozen}
-                              onClick={() => handleEmphasisKeywordRemove(kw)}
-                              aria-label={t('styleCell.emphasisRemove', { keyword: kw })}
-                              className={cn('opacity-80 hover:opacity-100', isFrozen && 'pointer-events-none opacity-40')}
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {/* (2) add-keyword text input */}
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        value={emphasisDraft}
-                        onChange={(e) => setEmphasisDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            handleEmphasisKeywordAdd(emphasisDraft)
-                            setEmphasisDraft('')
-                          }
-                        }}
-                        disabled={isFrozen}
-                        placeholder={t('styleCell.emphasisAddPlaceholder')}
-                        aria-label={t('styleCell.emphasisAddPlaceholder')}
-                        className="h-7 flex-1 min-w-0 rounded-md border border-line-strong bg-surface-0 px-2 text-caption focus:outline-none focus-visible:outline-none"
-                      />
-                      <button
-                        type="button"
-                        disabled={isFrozen || emphasisDraft.trim() === ''}
-                        onClick={() => { handleEmphasisKeywordAdd(emphasisDraft); setEmphasisDraft('') }}
-                        className={cn(
-                          'h-7 shrink-0 rounded-md px-2 text-caption font-medium transition-colors',
-                          'bg-primary text-fg-inverse hover:opacity-90',
-                          (isFrozen || emphasisDraft.trim() === '') && 'opacity-40 pointer-events-none',
-                        )}
-                      >
-                        {t('styleCell.emphasisAdd')}
-                      </button>
-                    </div>
-                    {/* (3) quick word chips (only when the cue has valid words) */}
-                    {wordsValid && entry.words && entry.words.length > 0 && (
-                      <div className="flex flex-wrap gap-1" role="group" aria-label={t('styleCell.emphasisWords')}>
-                        {entry.words.map((w, i) => {
-                          const label = w.text.trim()
-                          if (!label) return null
-                          const on = emphasisKeywords.includes(label)
-                          return (
-                            <button
-                              key={i}
-                              type="button"
-                              aria-pressed={on}
-                              disabled={isFrozen}
-                              onClick={() => handleEmphasisKeywordToggle(label)}
-                              className={cn(
-                                'rounded-[3px] px-2 py-0.5 text-caption font-medium transition-colors duration-150',
-                                'focus:outline-none focus-visible:outline-none',
-                                isFrozen && 'opacity-40 pointer-events-none',
-                                on
-                                  ? 'bg-primary text-fg-inverse'
-                                  : 'bg-surface-0 border border-line-strong text-fg-secondary hover:text-fg-primary hover:bg-surface-2',
-                              )}
-                            >
-                              {label}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
+              <StyleRow label={t('styleCell.emphasisRowLabel')} stopControlClickPropagation>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={entry.keywordEmphasisEnabled === true}
+                    onCheckedChange={handleEmphasisToggle}
+                    disabled={isFrozen}
+                    aria-label={t('styleCell.emphasis')}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isFrozen || entry.keywordEmphasisEnabled !== true}
+                    onClick={() => setEmphasisPickerOpen(true)}
+                    aria-label={t('styleCell.emphasisEdit')}
+                  >
+                    <Pencil className="h-3 w-3" />
+                    {t('styleCell.emphasisEdit')}
+                  </Button>
+                  <ColorPicker
+                    value={entry.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR}
+                    onChange={handleEmphasisColorPreview}
+                    onCommit={handleEmphasisColorCommit}
+                    disabled={isFrozen}
+                    swatchOnly
+                    heading={t('styleCell.emphasisColor')}
+                  />
+                  <NumberStepperInput
+                    value={entry.emphasisScalePercent ?? EMPHASIS_DEFAULT_SCALE_PERCENT}
+                    min={EMPHASIS_SCALE_MIN_PERCENT}
+                    max={EMPHASIS_SCALE_MAX_PERCENT}
+                    step={EMPHASIS_SCALE_STEP_PERCENT}
+                    onCommit={handleEmphasisSizeCommit}
+                    disabled={isFrozen}
+                    ariaLabel={t('styleCell.emphasisSize')}
+                    widthClass="w-16"
+                  />
+                </div>
+              </StyleRow>
             )}
             {/* Casing — REQ-0292 §4 moved BELOW karaoke.  REQ-0299 §3
                 — state text ("ALL CAPS"/"なし") removed; the Switch
@@ -1562,6 +1472,21 @@ export function TimelineBlockInspector({
         </div>
       )}
 
+      {/* REQ-0307 §1 — per-character emphasis picker.  Mounted at the
+          inspector root (not inside the collapsible 「字幕」 section) so
+          collapsing that section while the dialog is open can't unmount it
+          mid-edit.  Rendering is gated on `open` inside the component. */}
+      {showEmphasisUi && (
+        <EmphasisPickerDialog
+          open={emphasisPickerOpen}
+          onOpenChange={setEmphasisPickerOpen}
+          text={entry.text}
+          spans={emphasisResolvedSpans}
+          colorHex={entry.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR}
+          scalePercent={entry.emphasisScalePercent ?? EMPHASIS_DEFAULT_SCALE_PERCENT}
+          onCommit={handleEmphasisSpansCommit}
+        />
+      )}
     </div>
   )
 }

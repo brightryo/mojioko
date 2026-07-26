@@ -189,16 +189,10 @@
     "emphasisRowLabel": "Keyword emphasis",
     "emphasisColor": "Emphasis color",
     "emphasisSize": "Size %",
-    "emphasisWords": "Words",
-    "emphasisKeywords": "Emphasized keywords",
-    "emphasisAdd": "Add",
-    "emphasisAddPlaceholder": "Type a word to emphasize",
-    "emphasisRemove": "Remove {{keyword}}",
-    "emphasisHint": "Tap a word to emphasize it",
-    "emphasisNoWords": "No per-word data for this cue",
     "rotation": "Rotation (deg)",
     "family": "Font",
-    "weight": "Weight"
+    "weight": "Weight",
+    "emphasisEdit": "Edit"
   },
   "history": {
     "editText": "Edit text",
@@ -414,5 +408,14 @@
         "reviveFailedStillCut": "{{count}} subtitle(s) could not be restored — another trim still consumes them"
       }
     }
+  },
+  "emphasisPicker": {
+    "title": "Select characters to emphasise",
+    "description": "Click the characters you want to emphasise. Drag to select a run, or shift-click to extend the selection.",
+    "clear": "Clear all",
+    "selectedCount": "{{count}} selected",
+    "emptyText": "This subtitle has no text.",
+    "emptyLine": "(empty line)",
+    "spaceChar": "Space"
   }
 }

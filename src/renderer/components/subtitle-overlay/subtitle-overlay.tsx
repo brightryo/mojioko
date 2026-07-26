@@ -20,11 +20,12 @@ import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
 import { computeKaraokeBreaks } from '../../../shared/karaoke-ass'
 import {
   canUseKeywordEmphasisInTier,
-  resolveEmphasisKeywords,
-  computeEmphasisRanges,
+  resolveEmphasisRanges,
   tokenizeEmphasis,
-  emphasizedWordSet,
+  emphasizedWordRanges,
+  splitTextByLocalRanges,
   clampEmphasisScalePercent,
+  type EmphasisRange,
   EMPHASIS_DEFAULT_COLOR,
 } from '../../../shared/emphasis'
 import type { WordSpan } from '../../../shared/types'
@@ -556,26 +557,24 @@ export function SubtitleOverlay({
   // documents the resolution rule alongside the base colour.
   void karaokeHighlightColorResolved
 
-  // REQ-0306 — keyword emphasis (text/keyword-based).  Gate = per-cue
-  // toggle-on + free-tier gate.  Keywords are matched against the CURRENT
-  // text (migrating the legacy REQ-0305 word indices on the fly), so
-  // emphasis survives edits and works on cues with no / invalid `words`.
+  // REQ-0307 — keyword emphasis (anchored character spans).  Gate = per-cue
+  // toggle-on + free-tier gate.  `resolveEmphasis` migrates the legacy
+  // REQ-0305 word indices / REQ-0306 keyword list and resolves each span
+  // against the CURRENT text, so emphasis survives edits, works on cues with
+  // no / invalid `words`, and hits only the occurrence the user picked.  Same
+  // helper the ass-generator calls — that shared resolution is what keeps
+  // preview and burn-in in agreement.
   const emphasisGateOn = entry.keywordEmphasisEnabled === true && canUseKeywordEmphasisInTier(isMsix)
-  const emphasisKeywords = emphasisGateOn
-    ? resolveEmphasisKeywords(entry.emphasisKeywords, entry.emphasizedWordIndices, entry.words)
-    : []
-  const emphasisRanges = emphasisKeywords.length > 0
-    ? computeEmphasisRanges(entry.text, emphasisKeywords)
-    : []
+  const emphasisRanges = emphasisGateOn ? resolveEmphasisRanges(entry) : []
   const emphasisActive = emphasisRanges.length > 0
   const emphasisEm = clampEmphasisScalePercent(entry.emphasisScalePercent) / 100
   const emphasisColorResolved = entry.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR
-  // REQ-0306 §3 — which karaoke word units are emphasised (keyword ranges
-  // mapped onto the karaoke units).  Drives the per-word grow + Option-A
-  // colour in the karaoke render below.
-  const emphasisWordSet = emphasisActive && karaokeActive
-    ? emphasizedWordSet(entry.text, karaokeWords, emphasisKeywords)
-    : new Set<number>()
+  // REQ-0307 §4 — emphasis ranges projected onto the karaoke word units at
+  // CHARACTER granularity.  Drives the per-run grow + Option-A colour in the
+  // karaoke render below, splitting a word when a span covers only part of it.
+  const emphasisKaraokeRanges = emphasisActive && karaokeActive
+    ? emphasizedWordRanges(entry.text, karaokeWords, emphasisRanges)
+    : new Map<number, EmphasisRange[]>()
   // Standalone emphasis render (karaoke OFF): tokenise the cue text into
   // emphasised / plain runs (+ `\N` breaks) so each run gets its own colour +
   // size.  When karaoke is ON, emphasis rides on the karaoke word spans below.
@@ -682,26 +681,36 @@ export function SubtitleOverlay({
           {karaokeWordsRendered.map((w, i) => {
             const brokenHere = karaokeBreaks.has(i)
             const wordText = brokenHere ? w.text.replace(/^\s+/, '') : w.text
-            // REQ-0306 §3 (Option A) — emphasised karaoke words grow AND, when
-            // spoken, light up in the emphasis colour.  Size is set statically
-            // here; the spoken/unspoken colour is driven by the rAF loop in
-            // video-preview-panel, which reads `data-karaoke-emph-color` to
-            // pick the emphasis colour (spoken) vs base (unspoken).
-            const emphasized = emphasisWordSet.has(i)
+            // REQ-0306 §3 (Option A) / REQ-0307 §4 — emphasised karaoke text
+            // grows AND, when spoken, lights up in the emphasis colour.  A
+            // span may cover only part of a word, so the word is split into
+            // runs and EACH run gets its own span.  Every run keeps the same
+            // `data-karaoke-word-idx` + `-start-sec`, so the rAF loop in
+            // video-preview-panel (which iterates spans, not indices) lights
+            // them all at the same instant — mirroring how libass treats the
+            // whole `\k` block as one syllable.  Size is static here; the
+            // spoken/unspoken colour comes from `data-karaoke-emph-color`.
+            const localRanges = emphasisKaraokeRanges.get(i)
+            const runs = localRanges && localRanges.length > 0
+              ? splitTextByLocalRanges(wordText, localRanges)
+              : [{ text: wordText, emphasized: false }]
             return (
               <Fragment key={i}>
                 {brokenHere && <br />}
-                <span
-                  data-karaoke-word-idx={i}
-                  data-karaoke-word-start-sec={w.startSec}
-                  data-karaoke-emph-color={emphasized ? emphasisColorResolved : undefined}
-                  style={{
-                    color: karaokeBaseColorResolved,
-                    fontSize: emphasized ? `${emphasisEm}em` : undefined,
-                  }}
-                >
-                  {wordText}
-                </span>
+                {runs.map((run, r) => (
+                  <span
+                    key={r}
+                    data-karaoke-word-idx={i}
+                    data-karaoke-word-start-sec={w.startSec}
+                    data-karaoke-emph-color={run.emphasized ? emphasisColorResolved : undefined}
+                    style={{
+                      color: karaokeBaseColorResolved,
+                      fontSize: run.emphasized ? `${emphasisEm}em` : undefined,
+                    }}
+                  >
+                    {run.text}
+                  </span>
+                ))}
               </Fragment>
             )
           })}
