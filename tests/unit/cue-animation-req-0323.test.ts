@@ -3,6 +3,8 @@ import {
   resolveAnimation,
   animationTransformAt,
   animationKeyframes,
+  animationWindows,
+  animationFadeMs,
   isAnimationInert,
   NEUTRAL_TRANSFORM,
   SCALE_START,
@@ -124,12 +126,39 @@ describe('REQ-0323 §2-1 — the curves', () => {
     expect(animationTransformAt(s, 0, 4, 3.5).opacity).toBeCloseTo(1, 6) // no fade-out
   })
 
-  it('overlapping ramps on a short cue meet in the middle and never settle', () => {
-    // duration 0.4, ramps 1s each → the two ramps overlap.
+  it('★ REQ-0333 §4 — windows that would overlap are shrunk to fit the cue', () => {
+    // 0.4 s cue, 1 s of ramp requested at EACH end.  Pre-REQ-0333 this
+    // produced `min(pIn, pOut)`, a triangle peaking at 0.2 — a shape
+    // libass's `\fade` does not draw when its control points cross.
     const s = spec({ type: 'fade', durationSec: 1 })
-    const peak = animationTransformAt(s, 0, 0.4, 0.2).opacity
-    expect(peak).toBeLessThan(1)
-    expect(peak).toBeCloseTo(0.2, 6)
+    const w = animationWindows(s, 0, 0.4)
+    expect(w.inSec).toBeCloseTo(0.2, 9)
+    expect(w.outSec).toBeCloseTo(0.2, 9)
+    // The cue now settles exactly once, at the midpoint, and the ramps
+    // are symmetric about it.
+    expect(animationTransformAt(s, 0, 0.4, 0.2).opacity).toBeCloseTo(1, 6)
+    expect(animationTransformAt(s, 0, 0.4, 0.1).opacity).toBeCloseTo(0.5, 6)
+    expect(animationTransformAt(s, 0, 0.4, 0.3).opacity).toBeCloseTo(0.5, 6)
+    // ...and the emitted `\fad` can no longer cross: in + out === the
+    // cue length, so libass's t2 and t3 coincide instead of inverting.
+    expect(buildAnimationTags(s, 0, 0.4)).toBe(BS + 'fad(200,200)')
+  })
+
+  it('★ REQ-0333 §4 — the shrink is proportional, so one enabled end keeps the whole cue', () => {
+    const s = spec({ type: 'fade', durationSec: 1, outEnabled: false })
+    const w = animationWindows(s, 0, 0.4)
+    expect(w.inSec).toBeCloseTo(0.4, 9)
+    expect(w.outSec).toBe(0)
+    expect(animationTransformAt(s, 0, 0.4, 0.4).opacity).toBeCloseTo(1, 6)
+  })
+
+  it('★ REQ-0333 §4 — a cue whose windows FIT keeps the requested value untouched', () => {
+    // Not "close to": the same number, so no ordinary cue can pick up a
+    // floating-point difference and change an emitted byte.
+    for (const [d, start, end] of [[0.4, 0, 4], [1, 0, 2], [0.3, 10, 11]]) {
+      const s = spec({ type: 'fade', durationSec: d })
+      expect(animationWindows(s, start, end)).toEqual({ inSec: d, outSec: d })
+    }
   })
 
   it('an inert spec is exactly neutral', () => {
@@ -188,15 +217,33 @@ describe('REQ-0323 §1-6 — ★ the fadeDurationSec migration', () => {
 
   it('★ the migrated ramp is numerically identical to the pre-REQ-0323 helper', () => {
     // If this drifts, every existing project silently changes how it fades.
+    //
+    // REQ-0333 §4 narrowed this to cues whose two windows FIT
+    // (`2 × fadeSec <= end - start`).  On a cue too short for both, the
+    // legacy helper's `min()` triangle was never what libass drew — its
+    // `\fade` control points crossed — so reproducing it was reproducing a
+    // preview/burn mismatch.  The clamped behaviour is asserted separately
+    // in the §4 tests above.
     for (const fadeSec of [0.1, 0.2, 0.3, 0.5]) {
       const s = resolveAnimation({ fadeDurationSec: fadeSec })
-      for (const [start, end] of [[0, 4], [1.5, 2.0], [10, 10.3]]) {
+      for (const [start, end] of [[0, 4], [1.5, 2.6], [10, 11]]) {
+        expect(2 * fadeSec).toBeLessThanOrEqual(end - start)
         for (let t = start; t <= end; t += (end - start) / 20) {
           expect(animationTransformAt(s, start, end, t).opacity)
             .toBeCloseTo(legacyFadeOpacity(t, start, end, fadeSec), 10)
         }
       }
     }
+  })
+
+  it('★ REQ-0333 §4 — a legacy fade on a SHORT cue emits a fitting \\fad', () => {
+    // 0.3 s cue with a 0.4 s fade at each end: pre-REQ-0333 this emitted
+    // `\fad(400,400)` on a 300 ms event, so libass's t2 (400) sat past its
+    // t3 (-100) and the alpha jumped.  Both windows shrink by the same
+    // factor, so the pair always sums to the cue length.
+    const s = resolveAnimation({ fadeDurationSec: 0.4 })
+    expect(animationFadeMs(s, 10, 10.3)).toEqual({ inMs: 150, outMs: 150 })
+    expect(buildAnimationTags(s, 10, 10.3)).toBe(BS + 'fad(150,150)')
   })
 
   it('★ the migrated cue emits the SAME \\fad tag it emitted before', () => {

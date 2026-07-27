@@ -104,19 +104,35 @@ describe('computeFadeOpacity', () => {
     })
   })
 
-  describe('short caption — fade-in and fade-out overlap (duration < 2·N)', () => {
-    // Duration = 0.3, fade = 0.2 → ramps overlap and meet at the midpoint (t=1.15).
-    // Peak alpha = 0.15 / 0.2 = 0.75.
+  describe('short caption — the requested windows do not fit (duration < 2·N)', () => {
+    // Duration = 0.3, fade = 0.2 → 0.4 s of ramp requested inside a 0.3 s
+    // cue.  REQ-0333 §4 shrinks both windows by the same factor to 0.15 s
+    // each, instead of the pre-REQ-0333 `min()` triangle that peaked at
+    // 0.75 and never settled.
+    //
+    // The triangle was not a behaviour worth preserving: it was never what
+    // the MP4 showed.  `\fad(200,200)` on a 300 ms event gives libass a t2
+    // of 200 past a t3 of 100, its control points cross, and its alpha
+    // reaches 1 and then JUMPS.  Preview and burn disagreed; now both
+    // describe the same 0.15 + 0.15 pair.
     const short = { startSec: 1.0, endSec: 1.3, fadeDurationSec: 0.2 }
 
-    it('at the midpoint reaches the triangular peak (= duration/2 / fade)', () => {
-      expect(computeFadeOpacity({ ...short, currentTimeSec: 1.15 })).toBeCloseTo(0.75, 10)
+    it('★ settles exactly at the midpoint, where the two windows meet', () => {
+      expect(computeFadeOpacity({ ...short, currentTimeSec: 1.15 })).toBeCloseTo(1, 10)
     })
 
-    it('never reaches alpha 1 across the whole span', () => {
-      for (let t = short.startSec; t <= short.endSec; t += 0.01) {
-        expect(computeFadeOpacity({ ...short, currentTimeSec: t })).toBeLessThanOrEqual(0.75 + 1e-9)
+    it('★ the two ramps are symmetric about that midpoint', () => {
+      for (const d of [0.15, 0.10, 0.05, 0]) {
+        expect(computeFadeOpacity({ ...short, currentTimeSec: 1.15 - d }))
+          .toBeCloseTo(computeFadeOpacity({ ...short, currentTimeSec: 1.15 + d }), 10)
       }
+      // Half-way up each shrunk window.
+      expect(computeFadeOpacity({ ...short, currentTimeSec: 1.075 })).toBeCloseTo(0.5, 10)
+    })
+
+    it('still starts and ends fully transparent', () => {
+      expect(computeFadeOpacity({ ...short, currentTimeSec: 1.0 })).toBeCloseTo(0, 10)
+      expect(computeFadeOpacity({ ...short, currentTimeSec: 1.3 })).toBeCloseTo(0, 10)
     })
   })
 

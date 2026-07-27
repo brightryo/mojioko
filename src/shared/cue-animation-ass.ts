@@ -129,7 +129,11 @@ export function buildAnimationTags(
   // owner asked for, over a shorter window — the durations come from
   // `animationFadeMs`, not from arithmetic here, so there is still exactly
   // one definition of the ramp.
-  const { inMs, outMs } = animationFadeMs(spec)
+  // REQ-0333 §4 — the cue bounds are passed so the shared clamp can shrink
+  // both windows on a cue shorter than in + out.  The clamp lives in
+  // `cue-animation.ts`; recomputing it here is the two-implementations bug
+  // this module's header exists to forbid.
+  const { inMs, outMs } = animationFadeMs(spec, startSec, endSec)
   const fadeTag = inMs > 0 || outMs > 0 ? `\\fad(${inMs},${outMs})` : ''
 
   if (spec.type === 'fade') return fadeTag

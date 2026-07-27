@@ -396,21 +396,85 @@ export function isAnimationInert(spec: AnimationSpec): boolean {
     || (!spec.inEnabled && !spec.outEnabled)
 }
 
+/** The entrance / exit ramp lengths a cue actually gets, in seconds. */
+export interface AnimationWindows {
+  inSec: number
+  outSec: number
+}
+
+/**
+ * REQ-0333 §4 — the ONE place the entrance / exit windows are decided.
+ *
+ * ## The bug this fixes
+ *
+ * The requested duration is per-END, so a cue with both ends enabled asks
+ * for `2 × durationSec` of ramp.  When that exceeds the cue's own length
+ * the two windows overlap, and the preview and the burn then disagree
+ * about what overlapping windows mean:
+ *
+ *   - the shared model took `min(pIn, pOut)`, i.e. a triangle that peaks
+ *     part-way up and never settles;
+ *   - libass's `\fade(a1,a2,a3,t1,t2,t3,t4)` — which `\fad(in,out)`
+ *     expands to with `t2 = in` and `t3 = dur − out` — tests its control
+ *     points in order, so when `t2 > t3` the whole in-ramp wins, the cue
+ *     reaches FULL opacity at `t2`, and the alpha then JUMPS to wherever
+ *     the out-ramp had already got to.  A discontinuity, and nothing like
+ *     a triangle.
+ *
+ * Rather than teach the shared model to imitate that (it is a libass
+ * implementation artefact, not a design), the windows are shrunk so they
+ * can never overlap in the first place.  Then `min(pIn, pOut)` and
+ * `\fade`'s control points describe the same shape and the question of
+ * who wins the overlap does not arise.
+ *
+ * ## Why PROPORTIONAL shrink rather than one-side priority
+ *
+ * Both windows are scaled by the same factor `cueLen / (in + out)`.
+ *
+ *   - It is symmetric.  A cue with both ends enabled keeps both ends —
+ *     each gets half the cue.  One-side priority ("the entrance is worth
+ *     more") would delete the exit outright on a short cue, and a caption
+ *     that fades in but cuts to black is a far more visible defect than
+ *     one whose fades are simply quick.
+ *   - It preserves the enabled/disabled asymmetry for free: a cue with
+ *     only ONE end enabled has `total = durationSec`, so the factor
+ *     clamps that single window to the whole cue, which is the obvious
+ *     right answer and needs no special case.
+ *   - It is a no-op whenever the windows fit (`total <= cueLen`), and the
+ *     early return below leaves the requested value *untouched* — not
+ *     multiplied by a factor of 1 — so ordinary cues cannot pick up a
+ *     floating-point difference and change a single emitted byte.
+ */
+export function animationWindows(
+  spec: AnimationSpec,
+  startSec: number,
+  endSec: number,
+): AnimationWindows {
+  if (isAnimationInert(spec)) return { inSec: 0, outSec: 0 }
+  const want: AnimationWindows = {
+    inSec: spec.inEnabled ? spec.durationSec : 0,
+    outSec: spec.outEnabled ? spec.durationSec : 0,
+  }
+  const total = want.inSec + want.outSec
+  const cueSec = Math.max(0, endSec - startSec)
+  if (total <= 0 || total <= cueSec) return want
+  const factor = cueSec / total
+  return { inSec: want.inSec * factor, outSec: want.outSec * factor }
+}
+
 /**
  * Ramp progress at time `t`: 0 = fully un-entered, 1 = fully settled.
  *
  * Taking the MINIMUM of the entrance and exit ramps generalises exactly
- * what `computeFadeOpacity` did for `\fad`: on a cue shorter than twice
- * the duration the two ramps overlap and meet in the middle, so the cue
- * never fully settles.  Reproducing that rule here (rather than inventing
- * a new one) is what lets `fade` remain bit-for-bit the behaviour users
- * already have — see the equivalence test.
+ * what `computeFadeOpacity` did for `\fad`.  Since REQ-0333 §4 the two
+ * windows are clamped so they cannot overlap, so the `min` only ever
+ * picks the ramp that is actually running — see `animationWindows` for
+ * why the overlap had to go rather than be modelled.
  */
 function rampProgress(spec: AnimationSpec, startSec: number, endSec: number, tSec: number): number {
-  const d = spec.durationSec
-  if (d <= 0) return 1
-  const pIn = spec.inEnabled ? clamp01((tSec - startSec) / d) : 1
-  const pOut = spec.outEnabled ? clamp01((endSec - tSec) / d) : 1
+  const { inSec, outSec } = animationWindows(spec, startSec, endSec)
+  const pIn = inSec > 0 ? clamp01((tSec - startSec) / inSec) : 1
+  const pOut = outSec > 0 ? clamp01((endSec - tSec) / outSec) : 1
   return Math.min(pIn, pOut)
 }
 
@@ -579,14 +643,25 @@ function progressSamples(spec: AnimationSpec): number[] {
  *
  * This function and `opacityRampFraction` are the ONLY two places the
  * opacity window is defined — the writer just prints what it returns.
+ *
+ * REQ-0333 §4 — the window comes from `animationWindows`, which is why
+ * this now needs the cue's own bounds.  Emitting `\fad(in,out)` with
+ * `in + out > dur` is what made libass's control points cross; going
+ * through the shared clamp means the pair emitted here can never do that,
+ * and it is the SAME clamp `animationTransformAt` applies, so the preview
+ * cannot describe a different ramp.
  */
-export function animationFadeMs(spec: AnimationSpec): { inMs: number; outMs: number } {
+export function animationFadeMs(
+  spec: AnimationSpec,
+  startSec: number,
+  endSec: number,
+): { inMs: number; outMs: number } {
   if (isAnimationInert(spec) || spec.type === 'slide') return { inMs: 0, outMs: 0 }
-  const ms = Math.round(spec.durationSec * opacityRampFraction(spec.type) * 1000)
-  if (ms <= 0) return { inMs: 0, outMs: 0 }
+  const fraction = opacityRampFraction(spec.type)
+  const { inSec, outSec } = animationWindows(spec, startSec, endSec)
   return {
-    inMs: spec.inEnabled ? ms : 0,
-    outMs: spec.outEnabled ? ms : 0,
+    inMs: Math.round(inSec * fraction * 1000),
+    outMs: Math.round(outSec * fraction * 1000),
   }
 }
 
@@ -623,12 +698,18 @@ export function animationKeyframes(
     out.push({ atSec: clamped, transform: animationTransformAt(spec, startSec, endSec, clamped) })
   }
 
-  const d = spec.durationSec
-  if (spec.inEnabled) for (const p of breaks) push(startSec + p * d)
-  if (spec.outEnabled) for (const p of [...breaks].reverse()) push(endSec - p * d)
+  // REQ-0333 §4 — sample over the CLAMPED windows.  Using `durationSec`
+  // here while `rampProgress` used a shorter window would put the control
+  // points at instants the curve no longer passes through, i.e. exactly
+  // the preview/burn split this REQ closes.  Unclamped, `inSec` IS
+  // `durationSec`, so ordinary cues keep the identical arithmetic.
+  const { inSec, outSec } = animationWindows(spec, startSec, endSec)
+  if (inSec > 0) for (const p of breaks) push(startSec + p * inSec)
+  if (outSec > 0) for (const p of [...breaks].reverse()) push(endSec - p * outSec)
 
-  // De-duplicate coincident points (a cue shorter than the ramps can make
-  // the in and out breakpoints collide) and keep them in time order.
+  // De-duplicate coincident points (the in and out breakpoints can still
+  // collide when the clamped windows exactly meet) and keep them in time
+  // order.
   out.sort((a, b) => a.atSec - b.atSec)
   return out.filter((k, i) => i === 0 || Math.abs(k.atSec - out[i - 1].atSec) > 1e-9)
 }
