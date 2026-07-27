@@ -167,7 +167,17 @@ export async function loadSubtitleFontFor(fontId: FontId): Promise<Font> {
   })()
   inFlight.set(fontId, promise)
   // Once settled (either way), clear the in-flight entry so retries can run.
-  promise.finally(() => { inFlight.delete(fontId) })
+  //
+  // REQ-0329 §1 — the trailing `.catch` is load-bearing, not decoration.
+  // `.finally()` returns a NEW promise that adopts the original's rejection.
+  // Callers attach their handler to `promise` (returned below), so THAT one
+  // is handled — but this derived branch had nobody, and a font that fails
+  // to load therefore raised an unhandled rejection.  It surfaced as a
+  // non-zero `vitest` exit even with all 1680 tests passing, which is how
+  // it was finally noticed; the same leak exists in production whenever a
+  // font fails (a missing file, or the `HTTP <status>` throw in
+  // `fetchFontBytes`).  `void` alone does not suppress it.
+  void promise.finally(() => { inFlight.delete(fontId) }).catch(() => undefined)
   return promise
 }
 
