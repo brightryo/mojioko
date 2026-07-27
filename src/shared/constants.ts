@@ -86,7 +86,7 @@ export const FONT_SIZE_MAX_PX = 600
  * REQ-0292 §5 raised the ceiling from 10 to 20 so users can build the
  * heavier chunky-outline look common in short-form / kawaii captions.
  * Every consumer (slider `max`, settings-store clamp, ass-generator
- * `\bord`, subtitle-overlay `-webkit-text-stroke`) reads from this
+ * `\bord`, subtitle-overlay's canvas ring) reads from this
  * constant so bumping it here propagates end-to-end in one step.
  */
 export const OUTLINE_THICKNESS_MAX_PX = 20
