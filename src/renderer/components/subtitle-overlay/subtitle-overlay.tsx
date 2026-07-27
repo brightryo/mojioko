@@ -15,7 +15,7 @@ import { useAppEnvStore } from '@/stores/app-env-store'
 import { canSelectFontInTier } from '@/lib/font-tier'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
-import { measureRuns, computeRingBox, prepareCanvas, paintRing, paintShadow } from '@/lib/outline-ring'
+import { paintOutlineLayers } from '@/lib/outline-ring'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 import { sweepWordTimings } from '../../../shared/karaoke-sweep'
 import { resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
@@ -666,90 +666,43 @@ export function SubtitleOverlay({
     const ringCanvas = ringCanvasRef.current
     const shadowCanvas = shadowCanvasRef.current
     if (!outer || !ringCanvas || !shadowCanvas) return
-    const clear = (c: HTMLCanvasElement) => {
-      if (c.width !== 0) c.width = 0
-      if (c.height !== 0) c.height = 0
-    }
-    const wantRing = showOutline && outlinePx > 0
-    const wantShadow = shadowActive && shadowDepthPx > 0
-    if (!wantRing && !wantShadow) {
-      clear(ringCanvas)
-      clear(shadowCanvas)
-      return
-    }
-    const wrapper = outer.querySelector<HTMLElement>('[data-subtitle-text-wrapper]')
-    if (!wrapper) return
     if (!measureCtxRef.current) {
       measureCtxRef.current = document.createElement('canvas').getContext('2d')
     }
     const mctx = measureCtxRef.current
     if (!mctx) return
 
-    // `getClientRects()` reports VIEWPORT boxes.  Under a rotation those are
-    // axis-aligned bounding boxes whose corners are not the box's corners, so
-    // the rotation is neutralised for the duration of the measurement and the
-    // canvases — being children of the same span — get it re-applied by CSS.
-    // Only translations remain, and those cancel in the subtraction below.
-    // REQ-0326 §1-2 — neutralise the transform UNCONDITIONALLY, not just for
-    // rotation.
+    // REQ-0328 §1 — the procedure itself lives in `outline-ring.ts` so that
+    // `scripts/verify-ring-paint` drives THE SAME CODE in a real Electron
+    // window and measures the pixels it produces.  That gate used to run a
+    // hand-ported COPY of this body; two copies of one procedure drift, and a
+    // drifted harness stays green while production breaks.  What stays here is
+    // React-specific: obtaining the refs, the layout-effect timing, and the
+    // deliberately absent dependency array.
     //
-    // `getBoundingClientRect()` reports TRANSFORMED viewport coordinates, but
-    // the canvas draws in the span's UNTRANSFORMED local space with an
-    // unscaled `ctx.font`.  Any active transform therefore inflates/deflates
-    // `baselineY` while the glyph size stays put, and the ring lands off the
-    // text.  Rotation was already handled here; the REQ-0323 animation scale
-    // was NOT, and measurement found the ring up to ~16px out vertically when
-    // the effect re-ran mid-animation (bord 20 at S=115%: thickness 6/39
-    // instead of 23/23).
+    // The transform neutralisation moved WITH the procedure — see
+    // `paintOutlineLayers` for why it is unconditional (REQ-0326 §1-2).  It has
+    // to live inside the shared function, or the harness's negative control
+    // would only be perturbing a copy of the code production runs.
     //
-    // This is reachable: the effect below has no dependency array, so it runs
+    // Why that matters HERE: this effect has no dependency array, so it runs
     // after EVERY render, and `video-preview-panel` re-renders this component
-    // from `onTimeUpdate` while the entrance animation is playing.
-    //
-    // Neutralising the translations too is harmless — they cancelled in the
-    // subtraction anyway — and removes the need to reason about which
-    // transform functions are safe.
-    const prevTransform = outer.style.transform
-    outer.style.transform = 'none'
-    const originRect = outer.getBoundingClientRect()
-    const { runs, extents } = measureRuns(wrapper, originRect.left, originRect.top, mctx)
-    outer.style.transform = prevTransform
+    // from `onTimeUpdate` while the entrance animation is playing — i.e. the
+    // measurement genuinely does happen with a live `scale()` on the span.
+    paintOutlineLayers({
+      outer,
+      ringCanvas,
+      shadowCanvas,
+      measureCtx: mctx,
+      outlinePx: showOutline && outlinePx > 0 ? outlinePx : 0,
+      outlineColorOpaque: entry.outlineColorHex,
+      outlineOpacity01: (entry.outlineAlpha ?? 100) / 100,
+      shadowOffsetPx: shadowActive && shadowDepthPx > 0 ? shadowDepthPx : 0,
+      shadowColorOpaque,
+      shadowOpacity01: shadowAlpha01,
+      dpr: window.devicePixelRatio || 1,
+    })
 
-    const box = computeRingBox(
-      runs,
-      extents,
-      wantRing ? outlinePx : 0,
-      wantShadow ? shadowDepthPx : 0,
-    )
-    if (!box) {
-      clear(ringCanvas)
-      clear(shadowCanvas)
-      return
-    }
-    const dpr = window.devicePixelRatio || 1
-
-    if (wantShadow) {
-      const sctx = prepareCanvas(shadowCanvas, box, dpr)
-      if (sctx) {
-        paintShadow(sctx, runs, wantRing ? outlinePx : 0, shadowDepthPx, shadowColorOpaque)
-        shadowCanvas.style.opacity = String(shadowAlpha01)
-      }
-    } else {
-      clear(shadowCanvas)
-    }
-
-    if (wantRing) {
-      const rctx = prepareCanvas(ringCanvas, box, dpr)
-      if (rctx) {
-        paintRing(rctx, runs, outlinePx, entry.outlineColorHex)
-        // `a` as an ELEMENT opacity, so overlapping rings composite once.
-        ringCanvas.style.opacity = String(
-          Math.max(0, Math.min(1, (entry.outlineAlpha ?? 100) / 100)),
-        )
-      }
-    } else {
-      clear(ringCanvas)
-    }
   })
 
   return (

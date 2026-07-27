@@ -45,6 +45,10 @@
  * Both MUST fail on the `scale-then-paint` rows.  If they pass, the gate has
  * stopped testing anything — fix it before trusting a green run.
  *
+ * The break is NOT a harness-local reimplementation: it sets
+ * `skipTransformNeutralisation` on `paintOutlineLayers`, so it perturbs the
+ * very function production calls (REQ-0328 §1).
+ *
  * ## Method
  *
  * The ring is painted RED (#FF0000) on a BLACK stage under a WHITE fill, so the
@@ -61,9 +65,11 @@
  *
  * ## Not covered (honest limits)
  *
- * - React itself: the effect body is PORTED into page.html, so commit ordering,
- *   ref timing and the dependency array are not exercised.  Keep the port in
- *   step with `subtitle-overlay.tsx` by hand.
+ * - React itself: the effect BODY is now shared code (`paintOutlineLayers`), but
+ *   the call site is not — commit ordering, ref timing, the dependency array and
+ *   the arguments the component passes are not exercised.  Nor is the cue's DOM
+ *   shape: `page.html:buildCue` replicates the overlay's JSX by hand, because a
+ *   server-rendered component never runs the layout effect.
  * - One font, one weight, one line, Latin only.  Multi-line, CJK, emphasis runs
  *   and per-run font changes are `verify:outline-ring`'s job.
  * - Rotation, shadow canvas, opacity, karaoke sweep.

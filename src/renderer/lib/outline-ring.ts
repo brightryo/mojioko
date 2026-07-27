@@ -225,6 +225,139 @@ export function paintShadow(
 }
 
 /**
+ * Everything `paintOutlineLayers` needs.  DOM elements in, painted canvases
+ * out; no React, no store, no `window` reads (`dpr` is passed).
+ */
+export interface OutlineLayerPaintOptions {
+  /** The cue's outer span: the local coordinate origin, and the transform carrier. */
+  outer: HTMLElement
+  /** Beneath the ring; sized and painted only when `shadowOffsetPx > 0`. */
+  shadowCanvas: HTMLCanvasElement
+  /** Above the shadow, below the text; painted only when `outlinePx > 0`. */
+  ringCanvas: HTMLCanvasElement
+  /** Scratch 2D context used for font metrics only.  Never drawn into. */
+  measureCtx: CanvasRenderingContext2D
+  /** Outward ring reach in local px.  0 disables the ring. */
+  outlinePx: number
+  /** `\3c` as an opaque colour; `\3a` rides on `outlineOpacity01`. */
+  outlineColorOpaque: string
+  /** `\3a` as 0..1, applied to the canvas ELEMENT (see `paintRing`). */
+  outlineOpacity01: number
+  /** Down-right shadow offset in local px.  0 disables the shadow. */
+  shadowOffsetPx: number
+  shadowColorOpaque: string
+  shadowOpacity01: number
+  /** `window.devicePixelRatio`, passed in so this stays testable and DOM-only. */
+  dpr: number
+  /**
+   * HARNESS ONLY — `scripts/verify-ring-paint` sets this to re-create the
+   * pre-REQ-0326 bug and prove its gate still detects it (`RING_PAINT_BREAK`).
+   * Production MUST leave it unset: skipping the neutralisation puts the ring
+   * up to ~16px off the glyphs whenever a transform is active.  It lives here,
+   * rather than in the harness, so that the break perturbs the code production
+   * actually runs instead of a copy of it.
+   *
+   * @internal
+   */
+  skipTransformNeutralisation?: boolean
+}
+
+/**
+ * The whole ring+shadow paint: measure the live DOM, size both canvases, paint.
+ *
+ * ## Why this is a shared function and not inlined in the layout effect
+ *
+ * `scripts/verify-ring-paint` drives this procedure in a real Electron window
+ * and measures the resulting PIXELS — the only check that covers
+ * `computeRingBox`, `prepareCanvas`'s dpr handling, `paintRing`'s
+ * stroke-then-punch, and the transform neutralisation below.  It used to do
+ * that against a hand-ported COPY of the layout effect, which would inevitably
+ * drift from this one and leave the gate green while production broke
+ * (REQ-0328 §1).  Both callers now enter here.  Keep React concerns — refs,
+ * effect timing, dependency arrays — at the call site.
+ *
+ * ## The transform neutralisation is load-bearing (REQ-0326)
+ *
+ * `getBoundingClientRect()` reports TRANSFORMED viewport coordinates, but the
+ * canvas draws in the outer span's UNTRANSFORMED local space with an unscaled
+ * `ctx.font`.  Any active transform therefore skews `baselineY` while the glyph
+ * size stays put, and the ring lands off the text.  Neutralising it for the
+ * duration of the measurement — unconditionally, not just for rotation — is
+ * what makes it safe to re-run this after every render while an animation
+ * transform is live.  The canvases are children of the same span, so CSS
+ * re-applies the transform to ring and glyphs together afterwards.
+ *
+ * Returns the box both canvases were sized to, or null when nothing was drawn.
+ */
+export function paintOutlineLayers(opts: OutlineLayerPaintOptions): RingBox | null {
+  const { outer, ringCanvas, shadowCanvas, measureCtx } = opts
+  const clear = (c: HTMLCanvasElement) => {
+    if (c.width !== 0) c.width = 0
+    if (c.height !== 0) c.height = 0
+  }
+  const wantRing = opts.outlinePx > 0
+  const wantShadow = opts.shadowOffsetPx > 0
+  if (!wantRing && !wantShadow) {
+    clear(ringCanvas)
+    clear(shadowCanvas)
+    return null
+  }
+  const wrapper = outer.querySelector<HTMLElement>('[data-subtitle-text-wrapper]')
+  if (!wrapper) return null
+
+  const prevTransform = outer.style.transform
+  const neutralise = opts.skipTransformNeutralisation !== true
+  if (neutralise) outer.style.transform = 'none'
+  const originRect = outer.getBoundingClientRect()
+  const { runs, extents } = measureRuns(wrapper, originRect.left, originRect.top, measureCtx)
+  if (neutralise) outer.style.transform = prevTransform
+
+  const box = computeRingBox(
+    runs,
+    extents,
+    wantRing ? opts.outlinePx : 0,
+    wantShadow ? opts.shadowOffsetPx : 0
+  )
+  if (!box) {
+    clear(ringCanvas)
+    clear(shadowCanvas)
+    return null
+  }
+
+  if (wantShadow) {
+    const sctx = prepareCanvas(shadowCanvas, box, opts.dpr)
+    if (sctx) {
+      paintShadow(
+        sctx,
+        runs,
+        wantRing ? opts.outlinePx : 0,
+        opts.shadowOffsetPx,
+        opts.shadowColorOpaque
+      )
+      shadowCanvas.style.opacity = String(clamp01(opts.shadowOpacity01))
+    }
+  } else {
+    clear(shadowCanvas)
+  }
+
+  if (wantRing) {
+    const rctx = prepareCanvas(ringCanvas, box, opts.dpr)
+    if (rctx) {
+      paintRing(rctx, runs, opts.outlinePx, opts.outlineColorOpaque)
+      // `\3a` as an ELEMENT opacity, so overlapping rings composite once.
+      ringCanvas.style.opacity = String(clamp01(opts.outlineOpacity01))
+    }
+  } else {
+    clear(ringCanvas)
+  }
+  return box
+}
+
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v))
+}
+
+/**
  * Reads every text run inside `wrapper` straight out of the live DOM.
  *
  * `originLeft`/`originTop` are the viewport coordinates of the local origin

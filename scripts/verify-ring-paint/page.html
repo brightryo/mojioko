@@ -22,15 +22,22 @@
   /**
    * REQ-0327 §2 — the page half of the ring-paint gate.
    *
-   * Everything below is a FAITHFUL PORT of the production overlay: the DOM
-   * shape comes from `subtitle-overlay.tsx`'s return value and the paint path
-   * from its ring `useLayoutEffect`.  `Ring.*` is the real
-   * `src/renderer/lib/outline-ring.ts`, bundled by index.mjs — no
-   * reimplementation of measurement, box or paint lives here.
+   * The PAINT is production code: `runRingEffect` below calls
+   * `Ring.paintOutlineLayers`, i.e. the real
+   * `src/renderer/lib/outline-ring.ts` bundled by index.mjs, which is the same
+   * function `subtitle-overlay.tsx`'s layout effect calls.  Nothing about
+   * measuring, sizing, painting or neutralising the transform is duplicated
+   * here any more (REQ-0328 §1).
    *
-   * The one deliberate deviation is `neutralise`, which lets the driver run
-   * the effect with the REQ-0326 fix disabled so the negative control can
-   * prove the gate goes red.  Production behaviour is `'always'`.
+   * What IS still a replica: `buildCue` — the cue's DOM shape and inline
+   * styles, copied from `subtitle-overlay.tsx`'s returned JSX.  It cannot call
+   * the component (React would have to render, and `renderToStaticMarkup`
+   * never runs the layout effect, which is the whole reason this gate exists).
+   * So a change to the overlay's DOM — renaming
+   * `[data-subtitle-text-wrapper]`, moving the transform onto a different
+   * element, changing `white-space` or `transform-origin` — will NOT be
+   * reflected here automatically.  Keep the two in step; the smaller surface
+   * is the point, not its absence.
    */
   const STAGE = document.getElementById('stage')
   let measureCtx = null
@@ -104,57 +111,43 @@
   }
 
   /**
-   * PORT of the ring `useLayoutEffect` in `subtitle-overlay.tsx` (shadow path
-   * omitted; these cases run with shadowDepth 0).  Keep in step with it.
+   * Calls the PRODUCTION paint procedure — `paintOutlineLayers` out of the real
+   * `src/renderer/lib/outline-ring.ts`, the same function
+   * `subtitle-overlay.tsx`'s layout effect calls.  REQ-0328 §1 pulled it out of
+   * the component precisely so this harness would stop maintaining a second
+   * copy: a copy drifts, and a drifted harness passes while production breaks.
+   *
+   * The negative control is expressed the same way: `skipTransformNeutralisation`
+   * is an option OF THE SHARED FUNCTION, so `RING_PAINT_BREAK` perturbs the code
+   * production runs rather than a look-alike.  'rotation-only' reproduces the
+   * pre-REQ-0326 condition (neutralise only when rotated) by skipping whenever
+   * rotation is 0, which is the case for every fixture here.
    */
   function runRingEffect(els, spec) {
-    const { outer, ringCanvas, shadowCanvas } = els
-    const clear = (c) => {
-      if (c.width !== 0) c.width = 0
-      if (c.height !== 0) c.height = 0
-    }
-    const outlinePx = spec.outlinePx
-    const wantRing = outlinePx > 0
-    if (!wantRing) {
-      clear(ringCanvas)
-      clear(shadowCanvas)
-      return
-    }
-    const wrapper = outer.querySelector('[data-subtitle-text-wrapper]')
-    if (!wrapper) return
     if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d')
-    const mctx = measureCtx
-
-    // ---- the line REQ-0326 fixed -------------------------------------------
-    // production: neutralise unconditionally.  'rotation-only' is the pre-fix
-    // behaviour; 'never' removes it entirely.  Both are negative controls.
     const rotationDeg = spec.rotationDeg || 0
-    const neutralise =
+    const skip =
       spec.neutralise === 'never'
-        ? false
+        ? true
         : spec.neutralise === 'rotation-only'
-          ? rotationDeg !== 0
-          : true
-    const prevTransform = outer.style.transform
-    if (neutralise) outer.style.transform = 'none'
-    const originRect = outer.getBoundingClientRect()
-    const measured = Ring.measureRuns(wrapper, originRect.left, originRect.top, mctx)
-    if (neutralise) outer.style.transform = prevTransform
-    // ------------------------------------------------------------------------
-
-    const box = Ring.computeRingBox(measured.runs, measured.extents, outlinePx, 0)
-    if (!box) {
-      clear(ringCanvas)
-      clear(shadowCanvas)
-      return
-    }
-    const dpr = window.devicePixelRatio || 1
-    const rctx = Ring.prepareCanvas(ringCanvas, box, dpr)
-    if (rctx) {
-      Ring.paintRing(rctx, measured.runs, outlinePx, spec.ringColor)
-      ringCanvas.style.opacity = '1'
-    }
-    clear(shadowCanvas)
+          ? rotationDeg === 0
+          : false
+    Ring.paintOutlineLayers({
+      outer: els.outer,
+      ringCanvas: els.ringCanvas,
+      shadowCanvas: els.shadowCanvas,
+      measureCtx,
+      outlinePx: spec.outlinePx,
+      outlineColorOpaque: spec.ringColor,
+      outlineOpacity01: 1,
+      // These cases isolate the ring; the shadow canvas stays cleared so the
+      // capture contains exactly two colours to separate.
+      shadowOffsetPx: 0,
+      shadowColorOpaque: '#000000',
+      shadowOpacity01: 1,
+      dpr: window.devicePixelRatio || 1,
+      skipTransformNeutralisation: skip
+    })
   }
 
   /**
