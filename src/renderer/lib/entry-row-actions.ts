@@ -12,6 +12,7 @@ import {
   clampEmphasisScalePercent,
 } from '../../shared/emphasis'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
+import { buildDuplicateEntry } from '@/lib/duplicate-entry'
 
 /**
  * Row-level edit operations that are shared between the list view
@@ -423,37 +424,14 @@ export function duplicateRow(
     ? `dup-${crypto.randomUUID()}`
     : `dup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-  const base = {
-    startSec: entry.startSec,
-    endSec: entry.endSec,
-    text: entry.text,
-    fontSizePx: entry.fontSizePx,
-    textColorHex: entry.textColorHex,
-    outlineColorHex: entry.outlineColorHex,
-    outlineThicknessPx: entry.outlineThicknessPx,
-    fadeDurationSec: entry.fadeDurationSec,
-    fontId: entry.fontId,
-    // REQ-20260613-016 / v1.2.2 機能A+B: copy per-row layout / background /
-    // free-position fields from the source row.  subtitleBackground is
-    // deep-copied so the duplicate doesn't share object identity with the
-    // source.  posX/posY copy through verbatim — duplicating a pinned row
-    // gives a pinned duplicate, which the user can then drag elsewhere.
-    horizontalPosition: entry.horizontalPosition,
-    verticalPosition: entry.verticalPosition,
-    verticalMarginPx: entry.verticalMarginPx,
-    subtitleBackground: { ...entry.subtitleBackground },
-    posX: entry.posX,
-    posY: entry.posY
-  }
-  const duplicate: SubtitleEntry = {
-    id: newId,
-    ...base,
-    isDeleted: false,
-    isEdited: true,
-    // Deep-copy subtitleBackground a second time for the original snapshot
-    // so live + original do not share object identity.
-    original: { ...base, subtitleBackground: { ...base.subtitleBackground } }
-  }
+  // REQ-0322 §2 — the field list used to live inline here and had drifted
+  // 16 fields behind `SubtitleEntry` (style effects, karaoke `words`,
+  // emphasis spans).  It now lives in `duplicate-entry.ts` behind a
+  // `{ [K in keyof SubtitleEntry]-?: DuplicationRule }` classification, so
+  // a new field that nobody classifies fails `tsc` instead of being
+  // silently dropped from every duplicate.  See that module for the
+  // per-field copy / deep-copy / regenerate / reset / snapshot table.
+  const duplicate: SubtitleEntry = buildDuplicateEntry(entry, newId)
 
   pushHistory({
     label: labels.history,
