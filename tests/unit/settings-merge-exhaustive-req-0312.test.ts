@@ -68,7 +68,6 @@ describe('REQ-0312 §1 — the rule table pins every field s classification', ()
     encoder: 'incoming-wins',
     defaultAudioTrackIndex: 'incoming-wins',
     fadeDurationSec: 'incoming-wins',
-    activeFontId: 'incoming-wins',
     activeModelId: 'incoming-else-existing',
     lastInputDir: 'incoming-else-existing',
     lastOutputDir: 'incoming-else-existing',
@@ -77,6 +76,7 @@ describe('REQ-0312 §1 — the rule table pins every field s classification', ()
     defaultOutputDir: 'presence-wins',
     defaultProjectDir: 'presence-wins',
     fontSetInstalledVersion: 'presence-wins',
+    activeFontId: 'presence-wins',
     burnin: 'session-only',
     audioMode: 'session-only',
     subtitleBackground: 'session-only',
@@ -95,6 +95,8 @@ describe('REQ-0312 §1 — the rule table pins every field s classification', ()
     expect(SETTINGS_MERGE_RULES.defaultInputDir).toBe('presence-wins')
     expect(SETTINGS_MERGE_RULES.defaultOutputDir).toBe('presence-wins')
     expect(SETTINGS_MERGE_RULES.fontSetInstalledVersion).toBe('presence-wins')
+    // REQ-0315 §4 joined them.
+    expect(SETTINGS_MERGE_RULES.activeFontId).toBe('presence-wins')
   })
 })
 

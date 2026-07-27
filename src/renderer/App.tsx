@@ -204,7 +204,12 @@ function AppInner() {
           defaultAudioTrackIndex: s.defaultAudioTrackIndex,
           fadeDurationSec: s.fadeDurationSec,
           activeModelId: null,
-          activeFontId: s.activeFontId,
+          // REQ-0315 §4 — `activeFontId` is deliberately NOT sent.
+          // Main owns it exclusively (font.ts `fontSetActive` /
+          // `fontUninstall` / `fontUninstallAll` are the only writers), and the
+          // merge rule is `presence-wins`, which only preserves the on-disk
+          // value while the key is ABSENT.  Sending it would defeat the rule —
+          // same two-part shape as `fontSetInstalledVersion` (REQ-0279).
           lastInputDir: null,
           lastOutputDir: null,
           // REQ-0158 — the Settings-dialog user-preferred fixed folders

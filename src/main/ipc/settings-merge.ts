@@ -89,9 +89,6 @@ export const SETTINGS_MERGE_RULES: { readonly [K in keyof AppSettings]-?: MergeR
   encoder: 'incoming-wins',
   defaultAudioTrackIndex: 'incoming-wins',
   fadeDurationSec: 'incoming-wins',
-  // Main also writes this (font.ts), but the renderer sends it, so today the
-  // payload wins.  Preserved as-is by REQ-0312's no-behaviour-change rule.
-  activeFontId: 'incoming-wins',
 
   // --- main-owned, renderer sends a null sentinel each save ----------------
   activeModelId: 'incoming-else-existing',
@@ -109,6 +106,10 @@ export const SETTINGS_MERGE_RULES: { readonly [K in keyof AppSettings]-?: MergeR
   // REQ-0279: written only by `fontList:recordSetVersion`; the renderer has
   // never sent it, so this always resolves to `existing`.
   fontSetInstalledVersion: 'presence-wins',
+  // REQ-0315 §4: written only by font.ts (`fontSetActive` / `fontUninstall` /
+  // `fontUninstallAll`).  App.tsx no longer sends it — the rule and the omitted
+  // key are a PAIR; `presence-wins` protects nothing while the key is present.
+  activeFontId: 'presence-wins',
 
   // --- session-only: never persisted --------------------------------------
   burnin: 'session-only',

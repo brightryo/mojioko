@@ -58,7 +58,6 @@ function makeRendererPayload(): AppSettings {
     defaultAudioTrackIndex: 1,
     fadeDurationSec: 0.2,
     activeModelId: null,
-    activeFontId: 'noto-sans-jp-semibold',
     lastInputDir: null,
     lastOutputDir: null,
     defaultInputDir: null,
@@ -81,6 +80,11 @@ describe('REQ-0279 — bulk DL end-to-end sequence preserves setIsCurrent', () =
     // today).
     const rendererPayload = makeRendererPayload()
     expect('fontSetInstalledVersion' in rendererPayload).toBe(false)
+    // REQ-0315 §4 — `activeFontId` joined the same two-part protection:
+    // the renderer omits the key AND the merge rule is `presence-wins`.
+    // `presence-wins` protects nothing while the key is present, so this
+    // assertion is half of the fix, not a restatement of it.
+    expect('activeFontId' in rendererPayload).toBe(false)
 
     // Step 5: main-side merge.  The fix's `'key' in incoming` guard
     // must preserve the value from `onDiskAfterRecord`.
