@@ -117,15 +117,27 @@ export const SETTINGS_MERGE_RULES: { readonly [K in keyof AppSettings]-?: MergeR
 }
 
 /**
- * COMPILE-TIME ONLY.  Not read at runtime — `transcriptionDefaults` is merged
- * as one object.  Adding a field to `TranscriptionDefaults` without adding it
- * here is a compile error, which is the whole purpose: it forces a conscious
- * "does main ever write this?" decision at the moment the field is introduced.
+ * COMPILE-TIME ONLY, AND IT DOES NOT PROTECT VALUES.
+ *
+ * Read this before adding an entry: the table is never consulted at runtime.
+ * `transcriptionDefaults` is merged as ONE OBJECT by the top-level rule, so
+ * writing `'incoming-else-existing'` on a nested field here would have NO
+ * EFFECT — the whole object is still replaced by the payload.
+ *
+ * If a future nested field is written by main, protecting it requires changing
+ * `transcriptionDefaults`'s OWN rule to a custom per-field merge; that is a
+ * behaviour change and needs its own REQ.  Better still, do what REQ-0315 §3
+ * did for `whisperModel`: make the renderer store the source of truth, so no
+ * merge rule is needed at all.
+ *
+ * Assuming otherwise is how this bug class reaches its sixth instance.
+ *
+ * What the table DOES buy: adding a field without classifying it here is a
+ * compile error, which forces the "does main ever write this?" question at the
+ * moment the field is introduced. 
  *
  * Every entry is `incoming-wins` because that is what the whole-object merge
- * does today.  If a future field needs preserving, promoting it requires
- * changing `transcriptionDefaults`'s own rule above to a custom merge — that
- * is a behaviour change and needs its own REQ.
+ * does today.
  */
 export const TRANSCRIPTION_DEFAULTS_MERGE_RULES: {
   readonly [K in keyof TranscriptionDefaults]-?: MergeRule
