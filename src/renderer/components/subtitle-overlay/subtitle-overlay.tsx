@@ -651,6 +651,17 @@ export function SubtitleOverlay({
   // canvases would risk dropping them behind an ancestor's background whenever
   // the outer span happens not to create a stacking context.  `relative` does
   // not alter inline layout.
+  // REQ-0333 §2 — the background box is PER DISPLAY LINE, and that is load
+  // bearing.  `display: inline` means the background covers the font's
+  // CONTENT AREA (ascent + descent), not the line box, and
+  // `box-decoration-break: clone` repeats it on every line fragment.  So the
+  // boxes separate as line spacing rises and overlap as it falls — which is
+  // exactly what libass does with `BorderStyle=3` once REQ-0332 splits a
+  // spaced cue into per-line events.  Measured at −50 / 0 / +100 %: same band
+  // count, same 200-px pitch, same gap (see
+  // `tests/unit/overlay-bg-per-line-box-req-0333.test.ts`).  Switching this to
+  // `inline-block`, or dropping `clone`, silently produces ONE continuous box
+  // and the preview stops matching the burn at every non-zero spacing.
   const textWrapperStyle: React.CSSProperties = bgEnabled
     ? {
         position:                 'relative',
