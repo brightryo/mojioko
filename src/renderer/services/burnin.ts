@@ -1,5 +1,5 @@
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground, IpcResult, EncoderSetting, AudioMode, OutputContainer } from '../../shared/types'
-import type { BurninEvent } from '../../shared/ipc-contracts'
+import type { BurninEvent, BurninStartRequest } from '../../shared/ipc-contracts'
 import { isFontId, resolveRenderableFontId, type FontId } from '../../shared/fonts'
 import type { Cut } from '../../shared/cuts'
 import type { KaraokeStyle } from '../../shared/karaoke-style'
@@ -42,6 +42,73 @@ export interface BurninOptions {
 
 export interface BurninHandle {
   cancel: () => void
+}
+
+
+/**
+ * REQ-0321 §1 — every `BurninOptions` field must be accounted for, by type.
+ *
+ * This payload used to be hand-listed field by field.  `karaokeStyle` was
+ * simply not among the fields, so the drawer's value was dropped on the way to
+ * main and every export ignored the setting while the preview honoured it
+ * (REQ-0320 §1).  Nothing failed: the IPC field is OPTIONAL, so omitting it was
+ * legal, and the ASS writer fell back to its default.
+ *
+ * That is the same failure the settings merge had three times before
+ * (REQ-0157 / 0158 / 0279) and which REQ-0312 §1 closed there with a
+ * `-?` mapped type.  The same medicine, one layer out: adding a field to
+ * `BurninOptions` without classifying it here does not compile.
+ *
+ *   forward — copied verbatim from `opts`
+ *   derived — recomputed before sending (must then appear in `derived` below,
+ *             which is typed `Pick<..., DerivedKey>` so forgetting one also
+ *             fails to compile)
+ *   omit    — deliberately NOT sent; the reason belongs in a comment beside it
+ *
+ * `omit` exists so that "we do not send this" is a written decision rather than
+ * an absence, which is exactly what made the original bug invisible.
+ */
+const BURNIN_FIELD_DISPOSITION = {
+  inputPath: 'forward',
+  outputPath: 'forward',
+  video: 'forward',
+  burnin: 'forward',
+  encoderSetting: 'forward',
+  audioMode: 'forward',
+  subtitleBackground: 'forward',
+  outputContainer: 'forward',
+  cuts: 'forward',
+  karaokeStyle: 'forward',
+  // Glyph substitution rewrites text/words/fontId per row before sending.
+  entries: 'derived',
+  // Resolved against the installed set + tier before sending.
+  fontId: 'derived',
+} as const satisfies { readonly [K in keyof BurninOptions]-?: 'forward' | 'derived' | 'omit' }
+
+type DerivedKey = {
+  [K in keyof typeof BURNIN_FIELD_DISPOSITION]: (typeof BURNIN_FIELD_DISPOSITION)[K] extends 'derived'
+    ? K
+    : never
+}[keyof typeof BURNIN_FIELD_DISPOSITION]
+
+export function buildBurninRequest(
+  opts: BurninOptions,
+  substitutedEntries: SubtitleEntry[],
+  resolvedProjectFontId: FontId,
+): BurninStartRequest {
+  const forwarded: Record<string, unknown> = {}
+  for (const [key, disposition] of Object.entries(BURNIN_FIELD_DISPOSITION)) {
+    if (disposition !== 'forward') continue
+    // Preserve absence: copying `undefined` in would make an omitted optional
+    // key present, which `'key' in payload` checks on the main side can see.
+    if (!(key in opts)) continue
+    forwarded[key] = (opts as unknown as Record<string, unknown>)[key]
+  }
+  const derived: Pick<BurninStartRequest, DerivedKey> = {
+    entries: substitutedEntries,
+    fontId: resolvedProjectFontId,
+  }
+  return { ...forwarded, ...derived } as BurninStartRequest
 }
 
 export async function startBurnin(
@@ -172,20 +239,9 @@ export async function startBurnin(
     return { ...e, ...patch }
   })
 
-  const result = await window.electronAPI.burninStart({
-    inputPath: opts.inputPath,
-    outputPath: opts.outputPath,
-    entries: substitutedEntries,
-    video: opts.video,
-    burnin: opts.burnin,
-    encoderSetting: opts.encoderSetting,
-    audioMode: opts.audioMode,
-    subtitleBackground: opts.subtitleBackground,
-    outputContainer: opts.outputContainer,
-    fontId: resolvedProjectFontId,
-    cuts: opts.cuts,
-    karaokeStyle: opts.karaokeStyle
-  })
+  const result = await window.electronAPI.burninStart(
+    buildBurninRequest(opts, substitutedEntries, resolvedProjectFontId),
+  )
 
   if (!result.ok) {
     throw new Error(result.error.message)
