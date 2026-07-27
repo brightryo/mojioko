@@ -19,7 +19,7 @@ import {
 } from '../services/font-downloader'
 import { downloadManager, type DownloadToken } from '../services/download-manager'
 import { getFontUserDir, getFontResolveDir, getBundledOflPath } from '../lib/paths'
-import { loadSettings, saveSettings } from '../services/settings-store'
+import { loadSettings, mutateSettings } from '../services/settings-store'
 import log from '../lib/logger'
 
 type OkResult<T> = { ok: true; data: T }
@@ -52,9 +52,11 @@ export function registerFontHandlers(): void {
   // `installed`.  Idempotent: writing the same value repeatedly is a no-op.
   ipcMain.handle(`${Channels.fontList}:recordSetVersion`, async (): Promise<OkResult<{ version: number }> | ErrResult> => {
     try {
-      const settings = await loadSettings()
-      settings.fontSetInstalledVersion = FONT_SET_VERSION
-      await saveSettings(settings)
+      // REQ-0319 §1 — inside the settings lock.
+      await mutateSettings((settings) => {
+        settings.fontSetInstalledVersion = FONT_SET_VERSION
+        return { save: settings, value: null }
+      })
       log.info(`[ipc/font] recorded fontSetInstalledVersion=${FONT_SET_VERSION}`)
       return { ok: true, data: { version: FONT_SET_VERSION } }
     } catch (err) {
@@ -117,7 +119,10 @@ export function registerFontHandlers(): void {
   ipcMain.handle(Channels.fontUninstallAll, async (): Promise<OkResult<FontsState & { removedIds: FontId[] }> | ErrResult> => {
     try {
       const removed = uninstallAllDownloaded()
-      const settings = await loadSettings()
+      // REQ-0319 §1 — the version reset and the active-font fallback are one
+      // atomic decision; splitting them across the lock would let a concurrent
+      // write land between the two fields.
+      const settings = await mutateSettings((settings) => {
       // Clear the version stamp so the binary state pins to 0.  Even if
       // `removed` was empty (disk already clean), we still reset here so
       // callers can use this handler idempotently as "make sure we're at 0".
@@ -131,7 +136,8 @@ export function registerFontHandlers(): void {
       if (!activeStillOk) {
         settings.activeFontId = DEFAULT_FONT_ID
       }
-      await saveSettings(settings)
+        return { save: settings, value: settings }
+      })
       const active = settings.activeFontId as FontId
       const state = buildFontsState(active, settings.fontSetInstalledVersion)
       log.info(`[ipc/font] uninstallAll removed ${removed.length} font(s); fontSetInstalledVersion cleared`)
@@ -154,12 +160,13 @@ export function registerFontHandlers(): void {
       removeFontDir(fontId)
 
       // If the uninstalled font was active, fall back to the default.
-      const settings = await loadSettings()
-      if (settings.activeFontId === fontId) {
-        settings.activeFontId = DEFAULT_FONT_ID
-        await saveSettings(settings)
-      }
-      const refreshed = await loadSettings()
+      // REQ-0319 §1 — read the current value and any fallback write happen in
+      // one critical section, so the value returned below cannot be a snapshot
+      // taken between somebody else's read and write.
+      const refreshed = await mutateSettings((settings) => {
+        if (settings.activeFontId === fontId) settings.activeFontId = DEFAULT_FONT_ID
+        return { save: settings, value: settings }
+      })
       const active = refreshed.activeFontId && isFontId(refreshed.activeFontId)
         ? refreshed.activeFontId
         : DEFAULT_FONT_ID
@@ -175,9 +182,11 @@ export function registerFontHandlers(): void {
       return { ok: false, error: { code: 'INVALID_FONT_ID', message: (err as Error).message } }
     }
     try {
-      const settings = await loadSettings()
-      settings.activeFontId = fontId
-      await saveSettings(settings)
+      // REQ-0319 §1 — inside the settings lock.
+      const settings = await mutateSettings((settings) => {
+        settings.activeFontId = fontId
+        return { save: settings, value: settings }
+      })
       log.info(`[ipc/font] setActive → ${fontId}`)
       return { ok: true, data: buildFontsState(fontId, settings.fontSetInstalledVersion) }
     } catch (err) {

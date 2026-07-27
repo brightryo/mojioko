@@ -102,6 +102,15 @@ export async function loadSettings(): Promise<AppSettings> {
       // Best-effort persist so the migration log line does not fire on
       // every subsequent launch.  A write failure is non-fatal — the
       // migrated value is still returned in memory.
+      //
+      // REQ-0319 §1 — deliberately NOT wrapped in `mutateSettings`.  This runs
+      // INSIDE `loadSettings`, which `mutateSettings` itself calls, so wrapping
+      // it would re-enter the chain and deadlock.  It is nonetheless covered
+      // whenever it is reached through `mutateSettings` (the common case: every
+      // handler now loads via the lock).  A bare `loadSettings` on a read-only
+      // path can still race, but the write is idempotent — it persists the same
+      // migrated value every time — so a lost update here costs one extra log
+      // line on the next launch, not data.
       try {
         await saveSettings(migrated)
       } catch (writeErr) {
@@ -138,4 +147,57 @@ async function recoverCorruptFile(settingsPath: string): Promise<void> {
   } catch {
     // ignore rename failure
   }
+}
+
+/**
+ * REQ-0319 §1 — serialised read-modify-write for settings.json.
+ *
+ * Every settings write in main is a `loadSettings -> mutate -> saveSettings`
+ * cycle, and `saveSettings` is a bare `fs.writeFile` with no locking.  The nine
+ * call sites are independent async IPC handlers, so two of them can interleave
+ * on the event loop:
+ *
+ *     A load -> B load -> A save -> B save      (A's write is lost)
+ *
+ * Reachable in practice, not theoretically: startup `migrateDeprecatedModelIds`
+ * racing the hydrate-triggered debounced save; `recordSetVersion` at the end of
+ * a bulk font download racing a settings change made during it; `setActiveModel`
+ * racing a save.  This is a lost update inside main, independent of whether the
+ * renderer's store is stale (that was a separate class of bug — REQ-0315 §3/§4).
+ *
+ * Locking `saveSettings` alone would NOT fix it: the read sits outside the lock,
+ * so both callers would still start from the same stale snapshot.  The whole
+ * cycle has to be inside.
+ *
+ * Chaining rather than a mutex flag keeps it simple and starvation-free: each
+ * call queues behind the previous one, in call order.  A rejected link must not
+ * poison the chain, so the tail swallows both outcomes while the caller still
+ * sees the original rejection.
+ */
+export interface SettingsMutation<T> {
+  /** The exact object to persist.  May be `current` mutated in place, or a
+   *  replacement (the merge path rebuilds the object and drops session keys). */
+  save: AppSettings
+  /** Whatever the caller wants back out of the critical section. */
+  value: T
+}
+
+let settingsWriteChain: Promise<unknown> = Promise.resolve()
+
+export function mutateSettings<T>(
+  mutate: (current: AppSettings) => SettingsMutation<T> | Promise<SettingsMutation<T>>,
+): Promise<T> {
+  const run = settingsWriteChain.then(async () => {
+    const current = await loadSettings()
+    const { save, value } = await mutate(current)
+    await saveSettings(save)
+    return value
+  })
+  // Keep the queue alive regardless of this link's outcome; the caller still
+  // gets the real rejection from `run`.
+  settingsWriteChain = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
 }

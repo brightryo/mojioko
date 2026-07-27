@@ -26,7 +26,7 @@ import {
 } from '../../shared/gpu-tool'
 import { getGpuToolDir, getGpuToolsRoot } from '../lib/paths'
 import { detectGpuAdapters } from './gpu-detector'
-import { loadSettings, saveSettings } from './settings-store'
+import { loadSettings, mutateSettings } from './settings-store'
 import log from '../lib/logger'
 
 /**
@@ -140,18 +140,22 @@ export async function buildGpuToolState(): Promise<GpuToolState> {
  * inject a GPU env var into a machine that has no NVIDIA card.
  */
 export async function setActiveAccelerator(next: 'cpu' | 'gpu'): Promise<GpuToolState> {
-  const settings = await loadSettings()
-  let effective: 'cpu' | 'gpu' = next
-  if (next === 'gpu') {
-    const dir = getGpuToolDir(GPU_TOOL_RELEASE_TAG)
-    const detection = await detectGpuAdapters()
-    if (!isInstallComplete(dir) || !detection.nvidiaDetected) {
-      log.warn('[gpu-tool] setActiveAccelerator("gpu") rejected — install incomplete or no NVIDIA')
-      effective = 'cpu'
+  // REQ-0319 §1 — read-modify-write inside the settings lock.  The GPU probe
+  // is awaited in here on purpose: doing it outside would reopen the same
+  // interleaving window the lock exists to close.
+  await mutateSettings(async (settings) => {
+    let effective: 'cpu' | 'gpu' = next
+    if (next === 'gpu') {
+      const dir = getGpuToolDir(GPU_TOOL_RELEASE_TAG)
+      const detection = await detectGpuAdapters()
+      if (!isInstallComplete(dir) || !detection.nvidiaDetected) {
+        log.warn('[gpu-tool] setActiveAccelerator("gpu") rejected — install incomplete or no NVIDIA')
+        effective = 'cpu'
+      }
     }
-  }
-  settings.activeAccelerator = effective
-  await saveSettings(settings)
+    settings.activeAccelerator = effective
+    return { save: settings, value: null }
+  })
   return buildGpuToolState()
 }
 

@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { Channels } from '../../shared/ipc-channels'
-import { loadSettings, saveSettings } from '../services/settings-store'
+import { loadSettings, mutateSettings } from '../services/settings-store'
 import { mergeSettingsForSave } from './settings-merge'
 import type { AppSettings } from '../../shared/types'
 import log from '../lib/logger'
@@ -19,9 +19,11 @@ export function registerSettingsHandlers(): void {
 
   ipcMain.handle(Channels.settingsSave, async (_event, settings: AppSettings): Promise<{ ok: true; data: null } | { ok: false; error: { code: string; message: string } }> => {
     try {
-      const existing = await loadSettings()
-      const merged = mergeSettingsForSave(settings, existing)
-      await saveSettings(merged)
+      // REQ-0319 §1 — the whole read-merge-write runs inside the settings lock.
+      await mutateSettings((existing) => ({
+        save: mergeSettingsForSave(settings, existing),
+        value: null,
+      }))
       return { ok: true, data: null }
     } catch (err: unknown) {
       const e = err as Error
