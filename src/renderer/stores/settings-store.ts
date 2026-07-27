@@ -5,7 +5,7 @@ import { BURNIN_DEFAULTS } from '../../shared/burnin-defaults'
 import { DEFAULT_LANGUAGE } from '../../shared/app-info'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, SHADOW_DEPTH_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
 import { DEFAULT_FONT_ID, isFontId, type FontId } from '../../shared/fonts'
-// REQ-0311 §4 — experimental karaoke sweep; delete with the feature.
+// REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 import { KARAOKE_STYLE_DEFAULT, coerceKaraokeStyle, type KaraokeStyle } from '../../shared/karaoke-style'
 
 interface SettingsStore {
@@ -17,7 +17,7 @@ interface SettingsStore {
   transcriptionDefaults: TranscriptionDefaults
   transcriptionAdvanced: TranscriptionAdvancedParams
   autoLineBreak: boolean
-  /** REQ-0311 §4 — experimental karaoke sweep toggle (see shared/karaoke-style). */
+  /** REQ-0311 §4 / REQ-0315 §2 — karaoke display style (see shared/karaoke-style). */
   karaokeStyle: KaraokeStyle
   encoder: EncoderSetting
   audioMode: AudioMode

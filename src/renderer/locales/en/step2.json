@@ -186,7 +186,7 @@
     "karaokeOnNoWords": "On (equal split — no per-word timing)",
     "karaokeHighlightColor": "Spoken",
     "karaokeBaseColor": "Unspoken",
-    "karaokeStyleRowLabel": "Karaoke style (experimental)",
+    "karaokeStyleRowLabel": "Karaoke style",
     "karaokeStyleSwitch": "Switch",
     "karaokeStyleSweep": "Sweep",
     "karaokeSeededDefault": "Uses default colors",

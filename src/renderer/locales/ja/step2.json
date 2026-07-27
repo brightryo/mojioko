@@ -186,7 +186,7 @@
     "karaokeOnNoWords": "有効（均等割り・ワード情報なし）",
     "karaokeHighlightColor": "発話済み色",
     "karaokeBaseColor": "未発話色",
-    "karaokeStyleRowLabel": "カラオケ表示（実験）",
+    "karaokeStyleRowLabel": "カラオケ表示",
     "karaokeStyleSwitch": "切り替え",
     "karaokeStyleSweep": "スイープ",
     "karaokeSeededDefault": "既定色で開始",

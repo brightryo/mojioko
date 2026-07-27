@@ -3,7 +3,7 @@ import { ASS_MARGIN_LR_PX, SHADOW_DEPTH_MAX_PX } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../shared/karaoke-gate'
 import { buildKaraokeAssText, splitWordsAtHardBreaks } from '../../shared/karaoke-ass'
-// REQ-0311 §4 — experimental sweep path; delete this import with the feature.
+// REQ-0311 §4 / REQ-0315 §2 — the sweep emitter.
 import { buildKaraokeSweepAssText } from '../../shared/karaoke-sweep'
 import type { KaraokeStyle } from '../../shared/karaoke-style'
 import { areWordsValidForText } from '../../shared/words-validity'
@@ -176,10 +176,11 @@ export function generateAss(
    */
   isMsix: boolean = false,
   /**
-   * REQ-0311 §4 — karaoke rendering style, app-wide setting.  `'switch'` (the
-   * default) is the shipping `\k` path and is what every pre-REQ-0311 caller
-   * and unit test gets; `'sweep'` routes to the isolated `\kf` emitter in
-   * `karaoke-sweep.ts`.  Experimental — see that module for the deletion list.
+   * REQ-0311 §4 / REQ-0315 §2 — karaoke rendering style, app-wide setting.
+   * `'switch'` is the `\k` path; `'sweep'` routes to the `\kf` emitter in
+   * `karaoke-sweep.ts`.  The parameter still DEFAULTS to `'switch'` so existing
+   * callers and unit tests are unaffected — which is exactly what masked
+   * REQ-0320 §1 when the renderer stopped sending the value.
    */
   karaokeStyle: KaraokeStyle = 'switch',
 ): string {

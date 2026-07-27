@@ -90,9 +90,12 @@ export interface BurninStartRequest {
    */
   cuts?: Cut[]
   /**
-   * REQ-0311 §4 — EXPERIMENTAL karaoke rendering style, app-wide setting.
-   * Optional; omitted means `'switch'` (the shipping `\k` path), so every
-   * caller predating the experiment is unaffected.  Delete with the feature.
+   * REQ-0311 §4 / REQ-0315 §2 — karaoke rendering style, app-wide setting.
+   *
+   * OPTIONAL, and REQ-0320 §1 is the price of that: `services/burnin.ts`
+   * rebuilds this payload field by field and simply omitted the key, so the
+   * writer silently used its default and every export came out as `\k` while
+   * the preview swept.  Optional + explicit re-construction = silent drop.
    */
   karaokeStyle?: KaraokeStyle
 }

@@ -16,7 +16,7 @@ import { canSelectFontInTier } from '@/lib/font-tier'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
 import { measureRuns, computeRingBox, prepareCanvas, paintRing, paintShadow } from '@/lib/outline-ring'
-// REQ-0311 §4 — experimental karaoke sweep; delete with the feature.
+// REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 import { sweepWordTimings } from '../../../shared/karaoke-sweep'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { areWordsValidForText } from '../../../shared/words-validity'

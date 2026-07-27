@@ -21,7 +21,7 @@ import { StyleRow } from '@/components/subtitle-table/style-row'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { useSettingsStore } from '@/stores/settings-store'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-// REQ-0311 §4 — experimental karaoke sweep; delete with the feature.
+// REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 import { coerceKaraokeStyle } from '../../../shared/karaoke-style'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
@@ -113,7 +113,7 @@ export function TimelineBlockInspector({
   // FamilyWeightSelector's onChange (concrete FontId that equals
   // activeFontId is stored as `undefined` = inherit).
   const activeFontId = useSettingsStore((s) => s.activeFontId)
-  // REQ-0311 §4 — experimental karaoke sweep; delete with the feature.
+  // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
   const karaokeStyle = useSettingsStore((s) => s.karaokeStyle)
   const setKaraokeStyle = useSettingsStore((s) => s.setKaraokeStyle)
   // REQ-0125 — history-less preview writer used from the color picker's
