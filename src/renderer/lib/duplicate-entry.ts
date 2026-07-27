@@ -109,6 +109,9 @@ export const SUBTITLE_ENTRY_DUPLICATION = {
   animationDurationSec: 'copy',
   animationDirection: 'copy',
   animationDistancePx: 'copy',
+  // REQ-0331 §1-3 — per-type strength ("強さ") row.
+  animationStartScalePercent: 'copy',
+  animationBlurPx: 'copy',
   // --- keyword emphasis (REQ-0305 / 0306 / 0307) ----------------------
   keywordEmphasisEnabled: 'copy',
   emphasisColorHex: 'copy',

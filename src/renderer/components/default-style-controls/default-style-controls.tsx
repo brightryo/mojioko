@@ -169,6 +169,8 @@ export function DefaultStyleControls({
     animationInEnabled: defaults.animationInEnabled,
     animationOutEnabled: defaults.animationOutEnabled,
     animationDurationSec: defaults.animationDurationSec,
+    animationStartScalePercent: defaults.animationStartScalePercent,
+    animationBlurPx: defaults.animationBlurPx,
     fadeDurationSec,
   })
   const showEmphasisUi = canUseKeywordEmphasisInTier(isMsix)
@@ -360,12 +362,17 @@ export function DefaultStyleControls({
           inEnabled: defaultsAnimation.inEnabled,
           outEnabled: defaultsAnimation.outEnabled,
           durationSec: defaultsAnimation.durationSec,
+          startScalePercent: Math.round(defaultsAnimation.startScale * 100),
+          blurPx: defaultsAnimation.blurMaxPx,
         }}
         onChange={(patch) => onUpdateDefaults({
           animationType: patch.type ?? defaultsAnimation.type,
           animationInEnabled: patch.inEnabled ?? defaultsAnimation.inEnabled,
           animationOutEnabled: patch.outEnabled ?? defaultsAnimation.outEnabled,
           animationDurationSec: patch.durationSec ?? defaultsAnimation.durationSec,
+          animationStartScalePercent:
+            patch.startScalePercent ?? Math.round(defaultsAnimation.startScale * 100),
+          animationBlurPx: patch.blurPx ?? defaultsAnimation.blurMaxPx,
         })}
         includeBlur={ANIMATION_BLUR_ENABLED}
         labelVariant="settings"

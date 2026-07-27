@@ -6,7 +6,10 @@ import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { AnimationControls, type AnimationControlsValue } from '@/components/animation-controls/animation-controls'
-import { ANIMATION_BLUR_ENABLED, ANIMATION_DURATION_DEFAULT_SEC } from '../../../shared/cue-animation'
+import {
+  ANIMATION_BLUR_ENABLED, ANIMATION_DURATION_DEFAULT_SEC, BLUR_MAX_PX,
+  defaultStartScalePercent,
+} from '../../../shared/cue-animation'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
@@ -307,6 +310,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   const [animationDraft, setAnimationDraft] = useState<AnimationControlsValue>({
     type: 'none', inEnabled: true, outEnabled: true,
     durationSec: ANIMATION_DURATION_DEFAULT_SEC,
+    // REQ-0331 §1-3 — seeded from the shared per-type defaults so the bulk
+    // bar opens on the same numbers a fresh cue would resolve to.
+    startScalePercent: defaultStartScalePercent('none'),
+    blurPx: BLUR_MAX_PX,
   })
   // REQ-0324 §4-1 — seeded from the constant default; the app-wide
   // karaoke-style setting was removed (the value is per-cue only now).
@@ -369,6 +376,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setAnimationDraft({
       type: 'none', inEnabled: true, outEnabled: true,
       durationSec: ANIMATION_DURATION_DEFAULT_SEC,
+      startScalePercent: defaultStartScalePercent('none'),
+      blurPx: BLUR_MAX_PX,
     })
     // REQ-0310 §1 — back to fully opaque on every selection change, matching
     // the field default so the bar never opens primed to hide the subtitles.
@@ -693,6 +702,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         animationInEnabled: next.inEnabled,
         animationOutEnabled: next.outEnabled,
         animationDurationSec: next.durationSec,
+        animationStartScalePercent: next.startScalePercent,
+        animationBlurPx: next.blurPx,
       },
       t('bulk.history.animation', { count: selectedRowIds.size })
     )

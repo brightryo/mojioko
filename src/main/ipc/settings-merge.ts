@@ -184,6 +184,9 @@ export const TRANSCRIPTION_DEFAULTS_MERGE_RULES: {
   animationInEnabled: 'incoming-wins',
   animationOutEnabled: 'incoming-wins',
   animationDurationSec: 'incoming-wins',
+  // REQ-0331 §1-3 — per-type animation strength defaults.
+  animationStartScalePercent: 'incoming-wins',
+  animationBlurPx: 'incoming-wins',
   horizontalPosition: 'incoming-wins',
   verticalPosition: 'incoming-wins',
   verticalMarginPx: 'incoming-wins',

@@ -285,6 +285,19 @@ export interface SubtitleEntryOriginal {
   animationDirection?: AnimationDirection
   /** Slide distance in ASS px, 0–200 (REQ-0323 §3).  Ignored otherwise. */
   animationDistancePx?: number
+  /**
+   * REQ-0331 §1-3 — "強さ" for `scale` / `pop`: the scale the cue starts
+   * from, in percent of natural size (`ANIMATION_START_SCALE_*`).
+   * `undefined` = the per-type default (`defaultStartScalePercent`), which
+   * is what every pre-REQ-0331 cue is, so their look is unchanged.
+   */
+  animationStartScalePercent?: number
+  /**
+   * REQ-0331 §1-3 — "強さ" for `blur`: peak blur radius in ASS px
+   * (`ANIMATION_BLUR_*`).  `undefined` = `BLUR_MAX_PX` (8), the value that
+   * used to be hardcoded.
+   */
+  animationBlurPx?: number
 
   /**
    * REQ-0285 Phase B foundation — per-word timestamps captured by
@@ -521,6 +534,9 @@ export interface TranscriptionDefaults {
   animationInEnabled?: boolean
   animationOutEnabled?: boolean
   animationDurationSec?: number
+  /** REQ-0331 §1-3 — strength defaults for new cues.  See `SubtitleEntry`. */
+  animationStartScalePercent?: number
+  animationBlurPx?: number
 }
 
 export interface ProjectState {

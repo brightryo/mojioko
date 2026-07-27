@@ -27,6 +27,7 @@
  */
 
 import {
+  animationFadeMs,
   animationKeyframes,
   isAnimationInert,
   type AnimationSpec,
@@ -119,15 +120,19 @@ export function buildAnimationTags(
 ): string {
   if (isAnimationInert(spec)) return ''
 
-  if (spec.type === 'fade') {
-    // Keep the historical `\fad` form exactly.  Durations are per-end, so
-    // a one-ended fade writes 0 for the other end.
-    const ms = Math.round(spec.durationSec * 1000)
-    if (ms <= 0) return ''
-    const inMs = spec.inEnabled ? ms : 0
-    const outMs = spec.outEnabled ? ms : 0
-    return `\\fad(${inMs},${outMs})`
-  }
+  // REQ-0331 §2-3 — the opacity component of EVERY type, as `\fad`.
+  //
+  // For `fade` this is the whole animation and the emitted string is
+  // character-for-character what it has always been (the window is the
+  // full duration), which is what keeps pre-REQ-0323 projects byte-
+  // identical.  For `scale` / `pop` / `blur` it is the mixed-in fade the
+  // owner asked for, over a shorter window — the durations come from
+  // `animationFadeMs`, not from arithmetic here, so there is still exactly
+  // one definition of the ramp.
+  const { inMs, outMs } = animationFadeMs(spec)
+  const fadeTag = inMs > 0 || outMs > 0 ? `\\fad(${inMs},${outMs})` : ''
+
+  if (spec.type === 'fade') return fadeTag
 
   if (spec.type === 'slide') {
     // REQ-0323 §3.  `\move` is one-per-event (proved empirically in
@@ -141,11 +146,11 @@ export function buildAnimationTags(
   }
 
   const keys = animationKeyframes(spec, startSec, endSec)
-  if (keys.length < 2) return ''
+  if (keys.length < 2) return fadeTag
 
   // Initial state = the first keyframe, written as plain tags so the cue
   // is already in its start state on its very first frame.
-  let out = stateTags(spec, keys[0].transform, geom)
+  let out = fadeTag + stateTags(spec, keys[0].transform, geom)
 
   // One `\t` per segment.  A segment whose endpoints are identical (the
   // plateau between the in-ramp and the out-ramp) contributes nothing.

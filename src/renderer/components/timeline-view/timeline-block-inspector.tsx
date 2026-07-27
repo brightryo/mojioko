@@ -134,6 +134,9 @@ export function TimelineBlockInspector({
       animationInEnabled: patch.inEnabled ?? animSpec.inEnabled,
       animationOutEnabled: patch.outEnabled ?? animSpec.outEnabled,
       animationDurationSec: patch.durationSec ?? animSpec.durationSec,
+      animationStartScalePercent:
+        patch.startScalePercent ?? Math.round(animSpec.startScale * 100),
+      animationBlurPx: patch.blurPx ?? animSpec.blurMaxPx,
     })
   }
   // REQ-0125 — history-less preview writer used from the color picker's
@@ -1582,6 +1585,8 @@ export function TimelineBlockInspector({
                 inEnabled: animSpec.inEnabled,
                 outEnabled: animSpec.outEnabled,
                 durationSec: animSpec.durationSec,
+                startScalePercent: Math.round(animSpec.startScale * 100),
+                blurPx: animSpec.blurMaxPx,
               }}
               onChange={handleAnimationChange}
               disabled={isFrozen}
