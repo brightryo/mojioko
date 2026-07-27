@@ -51,7 +51,8 @@ export interface SubtitleEntryOriginal {
   fontSizePx: number
   textColorHex: string
   outlineColorHex: string
-  /** Integer, 0–5 px. */
+  /** Integer, 0–OUTLINE_THICKNESS_MAX_PX (= 20) px.  REQ-0292 §5 raised the
+   *  ceiling from 10; this JSDoc lagged behind until REQ-0320 §4. */
   outlineThicknessPx: number
   /**
    * REQ-20260615-050 — per-entry fade ramp duration in seconds.
@@ -360,7 +361,8 @@ export interface TranscriptionDefaults {
   fontSizePx: number
   textColorHex: string
   outlineColorHex: string
-  /** Integer, 0–5 px. */
+  /** Integer, 0–OUTLINE_THICKNESS_MAX_PX (= 20) px.  REQ-0292 §5 raised the
+   *  ceiling from 10; this JSDoc lagged behind until REQ-0320 §4. */
   outlineThicknessPx: number
   whisperModel: WhisperModelId
 
