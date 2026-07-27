@@ -62,6 +62,25 @@ export interface KaraokeSweepEmphasis {
   closeTag: string
 }
 
+const toCs = (sec: number): number => Math.max(0, Math.round(sec * 100))
+
+/**
+ * The textless `{\k<gap>}` block that advances the karaoke clock across a
+ * silence without painting anything.
+ *
+ * Returns `''` for a non-positive gap (words that abut, or overlap).
+ *
+ * REQ-0330 §1 — extracted so the ass-generator can emit the silence that
+ * precedes a display line at the END of the PREVIOUS line's body, which is
+ * where the single-body emitter used to put it (the gap block is pushed
+ * before the `\N`, not after it).  Building the block by hand at the call
+ * site would have duplicated the centisecond rounding, which is exactly the
+ * kind of second source this codebase keeps getting bitten by.
+ */
+export function buildSweepGapBlock(gapSec: number): string {
+  return gapSec > 0 ? `{\\k${toCs(gapSec)}}` : ''
+}
+
 /**
  * Builds the `\kf` body for one cue.  Signature mirrors `buildKaraokeAssText`
  * so the two are drop-in alternatives at the call site.
@@ -76,8 +95,6 @@ export function buildKaraokeSweepAssText(
 ): string {
   if (words.length === 0) return ''
 
-  const toCs = (sec: number): number => Math.max(0, Math.round(sec * 100))
-
   const breaks =
     cueText !== undefined ? computeKaraokeBreaks(cueText, words) : new Set<number>()
 
@@ -90,8 +107,8 @@ export function buildKaraokeSweepAssText(
     // previous word's END.  Emitted as its own textless block so the sweep
     // never stretches across it.
     const prevEndSec = i === 0 ? cueStartSec : words[i - 1].endSec
-    const gapSec = w.startSec - prevEndSec
-    if (gapSec > 0) parts.push(`{\\k${toCs(gapSec)}}`)
+    const gapBlock = buildSweepGapBlock(w.startSec - prevEndSec)
+    if (gapBlock) parts.push(gapBlock)
 
     // Sweep duration = the word's own speech length.  Degenerate timings fall
     // back to the gap-absorbing rule so the line still advances.

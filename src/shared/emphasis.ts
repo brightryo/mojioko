@@ -748,17 +748,39 @@ export function emphasizedWordRanges(
   for (let w = 0; w < words.length; w++) {
     const len = stripAllWhitespace(words[w].text).length
     if (len > 0) {
-      const wStart = cursor
-      const wEnd = cursor + len
-      const local: Array<[number, number]> = []
-      for (const [a, b] of merged) {
-        const lo = Math.max(a, wStart)
-        const hi = Math.min(b, wEnd)
-        if (hi > lo) local.push([lo - wStart, hi - wStart])
-      }
+      const local = clipRangesToWindow(merged, cursor, cursor + len)
       if (local.length > 0) out.set(w, local)
     }
     cursor += len
+  }
+  return out
+}
+
+/**
+ * Clip `ranges` to the window `[start, end)` and re-express the survivors in
+ * window-local coordinates (i.e. with `start` subtracted).  Ranges entirely
+ * outside the window are dropped; one that straddles an edge is cut at it.
+ *
+ * REQ-0307 §4 introduced this as the per-`\k`-block clip inside
+ * `emphasizedWordRanges`; REQ-0330 §1 hoisted it out because the per-display-
+ * line body builder in `ass-generator` needs exactly the same operation on a
+ * different axis (cue-text code units instead of stripped-cue ones).  Keeping
+ * ONE implementation is the point: two hand-rolled clips would be two chances
+ * to disagree about whether the edges are inclusive.
+ *
+ * Input must be disjoint + ascending (everything here comes out of
+ * `mergeRanges`); the output then is too.
+ */
+export function clipRangesToWindow(
+  ranges: readonly EmphasisRange[],
+  start: number,
+  end: number,
+): EmphasisRange[] {
+  const out: EmphasisRange[] = []
+  for (const [a, b] of ranges) {
+    const lo = Math.max(a, start)
+    const hi = Math.min(b, end)
+    if (hi > lo) out.push([lo - start, hi - start])
   }
   return out
 }

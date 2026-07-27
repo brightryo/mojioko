@@ -2,9 +2,9 @@ import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground, Word
 import { ASS_MARGIN_LR_PX, SHADOW_DEPTH_MAX_PX } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../shared/karaoke-gate'
-import { buildKaraokeAssText, splitWordsAtHardBreaks } from '../../shared/karaoke-ass'
+import { buildKaraokeAssText, computeKaraokeBreaks, splitWordsAtHardBreaks } from '../../shared/karaoke-ass'
 // REQ-0311 §4 / REQ-0315 §2 — the sweep emitter.
-import { buildKaraokeSweepAssText } from '../../shared/karaoke-sweep'
+import { buildKaraokeSweepAssText, buildSweepGapBlock } from '../../shared/karaoke-sweep'
 import type { KaraokeStyle } from '../../shared/karaoke-style'
 import { resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../shared/karaoke-style'
 import { resolveAnimation } from '../../shared/cue-animation'
@@ -18,6 +18,7 @@ import {
   clampEmphasisScalePercent,
   resolveEmphasis,
   buildEmphasisBody,
+  clipRangesToWindow,
   emphasizedWordRanges,
   EMPHASIS_DEFAULT_COLOR,
   type EmphasisRange,
@@ -106,6 +107,44 @@ function escapeAssText(text: string): string {
     .replace(/\{/g, '\\{')
     .replace(/\}/g, '\\}')
     .replace(/\n/g, '\\N')
+}
+
+/**
+ * The libass hard line-break marker, as the two characters it occupies in a
+ * cue's stored `text` (backslash + `N`).  Protected convention — see
+ * CLAUDE.md §21; this constant names it, it does not redefine it.
+ */
+const HARD_BREAK = '\\N'
+
+/**
+ * REQ-0330 §1 — split a cue's text into its display lines at the hard breaks.
+ *
+ * The scan is the same leftmost, non-overlapping one `escapeAssText` and
+ * `tokenizeEmphasis` do, so re-joining the pieces with `HARD_BREAK`
+ * reproduces the input exactly — including the awkward case of a line that
+ * ends in a literal backslash.
+ */
+function splitCueTextIntoLines(text: string): string[] {
+  return text.split(HARD_BREAK)
+}
+
+/**
+ * REQ-0330 §1 — take the `[from, to)` slice of a cue-wide
+ * word-index → emphasis-ranges map and re-key it to that slice's own indices.
+ *
+ * The ranges are word-local already (REQ-0307 §4 clipped them per `\k` block),
+ * so only the KEYS move.
+ */
+function sliceWordRanges(
+  ranges: ReadonlyMap<number, readonly EmphasisRange[]>,
+  from: number,
+  to: number,
+): Map<number, readonly EmphasisRange[]> {
+  const out = new Map<number, readonly EmphasisRange[]>()
+  for (const [index, value] of ranges) {
+    if (index >= from && index < to) out.set(index - from, value)
+  }
+  return out
 }
 
 /**
@@ -525,22 +564,37 @@ export function generateAss(
       // OR `'none'` → no transform.
       // REQ-0286 §2 / REQ-0294 — when karaoke is active, the text
       // portion is built from `words` via `buildKaraokeAssText`,
-      // which inserts `{\k<duration>}` before each word.  We now
-      // ALSO pass `e.text` as the 5th arg so `\N` line breaks in
-      // the cue text are honoured — the karaoke body emits `\N` at
-      // the right position between words, so a 2-line cue stays
+      // which inserts `{\k<duration>}` before each word.  `\N` line
+      // breaks in the cue text are honoured — a 2-line cue stays
       // 2 lines when karaoke turns on.  Pre-REQ-0294 the `\N` was
       // silently dropped and karaoke collapsed every cue to one
-      // line (REQ-0294 §1 bug).
-      // Casing applies word-by-word via the escaper wrapper so
-      // uppercase karaoke still works.
+      // line (REQ-0294 §1 bug).  REQ-0330 §1 moved the break handling
+      // out of the emitter and into the per-line loop below, which
+      // splits the units BEFORE calling it; the emitter's own
+      // `cueText` argument is therefore no longer used from here.
       // Casing applies word-by-word via this escaper wrapper so uppercase
       // karaoke / emphasis still works (REQ-0277 §1 / REQ-0286 / REQ-0305).
       const escapeWord = (s: string): string => {
         const cased = e.casing === 'uppercase' ? s.toUpperCase() : s
         return escapeAssText(cased)
       }
-      let body: string
+      // REQ-0330 §1 — the body is assembled ONE DISPLAY LINE AT A TIME.
+      //
+      // Line spacing (REQ-0330 §2) has to emit each display line as its own
+      // ASS event with its own `\pos`, because ASS has no line-spacing tag and
+      // `ass_set_line_spacing()` is not reachable through ffmpeg.  Splitting
+      // the FINISHED body on `\N` cannot work: the karaoke and emphasis
+      // bodies interleave `{\k…}` / `{\fs…\c…}` override blocks with the text,
+      // so a naive cut would tear a block in half.  So the split happens on
+      // the INPUTS instead — words and emphasis ranges are apportioned to a
+      // line first, and each line's body is built from its own inputs.
+      //
+      // This step is a pure restructure: the per-line bodies are re-joined
+      // with the `\N` that separated them, so exactly one event is emitted and
+      // the output is byte-identical (pinned by
+      // `ass-generator-baseline-ac1fd67.test.ts`).  What changes is only that
+      // `lineBodies` now EXISTS as a seam for §2 to emit from.
+      const lineBodies: string[] = []
       if (karaokeActive) {
         // REQ-0289 — `karaokeWords` is either the real per-word list
         // (words valid) or the equal-split fallback list (words
@@ -566,30 +620,76 @@ export function generateAss(
               closeTag: `\\fs${e.fontSizePx}\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}`,
             }
           : undefined
-        // REQ-0311 §4 — the ONE branch that selects the sweep emitter.  Both
-        // take the same arguments; only the tag and the duration rule differ.
-        // Deleting the sweep feature means deleting this ternary's false arm.
         // REQ-0322 §3 — per-cue first, the request-level value as default.
         const cueKaraokeStyle = resolveKaraokeStyle(e.karaokeStyle, karaokeStyle)
-        const karaokeBody =
-          cueKaraokeStyle === 'sweep'
-            ? buildKaraokeSweepAssText(
-                karaokeWords,
-                e.startSec,
-                e.endSec,
-                escapeWord,
-                e.text,
-                emphasisOverlay,
-              )
-            : buildKaraokeAssText(
-                karaokeWords,
-                e.startSec,
-                e.endSec,
-                escapeWord,
-                e.text,
-                emphasisOverlay,
-              )
-        body = karaokeBody
+
+        // REQ-0330 §1 — apportion the karaoke units to display lines.
+        //
+        // The line boundaries come from `computeKaraokeBreaks`, NOT from
+        // splitting `e.text` on `\N`: that function is what the emitters
+        // themselves used to decide where to put a `\N`, and it can express
+        // fewer breaks than the text contains (a leading `\N` has no unit to
+        // attach to, and two adjacent `\N` collapse to one boundary).  Using
+        // the text split here would emit a different number of lines than the
+        // karaoke body has always emitted.  `splitWordsAtHardBreaks` (applied
+        // above) has already guaranteed every representable break sits on a
+        // unit boundary, so the groups below are exact.
+        const breakIndices = computeKaraokeBreaks(e.text, karaokeWords)
+        const groupStarts = [0, ...Array.from(breakIndices).sort((a, b) => a - b)]
+        for (let g = 0; g < groupStarts.length; g++) {
+          const from = groupStarts[g]
+          const to = g + 1 < groupStarts.length ? groupStarts[g + 1] : karaokeWords.length
+          // The first unit of a continuation line loses its leading whitespace
+          // so the line does not render an indent from faster-whisper's
+          // `" word"` convention.  The emitters do this themselves when THEY
+          // place the break; here the break is ours, so the strip is too.
+          // Stripping leading whitespace never moves a stripped-coordinate
+          // index, so the emphasis ranges below still line up.
+          const groupWords = karaokeWords
+            .slice(from, to)
+            .map((word, i) => (g > 0 && i === 0 ? { ...word, text: word.text.replace(/^\s+/, '') } : word))
+          // Timing seam.  A line is emitted as if it were a cue spanning
+          // [first unit's start, next line's first unit's start), which makes
+          // every `\k` / `\kf` duration come out exactly as it did when the
+          // whole cue was emitted in one pass:
+          //   - line 0 keeps the real cue start, so the leading-offset block
+          //     (`\k` path) / leading silence (`\kf` path) is still emitted;
+          //   - later lines start ON their first unit, so neither emitter
+          //     invents a second leading block;
+          //   - the last unit of a line holds until the next line's first unit
+          //     activates, which is what `words[i+1].startSec` gave before.
+          const lineStartSec = g === 0 ? e.startSec : groupWords[0].startSec
+          const lineEndSec = to < karaokeWords.length ? karaokeWords[to].startSec : e.endSec
+          // Emphasis ranges are keyed by cue-wide unit index; re-key them to
+          // this line's units.  The ranges themselves are unchanged — they are
+          // already word-local (REQ-0307 §4).
+          const lineEmphasis =
+            emphasisOverlay === undefined
+              ? undefined
+              : { ...emphasisOverlay, ranges: sliceWordRanges(emphasisOverlay.ranges, from, to) }
+          // REQ-0311 §4 — the ONE branch that selects the sweep emitter.  Both
+          // take the same arguments; only the tag and the duration rule differ.
+          // Deleting the sweep feature means deleting this ternary's false arm.
+          //
+          // `cueText` is deliberately NOT passed: a display line contains no
+          // `\N` by construction, so there is no break left for the emitter to
+          // find, and passing the whole cue text would make it re-derive breaks
+          // against a word list that is only a slice of the cue's.
+          lineBodies.push(
+            cueKaraokeStyle === 'sweep'
+              ? buildKaraokeSweepAssText(groupWords, lineStartSec, lineEndSec, escapeWord, undefined, lineEmphasis)
+              : buildKaraokeAssText(groupWords, lineStartSec, lineEndSec, escapeWord, undefined, lineEmphasis),
+          )
+          // The `\kf` path emits the silence BEFORE a unit as a textless
+          // `{\k<gap>}`, and when that unit opens a line the block lands
+          // before the `\N`, i.e. at the END of the previous line.  Keep it
+          // there: it is where libass has always seen it, and once §2 emits
+          // one event per line the clock still has to be advanced by the
+          // event that is on screen while the silence happens.
+          if (cueKaraokeStyle === 'sweep' && to < karaokeWords.length) {
+            lineBodies[g] += buildSweepGapBlock(karaokeWords[to].startSec - karaokeWords[to - 1].endSec)
+          }
+        }
       } else if (emphasisActive) {
         // REQ-0307 — karaoke OFF, emphasis ON.  Build the body straight from
         // the cue text + resolved span ranges (no `words` needed), wrapping
@@ -612,18 +712,37 @@ export function generateAss(
         const emphasisRestoreAlphaTag = isFullyOpaque(e.textAlpha)
           ? ''
           : `\\1a${assAlphaValue(e.textAlpha)}`
-        const emphasisBody = buildEmphasisBody(
-          e.text,
-          emphasisRanges,
-          escapeWord,
-          `\\fs${emphasisScaledFs}\\c${hexToAss(emphasisColorHex)}${emphasisOpaqueTag}`,
-          `\\fs${e.fontSizePx}\\c${hexToAss(e.textColorHex)}${emphasisRestoreAlphaTag}`,
-        )
-        body = emphasisBody
+        const openTag = `\\fs${emphasisScaledFs}\\c${hexToAss(emphasisColorHex)}${emphasisOpaqueTag}`
+        const closeTag = `\\fs${e.fontSizePx}\\c${hexToAss(e.textColorHex)}${emphasisRestoreAlphaTag}`
+        // REQ-0330 §1 — one call per display line.  The stored spans are
+        // code-unit offsets into the FULL cue text, so each line's ranges are
+        // the cue's ranges clipped to that line's window and shifted back to
+        // zero.  A span that straddles a break survives as two clipped ranges,
+        // one per line — which is what `tokenizeEmphasis` produced anyway,
+        // since it always flushed its run at the sentinel.
+        let lineStart = 0
+        for (const line of splitCueTextIntoLines(e.text)) {
+          lineBodies.push(
+            buildEmphasisBody(
+              line,
+              clipRangesToWindow(emphasisRanges, lineStart, lineStart + line.length),
+              escapeWord,
+              openTag,
+              closeTag,
+            ),
+          )
+          lineStart += line.length + HARD_BREAK.length
+        }
       } else {
-        const rawText = e.casing === 'uppercase' ? e.text.toUpperCase() : e.text
-        body = escapeAssText(rawText)
+        // Plain path — `escapeWord` is `escapeAssText` plus the casing
+        // transform, i.e. exactly what the whole-cue call used to do.
+        for (const line of splitCueTextIntoLines(e.text)) lineBodies.push(escapeWord(line))
       }
+      // REQ-0330 §1 — line spacing is still fixed at 0 %, so the lines are
+      // re-joined with the marker the split removed and the cue stays ONE
+      // event.  §2 replaces this join with one `expandCueToEvents` piece per
+      // line, each carrying its own `\pos`.
+      const body = lineBodies.join(HARD_BREAK)
 
       // Per-row MarginV — Dialogue's MarginV column overrides the Style-level
       // default per libass spec.  REQ-20260613-016 Phase 2 §A.
