@@ -1,6 +1,6 @@
 import { ASS_MARGIN_LR_PX } from './tokens'
 // REQ-0312 §2 — 禁則処理 (kinsoku) tables + break adjustment.
-import { applyKinsoku } from '../../shared/kinsoku'
+import { applyKinsoku, isNoLineStartChar, isNoLineEndChar } from '../../shared/kinsoku'
 import {
   getSubtitleFont,
   getLibassScale,
@@ -243,8 +243,45 @@ function breakSegment(
   // break later, which is why no iteration limit or convergence check is
   // needed here.  A no-kinsoku segment returns `breakPos` unchanged, so cues
   // without these characters wrap byte-identically to before (REQ-0303 pin).
-  const kinsokuPos = applyKinsoku(seg, breakPos)
-  let { leftEnd, rightStart } = adjustBreak(seg, kinsokuPos)
+  // REQ-0315 §6 — kinsoku and the Latin word rule are applied to a FIXED POINT,
+  // not once each.
+  //
+  // Running kinsoku only before `adjustBreak` was not enough: `adjustBreak`
+  // moves the break back to the preceding whitespace, and the character that
+  // then ends the line is whatever sat before that space — which may itself be
+  // prohibited.  Measured example (RES-0314 §4-3):
+  //
+  //   'あ'x50 + '「 supercalifragilistic'  ->  line 1 ended with '「'
+  //
+  // A single extra pass is not enough either, because that pass can land the
+  // break inside a Latin word and require `adjustBreak` again.  Alternating
+  // until neither rule wants to move is the only version that is actually
+  // closed under both.
+  //
+  // Termination is structural, not a retry budget: every step assigns
+  // `pos = result.leftEnd - 1`, and `adjustBreak(applyKinsoku(pos)) <= pos`, so
+  // `pos` strictly decreases and is bounded below by the `leftEnd > 1` guard.
+  // Neither rule can push the break later, so they cannot cycle.
+  const violates = (le: number, rs: number): boolean => {
+    const endChar = seg[le - 1]
+    const startChar = seg[rs]
+    return (
+      (endChar !== undefined && isNoLineEndChar(endChar)) ||
+      (startChar !== undefined && isNoLineStartChar(startChar))
+    )
+  }
+  const resolve = (from: number) => adjustBreak(seg, applyKinsoku(seg, from))
+  let settled = resolve(breakPos)
+  let probe = breakPos
+  while (violates(settled.leftEnd, settled.rightStart) && settled.leftEnd > 1) {
+    probe = settled.leftEnd - 1
+    settled = resolve(probe)
+  }
+  // Fallback (REQ-0312 §2 precedence): if no legal position exists, keep the
+  // pixel-accurate one.  Never overflow, never empty a line.
+  if (violates(settled.leftEnd, settled.rightStart)) settled = resolve(breakPos)
+  const kinsokuPos = settled.leftEnd
+  let { leftEnd, rightStart } = settled
   const pulled = pullBreakOutOfEmphasis(seg, kinsokuPos, emph, baseOffset)
   if (pulled !== null) {
     const adjusted = adjustBreak(seg, applyKinsoku(seg, pulled))
