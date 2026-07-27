@@ -12,6 +12,8 @@ import {
 } from '../../../shared/cue-animation'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
+import { LineSpacingSlider } from '@/components/subtitle-table/line-spacing-slider'
+import { LINE_SPACING_DEFAULT_PERCENT } from '../../../shared/line-spacing'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -291,6 +293,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // these rows".  Starts at the neutral default (4) which matches
   // the ass-generator fallback and the inspector's toggle-on seed.
   const [shadowSliderDraft, setShadowSliderDraft] = useState<number>(4)
+  // REQ-0332 §5 — bulk line-spacing draft.  Same pattern; starts at the
+  // neutral default so opening the bar and dragging away from 0 % is the
+  // only way to change anything.
+  const [lineSpacingDraft, setLineSpacingDraft] = useState<number>(LINE_SPACING_DEFAULT_PERCENT)
   // REQ-0292 §3 — bulk rotation draft.  Fixes the stuck-at-0 bug
   // where `NumberStepperInput value={0}` never advanced past the
   // first click: the stepper computes `next = clamp(value + step)`
@@ -740,6 +746,14 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     applyBulk(
       patch,
       t('bulk.history.shadow', { count: selectedRowIds.size }),
+    )
+  }
+  // REQ-0332 §5 — bulk line spacing (行間).
+  function handleLineSpacingBulkCommit(percent: number) {
+    setLineSpacingDraft(percent)
+    applyBulk(
+      { lineSpacingPercent: percent },
+      t('bulk.history.lineSpacing', { count: selectedRowIds.size }),
     )
   }
   function handleRotationBulk(deg: number) {
@@ -1410,6 +1424,20 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               }}
               disabled={vPosDraft === 'center'}
               ariaLabel={t('subtitlePosition.margin')}
+            />
+          </label>
+          {/* REQ-0332 §5 — 行間.  Next to the margin, mirroring the
+              inspector's レイアウト ordering so the two surfaces read the
+              same way. */}
+          <label
+            className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground"
+            title={t('styleCell.lineSpacingHint')}
+          >
+            <span>{t('styleCell.lineSpacing')}</span>
+            <LineSpacingSlider
+              value={lineSpacingDraft}
+              onCommit={handleLineSpacingBulkCommit}
+              ariaLabel={t('styleCell.lineSpacing')}
             />
           </label>
         </div>

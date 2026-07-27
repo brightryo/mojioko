@@ -5,6 +5,7 @@ import { BURNIN_DEFAULTS } from '../../shared/burnin-defaults'
 import { DEFAULT_LANGUAGE } from '../../shared/app-info'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, SHADOW_DEPTH_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
 import { DEFAULT_FONT_ID, isFontId, type FontId } from '../../shared/fonts'
+import { clampLineSpacingPercent } from '../../shared/line-spacing'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 
 interface SettingsStore {
@@ -251,6 +252,12 @@ export const useSettingsStore = create<SettingsStore>()(
             verticalMarginPx: td.verticalMarginPx === undefined
               ? undefined
               : Math.max(0, Math.floor(td.verticalMarginPx)),
+            // REQ-0332 — line spacing (行間), clamped on load like every
+            // other numeric default so a hand-edited settings.json cannot
+            // push the slider out of range.
+            lineSpacingPercent: td.lineSpacingPercent === undefined
+              ? undefined
+              : clampLineSpacingPercent(Math.round(td.lineSpacingPercent)),
             posOffsetX: td.posOffsetX === undefined ? undefined : Math.floor(td.posOffsetX),
             posOffsetY: td.posOffsetY === undefined ? undefined : Math.floor(td.posOffsetY),
           },

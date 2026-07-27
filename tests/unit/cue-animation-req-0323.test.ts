@@ -8,7 +8,11 @@ import {
   SCALE_START,
   POP_OVERSHOOT,
   POP_PEAK_PROGRESS,
+  POP_START_SCALE,
   BLUR_MAX_PX,
+  BLUR_EASE_POWER,
+  ANIMATION_OPACITY_RAMP_FRACTION,
+  ANIMATION_SAMPLE_TOLERANCE,
   ANIMATION_DURATION_DEFAULT_SEC,
   type AnimationSpec,
 } from '../../src/shared/cue-animation'
@@ -20,8 +24,17 @@ function spec(patch: Partial<AnimationSpec> = {}): AnimationSpec {
   return {
     type: 'fade', inEnabled: true, outEnabled: true,
     durationSec: 0.4, direction: 'down', distancePx: 50,
+    // REQ-0331 §1-3 — the strength fields.  Defaults chosen to reproduce
+    // the pre-REQ-0331 hardcoded constants, which is what lets the curve
+    // assertions below stay written in terms of the exported constants.
+    startScale: SCALE_START, blurMaxPx: BLUR_MAX_PX,
     ...patch,
   }
+}
+
+/** `pop` resolves to a start scale of 0, unlike `scale`'s 0.7. */
+function popSpec(patch: Partial<AnimationSpec> = {}): AnimationSpec {
+  return spec({ type: 'pop', startScale: POP_START_SCALE, ...patch })
 }
 
 /** The legacy fade ramp, transcribed from the pre-REQ-0323 helper. */
@@ -45,16 +58,21 @@ describe('REQ-0323 §2-1 — the curves', () => {
     expect(at(4)).toBeCloseTo(0, 6)
   })
 
-  it('scale goes SCALE_START→1 and never touches opacity', () => {
+  it('scale goes startScale→1, decelerating (REQ-0331 §2-3)', () => {
     const s = spec({ type: 'scale', durationSec: 1 })
-    expect(animationTransformAt(s, 0, 4, 0).scale).toBeCloseTo(SCALE_START, 6)
-    expect(animationTransformAt(s, 0, 4, 0.5).scale).toBeCloseTo((SCALE_START + 1) / 2, 6)
-    expect(animationTransformAt(s, 0, 4, 1).scale).toBeCloseTo(1, 6)
-    expect(animationTransformAt(s, 0, 4, 0.5).opacity).toBe(1)
+    const at = (t: number) => animationTransformAt(s, 0, 4, t).scale
+    expect(at(0)).toBeCloseTo(SCALE_START, 6)
+    expect(at(1)).toBeCloseTo(1, 6)
+    // Ease-OUT on the way in: already past the halfway point of the
+    // distance by the halfway point of the time.
+    expect(at(0.5)).toBeGreaterThan((SCALE_START + 1) / 2)
+    // Monotone, and by symmetry ease-IN on the way out.
+    expect(at(0.25)).toBeLessThan(at(0.5))
+    expect(at(3.5)).toBeGreaterThan(at(3.75))
   })
 
   it('pop overshoots past 1 and settles back — the two-segment shape', () => {
-    const s = spec({ type: 'pop', durationSec: 1 })
+    const s = popSpec({ durationSec: 1 })
     const at = (t: number) => animationTransformAt(s, 0, 4, t).scale
     expect(at(0)).toBeCloseTo(0, 6)
     expect(at(POP_PEAK_PROGRESS)).toBeCloseTo(POP_OVERSHOOT, 6)
@@ -66,11 +84,38 @@ describe('REQ-0323 §2-1 — the curves', () => {
     expect(at(0.8)).toBeLessThan(at(POP_PEAK_PROGRESS))
   })
 
-  it('blur starts at BLUR_MAX_PX and sharpens to 0', () => {
+  it('blur starts at its peak radius and sharpens to 0, front-loaded', () => {
     const s = spec({ type: 'blur', durationSec: 1 })
-    expect(animationTransformAt(s, 0, 4, 0).blurPx).toBeCloseTo(BLUR_MAX_PX, 6)
-    expect(animationTransformAt(s, 0, 4, 0.5).blurPx).toBeCloseTo(BLUR_MAX_PX / 2, 6)
-    expect(animationTransformAt(s, 0, 4, 1).blurPx).toBeCloseTo(0, 6)
+    const at = (t: number) => animationTransformAt(s, 0, 4, t).blurPx
+    expect(at(0)).toBeCloseTo(BLUR_MAX_PX, 6)
+    expect(at(1)).toBeCloseTo(0, 6)
+    // REQ-0331 §2-3 — the whole point: at mid-ramp the radius must ALREADY
+    // be far below half, or the cue is an unreadable smear for most of the
+    // ramp and then snaps sharp (RES-0323 §7).
+    expect(at(0.5)).toBeLessThan(BLUR_MAX_PX / 3)
+    expect(at(0.5)).toBeCloseTo(BLUR_MAX_PX * Math.pow(0.5, BLUR_EASE_POWER), 6)
+  })
+
+  it('the per-cue strength fields drive the curves (REQ-0331 §1-3)', () => {
+    const weak = spec({ type: 'scale', durationSec: 1, startScale: 0.95 })
+    expect(animationTransformAt(weak, 0, 4, 0).scale).toBeCloseTo(0.95, 6)
+    const heavy = spec({ type: 'blur', durationSec: 1, blurMaxPx: 20 })
+    expect(animationTransformAt(heavy, 0, 4, 0).blurPx).toBeCloseTo(20, 6)
+  })
+
+  it('★ every non-fade type carries its own opacity ramp (REQ-0331 §2-3)', () => {
+    for (const s of [
+      spec({ type: 'scale', durationSec: 1 }),
+      popSpec({ durationSec: 1 }),
+      spec({ type: 'blur', durationSec: 1 }),
+    ]) {
+      const at = (t: number) => animationTransformAt(s, 0, 4, t).opacity
+      expect(at(0)).toBeCloseTo(0, 6)
+      // Reaches full opacity at `fraction` of the ramp, then holds.
+      expect(at(ANIMATION_OPACITY_RAMP_FRACTION)).toBeCloseTo(1, 6)
+      expect(at(ANIMATION_OPACITY_RAMP_FRACTION / 2)).toBeCloseTo(0.5, 6)
+      expect(at(0.9)).toBeCloseTo(1, 6)
+    }
   })
 
   it('a disabled end does not ramp there', () => {
@@ -105,9 +150,9 @@ describe('REQ-0323 §1-1 — ★ the anti-drift guarantee', () => {
   const cases: AnimationSpec[] = [
     spec({ type: 'fade', durationSec: 0.4 }),
     spec({ type: 'scale', durationSec: 0.4 }),
-    spec({ type: 'pop', durationSec: 0.4 }),
+    popSpec({ durationSec: 0.4 }),
     spec({ type: 'blur', durationSec: 0.4 }),
-    spec({ type: 'pop', durationSec: 1, inEnabled: false }),
+    popSpec({ durationSec: 1, inEnabled: false }),
     spec({ type: 'scale', durationSec: 1, outEnabled: false }),
     spec({ type: 'blur', durationSec: 1 }),   // ramps overlap on a 1.5s cue
   ]
@@ -122,7 +167,7 @@ describe('REQ-0323 §1-1 — ★ the anti-drift guarantee', () => {
   }
 
   it('keyframes are ordered, de-duplicated and inside the cue', () => {
-    const keys = animationKeyframes(spec({ type: 'pop', durationSec: 1 }), 0, 1.2)
+    const keys = animationKeyframes(popSpec({ durationSec: 1 }), 0, 1.2)
     for (let i = 1; i < keys.length; i++) {
       expect(keys[i].atSec).toBeGreaterThan(keys[i - 1].atSec)
     }
@@ -198,16 +243,61 @@ describe('REQ-0323 §1-6 — ★ the fadeDurationSec migration', () => {
 })
 
 describe('REQ-0323 §1 — ASS transcription', () => {
-  it('scale emits an initial state plus one \\t per ramp', () => {
+  it('scale emits an initial state plus \\t segments covering both ramps', () => {
     const tags = buildAnimationTags(spec({ type: 'scale', durationSec: 0.4 }), 0, 4)
     expect(tags).toContain(BS + 'fscx70')
-    expect(tags).toContain(BS + 't(0,400,')
-    expect(tags).toContain(BS + 't(3600,4000,')
+    // The eased ramp is sampled, so the first segment starts at 0 and the
+    // last one lands on the cue's end; the intermediate boundaries are
+    // wherever the sampler decided (REQ-0331 §2-2).
+    expect(tags).toContain(BS + 't(0,')
+    expect(tags).toContain(',4000,')
+    expect(tags).toContain('fscx100')
+  })
+
+  it('★ every non-fade type also emits the opacity ramp as \\fad', () => {
+    for (const s of [
+      spec({ type: 'scale', durationSec: 0.4 }),
+      popSpec({ durationSec: 0.4 }),
+      spec({ type: 'blur', durationSec: 0.4 }),
+    ]) {
+      const ms = Math.round(0.4 * ANIMATION_OPACITY_RAMP_FRACTION * 1000)
+      expect(buildAnimationTags(s, 0, 4)).toContain(`${BS}fad(${ms},${ms})`)
+    }
+  })
+
+  it('★ the sampled keyframes stay within tolerance of the real curve', () => {
+    // The piecewise-linear approximation is only honest if the chords are
+    // actually close to the curve BETWEEN the control points — the
+    // anti-drift test only pins the control points themselves.
+    for (const s of [
+      spec({ type: 'scale', durationSec: 1 }),
+      popSpec({ durationSec: 1 }),
+      spec({ type: 'blur', durationSec: 1 }),
+    ]) {
+      const keys = animationKeyframes(s, 0, 4)
+      for (let i = 1; i < keys.length; i++) {
+        const a = keys[i - 1]
+        const b = keys[i]
+        if (b.atSec - a.atSec < 1e-9) continue
+        for (let f = 0.1; f < 1; f += 0.1) {
+          const t = a.atSec + (b.atSec - a.atSec) * f
+          const real = animationTransformAt(s, 0, 4, t)
+          const chord = {
+            scale: a.transform.scale + (b.transform.scale - a.transform.scale) * f,
+            blurPx: a.transform.blurPx + (b.transform.blurPx - a.transform.blurPx) * f,
+          }
+          expect(Math.abs(chord.scale - real.scale)).toBeLessThan(ANIMATION_SAMPLE_TOLERANCE * 2)
+          expect(Math.abs(chord.blurPx - real.blurPx))
+            .toBeLessThan(ANIMATION_SAMPLE_TOLERANCE * 2 * Math.max(1, s.blurMaxPx))
+        }
+      }
+    }
   })
 
   it('pop emits the overshoot as its own \\t segment', () => {
-    const tags = buildAnimationTags(spec({ type: 'pop', durationSec: 0.5 }), 0, 4)
-    expect(tags).toContain("fscx115")  // the overshoot, rounded by scalePercent
+    const tags = buildAnimationTags(popSpec({ durationSec: 0.5 }), 0, 4)
+    // the overshoot, rounded the way `scalePercent` rounds it
+    expect(tags).toContain(`fscx${Math.round(POP_OVERSHOOT * 1000) / 10}`)
     // in-ramp: 0 → peak → settle = two segments
     expect((tags.match(/\\t\(/g) ?? []).length).toBeGreaterThanOrEqual(3)
   })

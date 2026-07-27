@@ -30,6 +30,9 @@ function makeRichEntry(): SubtitleEntry {
     verticalMarginPx: 40,
     subtitleBackground: { enabled: true, color: 'black' as const, opacityPercent: 60 },
     posX: 120, posY: 340,
+    // REQ-0332 — line spacing (行間); a non-default value so a dropped
+    // `copy` classification shows up as a missing field, not a matching zero.
+    lineSpacingPercent: -25,
     casing: 'uppercase' as const,
     shadowDepth: 8, shadowColor: '#112233', shadowAlpha: 70,
     textAlpha: 90, outlineAlpha: 80,
@@ -43,6 +46,8 @@ function makeRichEntry(): SubtitleEntry {
     animationDurationSec: 0.4,
     animationDirection: 'up' as const,
     animationDistancePx: 60,
+    animationStartScalePercent: 35,
+    animationBlurPx: 12,
     words: [
       { startSec: 1.0, endSec: 1.4, text: 'Hello' },
       { startSec: 1.4, endSec: 2.2, text: ' brave' },

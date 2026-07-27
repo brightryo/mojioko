@@ -89,6 +89,8 @@ export const SUBTITLE_ENTRY_DUPLICATION = {
   subtitleBackground: 'deep-copy',
   posX: 'copy',
   posY: 'copy',
+  // REQ-0332 — line spacing (行間).
+  lineSpacingPercent: 'copy',
   // --- style effects (REQ-0277 / REQ-0310) ----------------------------
   casing: 'copy',
   shadowDepth: 'copy',

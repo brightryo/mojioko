@@ -24,6 +24,13 @@ import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../s
 import { areWordsValidForText } from '../../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
 import { computeKaraokeBreaks, splitWordsAtHardBreaks } from '../../../shared/karaoke-ass'
+// REQ-0332 — line spacing.  Same module the ASS writer reads.
+import {
+  estimateCueHeightAssPx,
+  lineSpacingFactor,
+  lineLeadingCorrectionAssPx,
+  resolveLineSpacingPercent,
+} from '../../../shared/line-spacing'
 import {
   canUseKeywordEmphasisInTier,
   resolveEmphasisRanges,
@@ -171,11 +178,12 @@ export function estimateOverlayHeightPx(
   // stays meaningful and future per-font calibration has a hook.
   void activeFontId
   const scale = containerWidthPx / videoWidthPx
-  // `\N` is the persisted line-break marker (RES-20260612-002 Q2).
-  const lineCount = 1 + (entry.text.match(/\\N/g)?.length ?? 0)
-  const heightAss =
-    lineCount * entry.fontSizePx + 2 * entry.outlineThicknessPx
-  return heightAss * scale
+  // REQ-0332 — the ASS-space height moved to `shared/line-spacing.ts` so the
+  // burn-in writer can feed the very same number into the very same
+  // `computeFixedStackOffsets`.  It is now line-spacing aware: a tightened cue
+  // must also take less room in a stack, or preview and burn-in would part
+  // company the moment two cues overlap.
+  return estimateCueHeightAssPx(entry) * scale
 }
 
 /**
@@ -284,6 +292,11 @@ export function SubtitleOverlay({
   }, [resolvedFontId])
   const scale      = containerWidthPx / videoWidthPx
   const fontSizePx = entry.fontSizePx        * libassScale * scale
+  // REQ-0332 — line spacing (行間), 0 % ⇒ factor 1 ⇒ nothing moves.
+  const lineSpacingPercent = resolveLineSpacingPercent(entry)
+  // CSS half-leading correction — see `lineLeadingCorrectionAssPx`.  Applied
+  // to the top/bottom anchored branches below; centre needs none.  0 at 0 %.
+  const leadingCorrectionPx = lineLeadingCorrectionAssPx(entry.fontSizePx, lineSpacingPercent) * scale
   // REQ-20260613-016 Phase 3: layout is now driven by the entry itself
   // (no more `burnin` prop).  Each entry carries its own
   // horizontalPosition / verticalPosition / verticalMarginPx — seeded by
@@ -369,7 +382,7 @@ export function SubtitleOverlay({
     transform = pinnedAnchorTransform(entry.horizontalPosition, entry.verticalPosition)
   } else {
     if (entry.verticalPosition === 'bottom') {
-      vStyle = { bottom: `${marginVPx + stackOffset}px` }
+      vStyle = { bottom: `${marginVPx + stackOffset - leadingCorrectionPx}px` }
       transform = undefined
     } else if (entry.verticalPosition === 'center') {
       // REQ-0140 — center-aligned rows anchor at the viewport middle
@@ -381,7 +394,7 @@ export function SubtitleOverlay({
       vStyle = { top: '50%' }
       transform = `translateY(calc(-50% + ${stackOffset}px))`
     } else {
-      vStyle = { top: `${marginVPx + stackOffset}px` }
+      vStyle = { top: `${marginVPx + stackOffset - leadingCorrectionPx}px` }
       transform = undefined
     }
     hStyle = { left: `${marginHPx}px`, right: `${marginHPx}px`, textAlign }
@@ -464,7 +477,17 @@ export function SubtitleOverlay({
   // exactly (= fontSize ASS px per line), so multi-line previews stack
   // their internal lines the same way the burn-in does.  Replaces the
   // prior `leading-snug` (= 1.375) which left a measurable gap.
-  const lineHeight = libassScale > 0 ? 1 / libassScale : 1.448
+  //
+  // REQ-0332 — line spacing scales that pitch.  It multiplies the line-height
+  // ONLY, so the libassScale cancellation the stack estimator depends on
+  // (REQ-0322 §1 / REQ-0324 §4-2) survives untouched:
+  //
+  //     line box = (fs × libassScale × scale) × (1 / libassScale) × factor
+  //              = fs × scale × factor
+  //
+  // which is exactly `estimateCueHeightAssPx`'s per-line term times `scale`.
+  // At 0 % the factor is 1 and this is the pre-REQ-0332 expression.
+  const lineHeight = (libassScale > 0 ? 1 / libassScale : 1.448) * lineSpacingFactor(lineSpacingPercent)
 
   // REQ-20260615-049 — preview-side fade is no longer computed here.
   // The parent runs a single requestAnimationFrame loop that reads the

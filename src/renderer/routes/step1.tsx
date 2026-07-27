@@ -576,6 +576,10 @@ export default function Step1Route(_: Step1RouteProps) {
         horizontalPosition: layoutH,
         verticalPosition: layoutV,
         verticalMarginPx: layoutMV,
+        // REQ-0332 — line spacing (行間).  Copied raw: an untouched setting
+        // leaves the cue field `undefined`, which every renderer reads as
+        // 0 % and therefore as "exactly the pre-REQ-0332 output".
+        lineSpacingPercent: runDefaults.lineSpacingPercent,
         // REQ-0295 — additive Phase A / Phase B defaults.  Copy raw
         // (undefined stays undefined so renderers fall back to their
         // per-field neutral defaults).

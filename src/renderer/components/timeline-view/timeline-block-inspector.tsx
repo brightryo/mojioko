@@ -15,6 +15,8 @@ import { clampOpacityPercent } from '../../../shared/alpha'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
+import { LineSpacingSlider } from '@/components/subtitle-table/line-spacing-slider'
+import { resolveLineSpacingPercent } from '../../../shared/line-spacing'
 import { SegmentGroup } from '@/components/subtitle-table/segment-group'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
@@ -1484,6 +1486,25 @@ export function TimelineBlockInspector({
               }}
               disabled={isFrozen || entry.verticalPosition === 'center'}
               ariaLabel={t('subtitlePosition.margin')}
+            />
+          </div>
+          {/* REQ-0332 §5 — 行間 (line spacing).  Percentage of the font size;
+              0 % is the historical pitch, negative tightens (the owner's
+              motivation: Latin fonts sit too far apart).  Only has a visible
+              effect on a multi-line cue, and the row is deliberately NOT
+              hidden for single-line cues — the value is a property of the row
+              that survives the text becoming two lines, exactly like the
+              margin above. */}
+          <div className="flex items-center justify-between gap-2" title={t('styleCell.lineSpacingHint')}>
+            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.lineSpacing')}</label>
+            <LineSpacingSlider
+              value={resolveLineSpacingPercent(entry)}
+              onCommit={(next) => {
+                if (next === resolveLineSpacingPercent(entry)) return
+                applyStyleEdit(t('history.editLineSpacing'), { lineSpacingPercent: next })
+              }}
+              disabled={isFrozen}
+              ariaLabel={t('styleCell.lineSpacing')}
             />
           </div>
           {/* REQ-20260615-033 — オフセット行.  Displays `posX-anchor.x` /

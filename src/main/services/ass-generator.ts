@@ -9,6 +9,19 @@ import type { KaraokeStyle } from '../../shared/karaoke-style'
 import { resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../shared/karaoke-style'
 import { resolveAnimation } from '../../shared/cue-animation'
 import { expandCueToEvents } from '../../shared/cue-events'
+// REQ-0332 — line spacing.  All the arithmetic (pitch, per-line `\pos`
+// anchors, cue height) lives in `shared/line-spacing.ts` so the preview reads
+// the same expressions; this file only transcribes the result into ASS.
+import {
+  ASS_HARD_BREAK,
+  cueLineAnchors,
+  estimateCueHeightAssPx,
+  formatAssCoord,
+  linePitchAssPx,
+  resolveLineSpacingPercent,
+} from '../../shared/line-spacing'
+import { computeFixedStackOffsets } from '../../shared/stack-offsets'
+import { groupByTimeOverlap } from '../../shared/simultaneous-groups'
 import { buildAnimationTags } from '../../shared/cue-animation-ass'
 import { areWordsValidForText } from '../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
@@ -113,8 +126,12 @@ function escapeAssText(text: string): string {
  * The libass hard line-break marker, as the two characters it occupies in a
  * cue's stored `text` (backslash + `N`).  Protected convention — see
  * CLAUDE.md §21; this constant names it, it does not redefine it.
+ *
+ * REQ-0332 moved the declaration to `shared/line-spacing.ts` because the
+ * splitter now has to re-join lines with the same marker; this alias keeps
+ * the local reads short.
  */
-const HARD_BREAK = '\\N'
+const HARD_BREAK = ASS_HARD_BREAK
 
 /**
  * REQ-0330 §1 — split a cue's text into its display lines at the hard breaks.
@@ -269,9 +286,13 @@ export function generateAss(
 
   const activeEntries = entries.filter((e) => !e.isDeleted)
 
-  const events = [
-    '[Events]',
-    'Format: Layer, Start, End, Style, MarginL, MarginR, MarginV, Effect, Text',
+  // REQ-0332 §3 — TWO passes.  The first builds each cue's material (override
+  // block, per-line bodies, margins); the second decides positions, which
+  // cannot be done per cue because a split cue drags its whole
+  // simultaneously-visible group onto self-computed positions.  Splitting the
+  // loop is the only structural change: pass 1's body is the pre-REQ-0332
+  // callback verbatim, minus its final `return`.
+  const renders: CueRender[] = [
     ...activeEntries.map((e) => {
       const rowBgEnabled = e.subtitleBackground.enabled
       const styleName = rowBgEnabled ? 'WithBox' : 'Default'
@@ -519,9 +540,14 @@ export function generateAss(
         bgShadTag  = '\\shad0'
       }
 
-      const styleTag = [
+      // REQ-0332 §3 — the override block is now built through a function
+      // with the position tag as a HOLE, because a line-split cue needs the
+      // same block N times with a different `\pos` in each.  Calling it with
+      // the row's own `posTag` reproduces the pre-REQ-0332 string exactly
+      // (empty for an unpinned row), so nothing about the unsplit path moves.
+      const buildStyleTag = (positionTag: string): string => [
         alignTag,
-        posTag,
+        positionTag,
         fontTag,
         sizeTag,
         fillTag,
@@ -594,7 +620,14 @@ export function generateAss(
       // the output is byte-identical (pinned by
       // `ass-generator-baseline-ac1fd67.test.ts`).  What changes is only that
       // `lineBodies` now EXISTS as a seam for §2 to emit from.
+      //
+      // REQ-0332 §3 — TWO forms of the same lines are built.  `lineBodies` is
+      // the joined form (what a one-event cue emits, byte-identical to before)
+      // and `splitLineBodies` is what a line-split cue emits.  They differ
+      // ONLY on the karaoke path, and only because `\k` is an event-local
+      // clock: see the comment at the push site.
       const lineBodies: string[] = []
+      const splitLineBodies: string[] = []
       if (karaokeActive) {
         // REQ-0289 — `karaokeWords` is either the real per-word list
         // (words valid) or the equal-split fallback list (words
@@ -675,17 +708,28 @@ export function generateAss(
           // `\N` by construction, so there is no break left for the emitter to
           // find, and passing the whole cue text would make it re-derive breaks
           // against a word list that is only a slice of the cue's.
-          lineBodies.push(
+          const buildLine = (fromSec: number): string =>
             cueKaraokeStyle === 'sweep'
-              ? buildKaraokeSweepAssText(groupWords, lineStartSec, lineEndSec, escapeWord, undefined, lineEmphasis)
-              : buildKaraokeAssText(groupWords, lineStartSec, lineEndSec, escapeWord, undefined, lineEmphasis),
-          )
+              ? buildKaraokeSweepAssText(groupWords, fromSec, lineEndSec, escapeWord, undefined, lineEmphasis)
+              : buildKaraokeAssText(groupWords, fromSec, lineEndSec, escapeWord, undefined, lineEmphasis)
+          lineBodies.push(buildLine(lineStartSec))
+          // ★ REQ-0332 §3 — the SPLIT form of the same line needs a different
+          // `\k` clock.  `\k` is per-EVENT, and every split line's event spans
+          // the whole cue, so a continuation line must open with the silence
+          // that separates the cue start from its own first unit — otherwise
+          // its sweep starts at t=0 and the karaoke runs on all lines at once.
+          // Passing the CUE start makes the emitters produce that leading
+          // block themselves (they already do it for the cue's own leading
+          // offset), so there is no second copy of the rounding rule.
+          splitLineBodies.push(g === 0 ? lineBodies[g] : buildLine(e.startSec))
           // The `\kf` path emits the silence BEFORE a unit as a textless
           // `{\k<gap>}`, and when that unit opens a line the block lands
           // before the `\N`, i.e. at the END of the previous line.  Keep it
-          // there: it is where libass has always seen it, and once §2 emits
-          // one event per line the clock still has to be advanced by the
-          // event that is on screen while the silence happens.
+          // there in the JOINED form: it is where libass has always seen it
+          // (RES-0330 §1-3 measured a byte difference when it moved).  The
+          // split form omits it — the gap is carried by the NEXT line's own
+          // leading block above, and a trailing textless block would only
+          // advance a clock nothing reads afterwards.
           if (cueKaraokeStyle === 'sweep' && to < karaokeWords.length) {
             lineBodies[g] += buildSweepGapBlock(karaokeWords[to].startSec - karaokeWords[to - 1].endSec)
           }
@@ -733,17 +777,14 @@ export function generateAss(
           )
           lineStart += line.length + HARD_BREAK.length
         }
+        // Emphasis carries no per-event clock, so the split form is identical.
+        splitLineBodies.push(...lineBodies)
       } else {
         // Plain path — `escapeWord` is `escapeAssText` plus the casing
         // transform, i.e. exactly what the whole-cue call used to do.
         for (const line of splitCueTextIntoLines(e.text)) lineBodies.push(escapeWord(line))
+        splitLineBodies.push(...lineBodies)
       }
-      // REQ-0330 §1 — line spacing is still fixed at 0 %, so the lines are
-      // re-joined with the marker the split removed and the cue stays ONE
-      // event.  §2 replaces this join with one `expandCueToEvents` piece per
-      // line, each carrying its own `\pos`.
-      const body = lineBodies.join(HARD_BREAK)
-
       // Per-row MarginV — Dialogue's MarginV column overrides the Style-level
       // default per libass spec.  REQ-20260613-016 Phase 2 §A.
       // MarginL / MarginR stay 0 (= use Style defaults from the Style header)
@@ -753,22 +794,146 @@ export function generateAss(
       // ignores MarginV when \pos is present, but writing 0 makes the
       // intent unambiguous to anyone reading the ASS file directly.
       const marginVCol = isPinned ? 0 : e.verticalMarginPx
-      // REQ-0327 §1-1 — one cue may become several events (line axis for
-      // line spacing, time axis for slide).  Currently a no-op passthrough,
-      // so the emitted string is byte-identical to the pre-REQ-0327 output.
+
+      return {
+        entry: e, styleName, buildStyleTag, ownPosTag: posTag,
+        lineBodies, splitLineBodies, marginVCol, isPinned,
+      }
+    }),
+  ]
+
+  // REQ-0332 §3 — decide, ACROSS cues, which ones position themselves.
+  const selfPositioned = resolveSelfPositionedCues(renders, video)
+
+  const events = [
+    '[Events]',
+    'Format: Layer, Start, End, Style, MarginL, MarginR, MarginV, Effect, Text',
+    ...renders.flatMap((r) => {
+      const placement = selfPositioned.get(r.entry.id)
+      // REQ-0327 §1-1 / REQ-0332 §3 — one cue may become several events (line
+      // axis for line spacing, time axis for slide).  `lineStyleTags`
+      // undefined ⇒ the lines are re-joined and ONE event comes back, which
+      // is byte-identical to the pre-REQ-0327 output.
       return expandCueToEvents({
-        startSec: e.startSec,
-        endSec: e.endSec,
-        marginV: marginVCol,
-        styleTag,
-        body,
+        startSec: r.entry.startSec,
+        endSec: r.entry.endSec,
+        marginV: placement === undefined ? r.marginVCol : 0,
+        styleTag: r.buildStyleTag(r.ownPosTag),
+        lineBodies: placement === undefined ? r.lineBodies : r.splitLineBodies,
+        lineStyleTags: placement?.map((a) =>
+          r.buildStyleTag(`\\pos(${formatAssCoord(a.x)},${formatAssCoord(a.y)})`),
+        ),
       }).map((piece) =>
         `Dialogue: 0,${formatAssTime(piece.startSec)},${formatAssTime(piece.endSec)},` +
-        `${styleName},0,0,${piece.marginV},,{${piece.styleTag}}${piece.body}`
+        `${r.styleName},0,0,${piece.marginV},,{${piece.styleTag}}${piece.body}`
       )
-    }).flat(),
+    }),
     ''
   ].join('\n')
 
   return [scriptInfo, styles, events].join('\n')
+}
+
+/** What `generateAss` needs to remember about a cue between its two passes. */
+interface CueRender {
+  entry: SubtitleEntry
+  styleName: string
+  /** The cue's override block, with the position tag left as a hole. */
+  buildStyleTag: (positionTag: string) => string
+  /** The row's own `\pos` tag (pinned rows only); '' otherwise. */
+  ownPosTag: string
+  /** The display lines as ONE event emits them (joined with `\N`). */
+  lineBodies: string[]
+  /** The same lines as SEPARATE events emit them.  Differs only for karaoke. */
+  splitLineBodies: string[]
+  marginVCol: number
+  isPinned: boolean
+}
+
+/**
+ * REQ-0332 §3 — work out which cues MOJIOKO positions itself, and where each
+ * of their display lines goes.
+ *
+ * Returns a map id → per-line anchors.  A cue absent from the map is emitted
+ * exactly as it always was: one event, libass decides the position.  The map
+ * is EMPTY whenever no cue has a non-zero line spacing, which is what keeps
+ * `ass-generator-baseline-ac1fd67` byte-identical.
+ *
+ * ## The three decisions
+ *
+ * 1. **Which cues actually need splitting.**  A cue needs it when it has more
+ *    than one display line AND a non-zero spacing.  A one-line cue has no gap
+ *    to change, so it is left alone no matter what the field says.
+ *
+ * 2. **Who gets dragged along.**  Splitting removes a cue from libass's
+ *    collision detection, so a split cue and an auto-stacked cue on the same
+ *    frame would be placed by two authorities that cannot see each other.
+ *    The owner's rule (§3): if any cue in a simultaneously-visible group is
+ *    split, the whole group self-positions.  The group is the transitive
+ *    closure of time-interval overlap — see `simultaneous-groups.ts` for why
+ *    the closure, and not just the pairwise overlaps, is the right unit.
+ *
+ * 3. **Where the lines go.**  Stack offsets come from the SAME
+ *    `computeFixedStackOffsets` the preview draws with (moved to `shared/` by
+ *    this REQ), fed the same `estimateCueHeightAssPx`.  The per-line anchors
+ *    come from `cueLineAnchors`, whose derivation was validated against
+ *    libass frame-by-frame (see its docblock).
+ *
+ * Pinned rows (`\pos`, 機能B) sit outside all of this: libass already excludes
+ * them from collisions and so does `computeFixedStackOffsets`, so a pinned cue
+ * splits only for its own sake and never drags a group along.
+ */
+function resolveSelfPositionedCues(
+  renders: readonly CueRender[],
+  video: VideoInfo,
+): Map<string, { x: number; y: number }[]> {
+  const out = new Map<string, { x: number; y: number }[]>()
+
+  const needsSplit = (r: CueRender): boolean =>
+    r.lineBodies.length > 1 && resolveLineSpacingPercent(r.entry) !== 0
+
+  // Pinned rows first — independent of every group.
+  const unpinned = renders.filter((r) => !r.isPinned)
+  const selfIds = new Set<string>()
+  for (const r of renders) {
+    if (r.isPinned && needsSplit(r)) selfIds.add(r.entry.id)
+  }
+
+  // Groups over the unpinned rows only.
+  for (const group of groupByTimeOverlap(unpinned.map((r) => r.entry))) {
+    if (!group.some((i) => needsSplit(unpinned[i]))) continue
+    for (const i of group) selfIds.add(unpinned[i].entry.id)
+  }
+
+  if (selfIds.size === 0) return out
+
+  // Stack offsets are computed over ALL unpinned rows, sorted by startSec as
+  // `computeFixedStackOffsets` requires.  Ties keep the array order, which is
+  // the ASS Dialogue order — the same tie-break the preview relies on.
+  const stacked = unpinned
+    .map((r) => r.entry)
+    .map((entry, i) => ({ entry, i }))
+    .sort((a, b) => a.entry.startSec - b.entry.startSec || a.i - b.i)
+    .map((x) => x.entry)
+  const offsets = computeFixedStackOffsets(stacked, estimateCueHeightAssPx)
+
+  for (const r of renders) {
+    if (!selfIds.has(r.entry.id)) continue
+    const e = r.entry
+    const offset = r.isPinned ? 0 : (offsets.get(e.id) ?? 0)
+    out.set(e.id, cueLineAnchors({
+      lineCount: r.lineBodies.length,
+      pitchPx: linePitchAssPx(e.fontSizePx, resolveLineSpacingPercent(e)),
+      horizontalPosition: e.horizontalPosition,
+      verticalPosition: e.verticalPosition,
+      verticalMarginPx: e.verticalMarginPx + offset,
+      centerOffsetPx: offset,
+      playResX: video.widthPx,
+      playResY: video.heightPx,
+      marginLrPx: ASS_MARGIN_LR_PX,
+      posX: e.posX,
+      posY: e.posY,
+    }))
+  }
+  return out
 }

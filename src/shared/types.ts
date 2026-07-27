@@ -117,6 +117,27 @@ export interface SubtitleEntryOriginal {
    */
   posX?: number
   posY?: number
+  /**
+   * REQ-0332 — line spacing (行間) for a multi-line cue, as a percentage OF
+   * `fontSizePx`.  Range −50 … +100; `undefined` and `0` are the same thing
+   * and reproduce today's output EXACTLY (pinned by
+   * `ass-generator-baseline-ac1fd67.test.ts`).
+   *
+   * The natural pitch libass uses for a `\N` inside one Dialogue event is
+   * `fontSizePx` itself (measured — REQ-20260614-001 補遺⑳, re-measured in
+   * REQ-0332 §6), so the field multiplies that: pitch = `fontSizePx ×
+   * (1 + lineSpacingPercent/100)`.  There is deliberately no `libassScale`
+   * in it; see `shared/line-spacing.ts`.
+   *
+   * ASS has no line-spacing tag and `ass_set_line_spacing()` is not exposed
+   * by ffmpeg, so a non-zero value makes the writer emit ONE EVENT PER
+   * DISPLAY LINE with an explicit `\pos`.  That takes the cue out of libass's
+   * collision detection, which is why a split cue drags its whole
+   * simultaneously-visible group onto self-computed positions
+   * (`shared/stack-offsets.ts`).  Ignored for a single-line cue — there is no
+   * gap to change, so no split happens and nothing about the output moves.
+   */
+  lineSpacingPercent?: number
 
   // ---------------------------------------------------------------------------
   // REQ-0277 Phase A — additional per-row style effects.  All optional +
@@ -502,6 +523,8 @@ export interface TranscriptionDefaults {
   horizontalPosition?: 'left' | 'center' | 'right'
   verticalPosition?: 'top' | 'center' | 'bottom'
   verticalMarginPx?: number
+  /** REQ-0332 — default line spacing for new cues.  See `SubtitleEntry`. */
+  lineSpacingPercent?: number
 
   /**
    * REQ-0295 §1 「オフセット」— default per-cue pin offset in pixels

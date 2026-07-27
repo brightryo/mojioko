@@ -190,6 +190,8 @@ export const TRANSCRIPTION_DEFAULTS_MERGE_RULES: {
   horizontalPosition: 'incoming-wins',
   verticalPosition: 'incoming-wins',
   verticalMarginPx: 'incoming-wins',
+  // REQ-0332 — default line spacing (行間) for new cues.
+  lineSpacingPercent: 'incoming-wins',
   posOffsetX: 'incoming-wins',
   posOffsetY: 'incoming-wins',
 }

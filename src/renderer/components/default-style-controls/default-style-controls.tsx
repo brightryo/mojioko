@@ -3,6 +3,8 @@ import { Switch } from '@/components/ui/switch'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
+import { LineSpacingSlider } from '@/components/subtitle-table/line-spacing-slider'
+import { LINE_SPACING_DEFAULT_PERCENT } from '../../../shared/line-spacing'
 import { AnimationControls } from '@/components/animation-controls/animation-controls'
 import { resolveAnimation, ANIMATION_BLUR_ENABLED } from '../../../shared/cue-animation'
 import { OpacityPercentSlider } from '@/components/subtitle-table/opacity-percent-slider'
@@ -421,6 +423,19 @@ export function DefaultStyleControls({
             onCommit={(v) => onUpdateDefaults({ verticalMarginPx: v })}
             ariaLabel={t('step2:styleCell.marginV')}
             widthClass="w-16"
+          />
+        </SettingsStyleRow>
+
+        {/* REQ-0332 §5 — 行間.  Sits in the レイアウト section next to the
+            margin because it is the other "how much room does the caption
+            take" control, and it is the default for NEW cues only (like
+            every other row in this panel). */}
+        <SettingsStyleRow label={t('step2:styleCell.lineSpacing')}>
+          <LineSpacingSlider
+            value={defaults.lineSpacingPercent ?? LINE_SPACING_DEFAULT_PERCENT}
+            onCommit={(v) => onUpdateDefaults({ lineSpacingPercent: v })}
+            ariaLabel={t('step2:styleCell.lineSpacing')}
+            fullWidth
           />
         </SettingsStyleRow>
 
