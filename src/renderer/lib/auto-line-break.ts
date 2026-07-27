@@ -1,4 +1,6 @@
 import { ASS_MARGIN_LR_PX } from './tokens'
+// REQ-0312 §2 — 禁則処理 (kinsoku) tables + break adjustment.
+import { applyKinsoku } from '../../shared/kinsoku'
 import {
   getSubtitleFont,
   getLibassScale,
@@ -220,17 +222,32 @@ function breakSegment(
   const breakPos = findBreakIndex(seg, fontSizePx, effectivePx, font, libassScale, cmap, tofu, emph, baseOffset)
   if (breakPos === -1) return seg  // entire segment fits
 
-  // REQ-0309 §3(B) — prefer not to split an emphasised run across lines.  Pull
-  // the break back to the start of the range, then let the Latin word rule run
-  // on that position too (the range may itself begin mid-word).  When pulling
-  // back would empty the left line — i.e. the emphasised run is wider than a
-  // whole line — fall through to the pixel-accurate break and split inside the
-  // range; §3(A) means the emphasis survives that, so this is only ever a
-  // cosmetic compromise, never data loss.
-  let { leftEnd, rightStart } = adjustBreak(seg, breakPos)
-  const pulled = pullBreakOutOfEmphasis(seg, breakPos, emph, baseOffset)
+  // REQ-0312 §2 — kinsoku runs FIRST, directly on the pixel-accurate position,
+  // and everything downstream sees its result instead of the raw index.  Order
+  // is: pixel → 禁則 → Latin word → emphasis.
+  //
+  // Kinsoku is first because it is the only rule expressed purely in terms of
+  // the two characters straddling the break, so it is the cheapest to satisfy
+  // and the least likely to be undone: `adjustBreak` only fires when BOTH sides
+  // are Latin word characters, which no kinsoku character is, so the two are
+  // mutually exclusive in practice and cannot argue.
+  //
+  // Emphasis is LAST and therefore wins outright when it disagrees — an
+  // emphasised run is an explicit per-character user choice, where kinsoku is a
+  // typographic default.  Kinsoku is re-applied to the pulled-back position so
+  // the emphasis outcome is still tidied when it can be.
+  //
+  // Termination: every one of these three only ever moves the break EARLIER,
+  // so the composition is strictly decreasing and bounded below by the
+  // `leftEnd <= 0` guard.  No rule can undo another's move by pushing the
+  // break later, which is why no iteration limit or convergence check is
+  // needed here.  A no-kinsoku segment returns `breakPos` unchanged, so cues
+  // without these characters wrap byte-identically to before (REQ-0303 pin).
+  const kinsokuPos = applyKinsoku(seg, breakPos)
+  let { leftEnd, rightStart } = adjustBreak(seg, kinsokuPos)
+  const pulled = pullBreakOutOfEmphasis(seg, kinsokuPos, emph, baseOffset)
   if (pulled !== null) {
-    const adjusted = adjustBreak(seg, pulled)
+    const adjusted = adjustBreak(seg, applyKinsoku(seg, pulled))
     if (adjusted.leftEnd > 0) ({ leftEnd, rightStart } = adjusted)
   }
   // Defensive: an empty left line would recurse forever (only reachable if a
