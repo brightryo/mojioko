@@ -314,8 +314,25 @@ export function SubtitleOverlay({
   // offset BEYOND `entry.verticalMarginPx`, in **CSS preview pixels**.
   //
   // The value comes from `computeFixedStackOffsets` whose `heightOf` is
-  // `estimateOverlayHeightPx` — which already multiplies by `scale` when
-  // computing `renderedFontSizePx = fontSizePx * libassScale * scale`.
+  // `estimateOverlayHeightPx` — which already multiplies by `scale`, so
+  // it is delivered in CSS preview pixels and must NOT be scaled again.
+  //
+  // REQ-0322 §1 — this comment previously read "…when computing
+  // `renderedFontSizePx = fontSizePx * libassScale * scale`", which was
+  // wrong and made `estimateOverlayHeightPx` look like it was missing a
+  // `libassScale` factor.  It is not missing one.  The two quantities are
+  // different: `fontSizePx` (line 282) is the CSS **font-size**, whereas
+  // the stack step is the CSS **line box height**, and libassScale
+  // cancels between them —
+  //
+  //     lineBox = fontSizePx_css × lineHeight
+  //             = (fs × libassScale × scale) × (1 / libassScale)
+  //             = fs × scale                    ← what the estimator returns
+  //
+  // (`lineHeight = 1 / libassScale`, line 441).  Applying libassScale
+  // inside the estimator would shrink every stack step by a uniform
+  // 30.94 % (e.g. fs=80 / 2 lines / 2nd row: 33.60px → 23.20px at
+  // scale 0.2), reintroducing the very overlap described below.
   // The earlier code multiplied by `scale` a second time here, which
   // collapsed the stack offset to a fifth of its intended value at the
   // typical preview scale ≈0.2 and caused stacked captions to overlap
