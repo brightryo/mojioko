@@ -62,19 +62,28 @@ export const ANIMATION_DURATION_DEFAULT_SEC = 0.4
 export const ANIMATION_DURATION_STEP_SEC = 0.1
 
 /**
- * The types the UI offers.  REQ-0324 §1 keeps `slide` OUT of the list
- * until REQ-0323 §3 implements it — `buildAnimationTags` returns '' for
- * slide, so offering it would be a control that silently does nothing.
- * It stays in `AnimationType` so stored values and the ASS writer's
- * exhaustive switch already accommodate it.
- */
-/**
  * REQ-0324 §2 — whether `blur` is offered in the UI.  A single flag so
  * the decision has one home; the curve, the ASS emitter and the preview
  * all keep working regardless, so flipping this does not strand data.
  */
 export const ANIMATION_BLUR_ENABLED = true
 
+/**
+ * The types the UI offers.  REQ-0324 §1 keeps `slide` OUT of the list, and
+ * REQ-0334 §3 (owner decision 2026-07-28) **deferred slide out of v1.3.6
+ * entirely** — `curve()` returns neutral and `buildAnimationTags` returns
+ * `''` for it, so offering it would be a control that silently does
+ * nothing.  It stays in `AnimationType` so stored values and the ASS
+ * writer's exhaustive switch already accommodate it.
+ *
+ * ★ Adding a member here is a promise that the type renders.  It is
+ * enforced, not merely documented: `tests/unit/cue-animation-req-0323.test.ts`
+ * → "REQ-0334 §3 — every selectable animation type actually does
+ * something" asserts that every member except `none` emits a non-empty ASS
+ * tag AND moves the preview off `NEUTRAL_TRANSFORM`.  The test passes on
+ * its own the day slide is genuinely implemented, and fails only if a type
+ * is listed here without an implementation behind it.
+ */
 export const SELECTABLE_ANIMATION_TYPES: readonly AnimationType[] = [
   'none', 'fade', 'pop', 'scale', 'blur',
 ] as const
@@ -515,9 +524,19 @@ function curve(spec: AnimationSpec, p: number): AnimationTransform {
       return { ...NEUTRAL_TRANSFORM, opacity, scale }
     }
     case 'slide':
-      // REQ-0323 §3.  Declared here so the type is exhaustive and the
+      // ★ DORMANT — deferred out of v1.3.6 (REQ-0334 §3; owner decision
+      // 2026-07-28).  Declared here so the type is exhaustive and the
       // preview/ASS split is already in place, but the geometry is not
-      // implemented in this REQ — it returns neutral, i.e. no movement.
+      // implemented — it returns neutral, i.e. no movement.
+      //
+      // Adding `'slide'` to `SELECTABLE_ANIMATION_TYPES` without first
+      // implementing this branch (and the `\move` branch in
+      // `cue-animation-ass.ts:buildAnimationTags`) ships a dropdown entry
+      // that silently does nothing.  `tests/unit/cue-animation-req-0323.test.ts`
+      // → "REQ-0334 §3 — every selectable animation type actually does
+      // something" fails in exactly that case; do not weaken it, implement
+      // the branch instead.  The measured `\move` groundwork is in
+      // `dev-docs/specs/event-splitting.md`.
       return { ...NEUTRAL_TRANSFORM }
     case 'none':
     default:

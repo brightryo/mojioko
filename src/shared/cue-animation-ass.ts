@@ -139,13 +139,22 @@ export function buildAnimationTags(
   if (spec.type === 'fade') return fadeTag
 
   if (spec.type === 'slide') {
-    // REQ-0323 §3.  `\move` is one-per-event (proved empirically in
-    // §3-1: first tag wins, later ones are discarded outright), so slide
-    // cannot be expressed as an override on a single event — it needs the
-    // cue split into abutting events.  That splitting is out of scope for
-    // §1, and emitting a partial `\move` here would render a cue that
-    // slides in and then never leaves.  Emitting nothing is the honest
-    // behaviour until §3 lands.
+    // ★ DORMANT — deferred out of v1.3.6 (REQ-0334 §3; owner decision
+    // 2026-07-28).  `\move` is one-per-event (proved empirically in
+    // RES-0323 §3-1: first tag wins, later ones are discarded outright), so
+    // slide cannot be expressed as an override on a single event — it needs
+    // the cue split into abutting events.  That splitting is not built, and
+    // emitting a partial `\move` here would render a cue that slides in and
+    // then never leaves.  Emitting nothing is the honest behaviour.
+    //
+    // Adding `'slide'` to `SELECTABLE_ANIMATION_TYPES` without first
+    // implementing this branch (and the `curve()` branch in
+    // `cue-animation.ts`) ships a dropdown entry that silently does
+    // nothing.  `tests/unit/cue-animation-req-0323.test.ts` → "REQ-0334 §3
+    // — every selectable animation type actually does something" fails in
+    // exactly that case; do not weaken it, implement the branch instead.
+    // The measured `\move` groundwork is in
+    // `dev-docs/specs/event-splitting.md`.
     return ''
   }
 

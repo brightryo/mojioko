@@ -16,7 +16,9 @@ import {
   ANIMATION_OPACITY_RAMP_FRACTION,
   ANIMATION_SAMPLE_TOLERANCE,
   ANIMATION_DURATION_DEFAULT_SEC,
+  SELECTABLE_ANIMATION_TYPES,
   type AnimationSpec,
+  type AnimationType,
 } from '../../src/shared/cue-animation'
 import { buildAnimationTags } from '../../src/shared/cue-animation-ass'
 
@@ -364,5 +366,58 @@ describe('REQ-0323 §1 — ASS transcription', () => {
 
   it('slide emits NOTHING until §3 — a half-implemented \\move would never leave', () => {
     expect(buildAnimationTags(spec({ type: 'slide', durationSec: 0.4 }), 0, 4)).toBe('')
+  })
+})
+
+/**
+ * REQ-0334 §3 — the dormant-branch trap.
+ *
+ * `slide` is deliberately absent from `SELECTABLE_ANIMATION_TYPES`, but
+ * `curve()` and `buildAnimationTags` still carry branches for it that
+ * return neutral / `''`.  Adding one line to the selectable list would
+ * therefore ship a dropdown entry that silently does nothing — the same
+ * shape as REQ-0292's `value={0}` rotation and REQ-0308's inert bulk
+ * emphasis, and invisible in review because nothing errors.
+ *
+ * These two tests close that hole from the *selectable* side rather than
+ * by asserting `slide` stays out: they pass the day slide is genuinely
+ * implemented and added, and fail only if a type is offered to the user
+ * without an implementation behind it.  Both halves are needed — a type
+ * can emit ASS tags while the preview stays neutral (or vice versa), and
+ * either asymmetry is a bug the user would report as "the preview lies".
+ */
+describe('REQ-0334 §3 — every selectable animation type actually does something', () => {
+  /** `pop` resolves to its own start scale; everything else uses `SCALE_START`. */
+  const specFor = (type: AnimationType): AnimationSpec =>
+    spec({ type, durationSec: 0.4, startScale: type === 'pop' ? POP_START_SCALE : SCALE_START })
+
+  it('★ every selectable type other than `none` emits a non-empty ASS tag', () => {
+    for (const type of SELECTABLE_ANIMATION_TYPES) {
+      const tags = buildAnimationTags(specFor(type), 0, 4)
+      if (type === 'none') {
+        // `none` is the honest "no animation" choice — emitting nothing is
+        // its correct behaviour, not a missing implementation.
+        expect(tags).toBe('')
+        continue
+      }
+      expect(
+        tags,
+        `'${type}' is offered in the UI but buildAnimationTags emits nothing for it — ` +
+          `either implement it or drop it from SELECTABLE_ANIMATION_TYPES`,
+      ).not.toBe('')
+    }
+  })
+
+  it('★ every selectable type other than `none` moves the preview off neutral', () => {
+    for (const type of SELECTABLE_ANIMATION_TYPES) {
+      if (type === 'none') continue
+      // At the cue's start the in-ramp is at p=0, so at least one component
+      // of the transform must differ from the settled (neutral) state.
+      const at = animationTransformAt(specFor(type), 0, 4, 0)
+      expect(
+        at,
+        `'${type}' is offered in the UI but curve() renders it identically to no animation`,
+      ).not.toEqual(NEUTRAL_TRANSFORM)
+    }
   })
 })
