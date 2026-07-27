@@ -247,7 +247,6 @@ export function generateAss(
       // fade of the same length and emits the same tag it always did —
       // byte-identical output for every existing project.
       const animSpec = resolveAnimation(e)
-      const animTag = buildAnimationTags(animSpec, e.startSec, e.endSec)
 
       // Per-row font override (REQ-021).  Emit \fn<family> only when the
       // row carries a fontId AND that font's ASS family name differs from
@@ -415,6 +414,23 @@ export function generateAss(
       let shadowColorTag = ''
       let shadowAlphaTag = ''
       const rawDepth = Math.max(0, Math.min(SHADOW_DEPTH_MAX_PX, e.shadowDepth ?? 0))
+      // REQ-0325 §1 — the scale animations must carry `\bord` (and `\shad`)
+      // with them: libass does not scale either with `\fscx`/`\fscy`, but the
+      // CSS preview's `transform: scale()` scales the rasterised pixels and
+      // therefore does.  The preview is the reference, so the burn follows.
+      //
+      // `shadowPx` is deliberately 0 on a background-box row — that path
+      // emits its own `\shad0` to stop bleed, and a scaled `\shad` here would
+      // bring the suppressed shadow back.  `outlinePx` IS carried for a box
+      // row, because there `\bord` is the box padding and the preview's CSS
+      // `padding` scales with the transform just the same.
+      //
+      // These tags land last in the override list, so they win over the
+      // static `bordTag` / `shadowDepthTag` on libass's last-write-wins.
+      const animTag = buildAnimationTags(animSpec, e.startSec, e.endSec, {
+        outlinePx: e.outlineThicknessPx,
+        shadowPx: rowBgEnabled ? 0 : rawDepth,
+      })
       if (rawDepth > 0 && !rowBgEnabled) {
         const color = e.shadowColor ?? '#000000'
         const alphaPct = Math.max(0, Math.min(100, e.shadowAlpha ?? 100))

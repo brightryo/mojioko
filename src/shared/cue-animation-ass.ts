@@ -33,9 +33,41 @@ import {
   type AnimationTransform,
 } from './cue-animation'
 
+/**
+ * REQ-0325 §1 — the cue's non-glyph geometry, needed because libass does
+ * NOT scale these with `\fscx`/`\fscy` while CSS `transform: scale()`
+ * unavoidably does (it scales already-rasterised pixels).  Measured at
+ * S=70/100/115: libass outline thickness stayed at its nominal value in
+ * every case, ratio exactly 1.000.
+ *
+ * The preview is the reference (owner decision, REQ-0325 §1), so the ASS
+ * writer drives these explicitly alongside the scale.
+ */
+export interface AnimationGeometry {
+  /**
+   * The cue's `\bord`.  Under BorderStyle=1 this is the outline width;
+   * under BorderStyle=3 it is the opaque box's padding.  Scaling it is
+   * right in BOTH cases: the CSS preview draws the box with a `padding`
+   * in px, which `transform: scale()` scales too.
+   */
+  outlinePx: number
+  /**
+   * The cue's effective `\shad`.  Pass 0 when no shadow is emitted —
+   * including for a background-box row, where the writer deliberately
+   * emits `\shad0` to stop shadow bleed.  Emitting a scaled `\shad` there
+   * would resurrect the very shadow that `\shad0` suppresses.
+   */
+  shadowPx: number
+}
+
 /** ASS percentage for a scale factor: 1 → 100. */
 function scalePercent(scale: number): number {
   return Math.round(scale * 1000) / 10
+}
+
+/** One decimal is libass's own precision for these tags. */
+function round1(n: number): number {
+  return Math.round(n * 10) / 10
 }
 
 function relMs(atSec: number, startSec: number): number {
@@ -47,12 +79,23 @@ function relMs(atSec: number, startSec: number): number {
  * state and as the target of a `\t`).  Returns '' when the state is the
  * natural one for that channel.
  */
-function stateTags(spec: AnimationSpec, t: AnimationTransform): string {
+function stateTags(
+  spec: AnimationSpec,
+  t: AnimationTransform,
+  geom: AnimationGeometry,
+): string {
   switch (spec.type) {
     case 'scale':
     case 'pop': {
       const p = scalePercent(t.scale)
-      return `\\fscx${p}\\fscy${p}`
+      let out = `\\fscx${p}\\fscy${p}`
+      // REQ-0325 §1 — carry the outline and shadow with the glyph.  Without
+      // this, a `pop` starting at `\fscx0` collapses the glyph to nothing
+      // while leaving a full-width border ring behind: the burn shows a
+      // blob where the preview shows nothing at all.
+      if (geom.outlinePx > 0) out += `\\bord${round1(geom.outlinePx * t.scale)}`
+      if (geom.shadowPx > 0) out += `\\shad${round1(geom.shadowPx * t.scale)}`
+      return out
     }
     case 'blur':
       // `\blur` takes script pixels; 0 is a sharp edge.
@@ -72,6 +115,7 @@ export function buildAnimationTags(
   spec: AnimationSpec,
   startSec: number,
   endSec: number,
+  geom: AnimationGeometry = { outlinePx: 0, shadowPx: 0 },
 ): string {
   if (isAnimationInert(spec)) return ''
 
@@ -101,16 +145,16 @@ export function buildAnimationTags(
 
   // Initial state = the first keyframe, written as plain tags so the cue
   // is already in its start state on its very first frame.
-  let out = stateTags(spec, keys[0].transform)
+  let out = stateTags(spec, keys[0].transform, geom)
 
   // One `\t` per segment.  A segment whose endpoints are identical (the
   // plateau between the in-ramp and the out-ramp) contributes nothing.
   for (let i = 1; i < keys.length; i++) {
     const from = keys[i - 1]
     const to = keys[i]
-    const target = stateTags(spec, to.transform)
+    const target = stateTags(spec, to.transform, geom)
     if (!target) continue
-    if (stateTags(spec, from.transform) === target) continue
+    if (stateTags(spec, from.transform, geom) === target) continue
     out += `\\t(${relMs(from.atSec, startSec)},${relMs(to.atSec, startSec)},${target})`
   }
   return out
