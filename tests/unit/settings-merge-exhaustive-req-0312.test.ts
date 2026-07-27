@@ -68,6 +68,9 @@ describe('REQ-0312 §1 — the rule table pins every field s classification', ()
     encoder: 'incoming-wins',
     defaultAudioTrackIndex: 'incoming-wins',
     fadeDurationSec: 'incoming-wins',
+    // REQ-0335 §3-6 — renderer-owned style presets.  `incoming-wins` AND
+    // App.tsx always sends the key, so a deletion round-trips to disk.
+    stylePresets: 'incoming-wins',
     activeModelId: 'incoming-else-existing',
     lastInputDir: 'incoming-else-existing',
     lastOutputDir: 'incoming-else-existing',

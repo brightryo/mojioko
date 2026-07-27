@@ -21,6 +21,10 @@ import { SegmentGroup } from '@/components/subtitle-table/segment-group'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { useSettingsStore } from '@/stores/settings-store'
+// REQ-0335 §3 — style presets.
+import { StylePresetControls } from '@/components/style-preset/style-preset-controls'
+import { buildStylePreset, resolveStylePresetPatch } from '@/lib/style-preset-apply'
+import type { StylePreset } from '../../../shared/style-preset'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 import { coerceKaraokeStyle, resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
@@ -315,6 +319,30 @@ export function TimelineBlockInspector({
       redo: () => updateEntry(entry.id, { ...snapshot, ...patch, isEdited: true })
     })
     updateEntry(entry.id, { ...patch, isEdited: true })
+  }
+
+  // -----------------------------------------------------------------------
+  // REQ-0335 §3 — style presets.
+  //
+  // Apply routes through `applyStyleEdit`, so it is ONE undoable operation on
+  // the existing history mechanism (§3-5).  The patch never contains `words`
+  // or `emphasisSpans` — they are classified `per-cue` in
+  // `shared/style-preset.ts` — so a karaoke row keeps its per-word timings
+  // and does not drop to even-split karaoke.
+  // -----------------------------------------------------------------------
+  const presetGeometry = {
+    videoWidthPx: video?.widthPx,
+    videoHeightPx: video?.heightPx,
+  }
+  function handleApplyPreset(preset: StylePreset) {
+    applyStyleEdit(t('history.applyPreset'), resolveStylePresetPatch(preset, presetGeometry))
+    toast.success(t('preset.applied', { name: preset.name }))
+  }
+  function handleSavePreset(name: string) {
+    const preset = buildStylePreset(entry, name, presetGeometry)
+    if (useSettingsStore.getState().addStylePreset(preset)) {
+      toast.success(t('preset.saved', { name: preset.name }))
+    }
   }
 
   function handleSizeChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1042,6 +1070,15 @@ export function TimelineBlockInspector({
         />
         {!isAudioOnly && (
           <>
+            {/* REQ-0335 §3 — style presets.  Sits at the TOP of the style
+                cluster because it is the coarsest control there: it writes
+                every field below it in one undoable step, so reading the
+                cluster top-down goes "whole look → individual fields". */}
+            <StylePresetControls
+              className="w-full justify-center"
+              onSaveCurrent={isFrozen ? null : handleSavePreset}
+              onApply={handleApplyPreset}
+            />
             {/* REQ-0275 §5 — two-tier family + weight picker replaces
                 the flat RowFontSelector at this site.  When the user
                 picks a family it snaps to the family's default weight;

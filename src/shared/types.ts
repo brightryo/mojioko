@@ -5,6 +5,10 @@ import type { FontId } from './fonts'
 import type { EmphasisSpan } from './emphasis'
 import type { KaraokeStyle } from './karaoke-style'
 import type { AnimationType, AnimationDirection } from './cue-animation'
+// REQ-0335 §3 — style presets live with their field classification in
+// `style-preset.ts`.  Type-only (that module imports `SubtitleEntry` back),
+// so this does not create a runtime import cycle — same shape as `emphasis`.
+import type { StylePreset } from './style-preset'
 export type { WhisperModelId }
 
 // ---------------------------------------------------------------------------
@@ -740,6 +744,19 @@ export interface AppSettings {
    * this REQ hydrate as CPU (the safe default — nothing extra to load).
    */
   activeAccelerator?: 'cpu' | 'gpu'
+  /**
+   * REQ-0335 §3 — user-saved subtitle style presets, newest last.
+   *
+   * Renderer-owned: the Step 2 inspector and bulk-edit bar are the only
+   * writers, so the merge rule is `incoming-wins`.  Optional so settings.json
+   * files predating this REQ hydrate as "no presets" without migration; the
+   * built-in presets the owner will author later are a separate,
+   * non-persisted list that this array never contains.
+   *
+   * Capped at `STYLE_PRESET_MAX`; see `shared/style-preset.ts` for the
+   * payload shape and the exhaustive field classification.
+   */
+  stylePresets?: StylePreset[]
 }
 
 // ---------------------------------------------------------------------------

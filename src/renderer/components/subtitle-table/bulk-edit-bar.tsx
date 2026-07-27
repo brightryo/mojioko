@@ -16,6 +16,10 @@ import { LineSpacingSlider } from '@/components/subtitle-table/line-spacing-slid
 import { LINE_SPACING_DEFAULT_PERCENT } from '../../../shared/line-spacing'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { StyleRow } from '@/components/subtitle-table/style-row'
+// REQ-0335 §3 — style presets.
+import { StylePresetControls } from '@/components/style-preset/style-preset-controls'
+import { buildStylePreset, resolveStylePresetPatch } from '@/lib/style-preset-apply'
+import type { StylePreset } from '../../../shared/style-preset'
 import { useSettingsStore } from '@/stores/settings-store'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppEnvStore } from '@/stores/app-env-store'
@@ -510,6 +514,48 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     useHistoryStore.getState().push({ label, undo: revert, redo: apply })
     apply()
     onApplied(snapshots.size, label)
+  }
+
+  // ---------------------------------------------------------------------
+  // REQ-0335 §3 — style presets.
+  //
+  // Applying goes through `applyBulk`, which already snapshots each row and
+  // pushes ONE history entry for the whole selection (§3-5).  The patch
+  // carries no `words` / `emphasisSpans` (classified `per-cue` in
+  // `shared/style-preset.ts`), so karaoke rows keep their per-word timings.
+  //
+  // Saving is offered only for a SINGLE-row selection: "the current style"
+  // has no unambiguous meaning across rows that differ, and silently
+  // snapshotting the first one would save a look the user never pointed at.
+  // ---------------------------------------------------------------------
+  const presetSaveSource: SubtitleEntry | null =
+    selectedRowIds.size === 1
+      ? (useProjectStore
+          .getState()
+          .entries.find((e) => selectedRowIds.has(e.id)) ?? null)
+      : null
+
+  function presetGeometry() {
+    const video = useProjectStore.getState().video
+    return { videoWidthPx: video?.widthPx, videoHeightPx: video?.heightPx }
+  }
+
+  function handleApplyPreset(preset: StylePreset) {
+    applyBulk(
+      resolveStylePresetPatch(preset, presetGeometry()),
+      t('bulk.history.applyPreset', { count: selectedRowIds.size }),
+    )
+    toast.success(
+      t('preset.appliedBulk', { name: preset.name, count: selectedRowIds.size }),
+    )
+  }
+
+  function handleSavePreset(name: string) {
+    if (!presetSaveSource) return
+    const preset = buildStylePreset(presetSaveSource, name, presetGeometry())
+    if (useSettingsStore.getState().addStylePreset(preset)) {
+      toast.success(t('preset.saved', { name: preset.name }))
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -1150,6 +1196,17 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         >
           <WrapText className="h-3.5 w-3.5" />
         </button>
+        {/* REQ-0335 §3 — apply a saved style preset to EVERY selected row
+            as one undoable operation.  Sits in the "actions that apply
+            across the selection" row for the same reason it sits at the
+            top of the inspector's style cluster: it writes every style
+            field below it at once. */}
+        <StylePresetControls
+          compact
+          className="ml-auto"
+          onSaveCurrent={presetSaveSource ? handleSavePreset : null}
+          onApply={handleApplyPreset}
+        />
       </div>
 
       {/* Controls cluster — REQ-20260614-001 補遺⑪ で 字幕 / レイアウト /

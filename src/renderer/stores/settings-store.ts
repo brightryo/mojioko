@@ -6,6 +6,7 @@ import { DEFAULT_LANGUAGE } from '../../shared/app-info'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, SHADOW_DEPTH_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
 import { DEFAULT_FONT_ID, isFontId, type FontId } from '../../shared/fonts'
 import { clampLineSpacingPercent } from '../../shared/line-spacing'
+import { STYLE_PRESET_MAX, validatePresetName, type StylePreset } from '../../shared/style-preset'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 
 interface SettingsStore {
@@ -69,6 +70,12 @@ interface SettingsStore {
    * and cannot be clobbered by an incomplete settings.json.
    */
   hasClickedStoreReview: boolean
+  /**
+   * REQ-0335 §3 — user-saved subtitle style presets, newest last.  Empty on
+   * a fresh install; the owner's built-in presets are a separate list that
+   * this array never contains.
+   */
+  stylePresets: StylePreset[]
 
   setLanguage: (lang: string) => void
   setTheme: (t: AppTheme) => void
@@ -94,6 +101,17 @@ interface SettingsStore {
   markStoreReviewClicked: () => void
 
   /**
+   * REQ-0335 §3-6 — append a preset.  Returns `false` (and changes nothing)
+   * when the name is invalid or the cap is reached; the caller has already
+   * validated with `validatePresetName` and surfaces the reason, so this is
+   * a belt-and-braces guard rather than the user-facing check.
+   */
+  addStylePreset: (preset: StylePreset) => boolean
+  /** Rename in place, keeping the id (the picker keys on it). */
+  renameStylePreset: (id: string, name: string) => boolean
+  deleteStylePreset: (id: string) => void
+
+  /**
    * REQ-20260613-016 Phase 4 — `burnin` / `subtitleBackground` were dropped
    * from the store along with the global panel UI; the per-row data
    * model on each SubtitleEntry replaces them.  `resetStep3Settings`
@@ -103,7 +121,7 @@ interface SettingsStore {
   resetStep3Settings: () => void
 
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'stylePresets'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -133,6 +151,9 @@ export const useSettingsStore = create<SettingsStore>()(
       // REQ-0208 — user has not yet clicked the Store review CTA.  Once
       // true, stays true across sessions via the persist middleware.
       hasClickedStoreReview: false,
+      // REQ-0335 §3 — no built-in presets ship in v1.3.6 (the owner will
+      // author their contents later); the mechanism starts empty.
+      stylePresets: [],
 
       setLanguage: (lang) => set({ language: lang }),
       setTheme: (t) => set({ theme: t }),
@@ -154,6 +175,31 @@ export const useSettingsStore = create<SettingsStore>()(
       setDefaultOutputDir: (path) => set({ defaultOutputDir: path }),
       setDefaultProjectDir: (path) => set({ defaultProjectDir: path }),
       markStoreReviewClicked: () => set({ hasClickedStoreReview: true }),
+
+      addStylePreset: (preset) => {
+        let ok = false
+        set((s) => {
+          if (validatePresetName(preset.name, s.stylePresets) !== null) return s
+          ok = true
+          return { stylePresets: [...s.stylePresets, preset] }
+        })
+        return ok
+      },
+      renameStylePreset: (id, name) => {
+        let ok = false
+        set((s) => {
+          if (validatePresetName(name, s.stylePresets, { ignoreId: id }) !== null) return s
+          ok = true
+          return {
+            stylePresets: s.stylePresets.map((p) =>
+              p.id === id ? { ...p, name: name.trim() } : p,
+            ),
+          }
+        })
+        return ok
+      },
+      deleteStylePreset: (id) =>
+        set((s) => ({ stylePresets: s.stylePresets.filter((p) => p.id !== id) })),
 
       resetStep3Settings: () =>
         set({
@@ -279,7 +325,26 @@ export const useSettingsStore = create<SettingsStore>()(
           defaultOutputDir: typeof s.defaultOutputDir === 'string' ? s.defaultOutputDir : null,
           // REQ-0194 — optional for backward compat with settings.json files
           // that predate the project-save feature.  Same fallback semantics.
-          defaultProjectDir: typeof s.defaultProjectDir === 'string' ? s.defaultProjectDir : null
+          defaultProjectDir: typeof s.defaultProjectDir === 'string' ? s.defaultProjectDir : null,
+          // REQ-0335 §3 — presets from settings.json.  Only the envelope is
+          // validated here (id / name / style object); individual style
+          // fields are NOT clamped, because a preset written by a NEWER
+          // build may legitimately carry keys this build does not know, and
+          // dropping them would corrupt the file on the next save.  Unknown
+          // keys are inert: `resolveStylePresetPatch` iterates the keys this
+          // build classifies, so it simply does not read them.
+          stylePresets: Array.isArray(s.stylePresets)
+            ? s.stylePresets
+                .filter(
+                  (p): p is StylePreset =>
+                    !!p &&
+                    typeof p.id === 'string' &&
+                    typeof p.name === 'string' &&
+                    !!p.style &&
+                    typeof p.style === 'object',
+                )
+                .slice(0, STYLE_PRESET_MAX)
+            : []
         })
       }
     }),
@@ -305,7 +370,12 @@ export const useSettingsStore = create<SettingsStore>()(
         // REQ-0208 — persist through localStorage only.  See interface
         // doc-comment for why this field is NOT in the AppSettings /
         // hydrate() path.
-        hasClickedStoreReview: state.hasClickedStoreReview
+        hasClickedStoreReview: state.hasClickedStoreReview,
+        // REQ-0335 §3-6 — presets round-trip through BOTH localStorage
+        // (here) and settings.json (via App.tsx's debounced save + the
+        // `incoming-wins` merge rule).  Same dual persistence every other
+        // renderer-owned setting already has.
+        stylePresets: state.stylePresets
       })
     }
   )

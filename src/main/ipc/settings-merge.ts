@@ -106,6 +106,11 @@ export const SETTINGS_MERGE_RULES: { readonly [K in keyof AppSettings]-?: MergeR
   encoder: 'incoming-wins',
   defaultAudioTrackIndex: 'incoming-wins',
   fadeDurationSec: 'incoming-wins',
+  // REQ-0335 §3-6: written only by the renderer (Step 2 inspector /
+  // bulk-edit bar).  Main never touches the list, so the payload is
+  // authoritative — and it MUST be sent on every save, otherwise a delete
+  // could not round-trip to disk.
+  stylePresets: 'incoming-wins',
 
   // --- main-owned, renderer sends a null sentinel each save ----------------
   activeModelId: 'incoming-else-existing',

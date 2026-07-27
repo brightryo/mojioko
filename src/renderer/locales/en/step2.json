@@ -246,7 +246,8 @@
     "autoLineBreak": "Pack wrap",
     "overflowWrap": "Overflow wrap",
     "duplicateRow": "Duplicate row",
-    "editAnimation": "Animation"
+    "editAnimation": "Animation",
+    "applyPreset": "Apply style preset"
   },
   "bulk": {
     "regionLabel": "Bulk edit",
@@ -282,7 +283,8 @@
       "shadow": "Bulk shadow change ({{count}} rows)",
       "karaoke": "Bulk karaoke change ({{count}} rows)",
       "rotation": "Bulk rotation change ({{count}} rows)",
-      "animation": "Animation ({{count}} rows)"
+      "animation": "Animation ({{count}} rows)",
+      "applyPreset": "Apply style preset ({{count}} rows)"
     }
   },
   "videoPreview": {
@@ -449,5 +451,24 @@
     "spaceChar": "Space",
     "editNote": "Emphasis follows your text edits automatically. A line break falling inside an emphasised run does not clear it — both lines stay emphasised. It is cleared only where the emphasised characters are deleted or rewritten, or where the same text ends up appearing more than once and can no longer be told apart.",
     "editNoteLabel": "When you edit the text"
+  },
+  "preset": {
+    "menu": "Style presets",
+    "apply": "Apply a preset",
+    "empty": "No saved presets yet",
+    "saveCurrent": "Save current style as a preset",
+    "saveTitle": "Save style preset",
+    "saveDescription": "Saves how this row looks (font, colours, outline, shadow, layout, line spacing, karaoke, emphasis, animation). Text, timecodes, word timings and emphasis spans are not saved.",
+    "namePlaceholder": "Preset name",
+    "delete": "Delete “{{name}}”",
+    "applied": "Applied preset “{{name}}”",
+    "appliedBulk": "Applied preset “{{name}}” to {{count}} rows",
+    "saved": "Saved preset “{{name}}”",
+    "error": {
+      "empty": "Enter a name",
+      "tooLong": "Name must be {{max}} characters or fewer",
+      "duplicate": "A preset with that name already exists",
+      "capReached": "You can save at most {{max}} presets. Delete one first."
+    }
   }
 }
