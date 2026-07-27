@@ -690,11 +690,30 @@ export function SubtitleOverlay({
     // the rotation is neutralised for the duration of the measurement and the
     // canvases — being children of the same span — get it re-applied by CSS.
     // Only translations remain, and those cancel in the subtraction below.
+    // REQ-0326 §1-2 — neutralise the transform UNCONDITIONALLY, not just for
+    // rotation.
+    //
+    // `getBoundingClientRect()` reports TRANSFORMED viewport coordinates, but
+    // the canvas draws in the span's UNTRANSFORMED local space with an
+    // unscaled `ctx.font`.  Any active transform therefore inflates/deflates
+    // `baselineY` while the glyph size stays put, and the ring lands off the
+    // text.  Rotation was already handled here; the REQ-0323 animation scale
+    // was NOT, and measurement found the ring up to ~16px out vertically when
+    // the effect re-ran mid-animation (bord 20 at S=115%: thickness 6/39
+    // instead of 23/23).
+    //
+    // This is reachable: the effect below has no dependency array, so it runs
+    // after EVERY render, and `video-preview-panel` re-renders this component
+    // from `onTimeUpdate` while the entrance animation is playing.
+    //
+    // Neutralising the translations too is harmless — they cancelled in the
+    // subtraction anyway — and removes the need to reason about which
+    // transform functions are safe.
     const prevTransform = outer.style.transform
-    if (rotationDeg !== 0) outer.style.transform = 'none'
+    outer.style.transform = 'none'
     const originRect = outer.getBoundingClientRect()
     const { runs, extents } = measureRuns(wrapper, originRect.left, originRect.top, mctx)
-    if (rotationDeg !== 0) outer.style.transform = prevTransform
+    outer.style.transform = prevTransform
 
     const box = computeRingBox(
       runs,
@@ -759,10 +778,16 @@ export function SubtitleOverlay({
         // every React re-render, and vice versa.
         //
         // Crucially this transform sits on the OUTER span, which contains
-        // both outline canvases AND the text wrapper.  A transform does
-        // not affect layout, so the ring is composited along with the
-        // glyphs and `measureRuns` is never re-run — the same trick
-        // rotation already relies on.
+        // both outline canvases AND the text wrapper, so the painted ring is
+        // composited along with the glyphs — the same trick rotation relies
+        // on.  Measured in REQ-0326 §1-2: dx = 0.00px at every scale and
+        // thickness tracks S within 3%.
+        //
+        // CORRECTION (REQ-0326 §1-2): an earlier version of this comment
+        // claimed `measureRuns` is never re-run.  That is FALSE — the ring
+        // layout effect has no dependency array and re-runs on every render.
+        // What makes that safe is the unconditional transform neutralisation
+        // in that effect, not the absence of re-measurement.
         ['--cue-anim-transform' as string]: 'translate(0px, 0px) scale(1)',
         // Scale from the cue's own alignment anchor so the text grows in
         // place.  libass scales `\fscx\fscy` about the `\an` anchor, so
