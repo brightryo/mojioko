@@ -38,7 +38,6 @@ export function SettingsDialog() {
   const baseColor = useSettingsStore((s) => s.baseColor)
   const setBaseColor = useSettingsStore((s) => s.setBaseColor)
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
-  const setFadeDurationSec = useSettingsStore((s) => s.setFadeDurationSec)
   // REQ-0295 — needed by DefaultStyleControls to hide the karaoke row
   // on free (NSIS) tier.  Falsey when the env store hasn't hydrated
   // yet; `canUseKaraokeInTier(false)` returns false so the row stays
@@ -324,7 +323,6 @@ export function SettingsDialog() {
               autoLineBreak={autoLineBreak}
               onSetAutoLineBreak={setAutoLineBreak}
               fadeDurationSec={fadeDurationSec}
-              onSetFadeDurationSec={setFadeDurationSec}
               isMsix={isMsix}
             />
           </TabsContent>

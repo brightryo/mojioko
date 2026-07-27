@@ -357,3 +357,37 @@ export function animationKeyframes(
   out.sort((a, b) => a.atSec - b.atSec)
   return out.filter((k, i) => i === 0 || Math.abs(k.atSec - out[i - 1].atSec) > 1e-9)
 }
+
+/**
+ * REQ-0325 §2 — the animation fields to stamp onto a NEW cue, taken from
+ * `TranscriptionDefaults`.
+ *
+ * Cue creation uses the v1.2.2 "作成時コピー方式": every entry carries its own
+ * concrete values, so later edits to the defaults do not retroactively
+ * rewrite existing cues.  Animation follows that, unlike `karaokeStyle`
+ * (REQ-0322 §3), because here the settings row is genuinely "what new cues
+ * start with" rather than a live fallback.
+ *
+ * Returns `{}` when the defaults carry no explicit choice, so the new cue
+ * stays on the `fadeDurationSec` migration path and pre-REQ-0325 settings
+ * keep producing the fade they always did.
+ */
+export function animationFieldsForNewCue(defaults: {
+  animationType?: AnimationType
+  animationInEnabled?: boolean
+  animationOutEnabled?: boolean
+  animationDurationSec?: number
+}): {
+  animationType?: AnimationType
+  animationInEnabled?: boolean
+  animationOutEnabled?: boolean
+  animationDurationSec?: number
+} {
+  if (defaults.animationType === undefined) return {}
+  return {
+    animationType: defaults.animationType,
+    animationInEnabled: defaults.animationInEnabled !== false,
+    animationOutEnabled: defaults.animationOutEnabled !== false,
+    animationDurationSec: defaults.animationDurationSec ?? ANIMATION_DURATION_DEFAULT_SEC,
+  }
+}

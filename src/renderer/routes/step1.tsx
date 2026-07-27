@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { animationFieldsForNewCue } from '../../shared/cue-animation'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform, Check, Circle } from 'lucide-react'
@@ -397,6 +398,7 @@ export default function Step1Route(_: Step1RouteProps) {
           outlineColorHex: runDefaults.outlineColorHex,
           outlineThicknessPx: runDefaults.outlineThicknessPx,
           fadeDurationSec: settingsFadeDurationSec,
+        ...animationFieldsForNewCue(transcriptionDefaults),
         },
         advanced: transcriptionAdvanced,
         // REQ-0207 — pass the drawer's checkbox through.  The service
@@ -552,6 +554,7 @@ export default function Step1Route(_: Step1RouteProps) {
         outlineColorHex: runDefaults.outlineColorHex,
         outlineThicknessPx: runDefaults.outlineThicknessPx,
         fadeDurationSec: settingsFadeDurationSec,
+        ...animationFieldsForNewCue(transcriptionDefaults),
         fontId: runFontId,
         // REQ-0285 — attach per-word timestamps captured by the sidecar.
         // `undefined` (rather than `[]`) when the segment carried no

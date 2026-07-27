@@ -3,7 +3,8 @@ import { Switch } from '@/components/ui/switch'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
-import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
+import { AnimationControls } from '@/components/animation-controls/animation-controls'
+import { resolveAnimation, ANIMATION_BLUR_ENABLED } from '../../../shared/cue-animation'
 import { OpacityPercentSlider } from '@/components/subtitle-table/opacity-percent-slider'
 import { clampOpacityPercent } from '../../../shared/alpha'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
@@ -109,14 +110,15 @@ interface DefaultStyleControlsProps {
   autoLineBreak: boolean
   onSetAutoLineBreak: (v: boolean) => void
   /**
-   * REQ-0295 §1 「フェード」— fade duration default for new cues.
-   * Lives on `settingsStore.fadeDurationSec` (single source of
-   * truth); the General tab exposes the same slider.  Exposed here
-   * too so the user can set every "style" default from a single
-   * screen.
+   * REQ-0325 §2 — READ-ONLY legacy input.  The animation row replaced the
+   * fade slider, and the default a new cue receives now lives in
+   * `defaults.animation*`.  This value is still needed for one thing: a
+   * settings file written before REQ-0325 has no `animation*`, and
+   * `resolveAnimation` uses this to display (and seed) the fade such a
+   * user already configured.  It is deliberately not settable from here
+   * any more — setting the animation writes `defaults.animation*` instead.
    */
   fadeDurationSec: number
-  onSetFadeDurationSec: (v: number) => void
   /**
    * REQ-0295 — tier gate for the karaoke default row.  Karaoke is
    * paid-only (`canUseKaraokeInTier(isMsix)`); hiding the row on
@@ -153,11 +155,22 @@ export function DefaultStyleControls({
   autoLineBreak,
   onSetAutoLineBreak,
   fadeDurationSec,
-  onSetFadeDurationSec,
   isMsix,
 }: DefaultStyleControlsProps) {
   const { t } = useTranslation(['step1', 'step2', 'common'])
   const showKaraokeUi = canUseKaraokeInTier(isMsix)
+
+  // REQ-0325 §2 — resolve through `resolveAnimation` so a settings file
+  // written before this REQ (only `fadeDurationSec`) displays as the fade it
+  // actually still produces, rather than as "none".  Same migration the cues
+  // themselves go through.
+  const defaultsAnimation = resolveAnimation({
+    animationType: defaults.animationType,
+    animationInEnabled: defaults.animationInEnabled,
+    animationOutEnabled: defaults.animationOutEnabled,
+    animationDurationSec: defaults.animationDurationSec,
+    fadeDurationSec,
+  })
   const showEmphasisUi = canUseKeywordEmphasisInTier(isMsix)
   // REQ-0298 §4-1 — segButton removed; H/V rows use the shared
   // SegmentGroup component from `@/components/subtitle-table/segment-group`
@@ -334,14 +347,29 @@ export function DefaultStyleControls({
         />
       </SettingsStyleRow>
 
-      <SettingsStyleRow label={t('step2:styleCell.fade')}>
-        <FadeDurationSlider
-          value={fadeDurationSec}
-          onCommit={onSetFadeDurationSec}
-          ariaLabel={t('step2:styleCell.fade')}
-          fullWidth
-        />
-      </SettingsStyleRow>
+      {/* REQ-0325 §2 — the fade slider is replaced by the full animation
+          control, and it is bound to `defaults` (TranscriptionDefaults)
+          rather than straight to the settings store.  Two reasons:
+          (a) after RES-0324 folded fade into the animation UI, a lone fade
+              slider could no longer express the default a new cue would get;
+          (b) every other row here is bound to `defaults`, and the settings-
+              store binding was the asymmetry REQ-0322 §3-6 reported. */}
+      <AnimationControls
+        value={{
+          type: defaultsAnimation.type,
+          inEnabled: defaultsAnimation.inEnabled,
+          outEnabled: defaultsAnimation.outEnabled,
+          durationSec: defaultsAnimation.durationSec,
+        }}
+        onChange={(patch) => onUpdateDefaults({
+          animationType: patch.type ?? defaultsAnimation.type,
+          animationInEnabled: patch.inEnabled ?? defaultsAnimation.inEnabled,
+          animationOutEnabled: patch.outEnabled ?? defaultsAnimation.outEnabled,
+          animationDurationSec: patch.durationSec ?? defaultsAnimation.durationSec,
+        })}
+        includeBlur={ANIMATION_BLUR_ENABLED}
+        labelVariant="settings"
+      />
 
       {/* ── Layout section header ── */}
       <div className="pt-2 mt-2 border-t border-border/60">

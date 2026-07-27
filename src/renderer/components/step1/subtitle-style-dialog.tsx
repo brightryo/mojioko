@@ -64,7 +64,6 @@ export function SubtitleStyleDialog({
   // expanded row list (shadow / karaoke / casing / rotation / fade /
   // layout).  Same store slots the Settings dialog uses.
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
-  const setFadeDurationSec = useSettingsStore((s) => s.setFadeDurationSec)
   const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
 
   return (
@@ -112,7 +111,6 @@ export function SubtitleStyleDialog({
             autoLineBreak={autoLineBreak}
             onSetAutoLineBreak={setAutoLineBreak}
             fadeDurationSec={fadeDurationSec}
-            onSetFadeDurationSec={setFadeDurationSec}
             isMsix={isMsix}
           />
         </div>

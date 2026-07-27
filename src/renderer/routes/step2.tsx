@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useLayoutEffect } from 'react'
+import { animationFieldsForNewCue } from '../../shared/cue-animation'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -735,6 +736,7 @@ export default function Step2Route(_: Step2RouteProps) {
         outlineColorHex: defaults.outlineColorHex,
         outlineThicknessPx: defaults.outlineThicknessPx,
         fadeDurationSec: settingsFadeDurationSec,
+        ...animationFieldsForNewCue(defaults),
         // REQ-20260613-016 / v1.2.2 機能A: seed per-row layout + background
         // defaults at creation time.  Same pattern as the transcription
         // segment mapping in step1.tsx.
@@ -990,6 +992,7 @@ export default function Step2Route(_: Step2RouteProps) {
         outlineColorHex: defaults.outlineColorHex,
         outlineThicknessPx: defaults.outlineThicknessPx,
         fadeDurationSec: settingsFadeDurationSec,
+        ...animationFieldsForNewCue(defaults),
         ...layoutDefaults,
       }
       const id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)

@@ -179,6 +179,11 @@ export const TRANSCRIPTION_DEFAULTS_MERGE_RULES: {
   emphasisScalePercent: 'incoming-wins',
   casing: 'incoming-wins',
   rotation: 'incoming-wins',
+  // REQ-0325 §2 — animation defaults for new cues.
+  animationType: 'incoming-wins',
+  animationInEnabled: 'incoming-wins',
+  animationOutEnabled: 'incoming-wins',
+  animationDurationSec: 'incoming-wins',
   horizontalPosition: 'incoming-wins',
   verticalPosition: 'incoming-wins',
   verticalMarginPx: 'incoming-wins',

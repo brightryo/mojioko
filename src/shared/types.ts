@@ -502,6 +502,25 @@ export interface TranscriptionDefaults {
    */
   posOffsetX?: number
   posOffsetY?: number
+
+  // -------------------------------------------------------------------------
+  // REQ-0325 §2 — entrance / exit animation defaults for NEW cues.
+  //
+  // Replaces the old `settingsStore.fadeDurationSec` in this role.  That
+  // field was bound straight to the settings store rather than to these
+  // defaults, which is the binding asymmetry REQ-0322 §3-6 reported; it
+  // also stopped working as a default once the per-cue fade row was folded
+  // into the animation UI (RES-0324 §1-3).  Living here means the animation
+  // default is seeded at cue-creation time like every other style default.
+  //
+  // All optional: a settings file written before this REQ simply has none of
+  // them, and `resolveAnimation` on the resulting cue falls through to the
+  // `fadeDurationSec` migration exactly as before.
+  // -------------------------------------------------------------------------
+  animationType?: AnimationType
+  animationInEnabled?: boolean
+  animationOutEnabled?: boolean
+  animationDurationSec?: number
 }
 
 export interface ProjectState {
