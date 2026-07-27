@@ -10,7 +10,7 @@ import { resolveAnimation, ANIMATION_BLUR_ENABLED } from '../../../shared/cue-an
 import { OpacityPercentSlider } from '@/components/subtitle-table/opacity-percent-slider'
 import { clampOpacityPercent } from '../../../shared/alpha'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
-import { StyleRow } from '@/components/subtitle-table/style-row'
+import { StyleRow, styleRowColumns } from '@/components/subtitle-table/style-row'
 import { SegmentGroup } from '@/components/subtitle-table/segment-group'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, MARGIN_V_MIN_PX, MARGIN_V_MAX_PX } from '../../../shared/constants'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
@@ -33,33 +33,15 @@ import type { TranscriptionDefaults } from '../../../shared/types'
 const FONT_SIZE_STEP_PX = 10
 
 /**
- * REQ-0296 §1 — right-column width for every row's control.  A single
- * class shared across every row keeps slider bars and stepper widths
- * visually aligned (previous layout let each control size itself,
- * which made the shadow / fade sliders look ~2× wider than outline
- * width).
- *
- * REQ-0298 §2 — widened from `w-48` (192px) to `w-72` (288px) so the
- * X/Y offset row (2 NumberStepperInputs + X/Y labels + gaps, ~280 px
- * of intrinsic content) fits without overflowing.  Pre-REQ-0298 the
- * offset row's content overflowed a 192-px wrapper, and the tab
- * wrapper's implicit `overflow-x: auto` (Chromium's default when
- * `overflow-y: auto` is set) surfaced a horizontal scrollbar on the
- * whole 字幕スタイル tab.  Widening the column removes the
- * overflow at source without touching dialog width or per-tab
- * height classes (REQ-0283 invariant preserved).
- */
-const CONTROL_COL_CLASS = 'w-72 shrink-0'
-
-/**
  * REQ-0298 §4 / REQ-0300 §2 — StyleRow lives in
- * `subtitle-table/style-row.tsx` and now provides its own control-
- * column wrapper.  Settings' 「字幕スタイル」 tab wants a wider
- * column than the inspector default (`w-72` vs `w-56`), so this
- * thin wrapper passes `controlColClass` explicitly and drops the
- * pre-REQ-0300 inner `<div className={CONTROL_COL_CLASS}>` (which
- * would double-wrap and produce a 288-px column inside the shared
- * StyleRow's 288-px column).
+ * `subtitle-table/style-row.tsx` and provides its own control-column
+ * wrapper.  Settings' 「字幕スタイル」 tab wants a wider column than
+ * the inspector default (288 px vs 224 px).
+ *
+ * REQ-0333 §3 — the widths themselves moved to `styleRowColumns()` in
+ * `style-row.tsx` so that this wrapper and `AnimationControls` (which
+ * renders four `StyleRow`s of its own into this same panel) run the
+ * SAME calculation instead of two independent sets of literals.
  */
 function SettingsStyleRow({
   label,
@@ -70,18 +52,8 @@ function SettingsStyleRow({
   help?: string
   children: React.ReactNode
 }) {
-  // REQ-0301 §1 — settings dialog keeps its pre-REQ-0301 look
-  // (intrinsic-width labels + 288 px fixed control) since the 640 px
-  // dialog has room to spare.  Passing `labelColClass="shrink-0"`
-  // opts out of the inspector's 128 px fixed label column.
   return (
-    <StyleRow
-      label={label}
-      help={help}
-      labelVariant="settings"
-      labelColClass="shrink-0"
-      controlColClass={CONTROL_COL_CLASS}
-    >
+    <StyleRow label={label} help={help} {...styleRowColumns('settings')}>
       {children}
     </StyleRow>
   )
@@ -377,7 +349,7 @@ export function DefaultStyleControls({
           animationBlurPx: patch.blurPx ?? defaultsAnimation.blurMaxPx,
         })}
         includeBlur={ANIMATION_BLUR_ENABLED}
-        labelVariant="settings"
+        surface="settings"
       />
 
       {/* ── Layout section header ── */}

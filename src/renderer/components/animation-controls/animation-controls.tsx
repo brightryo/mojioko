@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
-import { StyleRow, type StyleRowLabelClass } from '@/components/subtitle-table/style-row'
+import { StyleRow, styleRowColumns, type StyleRowSurface } from '@/components/subtitle-table/style-row'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -70,7 +70,17 @@ export interface AnimationControlsProps {
    * in the app and this component stays dumb.
    */
   includeBlur: boolean
-  labelVariant?: StyleRowLabelClass
+  /**
+   * REQ-0333 §3 — which surface is rendering these rows.  This used to be
+   * `labelVariant`, which only carried the label TYPOGRAPHY; the column
+   * WIDTHS silently stayed at the inspector defaults.  In the settings
+   * dialog, where every neighbouring row goes through `SettingsStyleRow`'s
+   * 288-px column, that left the four animation rows on a different
+   * vertical from the rows above and below them.  Taking the surface (and
+   * running it through `styleRowColumns`) means these rows go through the
+   * same width calculation as their neighbours, by construction.
+   */
+  surface?: StyleRowSurface
 }
 
 const STEP_COUNT = Math.round(
@@ -126,9 +136,12 @@ function AnimationSlider({
 }
 
 export function AnimationControls({
-  value, onChange, disabled, includeBlur, labelVariant = 'inspector',
+  value, onChange, disabled, includeBlur, surface = 'inspector',
 }: AnimationControlsProps) {
   const { t } = useTranslation('step2')
+  // REQ-0333 §3 — one lookup, spread onto all four rows, so the rows
+  // cannot individually drift from the surface they are rendered into.
+  const columns = styleRowColumns(surface)
 
   // Draft held as an integer step index for the same reason
   // `FadeDurationSlider` does it: floating-point seconds make the native
@@ -207,7 +220,7 @@ export function AnimationControls({
       {/* 種類 — full-width trigger so the selected value is never elided. */}
       <StyleRow
         label={t('styleCell.animationTypeLabel')}
-        labelVariant={labelVariant}
+        {...columns}
         stopControlClickPropagation
       >
         <Select value={value.type} onValueChange={handleTypeChange} disabled={disabled}>
@@ -225,7 +238,7 @@ export function AnimationControls({
       {/* タイミング — which ends of the cue animate. */}
       <StyleRow
         label={t('styleCell.animationTimingLabel')}
-        labelVariant={labelVariant}
+        {...columns}
         stopControlClickPropagation
       >
         <div className={cn('flex items-center gap-4 min-w-0', rowDisabled && 'opacity-50')}>
@@ -253,7 +266,7 @@ export function AnimationControls({
       {/* 再生時間 */}
       <StyleRow
         label={t('styleCell.animationDurationLabel')}
-        labelVariant={labelVariant}
+        {...columns}
         stopControlClickPropagation
       >
         <AnimationSlider
@@ -272,7 +285,7 @@ export function AnimationControls({
       {/* 強さ — meaning depends on the type (REQ-0331 §1-3). */}
       <StyleRow
         label={t('styleCell.animationStrengthLabel')}
-        labelVariant={labelVariant}
+        {...columns}
         stopControlClickPropagation
       >
         {isBlurStrength ? (

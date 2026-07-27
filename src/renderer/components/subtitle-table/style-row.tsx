@@ -65,6 +65,57 @@ export type StyleRowLabelClass = 'inspector' | 'settings'
 export const INSPECTOR_LABEL_COL_CLASS = 'w-32 shrink-0 min-w-0'
 export const INSPECTOR_CONTROL_COL_CLASS = 'w-56 min-w-[150px]'
 
+/**
+ * REQ-0296 §1 / REQ-0298 §2 — the settings 「字幕スタイル」 tab's columns.
+ * Intrinsic-width labels (the 640-px dialog has room, so no fixed label
+ * column and no truncation) and a 288-px control column: the X/Y offset
+ * row needs ~280 px of intrinsic content, and at the inspector's 192-px
+ * predecessor it overflowed, surfacing a horizontal scrollbar across the
+ * whole tab.
+ */
+export const SETTINGS_LABEL_COL_CLASS = 'shrink-0'
+export const SETTINGS_CONTROL_COL_CLASS = 'w-72 shrink-0'
+
+/**
+ * REQ-0333 §3 — the three surfaces `StyleRow` serves, and the ONE place
+ * that maps a surface to its column widths.
+ *
+ * `AnimationControls` is rendered by all three surfaces and used to hard-
+ * code nothing at all, so its four rows silently took the inspector
+ * defaults even inside the settings dialog — where every neighbouring row
+ * went through `SettingsStyleRow`'s 288-px column.  The animation rows
+ * therefore sat on a different vertical from the rows directly above and
+ * below them.
+ *
+ * The lesson this codebase has re-learnt several times is that alignment
+ * is not "pick matching numbers at each call site", it is "every row runs
+ * the SAME width calculation".  Any component that renders `StyleRow`s on
+ * behalf of a caller takes a `StyleRowSurface` and spreads the result of
+ * this function, rather than accepting (or defaulting) the individual
+ * class props.
+ */
+export type StyleRowSurface = 'inspector' | 'settings'
+
+export interface StyleRowColumns {
+  labelVariant: StyleRowLabelClass
+  labelColClass: string
+  controlColClass: string
+}
+
+export function styleRowColumns(surface: StyleRowSurface): StyleRowColumns {
+  return surface === 'settings'
+    ? {
+        labelVariant: 'settings',
+        labelColClass: SETTINGS_LABEL_COL_CLASS,
+        controlColClass: SETTINGS_CONTROL_COL_CLASS,
+      }
+    : {
+        labelVariant: 'inspector',
+        labelColClass: INSPECTOR_LABEL_COL_CLASS,
+        controlColClass: INSPECTOR_CONTROL_COL_CLASS,
+      }
+}
+
 interface StyleRowProps {
   /**
    * Left-column label.  Accepts a `ReactNode` (not just a string) so
