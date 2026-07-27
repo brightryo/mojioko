@@ -4,6 +4,7 @@ import type { FontId } from './fonts'
 // `emphasis.ts`.  Type-only, so this does not create a runtime import cycle.
 import type { EmphasisSpan } from './emphasis'
 import type { KaraokeStyle } from './karaoke-style'
+import type { AnimationType, AnimationDirection } from './cue-animation'
 export type { WhisperModelId }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +256,35 @@ export interface SubtitleEntryOriginal {
    * Ignored entirely when `karaokeEnabled` is not true.
    */
   karaokeStyle?: KaraokeStyle
+
+  // ---------------------------------------------------------------------------
+  // REQ-0323 §1-5 (Phase C) — entrance / exit animation.  Additive and
+  // optional; a cue with none of these set animates exactly as it did
+  // before this REQ (see `resolveAnimation` for the `fadeDurationSec`
+  // migration), and the ASS writer emits nothing extra for it, so
+  // pre-REQ-0323 projects burn byte-identically.
+  //
+  // The geometry and timing live in `shared/cue-animation.ts`, which BOTH
+  // the preview rAF loop and the ASS writer read.  Do not re-derive the
+  // curves at a call site.
+  // ---------------------------------------------------------------------------
+  /**
+   * Which entrance/exit animation this cue uses.  `undefined` means "not
+   * chosen yet" and routes through the legacy `fadeDurationSec`
+   * translation in `resolveAnimation` — it is NOT the same as `'none'`,
+   * which is an explicit "no animation" the user picked.
+   */
+  animationType?: AnimationType
+  /** Animate on the way in.  `undefined` = true. */
+  animationInEnabled?: boolean
+  /** Animate on the way out.  `undefined` = true. */
+  animationOutEnabled?: boolean
+  /** Ramp length in seconds, 0–1 (`ANIMATION_DURATION_*`). */
+  animationDurationSec?: number
+  /** Slide direction (REQ-0323 §3).  Ignored by the other types. */
+  animationDirection?: AnimationDirection
+  /** Slide distance in ASS px, 0–200 (REQ-0323 §3).  Ignored otherwise. */
+  animationDistancePx?: number
 
   /**
    * REQ-0285 Phase B foundation — per-word timestamps captured by

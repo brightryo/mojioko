@@ -19,6 +19,7 @@ import { measureRuns, computeRingBox, prepareCanvas, paintRing, paintShadow } fr
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 import { sweepWordTimings } from '../../../shared/karaoke-sweep'
 import { resolveKaraokeStyle } from '../../../shared/karaoke-style'
+import { resolveAnimation, isAnimationInert } from '../../../shared/cue-animation'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { areWordsValidForText } from '../../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
@@ -410,6 +411,11 @@ export function SubtitleOverlay({
   // of pinned-anchor / centre-translate offsets.  When `rotation ===
   // undefined` OR `0` no extra transform is added.
   const rotationDeg = entry.rotation ?? 0
+  // REQ-0323 §1-3 — does this cue's animation change `scale`?  Only then
+  // does the transform origin need to move off its historical value.
+  const animSpecForOrigin = resolveAnimation(entry)
+  const animScales = !isAnimationInert(animSpecForOrigin)
+    && (animSpecForOrigin.type === 'scale' || animSpecForOrigin.type === 'pop')
   if (rotationDeg !== 0) {
     const rotateFrag = `rotate(${rotationDeg}deg)`
     transform = transform ? `${transform} ${rotateFrag}` : rotateFrag
@@ -744,6 +750,27 @@ export function SubtitleOverlay({
         ...hStyle,
         fontFamily: `'${fontMeta.cssFontFamily}'`,
         fontWeight: fontMeta.weight,
+        // REQ-0323 §1-3 — animation transform layer.
+        //
+        // React owns the BASE transform (pinned-anchor offset, rotation);
+        // the rAF loop owns the animation and writes ONLY the custom
+        // property `--cue-anim-transform`.  Composing them through a
+        // `var()` keeps the two writers off each other's toes — a rAF
+        // that assigned `style.transform` directly would be clobbered on
+        // every React re-render, and vice versa.
+        //
+        // Crucially this transform sits on the OUTER span, which contains
+        // both outline canvases AND the text wrapper.  A transform does
+        // not affect layout, so the ring is composited along with the
+        // glyphs and `measureRuns` is never re-run — the same trick
+        // rotation already relies on.
+        ['--cue-anim-transform' as string]: 'translate(0px, 0px) scale(1)',
+        // Scale from the cue's own alignment anchor so the text grows in
+        // place.  libass scales `\fscx\fscy` about the `\an` anchor, so
+        // matching the origin to the alignment is the parity-correct
+        // choice — a default 50%/50% origin would drift a left- or
+        // right-aligned cue sideways as it scaled.
+
         fontSize:   `${fontSizePx}px`,
         lineHeight,
         // REQ-0286 — when karaoke is active, per-word spans set their
@@ -768,8 +795,31 @@ export function SubtitleOverlay({
         // BELOW a stroke and so cannot mask at all).  Keeping the outline out
         // of the text's own paint makes it independent of the fill technique.
         whiteSpace: 'pre',
-        transform,
-        transformOrigin: rotationDeg !== 0 ? 'center center' : undefined,
+        // REQ-0323 §1-3 — compose the rAF-owned animation layer with the
+        // React-owned base (pinned anchor / centre-translate / rotation).
+        // Animation first so it acts in the element's own frame before the
+        // layout offsets move it into place.
+        transform: `var(--cue-anim-transform) ${transform ?? ''}`.trim(),
+        // Rotation keeps its pre-REQ-0323 `center center` origin so rotated
+        // cues render exactly as before.  Otherwise, when a SCALING
+        // animation is active, scale about the cue's alignment anchor —
+        // libass scales `\fscx\fscy` about the `\an` anchor, so matching it
+        // is the parity-correct choice (a 50%/50% origin would drift a
+        // left- or right-aligned cue sideways as it grew).
+        // Known limitation: a cue with BOTH rotation and a scale animation
+        // gets the rotation origin; the two want different anchors and one
+        // property has to win.
+        transformOrigin: rotationDeg !== 0
+          ? 'center center'
+          : animScales
+            ? `${
+                entry.horizontalPosition === 'left' ? '0%'
+                : entry.horizontalPosition === 'right' ? '100%' : '50%'
+              } ${
+                entry.verticalPosition === 'top' ? '0%'
+                : entry.verticalPosition === 'bottom' ? '100%' : '50%'
+              }`
+            : undefined,
         // REQ-0277 §1 — CSS `text-transform: uppercase` handles Latin
         // case-mapping natively; CJK code points have no case and pass
         // through unchanged.  Matches ass-generator's `.toUpperCase()`

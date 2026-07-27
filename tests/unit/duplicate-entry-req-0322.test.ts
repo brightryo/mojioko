@@ -37,6 +37,12 @@ function makeRichEntry(): SubtitleEntry {
     karaokeEnabled: true,
     karaokeHighlightColor: '#FFCC00',
     karaokeStyle: 'sweep' as const,
+    animationType: 'pop' as const,
+    animationInEnabled: true,
+    animationOutEnabled: false,
+    animationDurationSec: 0.4,
+    animationDirection: 'up' as const,
+    animationDistancePx: 60,
     words: [
       { startSec: 1.0, endSec: 1.4, text: 'Hello' },
       { startSec: 1.4, endSec: 2.2, text: ' brave' },

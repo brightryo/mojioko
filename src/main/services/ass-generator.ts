@@ -7,6 +7,8 @@ import { buildKaraokeAssText, splitWordsAtHardBreaks } from '../../shared/karaok
 import { buildKaraokeSweepAssText } from '../../shared/karaoke-sweep'
 import type { KaraokeStyle } from '../../shared/karaoke-style'
 import { resolveKaraokeStyle } from '../../shared/karaoke-style'
+import { resolveAnimation } from '../../shared/cue-animation'
+import { buildAnimationTags } from '../../shared/cue-animation-ass'
 import { areWordsValidForText } from '../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
 import { assAlphaValue, isFullyOpaque, OPACITY_MAX_PERCENT } from '../../shared/alpha'
@@ -234,12 +236,18 @@ export function generateAss(
       const rowBgEnabled = e.subtitleBackground.enabled
       const styleName = rowBgEnabled ? 'WithBox' : 'Default'
 
-      // REQ-20260615-050 — read fade duration from the entry itself.
-      // `0` means no fade, and the helper writes no `\fad` tag in that
-      // case (libass renders at constant alpha = no ramp).  `0.1`–`0.5`
-      // emit `\fad(t,t)` symmetric in/out (matches the preview helper).
-      const fadeDurationMs = Math.round(e.fadeDurationSec * 1000)
-      const fadeTag = fadeDurationMs > 0 ? `\\fad(${fadeDurationMs},${fadeDurationMs})` : ''
+      // REQ-0323 §1 — entrance / exit animation.  The curve is NOT derived
+      // here: `shared/cue-animation.ts` owns it and the preview rAF loop
+      // reads the very same module, which is the structural fix for the
+      // REQ-0320 §1 failure mode (two independent sources for one render
+      // value).  This writer only transcribes the control points into ASS.
+      //
+      // `resolveAnimation` also performs the REQ-0323 §1-6 migration, so a
+      // pre-REQ-0323 cue carrying only `fadeDurationSec` comes back as a
+      // fade of the same length and emits the same tag it always did —
+      // byte-identical output for every existing project.
+      const animSpec = resolveAnimation(e)
+      const animTag = buildAnimationTags(animSpec, e.startSec, e.endSec)
 
       // Per-row font override (REQ-021).  Emit \fn<family> only when the
       // row carries a fontId AND that font's ASS family name differs from
@@ -491,7 +499,7 @@ export function generateAss(
         // REQ-0277 §4 — rotation last (order irrelevant for libass
         // parsing but keeps the emitted string easy to read).
         rotTag,
-        fadeTag,
+        animTag,
       ].filter(Boolean).join('')
 
       // REQ-0277 §1 — display casing.  Apply to the emitted text ONLY;

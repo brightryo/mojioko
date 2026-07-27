@@ -102,6 +102,13 @@ export const SUBTITLE_ENTRY_DUPLICATION = {
   karaokeHighlightColor: 'copy',
   karaokeStyle: 'copy',
   words: 'deep-copy',
+  // --- entrance / exit animation (REQ-0323 Phase C) -------------------
+  animationType: 'copy',
+  animationInEnabled: 'copy',
+  animationOutEnabled: 'copy',
+  animationDurationSec: 'copy',
+  animationDirection: 'copy',
+  animationDistancePx: 'copy',
   // --- keyword emphasis (REQ-0305 / 0306 / 0307) ----------------------
   keywordEmphasisEnabled: 'copy',
   emphasisColorHex: 'copy',

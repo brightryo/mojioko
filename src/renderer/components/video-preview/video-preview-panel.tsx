@@ -25,7 +25,7 @@ import {
   clampAssPosition,
 } from '@/lib/preview-coords'
 import { editedDuration, editedToOrig, effectiveEntryState, origToEdited } from '../../../shared/cuts'
-import { computeFadeOpacity } from '@/lib/fade-opacity'
+import { resolveAnimation, animationTransformAt, NEUTRAL_TRANSFORM } from '../../../shared/cue-animation'
 import { createPreviewSeeker, type PreviewSeeker } from '@/lib/preview-seek'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -300,6 +300,10 @@ export function VideoPreviewPanel() {
   // down and re-spawn the rAF every time the active set changed, which
   // happens at every entry boundary.
   const activeEntryMapRef = useRef<Map<string, SubtitleEntry>>(new Map())
+  // REQ-0323 §1-3 — the rAF loop needs the ASS→preview px ratio to scale
+  // the blur radius and (later) the slide offset.  Held in refs so the
+  // loop never closes over a stale render's value and never re-subscribes.
+  const previewScaleRef = useRef(1)
   // REQ-20260615-050 — fade duration now lives per-entry, so no global
   // ref is needed.  The rAF reads `entry.fadeDurationSec` straight from
   // the `activeEntryMapRef` snapshot.
@@ -313,7 +317,7 @@ export function VideoPreviewPanel() {
   // typical overlay counts (< 10 simultaneous captions).
   //
   // REQ-0196 §2 — the pre-0196 initial-write here used the raw
-  // computeFadeOpacity() and painted opacity 0 for any entry mounted
+  // the animation curve and painted opacity 0 for any entry mounted
   // while its startSec matched the video's currentTime (owner repro:
   // opening a project with a 0-second caption — video is paused at
   // currentTime = 0, entry.startSec = 0 sits exactly on the fade-in
@@ -335,15 +339,14 @@ export function VideoPreviewPanel() {
         const v = videoRef.current
         const t = v?.currentTime ?? 0
         const isPaused = v?.paused ?? true
-        const opacity = isPaused
-          ? (t >= entry.startSec && t < entry.endSec ? 1 : 0)
-          : computeFadeOpacity({
-              currentTimeSec: t,
-              startSec: entry.startSec,
-              endSec: entry.endSec,
-              fadeDurationSec: entry.fadeDurationSec,
-            })
-        el.style.opacity = String(opacity)
+        // REQ-0323 §1 — mount-time paint uses the same shared curve as the
+        // rAF loop, so the first frame after mount is already correct
+        // instead of flashing at full opacity for one tick.
+        const inRange = t >= entry.startSec && t < entry.endSec
+        const anim = (isPaused && t <= entry.startSec) || !inRange
+          ? NEUTRAL_TRANSFORM
+          : animationTransformAt(resolveAnimation(entry), entry.startSec, entry.endSec, t)
+        el.style.opacity = String(inRange ? anim.opacity : 0)
       } else {
         overlayOuterRefs.current.delete(entry.id)
       }
@@ -481,25 +484,63 @@ export function VideoPreviewPanel() {
       // painted at full opacity instead of the fade-in start (= 0 →
       // invisible).  During playback the burn-in-accurate ramp still
       // applies.  Same defensive out-of-range guard as
-      // computeFadeOpacity: if the paused playhead is outside the
+      // animationTransformAt: if the paused playhead is outside the
       // active entry's range, keep the caption hidden.
       const isPaused = v?.paused ?? true
       const entries = activeEntryMapRef.current
       for (const [id, el] of overlayOuterRefs.current) {
         const entry = entries.get(id)
         if (!entry) continue
-        const opacity = isPaused
-          ? (t >= entry.startSec && t < entry.endSec ? 1 : 0)
-          : computeFadeOpacity({
-              currentTimeSec: t,
-              startSec: entry.startSec,
-              endSec: entry.endSec,
-              fadeDurationSec: entry.fadeDurationSec,
-            })
+        // REQ-0323 §1-2 — the animation state is sampled from the video's
+        // OWN clock every frame, never from a CSS `animation`/`transition`.
+        // Wall-clock CSS animation cannot follow a seek, a pause, or a
+        // frame-step; recomputing from `currentTime` follows all three for
+        // free, because the value is a pure function of `t`.
+        //
+        // The curve comes from `shared/cue-animation.ts`, the same module
+        // the ASS writer transcribes — there is no second copy of the
+        // maths to drift (REQ-0320 §1's failure mode).
+        const inRange = t >= entry.startSec && t < entry.endSec
+        const spec = resolveAnimation(entry)
+        // REQ-0195 §2 preserved, but NARROWED (REQ-0323 §1-2).  That REQ
+        // snapped the whole ramp to "settled" whenever paused, so a cue
+        // parked at `currentTime = 0` on mount was not invisible.  A blanket
+        // snap now contradicts §1-2, which requires a paused playhead
+        // 1 s into a 3 s animation to SHOW the 1 s state.  So the snap is
+        // kept only for the original repro — paused at or before the cue's
+        // own start — and scrubbing anywhere inside the cue shows the real
+        // animation state.
+        const snapToSettled = isPaused && t <= entry.startSec
+        const anim = snapToSettled || !inRange
+          ? NEUTRAL_TRANSFORM
+          : animationTransformAt(spec, entry.startSec, entry.endSec, t)
+
+        const opacity = inRange ? anim.opacity : 0
         const next = String(opacity)
         // Guard CSSOM writes so a steady-state caption (mid-plateau,
         // opacity = "1") does not invalidate style every frame.
         if (el.style.opacity !== next) el.style.opacity = next
+
+        // REQ-0323 §1-3 — transform + filter go on the OUTER span, which
+        // contains the outline/shadow canvases as well as the text.  A
+        // transform does not affect layout, so the ring rides along and
+        // `measureRuns` is never re-run.  `--cue-anim-transform` is a
+        // custom property so React keeps ownership of the base transform.
+        //
+        // `offset*Px` is in ASS px; multiply into preview px like every
+        // other ASS-space quantity.  (Always 0 until slide lands in §3.)
+        const scalePx = previewScaleRef.current
+        const nextTransform =
+          `translate(${anim.offsetXPx * scalePx}px, ${anim.offsetYPx * scalePx}px) scale(${anim.scale})`
+        if (el.style.getPropertyValue('--cue-anim-transform') !== nextTransform) {
+          el.style.setProperty('--cue-anim-transform', nextTransform)
+        }
+        // Blur is the one channel that genuinely repaints (§1-3 calls this
+        // out as the accepted exception).  Writing `''` rather than
+        // `blur(0px)` when sharp keeps the element off the filter path
+        // entirely for the 99 % of frames that are not mid-ramp.
+        const nextFilter = anim.blurPx > 0 ? `blur(${anim.blurPx * scalePx}px)` : ''
+        if (el.style.filter !== nextFilter) el.style.filter = nextFilter
 
         // REQ-0286 §3 / REQ-0289 — karaoke per-word highlight, piggy-
         // backed on the same rAF loop so we don't spin a second
@@ -653,6 +694,9 @@ export function VideoPreviewPanel() {
   // actual pixel size.  Replaces the old separate ResizeObserver on
   // videoContainerRef.
   const videoContainerWidth = videoFrameW
+  previewScaleRef.current = videoWidthPx > 0 && videoContainerWidth > 0
+    ? videoContainerWidth / videoWidthPx
+    : 1
 
   const stackOffsetsByEntryId = useMemo(() => {
     if (videoWidthPx <= 0 || videoContainerWidth <= 0) {
