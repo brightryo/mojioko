@@ -238,3 +238,57 @@ describe('REQ-0312 §2 — the tables', () => {
     }
   })
 })
+
+/**
+ * REQ-0315 §5 — characters added after RES-0314 §4-1 / §4-2 measured the gaps.
+ *
+ * `…` is the one that actually bit: common in transcripts, and measured leading
+ * a line at videoWidth 1892.  `〜` did so even at the default 1920.  RES-0314
+ * §4-4 verified in advance that adding all of these leaves every existing pin
+ * untouched.
+ */
+describe('REQ-0315 §5 — widened tables', () => {
+  for (const ch of ['…', '‥', '〜', 'ゕ', 'ゖ', '〻', '‼', '⁇', '⁈', '⁉']) {
+    it(`'${ch}' may not START a line`, () => {
+      expect(KINSOKU_NO_LINE_START.includes(ch)).toBe(true)
+      const text = 'あ'.repeat(54) + ch + 'い'.repeat(10)
+      const [l1, l2] = lines(text)
+      expect(l2.startsWith(ch)).toBe(false)
+      expect(l1 + l2).toBe(text)
+    })
+  }
+
+  for (const ch of ['〖', '〘', '⦅']) {
+    it(`'${ch}' may not END a line`, () => {
+      expect(KINSOKU_NO_LINE_END.includes(ch)).toBe(true)
+      const text = 'あ'.repeat(53) + ch + 'い'.repeat(12)
+      const [l1, l2] = lines(text)
+      expect(l1.endsWith(ch)).toBe(false)
+      expect(l1 + l2).toBe(text)
+    })
+  }
+
+  it('half-width forms remain EXCLUDED, keeping kinsoku identity on ASCII', () => {
+    for (const ch of ['･', 'ﾞ', 'ﾟ', 'ｰ', '｡', '｣', '､', '｢']) {
+      expect(KINSOKU_NO_LINE_START.includes(ch)).toBe(false)
+      expect(KINSOKU_NO_LINE_END.includes(ch)).toBe(false)
+    }
+  })
+
+  it('the REQ-0303 pin is still byte-identical after widening', () => {
+    // Expressed through `lines()` so the ASS sentinel never has to appear
+    // as a literal here (a mangled escape silently broke this once).
+    expect(lines('あ'.repeat(60))).toEqual(['あ'.repeat(54), 'あ'.repeat(6)])
+  })
+
+  it('the widened set stays idempotent', () => {
+    for (const t of [
+      'あ'.repeat(54) + '…' + 'い'.repeat(10),
+      'あ'.repeat(53) + '〖' + 'い'.repeat(12),
+      'そうですね…だからこそ、今回の判断は難しい…でも、やるしかない',
+    ]) {
+      const once = wrap(t)
+      expect(wrap(once)).toBe(once)
+    }
+  })
+})

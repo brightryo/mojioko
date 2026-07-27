@@ -26,6 +26,17 @@
  *   2. faster-whisper emits full-width punctuation for Japanese, so the
  *      half-width forms essentially do not occur in the text this runs on.
  *
+ * REQ-0315 §5 re-affirmed that exclusion when widening the tables.  The
+ * half-width members of JIS X 4051 that stay OUT are, for the record:
+ * `･` `ﾞ` `ﾟ` `ｰ` `｡` `｣` `､` (line-start) and `｢` (line-end), plus every ASCII
+ * form.  Keeping them out is what preserves the property that kinsoku is the
+ * IDENTITY function on an ASCII string, which is how English wrapping is
+ * guaranteed unchanged.
+ *
+ * Also still out of scope: 分離禁止文字 (never splitting a RUN of `—` `…` `‥`
+ * `〳〴〵`), which is a different rule — it constrains where a break may fall
+ * INSIDE a repeated sequence, not which character may touch a line edge.
+ *
  * `’` (U+2019) is excluded from the closing set for the same reason even though
  * it is a legitimate Japanese closing quote: it doubles as the English
  * apostrophe and is already listed in `auto-line-break.ts`'s `WORD_CHAR` so
@@ -50,10 +61,19 @@ export const KINSOKU_NO_LINE_START =
   // closing brackets and quotes (see the docblock re: U+2019)
   '）］｝」』】〉》〕”〟' +
   // units that bind to the preceding number
-  '％℃‰'
+  '％℃‰' +
+  // REQ-0315 §5 — JIS X 4051 members the first pass missed.  `…` is the one
+  // that actually bites: it is common in transcripts and was measured leading a
+  // line at videoWidth 1892 (RES-0314 §4-1).  `〜` did so even at the default
+  // 1920.  The small kana `ゕゖ` complete the set whose katakana halves
+  // (`ヵヶ`) were already here.
+  '…‥〜ゕゖ〻‼⁇⁈⁉'
 
 /** Characters that may not END a line (行末禁則) — opening brackets and quotes. */
-export const KINSOKU_NO_LINE_END = '（［｛「『【〈《〔“‘〝'
+export const KINSOKU_NO_LINE_END =
+  '（［｛「『【〈《〔“‘〝' +
+  // REQ-0315 §5 — the remaining JIS X 4051 opening brackets.
+  '〖〘⦅'
 
 const NO_LINE_START = new Set(Array.from(KINSOKU_NO_LINE_START))
 const NO_LINE_END = new Set(Array.from(KINSOKU_NO_LINE_END))
