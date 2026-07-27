@@ -8,6 +8,7 @@ import { buildKaraokeSweepAssText } from '../../shared/karaoke-sweep'
 import type { KaraokeStyle } from '../../shared/karaoke-style'
 import { resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../shared/karaoke-style'
 import { resolveAnimation } from '../../shared/cue-animation'
+import { expandCueToEvents } from '../../shared/cue-events'
 import { buildAnimationTags } from '../../shared/cue-animation-ass'
 import { areWordsValidForText } from '../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
@@ -539,7 +540,7 @@ export function generateAss(
         const cased = e.casing === 'uppercase' ? s.toUpperCase() : s
         return escapeAssText(cased)
       }
-      let text: string
+      let body: string
       if (karaokeActive) {
         // REQ-0289 — `karaokeWords` is either the real per-word list
         // (words valid) or the equal-split fallback list (words
@@ -588,7 +589,7 @@ export function generateAss(
                 e.text,
                 emphasisOverlay,
               )
-        text = `{${styleTag}}${karaokeBody}`
+        body = karaokeBody
       } else if (emphasisActive) {
         // REQ-0307 — karaoke OFF, emphasis ON.  Build the body straight from
         // the cue text + resolved span ranges (no `words` needed), wrapping
@@ -618,10 +619,10 @@ export function generateAss(
           `\\fs${emphasisScaledFs}\\c${hexToAss(emphasisColorHex)}${emphasisOpaqueTag}`,
           `\\fs${e.fontSizePx}\\c${hexToAss(e.textColorHex)}${emphasisRestoreAlphaTag}`,
         )
-        text = `{${styleTag}}${emphasisBody}`
+        body = emphasisBody
       } else {
         const rawText = e.casing === 'uppercase' ? e.text.toUpperCase() : e.text
-        text = `{${styleTag}}${escapeAssText(rawText)}`
+        body = escapeAssText(rawText)
       }
 
       // Per-row MarginV — Dialogue's MarginV column overrides the Style-level
@@ -633,11 +634,20 @@ export function generateAss(
       // ignores MarginV when \pos is present, but writing 0 makes the
       // intent unambiguous to anyone reading the ASS file directly.
       const marginVCol = isPinned ? 0 : e.verticalMarginPx
-      const dialogueLine =
-        `Dialogue: 0,${formatAssTime(e.startSec)},${formatAssTime(e.endSec)},` +
-        `${styleName},0,0,${marginVCol},,${text}`
-      return dialogueLine
-    }),
+      // REQ-0327 §1-1 — one cue may become several events (line axis for
+      // line spacing, time axis for slide).  Currently a no-op passthrough,
+      // so the emitted string is byte-identical to the pre-REQ-0327 output.
+      return expandCueToEvents({
+        startSec: e.startSec,
+        endSec: e.endSec,
+        marginV: marginVCol,
+        styleTag,
+        body,
+      }).map((piece) =>
+        `Dialogue: 0,${formatAssTime(piece.startSec)},${formatAssTime(piece.endSec)},` +
+        `${styleName},0,0,${piece.marginV},,{${piece.styleTag}}${piece.body}`
+      )
+    }).flat(),
     ''
   ].join('\n')
 
