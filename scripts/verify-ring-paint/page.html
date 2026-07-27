@@ -1,0 +1,184 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>ring-paint stage</title>
+<style>
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    overflow: hidden;
+  }
+  .absolute {
+    position: absolute;
+  }
+  .pointer-events-none {
+    pointer-events: none;
+  }
+</style>
+<div id="stage"></div>
+<script src="./ring.js"></script>
+<script>
+  /**
+   * REQ-0327 §2 — the page half of the ring-paint gate.
+   *
+   * Everything below is a FAITHFUL PORT of the production overlay: the DOM
+   * shape comes from `subtitle-overlay.tsx`'s return value and the paint path
+   * from its ring `useLayoutEffect`.  `Ring.*` is the real
+   * `src/renderer/lib/outline-ring.ts`, bundled by index.mjs — no
+   * reimplementation of measurement, box or paint lives here.
+   *
+   * The one deliberate deviation is `neutralise`, which lets the driver run
+   * the effect with the REQ-0326 fix disabled so the negative control can
+   * prove the gate goes red.  Production behaviour is `'always'`.
+   */
+  const STAGE = document.getElementById('stage')
+  let measureCtx = null
+
+  /** Registers the face the cases render with, mirroring the app's @font-face. */
+  window.__setup = async function (opts) {
+    if (opts.fontUrl) {
+      const face = new FontFace(opts.fontFamily, `url("${opts.fontUrl}")`, {
+        weight: String(opts.fontWeight),
+        style: 'normal'
+      })
+      await face.load()
+      document.fonts.add(face)
+    }
+    await document.fonts.ready
+    return { dpr: window.devicePixelRatio, fonts: document.fonts.size }
+  }
+
+  /**
+   * Builds the production cue DOM: outer span (absolute, `white-space: pre`,
+   * transform composed from `var(--cue-anim-transform)`, anchored
+   * transform-origin) > [shadow canvas, ring canvas, text wrapper span].
+   */
+  function buildCue(spec) {
+    STAGE.innerHTML = ''
+    const outer = document.createElement('span')
+    outer.className = 'absolute pointer-events-none'
+    const s = outer.style
+    s.left = spec.left + 'px'
+    s.top = spec.top + 'px'
+    s.fontFamily = `'${spec.fontFamily}'`
+    s.fontWeight = String(spec.fontWeight)
+    s.fontSize = spec.fontSizePx + 'px'
+    s.lineHeight = String(spec.lineHeight)
+    s.color = spec.textColor
+    s.whiteSpace = 'pre'
+    // The rAF animation layer, exactly as REQ-0323 composes it.
+    s.setProperty('--cue-anim-transform', 'translate(0px, 0px) scale(1)')
+    s.transform = 'var(--cue-anim-transform)'
+    // Bottom-centre: what `animScales` picks for a default bottom-centred cue.
+    s.transformOrigin = '50% 100%'
+
+    const shadowCanvas = document.createElement('canvas')
+    shadowCanvas.width = 0
+    shadowCanvas.height = 0
+    shadowCanvas.className = 'absolute pointer-events-none'
+    const ringCanvas = document.createElement('canvas')
+    ringCanvas.width = 0
+    ringCanvas.height = 0
+    ringCanvas.className = 'absolute pointer-events-none'
+
+    const wrapper = document.createElement('span')
+    wrapper.setAttribute('data-subtitle-text-wrapper', '')
+    wrapper.style.position = 'relative'
+    wrapper.style.zIndex = '1'
+    wrapper.style.display = 'inline'
+    wrapper.textContent = spec.text
+
+    outer.appendChild(shadowCanvas)
+    outer.appendChild(ringCanvas)
+    outer.appendChild(wrapper)
+    STAGE.appendChild(outer)
+    return { outer, ringCanvas, shadowCanvas }
+  }
+
+  /** Writes the animation transform the rAF loop owns. */
+  function setAnimScale(outer, scale) {
+    outer.style.setProperty('--cue-anim-transform', `translate(0px, 0px) scale(${scale})`)
+    // Force a style/layout flush so the capture cannot race the write.
+    void outer.getBoundingClientRect()
+  }
+
+  /**
+   * PORT of the ring `useLayoutEffect` in `subtitle-overlay.tsx` (shadow path
+   * omitted; these cases run with shadowDepth 0).  Keep in step with it.
+   */
+  function runRingEffect(els, spec) {
+    const { outer, ringCanvas, shadowCanvas } = els
+    const clear = (c) => {
+      if (c.width !== 0) c.width = 0
+      if (c.height !== 0) c.height = 0
+    }
+    const outlinePx = spec.outlinePx
+    const wantRing = outlinePx > 0
+    if (!wantRing) {
+      clear(ringCanvas)
+      clear(shadowCanvas)
+      return
+    }
+    const wrapper = outer.querySelector('[data-subtitle-text-wrapper]')
+    if (!wrapper) return
+    if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d')
+    const mctx = measureCtx
+
+    // ---- the line REQ-0326 fixed -------------------------------------------
+    // production: neutralise unconditionally.  'rotation-only' is the pre-fix
+    // behaviour; 'never' removes it entirely.  Both are negative controls.
+    const rotationDeg = spec.rotationDeg || 0
+    const neutralise =
+      spec.neutralise === 'never'
+        ? false
+        : spec.neutralise === 'rotation-only'
+          ? rotationDeg !== 0
+          : true
+    const prevTransform = outer.style.transform
+    if (neutralise) outer.style.transform = 'none'
+    const originRect = outer.getBoundingClientRect()
+    const measured = Ring.measureRuns(wrapper, originRect.left, originRect.top, mctx)
+    if (neutralise) outer.style.transform = prevTransform
+    // ------------------------------------------------------------------------
+
+    const box = Ring.computeRingBox(measured.runs, measured.extents, outlinePx, 0)
+    if (!box) {
+      clear(ringCanvas)
+      clear(shadowCanvas)
+      return
+    }
+    const dpr = window.devicePixelRatio || 1
+    const rctx = Ring.prepareCanvas(ringCanvas, box, dpr)
+    if (rctx) {
+      Ring.paintRing(rctx, measured.runs, outlinePx, spec.ringColor)
+      ringCanvas.style.opacity = '1'
+    }
+    clear(shadowCanvas)
+  }
+
+  /**
+   * Runs one case and leaves the stage in its final painted state for capture.
+   *
+   *   order 'paint-then-scale' — paint at scale 1, then the animation scales it.
+   *   order 'scale-then-paint' — the animation is already active when the
+   *                              layout effect re-runs (REQ-0326's bug).
+   */
+  window.__case = function (spec) {
+    const els = buildCue(spec)
+    if (spec.order === 'scale-then-paint') {
+      setAnimScale(els.outer, spec.scale)
+      runRingEffect(els, spec)
+    } else {
+      setAnimScale(els.outer, 1)
+      runRingEffect(els, spec)
+      setAnimScale(els.outer, spec.scale)
+    }
+    const r = els.ringCanvas
+    return {
+      canvasPx: [r.width, r.height],
+      canvasCss: [parseFloat(r.style.width) || 0, parseFloat(r.style.height) || 0],
+      dpr: window.devicePixelRatio
+    }
+  }
+</script>

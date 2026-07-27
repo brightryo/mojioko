@@ -15,6 +15,7 @@
     "test:e2e": "playwright test",
     "scan:pii": "node scripts/pii-scan.mjs",
     "verify:outline-ring": "node scripts/verify-outline-ring/index.mjs",
+    "verify:ring-paint": "node scripts/verify-ring-paint/index.mjs",
     "setup:hooks": "git config core.hooksPath scripts/hooks",
     "msix:register": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/msix-register-sideload.ps1",
     "msix:register:skip-build": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/msix-register-sideload.ps1 -SkipBuild"

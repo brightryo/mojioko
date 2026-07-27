@@ -1,0 +1,4 @@
+# Scratch dir the gate builds (ring bundle, page copy, job/result JSON).
+# Normally deleted at the end of a run; left behind only when Electron fails
+# to start, which is exactly when you want to look at it.
+.work/
