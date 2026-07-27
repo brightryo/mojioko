@@ -2,6 +2,7 @@ import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground, IpcR
 import type { BurninEvent } from '../../shared/ipc-contracts'
 import { isFontId, resolveRenderableFontId, type FontId } from '../../shared/fonts'
 import type { Cut } from '../../shared/cuts'
+import type { KaraokeStyle } from '../../shared/karaoke-style'
 import { substituteMissingGlyphs } from '../../shared/glyph-substitute'
 import { getCmapCoverageFor, getTofuSubstituteFor, loadSubtitleFontFor } from '../lib/font-metrics'
 import { listFonts } from '@/services/font'
@@ -26,6 +27,17 @@ export interface BurninOptions {
    * ffmpeg command around filter_complex trim+concat.
    */
   cuts?: Cut[]
+  /**
+   * REQ-0320 §1 — karaoke rendering style, forwarded to the ASS writer.
+   *
+   * This is an APP-WIDE setting living in the renderer's settings store, not a
+   * field on `SubtitleEntry`, so it has to be carried here explicitly.  It was
+   * missing from this request for exactly that reason: the drawer set it, but
+   * this service rebuilds the IPC payload field-by-field and silently dropped
+   * anything it did not enumerate.  The preview kept working because it reads
+   * the store directly — only the burn-in was wrong.
+   */
+  karaokeStyle?: KaraokeStyle
 }
 
 export interface BurninHandle {
@@ -171,7 +183,8 @@ export async function startBurnin(
     subtitleBackground: opts.subtitleBackground,
     outputContainer: opts.outputContainer,
     fontId: resolvedProjectFontId,
-    cuts: opts.cuts
+    cuts: opts.cuts,
+    karaokeStyle: opts.karaokeStyle
   })
 
   if (!result.ok) {
