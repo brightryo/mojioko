@@ -48,6 +48,23 @@ describe('computeRingBox', () => {
     )
   })
 
+  /**
+   * REQ-0314 §2 — the shadow must not be gated on the outline width.  Before
+   * REQ-0313 the shadow was a CSS `text-shadow`, independent of `ord`, and
+   * libass keeps `\shad` and `ord` independent too.  Measured: at bord 0 the
+   * preview draws 4576 shadow px and libass 4751, so both still render.
+   */
+  it('still reserves room for the shadow when the outline is 0', () => {
+    const box = computeRingBox([run(100, 50)], [ext(30, 60, 40)], 0, 12)!
+    expect(box).not.toBeNull()
+    expect(box.left + box.width).toBeGreaterThanOrEqual(140 + 12)
+    expect(box.top + box.height).toBeGreaterThanOrEqual(60 + 12)
+    // and it is genuinely bigger than the no-shadow, no-outline case
+    const bare = computeRingBox([run(100, 50)], [ext(30, 60, 40)], 0, 0)!
+    expect(box.width).toBeGreaterThan(bare.width)
+    expect(box.height).toBeGreaterThan(bare.height)
+  })
+
   it('spans every run — multi-line and mixed emphasis sizes', () => {
     // Two lines; the second run is an emphasised (larger) run on line 1.
     const runs = [run(10, 40), run(60, 40), run(10, 120)]
