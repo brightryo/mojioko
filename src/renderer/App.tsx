@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { SETTINGS_DEBOUNCE_MS } from '../shared/constants'
 import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Toaster } from 'sonner'
@@ -227,7 +228,7 @@ function AppInner() {
           defaultProjectDir: s.defaultProjectDir
         }
         saveSettings(settings).catch(() => { /* ignore IPC failures */ })
-      }, 500)
+      }, SETTINGS_DEBOUNCE_MS)
     }
     const unsub = useSettingsStore.subscribe(save)
     return () => {

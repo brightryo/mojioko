@@ -13,7 +13,24 @@ import type {
  *
  * `incoming` is the renderer's `AppSettings` payload.  It always
  * TypeScript-satisfies `AppSettings` — but only because every field main owns
- * exclusively is OPTIONAL, so omitting it is legal.  `App.tsx`'s debounced
+ * exclusively is OPTIONAL, so omitting it is legal.
+ *
+ * ## How the failure actually happens (corrected by REQ-0315 §7)
+ *
+ * Earlier revisions of this docblock said a save "scheduled before one of those
+ * IPCs and firing after it" would clobber the field.  That mechanism is WRONG.
+ * App.tsx builds the payload INSIDE the timer callback
+ * (`useSettingsStore.getState()` at fire time, not at schedule time), and every
+ * store mutation clears and re-arms the timer.  Scheduling order is therefore
+ * irrelevant.
+ *
+ * The only question that matters is: IS THE STORE STALE WHEN THE TIMER FIRES?
+ *   - `activeFontId` — stale for the few ms between main's disk write and the
+ *     IPC reply reaching the renderer.  Narrow and self-healing, but real;
+ *     closed by REQ-0315 §4 (omit the key + `presence-wins`).
+ *   - `transcriptionDefaults.whisperModel` — was stale from activation until
+ *     the next restart, because nothing wrote it back into the store.  Not a
+ *     race at all; fixed at the source by REQ-0315 §3.  `App.tsx`'s debounced
  * auto-save builds the payload by hand and sets 17 of the 22 keys; the rest are
  * simply absent.  A plain `{ ...existing, ...incoming }` therefore drops
  * main-written state, and the SAME BUG has now shipped three times:
