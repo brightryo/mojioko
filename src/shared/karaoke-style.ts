@@ -1,31 +1,37 @@
 /**
- * REQ-0311 §4 — karaoke rendering style, an APP-WIDE setting (not per-cue).
+ * REQ-0311 §4 / REQ-0315 §2 — karaoke rendering style, an APP-WIDE setting
+ * (not per-cue).
  *
- * Owner decision: scoping this to the settings store rather than adding a field
- * to `SubtitleEntry` keeps the shared entry type — a REQ-0311 protected
- * surface — untouched, and makes the experiment trivially removable.  The
- * trade-off accepted with it: `\k` and `\kf` cannot be mixed within one
- * project; the toggle applies to every karaoke cue at once.
+ * ADOPTED.  The default is `'sweep'` (`\kf`, the fill sweeping left-to-right).
+ * `'switch'` (`\k`, the instant flip) remains selectable.  The deletion list that
+ * used to live here is gone — the feature is shipping, not on trial.
  *
- * DELETION LIST for dropping the sweep experiment:
- *   1. this file
- *   2. `src/shared/karaoke-sweep.ts` + `tests/unit/karaoke-sweep-req-0311.test.ts`
- *   3. `karaokeStyle` / `setKaraokeStyle` in `settings-store.ts` (+ its
- *      persistence entry and the main-process settings schema)
- *   4. the `karaokeStyle === 'sweep'` ternary in `ass-generator.ts`
- *   5. the sweep branch in `subtitle-overlay.tsx` and in the rAF loop in
- *      `video-preview-panel.tsx`
- *   6. the `karaokeStyleRow` StyleRow in `timeline-block-inspector.tsx` and the
- *      `styleCell.karaokeStyle*` i18n keys in ja/en `step2.json`
- * Nothing in the shipping `\k` path changes.
+ * Scope is the settings store rather than a field on `SubtitleEntry`, so the
+ * shared entry type (a protected surface) stays untouched.  Accepted trade-off:
+ * `\k` and `\kf` cannot be mixed within one project; the toggle applies to
+ * every karaoke cue at once.
+ *
+ * Existing saved settings are NOT migrated (REQ-0315 §2): a user who has
+ * explicitly stored a value keeps it.  That is why `coerceKaraokeStyle` names
+ * BOTH values instead of falling through to the default — with the default now
+ * `'sweep'`, a fall-through would silently rewrite a stored `'switch'`.
  */
 
-/** `'switch'` = `\k` (instant, shipping default).  `'sweep'` = `\kf` (fill). */
+/** `'switch'` = `\k` (instant).  `'sweep'` = `\kf` (fill) — the default. */
 export type KaraokeStyle = 'switch' | 'sweep'
 
-export const KARAOKE_STYLE_DEFAULT: KaraokeStyle = 'switch'
+export const KARAOKE_STYLE_DEFAULT: KaraokeStyle = 'sweep'
 
-/** Narrows an unknown persisted value, falling back to the shipping default. */
+/**
+ * Narrows an unknown persisted value.
+ *
+ * BOTH valid values are matched explicitly.  A `v === 'sweep' ? … : DEFAULT`
+ * form would, now that the default is `'sweep'`, rewrite a stored `'switch'`
+ * into `'sweep'` on load — silently migrating exactly the users REQ-0315 §2
+ * says must keep their choice.
+ */
 export function coerceKaraokeStyle(v: unknown): KaraokeStyle {
-  return v === 'sweep' ? 'sweep' : KARAOKE_STYLE_DEFAULT
+  if (v === 'switch') return 'switch'
+  if (v === 'sweep') return 'sweep'
+  return KARAOKE_STYLE_DEFAULT
 }

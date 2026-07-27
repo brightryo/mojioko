@@ -1246,12 +1246,11 @@ export function TimelineBlockInspector({
                 </div>
               </StyleRow>
             )}
-            {/* REQ-0311 §4 — EXPERIMENTAL karaoke sweep toggle.  App-wide (not
+            {/* REQ-0311 §4 / REQ-0315 §2 — karaoke display style.  App-wide (not
                 per-cue), so `SubtitleEntry` stays untouched; the trade-off is
-                that all karaoke cues share one style.  Shown only while the
-                cue actually has karaoke on, so the row doesn't advertise an
-                experiment on cues it cannot affect.
-                DELETE THIS WHOLE BLOCK with the feature. */}
+                that all karaoke cues share one style.  Shown only while the cue
+                actually has karaoke on, so the row does not offer a control
+                that cannot affect it.  Default is sweep. */}
             {showKaraokeUi && entry.karaokeEnabled === true && (
               <StyleRow label={t('styleCell.karaokeStyleRowLabel')} stopControlClickPropagation>
                 <Select
