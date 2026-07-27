@@ -231,17 +231,44 @@ describe('REQ-0310 — the CSS preview matches the burn-in', () => {
     )
   }
 
-  it('fill and outline become rgba() at partial opacity', () => {
+  it('the FILL becomes rgba() at partial opacity', () => {
     const html = markup({ textColorHex: '#FFFFFF', outlineColorHex: '#000000', textAlpha: 50, outlineAlpha: 25 })
     expect(html).toContain('color:rgba(255, 255, 255, 0.5)')
-    expect(html).toContain('-webkit-text-stroke-color:rgba(0, 0, 0, 0.25)')
   })
 
   it('stays plain hex at the default, so existing previews are unchanged', () => {
     const html = markup({ textColorHex: '#FFFFFF', outlineColorHex: '#000000' })
     expect(html).toContain('color:#FFFFFF')
-    expect(html).toContain('-webkit-text-stroke-color:#000000')
     expect(html).not.toContain('rgba(255, 255, 255')
+  })
+
+  /**
+   * REQ-0313 — the outline left the DOM entirely.  It used to be a CSS
+   * `-webkit-text-stroke`, whose centred geometry only read correctly while an
+   * opaque fill masked its inner half; that assumption broke under this REQ's
+   * own opacity feature and again under REQ-0311's `\kf` sweep.  It is now a
+   * canvas ring painted behind the text, so `a` lives on the canvas element's
+   * opacity rather than in a CSS colour.
+   *
+   * This assertion is the structural guard: if a CSS stroke ever comes back,
+   * the fill technique can silently break the outline for a third time.
+   */
+  it('REQ-0313 — the DOM carries NO text stroke at any opacity', () => {
+    for (const patch of [
+      { textAlpha: 100, outlineAlpha: 100 },
+      { textAlpha: 50, outlineAlpha: 25 },
+      { textAlpha: 0, outlineAlpha: 100 },
+    ]) {
+      const html = markup({ textColorHex: '#FFFFFF', outlineColorHex: '#000000', ...patch })
+      expect(html).not.toContain('-webkit-text-stroke')
+      expect(html).not.toContain('WebkitTextStroke')
+      expect(html).not.toContain('paint-order')
+    }
+  })
+
+  it('REQ-0313 — the shadow left the DOM too, so it cannot paint over the ring', () => {
+    const html = markup({ shadowDepth: 8, shadowColor: '#000000', shadowAlpha: 100 })
+    expect(html).not.toContain('text-shadow')
   })
 
   it('karaoke: the unspoken spans carry the opacity, matching `\\2a`', () => {

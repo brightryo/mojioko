@@ -7,7 +7,7 @@ import { getLibassScaleFor, getCmapCoverageFor, getTofuSubstituteFor, loadSubtit
 import { substituteMissingGlyphs } from '../../../shared/glyph-substitute'
 import { hexWithOpacity } from '../../../shared/alpha'
 import { useFontCacheVersionStore } from '@/stores/font-cache-version-store'
-import { useEffect } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useSettingsStore } from '@/stores/settings-store'
 import { getFontMeta, isFontId, resolveRenderableFontId, type FontId } from '../../../shared/fonts'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
@@ -15,7 +15,7 @@ import { useAppEnvStore } from '@/stores/app-env-store'
 import { canSelectFontInTier } from '@/lib/font-tier'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
-import { computePreviewOutline } from '@/lib/preview-outline'
+import { measureRuns, computeRingBox, prepareCanvas, paintRing, paintShadow } from '@/lib/outline-ring'
 // REQ-0311 §4 — experimental karaoke sweep; delete with the feature.
 import { sweepWordTimings } from '../../../shared/karaoke-sweep'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
@@ -33,26 +33,6 @@ import {
   EMPHASIS_DEFAULT_COLOR,
 } from '../../../shared/emphasis'
 import type { WordSpan } from '../../../shared/types'
-
-/**
- * REQ-0277 §2 — convert `#RRGGBB` + alpha (0-1 float) to an `rgba(...)`
- * CSS string.  Used by the drop-shadow builder so the shadow colour
- * can carry its own opacity independent of the text fill.  Silently
- * returns solid black if the hex is malformed (defensive; the
- * ColorPicker validator upstream guarantees the 6-hex form).
- */
-function hexToRgba(hex: string, alpha01: number): string {
-  const m = /^#([0-9a-f]{6})$/i.exec(hex)
-  if (!m) return `rgba(0, 0, 0, ${alpha01})`
-  const n = parseInt(m[1], 16)
-  const r = (n >> 16) & 0xff
-  const g = (n >> 8) & 0xff
-  const b = n & 0xff
-  return `rgba(${r}, ${g}, ${b}, ${alpha01})`
-}
-
-// REQ-0311 §3 — `MIN_VISIBLE_OUTLINE_PX` moved to `@/lib/preview-outline`
-// alongside the rest of the outline geometry.  Value and behaviour unchanged.
 
 /**
  * REQ-20260614-001 補遺⑳ — empirically-derived libass line-height formula.
@@ -206,25 +186,18 @@ export function estimateOverlayHeightPx(
  * so without this correction the preview renders text larger than the output
  * video (≈19 chars vs 27).
  *
- * Outline rendering uses `-webkit-text-stroke` with `paint-order: stroke fill`.
- * The stroke is painted first and then the fill is drawn on top, so the inside
- * half of the (centered) stroke is covered by the fill and only the OUTSIDE
- * half remains visible.  Doubling the stroke width therefore leaves exactly
- * `outlinePx` of stroke visible outside the glyph — matching how libass paints
- * outlines around (not into) each glyph.
+ * Outline rendering is a CANVAS RING behind the text (REQ-0313), not a CSS
+ * stroke.  `-webkit-text-stroke` is centred on the glyph, so the old model only
+ * looked right while an opaque fill masked the stroke's inner half — an
+ * implicit dependency that broke under REQ-0310 opacity and again under
+ * REQ-0311 `\kf`.  The canvas strokes at `2 * outlinePx` and then punches the
+ * glyph out with `destination-out`, leaving exactly `outlinePx` outside the
+ * glyph and nothing inside, which is the shape libass paints.  See
+ * `@/lib/outline-ring`.
  *
- * Outline size uses the plain container/video `scale`, with a floor applied to
- * the resulting OUTPUT pixel value (`MIN_VISIBLE_OUTLINE_PX`) — not to the
- * scale factor itself.  Rationale:
- *   - An earlier version floored the scale (`max(scale, 0.5)`).  At typical
- *     preview scales (≈0.17–0.26) that nearly doubled the outline relative to
- *     the text, making thickness=3 look thick enough to fill the glyph while
- *     the actual output renders ≈6 % outline/cap-height ratio.
- *   - Flooring the absolute pixel value instead leaves thicknesses ≥ 2 at
- *     their natural `outlineThicknessPx * scale`, matching the libass output
- *     proportionally, and only nudges thickness = 1 up to 0.5 px so it stays
- *     barely visible (would otherwise be sub-pixel and indistinguishable
- *     from 0 at small previews).
+ * Outline size uses the plain container/video `scale` with NO floor: a floor
+ * made thin outlines render thicker than the burn-in at small preview scales,
+ * and canvas antialiases a sub-pixel ring correctly anyway.
  *
  * libassScale is intentionally NOT applied to the outline — outline thickness
  * is an absolute video-pixel measurement (relative to PlayResY) in ASS, not a
@@ -318,17 +291,18 @@ export function SubtitleOverlay({
   // the same `scale` as the text so the outline/glyph ratio matches the libass
   // output.
   //
-  // REQ-0311 §3 — the geometry moved to `computePreviewOutline` so it can be
-  // unit-tested.  Unchanged at textAlpha 100 % (measured exact against libass);
-  // below that it clamps the inward bleed so hollow text cannot render solid.
-  // See that module's header for the measurements and for why this is a
-  // stopgap rather than a fix.
-  const { outlinePx, strokeWidthPx } = computePreviewOutline({
-    outlineThicknessPx: entry.outlineThicknessPx,
-    scale,
-    fontSizeCssPx: fontSizePx,
-    textAlphaPercent: entry.textAlpha,
-  })
+  // REQ-0313 — the outline is no longer drawn by the DOM at all.  It is a
+  // canvas ring painted behind the text (see `@/lib/outline-ring`), so this is
+  // simply "how far the ring reaches outward", in preview px, and it no longer
+  // depends on the fill in any way.
+  //
+  // REQ-0311's `computePreviewOutline` clamp is gone with the module: it only
+  // existed because a CSS centred stroke bled inward, which the canvas ring
+  // does not do.  The old `MIN_VISIBLE_OUTLINE_PX = 0.5` floor is gone too —
+  // it made thin outlines render THICKER than the burn-in at small preview
+  // scales, which is exactly the parity REQ-0313 asks for; canvas antialiases
+  // sub-pixel strokes properly, so the floor is no longer buying legibility.
+  const outlinePx = Math.max(0, entry.outlineThicknessPx * scale)
 
   // REQ-20260613-016 Phase 6 — pinned rows render at their own ASS-space
   // (posX, posY), independent of MarginV / alignment.  The alignment
@@ -440,16 +414,16 @@ export function SubtitleOverlay({
   const shadowDepthClamped = Math.max(0, Math.min(SHADOW_DEPTH_MAX_PX, entry.shadowDepth ?? 0))
   const shadowActive = shadowDepthClamped > 0 && !bgEnabled
   const shadowDepthPx = shadowActive ? shadowDepthClamped * scale : 0
-  const shadowColorCss = shadowActive
-    ? hexToRgba(entry.shadowColor ?? '#000000', (entry.shadowAlpha ?? 100) / 100)
-    : ''
+  // REQ-0313 — the shadow canvas takes an OPAQUE colour and the canvas ELEMENT
+  // carries the alpha.  Baking alpha into the fill would darken every place two
+  // glyphs' shadows overlap, which libass never does.
+  const shadowColorOpaque = entry.shadowColor ?? '#000000'
+  const shadowAlpha01 = Math.max(0, Math.min(1, (entry.shadowAlpha ?? 100) / 100))
 
   // REQ-0278 — glow (3-layer text-shadow stack) was removed here.
   // See SPECIFICATION.md §11 for the deletion rationale.
-  const dropShadow = shadowActive && shadowDepthPx > 0
-    ? `${shadowDepthPx}px ${shadowDepthPx}px 0 ${shadowColorCss}`
-    : ''
-  const textShadowCombined = dropShadow || undefined
+  // REQ-0313 — the CSS `text-shadow` builders are gone with the DOM stroke;
+  // the shadow is painted on its own canvas below the ring.
 
   // REQ-20260613-016 Phase 6 — when the parent supplies onPointerDown the
   // overlay becomes interactive: cursor=move, pointer-events-auto, and the
@@ -621,8 +595,16 @@ export function SubtitleOverlay({
   // container in the unpinned case.  When the row has a background, the
   // same wrapper carries the bg styles (per-line clone via
   // `box-decoration-break: clone`).
+  // REQ-0313 — `position: relative` + `zIndex: 1` puts the text ABOVE the two
+  // outline canvases.  Absolutely-positioned siblings otherwise paint over
+  // inline content regardless of DOM order, and a negative z-index on the
+  // canvases would risk dropping them behind an ancestor's background whenever
+  // the outer span happens not to create a stacking context.  `relative` does
+  // not alter inline layout.
   const textWrapperStyle: React.CSSProperties = bgEnabled
     ? {
+        position:                 'relative',
+        zIndex:                   1,
         display:                  'inline',
         backgroundColor:          bgColor,
         padding:                  `${2 * scale}px ${6 * scale}px`,
@@ -630,10 +612,103 @@ export function SubtitleOverlay({
         boxDecorationBreak:       'clone',
         WebkitBoxDecorationBreak: 'clone',
       }
-    : { display: 'inline' }
+    : { position: 'relative', zIndex: 1, display: 'inline' }
+  // REQ-0313 — canvas outline ring.  Painted from the LIVE DOM layout rather
+  // than a second text-layout implementation: `measureRuns` reads each run's
+  // rect and computed font, so line breaks, emphasis size changes, tofu
+  // substitution and the preview scale are all inherited for free and cannot
+  // drift from what the user sees.
+  //
+  // Runs in a layout effect (after DOM mutation, before paint) so the ring is
+  // never one frame behind the text.  It does NOT run per playback frame: the
+  // karaoke/fade rAF writes styles directly via the DOM and never re-renders
+  // this component, so colour changes cost nothing here.
+  const outerElRef = useRef<HTMLSpanElement | null>(null)
+  const ringCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const shadowCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const measureCtxRef = useRef<CanvasRenderingContext2D | null>(null)
+
+  function setOuterRef(el: HTMLSpanElement | null) {
+    outerElRef.current = el
+    if (typeof outerSpanRef === 'function') outerSpanRef(el)
+    else if (outerSpanRef) (outerSpanRef as React.MutableRefObject<HTMLSpanElement | null>).current = el
+  }
+
+  useLayoutEffect(() => {
+    const outer = outerElRef.current
+    const ringCanvas = ringCanvasRef.current
+    const shadowCanvas = shadowCanvasRef.current
+    if (!outer || !ringCanvas || !shadowCanvas) return
+    const clear = (c: HTMLCanvasElement) => {
+      if (c.width !== 0) c.width = 0
+      if (c.height !== 0) c.height = 0
+    }
+    const wantRing = showOutline && outlinePx > 0
+    const wantShadow = shadowActive && shadowDepthPx > 0
+    if (!wantRing && !wantShadow) {
+      clear(ringCanvas)
+      clear(shadowCanvas)
+      return
+    }
+    const wrapper = outer.querySelector<HTMLElement>('[data-subtitle-text-wrapper]')
+    if (!wrapper) return
+    if (!measureCtxRef.current) {
+      measureCtxRef.current = document.createElement('canvas').getContext('2d')
+    }
+    const mctx = measureCtxRef.current
+    if (!mctx) return
+
+    // `getClientRects()` reports VIEWPORT boxes.  Under a rotation those are
+    // axis-aligned bounding boxes whose corners are not the box's corners, so
+    // the rotation is neutralised for the duration of the measurement and the
+    // canvases — being children of the same span — get it re-applied by CSS.
+    // Only translations remain, and those cancel in the subtraction below.
+    const prevTransform = outer.style.transform
+    if (rotationDeg !== 0) outer.style.transform = 'none'
+    const originRect = outer.getBoundingClientRect()
+    const { runs, extents } = measureRuns(wrapper, originRect.left, originRect.top, mctx)
+    if (rotationDeg !== 0) outer.style.transform = prevTransform
+
+    const box = computeRingBox(
+      runs,
+      extents,
+      wantRing ? outlinePx : 0,
+      wantShadow ? shadowDepthPx : 0,
+    )
+    if (!box) {
+      clear(ringCanvas)
+      clear(shadowCanvas)
+      return
+    }
+    const dpr = window.devicePixelRatio || 1
+
+    if (wantShadow) {
+      const sctx = prepareCanvas(shadowCanvas, box, dpr)
+      if (sctx) {
+        paintShadow(sctx, runs, wantRing ? outlinePx : 0, shadowDepthPx, shadowColorOpaque)
+        shadowCanvas.style.opacity = String(shadowAlpha01)
+      }
+    } else {
+      clear(shadowCanvas)
+    }
+
+    if (wantRing) {
+      const rctx = prepareCanvas(ringCanvas, box, dpr)
+      if (rctx) {
+        paintRing(rctx, runs, outlinePx, entry.outlineColorHex)
+        // `a` as an ELEMENT opacity, so overlapping rings composite once.
+        ringCanvas.style.opacity = String(
+          Math.max(0, Math.min(1, (entry.outlineAlpha ?? 100) / 100)),
+        )
+      }
+    } else {
+      clear(ringCanvas)
+    }
+  })
+
   return (
     <span
-      ref={outerSpanRef}
+      ref={setOuterRef}
       className={
         interactive
           ? 'absolute pointer-events-auto cursor-move select-none group'
@@ -663,11 +738,13 @@ export function SubtitleOverlay({
         color:      karaokeActive
           ? karaokeBaseColorResolved
           : hexWithOpacity(entry.textColorHex, entry.textAlpha),
-        WebkitTextStrokeWidth: showOutline ? `${strokeWidthPx}px` : undefined,
-        WebkitTextStrokeColor: showOutline
-          ? hexWithOpacity(entry.outlineColorHex, entry.outlineAlpha)
-          : undefined,
-        paintOrder: 'stroke fill',
+        // REQ-0313 — NO `-webkit-text-stroke` here, deliberately.  The outline
+        // is a canvas ring behind this text.  A CSS stroke is centred on the
+        // glyph, so it only looked correct while an opaque fill masked its
+        // inner half; that assumption broke under REQ-0310 opacity and again
+        // under REQ-0311 `\kf` (whose `background-clip: text` fill paints
+        // BELOW a stroke and so cannot mask at all).  Keeping the outline out
+        // of the text's own paint makes it independent of the fill technique.
         whiteSpace: 'pre',
         transform,
         transformOrigin: rotationDeg !== 0 ? 'center center' : undefined,
@@ -681,12 +758,34 @@ export function SubtitleOverlay({
         // box; `undefined` otherwise.  Glow used to layer additional
         // shadows on top of this line (REQ-0277 §3) but was removed
         // in REQ-0278 — see SPECIFICATION.md §11 for why.
-        textShadow: textShadowCombined,
+        // REQ-0313 — shadow moved to its own canvas beneath the ring so the
+        // libass paint order (shadow -> outline -> fill) survives; a DOM
+        // `text-shadow` would paint above the ring canvas.
         // `opacity` is intentionally NOT set here — see comment above
         // the prop list; the parent's rAF loop writes it via DOM API
         // and React never touches the value.
       }}
     >
+      {/* REQ-0313 — outline ring + drop shadow.  Two canvases so each keeps its
+          own alpha and so the libass paint order (shadow, outline, fill) holds:
+          shadow first in DOM, then the ring, then the text above both via the
+          wrapper's z-index.  `width`/`height` start at 0 and are sized by the
+          layout effect; a cue with neither effect leaves them at 0 and paints
+          nothing. */}
+      <canvas
+        ref={shadowCanvasRef}
+        aria-hidden="true"
+        width={0}
+        height={0}
+        className="absolute pointer-events-none"
+      />
+      <canvas
+        ref={ringCanvasRef}
+        aria-hidden="true"
+        width={0}
+        height={0}
+        className="absolute pointer-events-none"
+      />
       {/* REQ-0286 §3 — karaoke render.  When karaoke is active
           (paid tier + toggle-on + words-valid), we split the cue into
           per-word `<span>` elements carrying `data-karaoke-word-idx`
@@ -711,7 +810,7 @@ export function SubtitleOverlay({
         <span
           ref={spanRef}
           data-karaoke-cue-id={entry.id}
-          style={textWrapperStyle}
+          data-subtitle-text-wrapper="" style={textWrapperStyle}
         >
           {/* REQ-0289 — `karaokeWords` is the resolved WordSpan[] —
               either the real per-word list (Whisper timing) or the
@@ -776,7 +875,7 @@ export function SubtitleOverlay({
            in the emphasis colour + size.  No `data-karaoke-*` attributes so
            the rAF karaoke driver never touches these spans.  Tofu
            substitution is applied per run (REQ-0297). */
-        <span ref={spanRef} style={textWrapperStyle}>
+        <span ref={spanRef} data-subtitle-text-wrapper="" style={textWrapperStyle}>
           {emphasisTokens.map((tok, i) => {
             if (tok.kind === 'break') return <br key={i} />
             const shown = cmapCoverage !== null && tofuSubstitute !== null
@@ -797,7 +896,7 @@ export function SubtitleOverlay({
           })}
         </span>
       ) : (
-        <span ref={spanRef} style={textWrapperStyle}>
+        <span ref={spanRef} data-subtitle-text-wrapper="" style={textWrapperStyle}>
           {renderedText}
         </span>
       )}
