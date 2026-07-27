@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "build:win": "rimraf out dist && npm run build && electron-builder --win",
+    "build:win": "npm run verify:sidecar && rimraf out dist && npm run build && electron-builder --win",
     "typecheck": "tsc --noEmit -p tsconfig.node.json --composite false && tsc --noEmit -p tsconfig.web.json --composite false",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --ignore-path .gitignore",
     "format": "prettier --write .",
@@ -16,6 +16,8 @@
     "scan:pii": "node scripts/pii-scan.mjs",
     "verify:outline-ring": "node scripts/verify-outline-ring/index.mjs",
     "verify:ring-paint": "node scripts/verify-ring-paint/index.mjs",
+    "verify:sidecar": "node scripts/verify-sidecar-fresh.mjs",
+    "sidecar:stamp": "node scripts/verify-sidecar-fresh.mjs --write",
     "setup:hooks": "git config core.hooksPath scripts/hooks",
     "msix:register": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/msix-register-sideload.ps1",
     "msix:register:skip-build": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/msix-register-sideload.ps1 -SkipBuild"

@@ -122,6 +122,18 @@ if ($SkipBuild) {
         Fail "-SkipBuild requested but $appxPath does not exist."
     }
 } else {
+    # REQ-0334 §1 — the PyInstaller sidecar staleness gate.  It lives in
+    # `npm run build:win`, but this script packages via `npm run build` +
+    # `npx electron-builder` directly and would otherwise bypass it.  That
+    # matters specifically here: REQ-0287's 9-day-stale sidecar was
+    # reproduced on an MSIX build.  Conservative by construction — it only
+    # exits non-zero when the sources provably differ from the stamp.
+    Write-Step "0/4 sidecar staleness check"
+    npm run verify:sidecar
+    if ($LASTEXITCODE -ne 0) {
+        Fail "sidecar is stale (exit $LASTEXITCODE). Rebuild it per dev-docs/BUILD_GUIDE.md §4, then re-run."
+    }
+
     Write-Step "1/4 electron-vite build (renderer + main)"
     npm run build
     if ($LASTEXITCODE -ne 0) { Fail "npm run build failed (exit $LASTEXITCODE)." }
