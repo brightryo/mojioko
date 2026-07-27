@@ -36,7 +36,7 @@ import { formatDuration } from '@/lib/time'
 import { formatBytes } from '@/lib/format'
 import type { SubtitleEntry as SubtitleEntryType, WhisperModelId } from '../../shared/types'
 import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
-import { getAnchorAssPosition } from '@/lib/preview-coords'
+import { styleFieldsFromDefaults } from '@/lib/style-defaults-to-entry'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
@@ -525,34 +525,22 @@ export default function Step1Route(_: Step1RouteProps) {
     // row (i.e. the renderer's neutral "off / default" behaviour
     // for that field) so pre-REQ-0295 setups produce byte-identical
     // entries to before.
-    const layoutH = runDefaults.horizontalPosition ?? makeEntryLayoutDefaults().horizontalPosition
-    const layoutV = runDefaults.verticalPosition ?? makeEntryLayoutDefaults().verticalPosition
-    const layoutMV = runDefaults.verticalMarginPx ?? makeEntryLayoutDefaults().verticalMarginPx
-    // REQ-0295 §1 「オフセット」— when the user configured a non-zero
-    // default offset, seed `posX` / `posY` on every new row by adding
-    // the offset to the alignment anchor for the current video
-    // dimensions.  When both offsets are 0 (or undefined), leave
-    // `posX` / `posY` undefined so the row uses pure alignment-based
-    // positioning (no `\pos` tag) — byte-identical to pre-REQ-0295.
-    const offX = runDefaults.posOffsetX ?? 0
-    const offY = runDefaults.posOffsetY ?? 0
-    let seededPosX: number | undefined
-    let seededPosY: number | undefined
-    if ((offX !== 0 || offY !== 0) && video?.widthPx && video?.heightPx) {
-      const anchor = getAnchorAssPosition(layoutH, layoutV, layoutMV, video.widthPx, video.heightPx)
-      seededPosX = anchor.x + offX
-      seededPosY = anchor.y + offY
-    }
+    // REQ-0334 §2-3 — the whole "defaults → cue style" projection now lives
+    // in ONE exhaustively-typed place.  Adding a field to
+    // `TranscriptionDefaults` without classifying it there is a `tsc` error,
+    // and Step 1's style preview calls this same function, so the preview
+    // cannot fall behind this seeding again.  Layout fallbacks and the
+    // 「オフセット」→ absolute `posX/posY` conversion moved inside it.
+    const styleFields = styleFieldsFromDefaults(runDefaults, {
+      videoWidthPx: video?.widthPx,
+      videoHeightPx: video?.heightPx,
+    })
 
     const entries: SubtitleEntryType[] = segments.map((seg, i) => {
       const base = {
         startSec: seg.startSec,
         endSec: seg.endSec,
         text: seg.text,
-        fontSizePx: runDefaults.fontSizePx,
-        textColorHex: runDefaults.textColorHex,
-        outlineColorHex: runDefaults.outlineColorHex,
-        outlineThicknessPx: runDefaults.outlineThicknessPx,
         fadeDurationSec: settingsFadeDurationSec,
         ...animationFieldsForNewCue(transcriptionDefaults),
         fontId: runFontId,
@@ -567,45 +555,17 @@ export default function Step1Route(_: Step1RouteProps) {
         // seeded from ENTRY_LAYOUT_DEFAULTS.  `makeEntryLayoutDefaults`
         // returns a fresh object literal per call so each row owns its
         // own subtitleBackground — mutating one row never aliases
-        // another.  REQ-0295 — the layout triple (H / V / margin) is
-        // OVERRIDDEN by the user's TranscriptionDefaults when set, so
-        // the makeEntryLayoutDefaults call is only for the background
-        // sub-object (background stays BURNIN_DEFAULTS since it's not
-        // a REQ-0295 field per owner decision 2026-07-26).
+        // another.  This call is now ONLY for the background sub-object
+        // (background stays BURNIN_DEFAULTS since it's not a REQ-0295
+        // field per owner decision 2026-07-26); the layout triple it also
+        // returns is immediately overridden by `styleFields` below, which
+        // applies the user's TranscriptionDefaults on top.  Order matters.
         ...makeEntryLayoutDefaults(),
-        horizontalPosition: layoutH,
-        verticalPosition: layoutV,
-        verticalMarginPx: layoutMV,
-        // REQ-0332 — line spacing (行間).  Copied raw: an untouched setting
-        // leaves the cue field `undefined`, which every renderer reads as
-        // 0 % and therefore as "exactly the pre-REQ-0332 output".
-        lineSpacingPercent: runDefaults.lineSpacingPercent,
-        // REQ-0295 — additive Phase A / Phase B defaults.  Copy raw
-        // (undefined stays undefined so renderers fall back to their
-        // per-field neutral defaults).
-        shadowDepth: runDefaults.shadowDepth,
-        shadowColor: runDefaults.shadowColor,
-        shadowAlpha: runDefaults.shadowAlpha,
-        // REQ-0310 — text / outline opacity.  Copied raw like the rest of this
-        // block, so an untouched setting leaves the cue field `undefined` and
-        // the renderers fall back to fully opaque.
-        textAlpha: runDefaults.textAlpha,
-        outlineAlpha: runDefaults.outlineAlpha,
-        karaokeEnabled: runDefaults.karaokeEnabled,
-        karaokeHighlightColor: runDefaults.karaokeHighlightColor,
-        // REQ-0305 — keyword-emphasis defaults.  The master toggle +
-        // colour + size seed from run defaults; per-word selection is
-        // inherently per-cue (chosen in the inspector), so no indices are
-        // seeded here.
-        keywordEmphasisEnabled: runDefaults.keywordEmphasisEnabled,
-        emphasisColorHex: runDefaults.emphasisColorHex,
-        emphasisScalePercent: runDefaults.emphasisScalePercent,
-        casing: runDefaults.casing,
-        rotation: runDefaults.rotation,
-        // Offset → absolute posX/posY seeded once per run using this
-        // video's dimensions (see `seededPosX/Y` above).
-        posX: seededPosX,
-        posY: seededPosY,
+        // REQ-0334 §2-3 — every style default in one spread.  The field
+        // list that used to be written out here is now the exhaustively
+        // typed map in `lib/style-defaults-to-entry.ts`, shared with Step
+        // 1's live style preview.
+        ...styleFields,
       }
       return {
         id: `t-${i}-${Date.now()}`,
