@@ -35,6 +35,7 @@ import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font
 // transient bulk-edit-bar slide-in/out (the bar moved to the right pane).
 import type { SubtitleEntry } from '../../shared/types'
 import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
+import { styleFieldsFromDefaults } from '@/lib/style-defaults-to-entry'
 import { NEW_ROW_DURATION_SEC, ENABLE_VIDEO_PREVIEW } from '../../shared/constants'
 import { VideoPreviewPanel } from '@/components/video-preview/video-preview-panel'
 import { AudioPreviewPanel } from '@/components/audio-preview/audio-preview-panel'
@@ -731,16 +732,22 @@ export default function Step2Route(_: Step2RouteProps) {
         startSec,
         endSec,
         text: '',
-        fontSizePx: defaults.fontSizePx,
-        textColorHex: defaults.textColorHex,
-        outlineColorHex: defaults.outlineColorHex,
-        outlineThicknessPx: defaults.outlineThicknessPx,
         fadeDurationSec: settingsFadeDurationSec,
         ...animationFieldsForNewCue(defaults),
         // REQ-20260613-016 / v1.2.2 機能A: seed per-row layout + background
         // defaults at creation time.  Same pattern as the transcription
         // segment mapping in step1.tsx.
-        ...makeEntryLayoutDefaults()
+        ...makeEntryLayoutDefaults(),
+        // REQ-0335 §2 — this used to list four style fields by hand (size /
+        // colour / outline colour / outline width), so a row added here lost
+        // shadow, casing, rotation, line spacing, opacity, emphasis, karaoke
+        // and the offsets: it looked different from a transcribed row under
+        // the very same settings.  Now it is the SAME exhaustively-typed
+        // projection step1.tsx seeds transcribed rows with.
+        ...styleFieldsFromDefaults(defaults, {
+          videoWidthPx: video?.widthPx,
+          videoHeightPx: video?.heightPx,
+        }),
       }
       // REQ-079 #2: collision-resistant id.  Date.now() alone collides
       // when two rows are added within the same millisecond — both rows
@@ -982,18 +989,21 @@ export default function Step2Route(_: Step2RouteProps) {
     // (SRT text ≠ original transcript) — this is what the
     // `edited` filter counts.
     const layoutDefaults = makeEntryLayoutDefaults()
+    // REQ-0335 §2 — same exhaustively-typed projection the transcribe path
+    // uses, instead of the four hand-listed style fields that used to be here.
+    const importStyleFields = styleFieldsFromDefaults(defaults, {
+      videoWidthPx: video?.widthPx,
+      videoHeightPx: video?.heightPx,
+    })
     const newEntries: SubtitleEntry[] = kept.map((cue) => {
       const base = {
         startSec: cue.startSec,
         endSec: cue.endSec,
         text: cue.text,
-        fontSizePx: defaults.fontSizePx,
-        textColorHex: defaults.textColorHex,
-        outlineColorHex: defaults.outlineColorHex,
-        outlineThicknessPx: defaults.outlineThicknessPx,
         fadeDurationSec: settingsFadeDurationSec,
         ...animationFieldsForNewCue(defaults),
         ...layoutDefaults,
+        ...importStyleFields,
       }
       const id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
         ? `srt-${crypto.randomUUID()}`
