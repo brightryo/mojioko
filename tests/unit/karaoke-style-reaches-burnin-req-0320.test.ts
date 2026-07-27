@@ -38,15 +38,15 @@ function karaokeCue(): SubtitleEntry {
 }
 
 describe('REQ-0320 §1 — the ASS writer honours karaokeStyle', () => {
-  it('sweep emits \kf', () => {
+  it('sweep emits \\kf', () => {
     const ass = generateAss([karaokeCue()], VIDEO, undefined as never, undefined, undefined, false, 'sweep')
-    expect(ass).toContain('\kf')
+    expect(ass).toContain('\\kf')
   })
 
-  it('switch emits \k and never \kf', () => {
+  it('switch emits \\k and never \\kf', () => {
     const ass = generateAss([karaokeCue()], VIDEO, undefined as never, undefined, undefined, false, 'switch')
-    expect(ass).toContain('\k')
-    expect(ass).not.toContain('\kf')
+    expect(ass).toContain('\\k')
+    expect(ass).not.toContain('\\kf')
   })
 
   it('the two styles produce DIFFERENT output — the flag is not inert', () => {
