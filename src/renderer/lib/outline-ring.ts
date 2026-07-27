@@ -34,10 +34,14 @@
  * what the DOM already laid out.
  *
  * Consequences that fall out for free:
- *   - `\N` line breaks, because each text node reports its own line's rect
  *   - emphasis font-size changes, because each run carries its own computed font
  *   - tofu substitution (REQ-0297), because the DOM text node IS the substituted text
  *   - preview scale, because the computed font size is already scaled
+ *
+ * Line breaks are NOT free, and assuming they were caused REQ-0315 §1: the
+ * plain path encodes them as real newlines inside ONE text node (`white-space:
+ * pre`), so a Range over it spans several line boxes and its bounding rect is
+ * their union.  `measureRuns` therefore emits one run per line fragment.
  *
  * The one thing the DOM does NOT hand over is `text-transform`: the text node
  * still holds the original casing while the rendering is uppercased, so the
@@ -253,30 +257,51 @@ export function measureRuns(
     const cs = getComputedStyle(parent)
     const text = applyTextTransform(raw, cs.textTransform)
     if (text.trim().length === 0) continue // whitespace-only: no ink to outline
-    range.selectNodeContents(node)
-    const rect = range.getBoundingClientRect()
-    if (rect.width <= 0 || rect.height <= 0) continue
     const font =
       cs.font && cs.font.length > 0
         ? cs.font
         : `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
-    // Baseline from the inline box: split the box by the font's own
-    // ascent/descent ratio rather than assuming the box height equals
-    // ascent+descent, so a browser that pads the line box differently still
-    // lands on the right baseline.
     measureCtx.font = font
     const m = measureCtx.measureText(text)
     const asc = m.fontBoundingBoxAscent
     const desc = m.fontBoundingBoxDescent
     const denom = asc + desc
-    const baselineY =
-      denom > 0 ? rect.top - originTop + (rect.height * asc) / denom : rect.bottom - originTop
-    runs.push({ text, font, x: rect.left - originLeft, baselineY })
-    extents.push({
-      top: rect.top - originTop,
-      bottom: rect.bottom - originTop,
-      width: rect.width,
-    })
+
+    // REQ-0315 §1 — ONE RUN PER LINE BOX, not one per text node.
+    //
+    // The plain render path builds its line breaks as real newline characters
+    // inside a SINGLE text node and lets `white-space: pre` break them
+    // (`subtitle-overlay.tsx` turns the ASS `\N` sentinel into a newline).  A
+    // `Range` over such a node therefore spans several line boxes, and
+    // `getBoundingClientRect()` collapses them into a UNION box whose `left`
+    // is the widest line's left and whose `height` covers every line.  Using
+    // that box put the ring left of the narrower line and far below the first
+    // line's baseline, while `strokeText` — which does not break lines — drew
+    // the whole cue as one long line on top of a wrapped one: the reported
+    // "doubled, offset down and left" outline (REQ-0315 §1).
+    //
+    // Splitting on the newline gives exactly the line fragments `pre` produces,
+    // so each gets its own rect, its own x and its own baseline.  A node with
+    // no newline takes the single-segment path and is byte-identical to before.
+    const segments = text.split('\n')
+    let offset = 0
+    for (const segment of segments) {
+      const start = offset
+      offset += segment.length + 1 // plus the \n that terminated it
+      if (segment.trim().length === 0) continue
+      range.setStart(node, start)
+      range.setEnd(node, start + segment.length)
+      const rect = range.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) continue
+      const baselineY =
+        denom > 0 ? rect.top - originTop + (rect.height * asc) / denom : rect.bottom - originTop
+      runs.push({ text: segment, font, x: rect.left - originLeft, baselineY })
+      extents.push({
+        top: rect.top - originTop,
+        bottom: rect.bottom - originTop,
+        width: rect.width,
+      })
+    }
   }
   return { runs, extents }
 }
