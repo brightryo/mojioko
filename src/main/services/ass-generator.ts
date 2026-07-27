@@ -6,6 +6,7 @@ import { buildKaraokeAssText, splitWordsAtHardBreaks } from '../../shared/karaok
 // REQ-0311 §4 / REQ-0315 §2 — the sweep emitter.
 import { buildKaraokeSweepAssText } from '../../shared/karaoke-sweep'
 import type { KaraokeStyle } from '../../shared/karaoke-style'
+import { resolveKaraokeStyle } from '../../shared/karaoke-style'
 import { areWordsValidForText } from '../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
 import { assAlphaValue, isFullyOpaque, OPACITY_MAX_PERCENT } from '../../shared/alpha'
@@ -181,6 +182,12 @@ export function generateAss(
    * `karaoke-sweep.ts`.  The parameter still DEFAULTS to `'switch'` so existing
    * callers and unit tests are unaffected — which is exactly what masked
    * REQ-0320 §1 when the renderer stopped sending the value.
+   *
+   * REQ-0322 §3 — this is now only the **default for cues that did not
+   * choose one**.  A cue carrying `entry.karaokeStyle` overrides it, so the
+   * two tags can be mixed inside a single ASS file.  Resolution goes through
+   * `resolveKaraokeStyle` so the preview (`subtitle-overlay.tsx`) and this
+   * writer answer the question identically.
    */
   karaokeStyle: KaraokeStyle = 'switch',
 ): string {
@@ -537,8 +544,10 @@ export function generateAss(
         // REQ-0311 §4 — the ONE branch that selects the sweep emitter.  Both
         // take the same arguments; only the tag and the duration rule differ.
         // Deleting the sweep feature means deleting this ternary's false arm.
+        // REQ-0322 §3 — per-cue first, the request-level value as default.
+        const cueKaraokeStyle = resolveKaraokeStyle(e.karaokeStyle, karaokeStyle)
         const karaokeBody =
-          karaokeStyle === 'sweep'
+          cueKaraokeStyle === 'sweep'
             ? buildKaraokeSweepAssText(
                 karaokeWords,
                 e.startSec,

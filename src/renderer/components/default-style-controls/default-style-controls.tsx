@@ -11,6 +11,9 @@ import { StyleRow } from '@/components/subtitle-table/style-row'
 import { SegmentGroup } from '@/components/subtitle-table/segment-group'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, MARGIN_V_MIN_PX, MARGIN_V_MAX_PX } from '../../../shared/constants'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
+import { coerceKaraokeStyle } from '../../../shared/karaoke-style'
+import { useSettingsStore } from '@/stores/settings-store'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   canUseKeywordEmphasisInTier,
   EMPHASIS_DEFAULT_COLOR,
@@ -158,6 +161,9 @@ export function DefaultStyleControls({
 }: DefaultStyleControlsProps) {
   const { t } = useTranslation(['step1', 'step2', 'common'])
   const showKaraokeUi = canUseKaraokeInTier(isMsix)
+  // REQ-0322 §3 — app-wide new-cue default for the karaoke display style.
+  const karaokeStyleDefault = useSettingsStore((st) => st.karaokeStyle)
+  const setKaraokeStyleDefault = useSettingsStore((st) => st.setKaraokeStyle)
   const showEmphasisUi = canUseKeywordEmphasisInTier(isMsix)
   // REQ-0298 §4-1 — segButton removed; H/V rows use the shared
   // SegmentGroup component from `@/components/subtitle-table/segment-group`
@@ -268,6 +274,36 @@ export function DefaultStyleControls({
               heading={t('step2:styleCell.karaokeHighlightColor')}
             />
           </div>
+        </SettingsStyleRow>
+      )}
+
+      {/* REQ-0322 §3 — karaoke display style, the DEFAULT for cues that
+          have not chosen one.  Sits here for the same reason every other
+          row does: it is a style default, and REQ-0322 §3 explicitly says
+          no show/hide prop — it appears in Step 1's dialog and in the
+          settings tab alike, exactly like its neighbours.
+
+          Unlike its neighbours it is bound to `useSettingsStore` rather
+          than to `defaults` (TranscriptionDefaults).  The store field
+          pre-dates per-cue support and is app-wide; a cue resolves its
+          style against it at RENDER time, so it behaves as a live default
+          rather than a value stamped into each new cue.  See RES-0322 §3
+          for the (deliberately deferred) question of whether it should
+          migrate into TranscriptionDefaults and become per-project. */}
+      {showKaraokeUi && (
+        <SettingsStyleRow label={t('step2:styleCell.karaokeStyleRowLabel')}>
+          <Select
+            value={karaokeStyleDefault}
+            onValueChange={(v) => setKaraokeStyleDefault(coerceKaraokeStyle(v))}
+          >
+            <SelectTrigger className="h-8 w-full" aria-label={t('step2:styleCell.karaokeStyleRowLabel')}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="switch">{t('step2:styleCell.karaokeStyleSwitch')}</SelectItem>
+              <SelectItem value="sweep">{t('step2:styleCell.karaokeStyleSweep')}</SelectItem>
+            </SelectContent>
+          </Select>
         </SettingsStyleRow>
       )}
 

@@ -3,6 +3,7 @@ import type { FontId } from './fonts'
 // REQ-0307 — the emphasis storage shape lives with its resolution logic in
 // `emphasis.ts`.  Type-only, so this does not create a runtime import cycle.
 import type { EmphasisSpan } from './emphasis'
+import type { KaraokeStyle } from './karaoke-style'
 export type { WhisperModelId }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +230,31 @@ export interface SubtitleEntryOriginal {
   karaokeEnabled?: boolean
   /** `#RRGGBB` — spoken/past words (maps to ASS PrimaryColour when karaoke on). */
   karaokeHighlightColor?: string
+
+  /**
+   * REQ-0322 §3 — per-cue karaoke animation style.
+   *
+   *   - `'switch'` — ASS `\k`: each word flips to the highlight colour at
+   *     its own start.  Two discrete states per word, no intermediate frame.
+   *   - `'sweep'`  — ASS `\kf`: the highlight wipes across each word over
+   *     its speech duration.  Continuous.
+   *
+   * `undefined` = **follow the new-cue default**
+   * (`useSettingsStore.karaokeStyle`, itself defaulting to
+   * `KARAOKE_STYLE_DEFAULT` = `'sweep'`).  Resolve with
+   * `resolveKaraokeStyle(entry.karaokeStyle, fallback)` — never with
+   * `coerceKaraokeStyle`, which collapses `undefined` to a hard-coded
+   * default and would freeze today's choice into every untouched cue.
+   *
+   * Deliberately NOT seeded at cue-creation time (unlike the v1.2.2
+   * layout fields' 作成時コピー方式): staying `undefined` is what makes
+   * the settings value behave as a *default* rather than a one-shot
+   * stamp — changing it still moves every cue the user never touched.
+   * Pre-REQ-0322 project files therefore need no migration.
+   *
+   * Ignored entirely when `karaokeEnabled` is not true.
+   */
+  karaokeStyle?: KaraokeStyle
 
   /**
    * REQ-0285 Phase B foundation — per-word timestamps captured by

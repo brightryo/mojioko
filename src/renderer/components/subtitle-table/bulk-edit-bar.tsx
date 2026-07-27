@@ -11,8 +11,10 @@ import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slid
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 import { useSettingsStore } from '@/stores/settings-store'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
+import { coerceKaraokeStyle, type KaraokeStyle } from '../../../shared/karaoke-style'
 // REQ-0308 §3 — only the wrap-measurement helpers are imported now; the bulk
 // emphasis controls (and the constants they needed) are gone.
 import {
@@ -300,6 +302,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // the karaoke sweep now always uses each row's own `textColorHex`
   // for the unspoken half — there's no per-cue override to bulk-set.
   const [karaokeHighlightDraft, setKaraokeHighlightDraft] = useState<string>(KARAOKE_DEFAULT_HIGHLIGHT_COLOR)
+  // REQ-0322 §3 — seeded from the new-cue default so the Select opens on
+  // the value the user already considers "normal" for this project.
+  const [karaokeStyleDraft, setKaraokeStyleDraft] = useState<KaraokeStyle>(
+    () => useSettingsStore.getState().karaokeStyle,
+  )
 
   // REQ-047 #1: same persist-then-re-seed pattern as the colour drafts.
   // Previously the size input was uncontrolled and cleared on blur
@@ -732,6 +739,20 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             karaokeHighlightColor: karaokeHighlightDraft,
           }
         : { karaokeEnabled: false },
+      t('bulk.history.karaoke', { count: selectedRowIds.size }),
+    )
+  }
+
+  // REQ-0322 §3 — bulk karaoke display style.  Writes a CONCRETE value to
+  // every selected row (never `undefined`), because the point of the control
+  // is "make these rows all sweep / all switch" — clearing them back to
+  // "follow the default" is not a bulk operation the owner asked for, and
+  // silently writing `undefined` would look like the control did nothing.
+  function handleKaraokeStyleBulk(v: string) {
+    const next = coerceKaraokeStyle(v)
+    setKaraokeStyleDraft(next)
+    applyBulk(
+      { karaokeStyle: next },
       t('bulk.history.karaoke', { count: selectedRowIds.size }),
     )
   }
@@ -1238,6 +1259,30 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                   heading={t('styleCell.karaokeHighlightColor')}
                 />
               </div>
+            </StyleRow>
+          )}
+          {/* REQ-0322 §3 — karaoke display style became PER-CUE, which is
+              exactly what makes a bulk control meaningful: before, one
+              app-wide value already covered every row and this Select would
+              have been a duplicate of the settings tab.  Unlike the other
+              bulk controls there is no "unset" state to represent, so the
+              Select starts on the current default and applying it pins every
+              selected row to that style.  Same tier gate as the karaoke row
+              above (unreachable on free tier). */}
+          {canUseKaraokeInTier(useAppEnvStore((s) => s.isMsix) ?? false) && (
+            <StyleRow label={t('styleCell.karaokeStyleRowLabel')}>
+              <Select
+                value={karaokeStyleDraft}
+                onValueChange={handleKaraokeStyleBulk}
+              >
+                <SelectTrigger className="h-8 w-full" aria-label={t('styleCell.karaokeStyleRowLabel')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="switch">{t('styleCell.karaokeStyleSwitch')}</SelectItem>
+                  <SelectItem value="sweep">{t('styleCell.karaokeStyleSweep')}</SelectItem>
+                </SelectContent>
+              </Select>
             </StyleRow>
           )}
           {/* REQ-0308 §3 — the bulk keyword-emphasis row was REMOVED.  Which

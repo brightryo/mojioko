@@ -100,6 +100,7 @@ export const SUBTITLE_ENTRY_DUPLICATION = {
   // --- karaoke (REQ-0286 / REQ-0322 §3) -------------------------------
   karaokeEnabled: 'copy',
   karaokeHighlightColor: 'copy',
+  karaokeStyle: 'copy',
   words: 'deep-copy',
   // --- keyword emphasis (REQ-0305 / 0306 / 0307) ----------------------
   keywordEmphasisEnabled: 'copy',

@@ -22,7 +22,7 @@ import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-
 import { useSettingsStore } from '@/stores/settings-store'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
-import { coerceKaraokeStyle } from '../../../shared/karaoke-style'
+import { coerceKaraokeStyle, resolveKaraokeStyle } from '../../../shared/karaoke-style'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import {
@@ -114,8 +114,11 @@ export function TimelineBlockInspector({
   // activeFontId is stored as `undefined` = inherit).
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
-  const karaokeStyle = useSettingsStore((s) => s.karaokeStyle)
-  const setKaraokeStyle = useSettingsStore((s) => s.setKaraokeStyle)
+  // REQ-0322 §3 — the store value is now the DEFAULT for new cues; the
+  // authority for THIS cue is `entry.karaokeStyle`.  Resolved through the
+  // same helper the ASS writer and the preview overlay use.
+  const karaokeStyleDefault = useSettingsStore((s) => s.karaokeStyle)
+  const karaokeStyleResolved = resolveKaraokeStyle(entry.karaokeStyle, karaokeStyleDefault)
   // REQ-0125 — history-less preview writer used from the color picker's
   // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
   const updateEntryPreview = useProjectStore((s) => s.updateEntryPreview)
@@ -1246,16 +1249,24 @@ export function TimelineBlockInspector({
                 </div>
               </StyleRow>
             )}
-            {/* REQ-0311 §4 / REQ-0315 §2 — karaoke display style.  App-wide (not
-                per-cue), so `SubtitleEntry` stays untouched; the trade-off is
-                that all karaoke cues share one style.  Shown only while the cue
-                actually has karaoke on, so the row does not offer a control
-                that cannot affect it.  Default is sweep. */}
+            {/* REQ-0311 §4 / REQ-0315 §2 / REQ-0322 §3 — karaoke display style,
+                now PER-CUE.  The row stays here (it is a property of this
+                clip); the settings-tab copy of the same control is the
+                default for cues that have not chosen one.  Shown only while
+                the cue actually has karaoke on, so the row never offers a
+                control that cannot affect it.  `karaokeStyleResolved` shows
+                the inherited default rather than an empty Select — picking
+                the value already displayed still writes it, which is correct:
+                the user is pinning the cue to that style. */}
             {showKaraokeUi && entry.karaokeEnabled === true && (
               <StyleRow label={t('styleCell.karaokeStyleRowLabel')} stopControlClickPropagation>
                 <Select
-                  value={karaokeStyle}
-                  onValueChange={(v) => setKaraokeStyle(coerceKaraokeStyle(v))}
+                  value={karaokeStyleResolved}
+                  onValueChange={(v) =>
+                    applyStyleEdit(t('history.editKaraoke'), {
+                      karaokeStyle: coerceKaraokeStyle(v),
+                    })
+                  }
                   disabled={isFrozen}
                 >
                   <SelectTrigger className="h-8 w-full" aria-label={t('styleCell.karaokeStyleRowLabel')}>
