@@ -389,7 +389,7 @@ describe('REQ-0307 generateAss integration', () => {
       emphasisScalePercent: 130,
       emphasisSpans: [spanAt(text, 'hello')],
     })
-    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
+    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
     expect(line).toContain('\\fs130')
     expect(line).toContain('\\fs100')
     expect(line).toMatch(/\{\\fs130[^}]*\}hello\{/)
@@ -405,7 +405,7 @@ describe('REQ-0307 generateAss integration', () => {
       emphasisScalePercent: 130,
       emphasisSpans: [spanAt(text, 'fox', 1)],   // the SECOND "fox"
     })
-    const body = bodyOf(dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true)))
+    const body = bodyOf(dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')))
     // Everything up to the emphasis block is plain — so the first "fox" is not
     // wrapped — and exactly one emphasis open tag exists.
     expect(body).toMatch(/\}fox and \{\\fs130[^}]*\}fox\{\\fs100[^}]*\}$/)
@@ -420,7 +420,7 @@ describe('REQ-0307 generateAss integration', () => {
       keywordEmphasisEnabled: true, emphasisScalePercent: 130,
       emphasisSpans: [spanAt(text, 'fox', 0)],
     })
-    const body = bodyOf(dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true)))
+    const body = bodyOf(dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')))
     expect(body).toMatch(/^\{[^}]*\}\{\\fs130[^}]*\}fox\{\\fs100[^}]*\} and fox$/)
     expect(body.match(/\\fs130/g)).toHaveLength(1)
   })
@@ -433,7 +433,7 @@ describe('REQ-0307 generateAss integration', () => {
       keywordEmphasisEnabled: true, emphasisScalePercent: 130,
       emphasisSpans: [{ start: 4, end: 7, text: 'fox' }],
     })
-    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
+    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
     expect(line).toMatch(/\{\\fs130[^}]*\}fox\{/)
   })
 
@@ -447,7 +447,7 @@ describe('REQ-0307 generateAss integration', () => {
         { start: 4, end: 9, text: 'quick' },     // survives
       ],
     })
-    const body = bodyOf(dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true)))
+    const body = bodyOf(dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')))
     expect(body).toMatch(/\{\\fs130[^}]*\}quick\{/)
     expect(body.match(/\\fs130/g)).toHaveLength(1)
     assertNoBareOverrides(body)
@@ -460,7 +460,7 @@ describe('REQ-0307 generateAss integration', () => {
       keywordEmphasisEnabled: true,
       emphasisSpans: [spanAt(text, 'fence')],
     })
-    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
+    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
     expect(line).toMatch(/\{\\fs130[^}]*\}fence\{/)
   })
 
@@ -472,13 +472,13 @@ describe('REQ-0307 generateAss integration', () => {
       keywordEmphasisEnabled: true,
       emphasisSpans: [spanAt(text, 'fox')],
     })
-    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
+    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
     expect(line).toMatch(/\{\\fs130[^}]*\}fox\{/)
   })
 
   it('§3 — legacy REQ-0306 keywords still render (migrated, no throw)', () => {
     const entry = makeEntry({ keywordEmphasisEnabled: true, emphasisKeywords: ['hello'] })
-    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
+    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
     expect(line).toMatch(/\{\\fs130[^}]*\}hello\{/)
   })
 
@@ -488,34 +488,34 @@ describe('REQ-0307 generateAss integration', () => {
       emphasizedWordIndices: [0], // → "hello"
       words: validWords,
     })
-    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
+    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
     expect(line).toMatch(/\{\\fs130[^}]*\}hello\{/)
   })
 
   it('§3 — a corrupt emphasisSpans payload degrades to plain, never throws', () => {
-    const plain = dialogueLineOf(generateAss([makeEntry()], video, burnin, undefined, undefined, true))
+    const plain = dialogueLineOf(generateAss([makeEntry()], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
     const entry = makeEntry({
       keywordEmphasisEnabled: true,
       // Deliberately not EmphasisSpan[] — mimics a hand-edited / older save.
       emphasisSpans: [{ foo: 1 }, null, 'x'] as unknown as EmphasisSpan[],
     })
     let line = ''
-    expect(() => { line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true)) }).not.toThrow()
+    expect(() => { line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')) }).not.toThrow()
     expect(line).toBe(plain)
   })
 
   it('no emphasis fields → byte-identical to a plain cue', () => {
-    const plain = dialogueLineOf(generateAss([makeEntry()], video, burnin, undefined, undefined, true))
-    const off = dialogueLineOf(generateAss([makeEntry({ keywordEmphasisEnabled: false })], video, burnin, undefined, undefined, true))
+    const plain = dialogueLineOf(generateAss([makeEntry()], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
+    const off = dialogueLineOf(generateAss([makeEntry({ keywordEmphasisEnabled: false })], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
     expect(off).toBe(plain)
   })
 
   it('enabled but no span resolves → plain render', () => {
-    const plain = dialogueLineOf(generateAss([makeEntry()], video, burnin, undefined, undefined, true))
+    const plain = dialogueLineOf(generateAss([makeEntry()], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
     const noMatch = dialogueLineOf(generateAss(
       [makeEntry({ keywordEmphasisEnabled: true, emphasisSpans: [{ start: 0, end: 3, text: 'zzz' }] })],
       video, burnin, undefined, undefined, true,
-    ))
+    /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
     expect(noMatch).toBe(plain)
   })
 
@@ -530,7 +530,7 @@ describe('REQ-0307 generateAss integration', () => {
       emphasisSpans: [spanAt(text, 'hello')],
       words: validWords,
     })
-    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true))
+    const line = dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
     expect(line).toContain('\\k')   // karaoke active
     expect(line).toContain('\\2c')  // base (unspoken) colour
     // Whole-word emphasis keeps the folded shape: \k + \fs + \c in one block.
@@ -552,7 +552,7 @@ describe('REQ-0307 generateAss integration', () => {
       emphasisSpans: [{ start: 3, end: 8, text: 'lo wo' }],
       words: validWords,
     })
-    const body = bodyOf(dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true)))
+    const body = bodyOf(dialogueLineOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')))
     // Both karaoke blocks survive with their original durations (word 1 starts
     // at 0.5s → k50; it then holds to the cue end at 2s → k150).
     expect(body).toContain('\\k50')
@@ -568,7 +568,7 @@ describe('REQ-0307 generateAss integration', () => {
 
   it('§4 — karaoke without emphasis is unchanged by the REQ-0307 rework', () => {
     const withEmph = makeEntry({ karaokeEnabled: true, words: validWords, keywordEmphasisEnabled: false })
-    const line = dialogueLineOf(generateAss([withEmph], video, burnin, undefined, undefined, true))
+    const line = dialogueLineOf(generateAss([withEmph], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
     expect(bodyOf(line).replace(/\{[^}]*\}/g, '')).toBe('hello world')
     expect(bodyOf(line)).not.toContain('\\fs150')
     assertNoBareOverrides(bodyOf(line))

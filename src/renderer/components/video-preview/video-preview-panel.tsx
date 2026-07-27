@@ -26,6 +26,7 @@ import {
 } from '@/lib/preview-coords'
 import { editedDuration, editedToOrig, effectiveEntryState, origToEdited } from '../../../shared/cuts'
 import { resolveAnimation, animationTransformAt, NEUTRAL_TRANSFORM } from '../../../shared/cue-animation'
+import { ASS_BLUR_TO_CSS_SIGMA } from '../../../shared/constants'
 import { createPreviewSeeker, type PreviewSeeker } from '@/lib/preview-seek'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -539,7 +540,14 @@ export function VideoPreviewPanel() {
         // out as the accepted exception).  Writing `''` rather than
         // `blur(0px)` when sharp keeps the element off the filter path
         // entirely for the 99 % of frames that are not mid-ramp.
-        const nextFilter = anim.blurPx > 0 ? `blur(${anim.blurPx * scalePx}px)` : ''
+        // REQ-0324 §2 — two corrections, both measured:
+        //   * `scalePx`               ASS blur is in VIDEO pixels; the preview
+        //                             is smaller, so it must shrink with it.
+        //   * ASS_BLUR_TO_CSS_SIGMA   libass and Chromium disagree on what a
+        //                             blur radius means (0.834 vs ~0.956 sigma).
+        const nextFilter = anim.blurPx > 0
+          ? `blur(${anim.blurPx * scalePx * ASS_BLUR_TO_CSS_SIGMA}px)`
+          : ''
         if (el.style.filter !== nextFilter) el.style.filter = nextFilter
 
         // REQ-0286 §3 / REQ-0289 — karaoke per-word highlight, piggy-

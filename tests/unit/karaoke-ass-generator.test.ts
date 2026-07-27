@@ -63,7 +63,7 @@ describe('REQ-0286 §0 — tier gate at the emit path', () => {
       karaokeHighlightColor: '#FFFF00',
       words: validWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true /* isMsix */)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true /* isMsix */, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).toContain('\\k')  // karaoke tag present
     expect(line).toContain('\\2c') // secondary colour (base) emitted
@@ -80,7 +80,7 @@ describe('REQ-0286 §0 — tier gate at the emit path', () => {
       karaokeHighlightColor: '#FFFF00',
       words: validWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, false /* NSIS */)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, false /* NSIS */, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).toContain('\\k')  // karaoke tags emitted
     expect(line).toContain('\\2c') // secondary colour emitted
@@ -91,7 +91,7 @@ describe('REQ-0286 §0 — tier gate at the emit path', () => {
       karaokeEnabled: false,
       words: validWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).not.toContain('\\k')
     expect(line).not.toContain('\\2c')
@@ -111,7 +111,7 @@ describe('REQ-0286 §0 — tier gate at the emit path', () => {
       karaokeEnabled: true,
       words: validWords, // still says "hello world" — mismatch triggers fallback
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).toContain('\\k')
     expect(line).toContain('\\2c')
@@ -132,7 +132,7 @@ describe('REQ-0286 §0 — tier gate at the emit path', () => {
       karaokeEnabled: true,
       words: undefined,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).toContain('\\k')
     expect(line).toContain('\\2c')
@@ -150,7 +150,7 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
       karaokeHighlightColor: '#FF0000',   // red highlight
       words: validWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     // #FF0000 → ASS &H000000FF&; #00FF00 → &H0000FF00&
     expect(line).toContain('\\c&H000000FF&')
@@ -166,7 +166,7 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
       karaokeEnabled: true,
       words: validWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     // ASS colours are &H00BBGGRR&, so #B4FF39 → &H0039FFB4&.
     expect(line).toContain('\\c&H0039FFB4&')  // #B4FF39 (default highlight)
@@ -188,7 +188,7 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- `karaokeBaseColor` was removed from the type; test simulates a legacy dev save carrying the extra key.
     } as any
     const entry = makeEntry(legacyPatch)
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).toContain('\\2c&H00FF00FF&')      // pink (textColorHex) wins
     expect(line).not.toContain('\\2c&H0000FF00&')  // legacy green MUST NOT appear
@@ -207,7 +207,7 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
       karaokeHighlightColor: '#AABBCC',
       words: validWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     // hexToAss(#123456) = &H00563412& (ASS is BGR)
     expect(line).toContain('\\3c&H00563412&')
@@ -224,7 +224,7 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
       karaokeEnabled: true,
       words: validWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).toContain('{\\k50}hello')
     expect(line).toContain('{\\k150} world')
@@ -239,7 +239,7 @@ describe('REQ-0286 §2 — karaoke emit shape', () => {
       casing: 'uppercase',
       words: validWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).toContain('HELLO')
     expect(line).toContain(' WORLD')
@@ -259,7 +259,7 @@ describe('REQ-0286 backward compat — pre-REQ-0286 entries render byte-identica
     // isMsix=true so the tier gate is not the gating factor here — this
     // is the "user hasn't opted into karaoke" path.
     const entry = makeEntry()
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).not.toContain('\\k')
     expect(line).not.toContain('\\2c')
@@ -279,7 +279,7 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
       karaokeEnabled: true,
       words: validWords,           // still says `hello world` — mismatch
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).toContain('\\k')       // fallback karaoke ACTIVE
     expect(line).toContain('\\2c')      // secondary colour also emitted
@@ -298,7 +298,7 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
       karaokeEnabled: true,
       words: undefined,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     // Each of the 5 chars gets `{\k40}` (0.4 s = 40 cs) — brace-
     // enclosed so libass parses the tag instead of drawing it.
@@ -319,7 +319,7 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
       karaokeEnabled: true,
       words: undefined,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).toContain('{\\k100}hello')
     expect(line).toContain('{\\k100} world')
@@ -336,7 +336,7 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
       karaokeEnabled: true,
       words: validWords, // [{0,0.5,hello}, {0.5,1.0,' world'}]
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     // Whisper timing: 50cs + 150cs (word activation offsets), NOT
     // 100cs + 100cs (equal split).  Both brace-enclosed (REQ-0291).
@@ -354,7 +354,7 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
       karaokeEnabled: true,
       words: undefined,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).not.toContain('\\k')
     expect(line).not.toContain('\\2c')
@@ -370,7 +370,7 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
       karaokeEnabled: true,
       words: undefined,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, false /* NSIS */)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, false /* NSIS */, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).toContain('\\k')
     expect(line).toContain('\\2c')
@@ -387,7 +387,7 @@ describe('REQ-0289 — equal-split karaoke fallback', () => {
       karaokeEnabled: false,
       words: undefined,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).not.toContain('\\k')
     expect(line).not.toContain('\\2c')
@@ -457,7 +457,7 @@ describe('REQ-0291 — ASS override-tag well-formedness (regression pin)', () =>
       karaokeEnabled: true,
       words: validWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     assertNoBareOverrideTags(line)
     assertBracesBalanced(line)
@@ -469,7 +469,7 @@ describe('REQ-0291 — ASS override-tag well-formedness (regression pin)', () =>
       karaokeEnabled: true,
       words: undefined,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     assertNoBareOverrideTags(line)
     assertBracesBalanced(line)
@@ -481,7 +481,7 @@ describe('REQ-0291 — ASS override-tag well-formedness (regression pin)', () =>
       karaokeEnabled: true,
       words: undefined,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     assertNoBareOverrideTags(line)
     assertBracesBalanced(line)
@@ -504,7 +504,7 @@ describe('REQ-0291 — ASS override-tag well-formedness (regression pin)', () =>
         { startSec: 1.0, endSec: 1.5, text: ' start' },
       ],
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     assertNoBareOverrideTags(line)
     assertBracesBalanced(line)
@@ -521,7 +521,7 @@ describe('REQ-0291 — ASS override-tag well-formedness (regression pin)', () =>
       karaokeEnabled: true,
       words: validWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     const textField = textFieldOf(line)
     // The pattern `}{` marks the boundary between the style block and
@@ -534,7 +534,7 @@ describe('REQ-0291 — ASS override-tag well-formedness (regression pin)', () =>
       karaokeEnabled: true,
       words: validWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     const textField = textFieldOf(line)
     // First char MUST be `{` (opening the style override block).
@@ -565,7 +565,7 @@ describe('REQ-0294 — multiline karaoke (\\N preserved through the emit)', () =
       karaokeEnabled: true,
       words: validWords, // [{0,0.5,hello}, {0.5,1.0,' world'}]
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     // The literal `\N` MUST appear between the two `{\k}` blocks.
     expect(line).toMatch(/\{\\k\d+\}hello\\N\{\\k\d+\}world/)
@@ -585,7 +585,7 @@ describe('REQ-0294 — multiline karaoke (\\N preserved through the emit)', () =
       karaokeEnabled: true,
       words: jaWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).toMatch(/\{\\k\d+\}こんにちは\\N\{\\k\d+\}世界/)
   })
@@ -601,7 +601,7 @@ describe('REQ-0294 — multiline karaoke (\\N preserved through the emit)', () =
       karaokeEnabled: true,
       words: undefined,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     expect(line).toMatch(/\{\\k\d+\}hello\{\\k\d+\} world\\N\{\\k\d+\}edited\{\\k\d+\} again/)
   })
@@ -614,7 +614,7 @@ describe('REQ-0294 — multiline karaoke (\\N preserved through the emit)', () =
       karaokeEnabled: true,
       words: undefined,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     // 5 CJK chars per line: テストです\Nこんにちは
     expect(line).toMatch(/\{\\k\d+\}テ\{\\k\d+\}ス\{\\k\d+\}ト\{\\k\d+\}で\{\\k\d+\}す\\N\{\\k\d+\}こ/)
@@ -633,8 +633,8 @@ describe('REQ-0294 — multiline karaoke (\\N preserved through the emit)', () =
       karaokeEnabled: true,
       words: validWords,
     })
-    const offField = textFieldOfDialogue(dialogueLineOf(generateAss([offEntry], video, burnin, undefined, undefined, true)))
-    const onField = textFieldOfDialogue(dialogueLineOf(generateAss([onEntry], video, burnin, undefined, undefined, true)))
+    const offField = textFieldOfDialogue(dialogueLineOf(generateAss([offEntry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')))
+    const onField = textFieldOfDialogue(dialogueLineOf(generateAss([onEntry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')))
     // OFF field: `{style}hello\Nworld`.  ON field: `{style}{\k}hello\N{\k}world`.
     // Both must contain exactly one `\N` at a position that maps to
     // the same word boundary.
@@ -656,7 +656,7 @@ describe('REQ-0294 — multiline karaoke (\\N preserved through the emit)', () =
       karaokeEnabled: true,
       words: validWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true)
+    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
     const line = dialogueLineOf(ass)
     // The style block's `\an2` starts with `\` inside `{...}` but is
     // never `\N`.  Only real `\N` occurrences count.

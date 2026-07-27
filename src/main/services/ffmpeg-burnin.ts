@@ -1,4 +1,5 @@
 import { promises as fs } from 'fs'
+import { KARAOKE_STYLE_DEFAULT } from '../../shared/karaoke-style'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
@@ -155,7 +156,7 @@ export async function startBurnin(
   // emit path.  Free builds get the plain path even when a project file
   // carries `karaokeEnabled=true` (defence-in-depth vs. tier bypass).
   const isMsix = isPackagedAsMsix(getCurrentProcessContext())
-  const assContent = generateAss(entriesForAss, video, burnin, subtitleBackground, fontMeta.assFontName, isMsix, karaokeStyle ?? 'switch')
+  const assContent = generateAss(entriesForAss, video, burnin, subtitleBackground, fontMeta.assFontName, isMsix, karaokeStyle ?? KARAOKE_STYLE_DEFAULT)
   const assPath = join(tmpdir(), `mojioko-${randomUUID()}.ass`)
   await fs.writeFile(assPath, assContent, 'utf-8')
 

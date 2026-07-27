@@ -280,7 +280,6 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
       outputContainer,
       fontId: activeFontId,
       // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (app-wide setting).
-      karaokeStyle: useSettingsStore.getState().karaokeStyle,
       cuts
     }
 

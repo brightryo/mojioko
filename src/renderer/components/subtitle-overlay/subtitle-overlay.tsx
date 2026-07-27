@@ -18,7 +18,7 @@ import { pinnedAnchorTransform } from '@/lib/preview-coords'
 import { measureRuns, computeRingBox, prepareCanvas, paintRing, paintShadow } from '@/lib/outline-ring'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 import { sweepWordTimings } from '../../../shared/karaoke-sweep'
-import { resolveKaraokeStyle } from '../../../shared/karaoke-style'
+import { resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
 import { resolveAnimation, isAnimationInert } from '../../../shared/cue-animation'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { areWordsValidForText } from '../../../shared/words-validity'
@@ -229,10 +229,9 @@ export function SubtitleOverlay({
   bumpRenderCount('SubtitleOverlay')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   // REQ-0311 §4 — experimental sweep toggle; delete with the feature.
-  // REQ-0322 §3 — the store value is the DEFAULT for cues that have not
-  // chosen a style; `entry.karaokeStyle` wins when present.  Same resolver as
-  // the ASS writer, so preview and burn-in cannot disagree per cue.
-  const karaokeStyleDefault = useSettingsStore((s) => s.karaokeStyle)
+  // REQ-0324 §4-1 — the app-wide setting is gone; a cue that has not
+  // chosen a style falls back to the CONSTANT default.  Same resolver the
+  // ASS writer uses, so preview and burn-in cannot disagree per cue.
   // REQ-0162 — subscribe to the font-cache version so this overlay
   // re-renders the moment ANY font finishes its opentype.js parse
   // and lands in the module-level `fontCache`.  Without this
@@ -538,7 +537,7 @@ export function SubtitleOverlay({
   // REQ-0311 §4 / REQ-0322 §3 — sweep (`\kf`) vs switch (`\k`), resolved
   // PER CUE with the settings value as the default.  Timings come from the
   // SAME helper the emitter uses, so preview and burn-in cannot drift.
-  const karaokeStyle = resolveKaraokeStyle(entry.karaokeStyle, karaokeStyleDefault)
+  const karaokeStyle = resolveKaraokeStyle(entry.karaokeStyle, KARAOKE_STYLE_DEFAULT)
   const sweepActive = karaokeActive && karaokeStyle === 'sweep'
   const sweepTimings = sweepActive
     ? sweepWordTimings(karaokeWords, entry.startSec, entry.endSec)

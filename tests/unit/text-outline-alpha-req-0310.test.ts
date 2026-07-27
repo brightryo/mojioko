@@ -51,7 +51,7 @@ function makeEntry(patch: Partial<SubtitleEntry> = {}): SubtitleEntry {
 }
 
 function dialogueOf(e: SubtitleEntry): string {
-  const ass = generateAss([e], VIDEO, BURNIN, undefined, undefined, true)
+  const ass = generateAss([e], VIDEO, BURNIN, undefined, undefined, true, 'switch')
   const line = ass.split('\n').find((l) => l.startsWith('Dialogue:'))
   expect(line).toBeDefined()
   return line!

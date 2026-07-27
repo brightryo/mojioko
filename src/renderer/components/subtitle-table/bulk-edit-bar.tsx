@@ -15,7 +15,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
-import { coerceKaraokeStyle, type KaraokeStyle } from '../../../shared/karaoke-style'
+import { coerceKaraokeStyle, KARAOKE_STYLE_DEFAULT, type KaraokeStyle } from '../../../shared/karaoke-style'
 // REQ-0308 §3 — only the wrap-measurement helpers are imported now; the bulk
 // emphasis controls (and the constants they needed) are gone.
 import {
@@ -308,9 +308,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     type: 'none', inEnabled: true, outEnabled: true,
     durationSec: ANIMATION_DURATION_DEFAULT_SEC,
   })
-  const [karaokeStyleDraft, setKaraokeStyleDraft] = useState<KaraokeStyle>(
-    () => useSettingsStore.getState().karaokeStyle,
-  )
+  // REQ-0324 §4-1 — seeded from the constant default; the app-wide
+  // karaoke-style setting was removed (the value is per-cue only now).
+  const [karaokeStyleDraft, setKaraokeStyleDraft] = useState<KaraokeStyle>(KARAOKE_STYLE_DEFAULT)
 
   // REQ-047 #1: same persist-then-re-seed pattern as the colour drafts.
   // Previously the size input was uncontrolled and cleared on blur

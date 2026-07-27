@@ -6,7 +6,7 @@ import { buildKaraokeAssText, splitWordsAtHardBreaks } from '../../shared/karaok
 // REQ-0311 §4 / REQ-0315 §2 — the sweep emitter.
 import { buildKaraokeSweepAssText } from '../../shared/karaoke-sweep'
 import type { KaraokeStyle } from '../../shared/karaoke-style'
-import { resolveKaraokeStyle } from '../../shared/karaoke-style'
+import { resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../shared/karaoke-style'
 import { resolveAnimation } from '../../shared/cue-animation'
 import { buildAnimationTags } from '../../shared/cue-animation-ass'
 import { areWordsValidForText } from '../../shared/words-validity'
@@ -191,7 +191,7 @@ export function generateAss(
    * `resolveKaraokeStyle` so the preview (`subtitle-overlay.tsx`) and this
    * writer answer the question identically.
    */
-  karaokeStyle: KaraokeStyle = 'switch',
+  karaokeStyle: KaraokeStyle = KARAOKE_STYLE_DEFAULT,
 ): string {
   // `burnin` / `subtitleBackground` are vestigial (see JSDoc above).  Reference
   // them once so `noUnusedParameters` stays quiet without disabling lint.

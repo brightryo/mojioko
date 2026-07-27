@@ -21,7 +21,7 @@ import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-
 import { useSettingsStore } from '@/stores/settings-store'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
-import { coerceKaraokeStyle, resolveKaraokeStyle } from '../../../shared/karaoke-style'
+import { coerceKaraokeStyle, resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
 import { resolveAnimation, ANIMATION_BLUR_ENABLED } from '../../../shared/cue-animation'
 import { AnimationControls, type AnimationControlsValue } from '@/components/animation-controls/animation-controls'
 import { useAppEnvStore } from '@/stores/app-env-store'
@@ -115,11 +115,9 @@ export function TimelineBlockInspector({
   // activeFontId is stored as `undefined` = inherit).
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
-  // REQ-0322 §3 — the store value is now the DEFAULT for new cues; the
-  // authority for THIS cue is `entry.karaokeStyle`.  Resolved through the
-  // same helper the ASS writer and the preview overlay use.
-  const karaokeStyleDefault = useSettingsStore((s) => s.karaokeStyle)
-  const karaokeStyleResolved = resolveKaraokeStyle(entry.karaokeStyle, karaokeStyleDefault)
+  // REQ-0324 §4-1 — no app-wide setting any more; the fallback is the
+  // constant default.
+  const karaokeStyleResolved = resolveKaraokeStyle(entry.karaokeStyle, KARAOKE_STYLE_DEFAULT)
 
   // REQ-0324 §1 — the row shows the RESOLVED spec, so a legacy cue that
   // only carries `fadeDurationSec` displays as fade at its own length

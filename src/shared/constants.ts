@@ -221,3 +221,28 @@ export const TRANSCRIPTION_DEFAULTS = {
   /** Target language — 'auto' means language=None (auto-detect) in the sidecar. */
   language: 'auto',
 } as const
+
+/**
+ * REQ-0324 §2 — ASS `lur N` to CSS `filter: blur()` conversion.
+ *
+ * Measured against real libass (bundled ffmpeg) and real Chromium (the
+ * app's own Electron build, via `capturePage`), fitting sigma as the
+ * second central moment of the edge-profile derivative:
+ *
+ *   libass  `lur N`      -> sigma = 0.834 x N   (linear to <1% for N>=4)
+ *   Chromium `blur(Npx)`   -> sigma ~ 0.956 x N   (+-8%, kinks at N~5
+ *                                                 where Skia switches
+ *                                                 blur approximation)
+ *
+ * so sigma_ASS / sigma_CSS = 0.84 (mean; +-9% spread, all of it
+ * Chromium's non-linearity rather than libass's).
+ *
+ * ALSO measured: `lur` is in OUTPUT DEVICE pixels and, unlike `ord`
+ * and `\shad`, does NOT scale with PlayRes->frame. Since the generator
+ * sets PlayRes to the video's pixel size, an ASS blur radius is already
+ * in video pixels, so the preview must additionally multiply by its own
+ * `containerWidthPx / videoWidthPx`. Omitting that term makes the preview
+ * roughly 6x blurrier than the burn at a typical preview scale of 0.2 --
+ * a far larger error than this factor corrects.
+ */
+export const ASS_BLUR_TO_CSS_SIGMA = 0.84
