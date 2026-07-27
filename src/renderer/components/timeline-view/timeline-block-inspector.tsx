@@ -13,7 +13,6 @@ import { ColorPicker } from '@/components/color-picker/color-picker'
 import { OpacityPercentSlider } from '@/components/subtitle-table/opacity-percent-slider'
 import { clampOpacityPercent } from '../../../shared/alpha'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
-import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
 import { SegmentGroup } from '@/components/subtitle-table/segment-group'
@@ -23,6 +22,8 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 import { coerceKaraokeStyle, resolveKaraokeStyle } from '../../../shared/karaoke-style'
+import { resolveAnimation, ANIMATION_BLUR_ENABLED } from '../../../shared/cue-animation'
+import { AnimationControls, type AnimationControlsValue } from '@/components/animation-controls/animation-controls'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import {
@@ -119,6 +120,24 @@ export function TimelineBlockInspector({
   // same helper the ASS writer and the preview overlay use.
   const karaokeStyleDefault = useSettingsStore((s) => s.karaokeStyle)
   const karaokeStyleResolved = resolveKaraokeStyle(entry.karaokeStyle, karaokeStyleDefault)
+
+  // REQ-0324 §1 — the row shows the RESOLVED spec, so a legacy cue that
+  // only carries `fadeDurationSec` displays as fade at its own length
+  // rather than as "none".  Editing writes the explicit fields, which
+  // then take over permanently (see `resolveAnimation`).
+  const animSpec = resolveAnimation(entry)
+  function handleAnimationChange(patch: Partial<AnimationControlsValue>) {
+    // Write the WHOLE resolved spec, not only the changed key.  A legacy
+    // cue has no `animation*` fields at all; patching just one would leave
+    // the others falling through the migration branch, and the edit would
+    // appear not to stick.
+    applyStyleEdit(t('history.editAnimation'), {
+      animationType: patch.type ?? animSpec.type,
+      animationInEnabled: patch.inEnabled ?? animSpec.inEnabled,
+      animationOutEnabled: patch.outEnabled ?? animSpec.outEnabled,
+      animationDurationSec: patch.durationSec ?? animSpec.durationSec,
+    })
+  }
   // REQ-0125 — history-less preview writer used from the color picker's
   // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
   const updateEntryPreview = useProjectStore((s) => s.updateEntryPreview)
@@ -209,6 +228,7 @@ export function TimelineBlockInspector({
     el.style.maxHeight = `${natural * INSPECTOR_TEXTAREA_MAX_HEIGHT_RATIO}px`
   }, [subtitleSectionOpen])
   const [layoutSectionOpen, setLayoutSectionOpen] = useState(true)
+  const [animationSectionOpen, setAnimationSectionOpen] = useState(true)
   const [backgroundSectionOpen, setBackgroundSectionOpen] = useState(false)
   // REQ-0307 §1 — the per-character emphasis picker lives behind the row's
   // 「編集」 button, so the inspector row itself stays one line tall.
@@ -383,10 +403,6 @@ export function TimelineBlockInspector({
   }
   function handleOutlineThicknessCommit(v: number) {
     applyStyleEdit(t('history.editStroke'), { outlineThicknessPx: v })
-  }
-  function handleFadeDurationCommit(next: number) {
-    if (next === entry.fadeDurationSec) return
-    applyStyleEdit(t('history.editFade'), { fadeDurationSec: next })
   }
   function handleFontChange(next: FontId | undefined) {
     if (next === entry.fontId) return
@@ -1366,17 +1382,12 @@ export function TimelineBlockInspector({
                 ariaLabel={t('styleCell.rotation')}
               />
             </StyleRow>
-            {/* Fade — REQ-0292 §4 moved to the end so the temporal
-                knob sits after all the visual style effects. */}
-            <StyleRow label={t('styleCell.fade')} stopControlClickPropagation>
-              <FadeDurationSlider
-                value={entry.fadeDurationSec}
-                onCommit={handleFadeDurationCommit}
-                disabled={isFrozen}
-                ariaLabel={t('styleCell.fade')}
-                fullWidth
-              />
-            </StyleRow>
+            {/* REQ-0324 §1 — the standalone Fade row is GONE.  Fade is now
+                one choice inside the animation section below; keeping a
+                second control writing `fadeDurationSec` would have given
+                the user two knobs for one effect that silently disagree.
+                Existing cues keep their fade via `resolveAnimation`'s
+                migration, which reads the stored `fadeDurationSec`. */}
           </>
         )}
         </div>{/* REQ-0184 §4 — close subtitle-section collapse wrapper */}
@@ -1543,6 +1554,42 @@ export function TimelineBlockInspector({
             </div>
           )}
           </div>{/* REQ-0184 §4 — close layout-section collapse wrapper */}
+        </div>
+      )}
+
+      {/* § 5.5 — animation section (REQ-0324 §1).  Its OWN section rather
+          than a row inside the subtitle one, per owner instruction: the
+          order is subtitle / layout / animation / background.  audio-only
+          hides it for the same reason layout does — there is nothing
+          rendered to animate. */}
+      {!isAudioOnly && (
+        <div className="space-y-2 border-t border-line pt-2">
+          <button
+            type="button"
+            onClick={() => setAnimationSectionOpen((v) => !v)}
+            aria-expanded={animationSectionOpen}
+            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+          >
+            {animationSectionOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
+            )}
+            <span>{t('timeline.inspector.animationSection')}</span>
+          </button>
+          <div className={cn('space-y-2', !animationSectionOpen && 'hidden')}>
+            <AnimationControls
+              value={{
+                type: animSpec.type,
+                inEnabled: animSpec.inEnabled,
+                outEnabled: animSpec.outEnabled,
+                durationSec: animSpec.durationSec,
+              }}
+              onChange={handleAnimationChange}
+              disabled={isFrozen}
+              includeBlur={ANIMATION_BLUR_ENABLED}
+            />
+          </div>
         </div>
       )}
 

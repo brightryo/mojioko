@@ -5,7 +5,8 @@ import { cn } from '@/lib/utils'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
-import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
+import { AnimationControls, type AnimationControlsValue } from '@/components/animation-controls/animation-controls'
+import { ANIMATION_BLUR_ENABLED, ANIMATION_DURATION_DEFAULT_SEC } from '../../../shared/cue-animation'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
@@ -281,7 +282,6 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // semantics as the colour / outline drafts so the slider thumb stays
   // where the user left it across selection changes.  Initial value
   // matches the legacy "fade OFF" semantics (= 0 = no fade).
-  const [fadeSliderDraft, setFadeSliderDraft] = useState<number>(0)
   // REQ-0292 §1 — bulk shadow-depth draft.  Same pattern as the other
   // slider drafts: the thumb shows the last-applied value across the
   // current selection session so the user can see "what I set on
@@ -304,6 +304,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   const [karaokeHighlightDraft, setKaraokeHighlightDraft] = useState<string>(KARAOKE_DEFAULT_HIGHLIGHT_COLOR)
   // REQ-0322 §3 — seeded from the new-cue default so the Select opens on
   // the value the user already considers "normal" for this project.
+  const [animationDraft, setAnimationDraft] = useState<AnimationControlsValue>({
+    type: 'none', inEnabled: true, outEnabled: true,
+    durationSec: ANIMATION_DURATION_DEFAULT_SEC,
+  })
   const [karaokeStyleDraft, setKaraokeStyleDraft] = useState<KaraokeStyle>(
     () => useSettingsStore.getState().karaokeStyle,
   )
@@ -359,7 +363,13 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftText(pickFirstSelectedColor(selectedRowIds, 'text'))
     setColorDraftOutline(pickFirstSelectedColor(selectedRowIds, 'outline'))
     setOutlineSliderDraft(0)
-    setFadeSliderDraft(0)
+    // REQ-0324 §1 — the animation draft resets with the selection for the
+    // same reason every other draft does: a bulk control must not carry a
+    // previous selection's value into a new one.
+    setAnimationDraft({
+      type: 'none', inEnabled: true, outEnabled: true,
+      durationSec: ANIMATION_DURATION_DEFAULT_SEC,
+    })
     // REQ-0310 §1 — back to fully opaque on every selection change, matching
     // the field default so the bar never opens primed to hide the subtitles.
     setTextAlphaDraft(OPACITY_DEFAULT_PERCENT)
@@ -668,11 +678,23 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     )
   }
 
-  function handleFadeDurationCommit(next: number) {
-    setFadeSliderDraft(next)
+  // REQ-0324 §1 — bulk animation.  Like every other bulk control there is
+  // no "unset" state to express, so the draft starts at the neutral spec
+  // and applying writes the WHOLE spec to every selected row.  Writing the
+  // whole spec (not just the changed key) matters for the same reason it
+  // does in the inspector: a legacy row has no `animation*` fields, and a
+  // partial patch would leave the rest falling through the migration.
+  function handleAnimationBulk(patch: Partial<AnimationControlsValue>) {
+    const next = { ...animationDraft, ...patch }
+    setAnimationDraft(next)
     applyBulk(
-      { fadeDurationSec: next },
-      t('bulk.history.fade', { count: selectedRowIds.size })
+      {
+        animationType: next.type,
+        animationInEnabled: next.inEnabled,
+        animationOutEnabled: next.outEnabled,
+        animationDurationSec: next.durationSec,
+      },
+      t('bulk.history.animation', { count: selectedRowIds.size })
     )
   }
 
@@ -1307,15 +1329,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               ariaLabel={t('styleCell.rotation')}
             />
           </StyleRow>
-          {/* Fade — REQ-0292 §4 moved to end of style cluster (matches inspector order). */}
-          <StyleRow label={t('bulk.fade')}>
-            <FadeDurationSlider
-              value={fadeSliderDraft}
-              onCommit={handleFadeDurationCommit}
-              ariaLabel={t('bulk.fade')}
-              fullWidth
-            />
-          </StyleRow>
+          {/* REQ-0324 §1 — the standalone Fade row moved into the new
+              animation section below, mirroring the inspector.  Two
+              controls writing the same effect is what this REQ removes. */}
         </div>
 
         {/* § レイアウト — Horizontal, Vertical, Margin. */}
@@ -1385,6 +1401,21 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               ariaLabel={t('subtitlePosition.margin')}
             />
           </label>
+        </div>
+
+        {/* § アニメーション — REQ-0324 §1.  Own section, ordered
+            subtitle / layout / animation / background to match the
+            inspector exactly.  Uses the SAME `AnimationControls`
+            component, so the two surfaces cannot drift apart. */}
+        <div className="flex flex-col gap-2 border-t border-border/60 pt-2 mt-2">
+          <div className="text-body font-semibold text-foreground">
+            {t('timeline.inspector.animationSection')}
+          </div>
+          <AnimationControls
+            value={animationDraft}
+            onChange={handleAnimationBulk}
+            includeBlur={ANIMATION_BLUR_ENABLED}
+          />
         </div>
 
         {/* § 背景色 — Bg ON/OFF, Bg colour, Opacity.  REQ-0096 attaches a

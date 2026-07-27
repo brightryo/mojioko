@@ -197,7 +197,20 @@
     "rotation": "回転 (度)",
     "family": "フォント",
     "weight": "ウェイト",
-    "emphasisEdit": "編集"
+    "emphasisEdit": "編集",
+    "animationSection": "アニメーション",
+    "animationRowLabel": "アニメーション",
+    "animationIn": "入",
+    "animationOut": "出",
+    "animationDuration": "アニメーションの長さ",
+    "animationType": {
+      "none": "なし",
+      "fade": "フェード",
+      "slide": "スライド",
+      "pop": "ポップ",
+      "scale": "スケール",
+      "blur": "ブラー"
+    }
   },
   "history": {
     "editText": "テキストを編集",
@@ -223,7 +236,8 @@
     "addRow": "追加",
     "autoLineBreak": "敷き詰め改行",
     "overflowWrap": "はみ出し改行",
-    "duplicateRow": "行を複製"
+    "duplicateRow": "行を複製",
+    "editAnimation": "アニメーション"
   },
   "bulk": {
     "regionLabel": "一括編集",
@@ -257,7 +271,8 @@
       "casing": "大文字化を一括変更 ({{count}}件)",
       "shadow": "影を一括変更 ({{count}}件)",
       "karaoke": "カラオケを一括変更 ({{count}}件)",
-      "rotation": "回転を一括変更 ({{count}}件)"
+      "rotation": "回転を一括変更 ({{count}}件)",
+      "animation": "アニメーション ({{count}} 行)"
     }
   },
   "videoPreview": {
@@ -380,7 +395,8 @@
       "subtitleSection": "字幕",
       "layoutSection": "レイアウト",
       "backgroundSection": "背景色",
-      "backgroundSectionHelp": "背景色を有効にすると、アウトライン色は無効になります。"
+      "backgroundSectionHelp": "背景色を有効にすると、アウトライン色は無効になります。",
+      "animationSection": "アニメーション"
     },
     "nav": {
       "first": "先頭へ",

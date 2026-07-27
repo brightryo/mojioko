@@ -197,7 +197,20 @@
     "rotation": "Rotation (deg)",
     "family": "Font",
     "weight": "Weight",
-    "emphasisEdit": "Edit"
+    "emphasisEdit": "Edit",
+    "animationSection": "Animation",
+    "animationRowLabel": "Animation",
+    "animationIn": "In",
+    "animationOut": "Out",
+    "animationDuration": "Animation duration",
+    "animationType": {
+      "none": "None",
+      "fade": "Fade",
+      "slide": "Slide",
+      "pop": "Pop",
+      "scale": "Scale",
+      "blur": "Blur"
+    }
   },
   "history": {
     "editText": "Edit text",
@@ -223,7 +236,8 @@
     "addRow": "Add",
     "autoLineBreak": "Pack wrap",
     "overflowWrap": "Overflow wrap",
-    "duplicateRow": "Duplicate row"
+    "duplicateRow": "Duplicate row",
+    "editAnimation": "Animation"
   },
   "bulk": {
     "regionLabel": "Bulk edit",
@@ -257,7 +271,8 @@
       "casing": "Bulk casing change ({{count}} rows)",
       "shadow": "Bulk shadow change ({{count}} rows)",
       "karaoke": "Bulk karaoke change ({{count}} rows)",
-      "rotation": "Bulk rotation change ({{count}} rows)"
+      "rotation": "Bulk rotation change ({{count}} rows)",
+      "animation": "Animation ({{count}} rows)"
     }
   },
   "videoPreview": {
@@ -380,7 +395,8 @@
       "subtitleSection": "Subtitle",
       "layoutSection": "Layout",
       "backgroundSection": "Background",
-      "backgroundSectionHelp": "Enabling the background disables the outline color."
+      "backgroundSectionHelp": "Enabling the background disables the outline color.",
+      "animationSection": "Animation"
     },
     "nav": {
       "first": "Jump to start",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeFadeOpacity } from '../../src/renderer/lib/fade-opacity'
+import { resolveAnimation, animationTransformAt } from '../../src/shared/cue-animation'
 
 /**
  * Contract for the preview-side fade ramp (REQ-20260615-048).
@@ -9,6 +9,32 @@ import { computeFadeOpacity } from '../../src/renderer/lib/fade-opacity'
  * the disabled / zero-duration short-circuit, the out-of-range guard,
  * and the overlapping-ramp behaviour for captions shorter than 2·N.
  */
+
+
+/**
+ * REQ-0324 §1 — these 15 cases are the ORIGINAL `computeFadeOpacity` suite,
+ * carried over verbatim when REQ-0323 replaced that module with the shared
+ * `cue-animation.ts`.  They are kept (rather than deleted as redundant)
+ * because they are the only record of the fade semantics as the owner
+ * originally specified them, and they now double as a migration test: the
+ * inputs go in as a LEGACY cue (`fadeDurationSec` only, no `animation*`
+ * fields), so every one of them also proves the migration path returns the
+ * pre-REQ-0323 numbers.
+ */
+function computeFadeOpacity(args: {
+  currentTimeSec: number
+  startSec: number
+  endSec: number
+  fadeDurationSec: number
+}): number {
+  const { currentTimeSec, startSec, endSec, fadeDurationSec } = args
+  const spec = resolveAnimation({ fadeDurationSec })
+  // The old helper returned 0 outside the cue; the new one describes only
+  // the animation and leaves visibility to the caller (REQ-0195 §2), so the
+  // range check that the caller now owns is applied here.
+  if (!(currentTimeSec >= startSec && currentTimeSec <= endSec)) return 0
+  return animationTransformAt(spec, startSec, endSec, currentTimeSec).opacity
+}
 
 describe('computeFadeOpacity', () => {
   const baseEntry = {

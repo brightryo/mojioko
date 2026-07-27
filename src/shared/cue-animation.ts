@@ -59,6 +59,30 @@ export const ANIMATION_DIRECTIONS: readonly AnimationDirection[] = [
 export const ANIMATION_DURATION_MIN_SEC = 0
 export const ANIMATION_DURATION_MAX_SEC = 1
 export const ANIMATION_DURATION_DEFAULT_SEC = 0.4
+export const ANIMATION_DURATION_STEP_SEC = 0.1
+
+/**
+ * The types the UI offers.  REQ-0324 §1 keeps `slide` OUT of the list
+ * until REQ-0323 §3 implements it — `buildAnimationTags` returns '' for
+ * slide, so offering it would be a control that silently does nothing.
+ * It stays in `AnimationType` so stored values and the ASS writer's
+ * exhaustive switch already accommodate it.
+ */
+/**
+ * REQ-0324 §2 — whether `blur` is offered in the UI.  A single flag so
+ * the decision has one home; the curve, the ASS emitter and the preview
+ * all keep working regardless, so flipping this does not strand data.
+ */
+export const ANIMATION_BLUR_ENABLED = true
+
+export const SELECTABLE_ANIMATION_TYPES: readonly AnimationType[] = [
+  'none', 'fade', 'pop', 'scale', 'blur',
+] as const
+
+/** Narrow an unknown UI value to a type.  Unknown → `none`. */
+export function coerceAnimationType(v: unknown): AnimationType {
+  return (ANIMATION_TYPES as readonly unknown[]).includes(v) ? (v as AnimationType) : 'none'
+}
 
 /** Slide distance bounds (ASS px).  REQ-0323 §3-4. */
 export const ANIMATION_DISTANCE_MIN_PX = 0
