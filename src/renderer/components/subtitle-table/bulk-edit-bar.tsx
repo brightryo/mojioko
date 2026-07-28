@@ -8,7 +8,7 @@ import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thic
 import { AnimationControls, type AnimationControlsValue } from '@/components/animation-controls/animation-controls'
 import {
   ANIMATION_BLUR_ENABLED, ANIMATION_DURATION_DEFAULT_SEC, BLUR_MAX_PX,
-  defaultStartScalePercent,
+  animationEntryFields, defaultStartScalePercent,
 } from '../../../shared/cue-animation'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
@@ -747,19 +747,16 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // does in the inspector: a legacy row has no `animation*` fields, and a
   // partial patch would leave the rest falling through the migration.
   function handleAnimationBulk(patch: Partial<AnimationControlsValue>) {
-    const next = { ...animationDraft, ...patch }
-    setAnimationDraft(next)
-    applyBulk(
-      {
-        animationType: next.type,
-        animationInEnabled: next.inEnabled,
-        animationOutEnabled: next.outEnabled,
-        animationDurationSec: next.durationSec,
-        animationStartScalePercent: next.startScalePercent,
-        animationBlurPx: next.blurPx,
-      },
-      t('bulk.history.animation', { count: selectedRowIds.size })
-    )
+    const next = animationEntryFields(animationDraft, patch)
+    setAnimationDraft({
+      type: next.animationType,
+      inEnabled: next.animationInEnabled,
+      outEnabled: next.animationOutEnabled,
+      durationSec: next.animationDurationSec,
+      startScalePercent: next.animationStartScalePercent,
+      blurPx: next.animationBlurPx,
+    })
+    applyBulk(next, t('bulk.history.animation', { count: selectedRowIds.size }))
   }
 
   // REQ-0277 Phase A — bulk-apply of the style effects.  Each handler

@@ -6,7 +6,9 @@ import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slid
 import { LineSpacingSlider } from '@/components/subtitle-table/line-spacing-slider'
 import { LINE_SPACING_DEFAULT_PERCENT } from '../../../shared/line-spacing'
 import { AnimationControls } from '@/components/animation-controls/animation-controls'
-import { resolveAnimation, ANIMATION_BLUR_ENABLED } from '../../../shared/cue-animation'
+import {
+  resolveAnimation, ANIMATION_BLUR_ENABLED, animationEntryFields, animationUiValue,
+} from '../../../shared/cue-animation'
 import { OpacityPercentSlider } from '@/components/subtitle-table/opacity-percent-slider'
 import { clampOpacityPercent } from '../../../shared/alpha'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
@@ -330,24 +332,17 @@ export function DefaultStyleControls({
               slider could no longer express the default a new cue would get;
           (b) every other row here is bound to `defaults`, and the settings-
               store binding was the asymmetry REQ-0322 §3-6 reported. */}
+      {/* REQ-0337 §1-4 — this is the surface the owner singled out: the
+          table must not overrule a value the user SAVED here, but changing
+          the TYPE here must re-seed exactly as it does in the inspector.
+          Both hold because this renders the same `AnimationControls` and
+          writes through the same `animationEntryFields`; the table is only
+          ever consulted by the control's own type-change handler. */}
       <AnimationControls
-        value={{
-          type: defaultsAnimation.type,
-          inEnabled: defaultsAnimation.inEnabled,
-          outEnabled: defaultsAnimation.outEnabled,
-          durationSec: defaultsAnimation.durationSec,
-          startScalePercent: Math.round(defaultsAnimation.startScale * 100),
-          blurPx: defaultsAnimation.blurMaxPx,
-        }}
-        onChange={(patch) => onUpdateDefaults({
-          animationType: patch.type ?? defaultsAnimation.type,
-          animationInEnabled: patch.inEnabled ?? defaultsAnimation.inEnabled,
-          animationOutEnabled: patch.outEnabled ?? defaultsAnimation.outEnabled,
-          animationDurationSec: patch.durationSec ?? defaultsAnimation.durationSec,
-          animationStartScalePercent:
-            patch.startScalePercent ?? Math.round(defaultsAnimation.startScale * 100),
-          animationBlurPx: patch.blurPx ?? defaultsAnimation.blurMaxPx,
-        })}
+        value={animationUiValue(defaultsAnimation)}
+        onChange={(patch) =>
+          onUpdateDefaults(animationEntryFields(animationUiValue(defaultsAnimation), patch))
+        }
         includeBlur={ANIMATION_BLUR_ENABLED}
         surface="settings"
       />

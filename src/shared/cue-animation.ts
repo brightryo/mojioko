@@ -93,6 +93,97 @@ export function coerceAnimationType(v: unknown): AnimationType {
   return (ANIMATION_TYPES as readonly unknown[]).includes(v) ? (v as AnimationType) : 'none'
 }
 
+// ---------------------------------------------------------------------------
+// REQ-0337 §1 / §2 — the per-type defaults table, and the "強さ" scale.
+// ---------------------------------------------------------------------------
+
+/**
+ * REQ-0337 §2 — the two directions of the strength knob.
+ *
+ * `scale` / `pop` STORE a **start scale** (`animationStartScalePercent`):
+ * 0 % = grows from nothing = the biggest movement, 100 % = starts at
+ * natural size = no movement at all.  `blur` stores a **peak radius**,
+ * where bigger is unambiguously stronger.  Under the single label 「強さ」
+ * that made the slider run backwards depending on the type, which is what
+ * the owner reported in REQ-0337 §2-1.
+ *
+ * The fix is a display-only inversion.  **The stored meaning is
+ * unchanged** (REQ-0337 §2-3): `animationStartScalePercent` is still a
+ * start scale in every project file, in `AnimationSpec.startScale`, and in
+ * the ASS writer.  Only the UI — and this table — speak in strength, so
+ * there is no migration, no change to the curves below, and no change to a
+ * single emitted byte.
+ *
+ * Blur needs no conversion: its stored value already rises with strength.
+ */
+export function strengthToStartScalePercent(strength: number): number {
+  return 100 - strength
+}
+export function startScalePercentToStrength(startScalePercent: number): number {
+  return 100 - startScalePercent
+}
+
+/** The starting point a type hands the user when it is PICKED. */
+export interface AnimationTypeDefaults {
+  /** Seconds, per END of the cue. */
+  durationSec: number
+  inEnabled: boolean
+  outEnabled: boolean
+  /**
+   * 強さ on the unified scale (see `strengthToStartScalePercent`): larger
+   * is always stronger.  The UNIT still depends on the type — travel
+   * percent for `scale` / `pop`, ASS px for `blur` — which is why the two
+   * stored fields stay separate and are read through
+   * `defaultStartScalePercent` / `BLUR_MAX_PX` rather than from here
+   * directly.  `fade` has no strength; its entry is inert filler that
+   * keeps the map exhaustive.
+   */
+  strength: number
+}
+
+/**
+ * REQ-0337 §1-2 — where every animation parameter starts, per type.
+ *
+ * ## Why this table exists
+ *
+ * Before it, changing the type re-seeded the STRENGTH (REQ-0331 — a
+ * `pop` inheriting `scale`'s 70 % start does not pop) but carried the
+ * duration and the timing switches over unchanged.  One parameter
+ * followed the type and the others did not, which reads as a bug because
+ * it is an inconsistency with no reason behind it.  Picking a type now
+ * writes ALL of them from here.
+ *
+ * ## ★ Exhaustive by construction
+ *
+ * The annotation is `{ readonly [K in AnimationType]-?: … }`, the same
+ * shape `style-preset.ts`, `duplicate-entry.ts`, `settings-merge.ts` and
+ * `style-defaults-to-entry.ts` use.  Adding a member to `AnimationType`
+ * (slide is already there; a future `wipe` would be next) fails `tsc`
+ * here until its defaults are written, rather than silently inheriting
+ * whatever the previous type had.
+ *
+ * ## ★ This table does NOT override `TranscriptionDefaults`
+ *
+ * REQ-0337 §1-4.  If the user saved "type = blur, duration = 0.5 s" as the
+ * default for new cues, that is an explicit choice and
+ * `animationFieldsForNewCue` uses it verbatim — it never consults this
+ * table for a field the defaults already carry.  The table is only the
+ * starting point you get at the moment you *pick* a type, which is why the
+ * defaults panel re-seeds from it exactly like the inspector does (it
+ * renders the same `AnimationControls`).
+ */
+export const ANIMATION_TYPE_DEFAULTS: {
+  readonly [K in AnimationType]-?: AnimationTypeDefaults
+} = {
+  none:  { durationSec: 0.4, inEnabled: true, outEnabled: true, strength: 30 },
+  fade:  { durationSec: 0.2, inEnabled: true, outEnabled: true, strength: 30 },
+  scale: { durationSec: 0.4, inEnabled: true, outEnabled: true, strength: 30 },
+  pop:   { durationSec: 0.4, inEnabled: true, outEnabled: true, strength: 100 },
+  blur:  { durationSec: 0.8, inEnabled: true, outEnabled: true, strength: 30 },
+  // Dormant (REQ-0334 §3); present so the map stays exhaustive.
+  slide: { durationSec: 0.4, inEnabled: true, outEnabled: true, strength: 30 },
+} as const
+
 /** Slide distance bounds (ASS px).  REQ-0323 §3-4. */
 export const ANIMATION_DISTANCE_MIN_PX = 0
 export const ANIMATION_DISTANCE_MAX_PX = 200
@@ -135,15 +226,20 @@ export const ANIMATION_BLUR_STEP_PX = 1
  * default (rather than becoming a hard constant) so pre-REQ-0331 cues look
  * exactly as they did.
  */
-export const SCALE_START = 0.7
+export const SCALE_START =
+  strengthToStartScalePercent(ANIMATION_TYPE_DEFAULTS.scale.strength) / 100
 /** DEFAULT start scale for `pop`: from nothing. */
-export const POP_START_SCALE = 0
+export const POP_START_SCALE =
+  strengthToStartScalePercent(ANIMATION_TYPE_DEFAULTS.pop.strength) / 100
 /** `pop` overshoots to this before settling at 1. */
 export const POP_OVERSHOOT = 1.18
 /** Fraction of the ramp spent going start → overshoot (rest settles to 1). */
 export const POP_PEAK_PROGRESS = 0.45
-/** DEFAULT peak blur for `blur` (ASS px); sharpens to 0. */
-export const BLUR_MAX_PX = 8
+/**
+ * DEFAULT peak blur for `blur` (ASS px); sharpens to 0.  Comes from the
+ * per-type table (REQ-0337 §1-2), which raised it from 8 to 30.
+ */
+export const BLUR_MAX_PX = ANIMATION_TYPE_DEFAULTS.blur.strength
 
 /**
  * REQ-0331 §2-3 — `blur` radius falls as `pow(1 - p, BLUR_EASE_POWER)`.
@@ -227,7 +323,14 @@ function smoothstep(p: number): number {
  * two copies of "pop starts at 0, scale starts at 70" would drift.
  */
 export function defaultStartScalePercent(type: AnimationType): number {
-  return type === 'pop' ? POP_START_SCALE * 100 : SCALE_START * 100
+  // Only `scale` and `pop` read this field, so only they take their own
+  // entry.  Every other type gets `scale`'s value: the field is still
+  // written (the surfaces write the whole spec), and parking it on a
+  // sensible number means switching blur → scale lands somewhere useful
+  // rather than on whatever the last unrelated type happened to leave.
+  return type === 'pop' || type === 'scale'
+    ? strengthToStartScalePercent(ANIMATION_TYPE_DEFAULTS[type].strength)
+    : strengthToStartScalePercent(ANIMATION_TYPE_DEFAULTS.scale.strength)
 }
 
 /** The resolved, defaults-applied animation settings for one cue. */
@@ -355,6 +458,13 @@ export function resolveAnimation(entry: {
   }
 
   const type = coerceType(rawType)
+  // REQ-0337 §1-5 — the fallbacks here are deliberately NOT
+  // `ANIMATION_TYPE_DEFAULTS`.  This function's job is to describe data
+  // that already exists, and re-pointing an absent field at the new
+  // per-type table would change how existing projects LOOK (a stored
+  // `fade` with no duration would go 0.4 s → 0.2 s) without anyone having
+  // touched them.  The table is the starting point for a NEW choice —
+  // `animationFieldsForNewCue` and the type-change re-seed use it.
   const durationRaw = typeof entry.animationDurationSec === 'number'
     ? entry.animationDurationSec
     : ANIMATION_DURATION_DEFAULT_SEC
@@ -746,6 +856,15 @@ export function animationKeyframes(
  * Returns `{}` when the defaults carry no explicit choice, so the new cue
  * stays on the `fadeDurationSec` migration path and pre-REQ-0325 settings
  * keep producing the fade they always did.
+ *
+ * ## ★ REQ-0337 §1-4 — the per-type table must NOT win here
+ *
+ * Every field the settings panel actually saved is copied VERBATIM.  A
+ * user who set "type = blur, duration = 0.5 s" as their default made an
+ * explicit choice, and `ANIMATION_TYPE_DEFAULTS.blur.durationSec` (0.8)
+ * must not quietly overrule it.  The table is consulted only for fields
+ * the defaults do not carry at all — i.e. a settings file written before
+ * that field existed — where there is no choice to respect.
  */
 export function animationFieldsForNewCue(defaults: {
   animationType?: AnimationType
@@ -763,13 +882,110 @@ export function animationFieldsForNewCue(defaults: {
   animationBlurPx?: number
 } {
   if (defaults.animationType === undefined) return {}
+  const table = ANIMATION_TYPE_DEFAULTS[defaults.animationType]
   return {
     animationType: defaults.animationType,
     animationInEnabled: defaults.animationInEnabled !== false,
     animationOutEnabled: defaults.animationOutEnabled !== false,
-    animationDurationSec: defaults.animationDurationSec ?? ANIMATION_DURATION_DEFAULT_SEC,
+    animationDurationSec: defaults.animationDurationSec ?? table.durationSec,
     animationStartScalePercent: defaults.animationStartScalePercent
       ?? defaultStartScalePercent(defaults.animationType),
     animationBlurPx: defaults.animationBlurPx ?? BLUR_MAX_PX,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// REQ-0337 §1 — the UI value object, and the two operations every animation
+// surface performs on it.
+//
+// The inspector, the bulk-edit bar and the settings 「字幕スタイル」 panel all
+// render one `AnimationControls`, but each of them used to re-implement the
+// "spread the whole spec back onto the entry fields" step inline — three
+// copies of the same six-line mapping.  That is the shape REQ-0320 §1
+// records the cost of, so the mapping lives here and each surface calls it.
+//
+// It is also what makes REQ-0337 §1-4 testable without a DOM: the
+// re-seed is a pure function of the type, and the write is a pure function
+// of (current, patch), so "the defaults panel re-seeds exactly like the
+// inspector" is a property of these two functions rather than of a
+// component that only an integration test could reach.
+// ---------------------------------------------------------------------------
+
+/** A resolved animation as the flat object the controls bind to. */
+export interface AnimationUiValue {
+  type: AnimationType
+  inEnabled: boolean
+  outEnabled: boolean
+  durationSec: number
+  /**
+   * The STORED start scale (percent of natural size), NOT the 「強さ」 the
+   * slider shows — REQ-0337 §2-3 keeps the inversion inside the control.
+   */
+  startScalePercent: number
+  /** Peak blur radius, ASS px.  Already rises with strength. */
+  blurPx: number
+}
+
+/** The `SubtitleEntry` / `TranscriptionDefaults` fields an edit writes. */
+export interface AnimationEntryFields {
+  animationType: AnimationType
+  animationInEnabled: boolean
+  animationOutEnabled: boolean
+  animationDurationSec: number
+  animationStartScalePercent: number
+  animationBlurPx: number
+}
+
+/** A resolved spec, viewed as the controls' value object. */
+export function animationUiValue(spec: AnimationSpec): AnimationUiValue {
+  return {
+    type: spec.type,
+    inEnabled: spec.inEnabled,
+    outEnabled: spec.outEnabled,
+    durationSec: spec.durationSec,
+    startScalePercent: Math.round(spec.startScale * 100),
+    blurPx: spec.blurMaxPx,
+  }
+}
+
+/**
+ * Apply a control patch and return the WHOLE field set to write.
+ *
+ * Whole, not just the changed key: a legacy cue carries no `animation*`
+ * fields at all, so patching one would leave the rest falling through
+ * `resolveAnimation`'s migration branch and the edit would appear not to
+ * stick.  `current` therefore has to come from the RESOLVED spec.
+ */
+export function animationEntryFields(
+  current: AnimationUiValue,
+  patch: Partial<AnimationUiValue> = {},
+): AnimationEntryFields {
+  return {
+    animationType: patch.type ?? current.type,
+    animationInEnabled: patch.inEnabled ?? current.inEnabled,
+    animationOutEnabled: patch.outEnabled ?? current.outEnabled,
+    animationDurationSec: patch.durationSec ?? current.durationSec,
+    animationStartScalePercent: patch.startScalePercent ?? current.startScalePercent,
+    animationBlurPx: patch.blurPx ?? current.blurPx,
+  }
+}
+
+/**
+ * REQ-0337 §1-2 — every parameter a freshly PICKED type starts from.
+ *
+ * Returns a full value (not a partial) because picking a type overwrites
+ * all of them: timing, duration and strength.  See
+ * `ANIMATION_TYPE_DEFAULTS` for why the duration and switches now follow
+ * the type as the strength already did.
+ */
+export function animationFieldsForTypeChange(type: AnimationType): AnimationUiValue {
+  const seed = ANIMATION_TYPE_DEFAULTS[type]
+  return {
+    type,
+    inEnabled: seed.inEnabled,
+    outEnabled: seed.outEnabled,
+    durationSec: seed.durationSec,
+    startScalePercent: defaultStartScalePercent(type),
+    blurPx: BLUR_MAX_PX,
   }
 }

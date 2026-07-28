@@ -16,11 +16,10 @@ import {
   ANIMATION_START_SCALE_MAX_PCT,
   ANIMATION_START_SCALE_MIN_PCT,
   ANIMATION_START_SCALE_STEP_PCT,
-  BLUR_MAX_PX,
   SELECTABLE_ANIMATION_TYPES,
+  animationFieldsForTypeChange,
   coerceAnimationType,
-  defaultStartScalePercent,
-  type AnimationType,
+  type AnimationUiValue,
 } from '../../../shared/cue-animation'
 
 /**
@@ -48,16 +47,13 @@ import {
  * Each row is its own `StyleRow`, so every control lands in the same
  * column as every other row in the section at every pane width.
  */
-export interface AnimationControlsValue {
-  type: AnimationType
-  inEnabled: boolean
-  outEnabled: boolean
-  durationSec: number
-  /** REQ-0331 §1-3 — 強さ for `scale` / `pop` (percent of natural size). */
-  startScalePercent: number
-  /** REQ-0331 §1-3 — 強さ for `blur` (peak radius, ASS px). */
-  blurPx: number
-}
+/**
+ * REQ-0337 §1 — the value object moved to `shared/cue-animation.ts` (as
+ * `AnimationUiValue`) so the re-seed and the write-back can be pure,
+ * testable functions rather than component internals.  The old name is
+ * kept as an alias because three surfaces import it.
+ */
+export type AnimationControlsValue = AnimationUiValue
 
 export interface AnimationControlsProps {
   value: AnimationControlsValue
@@ -199,20 +195,33 @@ export function AnimationControls({
   }
 
   /**
-   * Changing the type re-seeds the strength to that type's own default.
-   * Without this, picking `pop` on a cue that had been a `scale` would
-   * inherit start-scale 70 % and produce a "pop" that starts nearly full
-   * size — i.e. not a pop at all.  The defaults come from
-   * `defaultStartScalePercent`, the same function `resolveAnimation` uses
-   * for an absent field, so the seeded value and the implicit value agree.
+   * REQ-0337 §1 — changing the type re-seeds EVERY parameter from
+   * `ANIMATION_TYPE_DEFAULTS`.
+   *
+   * REQ-0331 already re-seeded the strength, because picking `pop` on a
+   * cue that had been a `scale` would otherwise inherit start-scale 70 %
+   * and produce a "pop" that starts nearly full size — i.e. not a pop.
+   * The duration and the two timing switches carried over unchanged,
+   * though, so one parameter followed the type and the rest did not.  The
+   * owner read that inconsistency as a bug; there was no reason behind it.
+   *
+   * All three surfaces (inspector / bulk-edit / the settings defaults
+   * panel) render THIS component, so this is also what satisfies
+   * REQ-0337 §1-4's second half: changing the type inside the defaults
+   * panel re-seeds identically, by construction rather than by a second
+   * implementation.
    */
   const handleTypeChange = (raw: string) => {
     const type = coerceAnimationType(raw)
     if (type === value.type) return
-    const nextScale = defaultStartScalePercent(type)
-    setScaleDraft(nextScale)
-    setBlurDraft(BLUR_MAX_PX)
-    onChange({ type, startScalePercent: nextScale, blurPx: BLUR_MAX_PX })
+    const seed = animationFieldsForTypeChange(type)
+    // The three local drafts mirror the committed value, so they have to
+    // move with it — otherwise the sliders keep showing the old type's
+    // numbers until the next prop round-trip.
+    setDraft(secondsToStep(seed.durationSec))
+    setScaleDraft(seed.startScalePercent)
+    setBlurDraft(seed.blurPx)
+    onChange(seed)
   }
 
   return (

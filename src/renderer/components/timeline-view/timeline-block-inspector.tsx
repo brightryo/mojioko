@@ -28,7 +28,9 @@ import type { StylePreset } from '../../../shared/style-preset'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 import { coerceKaraokeStyle, resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
-import { resolveAnimation, ANIMATION_BLUR_ENABLED } from '../../../shared/cue-animation'
+import {
+  resolveAnimation, ANIMATION_BLUR_ENABLED, animationEntryFields, animationUiValue,
+} from '../../../shared/cue-animation'
 import { AnimationControls, type AnimationControlsValue } from '@/components/animation-controls/animation-controls'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
@@ -134,19 +136,16 @@ export function TimelineBlockInspector({
   // then take over permanently (see `resolveAnimation`).
   const animSpec = resolveAnimation(entry)
   function handleAnimationChange(patch: Partial<AnimationControlsValue>) {
-    // Write the WHOLE resolved spec, not only the changed key.  A legacy
-    // cue has no `animation*` fields at all; patching just one would leave
-    // the others falling through the migration branch, and the edit would
-    // appear not to stick.
-    applyStyleEdit(t('history.editAnimation'), {
-      animationType: patch.type ?? animSpec.type,
-      animationInEnabled: patch.inEnabled ?? animSpec.inEnabled,
-      animationOutEnabled: patch.outEnabled ?? animSpec.outEnabled,
-      animationDurationSec: patch.durationSec ?? animSpec.durationSec,
-      animationStartScalePercent:
-        patch.startScalePercent ?? Math.round(animSpec.startScale * 100),
-      animationBlurPx: patch.blurPx ?? animSpec.blurMaxPx,
-    })
+    // REQ-0337 §1 — the "write the WHOLE resolved spec, not only the
+    // changed key" rule now lives in `animationEntryFields`, shared with
+    // the bulk-edit bar and the settings defaults panel.  (A legacy cue
+    // has no `animation*` fields at all; patching just one would leave the
+    // others falling through the migration branch and the edit would
+    // appear not to stick.)
+    applyStyleEdit(
+      t('history.editAnimation'),
+      animationEntryFields(animationUiValue(animSpec), patch),
+    )
   }
   // REQ-0125 — history-less preview writer used from the color picker's
   // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
