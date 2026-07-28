@@ -7,8 +7,8 @@ import { Switch } from '@/components/ui/switch'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
 import { AnimationControls, type AnimationControlsValue } from '@/components/animation-controls/animation-controls'
 import {
-  ANIMATION_BLUR_ENABLED, ANIMATION_DURATION_DEFAULT_SEC, BLUR_MAX_PX,
-  animationEntryFields, defaultStartScalePercent,
+  ANIMATION_BLUR_ENABLED,
+  animationEntryFields, animationFieldsForTypeChange,
 } from '../../../shared/cue-animation'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
@@ -328,14 +328,15 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   const [karaokeHighlightDraft, setKaraokeHighlightDraft] = useState<string>(KARAOKE_DEFAULT_HIGHLIGHT_COLOR)
   // REQ-0322 §3 — seeded from the new-cue default so the Select opens on
   // the value the user already considers "normal" for this project.
-  const [animationDraft, setAnimationDraft] = useState<AnimationControlsValue>({
-    type: 'none', inEnabled: true, outEnabled: true,
-    durationSec: ANIMATION_DURATION_DEFAULT_SEC,
-    // REQ-0331 §1-3 — seeded from the shared per-type defaults so the bulk
-    // bar opens on the same numbers a fresh cue would resolve to.
-    startScalePercent: defaultStartScalePercent('none'),
-    blurPx: BLUR_MAX_PX,
-  })
+  // REQ-0341 §4-2 — seeded through the SAME function that re-seeds the draft
+  // the instant a type is picked (`animationFieldsForTypeChange`), instead of
+  // hand-assembling three constants that happened to agree with it.  The
+  // values were already correct; keeping a second expression for them meant
+  // the opening state and the after-first-pick state were derived
+  // independently, and would drift the next time the per-type table moves.
+  const [animationDraft, setAnimationDraft] = useState<AnimationControlsValue>(
+    () => animationFieldsForTypeChange('none'),
+  )
   // REQ-0324 §4-1 — seeded from the constant default; the app-wide
   // karaoke-style setting was removed (the value is per-cue only now).
   const [karaokeStyleDraft, setKaraokeStyleDraft] = useState<KaraokeStyle>(KARAOKE_STYLE_DEFAULT)
@@ -394,12 +395,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     // REQ-0324 §1 — the animation draft resets with the selection for the
     // same reason every other draft does: a bulk control must not carry a
     // previous selection's value into a new one.
-    setAnimationDraft({
-      type: 'none', inEnabled: true, outEnabled: true,
-      durationSec: ANIMATION_DURATION_DEFAULT_SEC,
-      startScalePercent: defaultStartScalePercent('none'),
-      blurPx: BLUR_MAX_PX,
-    })
+    setAnimationDraft(animationFieldsForTypeChange('none'))
     // REQ-0310 §1 — back to fully opaque on every selection change, matching
     // the field default so the bar never opens primed to hide the subtitles.
     setTextAlphaDraft(OPACITY_DEFAULT_PERCENT)

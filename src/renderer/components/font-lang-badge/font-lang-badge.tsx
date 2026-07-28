@@ -6,9 +6,9 @@ import type { FontLanguage } from '../../../shared/fonts'
  * font display name across the app.  A single component so the visual
  * is uniform across:
  *
- *   - Settings > Fonts picker (FontPicker.FontRow)
- *   - Timeline inspector per-row selector (RowFontSelector)
- *   - Bulk-edit bar font selector (BulkEditBar)
+ *   - Settings > Fonts picker (FontPicker.FontFamilyRow)
+ *   - Timeline inspector / bulk-edit / default-font selector
+ *     (FamilyWeightSelector, via `FontFamilyBadges` — REQ-0341 §1)
  *   - License attribution list (FontLicensesDialog)
  *
  * The chip does not affect selectability or missing-glyph behaviour —

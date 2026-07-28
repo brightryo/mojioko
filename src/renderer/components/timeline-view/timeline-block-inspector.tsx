@@ -1127,10 +1127,11 @@ export function TimelineBlockInspector({
                 fields (§5 undo atomicity requirement).  When the
                 picked FontId matches the project's active default,
                 collapse to `undefined` so the row keeps "inherit"
-                semantics (mirrors RowFontSelector's onChange handler).
-                RowFontSelector remains available for the table's
-                per-row column where compact single-dropdown fits
-                the tight cell. */}
+                semantics (mirrors the onChange handler the retired
+                RowFontSelector used).  REQ-0341 §4-4 deleted that
+                component: it was never mounted anywhere, and the badge
+                markup it carried now lives in `FontFamilyBadges`, which
+                the selector below renders. */}
             <FamilyWeightSelector
               value={entry.fontId ?? activeFontId}
               onChange={(nextId) => handleFontChange(nextId === activeFontId ? undefined : nextId)}

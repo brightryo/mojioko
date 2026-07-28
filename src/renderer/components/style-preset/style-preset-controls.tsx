@@ -167,7 +167,11 @@ export function StylePresetControls({
                 className="justify-between gap-2"
                 onSelect={() => onApply(p)}
               >
-                <span className="truncate">{p.name}</span>
+                {/* REQ-0341 §4-1 — `title` so a name the 256 px panel
+                    truncates is still readable on hover.  Names are capped at
+                    STYLE_PRESET_NAME_MAX_LEN (40) and must be unique, so two
+                    long presets can differ only past the ellipsis. */}
+                <span className="truncate" title={p.name}>{p.name}</span>
                 <button
                   type="button"
                   aria-label={t('preset.delete', { name: p.name })}
