@@ -78,6 +78,59 @@ export function linePitchAssPx(fontSizePx: number, percent: number): number {
 }
 
 /**
+ * REQ-0350 — the largest font size a rendered line actually uses, in ASS px.
+ *
+ * A display line is not necessarily `fontSizePx` tall.  Keyword emphasis emits
+ * its runs with `\fs<scaled>` (160 → 240 at 150 %), so a line containing an
+ * emphasised word is taller than the cue's base size.  `linePitchAssPx` knows
+ * only the base size, and a cue split into per-line `\pos` events was spacing
+ * every line by that base pitch — so an enlarged line ran into its neighbour.
+ * Burned at the owner's settings (4 lines, `\fs160`, −30 %, emphasis 150 %),
+ * four lines produced **three** ink bands: two pairs had merged.
+ *
+ * ## Why this reads the emitted body rather than the entry's emphasis fields
+ *
+ * The body is what libass will actually be handed, so scanning it for `\fs`
+ * cannot disagree with what gets rendered.  Deriving the same answer from
+ * `emphasisScalePercent` + a range→line mapping would be a SECOND predicate
+ * over the same question, and would silently miss any future tag that changes
+ * a run's size — which is precisely the shape of the bug being fixed here (a
+ * size change the pitch calculation did not know about).  One authority: the
+ * text being rendered.
+ *
+ * `\fs` values the writer emits are integers (`emphasisScaledFs` is rounded),
+ * but a decimal is accepted so a hand-authored or future fractional size still
+ * measures correctly.
+ */
+export function maxFontSizeInLineBodyAssPx(lineBody: string, baseFontSizePx: number): number {
+  let max = baseFontSizePx
+  for (const m of lineBody.matchAll(/\\fs(\d+(?:\.\d+)?)/g)) {
+    const v = Number(m[1])
+    if (Number.isFinite(v) && v > max) max = v
+  }
+  return max
+}
+
+/**
+ * REQ-0350 — per-line box heights in ASS px, one per display line.
+ *
+ * Line spacing scales each line's own height, exactly as the preview's
+ * unitless CSS `line-height` does: a unitless value multiplies each element's
+ * OWN font-size, so an emphasised run's inline box grows with it and the line
+ * box takes the tallest. That is why the preview never showed this bug.
+ *
+ * With no emphasis every entry is `fontSizePx × factor` and the array is
+ * uniform, which is the pre-REQ-0350 pitch.
+ */
+export function lineHeightsAssPx(
+  lineMaxFontSizesPx: readonly number[],
+  percent: number,
+): number[] {
+  const factor = lineSpacingFactor(percent)
+  return lineMaxFontSizesPx.map((fs) => fs * factor)
+}
+
+/**
  * The libass hard line-break marker as it appears inside a cue's stored
  * `text` (backslash + `N`).  Protected convention (CLAUDE.md §21) — this
  * constant NAMES it, it does not redefine it.
@@ -151,10 +204,16 @@ export function lineLeadingCorrectionAssPx(fontSizePx: number, percent: number):
 // ---------------------------------------------------------------------------
 
 export interface CueLineAnchorInput {
-  /** How many events the cue is being split into. */
-  lineCount: number
-  /** Distance between consecutive lines, ASS px (`linePitchAssPx`). */
-  pitchPx: number
+  /**
+   * Height of each display line's box, ASS px, one per line
+   * (`lineHeightsAssPx`).  Its length IS the line count.
+   *
+   * REQ-0350 replaced a single `pitchPx` with this array: lines are not all
+   * the same height once keyword emphasis can enlarge a run, so the anchors
+   * have to accumulate rather than sit at a constant stride.  A uniform array
+   * reproduces the old arithmetic exactly — see `cueLineAnchors`.
+   */
+  lineHeightsPx: readonly number[]
   horizontalPosition: 'left' | 'center' | 'right'
   verticalPosition: 'top' | 'center' | 'bottom'
   /**
@@ -214,7 +273,8 @@ export interface CueLineAnchor {
  * edge-derived anchor, with the same per-line arithmetic around it.
  */
 export function cueLineAnchors(input: CueLineAnchorInput): CueLineAnchor[] {
-  const { lineCount, pitchPx, playResX, playResY, marginLrPx } = input
+  const { lineHeightsPx, playResX, playResY, marginLrPx } = input
+  const lineCount = lineHeightsPx.length
   const pinned = input.posX !== undefined && input.posY !== undefined
 
   const x = pinned
@@ -225,19 +285,37 @@ export function cueLineAnchors(input: CueLineAnchorInput): CueLineAnchor[] {
         ? playResX - marginLrPx
         : playResX / 2
 
+  // REQ-0350 — stack the lines as boxes and read each anchor off the edge its
+  // `\an` names, instead of stepping a constant pitch.
+  //
+  //   offsetTop[i] = height of every line above line i
+  //   total        = the block's full height
+  //
+  // `\an1/2/3` puts the anchor at a line's BOTTOM edge, `\an7/8/9` at its TOP,
+  // `\an4/5/6` at its middle — so each alignment reads a different point of
+  // the same stack.  When every height is equal this collapses term-for-term
+  // into the pre-REQ-0350 expressions (`base − (L−1−i)·pitch`, `base + i·pitch`,
+  // `base + (i − (L−1)/2)·pitch`), which is what keeps the no-emphasis output
+  // and the REQ-0332 frame-identity result untouched.
+  const offsetTop: number[] = []
+  let running = 0
+  for (const h of lineHeightsPx) { offsetTop.push(running); running += h }
+  const total = running
+
   const centerOffset = input.centerOffsetPx ?? 0
   const out: CueLineAnchor[] = []
   for (let i = 0; i < lineCount; i++) {
     let y: number
     if (input.verticalPosition === 'bottom') {
       const base = pinned ? (input.posY as number) : playResY - input.verticalMarginPx
-      y = base - (lineCount - 1 - i) * pitchPx
+      // Block bottom sits at `base`; line i's bottom edge is its own box end.
+      y = base - total + offsetTop[i] + lineHeightsPx[i]
     } else if (input.verticalPosition === 'top') {
       const base = pinned ? (input.posY as number) : input.verticalMarginPx
-      y = base + i * pitchPx
+      y = base + offsetTop[i]
     } else {
       const base = pinned ? (input.posY as number) : playResY / 2 + centerOffset
-      y = base + (i - (lineCount - 1) / 2) * pitchPx
+      y = base - total / 2 + offsetTop[i] + lineHeightsPx[i] / 2
     }
     out.push({ x, y })
   }

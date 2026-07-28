@@ -17,7 +17,8 @@ import {
   cueLineAnchors,
   estimateCueHeightAssPx,
   formatAssCoord,
-  linePitchAssPx,
+  lineHeightsAssPx,
+  maxFontSizeInLineBodyAssPx,
   resolveLineSpacingPercent,
 } from '../../shared/line-spacing'
 import { computeFixedStackOffsets } from '../../shared/stack-offsets'
@@ -961,9 +962,14 @@ function resolveSelfPositionedCues(
     if (!selfIds.has(r.entry.id)) continue
     const e = r.entry
     const offset = r.isPinned ? 0 : (offsets.get(e.id) ?? 0)
+    // REQ-0350 — measure each line from the body that will actually be
+    // emitted, so a line carrying an emphasis `\fs` gets a taller box.  The
+    // SPLIT bodies are the right ones to read: those are the events these
+    // anchors position.
+    const lineMaxFontSizes = r.splitLineBodies.map((body) =>
+      maxFontSizeInLineBodyAssPx(body, e.fontSizePx))
     out.set(e.id, cueLineAnchors({
-      lineCount: r.lineBodies.length,
-      pitchPx: linePitchAssPx(e.fontSizePx, resolveLineSpacingPercent(e)),
+      lineHeightsPx: lineHeightsAssPx(lineMaxFontSizes, resolveLineSpacingPercent(e)),
       horizontalPosition: e.horizontalPosition,
       verticalPosition: e.verticalPosition,
       verticalMarginPx: e.verticalMarginPx + offset,

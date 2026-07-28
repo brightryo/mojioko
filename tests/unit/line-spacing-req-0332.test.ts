@@ -120,8 +120,14 @@ describe('REQ-0332 §3-1 — pitch and geometry', () => {
 })
 
 describe('REQ-0332 §3-1 — per-line `\\pos` anchors', () => {
+  // REQ-0350 replaced `{ lineCount, pitchPx }` with a per-line height array,
+  // because keyword emphasis makes lines different heights.  A UNIFORM array
+  // is the same geometry as the old single pitch, so every expected value
+  // below is unchanged — which is the point: the generalisation had to
+  // collapse term-for-term onto the arithmetic REQ-0332 §6 validated
+  // pixel-identical against libass.
   const base = {
-    lineCount: 2, pitchPx: 100, playResX: 1920, playResY: 1080, marginLrPx: 120,
+    lineHeightsPx: [100, 100], playResX: 1920, playResY: 1080, marginLrPx: 120,
     verticalMarginPx: 40,
   } as const
 
