@@ -165,9 +165,12 @@ export function buildKaraokeAssText(
   // text here so the `{openTag}` … `{closeTag}` pair sits exactly around the
   // emphasised characters.  Both stay brace-enclosed (REQ-0291).
   //
-  // When a word is emphasised from its first visible character, the open tag is
-  // folded into that word's `{\k…}` block (one block instead of two adjacent
-  // ones) — this is also what keeps whole-word emphasis byte-identical to the
+  // REQ-0338 §1 — each run opens its OWN `{\k…}` block with the style change
+  // folded in, because libass stops colouring a syllable at the first override
+  // that changes glyph metrics (see the emit loop's comment).  Runs before the
+  // last carry `\k0`, so the whole word still lights at one instant and the
+  // clock advances by exactly the word's own duration.  A word with a single
+  // run (no emphasis, or whole-word emphasis) is byte-identical to the
   // REQ-0306 output.  `undefined` → byte-identical to the pre-REQ-0305 output
   // (existing callers/tests unaffected).
   emphasis?: {
@@ -244,26 +247,40 @@ export function buildKaraokeAssText(
       parts.push(`{${kTag}}`)
       continue
     }
+    // REQ-0338 §1 — every run opens its OWN `\k` block, with the emphasis
+    // open/close tag folded into it.
+    //
+    // libass ends a karaoke syllable's colouring at the first override that
+    // changes glyph METRICS (`\fs`, `\fscx/y`, `\b`, `\fsp`; a colour-only
+    // override is transparent).  Everything from that override to the end of
+    // the syllable stays in SecondaryColour until the syllable's time expires.
+    // Emitting `{\k200}c{\fs104…}har{\fs80…}lie` therefore left "harlie"
+    // unspoken for the whole syllable — and when that syllable is the cue's
+    // last, "the whole syllable" is "until the cue disappears", so those
+    // characters never reached the spoken colour at all.  Measured on the
+    // bundled ffmpeg: spoken-area fraction 0.6075 at the cue's final frame,
+    // where the invariant is 1.0.  See `karaoke-sweep.ts` for the full probe
+    // table; the two paths trip the same libass rule.
+    //
+    // `\k` switches a syllable at its START, so the WHOLE word must still light
+    // at one instant: every run but the last carries `\k0` and the last carries
+    // the word's entire duration.  Their activation times are then all equal to
+    // the word's, and the clock advances by exactly what the un-split word
+    // advanced it by — no second rounding rule, no drift.  A word with one run
+    // (no emphasis, or whole-word emphasis) is byte-identical to before.
+    const lastCsIndex = runs.length - 1
     let opened = false
     for (let r = 0; r < runs.length; r++) {
       const run = runs[r]
+      const tag = r === lastCsIndex ? kTag : '\\k0'
       if (run.emphasized) {
-        if (r === 0) {
-          // Fold into the `\k` block — `{\k70\fs150\c…}TEXT`.
-          parts.push(`{${kTag}${emphasis!.openTag}}`)
-        } else {
-          parts.push(`{${emphasis!.openTag}}`)
-        }
-        parts.push(escapeText(run.text))
+        parts.push(`{${tag}${emphasis!.openTag}}`)
         opened = true
       } else {
-        if (r === 0) parts.push(`{${kTag}}`)
-        if (opened) {
-          parts.push(`{${emphasis!.closeTag}}`)
-          opened = false
-        }
-        parts.push(escapeText(run.text))
+        parts.push(`{${tag}${opened ? emphasis!.closeTag : ''}}`)
+        opened = false
       }
+      parts.push(escapeText(run.text))
     }
     if (opened) parts.push(`{${emphasis!.closeTag}}`)
   }

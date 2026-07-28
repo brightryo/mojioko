@@ -115,21 +115,42 @@ describe('buildKaraokeSweepAssText — keyword emphasis', () => {
     closeTag: '\\fs100\\c&H39FFB4&',
   }
 
-  it('folds the open tag into the `\\kf` block and closes before the next run', () => {
+  it('REQ-0338 §1 — gives EVERY run its own `\\kf`, with the style change folded in', () => {
     const out = buildKaraokeSweepAssText([w(0, 1, 'abcd')], 0, 1, id, undefined, emphasis)
-    expect(out).toBe('{\\kf100\\fs150\\c&H00FFFF&}ab{\\fs100\\c&H39FFB4&}cd')
+    expect(out).toBe('{\\kf50\\fs150\\c&H00FFFF&}ab{\\kf50\\fs100\\c&H39FFB4&}cd')
   })
 
-  it('emits exactly ONE `\\kf` per word so the fill crosses runs continuously', () => {
+  it('REQ-0338 §1 — never leaves a metric change INSIDE a `\\kf` syllable', () => {
+    // libass stops filling a syllable at the first override that changes glyph
+    // metrics, so every `\fs` must be the first thing in its own `\kf` block.
+    // The regression this pins burned in as an instant switch, and — when the
+    // syllable was the cue's last — never reached the spoken colour at all.
     const out = buildKaraokeSweepAssText([w(0, 1, 'abcd')], 0, 1, id, undefined, emphasis)
-    expect((out.match(/\\kf/g) ?? []).length).toBe(1)
+    for (const block of out.match(/\{[^}]*\}/g) ?? []) {
+      const fs = block.indexOf('\\fs')
+      if (fs < 0) continue
+      expect(block.slice(0, fs)).toMatch(/^\{\\kf\d+$/)
+    }
   })
 
-  it('keeps timing identical whether or not the word is emphasised', () => {
+  it('REQ-0338 §1 — the runs\' durations still sum to the un-split word\'s', () => {
     const plain = buildKaraokeSweepAssText([w(0, 0.7, 'abcd')], 0, 1, id)
     const emph = buildKaraokeSweepAssText([w(0, 0.7, 'abcd')], 0, 1, id, undefined, emphasis)
+    const sum = (s: string): number =>
+      [...s.matchAll(/\\kf?(\d+)/g)].reduce((a, m) => a + Number(m[1]), 0)
     expect(plain).toContain('\\kf70')
-    expect(emph).toContain('\\kf70')
+    expect(sum(emph)).toBe(sum(plain))
+  })
+
+  it('REQ-0338 §1 — apportioning never drifts off the word total, at any split', () => {
+    // 7 characters into 2 runs at every cut point: the emitted centiseconds
+    // must always add up to what the word alone would have emitted.
+    for (let cut = 1; cut < 7; cut++) {
+      const e = { ...emphasis, ranges: new Map([[0, [[0, cut] as readonly [number, number]]]]) }
+      const out = buildKaraokeSweepAssText([w(0, 0.83, 'abcdefg')], 0, 1, id, undefined, e)
+      const total = [...out.matchAll(/\\kf?(\d+)/g)].reduce((a, m) => a + Number(m[1]), 0)
+      expect(total).toBe(83)
+    }
   })
 })
 

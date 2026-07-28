@@ -40,11 +40,52 @@
  * the gap-absorbing duration, so degenerate input still produces a monotonic
  * timeline rather than a zero-length sweep.
  *
- * ## Emphasis
+ * ## Emphasis — why every run gets its OWN `\kf` (REQ-0338 §1)
  *
- * Runs after the first carry no `\k*` tag, so they stay part of the SAME `\kf`
- * syllable and the fill crosses them continuously — matching the `\k` path,
- * where every run of a word lights together.
+ * Up to REQ-0337 a word was ONE `\kf` syllable and the emphasis open/close tags
+ * were emitted inside it, on the premise that the fill would cross the runs
+ * continuously.  **libass does not do that.**  Measured against the bundled
+ * ffmpeg (lossless RGB burn, `\kf400` over 8 glyphs, sampled at 25/50/75 % of
+ * the syllable):
+ *
+ *   `{\kf400}HHHHHHHH`                  → 0.250 / 0.502 / 0.750   (fills)
+ *   `{\kf400}HHHH{\c&H0000FF&}HHHH`     → 0.250 / 0.502 / 0.750   (fills)
+ *   `{\kf400}HHHH{\fs104}HHHH`          → 0.096 / 0.186 / 0.279   (does NOT)
+ *   `{\kf400}HHHH{\fscx130\fscy130}HHHH`→ 0.096 / 0.186 / 0.279   (does NOT)
+ *   `{\kf400}HHHH{\b1}HHHH`             → 0.104 / 0.205 / 0.307   (does NOT)
+ *
+ * A colour-only override is transparent to the fill; **any override that
+ * changes glyph metrics ends it.**  Everything from that override to the end of
+ * the syllable is left in SecondaryColour and flips to Primary only when the
+ * syllable's time expires — i.e. it renders as `\k` (instant switch) no matter
+ * what the user picked.  Two owner-visible symptoms, one cause:
+ *
+ *   1. the emphasised span switches instead of sweeping;
+ *   2. when that syllable is the cue's LAST, its window ends with the cue, so
+ *      the emphasised run and everything after it in the word never reach the
+ *      spoken colour at all — the sweep appears to stop just before the
+ *      emphasised characters and stay there.
+ *
+ * The emphasis size change is the whole point of the feature, so the fix is to
+ * stop putting it INSIDE a syllable: each run opens its own `{\kf…}` block with
+ * the style change folded in, so every syllable is metrically uniform.  Proven
+ * by the same harness: `{\kf100}HHHH{\kf100\fs104}HHHH` → 0.186 / 0.372 / 0.687,
+ * a continuous fill across the size change.
+ *
+ * The word's sweep time is apportioned across its runs **in proportion to their
+ * code-point counts**, and by differencing a running cumulative total so the
+ * per-run centiseconds sum EXACTLY to the centiseconds the un-split word would
+ * have had.  Linear interpolation inside a word is the same approximation
+ * `splitWordsAtHardBreaks` already makes when a `\N` cuts a unit, and it is the
+ * best available here: the ASS writer has no glyph metrics, so it cannot know
+ * that the emphasised run is also wider.  The sweep therefore crosses an
+ * emphasised run slightly faster than a plain one; it no longer skips it.
+ *
+ * The `\k` (switch) path in `karaoke-ass.ts` is deliberately NOT changed: `\k`
+ * has no partial fill, so the metric change costs it nothing (verified — a
+ * `{\k…}` word with a mid-word `\fs` lights in full), and splitting it would
+ * make an emphasised span light at a different instant from the rest of its
+ * word, which is a behaviour change rather than a fix.
  *
  * ## Override-tag enclosure
  *
@@ -63,6 +104,37 @@ export interface KaraokeSweepEmphasis {
 }
 
 const toCs = (sec: number): number => Math.max(0, Math.round(sec * 100))
+
+/**
+ * REQ-0338 §1 — split `totalCs` centiseconds across parts weighted by `weights`,
+ * so that the parts sum EXACTLY to `totalCs`.
+ *
+ * Rounding each part independently would drift, and a karaoke body whose tags
+ * sum to less than the cue leaves its tail unspoken forever — the failure mode
+ * REQ-0336 was filed for.  Differencing a rounded RUNNING TOTAL cannot drift:
+ * the last boundary is `totalCs` by construction.
+ *
+ * An all-zero (or empty) weight vector puts everything on the first part, which
+ * is the degenerate case where no part has any characters to sweep across.
+ */
+export function apportionCs(totalCs: number, weights: readonly number[]): number[] {
+  const out = new Array<number>(weights.length).fill(0)
+  if (weights.length === 0) return out
+  const sum = weights.reduce((a, b) => a + b, 0)
+  if (sum <= 0) {
+    out[0] = totalCs
+    return out
+  }
+  let consumed = 0
+  let emitted = 0
+  for (let i = 0; i < weights.length; i++) {
+    consumed += weights[i]
+    const upto = i === weights.length - 1 ? totalCs : Math.round((totalCs * consumed) / sum)
+    out[i] = Math.max(0, upto - emitted)
+    emitted = upto
+  }
+  return out
+}
 
 /**
  * The textless `{\k<gap>}` block that advances the karaoke clock across a
@@ -131,21 +203,22 @@ export function buildKaraokeSweepAssText(
       parts.push(`{${kfTag}}`)
       continue
     }
+    // REQ-0338 §1 — one `\kf` PER RUN (see the "Emphasis" docstring section).
+    // A single run reproduces the pre-REQ-0338 output byte-for-byte because the
+    // whole word's centiseconds land on it.
+    const runCs = apportionCs(toCs(durationSec), runs.map((run) => [...run.text].length))
     let opened = false
     for (let r = 0; r < runs.length; r++) {
       const run = runs[r]
+      const tag = `\\kf${runCs[r]}`
       if (run.emphasized) {
-        parts.push(r === 0 ? `{${kfTag}${emphasis!.openTag}}` : `{${emphasis!.openTag}}`)
-        parts.push(escapeText(run.text))
+        parts.push(`{${tag}${emphasis!.openTag}}`)
         opened = true
       } else {
-        if (r === 0) parts.push(`{${kfTag}}`)
-        if (opened) {
-          parts.push(`{${emphasis!.closeTag}}`)
-          opened = false
-        }
-        parts.push(escapeText(run.text))
+        parts.push(`{${tag}${opened ? emphasis!.closeTag : ''}}`)
+        opened = false
       }
+      parts.push(escapeText(run.text))
     }
     if (opened) parts.push(`{${emphasis!.closeTag}}`)
   }

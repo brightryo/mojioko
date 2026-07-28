@@ -557,10 +557,14 @@ describe('REQ-0307 generateAss integration', () => {
     // at 0.5s → k50; it then holds to the cue end at 2s → k150).
     expect(body).toContain('\\k50')
     expect(body).toContain('\\k150')
+    // REQ-0338 §1 — each run opens its OWN `\k` block with the style change
+    // folded in, so no metric-changing override sits inside a syllable (libass
+    // stops colouring the syllable there).  `\k0` on the leading runs keeps the
+    // word lighting at one instant, and the durations still sum to the word's.
     // Word 0: plain "hel", then emphasised "lo", then style restored.
-    expect(body).toMatch(/\}hel\{\\fs150\\c&H0000D4FF&\}lo\{\\fs100\\c&H0000FFFF&\}/)
-    // Word 1: the `\k` block, the (unemphasised) leading space, then "wo".
-    expect(body).toMatch(/\{\\k150\} \{\\fs150\\c&H0000D4FF&\}wo\{\\fs100\\c&H0000FFFF&\}rld/)
+    expect(body).toMatch(/\{\\k0\}hel\{\\k50\\fs150\\c&H0000D4FF&\}lo\{\\fs100\\c&H0000FFFF&\}/)
+    // Word 1: the (unemphasised) leading space, then "wo", then "rld".
+    expect(body).toMatch(/\{\\k0\} \{\\k0\\fs150\\c&H0000D4FF&\}wo\{\\k150\\fs100\\c&H0000FFFF&\}rld/)
     // Concatenating the visible text still reproduces the cue.
     expect(body.replace(/\{[^}]*\}/g, '')).toBe('hello world')
     assertNoBareOverrides(body)

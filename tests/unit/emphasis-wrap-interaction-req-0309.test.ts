@@ -189,7 +189,11 @@ describe('REQ-0309 §3(A) — a cross-break run renders on BOTH lines', () => {
       openTag: 'OPEN',
       closeTag: 'CLOSE',
     })
-    expect(body).toBe('{\\k100}あいう{OPEN}とて{CLOSE}\\N{\\k100OPEN}も{CLOSE}えお')
+    // REQ-0338 §1 — every run opens its own `\k` block so no metric-changing
+    // override sits inside a syllable.  `\k0` on all but the last run keeps the
+    // whole word lighting at one instant and the clock advancing by exactly the
+    // word's own duration (0 + 100 and 0 + 0 + 100, as before).
+    expect(body).toBe('{\\k0}あいう{\\k100OPEN}とて{CLOSE}\\N{\\k0OPEN}も{\\k100CLOSE}えお')
     expectWellFormedOverrides(body)
     // Visible text still reconstructs the cue.
     expect(body.replace(/\{[^}]*\}/g, '')).toBe(text)
