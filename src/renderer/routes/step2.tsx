@@ -35,6 +35,7 @@ import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font
 // transient bulk-edit-bar slide-in/out (the bar moved to the right pane).
 import type { SubtitleEntry } from '../../shared/types'
 import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
+import { formatSrtTime } from '../../shared/srt-time'
 import { styleFieldsFromDefaults } from '@/lib/style-defaults-to-entry'
 import { NEW_ROW_DURATION_SEC, ENABLE_VIDEO_PREVIEW } from '../../shared/constants'
 import { VideoPreviewPanel } from '@/components/video-preview/video-preview-panel'
@@ -148,15 +149,6 @@ type EditorState =
       nextEntryStartSec: number | null
       nextEntryEndSec: number | null
     }
-
-/** Format seconds as SRT timecode: HH:MM:SS,mmm */
-function formatSrtTime(sec: number): string {
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  const s = Math.floor(sec % 60)
-  const ms = Math.round((sec % 1) * 1000)
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`
-}
 
 /**
  * Build UTF-8 BOM SRT content from subtitle entries (DaVinci Resolve
