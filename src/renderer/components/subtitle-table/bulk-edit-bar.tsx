@@ -11,6 +11,7 @@ import {
   animationEntryFields, animationFieldsForTypeChange,
 } from '../../../shared/cue-animation'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
+import { measureSync } from '@/lib/perf-counter'
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
 import { LineSpacingSlider } from '@/components/subtitle-table/line-spacing-slider'
 import { LINE_SPACING_DEFAULT_PERCENT } from '../../../shared/line-spacing'
@@ -461,13 +462,18 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     // turned it into trimDeleted while it was still in the selection set).
     const cuts = useProjectStore.getState().cuts
     const snapshots = new Map<string, SubtitleEntry>()
-    for (const id of ids) {
-      const e = all.find((x) => x.id === id)
-      if (!e) continue
-      if (e.isDeleted) continue
-      if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
-      snapshots.set(id, { ...e })
-    }
+    // REQ-0342 §2 — labelled so a perf run can attribute milliseconds to a
+    // phase instead of guessing from a sampling profile of a minified build.
+    // `measureSync` is a no-op outside `?seed=demo` (perf-counter.ts).
+    measureSync('bulk.snapshot', () => {
+      for (const id of ids) {
+        const e = all.find((x) => x.id === id)
+        if (!e) continue
+        if (e.isDeleted) continue
+        if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
+        snapshots.set(id, { ...e })
+      }
+    })
     if (snapshots.size === 0) return
 
     // REQ-20260615-037 — if this bulk op touches horizontal / vertical /
@@ -518,9 +524,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       }
     }
 
-    useHistoryStore.getState().push({ label, undo: revert, redo: apply })
-    apply()
-    onApplied(snapshots.size, label)
+    measureSync('bulk.historyPush', () => {
+      useHistoryStore.getState().push({ label, undo: revert, redo: apply })
+    })
+    measureSync('bulk.apply', apply)
+    measureSync('bulk.onApplied', () => onApplied(snapshots.size, label))
   }
 
   // ---------------------------------------------------------------------

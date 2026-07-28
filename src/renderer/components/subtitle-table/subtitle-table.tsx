@@ -24,6 +24,7 @@ import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { commitTextEditWithHistory } from '@/lib/commit-text-edit'
+import { measureSync } from '@/lib/perf-counter'
 import { filterEntries } from '@/lib/subtitle-filter'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
 import { effectiveEntryState, type ClipStatus, type CutList } from '../../../shared/cuts'
@@ -997,7 +998,9 @@ export function SubtitleTable({
     return () => clearTimeout(timer)
   }, [scrollToRowId, setScrollToRowId])
 
-  const filtered = filterEntries(entries, tableFilter, warningsMap, cuts)
+  // REQ-0342 §2 — labelled; no-op outside `?seed=demo` (perf-counter.ts).
+  const filtered = measureSync('table.filterEntries', () =>
+    filterEntries(entries, tableFilter, warningsMap, cuts))
 
   const emptyKey =
     tableFilter === 'all'      ? 'empty.all'      :

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useLayoutEffect } from 'react'
 import { animationFieldsForNewCue } from '../../shared/cue-animation'
-import { bumpRenderCount } from '@/lib/perf-counter'
+import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Plus, RotateCcw, RotateCw, Film, Import } from 'lucide-react'
@@ -391,6 +391,9 @@ export default function Step2Route(_: Step2RouteProps) {
   // after the real glyph metrics became available a few frames later.
   const fontCacheVersion = useFontCacheVersionStore((s) => s.version)
   const overflowMap = useMemo(() => {
+    // REQ-0342 §2 — labelled so a perf run can attribute milliseconds to this
+    // loop.  `measureSync` is a no-op outside `?seed=demo` (perf-counter.ts).
+    return measureSync('step2.overflowMap', () => {
     const map = new Map<string, number>()
     if (isAudioOnly) return map
     for (const e of entries) {
@@ -417,6 +420,7 @@ export default function Step2Route(_: Step2RouteProps) {
       if (r.overflowStartIndex !== -1) map.set(e.id, r.overflowStartIndex)
     }
     return map
+  })
     // `fontCacheVersion` is the explicit re-run signal — `computeOverflowSync`
     // reads the per-row Font through the font-metrics module cache, which the
     // memo can't see directly, so the lint rule's "unnecessary dep" warning
@@ -431,7 +435,7 @@ export default function Step2Route(_: Step2RouteProps) {
    * tabs, the per-row badges, and the footer summary.  Built in entry order
    * because `overlap` depends on the previous non-deleted entry's end time.
    */
-  const warningsMap = useMemo(() => {
+  const warningsMap = useMemo(() => measureSync('step2.warningsMap', () => {
     const map = new Map<string, EntryWarnings>()
     let prevEnd: number | null = null
     for (const e of entries) {
@@ -441,7 +445,7 @@ export default function Step2Route(_: Step2RouteProps) {
       prevEnd = e.endSec
     }
     return map
-  }, [entries, overflowMap, videoDurationSec])
+  }), [entries, overflowMap, videoDurationSec])
 
   // Currently-visible entries under the active filter — drives Ctrl+A's
   // target list and the bulk-selection pruning effect below.
