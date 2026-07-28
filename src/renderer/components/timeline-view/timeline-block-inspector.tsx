@@ -1525,34 +1525,34 @@ export function TimelineBlockInspector({
           {/* REQ-20260615-014 B: horizontal / vertical lift from native
               <select> to a single-select SegmentGroup so all options are
               visible up-front.  Value bindings are unchanged. */}
-          <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-fg-secondary shrink-0">{t('styleCell.layoutH')}</label>
+          <StyleRow label={t('styleCell.layoutH')} stopControlClickPropagation>
             <SegmentGroup<'left' | 'center' | 'right'>
               value={entry.horizontalPosition}
               onChange={handleHorizontalPositionChange}
               disabled={isFrozen}
               ariaLabel={t('subtitlePosition.horizontal')}
+              fullWidth
               options={[
                 { value: 'left', label: t('subtitlePosition.left') },
                 { value: 'center', label: t('subtitlePosition.center') },
                 { value: 'right', label: t('subtitlePosition.right') },
               ]}
             />
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-fg-secondary shrink-0">{t('styleCell.layoutV')}</label>
+          </StyleRow>
+          <StyleRow label={t('styleCell.layoutV')} stopControlClickPropagation>
             <SegmentGroup<'top' | 'center' | 'bottom'>
               value={entry.verticalPosition}
               onChange={handleVerticalPositionChange}
               disabled={isFrozen}
               ariaLabel={t('subtitlePosition.vertical')}
+              fullWidth
               options={[
                 { value: 'top', label: t('subtitlePosition.top') },
                 { value: 'center', label: t('subtitlePosition.center') },
                 { value: 'bottom', label: t('subtitlePosition.bottom') },
               ]}
             />
-          </div>
+          </StyleRow>
           {/* REQ-0140 — when the row is center-aligned the margin has no
               effect (libass `\an4/5/6` ignores MarginV; §3.2).  Keep
               the input in the layout (§3.2 "隠さず disabled") and
@@ -1560,15 +1560,15 @@ export function TimelineBlockInspector({
               verticalMarginPx value is preserved across the flip so
               switching back to top/bottom restores the user's last
               margin. */}
-          <div
-            className="flex items-center justify-between gap-2"
+          <StyleRow
+            label={t('styleCell.marginV')}
+            stopControlClickPropagation
             title={
               entry.verticalPosition === 'center'
                 ? t('subtitlePosition.marginDisabledCenter')
                 : undefined
             }
           >
-            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.marginV')}</label>
             {/* REQ-20260615-059 B — margin gets the ±10 chevron stepper
                 the size row already uses, so the same wrist-flick keeps
                 margin in step with size adjustments.  REQ-0269 A raised
@@ -1594,7 +1594,7 @@ export function TimelineBlockInspector({
               disabled={isFrozen || entry.verticalPosition === 'center'}
               ariaLabel={t('subtitlePosition.margin')}
             />
-          </div>
+          </StyleRow>
           {/* REQ-0332 §5 — 行間 (line spacing).  Percentage of the font size;
               0 % is the historical pitch, negative tightens (the owner's
               motivation: Latin fonts sit too far apart).  Only has a visible
@@ -1602,8 +1602,11 @@ export function TimelineBlockInspector({
               hidden for single-line cues — the value is a property of the row
               that survives the text becoming two lines, exactly like the
               margin above. */}
-          <div className="flex items-center justify-between gap-2" title={t('styleCell.lineSpacingHint')}>
-            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.lineSpacing')}</label>
+          <StyleRow
+            label={t('styleCell.lineSpacing')}
+            stopControlClickPropagation
+            title={t('styleCell.lineSpacingHint')}
+          >
             <LineSpacingSlider
               value={resolveLineSpacingPercent(entry)}
               onCommit={(next) => {
@@ -1612,8 +1615,9 @@ export function TimelineBlockInspector({
               }}
               disabled={isFrozen}
               ariaLabel={t('styleCell.lineSpacing')}
+              fullWidth
             />
-          </div>
+          </StyleRow>
           {/* REQ-20260615-033 — オフセット行.  Displays `posX-anchor.x` /
               `posY-anchor.y`; entering values writes back
               posX=anchor.x+offset, posY=anchor.y+offset.  X=Y=0 unpins
@@ -1627,10 +1631,7 @@ export function TimelineBlockInspector({
               affordance + distance rulers), which is more discoverable
               than a hover-only tooltip. */}
           {showOffsetRow && (
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-callout font-semibold text-fg-secondary shrink-0">
-                {t('styleCell.offset')}
-              </label>
+            <StyleRow label={t('styleCell.offset')} stopControlClickPropagation>
               <div className="flex items-center gap-1">
                 <span className="text-caption text-fg-tertiary">X</span>
                 <input
@@ -1680,7 +1681,7 @@ export function TimelineBlockInspector({
                   <RotateCcw className="h-3.5 w-3.5" />
                 </button>
               </div>
-            </div>
+            </StyleRow>
           )}
           </div>{/* REQ-0184 §4 — close layout-section collapse wrapper */}
         </div>
@@ -1755,21 +1756,25 @@ export function TimelineBlockInspector({
             </span>
           </button>
           <div className={cn('space-y-2', !backgroundSectionOpen && 'hidden')}>
-          <div className="flex items-center justify-between gap-2">
-            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.bgEnabled')}</label>
+          <StyleRow label={t('styleCell.bgEnabled')} stopControlClickPropagation>
+            {/* REQ-0341 §2 — `scale-75 origin-right` is gone with the
+                `justify-between` row it existed for: the switch was pinned to
+                the row's right edge, so it had to be shrunk toward that edge
+                to sit under the neighbouring controls.  Inside the shared
+                control column it starts at the column's left edge like every
+                other control and needs no transform. */}
             <Switch
               checked={entry.subtitleBackground.enabled}
               onCheckedChange={handleBackgroundEnabledChange}
               disabled={isFrozen}
-              className="scale-75 origin-right"
               aria-label={t('styleCell.bgEnabled')}
             />
-          </div>
-          <div className={cn(
-            'flex items-center justify-between gap-2',
-            !entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none'
-          )}>
-            <label className="text-callout font-semibold text-fg-secondary shrink-0">{t('styleCell.bgColor')}</label>
+          </StyleRow>
+          <StyleRow
+            label={t('styleCell.bgColor')}
+            stopControlClickPropagation
+            className={cn(!entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none')}
+          >
             {/* REQ-20260615-014 B: black / white SegmentGroup replaces the
                 native <select>.  Value binding unchanged. */}
             <SegmentGroup<'black' | 'white'>
@@ -1782,12 +1787,12 @@ export function TimelineBlockInspector({
                 { value: 'white', label: t('background.white') },
               ]}
             />
-          </div>
-          <div className={cn(
-            'flex items-center justify-between gap-2',
-            !entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none'
-          )}>
-            <label className="text-callout font-semibold text-fg-secondary">{t('styleCell.bgOpacity')}</label>
+          </StyleRow>
+          <StyleRow
+            label={t('styleCell.bgOpacity')}
+            stopControlClickPropagation
+            className={cn(!entry.subtitleBackground.enabled && 'opacity-40 pointer-events-none')}
+          >
             {/* REQ-20260615-059 B — bg opacity gets the same ±10
                 stepper as size / margin so the inspector's three
                 numeric rows share one input shape.  Range stays
@@ -1806,7 +1811,7 @@ export function TimelineBlockInspector({
               disabled={isFrozen || !entry.subtitleBackground.enabled}
               ariaLabel={t('styleCell.bgOpacity')}
             />
-          </div>
+          </StyleRow>
           </div>{/* REQ-0184 §4 — close background-section collapse wrapper */}
         </div>
       )}

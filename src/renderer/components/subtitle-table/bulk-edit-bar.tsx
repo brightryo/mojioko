@@ -170,12 +170,21 @@ function BulkSegmentGroup<T extends string>({
   options,
   disabled,
   ariaLabel,
+  fullWidth,
 }: {
   value: T | null
   onChange: (next: T) => void
   options: ReadonlyArray<{ value: T; label: string }>
   disabled?: boolean
   ariaLabel: string
+  /**
+   * REQ-0341 §2 — mirrors `SegmentGroup`'s prop of the same name.  The
+   * `w-[40%]` default was a percentage of the RAW row these controls used to
+   * sit in; inside `StyleRow`'s fixed control column the percentage is of the
+   * column, and `min-w-fit` then overrides it anyway, so the group would
+   * render at its intrinsic width and stop lining up with the sliders above.
+   */
+  fullWidth?: boolean
 }) {
   // REQ-20260615-060 A — width + per-segment flex match the inspector's
   // SegmentGroup (`timeline-block-inspector.tsx:50`):
@@ -189,7 +198,8 @@ function BulkSegmentGroup<T extends string>({
       role="radiogroup"
       aria-label={ariaLabel}
       className={cn(
-        'flex h-7 w-[40%] min-w-fit items-stretch gap-0.5 rounded-md border border-line-strong bg-surface-0 p-0.5',
+        'flex h-7 min-w-fit items-stretch gap-0.5 rounded-md border border-line-strong bg-surface-0 p-0.5',
+        fullWidth ? 'w-full' : 'w-[40%]',
         disabled && 'opacity-40 pointer-events-none',
       )}
     >
@@ -1461,8 +1471,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           <div className="text-body font-semibold text-foreground">
             {t('timeline.inspector.layoutSection')}
           </div>
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('styleCell.layoutH')}</span>
+          <StyleRow label={t('styleCell.layoutH')}>
             {/* REQ-20260615-059 C — same segmented control the inspector
                 uses.  `null` value renders nothing highlighted (= mixed
                 selection); a click applies the value to every selected
@@ -1471,41 +1480,41 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               value={hPosDraft}
               onChange={(v) => handleHPosCommit(v)}
               ariaLabel={t('subtitlePosition.horizontal')}
+              fullWidth
               options={[
                 { value: 'left',   label: t('subtitlePosition.left') },
                 { value: 'center', label: t('subtitlePosition.center') },
                 { value: 'right',  label: t('subtitlePosition.right') },
               ]}
             />
-          </label>
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('styleCell.layoutV')}</span>
+          </StyleRow>
+          <StyleRow label={t('styleCell.layoutV')}>
             <BulkSegmentGroup<'top' | 'center' | 'bottom'>
               value={vPosDraft}
               onChange={(v) => handleVPosCommit(v)}
               ariaLabel={t('subtitlePosition.vertical')}
+              fullWidth
               options={[
                 { value: 'top',    label: t('subtitlePosition.top') },
                 { value: 'center', label: t('subtitlePosition.center') },
                 { value: 'bottom', label: t('subtitlePosition.bottom') },
               ]}
             />
-          </label>
+          </StyleRow>
           {/* REQ-0140 — disable the bulk margin stepper when the
               uniform vertical draft is `'center'`.  When the selection
               is mixed (vPosDraft === null) the stepper stays enabled;
               committing a value applies it to every selected row but
               only affects the top/bottom-aligned ones (center-aligned
               rows keep the value in storage but ignore it at render). */}
-          <label
-            className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground"
+          <StyleRow
+            label={t('styleCell.marginV')}
             title={
               vPosDraft === 'center'
                 ? t('subtitlePosition.marginDisabledCenter')
                 : undefined
             }
           >
-            <span>{t('styleCell.marginV')}</span>
             {/* REQ-20260615-059 B — ±10 stepper to keep margin in step
                 with size adjustments.  REQ-0269 A raised the ceiling
                 to 9999 (`MARGIN_V_MAX_PX`); input widens to `w-16`. */}
@@ -1522,21 +1531,18 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               disabled={vPosDraft === 'center'}
               ariaLabel={t('subtitlePosition.margin')}
             />
-          </label>
+          </StyleRow>
           {/* REQ-0332 §5 — 行間.  Next to the margin, mirroring the
               inspector's レイアウト ordering so the two surfaces read the
               same way. */}
-          <label
-            className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground"
-            title={t('styleCell.lineSpacingHint')}
-          >
-            <span>{t('styleCell.lineSpacing')}</span>
+          <StyleRow label={t('styleCell.lineSpacing')} title={t('styleCell.lineSpacingHint')}>
             <LineSpacingSlider
               value={lineSpacingDraft}
               onCommit={handleLineSpacingBulkCommit}
               ariaLabel={t('styleCell.lineSpacing')}
+              fullWidth
             />
-          </label>
+          </StyleRow>
         </div>
 
         {/* § アニメーション — REQ-0324 §1.  Own section, ordered
@@ -1562,10 +1568,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             <span>{t('timeline.inspector.backgroundSection')}</span>
             <HelpIcon content={t('timeline.inspector.backgroundSectionHelp')} />
           </div>
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('styleCell.bgEnabled')}</span>
+          <StyleRow label={t('styleCell.bgEnabled')}>
             <Switch checked={bgEnabledDraft} onCheckedChange={handleBgEnabledToggle} aria-label={t('styleCell.bgEnabled')} />
-          </label>
+          </StyleRow>
           {/* REQ-20260615-062 — background colour now uses the same
               segmented control the inspector uses (and the bulk-edit
               horizontal / vertical rows already use), replacing the
@@ -1575,27 +1580,26 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               existing `handleBgColorChange` path.  Mixed selections
               render with no active segment, matching how H / V
               segments behave when the selection's values disagree. */}
-          <label className={cn(
-            'flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground',
-            !bgEnabledDraft && 'opacity-40'
-          )}>
-            <span>{t('styleCell.bgColor')}</span>
+          <StyleRow
+            label={t('styleCell.bgColor')}
+            className={cn(!bgEnabledDraft && 'opacity-40')}
+          >
             <BulkSegmentGroup<'black' | 'white'>
               value={bgColorDraft}
               onChange={(v) => handleBgColorChange(v)}
               disabled={!bgEnabledDraft}
               ariaLabel={t('styleCell.bgColor')}
+              fullWidth
               options={[
                 { value: 'black', label: t('background.black') },
                 { value: 'white', label: t('background.white') },
               ]}
             />
-          </label>
-          <label className={cn(
-            'flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground',
-            !bgEnabledDraft && 'opacity-40'
-          )}>
-            <span>{t('styleCell.bgOpacity')}</span>
+          </StyleRow>
+          <StyleRow
+            label={t('styleCell.bgOpacity')}
+            className={cn(!bgEnabledDraft && 'opacity-40')}
+          >
             {/* REQ-20260615-059 B — ±10 stepper for bg opacity %.
                 Disabled when the bulk panel's bgEnabledDraft is off
                 (matches the pre-REQ disabled-input behaviour). */}
@@ -1611,7 +1615,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               disabled={!bgEnabledDraft}
               ariaLabel={t('styleCell.bgOpacity')}
             />
-          </label>
+          </StyleRow>
         </div>
 
         {/* REQ-20260615-060 B — the bottom wrap-actions cluster was

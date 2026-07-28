@@ -188,6 +188,22 @@ interface StyleRowProps {
    * 640 px wide and doesn't need the shrinkage machinery.
    */
   labelColClass?: string
+  /**
+   * REQ-0341 §2 — `title` on the ROW, for rows whose whole point needs
+   * explaining rather than whose label does (「マージン」 when the anchor is
+   * centred and the value has no effect; 「行間」's hint).  The raw
+   * `justify-between` rows these replaced carried it on their wrapper div, and
+   * the alternative — passing a `ReactNode` label just to hang a title on it —
+   * opts the row out of `labelColClass` and breaks the alignment this shell
+   * exists to provide.
+   */
+  title?: string
+  /**
+   * REQ-0341 §2 — extra classes for the row wrapper.  Exists for the
+   * background section's dimming (`opacity-40 pointer-events-none` while the
+   * box is off), which has to cover the label as well as the control.
+   */
+  className?: string
   children: React.ReactNode
 }
 
@@ -230,6 +246,8 @@ export function StyleRow({
   stopControlClickPropagation,
   controlColClass = INSPECTOR_CONTROL_COL_CLASS,
   labelColClass = INSPECTOR_LABEL_COL_CLASS,
+  title,
+  className,
   children,
 }: StyleRowProps) {
   // REQ-0301 §2 — the label span gets `truncate` so a label wider
@@ -247,6 +265,7 @@ export function StyleRow({
   const rowClass = cn(
     'flex items-center gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-accent/40 transition-colors duration-150',
     !SHOW_DASHED_FILLER && 'justify-between',
+    className,
   )
   const labelTitle = typeof label === 'string' ? label : undefined
   const labelBlock = typeof label === 'string' ? (
@@ -275,7 +294,7 @@ export function StyleRow({
     ? { onClick: (e: React.MouseEvent) => e.stopPropagation() }
     : {}
   return (
-    <div className={rowClass}>
+    <div className={rowClass} title={title}>
       {labelBlock}
       {SHOW_DASHED_FILLER && (
         <div className="flex-1 border-t border-dashed border-border min-w-[16px]" />
