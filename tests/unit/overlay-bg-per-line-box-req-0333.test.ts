@@ -29,10 +29,14 @@ import { join } from 'node:path'
  *
  * Same band COUNT, same pitch (200 px), same gap at +100 %, same overlap at
  * −50 %, and identical continuity at 0 %.  The constant 1-px inset per edge
- * is the pre-existing box-padding difference (CSS `padding: 2px 6px` vs
- * libass `\bord3` under `BorderStyle=3`); it is spacing-INDEPENDENT — it is
- * the same at 0 % — so it is a separate defect, recorded in RES-0333, not
- * this one.
+ * was the box-PADDING difference (CSS `padding: 2px 6px` vs libass `\bord3`
+ * under `BorderStyle=3`); it is spacing-INDEPENDENT — the same at 0 % — so it
+ * was a separate defect.  **REQ-0340 §1 fixed it**: the padding is now
+ * `outlineThicknessPx * scale`, and the burn's bands and the preview's are
+ * identical integer ranges at outline 0/4/9/20 × spacing −50/0/+100 %.  The
+ * padding itself is pinned by `overlay-bg-box-padding-req-0340.test.ts`; what
+ * remains this file's job is the PER-LINE mechanism, which that fix did not
+ * touch.
  *
  * ## Why the preview already gaps
  *

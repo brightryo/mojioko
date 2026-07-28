@@ -667,14 +667,43 @@ export function SubtitleOverlay({
   // `tests/unit/overlay-bg-per-line-box-req-0333.test.ts`).  Switching this to
   // `inline-block`, or dropping `clone`, silently produces ONE continuous box
   // and the preview stops matching the burn at every non-zero spacing.
-  const textWrapperStyle: React.CSSProperties = bgEnabled
+  //
+  // REQ-0340 §1 — the box's PADDING is `\bord`, and `\bord` is the outline
+  // width slider.  It used to be the constant `2px 6px`, which happens to be
+  // close at the default outline (3) and wrong everywhere else.  Measured, box
+  // edge minus glyph ink edge, top edge, at PlayRes = frame:
+  //
+  //     outline |   4     9    20
+  //     burn    | 33.08 38.08 49.08   -> exactly `bord + 29.08`
+  //     preview | 31.00 31.00 31.00   -> constant; error 2, 7, 18 px
+  //
+  // The left edge does the same with its own constant (`bord + 6.4` vs a flat
+  // 12.44).  So the two agreed only where the two constants crossed — bord 2
+  // vertically, bord 6 horizontally — and the preview under-drew the box by up
+  // to 18 px per edge at the top of the slider.  Driving the padding from
+  // `outlinePx` (already `entry.outlineThicknessPx * scale`) makes both sides
+  // `bord + <same constant>` and they track at every width.  Line spacing is
+  // unaffected by this: at −50 / 0 / +100 % the burn's band count, 200-px pitch
+  // and merge/split behaviour already matched, and only the padding differed.
+  //
+  // `outlinePx === 0` draws NO box, because that is what libass does: under
+  // `BorderStyle=3` the "box" is the glyph outline grown by `\bord`, so at 0 it
+  // collapses onto the glyph and is hidden beneath it.  Measured: zero white
+  // pixels in the burn at `\bord0`, against 28,034 in the preview.  (That the
+  // background box therefore VANISHES from an export whenever the user has the
+  // outline at 0 is a product question, not a parity one — recorded in
+  // RES-0340 rather than fixed here.)
+  //
+  // The 2 px `borderRadius` is gone for the same reason: libass' box has
+  // square corners.
+  const bgBoxVisible = bgEnabled && outlinePx > 0
+  const textWrapperStyle: React.CSSProperties = bgBoxVisible
     ? {
         position:                 'relative',
         zIndex:                   1,
         display:                  'inline',
         backgroundColor:          bgColor,
-        padding:                  `${2 * scale}px ${6 * scale}px`,
-        borderRadius:             '2px',
+        padding:                  `${outlinePx}px`,
         boxDecorationBreak:       'clone',
         WebkitBoxDecorationBreak: 'clone',
       }

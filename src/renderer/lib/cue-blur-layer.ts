@@ -78,7 +78,13 @@ export function applyCueBlurToLayer(outer: HTMLElement, cssBlurPx: number): void
   //
   // A cue whose ring is suppressed (background box) has neither, and falls to
   // the outer-span branch — which is what a duplicated entry-side predicate
-  // would have got wrong.
+  // would have got wrong.  REQ-0340 §1 measured that this is also the RIGHT
+  // answer, not merely the incidental one: under `BorderStyle=3` libass blurs
+  // the box AND the type together, unlike `BorderStyle=1`.  Type-edge σ, burn
+  // → preview, at `\blur` 0/10/20/30: 0.58→0.62, 6.56→6.42, 17.79→17.48,
+  // 24.58→24.74, with a `BorderStyle=1` control in the same harness reading
+  // 0.58→0.62 (sharp) at `\blur20`.  So the outer-span branch matches the burn
+  // for background-box cues and must NOT be "fixed" to use the canvas path.
   const outlined = outer.hasAttribute('data-cue-outlined') || (ring !== undefined && ring.width > 0)
   const filter = cssBlurPx > 0 ? `blur(${cssBlurPx}px)` : ''
   const set = (el: HTMLElement | undefined, value: string) => {
