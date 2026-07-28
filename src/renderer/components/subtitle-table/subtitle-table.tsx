@@ -24,8 +24,6 @@ import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { commitTextEditWithHistory } from '@/lib/commit-text-edit'
-import { measureSync } from '@/lib/perf-counter'
-import { filterEntries } from '@/lib/subtitle-filter'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
 import { effectiveEntryState, type ClipStatus, type CutList } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
@@ -863,6 +861,7 @@ export function SubtitleTable({
   warningsMap,
   videoDurationSec,
   onAdjustTime,
+  visibleEntries,
 }: {
   /**
    * Where each entry's text overflows (-1 = no overflow).  Required separately
@@ -876,9 +875,24 @@ export function SubtitleTable({
   videoDurationSec: number
   /** Open the shared time-editor dialog for the given entry. */
   onAdjustTime: (entryId: string) => void
+  /**
+   * The rows to display, already filtered by the active tab — memoised in
+   * `step2.tsx` as `visibleEntries` (REQ-0345 §4-A).
+   *
+   * The table must NOT re-derive this.  It used to call the identical
+   * `filterEntries(...)` itself with no `useMemo`, so every render paid an
+   * O(N) pass AND produced a new array identity, which silently disabled
+   * `selectableIds` and `selectableSelectedCount` below — both of which list
+   * it as a dependency.  One filter, computed once, is also the only way the
+   * table and the route's Ctrl+A target list cannot drift.
+   */
+  visibleEntries: readonly SubtitleEntry[]
 }) {
   const { t } = useTranslation(['step2'])
-  const entries = useProjectStore((s) => s.entries)
+  // REQ-0345 §4-A — no `entries` subscription.  The rows arrive already
+  // filtered via `visibleEntries`, which `step2.tsx` recomputes when
+  // `entries` changes, so subscribing here would only add a second wake-up
+  // for the same event.
   // REQ-102: filterEntries is now cut-aware so the table tabs / counts
   // agree with the timeline view and the ffmpeg burnin output.  See
   // src/renderer/lib/subtitle-filter.ts for the predicate; this
@@ -893,7 +907,17 @@ export function SubtitleTable({
   // focusedRowId は下の scrollIntoView effect だけが参照する。)
   const selectedEntryId = useUiStore((s) => s.selectedEntryId)
   const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
-  const focusedRowId = useUiStore((s) => s.focusedRowId)
+  // REQ-0345 §4-A — `focusedRowId` is deliberately NOT subscribed here.
+  //
+  // Nothing in this component's OUTPUT depends on it: the only reader is the
+  // auto-scroll effect below.  Subscribing at the top level made it an input
+  // to rendering anyway, and that cost a second full pass over every row on
+  // every row click — the click writes `videoSeekRequestSec`, the preview
+  // panel seeks, the resulting `timeupdate` writes `focusedRowId`
+  // (`video-preview-panel.tsx`), and the table re-rendered because of it.
+  // Two renders of N rows for one click.  The effect subscribes to the store
+  // directly instead, so the scroll still follows playback and the render is
+  // no longer involved.
   // REQ-028: blank out the "Size" / "Style" header labels when the
   // input is audio-only so the dead columns don't advertise themselves.
   // Column widths stay reserved (TABLE_GRID_COLS unchanged) — only the
@@ -932,22 +956,37 @@ export function SubtitleTable({
   // through the dedicated `scrollToRowId` signal below (centred, deferred).
   //
   // Suppressed while the user is actively scrolling the table manually.
+  //
+  // REQ-0345 §4-A — driven by a direct store subscription rather than by a
+  // rendered value, so a playback tick moves the scroll without re-rendering
+  // the rows.  `useUiStore.subscribe` fires on every store write, so the
+  // handler filters for an actual `focusedRowId` change itself; that check is
+  // two comparisons against N rows of reconciliation.
   useEffect(() => {
-    if (!focusedRowId) return
-    if (Date.now() - lastUserScrollAt.current < AUTO_SCROLL_DEBOUNCE_MS) return
-    const el = rowRefs.current.get(focusedRowId)
-    if (!el) return
-    // Mark auto-scroll in progress so handleScroll ignores the scroll event
-    // that scrollIntoView() itself fires (which would otherwise reset the
-    // debounce timer and block the *next* auto-scroll for 3 seconds).
-    if (autoScrollTimerRef.current !== null) clearTimeout(autoScrollTimerRef.current)
-    isAutoScrollingRef.current = true
-    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    autoScrollTimerRef.current = setTimeout(() => {
-      isAutoScrollingRef.current = false
-      autoScrollTimerRef.current = null
-    }, 600)
-  }, [focusedRowId])
+    let prevFocused = useUiStore.getState().focusedRowId
+    const runAutoScroll = (focusedRowId: string | null) => {
+      if (!focusedRowId) return
+      if (Date.now() - lastUserScrollAt.current < AUTO_SCROLL_DEBOUNCE_MS) return
+      const el = rowRefs.current.get(focusedRowId)
+      if (!el) return
+      // Mark auto-scroll in progress so handleScroll ignores the scroll event
+      // that scrollIntoView() itself fires (which would otherwise reset the
+      // debounce timer and block the *next* auto-scroll for 3 seconds).
+      if (autoScrollTimerRef.current !== null) clearTimeout(autoScrollTimerRef.current)
+      isAutoScrollingRef.current = true
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      autoScrollTimerRef.current = setTimeout(() => {
+        isAutoScrollingRef.current = false
+        autoScrollTimerRef.current = null
+      }, 600)
+    }
+    runAutoScroll(prevFocused)
+    return useUiStore.subscribe((s) => {
+      if (s.focusedRowId === prevFocused) return
+      prevFocused = s.focusedRowId
+      runAutoScroll(s.focusedRowId)
+    })
+  }, [])
 
   function handleScroll() {
     // Skip scroll events that originate from our own scrollIntoView() calls.
@@ -998,9 +1037,8 @@ export function SubtitleTable({
     return () => clearTimeout(timer)
   }, [scrollToRowId, setScrollToRowId])
 
-  // REQ-0342 §2 — labelled; no-op outside `?seed=demo` (perf-counter.ts).
-  const filtered = measureSync('table.filterEntries', () =>
-    filterEntries(entries, tableFilter, warningsMap, cuts))
+  // REQ-0345 §4-A — computed once in `step2.tsx`; see the prop's JSDoc.
+  const filtered = visibleEntries
 
   const emptyKey =
     tableFilter === 'all'      ? 'empty.all'      :

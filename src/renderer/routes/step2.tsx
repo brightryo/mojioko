@@ -1364,6 +1364,14 @@ export default function Step2Route(_: Step2RouteProps) {
             warningsMap={warningsMap}
             videoDurationSec={videoDurationSec}
             onAdjustTime={openEditTimeDialog}
+            // REQ-0345 §4-A — the table used to run this exact
+            // `filterEntries(entries, tableFilter, warningsMap, cuts)` call
+            // itself, unmemoised, on every render.  Two costs, not one: the
+            // O(N) pass, and a fresh array identity that killed the two
+            // downstream `useMemo`s depending on it.  Passing the memoised
+            // value makes the filter single-source and stabilises the
+            // identity, which is what revives them.
+            visibleEntries={visibleEntries}
           />
         ) : (
           <TimelineView
