@@ -110,7 +110,11 @@
       "cancel": "Cancel"
     },
     "importSrtTitle": "Import SRT",
-    "importSrtBody": "About to import subtitles from an SRT file.\nAll current subtitles will be replaced and edit history will be lost (this cannot be undone)."
+    "importSrtBody": "About to import subtitles from an SRT file.\nAll current subtitles will be replaced and edit history will be lost (this cannot be undone).",
+    "importSrtProgressTitle": "Importing SRT",
+    "importSrtProgressReading": "Reading the file…",
+    "importSrtProgressCount": "{{done}} / {{total}} subtitles",
+    "importSrtProgressApplying": "Applying to the editor. With a large file the app will stop responding for a moment."
   },
   "addRowPopover": {
     "label": "Insert position",
@@ -144,6 +148,7 @@
     "bulkAppliedUndo": "Undo",
     "trimDeletedRestoreHint": "Removed by a trim — click its scissor marker to undo the cut and restore the subtitle",
     "srtImportedAll": "Imported {{count}} subtitles",
+    "srtImportCancelled": "Import cancelled. Your subtitles were not changed",
     "srtImportedWithDrop": "Imported {{count}} subtitles ({{dropped}} skipped for exceeding the video duration)",
     "srtImportEmpty": "No subtitles were found in the file",
     "srtImportReadFailed": "Failed to read the SRT file: {{error}}",

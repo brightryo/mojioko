@@ -697,7 +697,7 @@ export function VideoPreviewPanel() {
     if (videoWidthPx <= 0 || videoContainerWidth <= 0) {
       return new Map<string, number>()
     }
-    return computeFixedStackOffsets(
+    return measureSync('vpp.stackOffsets', () => computeFixedStackOffsets(
       sortedActiveEntries,
       (entry) => estimateOverlayHeightPx(
         entry,
@@ -705,7 +705,7 @@ export function VideoPreviewPanel() {
         videoWidthPx,
         videoContainerWidth,
       ),
-    )
+    ))
   }, [sortedActiveEntries, activeFontId, videoWidthPx, videoContainerWidth])
 
   // Load the subtitle font on mount and refresh whenever the active font
