@@ -147,12 +147,36 @@ function parseArgs(argv) {
   return out
 }
 
-/** `HH:MM:SS,mmm` — identical to `formatSrtTime` in routes/step2.tsx. */
+/**
+ * `HH:MM:SS,mmm`.
+ *
+ * REQ-0346 §3 — this used to mirror `formatSrtTime` in routes/step2.tsx:
+ *
+ *   const s  = Math.floor(sec % 60)
+ *   const ms = Math.round((sec % 1) * 1000)
+ *
+ * Those two fields are computed independently, so a `sec` whose fractional
+ * part rounds UP to a full second emits `mmm === 1000` while the seconds field
+ * stays put: `00:19:54,1000`, which is not a valid SRT timestamp. It showed up
+ * the first time this generator was asked for 4.6 s cues (10 occurrences in
+ * 250), because that length accumulates a float remainder like 0.9999999.
+ *
+ * Fixed by converting ONCE to integer milliseconds and deriving every field
+ * from that, so the carry cannot be lost between them.
+ *
+ * NOTE: `routes/step2.tsx:153` still has the original form, so the app's own
+ * SRT export can still emit `,1000`. That is a shipped-code bug and is
+ * reported in RES-0346 rather than fixed here — this REQ was told not to fix
+ * defects it finds along the way. The two are no longer identical; when the
+ * app side is fixed, this comment should be reduced to a pointer.
+ */
 function formatSrtTime(sec) {
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  const s = Math.floor(sec % 60)
-  const ms = Math.round((sec % 1) * 1000)
+  const totalMs = Math.round(sec * 1000)
+  const ms = totalMs % 1000
+  const totalSec = (totalMs - ms) / 1000
+  const s = totalSec % 60
+  const m = Math.floor(totalSec / 60) % 60
+  const h = Math.floor(totalSec / 3600)
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:` +
          `${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`
 }
