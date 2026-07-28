@@ -54,6 +54,7 @@ export function FontLangBadge({
 }) {
   return (
     <span
+      data-font-badge={`lang-${language}`}
       className={cn(
         'inline-flex items-center rounded-full px-1.5 py-[1px]',
         'text-caption font-mono font-semibold uppercase tracking-wider',

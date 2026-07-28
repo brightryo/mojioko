@@ -6,6 +6,7 @@ import { useAppEnvStore } from '@/stores/app-env-store'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { cn } from '@/lib/utils'
 import { StyleRow } from '@/components/subtitle-table/style-row'
+import { FontFamilyBadges } from '@/components/font-lang-badge/font-family-badges'
 import {
   getFontMeta,
   getFontFamilies,
@@ -125,11 +126,28 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: 
           className={triggerBase}
           aria-label={t('rowFont.tooltipOverride', { name: currentFamilyLabel })}
         >
-          <span
-            className="truncate"
-            style={{ fontFamily: `'${currentMeta.cssFontFamily}'`, fontWeight: currentMeta.weight }}
-          >
-            {currentFamilyLabel}
+          {/* REQ-0341 §1 — the SELECTED family's badges live on the trigger,
+              not only in the open list.  A warning you can see only while the
+              dropdown is open is a warning you see once and then lose; this is
+              the surface the user reads while typing subtitles.  `min-w-0`
+              plus `truncate` on the name gives the badges (which are
+              `shrink-0`) priority over the family label — the label is
+              recoverable from the trigger's own `aria-label` and the list,
+              the tofu warning is not. */}
+          <span className="flex items-center gap-1.5 min-w-0 flex-1">
+            <span
+              className="truncate"
+              style={{ fontFamily: `'${currentMeta.cssFontFamily}'`, fontWeight: currentMeta.weight }}
+            >
+              {currentFamilyLabel}
+            </span>
+            {currentFamily && (
+              <FontFamilyBadges
+                languages={currentFamily.languages}
+                lacksRareKanji={currentFamily.lacksRareKanji}
+                variant="trigger"
+              />
+            )}
           </span>
           <ChevronDown className="h-3 w-3 shrink-0 text-fg-muted" aria-hidden="true" />
         </button>
@@ -163,6 +181,10 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: 
                 >
                   {fam.displayLabel}
                 </span>
+                {/* REQ-0341 §1 — same component the Settings font list uses.
+                    The popover is 240 px (wider than the 224 px control
+                    column it hangs off), so the chip keeps its label here. */}
+                <FontFamilyBadges languages={fam.languages} lacksRareKanji={fam.lacksRareKanji} />
               </button>
             )
           })}

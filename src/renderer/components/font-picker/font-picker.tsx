@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, FileText, AlertCircle, AlertTriangle, Lock, DownloadCloud, Trash2 } from 'lucide-react'
+import { X, FileText, AlertTriangle, Lock, DownloadCloud, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -40,7 +40,8 @@ import {
   type FontFamily,
   type FamilyStatus,
 } from '../../../shared/fonts'
-import { FontLangBadge, FontLangBadges } from '@/components/font-lang-badge/font-lang-badge'
+import { FontLangBadge } from '@/components/font-lang-badge/font-lang-badge'
+import { FontFamilyBadges } from '@/components/font-lang-badge/font-family-badges'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 
 interface FontPickerProps {
@@ -699,16 +700,10 @@ function FontFamilyRow({
         <span className="text-body text-foreground truncate" style={labelStyle}>
           {familyLabel}
         </span>
-        <FontLangBadges languages={family.languages} />
-        {family.lacksRareKanji && (
-          <span
-            className="inline-flex items-center gap-1 shrink-0 rounded px-1.5 py-0.5 text-caption uppercase tracking-wide text-warning-faint/90 border border-warning-soft/30 bg-warning-soft/10"
-            title={t('fontPicker.note.missingRareKanjiHelp')}
-          >
-            <AlertCircle className="h-3 w-3" aria-hidden="true" />
-            {t('fontPicker.note.missingRareKanji')}
-          </span>
-        )}
+        {/* REQ-0341 §1 — the chip markup moved into `FontFamilyBadges` so this
+            row and `FamilyWeightSelector` cannot drift apart.  Both read the
+            same two fields off the same `getFontFamilies()` object. */}
+        <FontFamilyBadges languages={family.languages} lacksRareKanji={family.lacksRareKanji} />
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
