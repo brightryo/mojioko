@@ -20,6 +20,20 @@ import {
 describe('getFontFamilies', () => {
   const families = getFontFamilies()
 
+  it('REQ-0338 §2 — orders families by NAME, case-insensitively', () => {
+    // The pickers moved off `getSortedFontRegistry` in REQ-0275 / REQ-0281 and
+    // nothing carried the sort across, so `FONT_REGISTRY`'s hand-authored
+    // order (bundled Noto, then the Japanese display faces, then the Latin
+    // ones) leaked into the UI and read as a language grouping.  Nothing
+    // pinned the order, which is why it drifted silently — this is that pin.
+    const names = families.map((f) => f.cssFontFamily.replace(/^MOJIOKO /, ''))
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' })))
+    // Concretely, and in particular NOT with the default pinned to the top.
+    expect(names[0]).toBe('Anton')
+    expect(names).toContain('Noto Sans JP')
+    expect(names.indexOf('Noto Sans JP')).toBeGreaterThan(0)
+  })
+
   it('collapses per-weight entries into one entry per unique cssFontFamily', () => {
     const registryFamilies = new Set(FONT_REGISTRY.map((f) => f.cssFontFamily))
     expect(families).toHaveLength(registryFamilies.size)

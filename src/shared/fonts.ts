@@ -830,9 +830,28 @@ export function stripFamilyNamespacePrefix(cssFontFamily: string): string {
  * REQ-0269 B — grouped view of the registry, one entry per unique
  * `cssFontFamily`, carrying its ordered weight list.  Used by every
  * font picker so the family selector and weight selector can render as
- * two dependent dropdowns instead of a flat 29-item list.  Families
- * appear in the order they were first seen in `FONT_REGISTRY` (so
- * "Noto Sans JP" pins first, then Anton / Bebas Neue / Dela / …).
+ * two dependent dropdowns instead of a flat 29-item list.
+ *
+ * **Families come out in family-name order** (`compareFontFamilyNames`,
+ * case-insensitive), which is the order every general-purpose editor uses and
+ * the one the owner asked for in REQ-0338 §2 — Anton → BEBAS NEUE →
+ * Dela Gothic One → … → Noto Sans JP → … → Yusei Magic.
+ *
+ * Until REQ-0338 this returned FIRST-SEEN order from `FONT_REGISTRY`, which is
+ * hand-authored as "bundled Noto, then the Japanese display faces, then the
+ * Latin ones".  That was never a deliberate UI decision: pre-REQ-0275 every
+ * picker went through `getSortedFontRegistry` (alphabetical), and REQ-0275 /
+ * REQ-0281 moved them onto this grouped helper without carrying the sort over,
+ * so the registry's authoring order leaked into the UI and read as a
+ * language grouping.
+ *
+ * The default font (Noto Sans JP) is deliberately NOT pinned to the top: the
+ * instruction was "name order", and a pinned default is a second ordering rule
+ * that the next reader has to discover.  `DEFAULT_FONT_ID` still selects it, so
+ * it is pre-selected wherever it is the current value.
+ *
+ * `FONT_REGISTRY`'s own order is untouched — `getFontMeta`'s defensive `[0]`
+ * fallback and the "Noto first" mental model still hold at the data layer.
  */
 export interface FontFamily {
   /** Rendered family name shared by every weight (`cssFontFamily`). */
@@ -891,11 +910,14 @@ export function getFontFamilies(): FontFamily[] {
     )
     entry.hasMultipleWeights = entry.weights.length > 1
   }
-  return Array.from(byFamily.values()).map((e) => {
-    const { _seen: _drop, ...rest } = e
-    void _drop
-    return rest
-  })
+  return Array.from(byFamily.values())
+    .map((e) => {
+      const { _seen: _drop, ...rest } = e
+      void _drop
+      return rest
+    })
+    // REQ-0338 §2 — name order, the same comparator the flat view uses.
+    .sort((a, b) => compareFontFamilyNames(a.cssFontFamily, b.cssFontFamily))
 }
 
 /**
@@ -1057,12 +1079,12 @@ export function resolveRenderableFontId(
 }
 
 /**
- * REQ-0153 §2 / REQ-0270 §1 — canonical display order for every font-list
- * rendering site (settings picker, timeline inspector row selector,
- * bulk-edit bar selector, subtitle style dialog, license attribution
- * list).
+ * REQ-0153 §2 / REQ-0270 §1 — the FLAT (one row per weight) display order.
+ * Reaches the license attribution dialog; the pickers use the grouped
+ * `getFontFamilies`, which orders families by the same comparator
+ * (REQ-0338 §2), so the two views agree.
  *
- * Primary key: **family display name** (`en` locale, case-insensitive) so
+ * Primary key: **family display name** (`compareFontFamilyNames`) so
  *   Anton → Bebas Neue → Dela Gothic One → DotGothic16 → Hachi Maru Pop
  *   → Mochiy Pop One → Montserrat → Noto Sans JP → Poppins → Potta One
  *   → Rampart One → Reggae One → Yusei Magic.  The pre-REQ-0270 sort
@@ -1084,9 +1106,29 @@ export function resolveRenderableFontId(
  */
 export function getSortedFontRegistry(): FontMeta[] {
   return [...FONT_REGISTRY].sort((a, b) => {
-    const family = a.cssFontFamily.localeCompare(b.cssFontFamily, 'en', { sensitivity: 'base' })
+    const family = compareFontFamilyNames(a.cssFontFamily, b.cssFontFamily)
     if (family !== 0) return family
     return a.weight - b.weight
+  })
+}
+
+/**
+ * REQ-0338 §2 — the ONE family-name comparator every font list orders by.
+ *
+ * Case-insensitive (`sensitivity: 'base'`) because the registry mixes casing
+ * conventions — `BEBAS NEUE` must sort next to `Anton`, not ahead of every
+ * lowercase-second-letter name the way a raw code-unit compare would put it.
+ * The `MOJIOKO ` namespace prefix is stripped first so the comparison runs on
+ * the name the user actually reads; the prefix is constant today, so this only
+ * matters if a future entry ever ships unprefixed.
+ *
+ * Lives here, and is called from both `getSortedFontRegistry` and
+ * `getFontFamilies`, so the flat and grouped views cannot drift into two
+ * different alphabets.
+ */
+export function compareFontFamilyNames(a: string, b: string): number {
+  return stripFamilyNamespacePrefix(a).localeCompare(stripFamilyNamespacePrefix(b), 'en', {
+    sensitivity: 'base',
   })
 }
 
