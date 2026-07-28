@@ -18,6 +18,7 @@
 </style>
 <div id="stage"></div>
 <script src="./ring.js"></script>
+<script src="./cue-blur.js"></script>
 <script>
   /**
    * REQ-0327 §2 — the page half of the ring-paint gate.
@@ -166,6 +167,16 @@
       setAnimScale(els.outer, 1)
       runRingEffect(els, spec)
       setAnimScale(els.outer, spec.scale)
+    }
+    // REQ-0339 §1 — the entrance/exit blur.  Production code again
+    // (`src/renderer/lib/cue-blur-layer.ts`), so the gate perturbs the very
+    // function the rAF loop calls.  `blurTarget: 'outer'` is the NEGATIVE
+    // CONTROL: it reproduces the pre-REQ-0339 behaviour of filtering the whole
+    // composite, which blurs the text along with the ring.
+    if (spec.blurPx > 0) {
+      if (spec.blurTarget === 'outer') els.outer.style.filter = `blur(${spec.blurPx}px)`
+      else CueBlur.applyCueBlurToLayer(els.outer, spec.blurPx)
+      void els.outer.getBoundingClientRect()
     }
     const r = els.ringCanvas
     return {

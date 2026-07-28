@@ -49,6 +49,13 @@
  * `skipTransformNeutralisation` on `paintOutlineLayers`, so it perturbs the
  * very function production calls (REQ-0328 §1).
  *
+ * REQ-0339 §1 added a second, independent gate at the bottom of this file — the
+ * entrance/exit blur must land on the outline ring, not on the type:
+ *
+ *   RING_PAINT_BLUR_TARGET=outer npm run verify:ring-paint   # pre-REQ-0339
+ *
+ * MUST fail (the fill loses every saturated pixel).  Its own negative control.
+ *
  * ## Method
  *
  * The ring is painted RED (#FF0000) on a BLACK stage under a WHITE fill, so the
@@ -130,6 +137,12 @@ const THICK_TOL_PX = 1.25
 const THICK_MIN_MEASURABLE_PX = 1.0
 
 const BREAK = process.env.RING_PAINT_BREAK ?? 'always'
+/**
+ * REQ-0339 §1 negative control.  `RING_PAINT_BLUR_TARGET=outer` puts the blur
+ * back on the outer span (pre-REQ-0339), which blurs the text along with the
+ * ring.  The blur rows MUST fail with it.
+ */
+const BLUR_TARGET = process.env.RING_PAINT_BLUR_TARGET ?? 'layer'
 const REPEATS = Number(process.env.RING_PAINT_REPEATS ?? 1)
 const DPRS = (process.env.RING_PAINT_DPR ?? '1,1.5').split(',').map(Number)
 
@@ -149,6 +162,15 @@ esbuild.buildSync({
   format: 'iife',
   globalName: 'Ring',
   outfile: path.join(WORK, 'ring.js')
+})
+// REQ-0339 §1 — the blur-layer chooser, bundled the same way so the blur rows
+// below exercise production code rather than a look-alike.
+esbuild.buildSync({
+  entryPoints: [path.join(REPO, 'src/renderer/lib/cue-blur-layer.ts')],
+  bundle: true,
+  format: 'iife',
+  globalName: 'CueBlur',
+  outfile: path.join(WORK, 'cue-blur.js')
 })
 copyFileSync(path.join(HERE, 'page.html'), path.join(WORK, 'page.html'))
 
@@ -328,6 +350,98 @@ for (const dpr of DPRS) {
           : expect < THICK_MIN_MEASURABLE_PX
             ? 'ok (thickness sub-pixel, not asserted)'
             : 'ok')
+    )
+  }
+}
+
+// ---------------------------------------------------------------------------
+// REQ-0339 §1 — the entrance/exit blur must NOT soften the type.
+//
+// Measured against ffmpeg/libass (see `cue-blur-layer.ts`): with `\bord > 0`,
+// libass blurs the OUTLINE bitmap and composites the SHARP glyph over it — the
+// fill's edge stays a hard one-pixel step at `\blur` 0 and at `\blur` 40 alike.
+// The preview used to put `filter: blur()` on the outer span, blurring the
+// composite, so at outline 20 / blur 30 the exported text edge was σ ≈ 0.3px
+// while the preview's was σ ≈ 24px.
+//
+// The assertion is therefore about the FILL, not the ring: blurring must move
+// the white fill's edges by less than the drift tolerance, while the composite
+// silhouette must visibly expand (or the row would pass by simply not blurring
+// anything).  `blurTarget: 'outer'` is the negative control and must fail.
+{
+  // 16 and 28 px: large enough that a blurred ring measurably drains its
+  // saturated core (the 'ring not blurred' guard), which an 8 px blur on a
+  // 20 px ring does not.
+  const BLURS = [0, 16, 28]
+  const blurCases = BLURS.map((blurPx) => ({
+    ...BASE,
+    name: `blur ${String(blurPx).padStart(2)}px`,
+    order: 'paint-then-scale',
+    outlinePx: 20,
+    scale: 1,
+    blurPx,
+    blurTarget: BLUR_TARGET
+  }))
+  const jobPath = path.join(WORK, 'job-blur.json')
+  const outJson = path.join(WORK, 'out-blur.json')
+  writeFileSync(
+    jobPath,
+    JSON.stringify({
+      dpr: 1,
+      stage: STAGE,
+      workDir: WORK,
+      repeats: 1,
+      show: process.env.RING_PAINT_SHOW === '1',
+      setup: {
+        fontUrl: 'file:///' + fontDest.replace(/\\/g, '/'),
+        fontFamily: BASE.fontFamily,
+        fontWeight: BASE.fontWeight
+      },
+      cases: blurCases
+    }),
+    'utf8'
+  )
+  const run = spawnSync(ELECTRON, [path.join(HERE, 'electron-main.cjs'), jobPath, outJson], {
+    encoding: 'utf8',
+    timeout: 300_000
+  })
+  if (!existsSync(outJson)) {
+    console.error('electron produced no result for the blur cases')
+    console.error(run.stdout ?? '')
+    console.error(run.stderr ?? '')
+    process.exit(1)
+  }
+  const res = JSON.parse(readFileSync(outJson, 'utf8'))
+  if (res.error) {
+    console.error(`electron error on the blur cases: ${res.error}`)
+    process.exit(1)
+  }
+  console.log(`\n--- blur layer (REQ-0339 §1)   target: ${BLUR_TARGET}`)
+  console.log('case            fill L/R/T/B shift vs blur 0     white kept   red kept   verdict')
+  const base = res.results[0].reps[0]
+  const g = (e) => [e.left, e.right, e.top, e.bottom]
+  const baseFill = g(base.fill)
+  for (const r of res.results) {
+    const rep = r.reps[0]
+    const s = rep.devScale
+    const shift = g(rep.fill).map((v, i) => (v - baseFill[i]) / s)
+    // Saturated-pixel counts are the direct read on "did this layer go soft".
+    // A blur drains a layer's saturated core; the fill must keep its own.
+    const whiteKept = base.whitePx > 0 ? rep.whitePx / base.whitePx : 1
+    const redKept = base.redPx > 0 ? rep.redPx / base.redPx : 1
+    const bad = []
+    for (const v of shift) if (!(Math.abs(v) <= DRIFT_TOL_PX)) bad.push('fill edge moved')
+    if (!(whiteKept >= 0.9)) bad.push('fill lost saturation')
+    // Without this the row would also pass by not blurring anything at all.
+    if (r.spec.blurPx > 0 && !(redKept <= 0.9)) bad.push('ring not blurred')
+    if (bad.length) failures++
+    console.log(
+      r.name.padEnd(16) +
+        shift.map((v) => v.toFixed(2).padStart(7)).join('') +
+        whiteKept.toFixed(3).padStart(12) +
+        redKept.toFixed(3).padStart(11) +
+        '   ' +
+        (bad.length ? '<-- FAIL ' + [...new Set(bad)].join(',') : 'ok')
     )
   }
 }
