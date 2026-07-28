@@ -279,6 +279,126 @@ export function applyCutsToEntry(
 }
 
 /**
+ * REQ-0340 §2 — put a whole cue on the EDITED axis: its live window, the
+ * `original` window the "was this edited?" tests compare against, and its
+ * per-word timings.
+ *
+ * Returns null when the cue does not survive the cuts (`applyCutsToEntry`).
+ *
+ * ## Why `original` and `words` have to move too
+ *
+ * Burn-in applies `subtitles=` to the CONCAT output, so every timestamp in
+ * the ASS must be a position on the edited timeline.  Before this function,
+ * `ffmpeg-burnin` translated only `startSec` / `endSec`.  Two things stayed
+ * behind on the original axis:
+ *
+ *   - `original.startSec` / `original.endSec`.  `karaokeWordTimingBlocker`
+ *     asks "did the user move this cue?" by comparing live against original.
+ *     Translating one side and not the other made that comparison read
+ *     "time-edited" for EVERY cue in a project with cuts, so karaoke always
+ *     fell back to the equal split (RES-0336 §5).
+ *   - `words`.  Those are absolute seconds too, and sweeping from them
+ *     without translating would paint from timestamps that no longer
+ *     describe the concatenated output.
+ *
+ * Which is why RES-0336 chose the equal split deliberately rather than half
+ * of the fix.  This does the other half.
+ *
+ * ## The rules, and why each is the one it is
+ *
+ * **`original` goes through the same clamp+translate as live.**  Not a bare
+ * `origToEdited`: a cut that clips a cue's head moves `startSec` but leaves
+ * `original.startSec` where it was, so translating them by different routes
+ * would re-introduce the very inequality this is removing.  Running both
+ * through `applyCutsToEntry` means an untouched cue arrives with the two
+ * sides bit-identical (same inputs, same arithmetic), and a cue the user
+ * really did move still reads as moved.
+ *
+ * **A word that straddles a cut boundary keeps both endpoints; it is not
+ * split and not dropped.**  `origToEdited` maps each end to its position
+ * after the splice, so the translated interval is exactly as long as the
+ * word's SURVIVING audio.  Splitting it would need the cue's text split to
+ * match (`areWordsValidForText` compares the word concatenation against the
+ * whole cue text) and dropping it would break that same check — cuts do not
+ * shorten a cue's TEXT, only its time, so the word list has to stay whole.
+ *
+ * **A word entirely inside a cut collapses to zero duration** at the splice
+ * point, because both ends map there.  That is the honest answer: its audio
+ * is gone.  `\k0` / `\kf0` still switch its glyphs to the sung colour at
+ * that instant, so the "every character is coloured by the end of the clip"
+ * invariant holds.
+ *
+ * **If the translated words no longer sit inside the translated cue window,
+ * or stop being non-decreasing, `words` is dropped** and the cue falls to
+ * the equal split.  This is the owner's invariant as a backstop: the equal
+ * split spans the cue's own window by construction, so a cue that would
+ * otherwise sweep out of bounds still colours every character.  Nothing
+ * known produces this, and it is deliberately not silent — the caller logs
+ * it.
+ *
+ * `original.words` is left on the original axis: nothing downstream of the
+ * burn reads it (`resolveKaraokeTiming` and the ASS emitter both take the
+ * live `words`), and translating a field no consumer looks at is a second
+ * thing to keep correct for no gain.
+ */
+export function translateEntryToEditedAxis(
+  e: SubtitleEntry,
+  cuts: CutList,
+): { entry: SubtitleEntry; wordsDropped: boolean } | null {
+  const clamped = applyCutsToEntry(e, cuts)
+  if (clamped === null) return null
+
+  const startSec = origToEdited(clamped.startSec, cuts)
+  const endSec = origToEdited(clamped.endSec, cuts)
+
+  // Same clamp, same translate, so an unedited cue lands on exactly the same
+  // two numbers as the live side above.
+  const originalClamped = applyCutsToEntry(
+    { ...e, startSec: e.original.startSec, endSec: e.original.endSec },
+    cuts,
+  )
+  const original: SubtitleEntry['original'] = originalClamped === null
+    // The original window is entirely inside a cut while the live one is not
+    // — i.e. the user moved this cue out of a region that is now gone.  There
+    // is no edited-axis position for it, so leave it be: the comparison then
+    // reads "time-edited", which it genuinely is.
+    ? e.original
+    : {
+        ...e.original,
+        startSec: origToEdited(originalClamped.startSec, cuts),
+        endSec: origToEdited(originalClamped.endSec, cuts),
+      }
+
+  let words = e.words
+  let wordsDropped = false
+  if (words !== undefined && words.length > 0) {
+    const translated = words.map((w) => ({
+      ...w,
+      // Clip to the surviving window FIRST, on the original axis: a word that
+      // reaches past a head/tail clamp must not translate to a position
+      // outside the cue.
+      startSec: origToEdited(Math.min(Math.max(w.startSec, clamped.startSec), clamped.endSec), cuts),
+      endSec: origToEdited(Math.min(Math.max(w.endSec, clamped.startSec), clamped.endSec), cuts),
+    }))
+    const inBounds = translated.every(
+      (w, i) =>
+        w.startSec >= startSec &&
+        w.endSec <= endSec &&
+        w.endSec >= w.startSec &&
+        (i === 0 || w.startSec >= translated[i - 1].startSec),
+    )
+    if (inBounds) {
+      words = translated
+    } else {
+      words = undefined
+      wordsDropped = true
+    }
+  }
+
+  return { entry: { ...e, startSec, endSec, original, words }, wordsDropped }
+}
+
+/**
  * REQ-103 — top-level mutually-exclusive status for one entry.
  * Drives the 行き先 tab partition (すべて / 出力対象 / 削除) and
  * the per-row status badge.  Exactly one of the four values applies

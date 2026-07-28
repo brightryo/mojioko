@@ -12,9 +12,8 @@ import { buildTrimConcatFilter } from './ffmpeg-trim-filter'
 import { buildAmixAudioFilter } from './preview-mix-filter'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
 import {
-  applyCutsToEntry,
   editedDuration,
-  origToEdited
+  translateEntryToEditedAxis
 } from '../../shared/cuts'
 import type { SubtitleEntry } from '../../shared/types'
 import type { BurninStartRequest, BurninEvent } from '../../shared/ipc-contracts'
@@ -134,28 +133,38 @@ export async function startBurnin(
   // present this transformation is the identity, so the assContent is
   // byte-identical to pre-1d output.
   //
-  // REQ-0336 §1 note — `original` is deliberately NOT translated alongside
-  // the live times, so every cue in a project WITH cuts reads as
-  // "times edited" to `resolveKaraokeTiming` and burns from the equal split.
-  // That is the correct outcome here: `words` are absolute ORIGINAL-axis
-  // seconds and are not translated either, so keeping them would sweep the
-  // cue from timestamps that no longer describe the concatenated output (the
-  // pre-REQ-0336 behaviour — silently broken).  The equal split spans each
-  // cue's own translated window, so every character still colours between
-  // its start and its end.  Translating `words` (and dropping the spans that
-  // fall inside a cut) is the only way to keep real timings across a cut and
-  // is left to a future REQ.
+  // REQ-0340 §2 — `original` and `words` now move onto the Edited axis with
+  // the live times, in `translateEntryToEditedAxis`.
+  //
+  // RES-0336 §5 translated only `startSec` / `endSec`, which left
+  // `original.*` on the original axis and so made every cue in a project
+  // with cuts read as "times edited" to `resolveKaraokeTiming`: karaoke
+  // always fell back to the equal split.  That was the deliberate choice at
+  // the time, because `words` were untranslated too and sweeping from them
+  // would have painted from timestamps that no longer describe the
+  // concatenated output.  Translating all three together removes both halves
+  // of the problem, so a project with cuts keeps real word timings.
+  //
+  // The rules (word straddling a cut, word inside a cut, the out-of-bounds
+  // backstop) are documented on the function in `shared/cuts.ts`.
+  const droppedWordsIds: string[] = []
   const entriesForAss: SubtitleEntry[] = hasCuts
     ? entries.flatMap((e) => {
-        const clamped = applyCutsToEntry(e, cutsList)
-        if (clamped === null) return []
-        return [{
-          ...e,
-          startSec: origToEdited(clamped.startSec, cutsList),
-          endSec: origToEdited(clamped.endSec, cutsList),
-        }]
+        const translated = translateEntryToEditedAxis(e, cutsList)
+        if (translated === null) return []
+        if (translated.wordsDropped) droppedWordsIds.push(e.id)
+        return [translated.entry]
       })
     : entries
+  if (droppedWordsIds.length > 0) {
+    // Not silent: this means a cue's translated word spans left its own
+    // window, and it is now burning from the equal split instead.  Nothing
+    // known produces it, so if it ever appears in a log it is a bug report.
+    log.warn(
+      `[ffmpeg-burnin] REQ-0340 §2 — dropped out-of-bounds word timings after cut translation ` +
+      `for ${droppedWordsIds.length} cue(s): ${droppedWordsIds.join(', ')}`
+    )
+  }
   log.info(
     `[ffmpeg-burnin] cuts=${cutsList.length} effectiveDuration=${effectiveDurationSec.toFixed(3)}s ` +
     `entries=${entries.length}→${entriesForAss.length}`
