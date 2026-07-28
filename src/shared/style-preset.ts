@@ -55,6 +55,13 @@
  */
 
 import { BURNIN_DEFAULTS, makeEntryLayoutDefaults } from './burnin-defaults'
+import {
+  FONT_SIZE_MIN_PX,
+  FONT_SIZE_MAX_PX,
+  OUTLINE_THICKNESS_MAX_PX,
+  MARGIN_V_MIN_PX,
+  MARGIN_V_MAX_PX,
+} from './constants'
 import type { SubtitleEntry } from './types'
 
 /** Schema version stamped onto every preset this build writes. */
@@ -290,6 +297,118 @@ export function makeSystemStyleDefaults(): { [K in PresetStoredKey]: SubtitleEnt
     animationDistancePx: undefined,
     animationStartScalePercent: undefined,
     animationBlurPx: undefined,
+  }
+}
+
+/**
+ * REQ-0341 §3-1 — value-range enforcement, at APPLY time.
+ *
+ * ## Why not at load time
+ *
+ * `settings-store`'s hydrate deliberately validates only the preset envelope
+ * (`id` / `name` / `style` is an object) and leaves the individual style
+ * values alone, because a preset written by a NEWER build may legitimately
+ * carry keys this build does not know — dropping them would corrupt the file
+ * on the next save (REQ-0335 §3-6).  That is the right call and it stays.
+ *
+ * But it means a hand-edited `settings.json` can put `fontSizePx: 5000` in a
+ * preset and have it land on a cue verbatim.  Clamping on the way OUT keeps
+ * both properties: unknown keys survive a round-trip untouched, and no value
+ * this build DOES understand escapes its range.
+ *
+ * ## Why most keys are `clamped-downstream`
+ *
+ * Adding a second clamp for a field that already has one is how this codebase
+ * grows two copies of a rule that then drift (RES-0323's `fade-opacity`
+ * "mirrors", REQ-0328 §1's duplicated ring paint).  The animation fields in
+ * particular are clamped by `resolveAnimation`, which its own source calls
+ * "THE clamp, and the only one" (REQ-0337 §2-5) precisely because a
+ * second clamp elsewhere would let the preview and the ASS writer disagree.
+ *
+ * So this table classifies every stored key, and only the three that reach
+ * the burn with NO clamp anywhere are handled here:
+ *
+ *   `fontSizePx`         -> `\fs${e.fontSizePx}`      verbatim
+ *   `outlineThicknessPx` -> `\bord${e.outlineThicknessPx}` verbatim
+ *   `verticalMarginPx`   -> the MarginV column         verbatim
+ *
+ * The exhaustive map is the point: a new preset field cannot be added without
+ * deciding which side it falls on, and `tsc` says so.
+ */
+export type PresetClampRule =
+  /** No clamp exists downstream; enforce the range here. */
+  | 'clamp-here'
+  /** Already clamped on the way to the preview AND the ASS writer. */
+  | 'clamped-downstream'
+  /** Not a bounded number (id, colour, enum, boolean, object). */
+  | 'non-numeric'
+
+export const PRESET_CLAMP_RULES = {
+  fontId:                     'non-numeric',
+  fontSizePx:                 'clamp-here',
+  textColorHex:               'non-numeric',
+  outlineColorHex:            'non-numeric',
+  outlineThicknessPx:         'clamp-here',
+  casing:                     'non-numeric',
+  // `((x % 360) + 360) % 360` in ass-generator, and the overlay mirrors it.
+  rotation:                   'clamped-downstream',
+  // `Math.max(0, Math.min(SHADOW_DEPTH_MAX_PX, ...))` in both.
+  shadowDepth:                'clamped-downstream',
+  shadowColor:                'non-numeric',
+  shadowAlpha:                'clamped-downstream',
+  // `assAlphaValue` -> `opacityPercentToAssAlpha` -> `clampOpacityPercent`.
+  textAlpha:                  'clamped-downstream',
+  outlineAlpha:               'clamped-downstream',
+  // `resolveLineSpacingPercent` -> `clampLineSpacingPercent`.
+  lineSpacingPercent:         'clamped-downstream',
+  horizontalPosition:         'non-numeric',
+  verticalPosition:           'non-numeric',
+  verticalMarginPx:           'clamp-here',
+  subtitleBackground:         'non-numeric',
+  karaokeEnabled:             'non-numeric',
+  karaokeHighlightColor:      'non-numeric',
+  karaokeStyle:               'non-numeric',
+  karaokeUseWordTimings:      'non-numeric',
+  keywordEmphasisEnabled:     'non-numeric',
+  emphasisColorHex:           'non-numeric',
+  // `clampEmphasisScalePercent` in ass-generator and the overlay.
+  emphasisScalePercent:       'clamped-downstream',
+  animationType:              'non-numeric',
+  animationInEnabled:         'non-numeric',
+  animationOutEnabled:        'non-numeric',
+  // The four below: `resolveAnimation`, REQ-0337 §2-5.
+  animationDurationSec:       'clamped-downstream',
+  animationDirection:         'non-numeric',
+  animationDistancePx:        'clamped-downstream',
+  animationStartScalePercent: 'clamped-downstream',
+  animationBlurPx:            'clamped-downstream',
+} as const satisfies { readonly [K in PresetStoredKey]: PresetClampRule }
+
+/**
+ * Clamp the `clamp-here` fields of a resolved preset patch, in place.
+ *
+ * Uses the SAME constants the sliders and the settings hydrate use — this
+ * introduces no new range of its own.  A non-finite or non-number value is
+ * left alone: it is not this function's job to invent a default, and every
+ * key is already backfilled from `makeSystemStyleDefaults()` before it gets
+ * here.
+ */
+export function clampPresetStyleValues(patch: Record<string, unknown>): void {
+  const num = (k: string): number | null => {
+    const v = patch[k]
+    return typeof v === 'number' && Number.isFinite(v) ? v : null
+  }
+  const fontSizePx = num('fontSizePx')
+  if (fontSizePx !== null) {
+    patch.fontSizePx = Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, fontSizePx))
+  }
+  const outline = num('outlineThicknessPx')
+  if (outline !== null) {
+    patch.outlineThicknessPx = Math.min(OUTLINE_THICKNESS_MAX_PX, Math.max(0, outline))
+  }
+  const marginV = num('verticalMarginPx')
+  if (marginV !== null) {
+    patch.verticalMarginPx = Math.min(MARGIN_V_MAX_PX, Math.max(MARGIN_V_MIN_PX, Math.floor(marginV)))
   }
 }
 

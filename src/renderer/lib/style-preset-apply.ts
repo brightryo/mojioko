@@ -18,6 +18,7 @@
 
 import {
   PRESET_STORED_KEYS,
+  clampPresetStyleValues,
   PRESET_OFFSET_TARGETS,
   STYLE_PRESET_VERSION,
   makeSystemStyleDefaults,
@@ -147,6 +148,16 @@ export function resolveStylePresetPatch(
     // Deep-copy so two rows given the same preset never share an object.
     patch[key] = value !== null && typeof value === 'object' ? cloneValue(value) : value
   }
+
+  // REQ-0341 §3-1 — enforce value ranges HERE rather than at load.  Hydrate
+  // validates only the envelope on purpose (a preset from a newer build may
+  // carry keys this build does not know, and dropping them would corrupt the
+  // file on the next save), which leaves a hand-edited `settings.json` free to
+  // put `fontSizePx: 5000` in a preset.  Clamping on the way out keeps both
+  // properties.  Only the fields with no clamp anywhere downstream are
+  // touched; `PRESET_CLAMP_RULES` records the disposition of every stored key
+  // and makes a new one a compile error.
+  clampPresetStyleValues(patch)
 
   // Offset → absolute `\pos` under the TARGET geometry and the layout the
   // preset itself just wrote (not the row's previous anchor).
