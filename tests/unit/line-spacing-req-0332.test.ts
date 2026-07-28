@@ -43,8 +43,18 @@ function entry(p: Partial<SubtitleEntry>): SubtitleEntry {
     horizontalPosition: 'center', verticalPosition: 'bottom', verticalMarginPx: 40,
     subtitleBackground: { enabled: false, color: 'black', opacityPercent: 60 },
     isDeleted: false, isEdited: false, animationType: 'none',
-    original: {} as SubtitleEntry['original'],
     ...p,
+    // REQ-0336 §1-5 — the karaoke timing resolver reads `original.startSec` /
+    // `original.endSec` to tell an untouched cue from one whose times the user
+    // dragged.  These fixtures never edit times, so the snapshot mirrors the
+    // live values; the previous `{} as …` left both `undefined`, which every
+    // real entry-creation path fills in (`SubtitleEntryOriginal` declares them
+    // required) and which made the karaoke case here read as "times edited".
+    original: {
+      startSec: p.startSec ?? 0,
+      endSec: p.endSec ?? 5,
+      ...p.original,
+    } as SubtitleEntry['original'],
   } as SubtitleEntry
 }
 

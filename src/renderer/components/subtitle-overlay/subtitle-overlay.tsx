@@ -21,8 +21,8 @@ import { sweepWordTimings } from '../../../shared/karaoke-sweep'
 import { resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
 import { resolveAnimation, isAnimationInert } from '../../../shared/cue-animation'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
-import { areWordsValidForText } from '../../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
+import { resolveKaraokeTiming } from '../../../shared/karaoke-timing'
 import { computeKaraokeBreaks, splitWordsAtHardBreaks } from '../../../shared/karaoke-ass'
 // REQ-0332 — line spacing.  Same module the ASS writer reads.
 import {
@@ -539,7 +539,12 @@ export function SubtitleOverlay({
   // directly via the DOM regardless of which resolution path fed the
   // spans.
   const karaokeGateOn = entry.karaokeEnabled === true && canUseKaraokeInTier(isMsix)
-  const karaokeWordsValid = areWordsValidForText(entry.words, entry.text)
+  // REQ-0336 §1-6 — WHICH timings drive the sweep comes from the one shared
+  // resolver the ASS writer also calls.  `areWordsValidForText` alone (a
+  // text-only predicate) left a cue whose times had been dragged rendering
+  // from word timestamps that no longer fell inside its own window — the
+  // preview lit nothing, or stopped part-way, and the burn matched it.
+  const karaokeUsesRealWords = resolveKaraokeTiming(entry).mode === 'words'
   // REQ-0308 §1 — `splitWordsAtHardBreaks` gives every `\N` in the cue text a
   // unit boundary to attach to.  Without it a break landing mid-word (the norm
   // for Japanese, where REQ-0303 does NOT protect word boundaries) was silently
@@ -551,7 +556,7 @@ export function SubtitleOverlay({
   const karaokeWords: readonly WordSpan[] = karaokeGateOn
     ? splitWordsAtHardBreaks(
         entry.text,
-        karaokeWordsValid
+        karaokeUsesRealWords
           ? entry.words!
           : buildFallbackKaraokeUnits(entry.text, entry.startSec, entry.endSec),
       )

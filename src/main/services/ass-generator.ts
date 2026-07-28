@@ -23,8 +23,8 @@ import {
 import { computeFixedStackOffsets } from '../../shared/stack-offsets'
 import { groupByTimeOverlap } from '../../shared/simultaneous-groups'
 import { buildAnimationTags } from '../../shared/cue-animation-ass'
-import { areWordsValidForText } from '../../shared/words-validity'
 import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
+import { resolveKaraokeTiming } from '../../shared/karaoke-timing'
 import { assAlphaValue, isFullyOpaque, OPACITY_MAX_PERCENT } from '../../shared/alpha'
 import {
   canUseKeywordEmphasisInTier,
@@ -367,7 +367,15 @@ export function generateAss(
       // `buildKaraokeAssText` emitter — the fallback is a data-source
       // swap, not a separate rendering codepath.
       const karaokeGateOn = e.karaokeEnabled === true && canUseKaraokeInTier(isMsix)
-      const karaokeWordsValid = areWordsValidForText(e.words, e.text)
+      // REQ-0336 §1-6 — WHICH timings drive the sweep is decided by the one
+      // shared resolver the preview also calls, so the burn cannot disagree
+      // with what the user watched.  It adds the time-axis half of the
+      // judgement that `areWordsValidForText` (a text-only predicate) could
+      // never make: a cue whose start/end no longer match `original` has lost
+      // its correspondence with the audio, so it drops to the equal split —
+      // which spans exactly this cue's own window and therefore colours every
+      // character between its start and its end.
+      const karaokeUsesRealWords = resolveKaraokeTiming(e).mode === 'words'
       // REQ-0308 §1 — split any unit a `\N` falls inside so every hard break
       // has a unit boundary to attach to.  A mid-word break (the norm for
       // Japanese — REQ-0303 protects Latin word boundaries only) was otherwise
@@ -378,7 +386,7 @@ export function generateAss(
       const karaokeWords: readonly WordSpan[] = karaokeGateOn
         ? splitWordsAtHardBreaks(
             e.text,
-            karaokeWordsValid
+            karaokeUsesRealWords
               ? e.words!
               : buildFallbackKaraokeUnits(e.text, e.startSec, e.endSec),
           )

@@ -133,6 +133,18 @@ export async function startBurnin(
   // subtitles= is applied to the concat output (§5.3).  When no cuts are
   // present this transformation is the identity, so the assContent is
   // byte-identical to pre-1d output.
+  //
+  // REQ-0336 §1 note — `original` is deliberately NOT translated alongside
+  // the live times, so every cue in a project WITH cuts reads as
+  // "times edited" to `resolveKaraokeTiming` and burns from the equal split.
+  // That is the correct outcome here: `words` are absolute ORIGINAL-axis
+  // seconds and are not translated either, so keeping them would sweep the
+  // cue from timestamps that no longer describe the concatenated output (the
+  // pre-REQ-0336 behaviour — silently broken).  The equal split spans each
+  // cue's own translated window, so every character still colours between
+  // its start and its end.  Translating `words` (and dropping the spans that
+  // fall inside a cut) is the only way to keep real timings across a cut and
+  // is left to a future REQ.
   const entriesForAss: SubtitleEntry[] = hasCuts
     ? entries.flatMap((e) => {
         const clamped = applyCutsToEntry(e, cutsList)
