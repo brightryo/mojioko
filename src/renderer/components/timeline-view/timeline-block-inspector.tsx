@@ -1133,6 +1133,10 @@ export function TimelineBlockInspector({
                 markup it carried now lives in `FontFamilyBadges`, which
                 the selector below renders. */}
             <FamilyWeightSelector
+              // REQ-0348 §1 — plain font names here.  This is an editing
+              // surface, and the owner wants it to read like any other
+              // editor's font menu; the coverage chips live in Settings ▸ Fonts.
+              showCoverageBadges={false}
               value={entry.fontId ?? activeFontId}
               onChange={(nextId) => handleFontChange(nextId === activeFontId ? undefined : nextId)}
               disabled={isFrozen}

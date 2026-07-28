@@ -1280,6 +1280,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               (via handleFontChange) so a single Undo restores every
               affected row's prior fontId in one step. */}
           <FamilyWeightSelector
+            // REQ-0348 §1 — plain font names, same reasoning as the inspector:
+            // this is where a font is picked mid-edit, not compared.
+            showCoverageBadges={false}
             value={fontDraft}
             onChange={(nextId) => handleFontChange(nextId)}
             // REQ-0296 §3 — show "フォント" / "ウェイト" left labels so

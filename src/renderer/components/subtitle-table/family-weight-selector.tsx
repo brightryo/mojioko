@@ -40,6 +40,28 @@ interface FamilyWeightSelectorProps {
    * doesn't want a per-dropdown label.
    */
   showLabels?: boolean
+  /**
+   * REQ-0348 §1 — whether the EN / JA / rare-kanji chips appear on the trigger
+   * and in the family list.
+   *
+   * **Required, with no default.**  There are three call sites and they do not
+   * agree, so a default would silently decide for whoever adds a fourth.  The
+   * house convention for exactly this situation is to make the argument
+   * required (`assFontName` in REQ-0340 §3, `karaokeStyle` in REQ-0344 §2-2):
+   * a default cannot tell "the caller means this" from "the caller forgot".
+   *
+   * `false` — the editing surfaces (inspector, bulk-edit bar).  REQ-0341 §1
+   * put the chips here on the reasoning that this is where a font is actually
+   * chosen day to day, so a coverage warning belongs where the choice is made.
+   * The owner decided otherwise (REQ-0348 §1-1): a font menu should read like
+   * every other editor's, a plain list of names.  That is a deliberate,
+   * informed trade — the tofu warning still exists, one screen away.
+   *
+   * `true` — Settings ▸ Fonts, which the owner kept as-is.  That screen is
+   * where fonts are browsed and compared rather than picked mid-edit, and its
+   * legend explains the vocabulary.
+   */
+  showCoverageBadges: boolean
 }
 
 /**
@@ -72,7 +94,7 @@ interface FamilyWeightSelectorProps {
  * the chosen family (tier-gated via `selectableWeightsForFamily`).
  * User-facing labels strip the internal `MOJIOKO ` prefix.
  */
-export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: FamilyWeightSelectorProps) {
+export function FamilyWeightSelector({ value, onChange, disabled, showLabels, showCoverageBadges }: FamilyWeightSelectorProps) {
   const { t } = useTranslation(['step2', 'step1'])
   const [familyOpen, setFamilyOpen] = useState(false)
   const [weightOpen, setWeightOpen] = useState(false)
@@ -126,14 +148,15 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: 
           className={triggerBase}
           aria-label={t('rowFont.tooltipOverride', { name: currentFamilyLabel })}
         >
-          {/* REQ-0341 §1 — the SELECTED family's badges live on the trigger,
-              not only in the open list.  A warning you can see only while the
-              dropdown is open is a warning you see once and then lose; this is
-              the surface the user reads while typing subtitles.  `min-w-0`
-              plus `truncate` on the name gives the badges (which are
-              `shrink-0`) priority over the family label — the label is
-              recoverable from the trigger's own `aria-label` and the list,
-              the tofu warning is not. */}
+          {/* REQ-0341 §1 put the selected family's badges here, so a coverage
+              warning would be visible while typing rather than only while the
+              dropdown was open.  REQ-0348 §1 makes that conditional: on the
+              editing surfaces the owner wants a plain font name, the way every
+              other editor shows one.  Where the chips DO render, `min-w-0` +
+              `truncate` on the name still gives them priority — they are
+              `shrink-0` — because the family name is recoverable from the
+              trigger's `aria-label` and from the list, and the tofu warning
+              is not. */}
           <span className="flex items-center gap-1.5 min-w-0 flex-1">
             <span
               className="truncate"
@@ -141,7 +164,7 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: 
             >
               {currentFamilyLabel}
             </span>
-            {currentFamily && (
+            {showCoverageBadges && currentFamily && (
               <FontFamilyBadges
                 languages={currentFamily.languages}
                 lacksRareKanji={currentFamily.lacksRareKanji}
@@ -183,33 +206,26 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: 
                     {fam.displayLabel}
                   </span>
                 </span>
-                {/* REQ-0344 §1 — the chips sit BELOW the name, not beside it.
-                    Sharing one line made them competitors for 200 px, and the
-                    chips are `shrink-0` while the name is `truncate`, so the
-                    name always lost: measured in the real faces at the startup
-                    window size, "Hachi Maru Pop" and "Potta One" — the two
-                    families carrying all three chips — were reduced to
-                    clientWidth 0.  Not shortened: GONE, leaving a row that
-                    warns about a font it does not name.
+                {/* REQ-0344 §1 — where the chips DO render they sit BELOW
+                    the name, never beside it.  Sharing one line made them
+                    competitors for 200 px, and since the chips are `shrink-0`
+                    while the name is `truncate`, the name always lost:
+                    measured in the real faces at the startup window size,
+                    "Hachi Maru Pop" and "Potta One" — the two families
+                    carrying all three chips — were reduced to clientWidth 0.
+                    Not shortened: GONE, leaving a row that warned about a font
+                    it did not name.
 
-                    The note this replaces claimed the 240 px popover was wide
-                    enough for the chips to keep their labels.  That was
-                    reasoned, not measured: the list is filtered by what is
-                    installed and by tier, so on the machine REQ-0341 was
-                    written on it held Noto alone (RES-0341 §1-6).
-                    `font-popover-list-fit.spec.ts` now injects both so the 13
-                    real rows are measured.
-
-                    Stacking is preferred over widening the popover or dropping
-                    chips because the list is where a font is COMPARED before
-                    it is chosen: both the name and the warnings are the point
-                    of the surface, so neither should be spending the other's
-                    space.  The name now gets the full 200 px against a 145 px
-                    worst case, which also means the next chip added here cannot
-                    reintroduce this. */}
-                <span className="pl-4">
-                  <FontFamilyBadges languages={fam.languages} lacksRareKanji={fam.lacksRareKanji} />
-                </span>
+                    REQ-0348 §1-4: the second line exists only FOR the chips,
+                    so it disappears with them.  Without badges the row is a
+                    single line again and the name has the full width, which is
+                    both what the owner asked for and strictly safer than the
+                    layout that caused the truncation. */}
+                {showCoverageBadges && (
+                  <span className="pl-4">
+                    <FontFamilyBadges languages={fam.languages} lacksRareKanji={fam.lacksRareKanji} />
+                  </span>
+                )}
               </button>
             )
           })}

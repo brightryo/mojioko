@@ -448,6 +448,13 @@ export function FontPicker({ onChange }: FontPickerProps) {
           <FamilyWeightSelector
             value={activeFontId}
             onChange={(nextId) => { void handleSelectById(nextId) }}
+            // REQ-0348 §1 — Settings ▸ Fonts keeps the chips.  This selector
+            // sits directly above the family list that explains them, on the
+            // screen where fonts are compared rather than picked mid-edit, and
+            // the owner kept this screen as it was.  Reached from both the
+            // settings dialog and STEP 1's subtitle-style dialog, which render
+            // the same `<FontPicker />`.
+            showCoverageBadges
           />
         </div>
       </section>
