@@ -279,7 +279,13 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
       },
       outputContainer,
       fontId: activeFontId,
-      // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (app-wide setting).
+      // REQ-0344 §2-2 — no `karaokeStyle` here on purpose.  REQ-0324 §4-1
+      // removed the app-wide setting this comment used to introduce, leaving
+      // the comment attached to nothing; `entry.karaokeStyle` is the authority
+      // per cue and main falls back to `KARAOKE_STYLE_DEFAULT` for cues that
+      // set none.  `BURNIN_FIELD_DISPOSITION` classifies the field as
+      // 'forward', so omitting it here forwards `undefined`, which is that
+      // same fallback.
       cuts
     }
 

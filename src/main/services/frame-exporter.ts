@@ -72,7 +72,8 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
     includeSubtitles,
     entries = [],
     subtitleBackground,
-    fontId
+    fontId,
+    karaokeStyle
   } = req
 
   const ffmpeg = getBinPath('ffmpeg')
@@ -111,6 +112,10 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
         // (some words highlighted, some not); libass handles the time-
         // slicing naturally when we render a single frame.
         isPackagedAsMsix(getCurrentProcessContext()),
+        // REQ-0344 §2-2 — the seventh argument this call used to omit, so a
+        // still was written with whatever `generateAss` defaulted to while the
+        // burn-in used the requested value.  Both now come from the caller.
+        karaokeStyle,
       )
       assPath = join(tmpdir(), `mojioko-frame-${randomUUID()}.ass`)
       await fs.writeFile(assPath, assContent, 'utf-8')

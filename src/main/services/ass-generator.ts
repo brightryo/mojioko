@@ -6,7 +6,7 @@ import { buildKaraokeAssText, computeKaraokeBreaks, splitWordsAtHardBreaks } fro
 // REQ-0311 §4 / REQ-0315 §2 — the sweep emitter.
 import { buildKaraokeSweepAssText, buildSweepGapBlock } from '../../shared/karaoke-sweep'
 import type { KaraokeStyle } from '../../shared/karaoke-style'
-import { resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../shared/karaoke-style'
+import { resolveKaraokeStyle } from '../../shared/karaoke-style'
 import { resolveAnimation } from '../../shared/cue-animation'
 import { expandCueToEvents } from '../../shared/cue-events'
 // REQ-0332 — line spacing.  All the arithmetic (pitch, per-line `\pos`
@@ -249,27 +249,38 @@ export function generateAss(
    * REQ-0286 §0 — current build's tier flag.  Karaoke is gated behind
    * `canUseKaraokeInTier(isMsix)`; when false, karaoke-enabled cues
    * fall through to plain rendering (no `\k` tags, no colour swap)
-   * regardless of the entry's `karaokeEnabled` field.  Defaults to
-   * `false` so pre-REQ-0286 callers (and every existing unit test)
-   * get the plain path automatically — the "byte-identical to
-   * pre-REQ-0286 output for entries without karaoke" invariant is
-   * pinned by `ass-generator-baseline-ac1fd67.test.ts`.
-   */
-  isMsix: boolean = false,
-  /**
-   * REQ-0311 §4 / REQ-0315 §2 — karaoke rendering style, app-wide setting.
-   * `'switch'` is the `\k` path; `'sweep'` routes to the `\kf` emitter in
-   * `karaoke-sweep.ts`.  The parameter still DEFAULTS to `'switch'` so existing
-   * callers and unit tests are unaffected — which is exactly what masked
-   * REQ-0320 §1 when the renderer stopped sending the value.
+   * regardless of the entry's `karaokeEnabled` field.
    *
-   * REQ-0322 §3 — this is now only the **default for cues that did not
-   * choose one**.  A cue carrying `entry.karaokeStyle` overrides it, so the
-   * two tags can be mixed inside a single ASS file.  Resolution goes through
+   * **Required, with no default (REQ-0344 §2-2.)**  It used to default to
+   * `false`, i.e. "silently render as the free tier".  That is the same shape
+   * of trap as the old `assFontName` default below: a caller that forgets the
+   * argument gets plausible output rather than an error.  It has to lose its
+   * default anyway for `karaokeStyle` to lose one (TypeScript forbids a
+   * required parameter after an optional), and the two share a reason.
+   */
+  isMsix: boolean,
+  /**
+   * REQ-0311 §4 / REQ-0315 §2 — karaoke rendering style: `'switch'` is the
+   * `\k` path, `'sweep'` routes to the `\kf` emitter in `karaoke-sweep.ts`.
+   *
+   * REQ-0322 §3 — this is only the **fallback for cues that did not choose
+   * one**.  A cue carrying `entry.karaokeStyle` overrides it, so both tags can
+   * be mixed inside a single ASS file.  Resolution goes through
    * `resolveKaraokeStyle` so the preview (`subtitle-overlay.tsx`) and this
    * writer answer the question identically.
+   *
+   * **Required, with no default (REQ-0344 §2-2.)**  The default was
+   * `KARAOKE_STYLE_DEFAULT`, and it is what hid REQ-0320 §1 for a release
+   * cycle: the renderer stopped sending the value, every call still compiled,
+   * and the burn-in quietly rendered a style nobody had chosen.  It then hid a
+   * second instance of itself — `frame-exporter.ts` called this function with
+   * six arguments, so still exports never saw the seventh at all (RES-0340
+   * §6-2).  A default cannot distinguish "the caller means the default" from
+   * "the caller forgot", and only the first of those is ever correct here.
+   * Requiring it turns the next occurrence into a compile error.
+   * `tests/unit/ass-karaoke-style-required-req-0344.test.ts` pins the arity.
    */
-  karaokeStyle: KaraokeStyle = KARAOKE_STYLE_DEFAULT,
+  karaokeStyle: KaraokeStyle,
 ): string {
   // `burnin` / `subtitleBackground` are vestigial (see JSDoc above).  Reference
   // them once so `noUnusedParameters` stays quiet without disabling lint.

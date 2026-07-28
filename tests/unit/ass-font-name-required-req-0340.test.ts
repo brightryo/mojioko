@@ -52,10 +52,12 @@ function makeEntry(): SubtitleEntry {
 }
 
 describe('REQ-0340 §3 — assFontName has no default', () => {
-  it('the first five parameters of generateAss are all required', () => {
-    // entries, video, burnin, subtitleBackground, assFontName.
+  it('the parameters up to and including assFontName are all required', () => {
+    // entries, video, burnin, subtitleBackground, assFontName — plus isMsix
+    // and karaokeStyle, which REQ-0344 §2-2 also stripped defaults from for
+    // the same reason (see `ass-karaoke-style-required-req-0344.test.ts`).
     // Drops to 3 the moment `assFontName = '...'` comes back.
-    expect(generateAss.length).toBe(5)
+    expect(generateAss.length).toBe(7)
   })
 
   it('the source declares no default for assFontName', () => {

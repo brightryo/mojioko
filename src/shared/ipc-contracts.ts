@@ -123,6 +123,21 @@ export interface ExportFrameRequest {
   // REQ-20260615-050 — same per-entry consolidation as BurninStartRequest.
   subtitleBackground?: SubtitleBackground
   fontId?: FontId
+  /**
+   * REQ-0344 §2-2 — fallback karaoke style for cues that carry no
+   * `entry.karaokeStyle` of their own.
+   *
+   * **Required**, unlike `BurninStartRequest.karaokeStyle` above, and the
+   * asymmetry is deliberate.  The burn-in payload is assembled by
+   * `services/burnin.ts`, where `BURNIN_FIELD_DISPOSITION` (REQ-0321 §1) is a
+   * mapped type over every `BurninOptions` key — adding a field without
+   * classifying it does not compile, so optionality there costs nothing.
+   * The frame-export request has no such map: `export-frame-button.tsx` builds
+   * the object literal by hand, which is exactly how `karaokeStyle` came to be
+   * missing from the still-export path in the first place (RES-0340 §6-2).
+   * Requiring the field is the cheapest equivalent forcing function.
+   */
+  karaokeStyle: KaraokeStyle
 }
 
 export interface ExportFrameResult {
