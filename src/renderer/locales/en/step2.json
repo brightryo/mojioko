@@ -163,6 +163,7 @@
     "textOpacity": "Text opacity",
     "outlineOpacity": "Outline opacity",
     "outlineWidth": "Outline width",
+    "outlineWidthBgMinNote": "Keep this at 1 or more while the background box is on. The box is drawn by thickening the outline, so at 0 the export carries no background at all.",
     "fade": "Fade",
     "layoutH": "Horizontal",
     "layoutV": "Vertical",

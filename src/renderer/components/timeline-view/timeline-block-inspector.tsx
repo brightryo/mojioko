@@ -1268,6 +1268,10 @@ export function TimelineBlockInspector({
                 disabled={isFrozen}
                 ariaLabel={t('styleCell.outlineWidth')}
                 fullWidth
+                // REQ-0344 §2-1 — the BG box is the outline grown by \bord, so
+                // \bord0 renders no box at all (RES-0340 §1-4).
+                min={entry.subtitleBackground.enabled ? 1 : 0}
+                minReason={t('styleCell.outlineWidthBgMinNote')}
               />
             </StyleRow>
             {/* REQ-0292 §4 — style-effect row order (top → bottom):

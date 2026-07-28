@@ -1350,6 +1350,12 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               onCommit={handleOutlineWidthCommit}
               ariaLabel={t('bulk.outlineWidth')}
               fullWidth
+              // REQ-0344 §2-1 — keyed off this bar's own background draft, the
+              // same value its BG switch below shows.  A bulk apply of 0 while
+              // that switch is on would push the "box renders nothing" state
+              // (RES-0340 §1-4) onto every selected row at once.
+              min={bgEnabledDraft ? 1 : 0}
+              minReason={t('styleCell.outlineWidthBgMinNote')}
             />
           </StyleRow>
           {/* REQ-0292 §4 — bulk-edit style-effect row order mirrors

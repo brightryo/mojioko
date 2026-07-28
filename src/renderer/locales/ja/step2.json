@@ -163,6 +163,7 @@
     "textOpacity": "文字の透過率",
     "outlineOpacity": "アウトラインの透過率",
     "outlineWidth": "アウトライン幅",
+    "outlineWidthBgMinNote": "背景ボックスが ON のあいだは 1 以上にしてください。背景ボックスはアウトラインを太らせて描かれるため、アウトライン幅が 0 だと書き出しに背景が出ません。",
     "fade": "フェード",
     "layoutH": "水平",
     "layoutV": "垂直",

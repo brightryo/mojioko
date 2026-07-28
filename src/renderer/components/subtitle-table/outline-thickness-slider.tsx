@@ -41,6 +41,28 @@ interface OutlineThicknessSliderProps {
    * to consume the empty space between the label and the value readout.
    */
   fullWidth?: boolean
+  /**
+   * REQ-0344 §2-1 — lowest selectable thickness.  Defaults to 0 (no floor).
+   *
+   * Callers raise it to 1 when the row's background box is ON, because the
+   * `BorderStyle=3` box IS the glyph outline grown by `\bord`: at `\bord0`
+   * the box collapses into the glyph and the export carries no background at
+   * all — measured as zero white pixels in the burn (RES-0340 §1-4).  So "BG
+   * on, outline 0" is a combination that silently produces nothing, and the
+   * cheapest cure is to stop offering it.
+   *
+   * This is a floor on what the user can SELECT, not a clamp on what is
+   * stored.  A project saved with 0 keeps its 0 — rewriting it would change
+   * that project's output, which is not this REQ's to do.  See `belowMin`
+   * below for how that state is shown.
+   */
+  min?: number
+  /**
+   * Explains why `min` is raised, for the tooltip.  Required in spirit
+   * whenever `min > 0`: a control that silently refuses a value the user
+   * could pick a moment ago is worse than one that never offered it.
+   */
+  minReason?: string
 }
 
 /**
@@ -59,9 +81,28 @@ export function OutlineThicknessSlider({
   onPreview,
   disabled,
   ariaLabel,
-  fullWidth
+  fullWidth,
+  min = 0,
+  minReason
 }: OutlineThicknessSliderProps) {
   const [draft, setDraft] = useState(value)
+
+  /**
+   * REQ-0344 §2-1 — an already-stored value below the current floor.
+   *
+   * Reachable two ways, and deliberately NOT auto-corrected in either:
+   *   - opening a project saved before this floor existed, and
+   *   - turning the background box on while the outline is already 0.
+   *
+   * Both are shown rather than fixed.  Writing a new thickness the user did
+   * not ask for would change what their video renders — the one thing this
+   * REQ says not to do — and doing it on load would do it to every project
+   * they open, silently.  So the readout states the real stored value and
+   * marks it as the problem it is; the floor then applies the moment the user
+   * touches the control, which is the first point they have actually asked
+   * for a value.
+   */
+  const belowMin = draft < min
 
   // True while the user is mid-gesture (drag or keyboard hold).  Used for
   // two purposes:
@@ -99,10 +140,14 @@ export function OutlineThicknessSlider({
         fullWidth && 'w-full',
         disabled && 'opacity-40 pointer-events-none'
       )}
+      // The tooltip hangs off the whole row, not just the readout, so it is
+      // reachable from wherever the pointer already is when the floor stops
+      // the thumb.
+      title={min > 0 ? minReason : undefined}
     >
       <input
         type="range"
-        min={0}
+        min={min}
         max={OUTLINE_THICKNESS_MAX_PX}
         step={1}
         value={draft}
@@ -122,7 +167,15 @@ export function OutlineThicknessSlider({
           and right-aligned so it matches FadeDurationSlider's readout
           cell exactly.  Same readout footprint = both sliders' bars
           start and end at the same X within a shared row container. */}
-      <span className="w-10 text-caption text-muted-foreground font-mono tabular-nums text-right">
+      {/* REQ-0344 §2-1 — a stored value under the floor is shown as it really
+          is, in the warning colour, so "my background box does not render"
+          has something on screen to explain it. */}
+      <span
+        className={cn(
+          'w-10 text-caption font-mono tabular-nums text-right',
+          belowMin ? 'text-warning-soft' : 'text-muted-foreground'
+        )}
+      >
         {draft}
       </span>
     </div>
