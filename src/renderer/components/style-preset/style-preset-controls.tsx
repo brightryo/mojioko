@@ -53,6 +53,16 @@ export interface StylePresetControlsProps {
   className?: string
   /** Render a compact icon-only trigger (bulk-edit bar). */
   compact?: boolean
+  /**
+   * REQ-0337 §3 — how the trigger is painted.
+   *
+   * `'button'` is the bulk-edit bar's bordered secondary Button.
+   * `'toolbar'` is the inspector's borderless action-icon square, so the
+   * palette sits in that row without being the one control in it that
+   * wears a border.  The DROPDOWN is identical either way — this only
+   * decides which row's visual language the trigger speaks.
+   */
+  triggerVariant?: 'button' | 'toolbar'
 }
 
 export function StylePresetControls({
@@ -60,6 +70,7 @@ export function StylePresetControls({
   onApply,
   className,
   compact = false,
+  triggerVariant = 'button',
 }: StylePresetControlsProps) {
   const { t } = useTranslation(['step2', 'common'])
   const presets = useSettingsStore((s) => s.stylePresets)
@@ -104,17 +115,44 @@ export function StylePresetControls({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="secondary"
-            size="md"
-            className={cn('gap-1.5', className)}
-            title={t('preset.menu')}
-          >
-            <Palette className="h-3.5 w-3.5" />
-            {!compact && <span>{t('preset.menu')}</span>}
-          </Button>
+          {triggerVariant === 'toolbar' ? (
+            // REQ-0337 §3-3 — a labelled button became an icon, so the
+            // tooltip is now the only thing naming it.  `title` AND
+            // `aria-label`, matching every other icon in that row.
+            <button
+              type="button"
+              title={t('preset.menu')}
+              aria-label={t('preset.menu')}
+              className={cn(
+                'flex items-center justify-center h-7 w-7 rounded',
+                'text-fg-tertiary hover:bg-surface-2 hover:text-fg-primary',
+                'transition-colors duration-150',
+                'focus:outline-none focus-visible:outline-none',
+                className,
+              )}
+            >
+              <Palette className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <Button
+              variant="secondary"
+              size="md"
+              className={cn('gap-1.5', className)}
+              title={t('preset.menu')}
+            >
+              <Palette className="h-3.5 w-3.5" />
+              {!compact && <span>{t('preset.menu')}</span>}
+            </Button>
+          )}
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-64">
+        {/* REQ-0337 §3 — `align="end"`.  On BOTH surfaces the trigger now
+            sits at the right end of its toolbar (bulk-edit's `ml-auto`,
+            and the inspector's since this REQ), so start-aligning a 256 px
+            panel ran it off the right edge of the window: the 「保存」 row
+            wrapped onto two lines and sat flush against the frame.  Ending
+            the panel on the trigger's own right edge keeps it inside the
+            pane on both. */}
+        <DropdownMenuContent align="end" className="w-64">
           <DropdownMenuLabel>{t('preset.apply')}</DropdownMenuLabel>
           {presets.length === 0 ? (
             <div className="px-2 py-1.5 text-xs text-muted-foreground">

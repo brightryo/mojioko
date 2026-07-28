@@ -990,6 +990,26 @@ export function TimelineBlockInspector({
           >
             <CopyPlus className="h-3.5 w-3.5" />
           </button>
+          {/* REQ-0337 §3 — style presets.  Pushed to the RIGHT END with
+              `ml-auto`, visually separated from the row-operation icons on
+              the left, exactly as the bulk-edit bar places it: those act on
+              THIS ROW, this acts on the whole style.  It lives in the
+              toolbar rather than inside 「字幕」 because a preset writes
+              layout / karaoke / emphasis / animation / line spacing too,
+              and because collapsing that section used to hide it.
+              Saving is ALWAYS enabled here (unlike bulk-edit, whose
+              "exactly one row selected" gate exists only because of
+              multi-select): the inspector always targets exactly one row,
+              and saving only READS it, so even a frozen row can be
+              snapshotted. */}
+          {!isAudioOnly && (
+            <StylePresetControls
+              triggerVariant="toolbar"
+              className="ml-auto"
+              onSaveCurrent={handleSavePreset}
+              onApply={handleApplyPreset}
+            />
+          )}
       </div>
 
       {/* § 2 — Status badges.  `state.edited` first, then warnings in the
@@ -1094,15 +1114,12 @@ export function TimelineBlockInspector({
         />
         {!isAudioOnly && (
           <>
-            {/* REQ-0335 §3 — style presets.  Sits at the TOP of the style
-                cluster because it is the coarsest control there: it writes
-                every field below it in one undoable step, so reading the
-                cluster top-down goes "whole look → individual fields". */}
-            <StylePresetControls
-              className="w-full justify-center"
-              onSaveCurrent={isFrozen ? null : handleSavePreset}
-              onApply={handleApplyPreset}
-            />
+            {/* REQ-0337 §3 — the preset control MOVED OUT of this section
+                to the action-icon toolbar at the top of the inspector.
+                Two reasons: collapsing 「字幕」 hid it entirely, and a
+                preset stores 29 fields (layout / karaoke / emphasis /
+                animation / line spacing), so living inside 「字幕」
+                misrepresented its scope. */}
             {/* REQ-0275 §5 — two-tier family + weight picker replaces
                 the flat RowFontSelector at this site.  When the user
                 picks a family it snaps to the family's default weight;

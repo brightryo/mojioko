@@ -333,16 +333,22 @@ export interface SubtitleEntryOriginal {
   /** Slide distance in ASS px, 0–200 (REQ-0323 §3).  Ignored otherwise. */
   animationDistancePx?: number
   /**
-   * REQ-0331 §1-3 — "強さ" for `scale` / `pop`: the scale the cue starts
-   * from, in percent of natural size (`ANIMATION_START_SCALE_*`).
-   * `undefined` = the per-type default (`defaultStartScalePercent`), which
-   * is what every pre-REQ-0331 cue is, so their look is unchanged.
+   * REQ-0331 §1-3 — the scale the cue STARTS from for `scale` / `pop`, in
+   * percent of natural size (`ANIMATION_START_SCALE_*`).  `undefined` =
+   * the per-type default (`defaultStartScalePercent`), which is what every
+   * pre-REQ-0331 cue is, so their look is unchanged.
+   *
+   * ★ REQ-0337 §2-3 — this is a START SCALE, where SMALLER means a BIGGER
+   * movement.  The UI shows the inverse (`100 − this`) so 「強さ」 runs the
+   * same way round as blur's, but nothing outside the control converts:
+   * the stored meaning, the curves and the ASS writer are unchanged.
    */
   animationStartScalePercent?: number
   /**
    * REQ-0331 §1-3 — "強さ" for `blur`: peak blur radius in ASS px
-   * (`ANIMATION_BLUR_*`).  `undefined` = `BLUR_MAX_PX` (8), the value that
-   * used to be hardcoded.
+   * (`ANIMATION_BLUR_*`).  `undefined` = `BLUR_MAX_PX`.  REQ-0337 §2-4
+   * moved the range to 20–40 (default 30); cues holding the earlier 8 are
+   * clamped up by `resolveAnimation`, never by the UI.
    */
   animationBlurPx?: number
 
