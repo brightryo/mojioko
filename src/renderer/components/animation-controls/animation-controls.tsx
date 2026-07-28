@@ -13,12 +13,14 @@ import {
   ANIMATION_DURATION_MAX_SEC,
   ANIMATION_DURATION_MIN_SEC,
   ANIMATION_DURATION_STEP_SEC,
-  ANIMATION_START_SCALE_MAX_PCT,
-  ANIMATION_START_SCALE_MIN_PCT,
-  ANIMATION_START_SCALE_STEP_PCT,
+  ANIMATION_STRENGTH_SCALE_MAX,
+  ANIMATION_STRENGTH_SCALE_MIN,
+  ANIMATION_STRENGTH_SCALE_STEP,
   SELECTABLE_ANIMATION_TYPES,
   animationFieldsForTypeChange,
   coerceAnimationType,
+  startScalePercentToStrength,
+  strengthToStartScalePercent,
   type AnimationUiValue,
 } from '../../../shared/cue-animation'
 
@@ -156,12 +158,25 @@ export function AnimationControls({
 
   // Strength drafts.  Two separate fields (not one polymorphic number)
   // because the unit differs per type — see `cue-animation.ts`.
-  const [scaleDraft, setScaleDraft] = useState(value.startScalePercent)
+  //
+  // REQ-0337 §2 — `scaleStrengthDraft` is held in the DISPLAYED scale
+  // (larger = stronger), not in the stored one.  The stored field stays a
+  // start scale (§2-3: no migration, no change to the curves or the ASS
+  // writer), so the inversion happens at exactly two points: reading the
+  // prop below, and committing in `commitScale`.  Keeping the draft in
+  // display units means the slider's `min`/`max`/`step`/readout are all the
+  // same number the user is looking at, with no per-site conversions to
+  // get backwards.
+  const [scaleStrengthDraft, setScaleStrengthDraft] = useState(
+    () => startScalePercentToStrength(value.startScalePercent),
+  )
   const [blurDraft, setBlurDraft] = useState(value.blurPx)
   const scaleInteracting = useRef(false)
   const blurInteracting = useRef(false)
   useEffect(() => {
-    if (!scaleInteracting.current) setScaleDraft(value.startScalePercent)
+    if (!scaleInteracting.current) {
+      setScaleStrengthDraft(startScalePercentToStrength(value.startScalePercent))
+    }
   }, [value.startScalePercent])
   useEffect(() => {
     if (!blurInteracting.current) setBlurDraft(value.blurPx)
@@ -187,7 +202,8 @@ export function AnimationControls({
   }
   const commitScale = () => {
     scaleInteracting.current = false
-    if (scaleDraft !== value.startScalePercent) onChange({ startScalePercent: scaleDraft })
+    const next = strengthToStartScalePercent(scaleStrengthDraft)
+    if (next !== value.startScalePercent) onChange({ startScalePercent: next })
   }
   const commitBlur = () => {
     blurInteracting.current = false
@@ -219,7 +235,7 @@ export function AnimationControls({
     // move with it — otherwise the sliders keep showing the old type's
     // numbers until the next prop round-trip.
     setDraft(secondsToStep(seed.durationSec))
-    setScaleDraft(seed.startScalePercent)
+    setScaleStrengthDraft(startScalePercentToStrength(seed.startScalePercent))
     setBlurDraft(seed.blurPx)
     onChange(seed)
   }
@@ -291,7 +307,11 @@ export function AnimationControls({
         />
       </StyleRow>
 
-      {/* 強さ — meaning depends on the type (REQ-0331 §1-3). */}
+      {/* 強さ — REQ-0337 §2: whichever type is active, the slider now runs
+          the same way round (weak at the left, strong at the right).  The
+          unit still differs (px for blur, travel for scale/pop), which is
+          why there are still two sliders — but the DIRECTION no longer
+          silently flips under one label. */}
       <StyleRow
         label={t('styleCell.animationStrengthLabel')}
         {...columns}
@@ -311,15 +331,15 @@ export function AnimationControls({
           />
         ) : (
           <AnimationSlider
-            min={ANIMATION_START_SCALE_MIN_PCT}
-            max={ANIMATION_START_SCALE_MAX_PCT}
-            step={ANIMATION_START_SCALE_STEP_PCT}
-            value={scaleDraft}
-            onDraft={(n) => { scaleInteracting.current = true; setScaleDraft(n) }}
+            min={ANIMATION_STRENGTH_SCALE_MIN}
+            max={ANIMATION_STRENGTH_SCALE_MAX}
+            step={ANIMATION_STRENGTH_SCALE_STEP}
+            value={scaleStrengthDraft}
+            onDraft={(n) => { scaleInteracting.current = true; setScaleStrengthDraft(n) }}
             onCommit={commitScale}
             disabled={strengthDisabled}
             ariaLabel={t('styleCell.animationStrengthScale')}
-            readout={`${scaleDraft}%`}
+            readout={`${scaleStrengthDraft}%`}
           />
         )}
       </StyleRow>

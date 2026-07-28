@@ -214,7 +214,7 @@
     "animationTimingLabel": "タイミング",
     "animationDurationLabel": "再生時間",
     "animationStrengthLabel": "強さ",
-    "animationStrengthScale": "開始倍率",
+    "animationStrengthScale": "拡大の強さ",
     "animationStrengthBlur": "ぼかしの強さ",
     "animationIn": "開始時",
     "animationOut": "終了時",

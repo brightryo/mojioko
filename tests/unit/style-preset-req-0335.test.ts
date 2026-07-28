@@ -72,7 +72,11 @@ function makeRichEntry(): SubtitleEntry {
     animationDirection: 'up' as const,
     animationDistancePx: 60,
     animationStartScalePercent: 40,
-    animationBlurPx: 6,
+    // REQ-0337 §2-4 moved the blur range to 20–40 px, so this fixture's old
+    // 6 px is now out of range and `resolveAnimation` clamps it (§2-5).
+    // The value is arbitrary here — the test is about round-tripping — so
+    // it moves into the range rather than the clamp being weakened.
+    animationBlurPx: 26,
     words: [
       { startSec: 1.0, endSec: 1.4, text: 'Hello' },
       { startSec: 1.4, endSec: 2.2, text: ' brave' },

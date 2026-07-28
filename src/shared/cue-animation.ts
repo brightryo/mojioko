@@ -206,12 +206,49 @@ export const ANIMATION_DISTANCE_DEFAULT_PX = 50
  * - `blur` → **peak blur radius** in ASS px (= output video px).
  * - `fade` → nothing; the row is greyed out.
  */
-export const ANIMATION_START_SCALE_MIN_PCT = 0
-export const ANIMATION_START_SCALE_MAX_PCT = 100
-export const ANIMATION_START_SCALE_STEP_PCT = 5
+/**
+ * ★ REQ-0337 §2-6 — WHY THE MINIMUM STRENGTH IS NOT ZERO.
+ *
+ * Every type except `fade` carries its OWN opacity ramp (REQ-0331 §2-3 —
+ * see `opacityRampFraction` and `curve` below).  So a cue at the weakest
+ * strength is **not** "animation off": it still fades.  What it loses is
+ * the component that makes it a different animation at all —
+ *
+ *   - strength 0 on `scale` / `pop` is start scale 100 %, i.e. no scaling
+ *     whatsoever, so the cue degenerates into a plain fade wearing a
+ *     different type name;
+ *   - blur below ~20 px at output resolution is, in the owner's words,
+ *     indistinguishable from a fade.
+ *
+ * The floors are therefore ABOVE zero deliberately: the range excludes the
+ * region where the control has stopped meaning anything.  **Do not lower
+ * them to 0 because a slider that does not start at zero looks unnatural**
+ * — that reintroduces the degeneration, and a user who wants a plain fade
+ * already has `fade` in the type list.
+ *
+ * Provenance: the blur range (20–40, default 30) is the owner's decision.
+ * The scale/pop floor of 10 was inferred by applying the same principle,
+ * not instructed — see RES-0337.
+ */
+export const ANIMATION_STRENGTH_SCALE_MIN = 10
+export const ANIMATION_STRENGTH_SCALE_MAX = 100
+export const ANIMATION_STRENGTH_SCALE_STEP = 5
 
-export const ANIMATION_BLUR_MIN_PX = 1
-export const ANIMATION_BLUR_MAX_PX = 30
+/**
+ * The STORED start-scale bounds, DERIVED from the strength bounds so the
+ * displayed range and the stored range cannot drift apart.  The inversion
+ * swaps the ends: strength 100 (the biggest movement) is start scale 0,
+ * and the strength floor of 10 becomes a start-scale ceiling of 90.
+ */
+export const ANIMATION_START_SCALE_MIN_PCT =
+  strengthToStartScalePercent(ANIMATION_STRENGTH_SCALE_MAX)
+export const ANIMATION_START_SCALE_MAX_PCT =
+  strengthToStartScalePercent(ANIMATION_STRENGTH_SCALE_MIN)
+export const ANIMATION_START_SCALE_STEP_PCT = ANIMATION_STRENGTH_SCALE_STEP
+
+/** Blur's stored value already rises with strength, so these are both. */
+export const ANIMATION_BLUR_MIN_PX = 20
+export const ANIMATION_BLUR_MAX_PX = 40
 export const ANIMATION_BLUR_STEP_PX = 1
 
 /**
@@ -497,6 +534,16 @@ export function resolveAnimation(entry: {
       ANIMATION_DISTANCE_MAX_PX,
       Math.max(ANIMATION_DISTANCE_MIN_PX, distanceRaw),
     ),
+    // ★ REQ-0337 §2-5 — THE clamp, and the only one.
+    //
+    // The ranges moved with the strength rework (blur 1–30 → 20–40 px,
+    // start scale 0–100 → 0–90 %), so cues written earlier can hold values
+    // the sliders can no longer reach: an 8 px blur, or a 100 % start
+    // scale that does not scale at all.  Clamping HERE rather than in the
+    // slider is what keeps the preview and the burn-in agreeing — both
+    // read the spec through this function, whereas a UI-side clamp would
+    // leave the ASS writer emitting the stale number and reproduce
+    // REQ-0320 §1 exactly.
     startScale: Math.min(
       ANIMATION_START_SCALE_MAX_PCT,
       Math.max(ANIMATION_START_SCALE_MIN_PCT, startScaleRaw),

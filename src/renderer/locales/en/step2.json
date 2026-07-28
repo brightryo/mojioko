@@ -214,7 +214,7 @@
     "animationTimingLabel": "Timing",
     "animationDurationLabel": "Duration",
     "animationStrengthLabel": "Strength",
-    "animationStrengthScale": "Start scale",
+    "animationStrengthScale": "Scale strength",
     "animationStrengthBlur": "Blur strength",
     "animationIn": "In",
     "animationOut": "Out",
