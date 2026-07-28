@@ -216,14 +216,35 @@ export function generateAss(
   entries: SubtitleEntry[],
   video: VideoInfo,
   burnin: BurninPosition,
-  subtitleBackground?: SubtitleBackground,
+  subtitleBackground: SubtitleBackground | undefined,
   /**
    * ASS `Style:` `Fontname` value — exact family name as libass will look it
-   * up in the `fontsdir`.  Defaults to "Noto Sans JP SemiBold" so legacy
-   * callers that pre-date font selection continue to produce the v1.0/v1.1
-   * output unchanged.
+   * up in the `fontsdir`.  **Required, with no default (REQ-0340 §3.)**
+   *
+   * It used to default to `'Noto Sans JP SemiBold'`, which is the name of no
+   * font this app ever stages.  Every bundled and downloadable TTF carries a
+   * NAMESPACED family (`'MOJIOKO Noto Sans JP SemiBold'`, …) precisely so that
+   * libass' DirectWrite provider cannot silently substitute a system-installed
+   * font of the upstream name (REQ-0275, `shared/fonts.ts`).  So a call that
+   * fell through to the default asked libass for a family absent from the
+   * `fontsdir`, and libass answered — without a warning anywhere in the ffmpeg
+   * output — with ArialMT.  Production never hit it (both call sites pass
+   * `getFontMeta(id).assFontName`), but the measurement harness in RES-0333
+   * did, and spent a run comparing the preview against Arial.
+   *
+   * A default is the wrong shape for this argument: the correct value is
+   * always derived from the entry's / project's font id, so there is no value
+   * a caller could omit and still be right.  Making it required moves that
+   * from "a trap the next harness author walks into" to a compile error.
+   * `tests/unit/ass-font-name-required-req-0340.test.ts` pins the arity so the
+   * default cannot come back.
+   *
+   * `subtitleBackground` above is spelled `| undefined` rather than `?` for
+   * the same reason: TypeScript forbids a required parameter after an optional
+   * one, and this argument is the one that must not be omittable.  It is
+   * vestigial either way (see the JSDoc above — it is `void`ed).
    */
-  assFontName: string = 'Noto Sans JP SemiBold',
+  assFontName: string,
   /**
    * REQ-0286 §0 — current build's tier flag.  Karaoke is gated behind
    * `canUseKaraokeInTier(isMsix)`; when false, karaoke-enabled cues

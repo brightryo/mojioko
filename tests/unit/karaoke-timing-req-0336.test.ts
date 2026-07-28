@@ -5,7 +5,10 @@ import {
   karaokeWordTimingBlocker,
   resolveKaraokeTiming,
 } from '../../src/shared/karaoke-timing'
-import { generateAss } from '../../src/main/services/ass-generator'
+// REQ-0340 §3 — `generateAss` no longer defaults `assFontName`.  This file's
+// subject is tag composition, not font resolution, so it goes through the
+// shim that supplies the historical name.  See the helper for why.
+import { generateAssLegacyFont as generateAss } from '../helpers/legacy-ass-font-name'
 import { buildFallbackKaraokeUnits } from '../../src/shared/karaoke-fallback'
 import { activeWordCountAtTime } from '../../src/renderer/lib/karaoke-highlight'
 import { SUBTITLE_ENTRY_DUPLICATION } from '../../src/renderer/lib/duplicate-entry'

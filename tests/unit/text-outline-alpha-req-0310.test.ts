@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
-import { generateAss } from '../../src/main/services/ass-generator'
+// REQ-0340 §3 — `generateAss` no longer defaults `assFontName`.  This file's
+// subject is tag composition, not font resolution, so it goes through the
+// shim that supplies the historical name.  See the helper for why.
+import { generateAssLegacyFont as generateAss } from '../helpers/legacy-ass-font-name'
 import {
   clampOpacityPercent,
   isFullyOpaque,
