@@ -47,7 +47,7 @@
     "helpStroke": "Outline thickness in pixels.",
     "helpFade": "Enable fade-in/fade-out effect on subtitles (300ms).",
     "previewLabel": "Preview",
-    "sampleText": "This is a sample subtitle so you can verify how the seed style will render in the burned-in output.",
+    "sampleText": "This is a SAMPLE subtitle (日本語).",
     "previewNote": "Approximate preview. Verify with the actual exported video."
   },
   "subtitleStyle": {

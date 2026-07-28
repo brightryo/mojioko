@@ -51,16 +51,19 @@ export interface StylePresetControlsProps {
   onApply: (preset: StylePreset) => void
   /** Extra classes for the trigger button. */
   className?: string
-  /** Render a compact icon-only trigger (bulk-edit bar). */
-  compact?: boolean
   /**
    * REQ-0337 §3 — how the trigger is painted.
    *
-   * `'button'` is the bulk-edit bar's bordered secondary Button.
-   * `'toolbar'` is the inspector's borderless action-icon square, so the
-   * palette sits in that row without being the one control in it that
-   * wears a border.  The DROPDOWN is identical either way — this only
-   * decides which row's visual language the trigger speaks.
+   * `'button'` is a labelled secondary Button.  `'toolbar'` is an icon
+   * square that takes its chrome from the caller's `className`, so it can sit
+   * in a row of action icons without being the one control in it painted as a
+   * solid block.  The DROPDOWN is identical either way — this only decides
+   * which row's visual language the trigger speaks.
+   *
+   * REQ-0338 §3-2 — BOTH live call sites (inspector, bulk-edit bar) now pass
+   * `'toolbar'`; `'button'` remains the default so it is what a new caller
+   * gets outside an icon row.  The `compact` flag that used to strip the
+   * label went with the bulk-edit bar's Button and is gone.
    */
   triggerVariant?: 'button' | 'toolbar'
 }
@@ -69,7 +72,6 @@ export function StylePresetControls({
   onSaveCurrent,
   onApply,
   className,
-  compact = false,
   triggerVariant = 'button',
 }: StylePresetControlsProps) {
   const { t } = useTranslation(['step2', 'common'])
@@ -141,7 +143,7 @@ export function StylePresetControls({
               title={t('preset.menu')}
             >
               <Palette className="h-3.5 w-3.5" />
-              {!compact && <span>{t('preset.menu')}</span>}
+              <span>{t('preset.menu')}</span>
             </Button>
           )}
         </DropdownMenuTrigger>

@@ -46,7 +46,7 @@
     "helpStroke": "アウトラインの太さ（ピクセル）。",
     "helpFade": "字幕のフェードイン・フェードアウト効果を有効にします（300ms）。",
     "previewLabel": "プレビュー",
-    "sampleText": "これはサンプル字幕です。書き出し後の見た目をここで確認できます。",
+    "sampleText": "これはSAMPLE字幕です。",
     "previewNote": "※ 近似表示です。書き出し後の動画で最終確認してください。"
   },
   "subtitleStyle": {

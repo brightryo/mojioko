@@ -161,14 +161,23 @@ export function StyleSamplePreview({
     return () => { cancelled = true }
   }, [activeFontId])
 
-  // Long-form sample text — chosen so the user can verify line wrapping,
-  // font-size sanity and outline visibility at a glance.  A single short
-  // word ("Sample") would hide overflow/wrap problems that only show up
-  // with a realistic-length caption.
-  const sampleText = t(
-    'subtitleDefaults.sampleText',
-    'これはサンプル字幕です。書き出し後の見た目をここで確認できます。'
-  )
+  // REQ-0338 §3-1 — this string is a DIAGNOSTIC, not filler.  It deliberately
+  // mixes Latin and Japanese so that picking a Latin-only face (Anton, Bebas
+  // Neue, Montserrat, Poppins) renders the Japanese half as tofu right here,
+  // where the font was chosen — `substituteMissingGlyphs` swaps every code
+  // point outside the font's cmap for the font's own placeholder (□, or ? for
+  // Bebas Neue / Poppins), so the mismatch is visible instead of being papered
+  // over by a system-font fallback that libass will not reproduce.
+  //
+  // Do not shorten it to one script.  The `en` string carries a Japanese token
+  // for the same reason: the UI language says nothing about what script the
+  // user's footage is in, so an English-speaking user subtitling Japanese needs
+  // the identical warning.
+  //
+  // The owner shortened it from a two-sentence caption in REQ-0338; the wrap /
+  // overflow rehearsal that length used to provide is the cost, and the
+  // diagnostic is what was asked for.
+  const sampleText = t('subtitleDefaults.sampleText', 'これはSAMPLE字幕です。')
 
   const videoWidthPx = video?.widthPx ?? FALLBACK_VIDEO_WIDTH
   const videoHeightPx = video?.heightPx ?? FALLBACK_VIDEO_HEIGHT

@@ -1213,9 +1213,17 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             across the selection" row for the same reason it sits at the
             top of the inspector's style cluster: it writes every style
             field below it at once. */}
+        {/* REQ-0338 §3-2 — the icon trigger, not the filled secondary Button:
+            it was the one control in this row painted as a solid block, which
+            read as the row's primary action when it is a sibling of the other
+            two.  Same `triggerVariant` the inspector took in REQ-0337 §3.
+            The border classes are passed here rather than baked into the
+            variant because THIS row's icons wear a border (`border bg-input`)
+            while the inspector's do not — the variant decides "icon square,
+            not labelled button"; the row decides its own chrome. */}
         <StylePresetControls
-          compact
-          className="ml-auto"
+          triggerVariant="toolbar"
+          className="ml-auto border border-border bg-input text-foreground hover:border-line-strong hover:bg-input"
           onSaveCurrent={presetSaveSource ? handleSavePreset : null}
           onApply={handleApplyPreset}
         />
