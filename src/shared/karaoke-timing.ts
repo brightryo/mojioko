@@ -95,7 +95,10 @@ export interface KaraokeTimingResolution {
  * a minimal object, while every real caller passes a `SubtitleEntry` and gets
  * the same answer.
  */
-export type KaraokeTimingInput = Pick<SubtitleEntry, 'text' | 'startSec' | 'endSec' | 'words'> & {
+export type KaraokeTimingInput = Pick<
+  SubtitleEntry,
+  'text' | 'startSec' | 'endSec' | 'words' | 'karaokeUseWordTimings'
+> & {
   readonly original: Pick<SubtitleEntry['original'], 'startSec' | 'endSec'>
 }
 
@@ -129,5 +132,10 @@ export function karaokeWordTimingBlocker(
 export function resolveKaraokeTiming(entry: KaraokeTimingInput): KaraokeTimingResolution {
   const blocker = karaokeWordTimingBlocker(entry)
   if (blocker !== null) return { mode: 'even', reason: blocker }
+  // REQ-0336 §2-5 — the user's own choice is checked LAST, so a cue whose
+  // timings are unusable reports WHY they are unusable rather than reporting
+  // an opt-out the user cannot currently undo.  `undefined` means "not chosen"
+  // and keeps the pre-REQ-0336 behaviour, so existing projects are unchanged.
+  if (entry.karaokeUseWordTimings === false) return { mode: 'even', reason: 'user-off' }
   return { mode: 'words' }
 }

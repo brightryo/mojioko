@@ -150,6 +150,14 @@ export const STYLE_PRESET_FIELDS = {
   karaokeEnabled: 'store',
   karaokeHighlightColor: 'store',
   karaokeStyle: 'store',
+  // REQ-0336 §2 — 「発話タイミング」.  `store`, for the same reason
+  // `karaokeStyle` is: it is a per-cue CHOICE about how the sweep runs, not
+  // row data, and a preset that omitted it could not reproduce "this look uses
+  // an even split".  What it is NOT is the row's word data — `words` stays
+  // `per-cue` above.  An older preset that predates the field resolves to
+  // `undefined` = "use the real timings when usable", i.e. the app's own
+  // default, which is the correct system initial value.
+  karaokeUseWordTimings: 'store',
   // --- keyword emphasis (REQ-0305 / REQ-0307) ---------------------------
   // The master toggle + colour + size are style; WHICH characters are
   // emphasised is `emphasisSpans`, classified `per-cue` above.
@@ -270,6 +278,7 @@ export function makeSystemStyleDefaults(): { [K in PresetStoredKey]: SubtitleEnt
     karaokeEnabled: undefined,
     karaokeHighlightColor: undefined,
     karaokeStyle: undefined,
+    karaokeUseWordTimings: undefined,
     keywordEmphasisEnabled: undefined,
     emphasisColorHex: undefined,
     emphasisScalePercent: undefined,

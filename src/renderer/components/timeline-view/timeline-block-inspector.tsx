@@ -32,6 +32,9 @@ import { resolveAnimation, ANIMATION_BLUR_ENABLED } from '../../../shared/cue-an
 import { AnimationControls, type AnimationControlsValue } from '@/components/animation-controls/animation-controls'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
+// REQ-0336 §2 — 「発話タイミング」: real per-word timings vs. the even split.
+import { karaokeWordTimingBlocker } from '../../../shared/karaoke-timing'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   canUseKeywordEmphasisInTier,
   resolveEmphasis,
@@ -487,6 +490,28 @@ export function TimelineBlockInspector({
       applyStyleEdit(t('history.editKaraoke'), { karaokeEnabled: false })
     }
   }
+  // REQ-0336 §2 — 「発話タイミング」.  ONE toggle expresses all three states:
+  // ON (real timings in use), OFF (the user chose the even split), and
+  // disabled/greyed (the real timings are unusable — the tooltip says which of
+  // the three reasons applies and what brings them back).  No badge and no
+  // status text: this project's rule is that the control states its own status
+  // and there is never a duplicate ON/OFF surface (REQ-0299 §3 removed exactly
+  // such a text from this row).
+  const wordTimingBlocker = karaokeWordTimingBlocker(entry)
+  const wordTimingsOn = wordTimingBlocker === null && entry.karaokeUseWordTimings !== false
+  const wordTimingTooltip =
+    wordTimingBlocker === 'no-words' ? t('styleCell.karaokeWordTimingsNoWords')
+    : wordTimingBlocker === 'text-edited' ? t('styleCell.karaokeWordTimingsTextEdited')
+    : wordTimingBlocker === 'time-edited' ? t('styleCell.karaokeWordTimingsTimeEdited')
+    : wordTimingsOn ? t('styleCell.karaokeWordTimingsOn')
+    : t('styleCell.karaokeWordTimingsOff')
+  function handleKaraokeWordTimingsToggle(on: boolean) {
+    // A concrete boolean, never `undefined`: `true` and absent resolve
+    // identically, but writing the value makes the choice visible in the
+    // project file and lets `original` / Reset row round-trip it.
+    applyStyleEdit(t('history.editKaraoke'), { karaokeUseWordTimings: on })
+  }
+
   // REQ-0286 §5 — colour picker follows the shared textColor/outlineColor
   // pattern: `onChange` writes preview (per-drag frame) via
   // updateEntryPreview, `onCommit` pushes ONE history op at popover close
@@ -1287,7 +1312,10 @@ export function TimelineBlockInspector({
                 `[label] [dashed filler] [Switch][gap][Picker]`. */}
             {showKaraokeUi && (
               <StyleRow label={t('styleCell.karaokeRowLabel')} stopControlClickPropagation>
-                <div className="flex items-center gap-2">
+                {/* `min-w-0` so the 「タイミング」 label may truncate rather
+                    than push the second Switch out of StyleRow's control
+                    column when the pane is at its 368 px minimum. */}
+                <div className="flex min-w-0 items-center gap-2">
                   <Switch
                     checked={entry.karaokeEnabled === true}
                     onCheckedChange={handleKaraokeToggle}
@@ -1302,6 +1330,32 @@ export function TimelineBlockInspector({
                     swatchOnly
                     heading={t('styleCell.karaokeHighlightColor')}
                   />
+                  {/* REQ-0336 §2-1/§2-3 — 「発話タイミング」 sits in the space
+                      right of the colour swatch.  Two Switches now share this
+                      row, so the second carries a short inline label; the full
+                      name and the per-reason explanation live in the tooltip.
+                      The wrapper div (not the Switch) is the tooltip trigger
+                      because a DISABLED button receives no pointer events, and
+                      the disabled state is precisely when the user most needs
+                      to be told why. */}
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <div className="ml-1 flex min-w-0 items-center gap-1.5">
+                        <span className="truncate text-caption text-fg-muted">
+                          {t('styleCell.karaokeWordTimingsShort')}
+                        </span>
+                        <Switch
+                          checked={wordTimingsOn}
+                          onCheckedChange={handleKaraokeWordTimingsToggle}
+                          disabled={isFrozen || wordTimingBlocker !== null}
+                          aria-label={t('styleCell.karaokeWordTimings')}
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[280px] text-left">
+                      {wordTimingTooltip}
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </StyleRow>
             )}

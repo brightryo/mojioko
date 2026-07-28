@@ -282,6 +282,28 @@ export interface SubtitleEntryOriginal {
    */
   karaokeStyle?: KaraokeStyle
 
+  /**
+   * REQ-0336 §2 — 「発話タイミング」: use this cue's real per-word timings
+   * (`words`) for the karaoke sweep, or split the cue's window evenly across
+   * its characters.
+   *
+   * `undefined` = **use the real timings whenever they are usable**, which is
+   * exactly the pre-REQ-0336 behaviour — existing projects look unchanged and
+   * no migration runs.  `false` is the user's explicit opt-out; `true` is what
+   * the toggle writes when switched back on (identical in effect to
+   * `undefined`).
+   *
+   * This field only expresses the USER'S CHOICE.  Whether the real timings are
+   * usable at all is derived from the data — `words` present, still matching
+   * `text`, and the cue's times unchanged from `original` — by
+   * `karaokeWordTimingBlocker` in `shared/karaoke-timing.ts`.  Never re-derive
+   * either half at a call site: `resolveKaraokeTiming(entry)` combines them and
+   * is what both the preview and the ASS writer read.
+   *
+   * Ignored entirely when `karaokeEnabled` is not true.
+   */
+  karaokeUseWordTimings?: boolean
+
   // ---------------------------------------------------------------------------
   // REQ-0323 §1-5 (Phase C) — entrance / exit animation.  Additive and
   // optional; a cue with none of these set animates exactly as it did

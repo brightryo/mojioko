@@ -40,6 +40,9 @@ function makeRichEntry(): SubtitleEntry {
     karaokeEnabled: true,
     karaokeHighlightColor: '#FFCC00',
     karaokeStyle: 'sweep' as const,
+    // REQ-0336 §2 — non-default (`false`) so a dropped `copy` classification
+    // shows up as a missing field rather than a matching default.
+    karaokeUseWordTimings: false,
     animationType: 'pop' as const,
     animationInEnabled: true,
     animationOutEnabled: false,

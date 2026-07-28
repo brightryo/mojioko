@@ -103,6 +103,11 @@ export const SUBTITLE_ENTRY_DUPLICATION = {
   karaokeEnabled: 'copy',
   karaokeHighlightColor: 'copy',
   karaokeStyle: 'copy',
+  // REQ-0336 §2 — the user's 「発話タイミング」 choice.  `copy`: the duplicate
+  // lands on the SAME timecodes and carries the same `words`, so whatever the
+  // source resolved to, the copy resolves to as well; carrying the choice keeps
+  // them identical instead of silently re-enabling real timings on the copy.
+  karaokeUseWordTimings: 'copy',
   words: 'deep-copy',
   // --- entrance / exit animation (REQ-0323 Phase C) -------------------
   animationType: 'copy',

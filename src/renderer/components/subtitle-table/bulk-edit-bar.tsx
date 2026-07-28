@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { coerceKaraokeStyle, KARAOKE_STYLE_DEFAULT, type KaraokeStyle } from '../../../shared/karaoke-style'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 // REQ-0308 §3 — only the wrap-measurement helpers are imported now; the bulk
 // emphasis controls (and the constants they needed) are gone.
 import {
@@ -836,6 +837,20 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     )
   }
 
+  // REQ-0336 §2-6 — bulk 「発話タイミング」.  Never disabled here: the
+  // selection is heterogeneous by nature, so the bar cannot claim "unusable"
+  // for all of it.  Writing `true` across rows that have no usable per-word
+  // timings is harmless — `resolveKaraokeTiming` still resolves them to the
+  // even split, because the data half of the judgement is independent of this
+  // flag.  The tooltip says so rather than a badge (no duplicate ON/OFF
+  // surface).
+  function handleKaraokeWordTimingsBulkToggle(on: boolean) {
+    applyBulk(
+      { karaokeUseWordTimings: on },
+      t('bulk.history.karaoke', { count: selectedRowIds.size }),
+    )
+  }
+
   // REQ-0322 §3 — bulk karaoke display style.  Writes a CONCRETE value to
   // every selected row (never `undefined`), because the point of the control
   // is "make these rows all sweep / all switch" — clearing them back to
@@ -1353,7 +1368,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               both left-aligned inside StyleRow's fixed control column. */}
           {canUseKaraokeInTier(useAppEnvStore((s) => s.isMsix) ?? false) && (
             <StyleRow label={t('styleCell.karaokeRowLabel')}>
-              <div className="flex items-center gap-2">
+              {/* `min-w-0` so the 「タイミング」 label truncates rather than
+                  pushing the second Switch out of the shared control column. */}
+              <div className="flex min-w-0 items-center gap-2">
                 <Switch onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
                 <ColorPicker
                   value={karaokeHighlightDraft}
@@ -1362,6 +1379,24 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                   swatchOnly
                   heading={t('styleCell.karaokeHighlightColor')}
                 />
+                {/* REQ-0336 §2 — 「発話タイミング」, same position and shape as
+                    the inspector's so the two surfaces read as siblings. */}
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <div className="ml-1 flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-caption text-fg-muted">
+                        {t('styleCell.karaokeWordTimingsShort')}
+                      </span>
+                      <Switch
+                        onCheckedChange={handleKaraokeWordTimingsBulkToggle}
+                        aria-label={t('styleCell.karaokeWordTimings')}
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[280px] text-left">
+                    {t('styleCell.karaokeWordTimingsBulk')}
+                  </TooltipContent>
+                </Tooltip>
               </div>
             </StyleRow>
           )}

@@ -8,6 +8,8 @@ import {
 import { generateAss } from '../../src/main/services/ass-generator'
 import { buildFallbackKaraokeUnits } from '../../src/shared/karaoke-fallback'
 import { activeWordCountAtTime } from '../../src/renderer/lib/karaoke-highlight'
+import { SUBTITLE_ENTRY_DUPLICATION } from '../../src/renderer/lib/duplicate-entry'
+import { STYLE_PRESET_FIELDS, makeSystemStyleDefaults } from '../../src/shared/style-preset'
 import type { SubtitleEntry, VideoInfo, WordSpan } from '../../src/shared/types'
 
 /**
@@ -160,6 +162,86 @@ describe('REQ-0336 §1-7 — the burn honours it', () => {
     })
     const line = dialogueOf(generateAss([clean], video, burnin, undefined, 'F', true, 'switch'))
     expect(line).toContain('{\\k50}{\\k50}テス{\\k200}トです')
+  })
+})
+
+describe('REQ-0336 §2 — the 発話タイミング toggle', () => {
+  it('★ default (absent) is the pre-REQ-0336 behaviour — existing projects look unchanged', () => {
+    const e = entry({ words: evenWords(0, 3) })
+    expect(e.karaokeUseWordTimings).toBeUndefined()
+    expect(resolveKaraokeTiming(e)).toEqual({ mode: 'words' })
+    expect(resolveKaraokeTiming({ ...e, karaokeUseWordTimings: true })).toEqual({ mode: 'words' })
+  })
+
+  it('★ opting out gives the even split with reason `user-off`', () => {
+    const e = entry({ words: evenWords(0, 3), karaokeUseWordTimings: false })
+    expect(resolveKaraokeTiming(e)).toEqual({ mode: 'even', reason: 'user-off' })
+  })
+
+  it('★ the opt-out never masks WHY the timings are unusable (the tooltip must be actionable)', () => {
+    // A row the user opted out of AND whose times were dragged reports
+    // `time-edited`, not `user-off` — otherwise the tooltip would offer an
+    // undo the user cannot currently perform.
+    const e = entry({
+      startSec: 5, endSec: 8, words: evenWords(0, 3), origStartSec: 0, origEndSec: 3,
+      karaokeUseWordTimings: false,
+    })
+    expect(resolveKaraokeTiming(e)).toEqual({ mode: 'even', reason: 'time-edited' })
+  })
+
+  it('★ the opt-out reaches the burn (not preview-only)', () => {
+    const off = entry({
+      karaokeEnabled: true, karaokeStyle: 'switch', karaokeUseWordTimings: false,
+      words: [
+        { startSec: 0.5, endSec: 1.0, text: 'テス' },
+        { startSec: 1.0, endSec: 3.0, text: 'トです' },
+      ],
+    })
+    const line = dialogueOf(generateAss([off], video, burnin, undefined, 'F', true, 'switch'))
+    // Even split over 5 characters of a 3.0 s cue = 60 cs each; the Whisper
+    // path would have emitted `{\k50}{\k50}テス{\k200}トです`.
+    expect(line).toContain('{\\k60}テ{\\k60}ス{\\k60}ト{\\k60}で{\\k60}す')
+  })
+
+  it('the field is classified by both `keyof SubtitleEntry` exhaustiveness gates', () => {
+    expect(SUBTITLE_ENTRY_DUPLICATION.karaokeUseWordTimings).toBe('copy')
+    expect(STYLE_PRESET_FIELDS.karaokeUseWordTimings).toBe('store')
+    // `store` without a system initial value is the "classify but forget to
+    // implement" hole; `makeSystemStyleDefaults` closes it at the type level,
+    // and this pins the value it chose.
+    expect(makeSystemStyleDefaults().karaokeUseWordTimings).toBeUndefined()
+  })
+
+  it('every tooltip reason has a ja AND an en string', () => {
+    const ja = JSON.parse(
+      readFileSync(path.join(process.cwd(), 'src/renderer/locales/ja/step2.json'), 'utf8'),
+    ) as { styleCell: Record<string, string> }
+    const en = JSON.parse(
+      readFileSync(path.join(process.cwd(), 'src/renderer/locales/en/step2.json'), 'utf8'),
+    ) as { styleCell: Record<string, string> }
+    const keys = [
+      'karaokeWordTimings',
+      'karaokeWordTimingsShort',
+      'karaokeWordTimingsOn',
+      'karaokeWordTimingsOff',
+      'karaokeWordTimingsNoWords',
+      'karaokeWordTimingsTextEdited',
+      'karaokeWordTimingsTimeEdited',
+      'karaokeWordTimingsBulk',
+    ]
+    for (const k of keys) {
+      expect(ja.styleCell[k], `ja.styleCell.${k}`).toBeTruthy()
+      expect(en.styleCell[k], `en.styleCell.${k}`).toBeTruthy()
+    }
+    // REQ-0336 §2-4 — the two recoverable reasons must SAY what brings the
+    // timings back, or the user is told only that something is off.
+    expect(ja.styleCell.karaokeWordTimingsTimeEdited).toContain('行をリセット')
+    expect(ja.styleCell.karaokeWordTimingsTextEdited).toContain('行をリセット')
+    expect(en.styleCell.karaokeWordTimingsTimeEdited).toContain('Reset row')
+    expect(en.styleCell.karaokeWordTimingsTextEdited).toContain('Reset row')
+    // …and the un-recoverable one must NOT, since there is nothing to reset.
+    expect(ja.styleCell.karaokeWordTimingsNoWords).not.toContain('行をリセット')
+    expect(en.styleCell.karaokeWordTimingsNoWords).not.toContain('Reset row')
   })
 })
 
