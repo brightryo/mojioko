@@ -22,7 +22,7 @@ import { useAppEnvStore } from '@/stores/app-env-store'
 import { loadSettings, saveSettings } from '@/services/settings'
 import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
-import { listFonts } from '@/services/font'
+import { refreshInstalledFonts, getInstalledFontIds } from '@/stores/installed-fonts-store'
 import { initDownloadActiveStore } from '@/services/download-active'
 import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts'
 import { toast } from 'sonner'
@@ -158,14 +158,17 @@ function AppInner() {
   // character-class width estimate (over-counts wide glyphs by ~45 %).
   // Best-effort: failures (e.g. a font was uninstalled mid-session) just
   // mean that font's row degrades to the fallback when measured.
+  //
+  // REQ-0339 §2 — routed through `refreshInstalledFonts` so this startup pass
+  // ALSO seeds the shared installed-font set.  Every `useInstalledFontIds`
+  // consumer that mounts later then reads a resolved value synchronously
+  // instead of starting from an empty set (which made each subtitle overlay
+  // paint its first frame in `DEFAULT_FONT_ID`).  One IPC, two jobs.
   useEffect(() => {
-    listFonts().then((r) => {
-      if (!r.ok) return
-      for (const f of r.data.fonts) {
-        if (f.status === 'bundled' || f.status === 'installed') {
-          loadSubtitleFontFor(f.id).catch(() => {})
-          ensureFontLoaded(f.id).catch(() => {})
-        }
+    refreshInstalledFonts(useUiStore.getState().fontInventoryVersion).then(() => {
+      for (const id of getInstalledFontIds()) {
+        loadSubtitleFontFor(id).catch(() => {})
+        ensureFontLoaded(id).catch(() => {})
       }
     }).catch(() => {})
   }, [])

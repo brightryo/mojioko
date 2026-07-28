@@ -65,12 +65,21 @@ export function applyCueBlurToLayer(outer: HTMLElement, cssBlurPx: number): void
   const canvases = outer.querySelectorAll('canvas')
   const shadow = canvases[0] as HTMLCanvasElement | undefined
   const ring = canvases[1] as HTMLCanvasElement | undefined
-  // `paintOutlineLayers` zeroes a canvas it did not draw into, so a non-zero
-  // width IS "this cue has an outline bitmap".  Reading the attribute rather
-  // than re-deriving the condition from the entry keeps the two in step even
-  // when the entry says outline > 0 but the ring was suppressed (background
-  // box), which is exactly the case a duplicated predicate would get wrong.
-  const outlined = ring !== undefined && ring.width > 0
+  // Two ways to know the cue has an outline bitmap, and BOTH are needed:
+  //
+  //   `data-cue-outlined` — written by `subtitle-overlay` during render, from
+  //     the same expression it feeds `paintOutlineLayers`.  This is the one
+  //     that answers at MOUNT time: `video-preview-panel`'s callback ref fires
+  //     during the commit phase, which is BEFORE the layout effect has sized
+  //     the ring canvas, so a width test alone reports "no outline" on exactly
+  //     the frame REQ-0339 §2 is about and blurs the text for that frame.
+  //   `ring.width > 0` — the painted truth, and the only signal available to
+  //     `verify:ring-paint`, which builds the cue DOM by hand.
+  //
+  // A cue whose ring is suppressed (background box) has neither, and falls to
+  // the outer-span branch — which is what a duplicated entry-side predicate
+  // would have got wrong.
+  const outlined = outer.hasAttribute('data-cue-outlined') || (ring !== undefined && ring.width > 0)
   const filter = cssBlurPx > 0 ? `blur(${cssBlurPx}px)` : ''
   const set = (el: HTMLElement | undefined, value: string) => {
     if (el && el.style.filter !== value) el.style.filter = value

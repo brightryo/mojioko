@@ -755,6 +755,13 @@ export function SubtitleOverlay({
       onPointerDown={interactive
         ? (e) => onPointerDown!(e, entry)
         : undefined}
+      // REQ-0339 §1/§2 — "this cue has an outline bitmap", from the SAME
+      // expression that feeds `paintOutlineLayers` below, so the two cannot
+      // disagree.  `cue-blur-layer` needs the answer during the commit phase,
+      // before the layout effect has sized the ring canvas; without this
+      // attribute the blur would land on the whole composite for exactly the
+      // cue's first frame — the case REQ-0339 §2 exists to remove.
+      {...(showOutline && outlinePx > 0 ? { 'data-cue-outlined': '' } : {})}
       style={{
         ...vStyle,
         ...hStyle,

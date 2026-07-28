@@ -26,8 +26,7 @@ import {
 } from '@/lib/preview-coords'
 import { editedDuration, editedToOrig, effectiveEntryState, origToEdited } from '../../../shared/cuts'
 import { resolveAnimation, animationTransformAt, NEUTRAL_TRANSFORM } from '../../../shared/cue-animation'
-import { ASS_BLUR_TO_CSS_SIGMA } from '../../../shared/constants'
-import { applyCueBlurToLayer } from '@/lib/cue-blur-layer'
+import { applyCueAnimationPaint } from '@/lib/cue-anim-paint'
 import { createPreviewSeeker, type PreviewSeeker } from '@/lib/preview-seek'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -348,7 +347,17 @@ export function VideoPreviewPanel() {
         const anim = (isPaused && t <= entry.startSec) || !inRange
           ? NEUTRAL_TRANSFORM
           : animationTransformAt(resolveAnimation(entry), entry.startSec, entry.endSec, t)
-        el.style.opacity = String(inRange ? anim.opacity : 0)
+        // REQ-0339 §2 — write the WHOLE animation state, not just opacity.
+        // This callback fires during the commit phase, i.e. before the browser
+        // paints the cue's first frame; the rAF loop only gets to run
+        // afterwards.  Writing opacity alone painted every cue's first frame
+        // UNBLURRED and UNSCALED — measured against the real component at
+        // 1.36x the intended width for `pop` and 1.25x for `scale`, and fully
+        // sharp for `blur`.  That is half of the "an unfinished subtitle, then
+        // the styled one" flash the owner reported.  Shared with the rAF loop
+        // because two writers covering different subsets of one state is
+        // exactly how they end up disagreeing for a frame.
+        applyCueAnimationPaint(el, anim, inRange, previewScaleRef.current)
       } else {
         overlayOuterRefs.current.delete(entry.id)
       }
@@ -517,40 +526,16 @@ export function VideoPreviewPanel() {
           ? NEUTRAL_TRANSFORM
           : animationTransformAt(spec, entry.startSec, entry.endSec, t)
 
-        const opacity = inRange ? anim.opacity : 0
-        const next = String(opacity)
-        // Guard CSSOM writes so a steady-state caption (mid-plateau,
-        // opacity = "1") does not invalidate style every frame.
-        if (el.style.opacity !== next) el.style.opacity = next
-
         // REQ-0323 §1-3 — transform + filter go on the OUTER span, which
         // contains the outline/shadow canvases as well as the text.  A
         // transform does not affect layout, so the ring rides along and
         // `measureRuns` is never re-run.  `--cue-anim-transform` is a
         // custom property so React keeps ownership of the base transform.
         //
-        // `offset*Px` is in ASS px; multiply into preview px like every
-        // other ASS-space quantity.  (Always 0 until slide lands in §3.)
-        const scalePx = previewScaleRef.current
-        const nextTransform =
-          `translate(${anim.offsetXPx * scalePx}px, ${anim.offsetYPx * scalePx}px) scale(${anim.scale})`
-        if (el.style.getPropertyValue('--cue-anim-transform') !== nextTransform) {
-          el.style.setProperty('--cue-anim-transform', nextTransform)
-        }
-        // Blur is the one channel that genuinely repaints (§1-3 calls this
-        // out as the accepted exception).  A radius of 0 removes the filter
-        // rather than writing `blur(0px)`, which keeps the element off the
-        // filter path entirely for the 99 % of frames that are not mid-ramp.
-        // REQ-0324 §2 — two corrections, both measured:
-        //   * `scalePx`               ASS blur is in VIDEO pixels; the preview
-        //                             is smaller, so it must shrink with it.
-        //   * ASS_BLUR_TO_CSS_SIGMA   libass and Chromium disagree on what a
-        //                             blur radius means (0.834 vs ~0.956 sigma).
-        // REQ-0339 §1 — and one correction that is NOT a factor: WHICH layer
-        // gets the filter.  libass blurs the outline bitmap and composites the
-        // sharp glyph over it, so with an outline the text must stay crisp.
-        // See `cue-blur-layer.ts` for the measurements.
-        applyCueBlurToLayer(el, anim.blurPx * scalePx * ASS_BLUR_TO_CSS_SIGMA)
+        // REQ-0339 §2 — the writes themselves moved into
+        // `applyCueAnimationPaint`, shared with the mount-time callback ref
+        // above.  Blur's layer choice is REQ-0339 §1's `cue-blur-layer.ts`.
+        applyCueAnimationPaint(el, anim, inRange, previewScaleRef.current)
 
         // REQ-0286 §3 / REQ-0289 — karaoke per-word highlight, piggy-
         // backed on the same rAF loop so we don't spin a second
