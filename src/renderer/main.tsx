@@ -21,11 +21,15 @@ async function maybeSeedFromUrl(): Promise<void> {
     { useProjectStore },
     { useUiStore },
     { useHistoryStore },
+    { useInstalledFontsStore },
+    { useAppEnvStore },
     { sampleVideoInfo, sampleEntries }
   ] = await Promise.all([
     import('./stores/project-store'),
     import('./stores/ui-store'),
     import('./stores/history-store'),
+    import('./stores/installed-fonts-store'),
+    import('./stores/app-env-store'),
     import('./lib/fixtures')
   ])
   useProjectStore.setState({
@@ -37,11 +41,23 @@ async function maybeSeedFromUrl(): Promise<void> {
   // direct undo/redo, etc.).  Only attached when seed=demo is explicitly
   // requested — never present when the shipped main process loads the
   // renderer.
+  //
+  // REQ-0344 §1-4 — `installedFonts` and `appEnv` are exposed so a gate can
+  // force the font popover to list every family.  Both are otherwise gated on
+  // machine state a test cannot assume: the family list is filtered by what is
+  // ON DISK (`installedFonts`) and by the paid/free tier (`appEnv.isMsix`).
+  // REQ-0341 measured only the closed trigger and passed, because on a machine
+  // with nothing downloaded the popover lists Noto alone — the list side had
+  // never been measured with 13 rows, and that is exactly how the truncation
+  // this REQ fixes reached the owner.  A gate that can only run on a fully
+  // provisioned paid machine is not a gate.
   Object.assign(window, {
     __mojioko_test: {
       project: useProjectStore,
       ui: useUiStore,
-      history: useHistoryStore
+      history: useHistoryStore,
+      installedFonts: useInstalledFontsStore,
+      appEnv: useAppEnvStore
     }
   })
 }

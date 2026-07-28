@@ -166,25 +166,50 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels }: 
                 type="button"
                 onClick={() => pickFamily(fam)}
                 className={cn(
-                  'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
+                  'flex flex-col gap-1 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
                   'hover:bg-accent/40',
                   isCurrent ? 'text-fg-primary' : 'text-fg-secondary',
                 )}
               >
-                <span
-                  className={cn('h-2 w-2 rounded-full shrink-0', isCurrent ? 'bg-primary' : 'bg-surface-4')}
-                  aria-hidden="true"
-                />
-                <span
-                  className="flex-1 min-w-0 truncate"
-                  style={{ fontFamily: `'${fam.cssFontFamily}'`, fontWeight: fam.defaultFontId ? getFontMeta(fam.defaultFontId).weight : 400 }}
-                >
-                  {fam.displayLabel}
+                <span className="flex items-center gap-2 w-full min-w-0">
+                  <span
+                    className={cn('h-2 w-2 rounded-full shrink-0', isCurrent ? 'bg-primary' : 'bg-surface-4')}
+                    aria-hidden="true"
+                  />
+                  <span
+                    className="flex-1 min-w-0 truncate"
+                    style={{ fontFamily: `'${fam.cssFontFamily}'`, fontWeight: fam.defaultFontId ? getFontMeta(fam.defaultFontId).weight : 400 }}
+                  >
+                    {fam.displayLabel}
+                  </span>
                 </span>
-                {/* REQ-0341 §1 — same component the Settings font list uses.
-                    The popover is 240 px (wider than the 224 px control
-                    column it hangs off), so the chip keeps its label here. */}
-                <FontFamilyBadges languages={fam.languages} lacksRareKanji={fam.lacksRareKanji} />
+                {/* REQ-0344 §1 — the chips sit BELOW the name, not beside it.
+                    Sharing one line made them competitors for 200 px, and the
+                    chips are `shrink-0` while the name is `truncate`, so the
+                    name always lost: measured in the real faces at the startup
+                    window size, "Hachi Maru Pop" and "Potta One" — the two
+                    families carrying all three chips — were reduced to
+                    clientWidth 0.  Not shortened: GONE, leaving a row that
+                    warns about a font it does not name.
+
+                    The note this replaces claimed the 240 px popover was wide
+                    enough for the chips to keep their labels.  That was
+                    reasoned, not measured: the list is filtered by what is
+                    installed and by tier, so on the machine REQ-0341 was
+                    written on it held Noto alone (RES-0341 §1-6).
+                    `font-popover-list-fit.spec.ts` now injects both so the 13
+                    real rows are measured.
+
+                    Stacking is preferred over widening the popover or dropping
+                    chips because the list is where a font is COMPARED before
+                    it is chosen: both the name and the warnings are the point
+                    of the surface, so neither should be spending the other's
+                    space.  The name now gets the full 200 px against a 145 px
+                    worst case, which also means the next chip added here cannot
+                    reintroduce this. */}
+                <span className="pl-4">
+                  <FontFamilyBadges languages={fam.languages} lacksRareKanji={fam.lacksRareKanji} />
+                </span>
               </button>
             )
           })}
