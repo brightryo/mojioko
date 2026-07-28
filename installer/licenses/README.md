@@ -85,8 +85,10 @@ reached only via FFmpeg's command-line / filter API.
 
 ## npm runtime dependencies
 
-The application's renderer process is bundled with the following 31
-packages from `dependencies` in `package.json`.
+The application's renderer process is bundled with the following 32
+packages from `dependencies` in `package.json`, plus one transitive
+package that is bundled with them (`@tanstack/virtual-core`, see the
+MIT table).
 
 ### Apache-2.0
 
@@ -103,7 +105,7 @@ NOTICE file, so no additional NOTICE attribution is required.
 |---|---|---|
 | lucide-react | 0.400.0 | `lucide-react-isc.txt` |
 
-### MIT (29 packages — each licence header retained verbatim within bundled JS source comments)
+### MIT (31 packages — each licence header retained verbatim within bundled JS source comments)
 
 | Package | Version |
 |---|---|
@@ -119,6 +121,8 @@ NOTICE file, so no additional NOTICE attribution is required.
 | @radix-ui/react-switch | 1.2.6 |
 | @radix-ui/react-tabs | 1.1.13 |
 | @radix-ui/react-tooltip | 1.2.8 |
+| @tanstack/react-virtual | 3.14.8 |
+| @tanstack/virtual-core | 3.17.6 |
 | clsx | 2.1.1 |
 | electron-log | 5.4.4 |
 | framer-motion | 11.18.2 |
@@ -128,8 +132,8 @@ NOTICE file, so no additional NOTICE attribution is required.
 | react-colorful | 5.7.0 |
 | react-dom | 18.3.1 |
 | react-hook-form | 7.76.0 |
-| react-hotkeys-hook | 4.6.2 |
 | react-i18next | 14.1.3 |
+| react-resizable-panels | 4.11.2 |
 | react-router-dom | 6.30.3 |
 | sonner | 1.7.4 |
 | tailwind-merge | 2.6.1 |
@@ -144,6 +148,30 @@ licence.  React's licence text is reproduced as `react-mit.txt`
 authoritative per-package text and is available in the source
 repository at `<repo>\node_modules\<pkg>\LICENSE`, as well
 as at each upstream's homepage.
+
+`@tanstack/virtual-core` is the one TRANSITIVE package listed here: it is
+not in `dependencies`, but `@tanstack/react-virtual` is a thin wrapper over
+it and Vite bundles both into the renderer, so it is shipped code.
+
+**Scope of this table, stated so the next audit is mechanical**: it
+enumerates the DIRECT entries of `dependencies` (plus the one transitive
+above).  Other transitive packages that Vite bundles — Radix's internal
+`@radix-ui/*` helpers, framer-motion's `motion-dom` / `motion-utils`, and
+so on — are not listed individually; each ships its own MIT/ISC header
+inside the bundled source and its `LICENSE` in `node_modules`.
+
+**Keeping it current** (REQ-0347 §2): this list drifted between v1.3.5 and
+v1.3.6 in both directions — `react-hotkeys-hook` was listed after it had
+been removed from `dependencies`, and `react-resizable-panels` was a
+dependency that was never added.  Neither is visible from reading the app.
+The check is one command, and it is worth running whenever `dependencies`
+changes:
+
+```powershell
+node -e "console.log(Object.keys(require('./package.json').dependencies).sort().join('\n'))"
+```
+
+diffed against the three tables above (Apache-2.0 + ISC + MIT).
 
 ---
 
