@@ -67,6 +67,35 @@ export const FONTS_RELEASE_TAG = 'fonts-v3'
  * v1: the original 12 downloadable fonts (REQ-0153).
  * v2: added Noto/Poppins weight expansion; SUPERSEDED (never shipped).
  * v3: MOJIOKO-namespaced family names (REQ-0275).  Ships in v1.3.6.
+ *
+ * ## REQ-0353 — why this stayed at 3 when six Noto weights became bundled
+ *
+ * Bundling Thin/ExtraLight/Light/Bold/ExtraBold/Black made the copies of
+ * those six on the `fonts-v3` release redundant *for this app version*, and
+ * the obvious follow-up would be a `fonts-v4` without them plus a bump to 4.
+ * Three findings said not to:
+ *
+ *   1. **Nothing fetches them any more.**  `batchTargets` (font-picker) filters
+ *      on `!meta.bundled`, so "download all" already skips them the moment
+ *      `bundled` flipped.  No gate had to be added.
+ *   2. **Nothing reads the old copies.**  `getFontResolveDir` branches on the
+ *      same flag, so a weight downloaded by v1.3.5 is unreachable rather than
+ *      competing with the bundled file — there is no double registration to
+ *      resolve (REQ-0353 §1-4).
+ *   3. **`fonts-v3` has to keep them anyway.**  v1.3.5 has `bundled: false`
+ *      for those six and downloads them at runtime; deleting them breaks that
+ *      release.  So a `fonts-v4` would not remove the duplication from the
+ *      server, it would add a near-copy of 26 more files beside it.
+ *
+ * And a bump is not free: the rule above ("saved value MUST equal
+ * FONT_SET_VERSION") means 3 → 4 marks every already-downloaded font as
+ * not-installed, forcing every paid user to re-fetch all twelve families for
+ * no functional gain.
+ *
+ * Bump this when the ASSETS actually change, which is what it has always
+ * meant.  `font-set-version-req-0353.test.ts` pins the two properties the
+ * decision rests on, so if either stops holding this comment stops being true
+ * and a test says so.
  */
 export const FONT_SET_VERSION = 3
 
