@@ -16,6 +16,7 @@ import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slid
 import { LineSpacingSlider } from '@/components/subtitle-table/line-spacing-slider'
 import { LINE_SPACING_DEFAULT_PERCENT } from '../../../shared/line-spacing'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
+import { buildUndoPatch } from '../../../shared/history-patch'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 // REQ-0335 §3 — style presets.
 import { StylePresetControls } from '@/components/style-preset/style-preset-controls'
@@ -529,8 +530,13 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         // override those fields on the naive per-entry snapshot so undo
         // doesn't restore the after-drag values that the color picker's
         // preview stream would otherwise have baked in.
+        // REQ-0352 — built from the keys the edit touches, so an optional
+        // field the row has never had is restored to UNSET rather than left
+        // holding the new value.  `{ ...snap }` could not do that: an unset
+        // optional field is not an own property, and `updateEntriesBatch`
+        // merges.  See `shared/history-patch.ts`.
         const beforeOverride = preBeforeSnapshots?.get(id)
-        perRow.set(id, beforeOverride ? { ...snap, ...beforeOverride } : snap)
+        perRow.set(id, buildUndoPatch(snap, patch, beforeOverride))
       }
       useProjectStore.getState().updateEntriesBatch(perRow)
     }

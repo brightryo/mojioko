@@ -13,11 +13,16 @@ interface OutlineThicknessSliderProps {
   /**
    * Fires exactly once per drag / keyboard interaction at the boundary
    * (mouseup / keyup / touchend) — never per onChange frame — and only
-   * when the final draft differs from the current `value`.  This keeps
-   * history pressure bounded to "one op per user gesture" without the
-   * caller needing its own debounce.
+   * when the final draft differs from the value the GESTURE STARTED AT.
+   * This keeps history pressure bounded to "one op per user gesture"
+   * without the caller needing its own debounce.
+   *
+   * REQ-0352 — `valueBeforeGesture` is that starting value.  A caller that
+   * streams `onPreview` into the same store field this slider reads back
+   * cannot recover it afterwards, so the slider reports it; use it as the
+   * undo target.  Same contract as `ColorPicker.onCommit(hex, hexOnOpen)`.
    */
-  onCommit: (next: number) => void
+  onCommit: (next: number, valueBeforeGesture: number) => void
   /**
    * REQ-0222 — optional per-frame preview callback fired on every
    * `onChange` while the user drags the thumb (before `onCommit`
@@ -113,6 +118,8 @@ export function OutlineThicknessSlider({
   //     interaction actually occurred (a stray onMouseUp / onKeyUp from
   //     focusing the input without dragging is a no-op).
   const interactingRef = useRef(false)
+  /** Value at the start of the current drag; null between gestures. */
+  const gestureStartRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (interactingRef.current) return
@@ -122,15 +129,36 @@ export function OutlineThicknessSlider({
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const v = parseInt(e.target.value, 10)
     if (isNaN(v)) return
+    // REQ-0352 §2-1 — remember the value this gesture STARTED from, before
+    // any preview write reaches the store.  See `commit()`.
+    if (gestureStartRef.current === null) gestureStartRef.current = value
     setDraft(v)
     interactingRef.current = true
     onPreview?.(v)
   }
 
+  /**
+   * REQ-0352 §2-1 — compare against the value this GESTURE started from, not
+   * the live prop.
+   *
+   * When the parent wires `onPreview` to a store write and binds `value` to
+   * that same store field (the inspector does both), the preview stream has
+   * already moved `value` to the dragged-to number by the time the pointer is
+   * released.  `draft !== value` was then false and `onCommit` never fired —
+   * so no history entry was pushed at all and Undo stayed disabled.  That is
+   * the reported shadow bug, and the two opacity sliders had it too.
+   *
+   * The pre-gesture value is also handed to `onCommit` as a second argument,
+   * the same contract `ColorPicker.onCommit(hex, hexOnOpen)` already uses, so
+   * the caller has a correct undo target even though the store no longer
+   * holds one.
+   */
   function commit() {
     if (!interactingRef.current) return
     interactingRef.current = false
-    if (draft !== value) onCommit(draft)
+    const before = gestureStartRef.current ?? value
+    gestureStartRef.current = null
+    if (draft !== before) onCommit(draft, before)
   }
 
   return (

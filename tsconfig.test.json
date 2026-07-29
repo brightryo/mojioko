@@ -1,0 +1,30 @@
+{
+  // REQ-0352 §3-2 — a type-check pass that actually covers a TEST file.
+  //
+  // `tsconfig.node.json` / `tsconfig.web.json` include only `src/`, so nothing
+  // under `tests/` has ever been type-checked, and vitest strips types without
+  // checking them.  That matters here because the undo gate proves its
+  // coverage with `satisfies Record<OptionalKey, …>` — a COMPILE-time
+  // assertion.  Without this config that gate would claim an exhaustiveness it
+  // never verified, so the gate runs `tsc -p tsconfig.test.json` itself.
+  //
+  // ## Why `include` is one file rather than `tests/**/*`
+  //
+  // Widening it to the whole suite surfaces **19 pre-existing type errors** in
+  // unrelated specs (stale `generateAss` arity in a REQ-0340 test, `'Delius'`
+  // no longer being a `FontId`, `SubtitleEntryOriginal` mismatches, Playwright
+  // `Page` typings).  Fixing those is worth doing — it would have caught
+  // REQ-0350's signature change before vitest did — but it is not this REQ's
+  // job and not a change to make immediately before a Store submission.
+  // Recorded in RES-0352; widen this `include` when they are cleaned up.
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "tests/unit/undo-restores-optional-fields-req-0352.test.ts",
+    "src/**/*"
+  ]
+}

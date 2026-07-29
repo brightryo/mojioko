@@ -16,7 +16,7 @@ interface ShadowDepthSliderProps {
    * and only when the final draft differs from the current `value`.
    * Keeps history pressure bounded to "one op per user gesture".
    */
-  onCommit: (next: number) => void
+  onCommit: (next: number, valueBeforeGesture: number) => void
   /**
    * Optional per-frame preview callback fired on every `onChange`
    * while the user drags the thumb (before `onCommit` fires at drag
@@ -65,6 +65,8 @@ export function ShadowDepthSlider({
   // Suppresses parent → child resync during a drag so an external
   // value change doesn't snap the thumb away from the user's hand.
   const interactingRef = useRef(false)
+  /** Value at the start of the current drag; null between gestures. */
+  const gestureStartRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (interactingRef.current) return
@@ -74,15 +76,36 @@ export function ShadowDepthSlider({
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const v = parseInt(e.target.value, 10)
     if (isNaN(v)) return
+    // REQ-0352 §2-1 — remember the value this gesture STARTED from, before
+    // any preview write reaches the store.  See `commit()`.
+    if (gestureStartRef.current === null) gestureStartRef.current = value
     setDraft(v)
     interactingRef.current = true
     onPreview?.(v)
   }
 
+  /**
+   * REQ-0352 §2-1 — compare against the value this GESTURE started from, not
+   * the live prop.
+   *
+   * When the parent wires `onPreview` to a store write and binds `value` to
+   * that same store field (the inspector does both), the preview stream has
+   * already moved `value` to the dragged-to number by the time the pointer is
+   * released.  `draft !== value` was then false and `onCommit` never fired —
+   * so no history entry was pushed at all and Undo stayed disabled.  That is
+   * the reported shadow bug, and the two opacity sliders had it too.
+   *
+   * The pre-gesture value is also handed to `onCommit` as a second argument,
+   * the same contract `ColorPicker.onCommit(hex, hexOnOpen)` already uses, so
+   * the caller has a correct undo target even though the store no longer
+   * holds one.
+   */
   function commit() {
     if (!interactingRef.current) return
     interactingRef.current = false
-    if (draft !== value) onCommit(draft)
+    const before = gestureStartRef.current ?? value
+    gestureStartRef.current = null
+    if (draft !== before) onCommit(draft, before)
   }
 
   return (

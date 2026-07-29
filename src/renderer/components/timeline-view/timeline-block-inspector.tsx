@@ -20,6 +20,7 @@ import { resolveLineSpacingPercent } from '../../../shared/line-spacing'
 import { SegmentGroup } from '@/components/subtitle-table/segment-group'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
+import { buildUndoPatch } from '../../../shared/history-patch'
 import { useSettingsStore } from '@/stores/settings-store'
 // REQ-0335 §3 — style presets.
 import { StylePresetControls } from '@/components/style-preset/style-preset-controls'
@@ -314,7 +315,11 @@ export function TimelineBlockInspector({
     beforePatch?: Partial<SubtitleEntry>
   ) {
     const snapshot = { ...entry }
-    const undoState = beforePatch ? { ...snapshot, ...beforePatch } : snapshot
+    // REQ-0352 — the undo patch is built from the keys this edit TOUCHES, not
+    // from a whole-entry spread.  A spread omits optional fields the entry has
+    // never had, and `updateEntry` merges — so undoing the FIRST change to an
+    // optional field used to restore nothing at all.  See `history-patch.ts`.
+    const undoState = buildUndoPatch(entry, patch, beforePatch)
     pushHistory({
       label,
       undo: () => updateEntry(entry.id, undoState),
@@ -457,11 +462,23 @@ export function TimelineBlockInspector({
   // colour + alpha defaults on the first non-zero commit so a fresh
   // slider drag from 0 lands on a visible black shadow rather than
   // an invisible one.
-  function handleShadowDepthCommit(depth: number) {
+  /**
+   * REQ-0352 §2-1 — `handleShadowDepthPreview` streams the new depth into the
+   * store on every frame, so by commit time `entry.shadowDepth` is already the
+   * AFTER value and cannot serve as the undo target.  The slider reports the
+   * value the gesture started from (same contract as
+   * `ColorPicker.onCommit(hex, hexOnOpen)`); pass it as the undo target.
+   *
+   * This control had neither that nor a pre-drag ref, and on top of it the
+   * preview stream made the slider's own `draft !== value` guard false, so
+   * `onCommit` never fired at all — which is why Undo stayed DISABLED rather
+   * than merely doing nothing.
+   */
+  function handleShadowDepthCommit(depth: number, depthBeforeGesture: number) {
     const patch: Partial<SubtitleEntry> = { shadowDepth: depth }
     if (depth > 0 && entry.shadowColor === undefined) patch.shadowColor = '#000000'
     if (depth > 0 && entry.shadowAlpha === undefined) patch.shadowAlpha = 100
-    applyStyleEdit(t('history.editShadow'), patch)
+    applyStyleEdit(t('history.editShadow'), patch, { shadowDepth: depthBeforeGesture })
   }
   // REQ-0292 §1 — slider drag-preview: reflect the depth into the
   // renderer on every onChange frame so the drop-shadow grows/shrinks
