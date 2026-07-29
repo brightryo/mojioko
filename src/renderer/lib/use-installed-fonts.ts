@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
-import { listFonts } from '@/services/font'
+import { useEffect } from 'react'
 import { useUiStore } from '@/stores/ui-store'
+import { useInstalledFontsStore, refreshInstalledFonts } from '@/stores/installed-fonts-store'
 import type { FontId } from '../../shared/fonts'
 
 /**
@@ -10,24 +10,27 @@ import type { FontId } from '../../shared/fonts'
  * user removes a font from Settings while STEP 2 stays mounted).
  *
  * REQ-022 step 1 / REQ-025 (iv).
+ *
+ * REQ-0339 §2 — the set itself now lives in `installed-fonts-store`, not in
+ * this hook's own `useState`.  Per-component state meant every mount began
+ * from an EMPTY set, and `resolveRenderableFontId` reads "empty" as "nothing
+ * is installed" and falls back to `DEFAULT_FONT_ID` — so each cue painted its
+ * first frame in the wrong font (measured at up to 2.53× the settled text
+ * width).  Reading a shared store makes the already-resolved value available
+ * SYNCHRONOUSLY to anything that mounts after the first fetch, which is every
+ * subtitle overlay.  See the store's header for the measurements.
+ *
+ * The effect still exists, but it now only says "make sure THIS inventory
+ * version has been fetched"; the store dedupes, so N consumers cost one IPC.
  */
 export function useInstalledFontIds(): ReadonlySet<FontId> {
-  const [ids, setIds] = useState<Set<FontId>>(() => new Set())
-  // Subscribe to the version so the useEffect re-runs on every bump.
+  // Subscribe to the version so the effect re-runs on every bump.
   // Reads at the slice level so unrelated UI store changes don't trigger
   // a re-render here.
   const version = useUiStore((s) => s.fontInventoryVersion)
+  const ids = useInstalledFontsStore((s) => s.ids)
   useEffect(() => {
-    let cancelled = false
-    listFonts().then((r) => {
-      if (cancelled || !r.ok) return
-      const next = new Set<FontId>()
-      for (const f of r.data.fonts) {
-        if (f.status === 'bundled' || f.status === 'installed') next.add(f.id)
-      }
-      setIds(next)
-    }).catch(() => {})
-    return () => { cancelled = true }
+    void refreshInstalledFonts(version)
   }, [version])
   return ids
 }

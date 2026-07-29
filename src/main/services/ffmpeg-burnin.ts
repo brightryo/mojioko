@@ -1,18 +1,19 @@
 import { promises as fs } from 'fs'
+import { KARAOKE_STYLE_DEFAULT } from '../../shared/karaoke-style'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
 import { getBinPath, getFontResolveDir } from '../lib/paths'
 import { generateAss } from './ass-generator'
+import { isPackagedAsMsix, getCurrentProcessContext } from '../lib/msix'
 import { getBestEncoder, buildEncoderArgs } from './encoder-detector'
 import { buildTrimConcatFilter } from './ffmpeg-trim-filter'
 import { buildAmixAudioFilter } from './preview-mix-filter'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
 import {
-  applyCutsToEntry,
   editedDuration,
-  origToEdited
+  translateEntryToEditedAxis
 } from '../../shared/cuts'
 import type { SubtitleEntry } from '../../shared/types'
 import type { BurninStartRequest, BurninEvent } from '../../shared/ipc-contracts'
@@ -96,7 +97,7 @@ export async function startBurnin(
   onEvent: BurninEventCallback,
   signal: AbortSignal
 ): Promise<void> {
-  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, subtitleBackground, outputContainer, fontId, cuts } = request
+  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, subtitleBackground, outputContainer, fontId, cuts, karaokeStyle } = request
 
   // REQ-074 1d: when cuts is non-empty the ffmpeg run is rebuilt around
   // filter_complex trim+concat (audio + video).  When empty / absent we
@@ -131,17 +132,39 @@ export async function startBurnin(
   // subtitles= is applied to the concat output (§5.3).  When no cuts are
   // present this transformation is the identity, so the assContent is
   // byte-identical to pre-1d output.
+  //
+  // REQ-0340 §2 — `original` and `words` now move onto the Edited axis with
+  // the live times, in `translateEntryToEditedAxis`.
+  //
+  // RES-0336 §5 translated only `startSec` / `endSec`, which left
+  // `original.*` on the original axis and so made every cue in a project
+  // with cuts read as "times edited" to `resolveKaraokeTiming`: karaoke
+  // always fell back to the equal split.  That was the deliberate choice at
+  // the time, because `words` were untranslated too and sweeping from them
+  // would have painted from timestamps that no longer describe the
+  // concatenated output.  Translating all three together removes both halves
+  // of the problem, so a project with cuts keeps real word timings.
+  //
+  // The rules (word straddling a cut, word inside a cut, the out-of-bounds
+  // backstop) are documented on the function in `shared/cuts.ts`.
+  const droppedWordsIds: string[] = []
   const entriesForAss: SubtitleEntry[] = hasCuts
     ? entries.flatMap((e) => {
-        const clamped = applyCutsToEntry(e, cutsList)
-        if (clamped === null) return []
-        return [{
-          ...e,
-          startSec: origToEdited(clamped.startSec, cutsList),
-          endSec: origToEdited(clamped.endSec, cutsList),
-        }]
+        const translated = translateEntryToEditedAxis(e, cutsList)
+        if (translated === null) return []
+        if (translated.wordsDropped) droppedWordsIds.push(e.id)
+        return [translated.entry]
       })
     : entries
+  if (droppedWordsIds.length > 0) {
+    // Not silent: this means a cue's translated word spans left its own
+    // window, and it is now burning from the equal split instead.  Nothing
+    // known produces it, so if it ever appears in a log it is a bug report.
+    log.warn(
+      `[ffmpeg-burnin] REQ-0340 §2 — dropped out-of-bounds word timings after cut translation ` +
+      `for ${droppedWordsIds.length} cue(s): ${droppedWordsIds.join(', ')}`
+    )
+  }
   log.info(
     `[ffmpeg-burnin] cuts=${cutsList.length} effectiveDuration=${effectiveDurationSec.toFixed(3)}s ` +
     `entries=${entries.length}→${entriesForAss.length}`
@@ -149,7 +172,12 @@ export async function startBurnin(
 
   // Write ASS to temp file (project default goes into Style:, per-row
   // overrides come through as \fn<family> inline tags — see ass-generator).
-  const assContent = generateAss(entriesForAss, video, burnin, subtitleBackground, fontMeta.assFontName)
+  // REQ-0286 — pass the current build's tier flag through so the karaoke
+  // gate (`canUseKaraokeInTier`) inside ass-generator can gate the `\k`
+  // emit path.  Free builds get the plain path even when a project file
+  // carries `karaokeEnabled=true` (defence-in-depth vs. tier bypass).
+  const isMsix = isPackagedAsMsix(getCurrentProcessContext())
+  const assContent = generateAss(entriesForAss, video, burnin, subtitleBackground, fontMeta.assFontName, isMsix, karaokeStyle ?? KARAOKE_STYLE_DEFAULT)
   const assPath = join(tmpdir(), `mojioko-${randomUUID()}.ass`)
   await fs.writeFile(assPath, assContent, 'utf-8')
 

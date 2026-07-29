@@ -110,7 +110,11 @@
       "cancel": "Cancel"
     },
     "importSrtTitle": "Import SRT",
-    "importSrtBody": "About to import subtitles from an SRT file.\nAll current subtitles will be replaced and edit history will be lost (this cannot be undone)."
+    "importSrtBody": "About to import subtitles from an SRT file.\nAll current subtitles will be replaced and edit history will be lost (this cannot be undone).",
+    "importSrtProgressTitle": "Importing SRT",
+    "importSrtProgressReading": "Reading the file…",
+    "importSrtProgressCount": "{{done}} / {{total}} subtitles",
+    "importSrtProgressApplying": "Applying to the editor. With a large file the app will stop responding for a moment."
   },
   "addRowPopover": {
     "label": "Insert position",
@@ -144,6 +148,7 @@
     "bulkAppliedUndo": "Undo",
     "trimDeletedRestoreHint": "Removed by a trim — click its scissor marker to undo the cut and restore the subtitle",
     "srtImportedAll": "Imported {{count}} subtitles",
+    "srtImportCancelled": "Import cancelled. Your subtitles were not changed",
     "srtImportedWithDrop": "Imported {{count}} subtitles ({{dropped}} skipped for exceeding the video duration)",
     "srtImportEmpty": "No subtitles were found in the file",
     "srtImportReadFailed": "Failed to read the SRT file: {{error}}",
@@ -160,18 +165,74 @@
     "size": "Size",
     "textColor": "Text color",
     "outlineColor": "Outline color",
+    "textOpacity": "Text opacity",
+    "outlineOpacity": "Outline opacity",
     "outlineWidth": "Outline width",
+    "outlineWidthBgMinNote": "Keep this at 1 or more while the background box is on. The box is drawn by thickening the outline, so at 0 the export carries no background at all.",
     "fade": "Fade",
     "layoutH": "Horizontal",
     "layoutV": "Vertical",
     "marginV": "Margin",
+    "lineSpacing": "Line spacing",
+    "lineSpacingHint": "Gap between the lines of a multi-line caption, as a percentage of the font size. 0% is the default.",
     "offset": "Offset",
     "offsetX": "X offset",
     "offsetY": "Y offset",
     "offsetResetTitle": "Reset position",
     "bgEnabled": "Background",
     "bgColor": "BG color",
-    "bgOpacity": "Opacity"
+    "bgOpacity": "Opacity",
+    "casing": "Casing",
+    "casingNone": "None",
+    "casingUppercase": "ALL CAPS",
+    "shadow": "Shadow",
+    "shadowDepth": "Depth",
+    "karaoke": "Karaoke",
+    "karaokeRowLabel": "Karaoke (spoken color)",
+    "karaokeOn": "On",
+    "karaokeOff": "Off",
+    "karaokeOnNoWords": "On (equal split — no per-word timing)",
+    "karaokeHighlightColor": "Spoken",
+    "karaokeBaseColor": "Unspoken",
+    "karaokeWordTimings": "Speech timing",
+    "karaokeWordTimingsShort": "Timing",
+    "karaokeWordTimingsOn": "Speech timing: colors each word as it was actually spoken, using the timings captured at transcription.",
+    "karaokeWordTimingsOff": "Speech timing: off. The display time is split evenly across the characters.",
+    "karaokeWordTimingsNoWords": "Speech timing: this subtitle has no per-word timings from transcription (imported from SRT, added by hand, and so on). The display time is split evenly instead.",
+    "karaokeWordTimingsTextEdited": "Speech timing: the text was edited, so it no longer lines up with the recorded timings. The display time is split evenly instead. Restore the text, or use \"Reset row\", to bring it back.",
+    "karaokeWordTimingsTimeEdited": "Speech timing: the display time was changed, so the link to the audio is broken. The display time is split evenly instead. Undo, or use \"Reset row\", to bring it back.",
+    "karaokeWordTimingsBulk": "Speech timing: applies to every selected row. Even when on, rows with no per-word timings — or whose text or display time was edited — stay on the even split.",
+    "karaokeStyleRowLabel": "Karaoke style",
+    "karaokeStyleSwitch": "Switch",
+    "karaokeStyleSweep": "Sweep",
+    "karaokeSeededDefault": "Uses default colors",
+    "emphasis": "Emphasis",
+    "emphasisRowLabel": "Keyword emphasis",
+    "emphasisColor": "Emphasis color",
+    "emphasisSize": "Size %",
+    "rotation": "Rotation (deg)",
+    "family": "Font",
+    "weight": "Weight",
+    "emphasisEdit": "Edit",
+    "animationSection": "Animation",
+    "animationRowLabel": "Animation",
+    "animationTypeLabel": "Type",
+    "animationTimingLabel": "Timing",
+    "animationDurationLabel": "Duration",
+    "animationStrengthLabel": "Strength",
+    "animationStrengthScale": "Scale strength",
+    "animationStrengthBlur": "Blur strength",
+    "animationIn": "In",
+    "animationOut": "Out",
+    "animationDuration": "Animation duration",
+    "animationType": {
+      "none": "None",
+      "fade": "Fade",
+      "slide": "Slide",
+      "pop": "Pop",
+      "scale": "Scale",
+      "blur": "Blur"
+    }
   },
   "history": {
     "editText": "Edit text",
@@ -183,8 +244,14 @@
     "editFont": "Change font",
     "editLayout": "Change layout",
     "editMargin": "Change margin",
+    "editLineSpacing": "Change line spacing",
     "editOffset": "Change offset",
     "editBackground": "Change background",
+    "editCasing": "Change casing",
+    "editShadow": "Change shadow",
+    "editKaraoke": "Change karaoke",
+    "editEmphasis": "Change emphasis",
+    "editRotation": "Change rotation",
     "dragPosition": "Drag position",
     "deleteRow": "Delete",
     "restoreRow": "Restore",
@@ -192,7 +259,9 @@
     "addRow": "Add",
     "autoLineBreak": "Pack wrap",
     "overflowWrap": "Overflow wrap",
-    "duplicateRow": "Duplicate row"
+    "duplicateRow": "Duplicate row",
+    "editAnimation": "Animation",
+    "applyPreset": "Apply style preset"
   },
   "bulk": {
     "regionLabel": "Bulk edit",
@@ -222,7 +291,14 @@
       "overflowWrap": "Bulk overflow-wrap ({{count}} rows)",
       "layout": "Bulk layout change ({{count}} rows)",
       "margin": "Bulk margin change ({{count}} rows)",
-      "background": "Bulk background change ({{count}} rows)"
+      "lineSpacing": "Bulk line spacing change ({{count}} rows)",
+      "background": "Bulk background change ({{count}} rows)",
+      "casing": "Bulk casing change ({{count}} rows)",
+      "shadow": "Bulk shadow change ({{count}} rows)",
+      "karaoke": "Bulk karaoke change ({{count}} rows)",
+      "rotation": "Bulk rotation change ({{count}} rows)",
+      "animation": "Animation ({{count}} rows)",
+      "applyPreset": "Apply style preset ({{count}} rows)"
     }
   },
   "videoPreview": {
@@ -345,7 +421,8 @@
       "subtitleSection": "Subtitle",
       "layoutSection": "Layout",
       "backgroundSection": "Background",
-      "backgroundSectionHelp": "Enabling the background disables the outline color."
+      "backgroundSectionHelp": "Enabling the background disables the outline color.",
+      "animationSection": "Animation"
     },
     "nav": {
       "first": "Jump to start",
@@ -376,6 +453,36 @@
         "cutApplied": "Trim applied — click its scissor marker to undo",
         "reviveFailedStillCut": "{{count}} subtitle(s) could not be restored — another trim still consumes them"
       }
+    }
+  },
+  "emphasisPicker": {
+    "title": "Select characters to emphasise",
+    "description": "Click the characters you want to emphasise. Drag to select a run, or shift-click to extend the selection.",
+    "clear": "Clear all",
+    "selectedCount": "{{count}} selected",
+    "emptyText": "This subtitle has no text.",
+    "emptyLine": "(empty line)",
+    "spaceChar": "Space",
+    "editNote": "Emphasis follows your text edits automatically. A line break falling inside an emphasised run does not clear it — both lines stay emphasised. It is cleared only where the emphasised characters are deleted or rewritten, or where the same text ends up appearing more than once and can no longer be told apart.",
+    "editNoteLabel": "When you edit the text"
+  },
+  "preset": {
+    "menu": "Style presets",
+    "apply": "Apply a preset",
+    "empty": "No saved presets yet",
+    "saveCurrent": "Save current style as a preset",
+    "saveTitle": "Save style preset",
+    "saveDescription": "Saves how this row looks (font, colours, outline, shadow, layout, line spacing, karaoke, emphasis, animation). Text, timecodes, word timings and emphasis spans are not saved.",
+    "namePlaceholder": "Preset name",
+    "delete": "Delete “{{name}}”",
+    "applied": "Applied preset “{{name}}”",
+    "appliedBulk": "Applied preset “{{name}}” to {{count}} rows",
+    "saved": "Saved preset “{{name}}”",
+    "error": {
+      "empty": "Enter a name",
+      "tooLong": "Name must be {{max}} characters or fewer",
+      "duplicate": "A preset with that name already exists",
+      "capReached": "You can save at most {{max}} presets. Delete one first."
     }
   }
 }

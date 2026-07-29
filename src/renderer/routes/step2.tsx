@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useLayoutEffect } from 'react'
-import { bumpRenderCount } from '@/lib/perf-counter'
+import { animationFieldsForNewCue } from '../../shared/cue-animation'
+import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Plus, RotateCcw, RotateCw, Film, Import } from 'lucide-react'
@@ -23,6 +24,7 @@ import { cn } from '@/lib/utils'
 import { saveFileDialog, writeTextFile, openSrtDialog, readTextFile } from '@/services/dialog'
 import { parseSrt } from '@/lib/srt-parse'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
+import { resolveEmphasisRanges, clampEmphasisScalePercent } from '../../shared/emphasis'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { computeEntryWarnings, hasAnyError, hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
@@ -33,6 +35,8 @@ import { loadSubtitleFont, getSubtitleFont, type SubtitleFont } from '@/lib/font
 // transient bulk-edit-bar slide-in/out (the bar moved to the right pane).
 import type { SubtitleEntry } from '../../shared/types'
 import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
+import { formatSrtTime } from '../../shared/srt-time'
+import { styleFieldsFromDefaults } from '@/lib/style-defaults-to-entry'
 import { NEW_ROW_DURATION_SEC, ENABLE_VIDEO_PREVIEW } from '../../shared/constants'
 import { VideoPreviewPanel } from '@/components/video-preview/video-preview-panel'
 import { AudioPreviewPanel } from '@/components/audio-preview/audio-preview-panel'
@@ -146,15 +150,6 @@ type EditorState =
       nextEntryEndSec: number | null
     }
 
-/** Format seconds as SRT timecode: HH:MM:SS,mmm */
-function formatSrtTime(sec: number): string {
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  const s = Math.floor(sec % 60)
-  const ms = Math.round((sec % 1) * 1000)
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`
-}
-
 /**
  * Build UTF-8 BOM SRT content from subtitle entries (DaVinci Resolve
  * compatible).  The caller is responsible for filtering entries through
@@ -256,6 +251,25 @@ export default function Step2Route(_: Step2RouteProps) {
   // not a state machine — no "loading" phase between confirm and file
   // pick because the file picker itself is the next step.
   const [srtImportConfirmOpen, setSrtImportConfirmOpen] = useState(false)
+  /**
+   * REQ-0346 §1 — SRT import progress.  `null` when no import is running.
+   *
+   * `total === 0` means "count not known yet" (the file is still being read
+   * or parsed), which the dialog renders as an indeterminate bar.
+   *
+   * `cancellable` is honest rather than decorative: it goes false once the
+   * import reaches the commit, because from that point the work is a single
+   * synchronous React render that nothing can interrupt.  See the RES — the
+   * dominant cost at 10,000 cues is `computeFixedStackOffsets`, an O(N²) pass
+   * in the video preview panel, measured at ~4.3 s of a ~4.5 s commit.
+   */
+  const [srtImportProgress, setSrtImportProgress] = useState<{
+    done: number
+    total: number
+    cancellable: boolean
+  } | null>(null)
+  /** Set by the dialog's Cancel button; read between chunks. */
+  const srtImportAbortRef = useRef(false)
   // REQ-0185 §4 — removed `skipDiscardWarning` state.  The pre-0185
   // "don't ask again this session" checkbox is retired now that the
   // confirm dialog always fires on back (regardless of hasChanges).
@@ -388,24 +402,36 @@ export default function Step2Route(_: Step2RouteProps) {
   // after the real glyph metrics became available a few frames later.
   const fontCacheVersion = useFontCacheVersionStore((s) => s.version)
   const overflowMap = useMemo(() => {
+    // REQ-0342 §2 — labelled so a perf run can attribute milliseconds to this
+    // loop.  `measureSync` is a no-op outside `?seed=demo` (perf-counter.ts).
+    return measureSync('step2.overflowMap', () => {
     const map = new Map<string, number>()
     if (isAudioOnly) return map
     for (const e of entries) {
       if (e.isDeleted) continue
       const r = computeOverflowSync({
         text: e.text,
-        fontFamily: 'Noto Sans JP',
+        fontFamily: 'MOJIOKO Noto Sans JP',
         fontSizePx: e.fontSizePx,
         outlineThicknessPx: e.outlineThicknessPx,
         videoWidthPx,
         // Per-row fontId (REQ-021): when set, computeOverflowSync looks
         // up that font's own Font + libassScale instead of falling back
         // to the active selection.  Undefined → row inherits active.
-        fontId: e.fontId
+        fontId: e.fontId,
+        // REQ-0306 §2 / REQ-0307 — measure emphasised spans at their enlarged
+        // size so the overflow warning fires when an emphasised cue overflows.
+        emphasisRanges: e.keywordEmphasisEnabled === true
+          ? resolveEmphasisRanges(e)
+          : undefined,
+        emphasisScale: e.keywordEmphasisEnabled === true
+          ? clampEmphasisScalePercent(e.emphasisScalePercent) / 100
+          : undefined,
       }, subtitleFont)
       if (r.overflowStartIndex !== -1) map.set(e.id, r.overflowStartIndex)
     }
     return map
+  })
     // `fontCacheVersion` is the explicit re-run signal — `computeOverflowSync`
     // reads the per-row Font through the font-metrics module cache, which the
     // memo can't see directly, so the lint rule's "unnecessary dep" warning
@@ -420,7 +446,7 @@ export default function Step2Route(_: Step2RouteProps) {
    * tabs, the per-row badges, and the footer summary.  Built in entry order
    * because `overlap` depends on the previous non-deleted entry's end time.
    */
-  const warningsMap = useMemo(() => {
+  const warningsMap = useMemo(() => measureSync('step2.warningsMap', () => {
     const map = new Map<string, EntryWarnings>()
     let prevEnd: number | null = null
     for (const e of entries) {
@@ -430,7 +456,7 @@ export default function Step2Route(_: Step2RouteProps) {
       prevEnd = e.endSec
     }
     return map
-  }, [entries, overflowMap, videoDurationSec])
+  }), [entries, overflowMap, videoDurationSec])
 
   // Currently-visible entries under the active filter — drives Ctrl+A's
   // target list and the bulk-selection pruning effect below.
@@ -721,15 +747,22 @@ export default function Step2Route(_: Step2RouteProps) {
         startSec,
         endSec,
         text: '',
-        fontSizePx: defaults.fontSizePx,
-        textColorHex: defaults.textColorHex,
-        outlineColorHex: defaults.outlineColorHex,
-        outlineThicknessPx: defaults.outlineThicknessPx,
         fadeDurationSec: settingsFadeDurationSec,
+        ...animationFieldsForNewCue(defaults),
         // REQ-20260613-016 / v1.2.2 機能A: seed per-row layout + background
         // defaults at creation time.  Same pattern as the transcription
         // segment mapping in step1.tsx.
-        ...makeEntryLayoutDefaults()
+        ...makeEntryLayoutDefaults(),
+        // REQ-0335 §2 — this used to list four style fields by hand (size /
+        // colour / outline colour / outline width), so a row added here lost
+        // shadow, casing, rotation, line spacing, opacity, emphasis, karaoke
+        // and the offsets: it looked different from a transcribed row under
+        // the very same settings.  Now it is the SAME exhaustively-typed
+        // projection step1.tsx seeds transcribed rows with.
+        ...styleFieldsFromDefaults(defaults, {
+          videoWidthPx: video?.widthPx,
+          videoHeightPx: video?.heightPx,
+        }),
       }
       // REQ-079 #2: collision-resistant id.  Date.now() alone collides
       // when two rows are added within the same millisecond — both rows
@@ -896,6 +929,20 @@ export default function Step2Route(_: Step2RouteProps) {
     setSrtImportConfirmOpen(true)
   }
 
+  /**
+   * REQ-0346 §1 — hand the frame back to the browser so it can PAINT.
+   *
+   * `await Promise.resolve()` is not enough: a microtask runs before the
+   * browser gets to render, so the progress dialog would only become visible
+   * after the work it is reporting on had already finished.  rAF then a
+   * macrotask puts us after a paint.
+   */
+  function yieldToPaint(): Promise<void> {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => setTimeout(resolve, 0))
+    })
+  }
+
   async function runSrtImport() {
     setSrtImportConfirmOpen(false)
 
@@ -904,6 +951,14 @@ export default function Step2Route(_: Step2RouteProps) {
     // user's intent is unambiguous when the picker dismisses.
     const srtPath = await openSrtDialog(defaultOutputDir ?? undefined)
     if (!srtPath) return
+
+    // From here on the user waits, so show the modal.  It is opened BEFORE
+    // any work and followed by a paint yield, because every phase below is
+    // synchronous — a dialog opened without yielding would not appear until
+    // the work it announces was over.
+    srtImportAbortRef.current = false
+    setSrtImportProgress({ done: 0, total: 0, cancellable: true })
+    await yieldToPaint()
 
     // Phase 2 — read the file bytes.  IPC failure (permissions, race
     // with an editor holding the file) is surfaced as a toast and we
@@ -915,9 +970,25 @@ export default function Step2Route(_: Step2RouteProps) {
       toast.error(
         t('toast.srtImportReadFailed', { error: err instanceof Error ? err.message : String(err) }),
       )
+      setSrtImportProgress(null)
       return
     }
+    await applySrtImport(raw)
+  }
 
+  /**
+   * Phases 3-7, split out from `runSrtImport` so the pipeline can be driven
+   * with already-read text.  Playwright cannot operate a native file picker,
+   * and a test that re-implemented these phases would pin the copy instead of
+   * the code that ships — so `importSrtForTest` (below) enters here.
+   *
+   * Assumes the caller has already opened the progress dialog and yielded.
+   */
+  async function applySrtImport(raw: string) {
+    // Every exit below — success, refusal, cancel, or a thrown error — goes
+    // through the `finally` that closes the dialog.  Clearing it at each
+    // `return` instead would be one edit away from a modal that never lifts.
+    try {
     // Phase 3 — parse.  A non-empty `errors` array is a hard failure:
     // partial imports would leave the user with a subtitle set that
     // silently dropped rows the caller expected to see.  Better to
@@ -971,17 +1042,21 @@ export default function Step2Route(_: Step2RouteProps) {
     // (SRT text ≠ original transcript) — this is what the
     // `edited` filter counts.
     const layoutDefaults = makeEntryLayoutDefaults()
-    const newEntries: SubtitleEntry[] = kept.map((cue) => {
+    // REQ-0335 §2 — same exhaustively-typed projection the transcribe path
+    // uses, instead of the four hand-listed style fields that used to be here.
+    const importStyleFields = styleFieldsFromDefaults(defaults, {
+      videoWidthPx: video?.widthPx,
+      videoHeightPx: video?.heightPx,
+    })
+    const mintEntry = (cue: (typeof kept)[number]): SubtitleEntry => {
       const base = {
         startSec: cue.startSec,
         endSec: cue.endSec,
         text: cue.text,
-        fontSizePx: defaults.fontSizePx,
-        textColorHex: defaults.textColorHex,
-        outlineColorHex: defaults.outlineColorHex,
-        outlineThicknessPx: defaults.outlineThicknessPx,
         fadeDurationSec: settingsFadeDurationSec,
+        ...animationFieldsForNewCue(defaults),
         ...layoutDefaults,
+        ...importStyleFields,
       }
       const id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
         ? `srt-${crypto.randomUUID()}`
@@ -998,7 +1073,39 @@ export default function Step2Route(_: Step2RouteProps) {
           subtitleBackground: { ...base.subtitleBackground },
         },
       }
-    })
+    }
+
+    // REQ-0346 §1-2 — built in chunks, yielding between them, so the dialog
+    // can paint its count and the Cancel button can be clicked.  MEASURED at
+    // 10,000 cues this whole phase is ~18 ms, so the chunking buys almost no
+    // cancellability by itself; it is here because it is nearly free and it
+    // is the only part of the import that CAN be interrupted.  The seconds
+    // are all in the commit below — see the RES.
+    const CHUNK = 500
+    const newEntries: SubtitleEntry[] = []
+    for (let start = 0; start < kept.length; start += CHUNK) {
+      if (srtImportAbortRef.current) {
+        // Nothing has been written to any store yet, so abandoning the local
+        // array IS the rollback (REQ-0346 §1-3).
+        toast.info(t('toast.srtImportCancelled'))
+        return
+      }
+      const end = Math.min(start + CHUNK, kept.length)
+      for (let i = start; i < end; i++) newEntries.push(mintEntry(kept[i]))
+      setSrtImportProgress({ done: end, total: kept.length, cancellable: true })
+      await yieldToPaint()
+    }
+
+    // Last chance to abandon: after this the store is written.
+    if (srtImportAbortRef.current) {
+      toast.info(t('toast.srtImportCancelled'))
+      return
+    }
+    // REQ-0346 §1-2 — the commit is ONE synchronous React render and cannot
+    // be interrupted, so the dialog stops offering a button that would lie.
+    // Yield once more so that state actually paints before the freeze.
+    setSrtImportProgress({ done: kept.length, total: kept.length, cancellable: false })
+    await yieldToPaint()
 
     // Phase 6 — commit.  From this point the operation is
     // irreversible via Undo (the history clear below is deliberate;
@@ -1029,7 +1136,34 @@ export default function Step2Route(_: Step2RouteProps) {
     } else {
       toast.success(t('toast.srtImportedAll', { count: newEntries.length }))
     }
+    } finally {
+      setSrtImportProgress(null)
+      srtImportAbortRef.current = false
+    }
   }
+
+  /**
+   * REQ-0346 §1-5 — drive the real import from a test, with the file picker
+   * and the IPC read replaced by text the caller already has.
+   *
+   * Attached only when the `?seed=demo` hook exists, which the shipped main
+   * process never sets (see `main.tsx`), so this is unreachable in a real
+   * build.  It deliberately re-uses `applySrtImport` rather than copying the
+   * phases: a spec that duplicated them would keep passing after the shipped
+   * pipeline changed.
+   */
+  useEffect(() => {
+    const w = window as unknown as {
+      __mojioko_test?: { importSrtForTest?: (raw: string) => Promise<void> }
+    }
+    if (!w.__mojioko_test) return
+    w.__mojioko_test.importSrtForTest = async (raw: string) => {
+      srtImportAbortRef.current = false
+      setSrtImportProgress({ done: 0, total: 0, cancellable: true })
+      await yieldToPaint()
+      await applySrtImport(raw)
+    }
+  })
 
   // REQ-103 — `activeEntries` from REQ-102 was removed in favour of the
   // per-tab counts above; `canContinue` originally read `readyCount`
@@ -1215,7 +1349,17 @@ export default function Step2Route(_: Step2RouteProps) {
       </div>
       <div
         ref={inspectorScrollRef}
-        className="flex-1 min-h-0 overflow-y-auto p-3"
+        // REQ-0301 §3 — `overflow-x-hidden` added defensively.  §1
+        // (fluid control column) + §2 (label truncate) already keep
+        // the row width within the pane at startup, but Chromium
+        // silently promotes `overflow-y-auto` elements to
+        // `overflow-x: auto` too, so any per-row px overshoot (from
+        // rounding, font-metric drift, hypothetical future controls
+        // with wider intrinsic widths) would resurface a horizontal
+        // scrollbar without the belt-and-braces.  REQ-0298 §2 added
+        // the same class to the settings-dialog scroll wrapper for
+        // the identical reason.
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3"
       >
         {inspectorBody}
       </div>
@@ -1328,6 +1472,14 @@ export default function Step2Route(_: Step2RouteProps) {
             warningsMap={warningsMap}
             videoDurationSec={videoDurationSec}
             onAdjustTime={openEditTimeDialog}
+            // REQ-0345 §4-A — the table used to run this exact
+            // `filterEntries(entries, tableFilter, warningsMap, cuts)` call
+            // itself, unmemoised, on every render.  Two costs, not one: the
+            // O(N) pass, and a fresh array identity that killed the two
+            // downstream `useMemo`s depending on it.  Passing the memoised
+            // value makes the filter single-source and stabilises the
+            // identity, which is what revives them.
+            visibleEntries={visibleEntries}
           />
         ) : (
           <TimelineView
@@ -1600,6 +1752,64 @@ export default function Step2Route(_: Step2RouteProps) {
             </Button>
             <Button variant="primary" size="md" onClick={runSrtImport}>
               {t('common:action.ok')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* REQ-0346 §1 — import progress.  Modal, so the background is inert
+          while the import runs (Radix Dialog renders an overlay and traps
+          focus); `hideClose` plus an `onOpenChange` that ignores close
+          requests means Esc and outside-clicks cannot dismiss it, because
+          dismissing the dialog would not stop the work — only Cancel does,
+          and only while it is still offered. */}
+      <Dialog
+        open={srtImportProgress !== null}
+        onOpenChange={() => { /* not user-dismissible; use Cancel */ }}
+      >
+        <DialogContent className="max-w-[420px]" hideClose>
+          <DialogHeader>
+            <DialogTitle>{t('dialog.importSrtProgressTitle')}</DialogTitle>
+            <DialogDescription>
+              {srtImportProgress !== null && srtImportProgress.total > 0
+                ? t('dialog.importSrtProgressCount', {
+                    done: srtImportProgress.done,
+                    total: srtImportProgress.total,
+                  })
+                : t('dialog.importSrtProgressReading')}
+            </DialogDescription>
+          </DialogHeader>
+          {/* Determinate once the cue count is known, indeterminate before
+              that.  The commit phase deliberately shows a full bar: the work
+              left is one render whose duration we cannot subdivide. */}
+          <div className="h-1.5 w-full rounded-full bg-border overflow-hidden">
+            <div
+              className={cn(
+                'h-full bg-primary',
+                srtImportProgress !== null && srtImportProgress.total > 0
+                  ? 'transition-all'
+                  : 'w-1/3 animate-pulse',
+              )}
+              style={
+                srtImportProgress !== null && srtImportProgress.total > 0
+                  ? { width: `${Math.round((srtImportProgress.done / srtImportProgress.total) * 100)}%` }
+                  : undefined
+              }
+            />
+          </div>
+          {srtImportProgress !== null && !srtImportProgress.cancellable && (
+            <p className="text-caption text-fg-tertiary">
+              {t('dialog.importSrtProgressApplying')}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              size="md"
+              disabled={srtImportProgress === null || !srtImportProgress.cancellable}
+              onClick={() => { srtImportAbortRef.current = true }}
+            >
+              {t('common:action.cancel')}
             </Button>
           </DialogFooter>
         </DialogContent>

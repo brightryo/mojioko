@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { animationFieldsForNewCue } from '../../shared/cue-animation'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform, Check, Circle } from 'lucide-react'
@@ -35,6 +36,7 @@ import { formatDuration } from '@/lib/time'
 import { formatBytes } from '@/lib/format'
 import type { SubtitleEntry as SubtitleEntryType, WhisperModelId } from '../../shared/types'
 import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
+import { styleFieldsFromDefaults } from '@/lib/style-defaults-to-entry'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
@@ -373,7 +375,11 @@ export default function Step1Route(_: Step1RouteProps) {
     setDrawerErrorMessage('')
     window.electronAPI.menuSetTranscribing(true)
 
-    const segments: { startSec: number; endSec: number; text: string }[] = []
+    // REQ-0285 — collected segments now carry an optional `words` array
+    // (per-word timestamps from faster-whisper).  Type mirrors the IPC
+    // contract (`ipc-contracts.ts:TranscriptionEvent`) so the compiler
+    // catches any drift between wire shape and this local buffer.
+    const segments: { startSec: number; endSec: number; text: string; words?: import('../../shared/types').WordSpan[] }[] = []
     let previewMixUrl: string | null = null
 
     const run = runTranscription(
@@ -392,6 +398,7 @@ export default function Step1Route(_: Step1RouteProps) {
           outlineColorHex: runDefaults.outlineColorHex,
           outlineThicknessPx: runDefaults.outlineThicknessPx,
           fadeDurationSec: settingsFadeDurationSec,
+        ...animationFieldsForNewCue(transcriptionDefaults),
         },
         advanced: transcriptionAdvanced,
         // REQ-0207 — pass the drawer's checkbox through.  The service
@@ -510,23 +517,55 @@ export default function Step1Route(_: Step1RouteProps) {
     const runFontId = useSettingsStore.getState().activeFontId
 
     // Build SubtitleEntry array from collected segments
+    // REQ-0295 — expanded seeding: on top of the four legacy style
+    // fields (font size / colours / outline), every new REQ-0295
+    // TranscriptionDefaults field is copied onto each transcribed
+    // row when the user has set it in Settings > "字幕スタイル".
+    // Fields left `undefined` in defaults stay `undefined` on the
+    // row (i.e. the renderer's neutral "off / default" behaviour
+    // for that field) so pre-REQ-0295 setups produce byte-identical
+    // entries to before.
+    // REQ-0334 §2-3 — the whole "defaults → cue style" projection now lives
+    // in ONE exhaustively-typed place.  Adding a field to
+    // `TranscriptionDefaults` without classifying it there is a `tsc` error,
+    // and Step 1's style preview calls this same function, so the preview
+    // cannot fall behind this seeding again.  Layout fallbacks and the
+    // 「オフセット」→ absolute `posX/posY` conversion moved inside it.
+    const styleFields = styleFieldsFromDefaults(runDefaults, {
+      videoWidthPx: video?.widthPx,
+      videoHeightPx: video?.heightPx,
+    })
+
     const entries: SubtitleEntryType[] = segments.map((seg, i) => {
-      // REQ-20260613-016 / v1.2.2 機能A: every transcribed row carries its
-      // own layout + background values seeded from ENTRY_LAYOUT_DEFAULTS
-      // (= BURNIN_DEFAULTS).  `makeEntryLayoutDefaults` returns a fresh
-      // object literal per call so each row owns its own subtitleBackground
-      // — mutating one row never aliases another.
       const base = {
         startSec: seg.startSec,
         endSec: seg.endSec,
         text: seg.text,
-        fontSizePx: runDefaults.fontSizePx,
-        textColorHex: runDefaults.textColorHex,
-        outlineColorHex: runDefaults.outlineColorHex,
-        outlineThicknessPx: runDefaults.outlineThicknessPx,
         fadeDurationSec: settingsFadeDurationSec,
+        ...animationFieldsForNewCue(transcriptionDefaults),
         fontId: runFontId,
-        ...makeEntryLayoutDefaults()
+        // REQ-0285 — attach per-word timestamps captured by the sidecar.
+        // `undefined` (rather than `[]`) when the segment carried no
+        // word data, so `areWordsValidForText` short-circuits on the
+        // truthiness check and downstream Phase B renderers can gate on
+        // a single value.  Deep-copied into `original.words` below via
+        // spread so Reset row restores the same array.
+        words: seg.words,
+        // REQ-20260613-016 / v1.2.2 機能A: layout + background values
+        // seeded from ENTRY_LAYOUT_DEFAULTS.  `makeEntryLayoutDefaults`
+        // returns a fresh object literal per call so each row owns its
+        // own subtitleBackground — mutating one row never aliases
+        // another.  This call is now ONLY for the background sub-object
+        // (background stays BURNIN_DEFAULTS since it's not a REQ-0295
+        // field per owner decision 2026-07-26); the layout triple it also
+        // returns is immediately overridden by `styleFields` below, which
+        // applies the user's TranscriptionDefaults on top.  Order matters.
+        ...makeEntryLayoutDefaults(),
+        // REQ-0334 §2-3 — every style default in one spread.  The field
+        // list that used to be written out here is now the exhaustively
+        // typed map in `lib/style-defaults-to-entry.ts`, shared with Step
+        // 1's live style preview.
+        ...styleFields,
       }
       return {
         id: `t-${i}-${Date.now()}`,
@@ -536,6 +575,11 @@ export default function Step1Route(_: Step1RouteProps) {
         // Deep-copy the nested subtitleBackground so the live entry and
         // its `original` snapshot don't share object identity (otherwise
         // an inline edit would also mutate the reset target).
+        // REQ-0285 — `words` is intentionally aliased between live and
+        // original (arrays of WordSpan objects are immutable in practice;
+        // nothing in the codebase mutates a word span in-place).  Cost
+        // of a per-row `.map` copy is nontrivial for long transcripts;
+        // the alias is safe as long as the invariant holds.
         original: { ...base, subtitleBackground: { ...base.subtitleBackground } }
       }
     })

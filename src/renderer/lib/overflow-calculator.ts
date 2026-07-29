@@ -11,6 +11,7 @@ import {
   type SubtitleFont
 } from './font-metrics'
 import type { FontId } from '../../shared/fonts'
+import { isEmphasizedAt, mapRangesAcrossBreakCollapse, type EmphasisRange } from '../../shared/emphasis'
 
 export interface OverflowResult {
   /** -1 if entire text fits; otherwise the code-unit index where overflow begins. */
@@ -44,6 +45,16 @@ export interface OverflowArgs {
    * module-level active-font cache is used — matching the legacy behaviour.
    */
   fontId?: FontId
+  /**
+   * REQ-0306 §2 / REQ-0307 — keyword emphasis.  When the cue has emphasised
+   * spans, those glyphs are physically larger, so the overflow judgement must
+   * measure them at `emphasisScale`.  `emphasisRanges` are the caller's
+   * already-resolved ranges in ORIGINAL-`text` coordinates (i.e. before `\N`
+   * is collapsed to `\n`); they are re-mapped internally.  Omitted / empty /
+   * scale ≤ 1 ⇒ byte-identical to the pre-REQ-0306 measurement.
+   */
+  emphasisRanges?: readonly EmphasisRange[]
+  emphasisScale?: number
 }
 
 /**
@@ -119,6 +130,27 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
   const effectiveFontId = fontId ?? getActiveFontId()
   const cmap = getCmapCoverageFor(effectiveFontId)
   const tofu = getTofuSubstituteFor(effectiveFontId)
+  // REQ-0306 §2 / REQ-0307 — the caller's ranges are in ORIGINAL-text
+  // coordinates, where each `\N` is two code units; the loop below walks
+  // `normalizedText`, where it is one.  Re-map so `charOffset` lines up
+  // instead of drifting by one per preceding break.  Empty ⇒ `mult` is
+  // always 1 (byte-identical to the pre-REQ-0306 measurement).
+  // REQ-0308 §4-4 — the guard is `!== 1`, not `> 1`: emphasis can now SHRINK a
+  // span (50–200 %), and a shrunk span must be measured narrower or the row
+  // wraps earlier than the burn-in requires.  `scale === 1` still short-circuits
+  // to the identity path so an un-scaled cue is byte-identical.
+  const emphRanges =
+    args.emphasisRanges &&
+    args.emphasisScale !== undefined &&
+    args.emphasisScale > 0 &&
+    args.emphasisScale !== 1 &&
+    args.emphasisRanges.length > 0
+      ? mapRangesAcrossBreakCollapse(text, args.emphasisRanges, 1)
+      : []
+  const emphScale = args.emphasisScale ?? 1
+  const mult = (off: number): number =>
+    emphRanges.length > 0 && isEmphasizedAt(off, emphRanges) ? emphScale : 1
+
   const lines = normalizedText.split('\n')
   let charOffset = 0
 
@@ -158,7 +190,7 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
         } else {
           advance = font.charToGlyph(ch).advanceWidth ?? 0
         }
-        cumulative += advance * scale
+        cumulative += advance * scale * mult(charOffset + byteOffset)
 
         // Overflow check: right edge of this glyph exceeds the budget.
         if (cumulative > effectivePx) {
@@ -197,9 +229,9 @@ export function computeOverflowSync(args: OverflowArgs, fontArg?: SubtitleFont |
       let i = 0
       for (const char of line) {
         const cp = line.codePointAt(i) ?? 0
-        const charWidth = isWide(cp)
+        const charWidth = (isWide(cp)
           ? fontSizePx * FALLBACK_LIBASS_SCALE
-          : fontSizePx * 0.55 * FALLBACK_LIBASS_SCALE
+          : fontSizePx * 0.55 * FALLBACK_LIBASS_SCALE) * mult(charOffset + i)
         cumulative += charWidth
         if (cumulative > effectivePx) {
           return { overflowStartIndex: charOffset + i, measuredPx: cumulative, effectivePx }

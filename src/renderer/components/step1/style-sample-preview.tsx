@@ -11,26 +11,33 @@ import {
 } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { useSettingsStore } from '@/stores/settings-store'
+import { styleFieldsFromDefaults } from '@/lib/style-defaults-to-entry'
 import { makeEntryLayoutDefaults } from '../../../shared/burnin-defaults'
 import type {
   TranscriptionDefaults,
   VideoInfo,
-  SubtitleEntry,
-  BurninPosition
+  SubtitleEntry
 } from '../../../shared/types'
 
 /**
- * Bottom-centre is the standard subtitle convention.  Step 1 deliberately
- * does NOT expose position controls (that responsibility belongs to Step 3),
- * so the preview always renders at this fixed reference position.  The
- * vertical margin matches Step 3's BURNIN_DEFAULTS so the seed look here
- * lines up with the final burn position when the user later opens Step 3
- * without changing anything.
+ * REQ-0334 §2 — fields the STILL preview deliberately does not show.
+ *
+ * Typed as a `Pick` rather than written inline so the suppression is a
+ * statement the compiler checks, not an omission: the key must be a real
+ * `SubtitleEntry` field, and anything added here is visible in one place.
+ *
+ * `karaokeEnabled` is forced OFF because karaoke is a *time-varying* effect.
+ * With no playhead, `SubtitleOverlay` would build fallback word units and
+ * render karaoke spans whose colours are normally written each frame by the
+ * video panel's rAF loop — a still frame of an animation, showing a state
+ * the user never actually sees.  (Owner scoped karaoke out of this REQ.)
+ *
+ * Entrance / exit animation is excluded the same way but needs no entry
+ * here: it reaches a cue only via `animationFieldsForNewCue`, which this
+ * preview simply never calls.
  */
-const PREVIEW_BURNIN: BurninPosition = {
-  horizontalPosition: 'center',
-  verticalPosition: 'bottom',
-  verticalMarginPx: 30
+const STILL_PREVIEW_SUPPRESSED: Pick<SubtitleEntry, 'karaokeEnabled'> = {
+  karaokeEnabled: false
 }
 
 /** Fallback frame size when no video is loaded — drives the preview's aspect
@@ -68,10 +75,22 @@ interface StyleSamplePreviewProps {
  *
  * Reuses SubtitleOverlay (the same component Step 2's video panel uses) so
  * the preview is pixel-faithful to what ffmpeg + libass will actually
- * render at burn-in time.  Seed values flow straight from the project
- * store's `defaults` via props — any field change in the right-column
- * controls re-renders this view on the next React tick with no additional
- * plumbing.
+ * render at burn-in time.
+ *
+ * REQ-0334 §2 — "any field change re-renders this view with no additional
+ * plumbing" is now TRUE.  It was not before: the sample entry was built from
+ * a hand-written field list (and gated by a second hand-written `useMemo`
+ * dependency list), so shadow / casing / rotation / layout / offset / line
+ * spacing / emphasis moved their controls and nothing else.  Both lists are
+ * gone; the entry comes from `styleFieldsFromDefaults`, the exhaustively
+ * typed projection `step1.tsx` uses to seed real transcribed rows, so
+ * adding a style default cannot leave this preview behind again.
+ *
+ * The two effects this STILL preview deliberately does not show are karaoke
+ * (`STILL_PREVIEW_SUPPRESSED`) and entrance/exit animation (never seeded —
+ * it arrives only via `animationFieldsForNewCue`, which this component does
+ * not call).  Both are time-varying and need a playhead; a still frame of
+ * either would show a state the user never actually sees.
  *
  * The component is intentionally generic over its parent: it takes only
  * `defaults` + `thumbnail` + `video` and contains zero references to the
@@ -142,14 +161,23 @@ export function StyleSamplePreview({
     return () => { cancelled = true }
   }, [activeFontId])
 
-  // Long-form sample text — chosen so the user can verify line wrapping,
-  // font-size sanity and outline visibility at a glance.  A single short
-  // word ("Sample") would hide overflow/wrap problems that only show up
-  // with a realistic-length caption.
-  const sampleText = t(
-    'subtitleDefaults.sampleText',
-    'これはサンプル字幕です。書き出し後の見た目をここで確認できます。'
-  )
+  // REQ-0338 §3-1 — this string is a DIAGNOSTIC, not filler.  It deliberately
+  // mixes Latin and Japanese so that picking a Latin-only face (Anton, Bebas
+  // Neue, Montserrat, Poppins) renders the Japanese half as tofu right here,
+  // where the font was chosen — `substituteMissingGlyphs` swaps every code
+  // point outside the font's cmap for the font's own placeholder (□, or ? for
+  // Bebas Neue / Poppins), so the mismatch is visible instead of being papered
+  // over by a system-font fallback that libass will not reproduce.
+  //
+  // Do not shorten it to one script.  The `en` string carries a Japanese token
+  // for the same reason: the UI language says nothing about what script the
+  // user's footage is in, so an English-speaking user subtitling Japanese needs
+  // the identical warning.
+  //
+  // The owner shortened it from a two-sentence caption in REQ-0338; the wrap /
+  // overflow rehearsal that length used to provide is the cost, and the
+  // diagnostic is what was asked for.
+  const sampleText = t('subtitleDefaults.sampleText', 'これはSAMPLE字幕です。')
 
   const videoWidthPx = video?.widthPx ?? FALLBACK_VIDEO_WIDTH
   const videoHeightPx = video?.heightPx ?? FALLBACK_VIDEO_HEIGHT
@@ -177,21 +205,27 @@ export function StyleSamplePreview({
       startSec: 0,
       endSec: 1,
       text: wrappedText,
-      fontSizePx: defaults.fontSizePx,
-      textColorHex: defaults.textColorHex,
-      outlineColorHex: defaults.outlineColorHex,
-      outlineThicknessPx: defaults.outlineThicknessPx,
       // REQ-20260615-050 — fade is irrelevant for a static settings
       // preview (no playhead, no ramp); seed with `0` (= no fade).
       fadeDurationSec: 0,
-      // REQ-20260613-016 / v1.2.2 機能A Phase 3: SubtitleOverlay now reads
-      // layout from the entry itself (no `burnin` prop).  Seed the sample
-      // entry's layout from PREVIEW_BURNIN so the preview frame keeps its
-      // historical center-bottom positioning with the same 30-px marginV.
+      // REQ-20260613-016 / v1.2.2 機能A Phase 3: SubtitleOverlay reads layout
+      // from the entry itself (no `burnin` prop).  This call supplies the
+      // `subtitleBackground` sub-object; the layout triple it also returns is
+      // overridden by `styleFieldsFromDefaults` below.  Order matters.
       ...makeEntryLayoutDefaults(),
-      horizontalPosition: PREVIEW_BURNIN.horizontalPosition,
-      verticalPosition: PREVIEW_BURNIN.verticalPosition,
-      verticalMarginPx: PREVIEW_BURNIN.verticalMarginPx
+      // REQ-0334 §2 — every style default in one spread, through the SAME
+      // function `step1.tsx` uses to seed real transcribed rows.  That
+      // sharing is the point: this preview used to list fields by hand and
+      // had drifted 14 fields behind `TranscriptionDefaults` (shadow,
+      // casing, rotation, line spacing, layout, offset, emphasis), so those
+      // controls moved nothing here.  A new style field now reaches this
+      // preview automatically, and a field that must NOT reach it has to be
+      // written into `STILL_PREVIEW_SUPPRESSED` below.
+      ...styleFieldsFromDefaults(defaults, {
+        videoWidthPx,
+        videoHeightPx
+      }),
+      ...STILL_PREVIEW_SUPPRESSED
     }
     return {
       id: 'step1-sample',
@@ -200,16 +234,13 @@ export function StyleSamplePreview({
       isEdited: false,
       original: { ...base, subtitleBackground: { ...base.subtitleBackground } }
     }
-  }, [
-    sampleText,
-    autoLineBreak,
-    font,
-    videoWidthPx,
-    defaults.fontSizePx,
-    defaults.textColorHex,
-    defaults.outlineColorHex,
-    defaults.outlineThicknessPx
-  ])
+    // `defaults` is depended on WHOLE.  The previous version listed the
+    // individual fields it read, which is the same hand-maintained list as
+    // the object literal above and drifted with it — a corrected literal
+    // still would not have re-rendered.  The settings store replaces this
+    // object on every update, so the whole-object dep is both correct and
+    // as tight as the per-field list ever was.
+  }, [sampleText, autoLineBreak, font, videoWidthPx, videoHeightPx, defaults])
 
   return (
     // self-start: keep the card at its natural height instead of stretching

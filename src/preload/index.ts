@@ -83,12 +83,18 @@ const electronAPI = {
     ipcRenderer.invoke(`${Channels.fontDownload}:cancel`, channelId),
   fontUninstall: (fontId: FontId): Promise<IpcResult<FontsState>> =>
     ipcRenderer.invoke(Channels.fontUninstall, fontId),
+  // REQ-0281 §4 — batch DL cancel cleanup + "Uninstall all" button.
+  fontUninstallAll: (): Promise<IpcResult<FontsState & { removedIds: FontId[] }>> =>
+    ipcRenderer.invoke(Channels.fontUninstallAll),
   fontSetActive: (fontId: FontId): Promise<IpcResult<FontsState>> =>
     ipcRenderer.invoke(Channels.fontSetActive, fontId),
   fontReadOfl: (fontId: FontId): Promise<IpcResult<string>> =>
     ipcRenderer.invoke(Channels.fontReadOfl, fontId),
   fontReadBytes: (fontId: FontId): Promise<IpcResult<ArrayBuffer>> =>
     ipcRenderer.invoke(Channels.fontReadBytes, fontId),
+  // REQ-0275 §3 — persist current FONT_SET_VERSION after bulk DL success.
+  fontRecordSetVersion: (): Promise<IpcResult<{ version: number }>> =>
+    ipcRenderer.invoke(`${Channels.fontList}:recordSetVersion`),
 
   // GPU acceleration tools (REQ-0149)
   gpuToolState: (): Promise<IpcResult<GpuToolState>> =>

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
 import {
   Dialog,
   DialogContent,
@@ -12,7 +13,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { FontPicker } from '@/components/font-picker/font-picker'
 import { DefaultStyleControls } from '@/components/default-style-controls/default-style-controls'
 import { WhisperAdvancedControls } from '@/components/whisper-advanced-controls/whisper-advanced-controls'
-import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
+// REQ-0298 §3 — FadeDurationSlider import removed with the General-tab
+// slider.  DefaultStyleControls (rendered in the 「字幕スタイル」 tab)
+// imports the slider itself; the setter + value are still subscribed
+// below and passed through to that component unchanged.
 import { FolderPathInput } from './folder-path-input'
 import { ShortcutsSettingsTab } from './shortcuts-settings-tab'
 
@@ -34,7 +38,11 @@ export function SettingsDialog() {
   const baseColor = useSettingsStore((s) => s.baseColor)
   const setBaseColor = useSettingsStore((s) => s.setBaseColor)
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
-  const setFadeDurationSec = useSettingsStore((s) => s.setFadeDurationSec)
+  // REQ-0295 — needed by DefaultStyleControls to hide the karaoke row
+  // on free (NSIS) tier.  Falsey when the env store hasn't hydrated
+  // yet; `canUseKaraokeInTier(false)` returns false so the row stays
+  // hidden until MSIX detection settles.
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
   // REQ-0121 — audio track selector + input/output folder inputs.
   const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
   const setDefaultAudioTrackIndex = useSettingsStore((s) => s.setDefaultAudioTrackIndex)
@@ -78,23 +86,60 @@ export function SettingsDialog() {
           element on whatever opened the dialog; users can still Tab into
           the dialog normally for keyboard navigation.
           REQ-018 #1. */}
+      {/* REQ-0283 / REQ-0284 — the DialogContent frame is FIXED at 720px
+          (capped at 85vh on tiny viewports so it never overflows the
+          screen).  Content that exceeds the panel area scrolls INSIDE
+          the wrapper `<div className="flex-1 min-h-0 overflow-y-auto">`
+          below, so the frame height never depends on the active tab.
+
+          The height was raised from 640 → 720 by REQ-0284 so the Fonts
+          tab fits with only its internal family-list scroll
+          (`max-h-[300px]` on the family list box).  At 640px the outer
+          wrapper ALSO scrolled on Fonts, producing an unpleasant
+          double-scroll.  720 clears the tallest current content
+          (Fonts with the upgrade-notice banner visible) with ~30 px of
+          slack.  See RES-0284 §1 for the measurement breakdown.
+
+          ------------------------------------------------------------
+          DO NOT (would reintroduce the REQ-018 → REQ-0164 → REQ-0283
+          content-drift bug that has been fixed 3 times already):
+            – Add `overflow-y-auto` to DialogContent (that lets the
+              OUTER frame scroll = content-driven height).
+            – Add `min-h-[...]` or `max-h-[...]` to any individual
+              `<TabsContent>` (per-tab height pinning is what caused
+              the whack-a-mole — each new tab had to remember, and
+              tall content bypassed the min-h anyway).
+            – Replace `h-[720px]` with `min-h-[Xpx]` (min alone reverts
+              to content-driven above the floor).
+          ------------------------------------------------------------
+          The `tests/unit/settings-dialog-height-invariant.test.ts`
+          suite enforces these rules at CI time — greping the TSX
+          source for the anti-patterns above.  If you have a legit
+          reason to change the fixed height, bump the pixel value here
+          AND update the test's expected value in the SAME commit; if
+          you're tempted to add per-tab min-h/max-h, the frame is
+          broken elsewhere — fix that instead.
+
+          Height composition (approx, worst-case Fonts tab with the
+          RES-0276 upgrade notice visible):
+            DialogHeader                    ~30px
+            + TabsList                      ~40px
+            + TabsContent primitive mt-3    ~12px
+            + Panel content (Fonts tab)     ~574px
+              = Section 1 (~112) + gap-6 (24) + Section 2 (~438,
+                including the family-list max-h-[300])
+            + p-4 padding (top + bottom)    ~32px
+            = ~688px → 720 with ~32px slack. */}
       <DialogContent
-        className="max-w-[640px] max-h-[85vh] overflow-y-auto"
+        className="max-w-[640px] h-[720px] max-h-[85vh] flex flex-col overflow-hidden"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle>{t('title')}</DialogTitle>
         </DialogHeader>
 
-        {/* min-h applied to every TabsContent below pegs the panel height
-            to the tallest tab (フォント, measured ~483px) so switching tabs
-            does not change the dialog height.  Empty space appears at the
-            bottom of shorter tabs (一般 / 既定スタイル); this is the
-            explicit trade-off vs. a smaller fixed height + internal scroll,
-            chosen because the FontPicker's internal scroll (max-h-[300px])
-            already handles the long font list.  REQ-018 #2. */}
-        <Tabs defaultValue="general" className="w-full">
-          <TabsList>
+        <Tabs defaultValue="general" className="flex-1 min-h-0 flex flex-col w-full">
+          <TabsList className="shrink-0">
             <TabsTrigger value="general">{t('tabs.general')}</TabsTrigger>
             <TabsTrigger value="fonts">{t('tabs.fonts')}</TabsTrigger>
             <TabsTrigger value="defaultStyle">{t('tabs.defaultStyle')}</TabsTrigger>
@@ -102,8 +147,15 @@ export function SettingsDialog() {
             <TabsTrigger value="shortcuts">{t('tabs.shortcuts')}</TabsTrigger>
           </TabsList>
 
+          {/* REQ-0283 — SINGLE scroll region wrapping every TabsContent.
+              Any tab content that exceeds the panel area scrolls here.
+              Do not move `overflow-y-auto` INTO individual TabsContent —
+              it must live on this wrapper so the frame stays fixed no
+              matter which tab is active OR which tabs are added later. */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+
           {/* ─ General ────────────────────────────────────────────── */}
-          <TabsContent value="general" className="min-h-[490px]">
+          <TabsContent value="general">
             <div className="grid grid-cols-2 items-start gap-y-4 gap-x-6 pt-1">
               {/* Language */}
               <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
@@ -170,22 +222,15 @@ export function SettingsDialog() {
                 </Select>
               </div>
 
-              {/* REQ-20260615-050 — fade duration slider.  Replaces the
-                  legacy number input.  0 = OFF, 0.1–0.5 s otherwise.
-                  This setting is the default for new entries; existing
-                  entries keep whatever per-row value they already hold. */}
-              <span className="whitespace-nowrap text-body text-fg-secondary self-start leading-none mt-2.5">
-                {t('general.fadeDuration')}
-              </span>
-              <div className="space-y-1 flex flex-col">
-                <FadeDurationSlider
-                  value={fadeDurationSec}
-                  onCommit={setFadeDurationSec}
-                  ariaLabel={t('general.fadeDuration')}
-                  fullWidth
-                />
-                <p className="text-body-sm text-fg-muted">{t('general.fadeDurationHint')}</p>
-              </div>
+              {/* REQ-0298 §3 — the fade-duration slider was removed from
+                  this tab.  REQ-0295 added the same slider to the
+                  「字幕スタイル」 tab (both surfaces write the SAME
+                  `settings.fadeDurationSec` store slot, so the value
+                  and behaviour are unchanged); exposing it in two
+                  tabs was confusing.  The store slot, its setter,
+                  and every downstream consumer (per-entry seed at
+                  transcription, style-defaults preview, etc.) stay
+                  as-is — this is a pure UI-visibility change. */}
 
               {/* REQ-0121 — default transcription audio track (1..6).  Fixed
                   1..6 dropdown regardless of the current video's track count
@@ -265,26 +310,25 @@ export function SettingsDialog() {
               `settings:fonts.hint` from the render path here; the
               locale key stayed as-is (unused, kept for safety in case
               a hot-fix consumer surfaces later). */}
-          <TabsContent value="fonts" className="space-y-1.5 min-h-[490px]">
+          <TabsContent value="fonts" className="space-y-1.5">
             <FontPicker />
           </TabsContent>
 
           {/* ─ Default style ──────────────────────────────────────── */}
-          <TabsContent value="defaultStyle" className="space-y-2 min-h-[490px]">
+          <TabsContent value="defaultStyle" className="space-y-2">
             <p className="text-body-sm text-muted-foreground">{t('defaultStyle.hint')}</p>
             <DefaultStyleControls
-              fontSizePx={transcriptionDefaults.fontSizePx}
-              textColorHex={transcriptionDefaults.textColorHex}
-              outlineColorHex={transcriptionDefaults.outlineColorHex}
-              outlineThicknessPx={transcriptionDefaults.outlineThicknessPx}
-              autoLineBreak={autoLineBreak}
+              defaults={transcriptionDefaults}
               onUpdateDefaults={updateTranscriptionDefaults}
+              autoLineBreak={autoLineBreak}
               onSetAutoLineBreak={setAutoLineBreak}
+              fadeDurationSec={fadeDurationSec}
+              isMsix={isMsix}
             />
           </TabsContent>
 
           {/* ─ Whisper engine ─────────────────────────────────────── */}
-          <TabsContent value="whisper" className="space-y-3 min-h-[490px]">
+          <TabsContent value="whisper" className="space-y-3">
             <p className="text-body-sm text-muted-foreground">{t('whisper.hint')}</p>
             <WhisperAdvancedControls
               transcriptionAdvanced={transcriptionAdvanced}
@@ -298,22 +342,15 @@ export function SettingsDialog() {
               `SHORTCUTS` registry.  No mutation UI; the tab exists so
               the user can discover which keys do what without leaving
               the app.
-              REQ-0164 §1 — `max-h-[490px] overflow-y-auto` added so
-              the shortcuts tab matches the sizing contract every other
-              tab already had (min-h == the tallest tab's height =
-              490px, established for the Fonts tab in REQ-018 #2).  The
-              REQ-0131 §5 shortcuts panel is the ONLY tab whose content
-              exceeds 490px (3 sections × ~10 rows + section
-              descriptions), so before this fix switching to it forced
-              the entire DialogContent to grow toward its
-              `max-h-[85vh]` cap and users saw the window height jump.
-              Pinning min == max here converts the tab to internal
-              scroll behind the same fixed frame the other tabs use —
-              zero visual change on other tabs, no more window resize
-              on this one. */}
-          <TabsContent value="shortcuts" className="space-y-3 min-h-[490px] max-h-[490px] overflow-y-auto">
+              REQ-0283 — the pre-fix `min-h-[490px] max-h-[490px]
+              overflow-y-auto` special-case that used to live here (a
+              REQ-0164 §1 whack-a-mole patch) has been removed.  Height
+              is now managed by the shared wrapper `<div>` above; this
+              tab, like every other, just describes its content. */}
+          <TabsContent value="shortcuts" className="space-y-3">
             <ShortcutsSettingsTab />
           </TabsContent>
+          </div>
         </Tabs>
       </DialogContent>
     </Dialog>

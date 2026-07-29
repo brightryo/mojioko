@@ -74,7 +74,12 @@ export const typography = {
   // fonts.css) and the woff2 itself has now been removed from the repo
   // to dodge an OFL distribution obligation for an unused font.  The
   // bundled Noto Sans JP covers Latin glyphs adequately for the UI.
-  fontSans: "'Noto Sans JP', system-ui, sans-serif",
+  // REQ-0275 §2 — CSS family renamed to MOJIOKO-namespaced form to
+  // avoid a system-installed Noto Sans JP silently shadowing our
+  // bundled TTF at burn-in time (libass DirectWrite behavior).  The
+  // UI stack follows the same rename so the app UI renders from the
+  // bundled face we actually shipped.
+  fontSans: "'MOJIOKO Noto Sans JP', system-ui, sans-serif",
   fontMono: "'SF Mono', Monaco, Consolas, monospace"
 } as const
 

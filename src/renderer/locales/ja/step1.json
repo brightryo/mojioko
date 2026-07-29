@@ -34,19 +34,19 @@
     "hint": "すべての字幕の初期値として適用されます",
     "size": "サイズ",
     "textColor": "文字色",
-    "outlineColor": "縁取り色",
-    "stroke": "縁取り幅",
+    "outlineColor": "アウトライン色",
+    "stroke": "アウトライン幅",
     "fade": "フェード",
     "fadeOn": "オン",
     "fadeOff": "オフ",
     "helpSize": "字幕の文字サイズ（ピクセル）。動画の解像度に合わせて調整してください。",
     "sizeHint": "{{min}}〜{{max}} px (範囲外は自動的にクランプ)",
     "helpTextColor": "字幕の文字色。白（#ffffff）が一般的です。",
-    "helpOutlineColor": "字幕の縁取り色。黒（#000000）が視認性に優れています。",
-    "helpStroke": "縁取りの太さ（ピクセル）。",
+    "helpOutlineColor": "字幕のアウトライン色。黒（#000000）が視認性に優れています。",
+    "helpStroke": "アウトラインの太さ（ピクセル）。",
     "helpFade": "字幕のフェードイン・フェードアウト効果を有効にします（300ms）。",
     "previewLabel": "プレビュー",
-    "sampleText": "これはサンプル字幕です。書き出し後の見た目をここで確認できます。",
+    "sampleText": "これはSAMPLE字幕です。",
     "previewNote": "※ 近似表示です。書き出し後の動画で最終確認してください。"
   },
   "subtitleStyle": {
@@ -178,7 +178,7 @@
     "wordSubtitle": {
       "label": "単語ごとに文字起こし（試験的機能）",
       "description": "字幕を1〜3語ごとの短い単位で生成します。英語音声向けの試験的機能です。日本語音声では単語の切れ目が不自然になる場合があります。",
-      "lockedPaidOnly": "有料版でのみ利用可能"
+      "lockedPaidOnly": "追加12書体は有料版（¥500 買い切り）でご利用いただけます"
     }
   },
   "dialog": {
@@ -240,19 +240,11 @@
   },
   "fontPicker": {
     "title": "デフォルト字幕フォントの選択",
+    "section1Description": "字幕のデフォルトフォントを選択します。",
+    "listSectionTitle": "フォント一覧",
+    "listSectionDescription": "Noto Sans JP は9ウェイトすべて同梱で、無料版でもお使いいただけます。下の追加12書体は有料版（¥500 買い切り）でご利用いただけます。",
     "description": "フォントをクリックして既定フォントを選択します。フォントの追加およびダウンロードは有料版のみの機能です。",
-    "status": {
-      "bundled": "標準同梱",
-      "installed": "ダウンロード済み",
-      "notInstalled": "未ダウンロード",
-      "downloading": "ダウンロード中…",
-      "active": "選択中"
-    },
     "action": {
-      "download": "ダウンロード",
-      "cancel": "キャンセル",
-      "uninstall": "削除",
-      "select": "このフォントを使う",
       "viewLicense": "ライセンス",
       "lockedPaidOnly": "有料版でのみ利用可能"
     },
@@ -261,33 +253,37 @@
       "missingRareKanjiHelp": "「塡 剝 頰」など常用漢字の一部が含まれていないため、これらの文字が含まれる字幕では別フォントで表示されることがあります。"
     },
     "toast": {
-      "downloadComplete": "{{name}} をダウンロードしました",
-      "downloadFailed": "ダウンロードに失敗しました: {{error}}",
-      "downloadUnavailable": "{{name}} はまだ配信されていません。時間を置いて再度お試しください。",
-      "uninstalled": "{{name}} を削除しました",
-      "uninstalledFallback": "{{name}} が削除されたため、{{count}}件をデフォルトフォントに変更しました",
       "activated": "{{name}} を選択しました"
     },
-    "uninstallConfirm": {
-      "title": "{{name}} を削除しますか？",
-      "body": "{{name}} は {{count}} 件で使用されています。削除すると、それらはデフォルトフォントに戻ります。",
-      "confirm": "削除する",
-      "cancel": "キャンセル"
-    },
     "tofuNote": "フォントに含まれない文字は □ や ? などで表示されます（例：英語専用フォントで日本語を使用した場合）",
+    "upgradeNotice": "アップデートに伴い、フォントの再取得が必要です。「まとめてダウンロード」を実行してください。",
     "langLegend": {
       "en": "英語対応",
       "ja": "日本語対応"
     },
     "batchDownload": {
-      "button": "まとめてダウンロード",
-      "buttonTooltip": "未ダウンロードのフォントをすべてダウンロードします",
+      "button": "追加フォントをダウンロード",
+      "buttonReinstall": "追加フォントを再ダウンロード",
+      "buttonTooltip": "追加フォント一式をまとめてダウンロードします",
       "cancel": "中止",
-      "progress": "{{completed}} / {{total}} ダウンロード中…",
       "toast": {
-        "done": "{{count}} 個のフォントをダウンロードしました",
-        "cancelled": "まとめダウンロードを中止しました（{{completed}} / {{total}} 完了）",
-        "partial": "{{total}} 中 {{completed}} をダウンロード、{{failed}} が失敗しました"
+        "done": "追加フォントのダウンロードが完了しました",
+        "cancelled": "ダウンロードを中止し、途中まで取得した追加フォントを削除しました",
+        "failed": "ダウンロードに失敗したため、途中まで取得した追加フォントを削除しました"
+      }
+    },
+    "uninstallAll": {
+      "button": "追加フォントを削除",
+      "buttonTooltip": "追加フォント一式をすべて削除します（同梱フォントは削除されません）",
+      "toast": {
+        "done": "追加フォント {{count}} 個を削除しました（{{rows}} 件のフォント指定をデフォルトに戻しました）",
+        "failed": "追加フォントの削除に失敗しました"
+      },
+      "confirm": {
+        "title": "追加フォントをまとめて削除しますか？",
+        "body": "現在のプロジェクトの {{count}} 件で追加フォントが使用されています。削除すると、それらはデフォルトフォントに戻ります。",
+        "confirm": "削除する",
+        "cancel": "キャンセル"
       }
     }
   }

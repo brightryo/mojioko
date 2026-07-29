@@ -4,7 +4,7 @@
  * The 11 CUDA/cuDNN DLLs that previously shipped inside the installer
  * (REQ-0146, ~1.5 GB) are now published as a single zip asset on
  * GitHub Releases and pulled in on demand from the app UI.  Same
- * pattern as fonts-v1 (`src/shared/fonts.ts`): a dedicated release tag
+ * pattern as `FONTS_RELEASE_TAG` (`src/shared/fonts.ts`): a dedicated release tag
  * holds a stable filename so the URL can be composed at build time,
  * and a SHA-256 lets the download service verify integrity before
  * extraction.
@@ -20,7 +20,7 @@ import { GITHUB_OWNER, GITHUB_REPO } from './app-info'
 
 /**
  * GitHub Releases tag holding the GPU tools zip.  Follows the same
- * `<slug>-v<n>` convention as `FONTS_RELEASE_TAG = 'fonts-v1'`.  Bump
+ * `<slug>-v<n>` convention as `FONTS_RELEASE_TAG` (currently `fonts-v2`).  Bump
  * this if the DLL set changes (major cuDNN version, additional
  * dependencies, etc.) — the folder-name derivation in
  * `getGpuToolDir()` uses this string, so tag bumps naturally isolate

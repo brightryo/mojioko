@@ -1,0 +1,110 @@
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'fs'
+import path from 'path'
+import { SETTINGS_MERGE_RULES } from '../../src/main/ipc/settings-merge'
+import type { AppSettings } from '../../src/shared/ipc-contracts'
+
+/**
+ * REQ-0341 §3-2 — the renderer must SEND every `incoming-wins` key.
+ *
+ * ## The relationship this pins
+ *
+ * A merge rule is only half of a contract; the other half is what the
+ * renderer puts in the payload, and the two are written in different files.
+ * REQ-0279 / REQ-0315 pinned one direction — `fontSetInstalledVersion` and
+ * `activeFontId` are `presence-wins` AND must be ABSENT, because
+ * `presence-wins` protects nothing while the key is present.
+ *
+ * This is the mirror. `incoming-wins` is a deliberate no-op in `applyRule`,
+ * and `mergeSettingsForSave` seeds `merged` from `{ ...incoming }`. So an
+ * `incoming-wins` key the renderer forgets to send is simply absent from the
+ * merged object and is therefore **dropped from settings.json entirely**.
+ * For `stylePresets` (REQ-0335 §3-6) that is the difference between deleting
+ * a preset and losing all of them.
+ *
+ * ## Why it reads App.tsx's source
+ *
+ * `font-set-version-preserved-across-save.test.ts` builds a hand-written copy
+ * of the payload and says so ("Kept in sync manually"). That copy has already
+ * drifted — it predates `stylePresets` and does not contain it — which is
+ * exactly why asserting a property of the copy proves nothing about the app.
+ * The only way to pin what App.tsx sends is to read what App.tsx sends.
+ *
+ * The parse is deliberately crude (top-level `key:` lines of the one object
+ * literal annotated `AppSettings`). If App.tsx restructures the payload this
+ * test fails loudly rather than passing vacuously — a failure here means
+ * "re-point the parser AND re-check the invariant", not "delete the test".
+ */
+const APP_TSX = path.resolve(__dirname, '../../src/renderer/App.tsx')
+
+/** Top-level keys of the `const settings: AppSettings = { ... }` literal. */
+function payloadKeys(): string[] {
+  const src = readFileSync(APP_TSX, 'utf8')
+  const start = src.indexOf('const settings: AppSettings = {')
+  expect(start, 'settings payload literal not found in App.tsx').toBeGreaterThan(-1)
+  const open = src.indexOf('{', start)
+  let depth = 0
+  let end = -1
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === '{') depth++
+    else if (src[i] === '}') {
+      depth--
+      if (depth === 0) { end = i; break }
+    }
+  }
+  expect(end, 'unbalanced braces in the settings payload literal').toBeGreaterThan(open)
+  const body = src.slice(open + 1, end)
+  // Strip nested objects so only top-level `key:` survives.
+  let flat = ''
+  let d = 0
+  for (const ch of body) {
+    if (ch === '{' || ch === '[') d++
+    else if (ch === '}' || ch === ']') d--
+    else if (d === 0) flat += ch
+  }
+  return Array.from(flat.matchAll(/(?:^|\n)\s*([A-Za-z_$][\w$]*)\s*:/g)).map((m) => m[1])
+}
+
+describe('REQ-0341 §3-2 — the settings save payload matches the merge rules', () => {
+  const keys = payloadKeys()
+  const rules = SETTINGS_MERGE_RULES as Record<string, string>
+  const withRule = (rule: string) =>
+    (Object.keys(rules) as (keyof AppSettings & string)[]).filter((k) => rules[k] === rule)
+
+  it('the parser actually found the payload', () => {
+    // Guards against a silent vacuous pass if App.tsx is restructured.
+    expect(keys.length).toBeGreaterThan(10)
+    expect(keys).toContain('version')
+  })
+
+  it('★ every `incoming-wins` key is sent on every save', () => {
+    // Omitting one does not "keep the old value" — `applyRule` no-ops and
+    // `merged` starts from `{ ...incoming }`, so the key vanishes from disk.
+    const missing = withRule('incoming-wins').filter((k) => !keys.includes(k))
+    expect(missing, `incoming-wins keys missing from App.tsx's payload: ${missing.join(', ')}`)
+      .toEqual([])
+  })
+
+  it('★ stylePresets specifically — the delete path depends on it', () => {
+    // REQ-0335 §3-6 named this pairing; this is the assertion that holds it.
+    expect(rules.stylePresets).toBe('incoming-wins')
+    expect(keys).toContain('stylePresets')
+  })
+
+  it('the two main-owned `presence-wins` keys stay absent (REQ-0279 / REQ-0315)', () => {
+    // The other direction of the same contract, restated here so both halves
+    // live together rather than only in the fontSetInstalledVersion test.
+    expect(keys).not.toContain('fontSetInstalledVersion')
+    expect(keys).not.toContain('activeFontId')
+  })
+
+  it('`session-only` keys are never sent', () => {
+    for (const k of withRule('session-only')) expect(keys).not.toContain(k)
+  })
+
+  it('every key the renderer sends has a rule', () => {
+    // The reverse drift: a key added to the payload but not to the table
+    // would be carried to disk with no documented merge semantics.
+    for (const k of keys) expect(rules[k], `payload key "${k}" has no merge rule`).toBeDefined()
+  })
+})

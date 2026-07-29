@@ -12,6 +12,7 @@ import { useUiStore } from '@/stores/ui-store'
 import { saveFileDialog } from '@/services/dialog'
 import { exportFrame as ipcExportFrame } from '@/services/video'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
+import { KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
 
 /**
  * REQ-20260615-022: STEP2 footer's "image export" entry — opens a small
@@ -87,7 +88,15 @@ export function ExportFrameButton() {
           color: BURNIN_DEFAULTS.subtitleBackground.color,
           opacityPercent: BURNIN_DEFAULTS.subtitleBackground.opacityPercent
         },
-        fontId: activeFontId
+        fontId: activeFontId,
+        // REQ-0344 §2-2 — fallback for cues with no `entry.karaokeStyle`.
+        // The same value the burn-in resolves to: REQ-0324 §4-1 removed the
+        // app-wide setting, so `KARAOKE_STYLE_DEFAULT` IS the project-level
+        // answer, and per-cue choices ride on the entries themselves.  Named
+        // here rather than left to a parameter default so that if a
+        // project-level setting ever returns, this call site is one of the
+        // places the compiler has already forced somebody to look at.
+        karaokeStyle: KARAOKE_STYLE_DEFAULT
       })
       if (result.ok) {
         toast.success(t('videoPreview.exportFrame.success', { path: result.data.outputPath }))

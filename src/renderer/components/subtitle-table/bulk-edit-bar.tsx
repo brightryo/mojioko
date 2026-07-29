@@ -1,29 +1,53 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, WrapText, AlignJustify, ChevronDown, AlertCircle, Lock } from 'lucide-react'
+import { X, WrapText, AlignJustify } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { Switch } from '@/components/ui/switch'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { OutlineThicknessSlider } from '@/components/subtitle-table/outline-thickness-slider'
-import { FadeDurationSlider } from '@/components/subtitle-table/fade-duration-slider'
+import { AnimationControls, type AnimationControlsValue } from '@/components/animation-controls/animation-controls'
+import {
+  ANIMATION_BLUR_ENABLED,
+  animationEntryFields, animationFieldsForTypeChange,
+} from '../../../shared/cue-animation'
 import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-input'
+import { measureSync } from '@/lib/perf-counter'
+import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
+import { LineSpacingSlider } from '@/components/subtitle-table/line-spacing-slider'
+import { LINE_SPACING_DEFAULT_PERCENT } from '../../../shared/line-spacing'
+import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
+import { buildUndoPatch } from '../../../shared/history-patch'
+import { StyleRow } from '@/components/subtitle-table/style-row'
+// REQ-0335 §3 — style presets.
+import { StylePresetControls } from '@/components/style-preset/style-preset-controls'
+import { buildStylePreset, resolveStylePresetPatch } from '@/lib/style-preset-apply'
+import type { StylePreset } from '../../../shared/style-preset'
+import { useSettingsStore } from '@/stores/settings-store'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useAppEnvStore } from '@/stores/app-env-store'
+import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
+import { coerceKaraokeStyle, KARAOKE_STYLE_DEFAULT, type KaraokeStyle } from '../../../shared/karaoke-style'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+// REQ-0308 §3 — only the wrap-measurement helpers are imported now; the bulk
+// emphasis controls (and the constants they needed) are gone.
+import {
+  resolveEmphasisRanges,
+  mapRangesAcrossBreakCollapse,
+  clampEmphasisScalePercent,
+} from '../../../shared/emphasis'
+import { OpacityPercentSlider } from '@/components/subtitle-table/opacity-percent-slider'
+import { OPACITY_DEFAULT_PERCENT } from '../../../shared/alpha'
 import { HelpIcon } from '@/components/help-icon'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
-import { useAppEnvStore } from '@/stores/app-env-store'
-import { useStoreUpsellStore } from '@/stores/store-upsell-store'
-import { canSelectFontInTier } from '@/lib/font-tier'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
-import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { toast } from 'sonner'
 import type { SubtitleEntry } from '../../../shared/types'
 import { effectiveEntryState } from '../../../shared/cuts'
-import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
-import { getSortedFontRegistry, isFontId, type FontId } from '../../../shared/fonts'
-import { FontLangBadges } from '@/components/font-lang-badge/font-lang-badge'
+import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, MARGIN_V_MIN_PX, MARGIN_V_MAX_PX } from '../../../shared/constants'
+import { isFontId, type FontId } from '../../../shared/fonts'
 import { recomputePinnedPosForAnchorChange } from '@/lib/preview-coords'
 
 interface BulkEditBarProps {
@@ -148,12 +172,21 @@ function BulkSegmentGroup<T extends string>({
   options,
   disabled,
   ariaLabel,
+  fullWidth,
 }: {
   value: T | null
   onChange: (next: T) => void
   options: ReadonlyArray<{ value: T; label: string }>
   disabled?: boolean
   ariaLabel: string
+  /**
+   * REQ-0341 §2 — mirrors `SegmentGroup`'s prop of the same name.  The
+   * `w-[40%]` default was a percentage of the RAW row these controls used to
+   * sit in; inside `StyleRow`'s fixed control column the percentage is of the
+   * column, and `min-w-fit` then overrides it anyway, so the group would
+   * render at its intrinsic width and stop lining up with the sliders above.
+   */
+  fullWidth?: boolean
 }) {
   // REQ-20260615-060 A — width + per-segment flex match the inspector's
   // SegmentGroup (`timeline-block-inspector.tsx:50`):
@@ -167,7 +200,8 @@ function BulkSegmentGroup<T extends string>({
       role="radiogroup"
       aria-label={ariaLabel}
       className={cn(
-        'flex h-7 w-[40%] min-w-fit items-stretch gap-0.5 rounded-md border border-line-strong bg-surface-0 p-0.5',
+        'flex h-7 min-w-fit items-stretch gap-0.5 rounded-md border border-line-strong bg-surface-0 p-0.5',
+        fullWidth ? 'w-full' : 'w-[40%]',
         disabled && 'opacity-40 pointer-events-none',
       )}
     >
@@ -216,6 +250,18 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // `subtitleDefaults.sizeHint` string defined for STEP 1 (REQ-034 #3).
   const { t } = useTranslation(['step2', 'step1', 'common'])
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
+  // REQ-0275 §5 / REQ-0298 §1 — the FamilyWeightSelector value is
+  // driven by a LOCAL draft (`fontDraft`) that seeds from the
+  // project's active font at mount / selection-change and updates
+  // itself whenever the user picks a new font.  Pre-REQ-0298 the
+  // selector was bound directly to `settingsStore.activeFontId`,
+  // which the bulk font-change handler never wrote to — so the
+  // display swatch stayed on the seed font forever even though the
+  // rows were correctly re-fonted via `applyBulk({ fontId })`.
+  // Same fix pattern as REQ-0292 §3 (bulk rotation stuck-at-0):
+  // the draft is the SOLE binding for what the user sees, and the
+  // handler updates BOTH the draft and the store.
+  const activeFontId = useSettingsStore((s) => s.activeFontId)
   // REQ-0125 — history-less preview writer used from the color picker's
   // drag path.  See handleTextColorPreview / handleOutlineColorPreview.
   const updateEntriesPreview = useProjectStore((s) => s.updateEntriesPreview)
@@ -248,11 +294,54 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // current selection session so the slider thumb stays where the user
   // left it (same pattern as colorDraftText/Outline above).
   const [outlineSliderDraft, setOutlineSliderDraft] = useState<number>(0)
+  // REQ-0310 §1 — bulk opacity drafts.  These seed at 100 (fully opaque, the
+  // field's own default) rather than 0 like the outline/fade drafts, because
+  // 0 % here means "invisible" and a bar that opened on 0 would read as
+  // "everything is about to disappear".
+  const [textAlphaDraft, setTextAlphaDraft] = useState<number>(OPACITY_DEFAULT_PERCENT)
+  const [outlineAlphaDraft, setOutlineAlphaDraft] = useState<number>(OPACITY_DEFAULT_PERCENT)
   // REQ-20260615-050 — bulk fade draft.  Same "remember last applied"
   // semantics as the colour / outline drafts so the slider thumb stays
   // where the user left it across selection changes.  Initial value
   // matches the legacy "fade OFF" semantics (= 0 = no fade).
-  const [fadeSliderDraft, setFadeSliderDraft] = useState<number>(0)
+  // REQ-0292 §1 — bulk shadow-depth draft.  Same pattern as the other
+  // slider drafts: the thumb shows the last-applied value across the
+  // current selection session so the user can see "what I set on
+  // these rows".  Starts at the neutral default (4) which matches
+  // the ass-generator fallback and the inspector's toggle-on seed.
+  const [shadowSliderDraft, setShadowSliderDraft] = useState<number>(4)
+  // REQ-0332 §5 — bulk line-spacing draft.  Same pattern; starts at the
+  // neutral default so opening the bar and dragging away from 0 % is the
+  // only way to change anything.
+  const [lineSpacingDraft, setLineSpacingDraft] = useState<number>(LINE_SPACING_DEFAULT_PERCENT)
+  // REQ-0292 §3 — bulk rotation draft.  Fixes the stuck-at-0 bug
+  // where `NumberStepperInput value={0}` never advanced past the
+  // first click: the stepper computes `next = clamp(value + step)`
+  // so with value permanently 0 every click applied 15° again and
+  // the minus button stayed disabled (value <= min).  Draft state
+  // increments alongside each commit so subsequent clicks step
+  // relative to the last-applied value, matching the size / margin
+  // bulk-draft pattern above.
+  const [rotationDraft, setRotationDraft] = useState<number>(0)
+  // REQ-0292 §2 / REQ-0293 §2 — bulk karaoke highlight-colour draft
+  // only.  The base-colour draft was removed with REQ-0293 because
+  // the karaoke sweep now always uses each row's own `textColorHex`
+  // for the unspoken half — there's no per-cue override to bulk-set.
+  const [karaokeHighlightDraft, setKaraokeHighlightDraft] = useState<string>(KARAOKE_DEFAULT_HIGHLIGHT_COLOR)
+  // REQ-0322 §3 — seeded from the new-cue default so the Select opens on
+  // the value the user already considers "normal" for this project.
+  // REQ-0341 §4-2 — seeded through the SAME function that re-seeds the draft
+  // the instant a type is picked (`animationFieldsForTypeChange`), instead of
+  // hand-assembling three constants that happened to agree with it.  The
+  // values were already correct; keeping a second expression for them meant
+  // the opening state and the after-first-pick state were derived
+  // independently, and would drift the next time the per-type table moves.
+  const [animationDraft, setAnimationDraft] = useState<AnimationControlsValue>(
+    () => animationFieldsForTypeChange('none'),
+  )
+  // REQ-0324 §4-1 — seeded from the constant default; the app-wide
+  // karaoke-style setting was removed (the value is per-cue only now).
+  const [karaokeStyleDraft, setKaraokeStyleDraft] = useState<KaraokeStyle>(KARAOKE_STYLE_DEFAULT)
 
   // REQ-047 #1: same persist-then-re-seed pattern as the colour drafts.
   // Previously the size input was uncontrolled and cleared on blur
@@ -264,6 +353,18 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   const [sizeDraft, setSizeDraft] = useState<string>(() =>
     pickFirstSelectedSize(selectedRowIds)
   )
+
+  // REQ-0298 §1 — bulk font-and-weight draft.  Seeds from the project's
+  // active font at mount; the font-change handler writes back to this
+  // draft so the FamilyWeightSelector display reflects the last picked
+  // font.  Pre-REQ-0298 the selector was bound directly to
+  // `settingsStore.activeFontId` which never mutated during bulk font
+  // apply — so the swatch stayed on the seed font even though
+  // `applyBulk({ fontId })` did re-font every selected row correctly.
+  // The bug was purely display-side (identical to the REQ-0292 §3
+  // rotation stuck-at-0 bug: read-only binding to an unrelated
+  // source-of-truth).
+  const [fontDraft, setFontDraft] = useState<FontId>(activeFontId)
 
   // REQ-20260613-016 Phase 5 — per-row layout + background drafts.  Seed
   // from the first selected row so the initial values show "what the
@@ -293,7 +394,32 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftText(pickFirstSelectedColor(selectedRowIds, 'text'))
     setColorDraftOutline(pickFirstSelectedColor(selectedRowIds, 'outline'))
     setOutlineSliderDraft(0)
-    setFadeSliderDraft(0)
+    // REQ-0324 §1 — the animation draft resets with the selection for the
+    // same reason every other draft does: a bulk control must not carry a
+    // previous selection's value into a new one.
+    setAnimationDraft(animationFieldsForTypeChange('none'))
+    // REQ-0310 §1 — back to fully opaque on every selection change, matching
+    // the field default so the bar never opens primed to hide the subtitles.
+    setTextAlphaDraft(OPACITY_DEFAULT_PERCENT)
+    setOutlineAlphaDraft(OPACITY_DEFAULT_PERCENT)
+    // REQ-0292 §1/§3/§2 — reset the new bulk-effect drafts on every
+    // selection change so the controls read as "fresh" for the newly
+    // selected rows.  Rotation resets to 0 (any drift from previous
+    // selection would be misleading), shadow depth to the same
+    // toggle-on default the inspector uses, karaoke colours to the
+    // same seeds the inspector shows before the user picks.
+    // REQ-0293 §1 — shadow starts at 0 (OFF) after selection change so
+    // the slider reads as "no bulk shadow set yet".  Pre-REQ-0293 it
+    // seeded at 4 to match the toggle-ON default, but with the Switch
+    // gone that seed would visibly apply a shadow to every row the
+    // moment the bar mounts.
+    setShadowSliderDraft(0)
+    setRotationDraft(0)
+    setKaraokeHighlightDraft(KARAOKE_DEFAULT_HIGHLIGHT_COLOR)
+    // REQ-0298 §1 — re-seed fontDraft from the project's active font
+    // on selection change.  Consistent with the "fresh selection ⇒
+    // fresh draft" convention every other bulk draft follows.
+    setFontDraft(activeFontId)
     setSizeDraft(pickFirstSelectedSize(selectedRowIds))
     const layout = pickFirstSelectedLayout(selectedRowIds)
     if (layout !== null) {
@@ -309,6 +435,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       setBgColorDraft(layout.bgColor)
       setBgOpacityDraft(String(layout.bgOpacityPercent))
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: activeFontId re-seed happens on selection change only, not on unrelated activeFont mutations.
   }, [selectedRowIds])
 
   // ---------------------------------------------------------------------
@@ -336,13 +463,23 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     // turned it into trimDeleted while it was still in the selection set).
     const cuts = useProjectStore.getState().cuts
     const snapshots = new Map<string, SubtitleEntry>()
-    for (const id of ids) {
-      const e = all.find((x) => x.id === id)
-      if (!e) continue
-      if (e.isDeleted) continue
-      if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
-      snapshots.set(id, { ...e })
-    }
+    // REQ-0342 §2 — labelled so a perf run can attribute milliseconds to a
+    // phase instead of guessing from a sampling profile of a minified build.
+    // `measureSync` is a no-op outside `?seed=demo` (perf-counter.ts).
+    measureSync('bulk.snapshot', () => {
+      // REQ-0342 §3 — index once instead of `all.find()` per id, which made
+      // this loop O(selected x total).  Measured at 3000 cues, select-all:
+      // 14.6 -> 0.9 ms.  Small next to the batching win, but it is the same
+      // quadratic shape and costs nothing to remove.
+      const byId = new Map(all.map((e) => [e.id, e]))
+      for (const id of ids) {
+        const e = byId.get(id)
+        if (!e) continue
+        if (e.isDeleted) continue
+        if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
+        snapshots.set(id, { ...e })
+      }
+    })
     if (snapshots.size === 0) return
 
     // REQ-20260615-037 — if this bulk op touches horizontal / vertical /
@@ -357,8 +494,12 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       'verticalPosition' in patch ||
       'verticalMarginPx' in patch
     const video = useProjectStore.getState().video
+    // REQ-0342 §3 — ONE store write, not one per selected row.  The loop
+    // below only BUILDS the per-row patches; `updateEntriesBatch` applies them
+    // in a single `set()`.  Measured at 3000 cues in the subtitle-table view,
+    // one font-size click: 12,666 ms of per-row writes -> 19.6 ms.
     const apply = () => {
-      const s = useProjectStore.getState()
+      const perRow = new Map<string, Partial<SubtitleEntry>>()
       for (const [id, snap] of snapshots) {
         let perRowPatch: Partial<SubtitleEntry> = patch
         if (layoutTouched && video && video.hasVideoStream) {
@@ -378,24 +519,75 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             perRowPatch = { ...patch, posX: recomputed.posX, posY: recomputed.posY }
           }
         }
-        s.updateEntry(id, { ...perRowPatch, isEdited: true })
+        perRow.set(id, { ...perRowPatch, isEdited: true })
       }
+      useProjectStore.getState().updateEntriesBatch(perRow)
     }
     const revert = () => {
-      const s = useProjectStore.getState()
+      const perRow = new Map<string, Partial<SubtitleEntry>>()
       for (const [id, snap] of snapshots) {
         // REQ-0125 — when the caller provided pre-drag field snapshots,
         // override those fields on the naive per-entry snapshot so undo
         // doesn't restore the after-drag values that the color picker's
         // preview stream would otherwise have baked in.
+        // REQ-0352 — built from the keys the edit touches, so an optional
+        // field the row has never had is restored to UNSET rather than left
+        // holding the new value.  `{ ...snap }` could not do that: an unset
+        // optional field is not an own property, and `updateEntriesBatch`
+        // merges.  See `shared/history-patch.ts`.
         const beforeOverride = preBeforeSnapshots?.get(id)
-        s.updateEntry(id, beforeOverride ? { ...snap, ...beforeOverride } : snap)
+        perRow.set(id, buildUndoPatch(snap, patch, beforeOverride))
       }
+      useProjectStore.getState().updateEntriesBatch(perRow)
     }
 
-    useHistoryStore.getState().push({ label, undo: revert, redo: apply })
-    apply()
-    onApplied(snapshots.size, label)
+    measureSync('bulk.historyPush', () => {
+      useHistoryStore.getState().push({ label, undo: revert, redo: apply })
+    })
+    measureSync('bulk.apply', apply)
+    measureSync('bulk.onApplied', () => onApplied(snapshots.size, label))
+  }
+
+  // ---------------------------------------------------------------------
+  // REQ-0335 §3 — style presets.
+  //
+  // Applying goes through `applyBulk`, which already snapshots each row and
+  // pushes ONE history entry for the whole selection (§3-5).  The patch
+  // carries no `words` / `emphasisSpans` (classified `per-cue` in
+  // `shared/style-preset.ts`), so karaoke rows keep their per-word timings.
+  //
+  // Saving is offered only for a SINGLE-row selection: "the current style"
+  // has no unambiguous meaning across rows that differ, and silently
+  // snapshotting the first one would save a look the user never pointed at.
+  // ---------------------------------------------------------------------
+  const presetSaveSource: SubtitleEntry | null =
+    selectedRowIds.size === 1
+      ? (useProjectStore
+          .getState()
+          .entries.find((e) => selectedRowIds.has(e.id)) ?? null)
+      : null
+
+  function presetGeometry() {
+    const video = useProjectStore.getState().video
+    return { videoWidthPx: video?.widthPx, videoHeightPx: video?.heightPx }
+  }
+
+  function handleApplyPreset(preset: StylePreset) {
+    applyBulk(
+      resolveStylePresetPatch(preset, presetGeometry()),
+      t('bulk.history.applyPreset', { count: selectedRowIds.size }),
+    )
+    toast.success(
+      t('preset.appliedBulk', { name: preset.name, count: selectedRowIds.size }),
+    )
+  }
+
+  function handleSavePreset(name: string) {
+    if (!presetSaveSource) return
+    const preset = buildStylePreset(presetSaveSource, name, presetGeometry())
+    if (useSettingsStore.getState().addStylePreset(preset)) {
+      toast.success(t('preset.saved', { name: preset.name }))
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -424,6 +616,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // commit so a fresh session snapshots afresh.
   const bulkTextColorBeforeRef = useRef<Map<string, string> | null>(null)
   const bulkOutlineColorBeforeRef = useRef<Map<string, string> | null>(null)
+  // REQ-0311 §5 — same per-row "before" bookkeeping for the opacity sliders, so
+  // a live drag still collapses to one undo entry.
+  const bulkTextAlphaBeforeRef = useRef<Map<string, number | undefined> | null>(null)
+  const bulkOutlineAlphaBeforeRef = useRef<Map<string, number | undefined> | null>(null)
 
   function handleTextColorPreview(hex: string) {
     if (bulkTextColorBeforeRef.current === null) {
@@ -501,6 +697,69 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     setColorDraftOutline(outlineHex)
   }
 
+  // REQ-0311 §5 — bulk opacity now streams during the drag so the selection
+  // updates live in the preview, instead of only snapping on release.
+  //
+  // This adopts the colour pickers' per-row "before" snapshot: the preview
+  // stream writes through `updateEntriesPreview` (no history), and the single
+  // commit at the end carries `preSnapshots` so undo restores each row's own
+  // prior value in ONE history entry — not one per rAF frame, and not a single
+  // wrong value smeared across rows that started out different.
+  //
+  // `textAlpha` / `outlineAlpha` are optional (undefined === 100 %, REQ-0310),
+  // so the snapshot deliberately stores `undefined` rather than normalising to
+  // 100 — otherwise undo would rewrite an untouched row's field to a literal.
+  function snapshotAlpha(
+    ref: React.MutableRefObject<Map<string, number | undefined> | null>,
+    read: (e: SubtitleEntry) => number | undefined,
+  ) {
+    if (ref.current !== null) return
+    const map = new Map<string, number | undefined>()
+    const all = useProjectStore.getState().entries
+    for (const id of selectedRowIds) {
+      const e = all.find((x) => x.id === id)
+      if (e) map.set(id, read(e))
+    }
+    ref.current = map
+  }
+
+  function commitAlpha(
+    ref: React.MutableRefObject<Map<string, number | undefined> | null>,
+    key: 'textAlpha' | 'outlineAlpha',
+    v: number,
+    label: string,
+  ) {
+    const beforeMap = ref.current
+    ref.current = null
+    const preSnapshots = beforeMap
+      ? new Map<string, Partial<SubtitleEntry>>(
+          Array.from(beforeMap.entries()).map(([id, prev]) => [id, { [key]: prev }]),
+        )
+      : undefined
+    applyBulk({ [key]: v }, label, preSnapshots)
+  }
+
+  function handleTextAlphaBulkPreview(v: number) {
+    snapshotAlpha(bulkTextAlphaBeforeRef, (e) => e.textAlpha)
+    setTextAlphaDraft(v)
+    updateEntriesPreview(Array.from(selectedRowIds), { textAlpha: v })
+  }
+  function handleTextAlphaBulkCommit(v: number) {
+    setTextAlphaDraft(v)
+    commitAlpha(bulkTextAlphaBeforeRef, 'textAlpha', v,
+      t('bulk.history.textColor', { count: selectedRowIds.size }))
+  }
+  function handleOutlineAlphaBulkPreview(v: number) {
+    snapshotAlpha(bulkOutlineAlphaBeforeRef, (e) => e.outlineAlpha)
+    setOutlineAlphaDraft(v)
+    updateEntriesPreview(Array.from(selectedRowIds), { outlineAlpha: v })
+  }
+  function handleOutlineAlphaBulkCommit(v: number) {
+    setOutlineAlphaDraft(v)
+    commitAlpha(bulkOutlineAlphaBeforeRef, 'outlineAlpha', v,
+      t('bulk.history.outlineColor', { count: selectedRowIds.size }))
+  }
+
   function handleOutlineWidthCommit(v: number) {
     // Mirror the colour-commit handlers: persist the just-applied value as
     // the swatch / slider position so the bar visually records "what was
@@ -512,13 +771,173 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     )
   }
 
-  function handleFadeDurationCommit(next: number) {
-    setFadeSliderDraft(next)
+  // REQ-0324 §1 — bulk animation.  Like every other bulk control there is
+  // no "unset" state to express, so the draft starts at the neutral spec
+  // and applying writes the WHOLE spec to every selected row.  Writing the
+  // whole spec (not just the changed key) matters for the same reason it
+  // does in the inspector: a legacy row has no `animation*` fields, and a
+  // partial patch would leave the rest falling through the migration.
+  function handleAnimationBulk(patch: Partial<AnimationControlsValue>) {
+    const next = animationEntryFields(animationDraft, patch)
+    setAnimationDraft({
+      type: next.animationType,
+      inEnabled: next.animationInEnabled,
+      outEnabled: next.animationOutEnabled,
+      durationSec: next.animationDurationSec,
+      startScalePercent: next.animationStartScalePercent,
+      blurPx: next.animationBlurPx,
+    })
+    applyBulk(next, t('bulk.history.animation', { count: selectedRowIds.size }))
+  }
+
+  // REQ-0277 Phase A — bulk-apply of the style effects.  Each handler
+  // pushes a single applyBulk call so every selected row's fields flip
+  // together with one Undo entry.  Turning shadow ON without specifying
+  // the sub-values seeds neutral defaults (depth 4, black, opaque) so
+  // the effect is visible immediately — matches the inspector's
+  // toggle-on behaviour.  REQ-0278 dropped the glow bulk-toggle here
+  // (see SPECIFICATION.md §11).
+  function handleCasingBulk(on: boolean) {
     applyBulk(
-      { fadeDurationSec: next },
-      t('bulk.history.fade', { count: selectedRowIds.size })
+      { casing: on ? 'uppercase' : 'none' },
+      t('bulk.history.casing', { count: selectedRowIds.size }),
     )
   }
+  // REQ-0293 §1 — the pre-REQ-0293 `handleShadowBulkToggle` Switch
+  // handler was removed.  Bulk shadow is now driven by the slider
+  // alone: depth = 0 turns shadow off across the selection; depth > 0
+  // turns it on with the picked value.  The commit seeds neutral
+  // colour + alpha defaults on the first non-zero commit so a fresh
+  // drag from 0 lands on a visible black shadow rather than an
+  // invisible one — same courtesy the pre-REQ-0293 toggle-on path
+  // provided.
+  function handleShadowDepthBulkCommit(depth: number) {
+    setShadowSliderDraft(depth)
+    const patch: Partial<SubtitleEntry> = { shadowDepth: depth }
+    if (depth > 0) {
+      patch.shadowColor = '#000000'
+      patch.shadowAlpha = 100
+    }
+    applyBulk(
+      patch,
+      t('bulk.history.shadow', { count: selectedRowIds.size }),
+    )
+  }
+  // REQ-0332 §5 — bulk line spacing (行間).
+  function handleLineSpacingBulkCommit(percent: number) {
+    setLineSpacingDraft(percent)
+    applyBulk(
+      { lineSpacingPercent: percent },
+      t('bulk.history.lineSpacing', { count: selectedRowIds.size }),
+    )
+  }
+  function handleRotationBulk(deg: number) {
+    const normalized = ((deg % 360) + 360) % 360
+    // REQ-0292 §3 — write the normalised value back into the local
+    // draft so the NumberStepperInput's `value` prop advances with
+    // each click.  Fixes the pre-REQ-0292 bug where `value={0}` was
+    // hardcoded, causing the stepper to compute `next = 0 + 15`
+    // every click (always applying 15) with the minus button
+    // permanently disabled (`value <= min`).
+    setRotationDraft(normalized)
+    applyBulk(
+      { rotation: normalized },
+      t('bulk.history.rotation', { count: selectedRowIds.size }),
+    )
+  }
+
+  // REQ-0286 §5 — karaoke bulk toggle.  Seeds ONLY the highlight
+  // colour (yellow accent) so every selected row gets a visible sweep
+  // in one operation.  Base (unspoken) colour is deliberately NOT set:
+  // each selected row falls back to its own `textColorHex` at render
+  // time (REQ-0290 §1) rather than being clobbered by a uniform
+  // default.  Free tier: the row is hidden entirely (tier gate above),
+  // so this handler is unreachable on NSIS builds.
+  function handleKaraokeBulkToggle(on: boolean) {
+    applyBulk(
+      on
+        ? {
+            karaokeEnabled: true,
+            karaokeHighlightColor: karaokeHighlightDraft,
+          }
+        : { karaokeEnabled: false },
+      t('bulk.history.karaoke', { count: selectedRowIds.size }),
+    )
+  }
+
+  // REQ-0336 §2-6 — bulk 「発話タイミング」.  Never disabled here: the
+  // selection is heterogeneous by nature, so the bar cannot claim "unusable"
+  // for all of it.  Writing `true` across rows that have no usable per-word
+  // timings is harmless — `resolveKaraokeTiming` still resolves them to the
+  // even split, because the data half of the judgement is independent of this
+  // flag.  The tooltip says so rather than a badge (no duplicate ON/OFF
+  // surface).
+  function handleKaraokeWordTimingsBulkToggle(on: boolean) {
+    applyBulk(
+      { karaokeUseWordTimings: on },
+      t('bulk.history.karaoke', { count: selectedRowIds.size }),
+    )
+  }
+
+  // REQ-0322 §3 — bulk karaoke display style.  Writes a CONCRETE value to
+  // every selected row (never `undefined`), because the point of the control
+  // is "make these rows all sweep / all switch" — clearing them back to
+  // "follow the default" is not a bulk operation the owner asked for, and
+  // silently writing `undefined` would look like the control did nothing.
+  function handleKaraokeStyleBulk(v: string) {
+    const next = coerceKaraokeStyle(v)
+    setKaraokeStyleDraft(next)
+    applyBulk(
+      { karaokeStyle: next },
+      t('bulk.history.karaoke', { count: selectedRowIds.size }),
+    )
+  }
+
+  // REQ-0292 §2 / REQ-0293 §2 — bulk karaoke highlight picker only.
+  // Same preview/commit pattern as the text / outline colour bulk
+  // pickers above so a drag in the popover streams live updates to
+  // every selected row's overlay, and one history op fires at
+  // popover close.  The base-colour bulk picker (and its pre-ref)
+  // were removed with REQ-0293 — base now tracks each row's
+  // `textColorHex` directly.
+  const bulkKaraokeHighlightBeforeRef = useRef<Map<string, string | undefined> | null>(null)
+
+  function handleKaraokeHighlightBulkPreview(hex: string) {
+    if (bulkKaraokeHighlightBeforeRef.current === null) {
+      const map = new Map<string, string | undefined>()
+      const all = useProjectStore.getState().entries
+      for (const id of selectedRowIds) {
+        const e = all.find((x) => x.id === id)
+        if (e) map.set(id, e.karaokeHighlightColor)
+      }
+      bulkKaraokeHighlightBeforeRef.current = map
+    }
+    setKaraokeHighlightDraft(hex)
+    updateEntriesPreview(Array.from(selectedRowIds), { karaokeHighlightColor: hex })
+  }
+  function handleKaraokeHighlightBulkCommit(hex: string) {
+    const beforeMap = bulkKaraokeHighlightBeforeRef.current
+    bulkKaraokeHighlightBeforeRef.current = null
+    const preSnapshots = beforeMap
+      ? new Map<string, Partial<SubtitleEntry>>(
+          Array.from(beforeMap.entries()).map(([id, v]) => [id, { karaokeHighlightColor: v }]),
+        )
+      : undefined
+    applyBulk(
+      { karaokeHighlightColor: hex },
+      t('bulk.history.karaoke', { count: selectedRowIds.size }),
+      preSnapshots,
+    )
+    setKaraokeHighlightDraft(hex)
+  }
+
+  // REQ-0293 §2 — bulk karaoke base-colour handlers removed along
+  // with the base picker.  The base half of the karaoke sweep now
+  // tracks each row's `textColorHex` at render time; there is no
+  // per-cue override to bulk-set.
+
+  // REQ-0308 §3 — the bulk keyword-emphasis handlers were removed along with
+  // their row.  See the comment at the (now absent) row in the JSX below.
 
   // REQ-20260613-016 Phase 5 — per-row layout / background bulk handlers.
   // Layout fields (horizontal / vertical / margin) commit independently
@@ -544,7 +963,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   function handleMarginCommit(raw: string) {
     const v = parseInt(raw, 10)
     if (isNaN(v)) return
-    const clamped = Math.max(0, Math.min(300, v))
+    const clamped = Math.max(MARGIN_V_MIN_PX, Math.min(MARGIN_V_MAX_PX, v))
     applyBulk(
       { verticalMarginPx: clamped },
       t('bulk.history.margin', { count: selectedRowIds.size })
@@ -596,6 +1015,11 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // have had heterogeneous overrides before the bulk apply.
   // REQ-022 step 2.
   function handleFontChange(next: FontId | undefined) {
+    // REQ-0298 §1 — update the draft so the FamilyWeightSelector
+    // reflects the newly picked font.  `undefined` means "fall back
+    // to project default" — visualise that as the project's active
+    // font (same seed we use at selection-change re-init).
+    setFontDraft(next ?? activeFontId)
     applyBulk(
       { fontId: next },
       t('bulk.history.font', { count: selectedRowIds.size })
@@ -681,7 +1105,18 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         e.outlineThicknessPx,
         videoWidthPx,
         font,
-        e.fontId
+        e.fontId,
+        // REQ-0306 §2 / REQ-0307 — respect each row's keyword emphasis size
+        // when bulk-wrapping.  In "pack" mode `input` has had every `\N`
+        // deleted, so the span ranges are shifted onto packed coordinates.
+        e.keywordEmphasisEnabled === true
+          ? {
+              ranges: mode === 'pack'
+                ? mapRangesAcrossBreakCollapse(e.text, resolveEmphasisRanges(e), 0)
+                : resolveEmphasisRanges(e),
+              scale: clampEmphasisScalePercent(e.emphasisScalePercent) / 100,
+            }
+          : undefined
       )
       if (rewrapped !== e.text) {
         snapshots.set(id, { ...e })
@@ -804,6 +1239,25 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         >
           <WrapText className="h-3.5 w-3.5" />
         </button>
+        {/* REQ-0335 §3 — apply a saved style preset to EVERY selected row
+            as one undoable operation.  Sits in the "actions that apply
+            across the selection" row for the same reason it sits at the
+            top of the inspector's style cluster: it writes every style
+            field below it at once. */}
+        {/* REQ-0338 §3-2 — the icon trigger, not the filled secondary Button:
+            it was the one control in this row painted as a solid block, which
+            read as the row's primary action when it is a sibling of the other
+            two.  Same `triggerVariant` the inspector took in REQ-0337 §3.
+            The border classes are passed here rather than baked into the
+            variant because THIS row's icons wear a border (`border bg-input`)
+            while the inspector's do not — the variant decides "icon square,
+            not labelled button"; the row decides its own chrome. */}
+        <StylePresetControls
+          triggerVariant="toolbar"
+          className="ml-auto border border-border bg-input text-foreground hover:border-line-strong hover:bg-input"
+          onSaveCurrent={presetSaveSource ? handleSavePreset : null}
+          onApply={handleApplyPreset}
+        />
       </div>
 
       {/* Controls cluster — REQ-20260614-001 補遺⑪ で 字幕 / レイアウト /
@@ -825,16 +1279,24 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           <div className="text-body font-semibold text-foreground">
             {t('timeline.inspector.subtitleSection')}
           </div>
-          <BulkFontPicker onPick={handleFontChange} />
-          {/* Font size */}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('bulk.size')}</span>
-            {/* REQ-20260615-059 B — ±10 chevron stepper.  Numeric draft is
-                seeded from the first selected row at selection-change time
-                (`pickFirstSelectedSize`); the stepper commits-on-blur or
-                chevron-click via the existing `handleSizeCommit` so the
-                bulk-write path is unchanged.  When the seed is empty we
-                fall back to the default size from BURNIN_DEFAULTS. */}
+          {/* REQ-0275 §5 — two-tier family + weight picker for bulk.
+              Uses activeFontId as the display seed when no rows are
+              selected or a heterogeneous selection collapses.  Bulk
+              application still goes through `applyBulk({ fontId })`
+              (via handleFontChange) so a single Undo restores every
+              affected row's prior fontId in one step. */}
+          <FamilyWeightSelector
+            // REQ-0348 §1 — plain font names, same reasoning as the inspector:
+            // this is where a font is picked mid-edit, not compared.
+            showCoverageBadges={false}
+            value={fontDraft}
+            onChange={(nextId) => handleFontChange(nextId)}
+            // REQ-0296 §3 — show "フォント" / "ウェイト" left labels so
+            // the two font rows line up with size / colours / etc.
+            showLabels
+          />
+          {/* Font size — REQ-0298 §4-2 wrapped in shared StyleRow. */}
+          <StyleRow label={t('bulk.size')}>
             <NumberStepperInput
               value={parseInt(sizeDraft, 10) || 100}
               min={FONT_SIZE_MIN_PX}
@@ -847,61 +1309,191 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               ariaLabel={t('bulk.size')}
               title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
             />
-          </label>
-          {/* Text color */}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('bulk.textColor')}</span>
-            <ColorPicker
-              value={colorDraftText ?? '#FFFFFF'}
-              onChange={handleTextColorPreview}
-              onCommit={handleTextColorCommit}
-              onPairApply={handleColorPairCommit}
-              swatchOnly
-              heading={t('common:colorPicker.headingText')}
-            />
-          </label>
-          {/* Outline color */}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('bulk.outlineColor')}</span>
-            <ColorPicker
-              value={colorDraftOutline ?? '#000000'}
-              onChange={handleOutlineColorPreview}
-              onCommit={handleOutlineColorCommit}
-              onPairApply={handleColorPairCommit}
-              swatchOnly
-              heading={t('common:colorPicker.headingOutline')}
-            />
-          </label>
-          {/* Outline width — REQ-20260615-061 B: slider now wrapped in
-              a w-[50%] cell + `fullWidth`, matching the inspector's
-              outline / fade rows so the bar's left and right edges
-              line up between this panel and the inspector. */}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('bulk.outlineWidth')}</span>
-            <div className="w-[50%]">
-              <OutlineThicknessSlider
-                value={outlineSliderDraft}
-                onCommit={handleOutlineWidthCommit}
-                ariaLabel={t('bulk.outlineWidth')}
+          </StyleRow>
+          {/* Text color + opacity (REQ-0310 §1) — same one-line shape as the
+              inspector, in the same shared 224px control column. */}
+          <StyleRow label={t('bulk.textColor')}>
+            <div className="flex items-center gap-2">
+              <ColorPicker
+                value={colorDraftText ?? '#FFFFFF'}
+                onChange={handleTextColorPreview}
+                onCommit={handleTextColorCommit}
+                onPairApply={handleColorPairCommit}
+                swatchOnly
+                heading={t('common:colorPicker.headingText')}
+              />
+              <OpacityPercentSlider
+                value={textAlphaDraft}
+                onPreview={handleTextAlphaBulkPreview}
+                onCommit={handleTextAlphaBulkCommit}
+                ariaLabel={t('styleCell.textOpacity')}
                 fullWidth
               />
             </div>
-          </label>
-          {/* REQ-20260615-050 — fade slider replaces the legacy ON/OFF
-              Switch.  REQ-20260615-061 B: same w-[50%] + fullWidth
-              treatment as Outline width above so the two bars share
-              their start / end X and align with the inspector. */}
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('bulk.fade')}</span>
-            <div className="w-[50%]">
-              <FadeDurationSlider
-                value={fadeSliderDraft}
-                onCommit={handleFadeDurationCommit}
-                ariaLabel={t('bulk.fade')}
+          </StyleRow>
+          {/* Outline color + opacity (REQ-0310 §1). */}
+          <StyleRow label={t('bulk.outlineColor')}>
+            <div className="flex items-center gap-2">
+              <ColorPicker
+                value={colorDraftOutline ?? '#000000'}
+                onChange={handleOutlineColorPreview}
+                onCommit={handleOutlineColorCommit}
+                onPairApply={handleColorPairCommit}
+                swatchOnly
+                heading={t('common:colorPicker.headingOutline')}
+              />
+              <OpacityPercentSlider
+                value={outlineAlphaDraft}
+                onPreview={handleOutlineAlphaBulkPreview}
+                onCommit={handleOutlineAlphaBulkCommit}
+                ariaLabel={t('styleCell.outlineOpacity')}
                 fullWidth
               />
             </div>
-          </label>
+          </StyleRow>
+          {/* Outline width — REQ-0300 §2 dropped inner `w-[65%]`;
+              StyleRow provides the fixed control column. */}
+          <StyleRow label={t('bulk.outlineWidth')}>
+            <OutlineThicknessSlider
+              value={outlineSliderDraft}
+              onCommit={handleOutlineWidthCommit}
+              ariaLabel={t('bulk.outlineWidth')}
+              fullWidth
+              // REQ-0344 §2-1 — keyed off this bar's own background draft, the
+              // same value its BG switch below shows.  A bulk apply of 0 while
+              // that switch is on would push the "box renders nothing" state
+              // (RES-0340 §1-4) onto every selected row at once.
+              min={bgEnabledDraft ? 1 : 0}
+              minReason={t('styleCell.outlineWidthBgMinNote')}
+            />
+          </StyleRow>
+          {/* REQ-0292 §4 — bulk-edit style-effect row order mirrors
+              the inspector: shadow, karaoke (+ colours), casing,
+              rotation, fade.  Bulk-edit intentionally has no text
+              input (text is per-cue) but every other row lines up
+              with the inspector so users switching between the two
+              surfaces don't relearn the layout.
+              REQ-0293 §1 — shadow row: single ShadowDepthSlider (0–50,
+              0=OFF).  Pre-REQ-0293 had a separate Switch that
+              duplicated the "depth is 0" state; removing it lets the
+              slider alone drive both the tag emission and the ON/OFF
+              affordance.  Draft starts at 0 so a fresh selection reads
+              as "no bulk shadow set" and dragging past 0 activates.
+              REQ-0293 §2 — karaoke row: highlight ColorPicker only.
+              The base-colour picker was removed because base now
+              always tracks each row's own `textColorHex`; users
+              change the base colour by changing the cue's text
+              colour.
+              REQ-0292 §3 — rotation NumberStepperInput bound to
+              `rotationDraft` (was `value={0}` hardcoded pre-REQ-0292). */}
+          <StyleRow label={t('styleCell.shadow')}>
+            <ShadowDepthSlider
+              value={shadowSliderDraft}
+              onCommit={handleShadowDepthBulkCommit}
+              ariaLabel={t('styleCell.shadowDepth')}
+              fullWidth
+            />
+          </StyleRow>
+          {/* REQ-0278 — glow bulk-toggle removed here (SPECIFICATION.md §11). */}
+          {/* REQ-0286 §5 / REQ-0293 §2 — karaoke bulk cluster.  Hidden
+              on free tier (`canUseKaraokeInTier(isMsix)` returns
+              false).  Highlight picker stays visible whenever the tier
+              gate passes so the user can prepare an accent colour and
+              then flip the switch.  Base picker was removed with
+              REQ-0293 — base always tracks each row's `textColorHex`. */}
+          {/* REQ-0296 §2 — single-row karaoke: Switch + highlight
+              ColorPicker on the same row as the label.  Matches the
+              inspector layout post-REQ-0296.  Picker stays visible
+              regardless of Switch state so the row height is
+              stable; the colour is applied when the Switch is ON.
+              Tier gate hides the entire row on free tier. */}
+          {/* REQ-0299 §3 — karaoke state text ("既定色で開始") removed.
+              Row is now `[label] [Switch] [ColorPicker]`. */}
+          {/* REQ-0300 §1 — Switch + Picker adjacent (no flex-1 spacer),
+              both left-aligned inside StyleRow's fixed control column. */}
+          {canUseKaraokeInTier(useAppEnvStore((s) => s.isMsix) ?? false) && (
+            <StyleRow label={t('styleCell.karaokeRowLabel')}>
+              {/* `min-w-0` so the 「タイミング」 label truncates rather than
+                  pushing the second Switch out of the shared control column. */}
+              <div className="flex min-w-0 items-center gap-2">
+                <Switch onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
+                <ColorPicker
+                  value={karaokeHighlightDraft}
+                  onChange={handleKaraokeHighlightBulkPreview}
+                  onCommit={handleKaraokeHighlightBulkCommit}
+                  swatchOnly
+                  heading={t('styleCell.karaokeHighlightColor')}
+                />
+                {/* REQ-0336 §2 — 「発話タイミング」, same position and shape as
+                    the inspector's so the two surfaces read as siblings. */}
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <div className="ml-1 flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-caption text-fg-muted">
+                        {t('styleCell.karaokeWordTimingsShort')}
+                      </span>
+                      <Switch
+                        onCheckedChange={handleKaraokeWordTimingsBulkToggle}
+                        aria-label={t('styleCell.karaokeWordTimings')}
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[280px] text-left">
+                    {t('styleCell.karaokeWordTimingsBulk')}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </StyleRow>
+          )}
+          {/* REQ-0322 §3 — karaoke display style became PER-CUE, which is
+              exactly what makes a bulk control meaningful: before, one
+              app-wide value already covered every row and this Select would
+              have been a duplicate of the settings tab.  Unlike the other
+              bulk controls there is no "unset" state to represent, so the
+              Select starts on the current default and applying it pins every
+              selected row to that style.  Same tier gate as the karaoke row
+              above (unreachable on free tier). */}
+          {canUseKaraokeInTier(useAppEnvStore((s) => s.isMsix) ?? false) && (
+            <StyleRow label={t('styleCell.karaokeStyleRowLabel')}>
+              <Select
+                value={karaokeStyleDraft}
+                onValueChange={handleKaraokeStyleBulk}
+              >
+                <SelectTrigger className="h-8 w-full" aria-label={t('styleCell.karaokeStyleRowLabel')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="switch">{t('styleCell.karaokeStyleSwitch')}</SelectItem>
+                  <SelectItem value="sweep">{t('styleCell.karaokeStyleSweep')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </StyleRow>
+          )}
+          {/* REQ-0308 §3 — the bulk keyword-emphasis row was REMOVED.  Which
+              characters get emphasised is a per-cue choice (REQ-0307's picker),
+              so there was nothing meaningful to bulk-apply: toggling emphasis on
+              across a selection lit up nothing, and the colour / size knobs only
+              restyled whatever each cue had already been given individually.
+              The inspector and 設定 > 字幕スタイル keep the full emphasis UI.
+              Per-row emphasis is still honoured by the two wrap buttons above
+              (they read each row's own spans when measuring). */}
+          {/* REQ-0299 §3 — casing state text ("ALL CAPS") removed. */}
+          <StyleRow label={t('styleCell.casing')}>
+            <Switch onCheckedChange={handleCasingBulk} aria-label={t('styleCell.casing')} />
+          </StyleRow>
+          <StyleRow label={t('styleCell.rotation')}>
+            <NumberStepperInput
+              value={rotationDraft}
+              min={0}
+              max={359}
+              step={15}
+              onCommit={handleRotationBulk}
+              ariaLabel={t('styleCell.rotation')}
+            />
+          </StyleRow>
+          {/* REQ-0324 §1 — the standalone Fade row moved into the new
+              animation section below, mirroring the inspector.  Two
+              controls writing the same effect is what this REQ removes. */}
         </div>
 
         {/* § レイアウト — Horizontal, Vertical, Margin. */}
@@ -909,8 +1501,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           <div className="text-body font-semibold text-foreground">
             {t('timeline.inspector.layoutSection')}
           </div>
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('styleCell.layoutH')}</span>
+          <StyleRow label={t('styleCell.layoutH')}>
             {/* REQ-20260615-059 C — same segmented control the inspector
                 uses.  `null` value renders nothing highlighted (= mixed
                 selection); a click applies the value to every selected
@@ -919,48 +1510,50 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               value={hPosDraft}
               onChange={(v) => handleHPosCommit(v)}
               ariaLabel={t('subtitlePosition.horizontal')}
+              fullWidth
               options={[
                 { value: 'left',   label: t('subtitlePosition.left') },
                 { value: 'center', label: t('subtitlePosition.center') },
                 { value: 'right',  label: t('subtitlePosition.right') },
               ]}
             />
-          </label>
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('styleCell.layoutV')}</span>
+          </StyleRow>
+          <StyleRow label={t('styleCell.layoutV')}>
             <BulkSegmentGroup<'top' | 'center' | 'bottom'>
               value={vPosDraft}
               onChange={(v) => handleVPosCommit(v)}
               ariaLabel={t('subtitlePosition.vertical')}
+              fullWidth
               options={[
                 { value: 'top',    label: t('subtitlePosition.top') },
                 { value: 'center', label: t('subtitlePosition.center') },
                 { value: 'bottom', label: t('subtitlePosition.bottom') },
               ]}
             />
-          </label>
+          </StyleRow>
           {/* REQ-0140 — disable the bulk margin stepper when the
               uniform vertical draft is `'center'`.  When the selection
               is mixed (vPosDraft === null) the stepper stays enabled;
               committing a value applies it to every selected row but
               only affects the top/bottom-aligned ones (center-aligned
               rows keep the value in storage but ignore it at render). */}
-          <label
-            className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground"
+          <StyleRow
+            label={t('styleCell.marginV')}
             title={
               vPosDraft === 'center'
                 ? t('subtitlePosition.marginDisabledCenter')
                 : undefined
             }
           >
-            <span>{t('styleCell.marginV')}</span>
             {/* REQ-20260615-059 B — ±10 stepper to keep margin in step
-                with size adjustments.  Range [0, 300] same as before. */}
+                with size adjustments.  REQ-0269 A raised the ceiling
+                to 9999 (`MARGIN_V_MAX_PX`); input widens to `w-16`. */}
             <NumberStepperInput
               value={parseInt(marginDraft, 10) || 0}
-              min={0}
-              max={300}
+              min={MARGIN_V_MIN_PX}
+              max={MARGIN_V_MAX_PX}
               step={10}
+              widthClass="w-16"
               onCommit={(next) => {
                 setMarginDraft(String(next))
                 handleMarginCommit(String(next))
@@ -968,7 +1561,33 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               disabled={vPosDraft === 'center'}
               ariaLabel={t('subtitlePosition.margin')}
             />
-          </label>
+          </StyleRow>
+          {/* REQ-0332 §5 — 行間.  Next to the margin, mirroring the
+              inspector's レイアウト ordering so the two surfaces read the
+              same way. */}
+          <StyleRow label={t('styleCell.lineSpacing')} title={t('styleCell.lineSpacingHint')}>
+            <LineSpacingSlider
+              value={lineSpacingDraft}
+              onCommit={handleLineSpacingBulkCommit}
+              ariaLabel={t('styleCell.lineSpacing')}
+              fullWidth
+            />
+          </StyleRow>
+        </div>
+
+        {/* § アニメーション — REQ-0324 §1.  Own section, ordered
+            subtitle / layout / animation / background to match the
+            inspector exactly.  Uses the SAME `AnimationControls`
+            component, so the two surfaces cannot drift apart. */}
+        <div className="flex flex-col gap-2 border-t border-border/60 pt-2 mt-2">
+          <div className="text-body font-semibold text-foreground">
+            {t('timeline.inspector.animationSection')}
+          </div>
+          <AnimationControls
+            value={animationDraft}
+            onChange={handleAnimationBulk}
+            includeBlur={ANIMATION_BLUR_ENABLED}
+          />
         </div>
 
         {/* § 背景色 — Bg ON/OFF, Bg colour, Opacity.  REQ-0096 attaches a
@@ -979,10 +1598,9 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             <span>{t('timeline.inspector.backgroundSection')}</span>
             <HelpIcon content={t('timeline.inspector.backgroundSectionHelp')} />
           </div>
-          <label className="flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground">
-            <span>{t('styleCell.bgEnabled')}</span>
+          <StyleRow label={t('styleCell.bgEnabled')}>
             <Switch checked={bgEnabledDraft} onCheckedChange={handleBgEnabledToggle} aria-label={t('styleCell.bgEnabled')} />
-          </label>
+          </StyleRow>
           {/* REQ-20260615-062 — background colour now uses the same
               segmented control the inspector uses (and the bulk-edit
               horizontal / vertical rows already use), replacing the
@@ -992,27 +1610,26 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               existing `handleBgColorChange` path.  Mixed selections
               render with no active segment, matching how H / V
               segments behave when the selection's values disagree. */}
-          <label className={cn(
-            'flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground',
-            !bgEnabledDraft && 'opacity-40'
-          )}>
-            <span>{t('styleCell.bgColor')}</span>
+          <StyleRow
+            label={t('styleCell.bgColor')}
+            className={cn(!bgEnabledDraft && 'opacity-40')}
+          >
             <BulkSegmentGroup<'black' | 'white'>
               value={bgColorDraft}
               onChange={(v) => handleBgColorChange(v)}
               disabled={!bgEnabledDraft}
               ariaLabel={t('styleCell.bgColor')}
+              fullWidth
               options={[
                 { value: 'black', label: t('background.black') },
                 { value: 'white', label: t('background.white') },
               ]}
             />
-          </label>
-          <label className={cn(
-            'flex items-center justify-between gap-2 text-callout font-semibold text-muted-foreground',
-            !bgEnabledDraft && 'opacity-40'
-          )}>
-            <span>{t('styleCell.bgOpacity')}</span>
+          </StyleRow>
+          <StyleRow
+            label={t('styleCell.bgOpacity')}
+            className={cn(!bgEnabledDraft && 'opacity-40')}
+          >
             {/* REQ-20260615-059 B — ±10 stepper for bg opacity %.
                 Disabled when the bulk panel's bgEnabledDraft is off
                 (matches the pre-REQ disabled-input behaviour). */}
@@ -1028,7 +1645,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               disabled={!bgEnabledDraft}
               ariaLabel={t('styleCell.bgOpacity')}
             />
-          </label>
+          </StyleRow>
         </div>
 
         {/* REQ-20260615-060 B — the bottom wrap-actions cluster was
@@ -1041,155 +1658,3 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Bulk font picker — Popover content mirrors RowFontSelector's, but the
-// trigger is a fixed "Font" pill with no row-specific state.  Kept inline
-// because pulling it into its own file would duplicate the use-installed-
-// fonts + font-registry filter logic without giving any new abstraction.
-// ---------------------------------------------------------------------------
-function BulkFontPicker({ onPick }: { onPick: (next: FontId | undefined) => void }) {
-  const { t } = useTranslation(['step2', 'step1', 'common'])
-  const [open, setOpen] = useState(false)
-  const installed = useInstalledFontIds()
-  // REQ-0171 — `activeFontId` binding removed alongside the reset
-  // button: the only remaining consumer was the button's
-  // "current default's display name" subtitle.  Tier logic below
-  // reads `isMsix` directly and does not need the active-font
-  // reference.
-  // REQ-088 #4 — mirror RowFontSelector: NSIS (free) tier restricts the
-  // bulk picker to the bundled default.  `null` treated as the more
-  // restrictive free tier until the boot-time IPC resolves.
-  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
-  // REQ-091 — Store upsell trigger.
-  const openUpsell = useStoreUpsellStore((s) => s.openUpsell)
-  // REQ-0153 §2 — alphabetical registry order (same policy as
-  // RowFontSelector / FontPicker).  Selectability / tier gating
-  // unchanged.
-  const sortedRegistry = getSortedFontRegistry()
-  const selectable = sortedRegistry.filter(
-    (m) => installed.has(m.id) && canSelectFontInTier(isMsix, m.id),
-  )
-  // REQ-091 — same tier-locked discovery list as RowFontSelector.
-  const tierLocked = !isMsix
-    ? sortedRegistry.filter((m) => !canSelectFontInTier(isMsix, m.id))
-    : []
-
-  function pick(next: FontId | undefined) {
-    onPick(next)
-    setOpen(false)
-  }
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'inline-flex items-center justify-between gap-1.5',
-            'h-7 px-2 rounded border bg-input text-body-sm text-foreground',
-            'border-border hover:border-line-strong',
-            'focus:outline-none focus-visible:outline-none'
-          )}
-          aria-label={t('bulkRowFont.label')}
-        >
-          <span>{t('bulkRowFont.label')}</span>
-          <ChevronDown className="h-3 w-3 text-fg-muted" aria-hidden="true" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        // REQ-0169 §1 — same viewport-clamp + internal-scroll pattern
-        // as `row-font-selector.tsx`, applied here for parity.  The
-        // bulk font popover shares this component's list shape (~13
-        // rows + tier-locked block) and would otherwise clip against
-        // the top edge whenever the bulk-edit bar is docked high in
-        // the STEP 2 layout.
-        collisionPadding={8}
-        className="w-[260px] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
-      >
-        <div className="flex flex-col">
-          {/* REQ-0171 Phase 2 (owner approval option A) — the
-              "Use project default (Noto Sans JP SemiBold)" reset
-              button + its separator that used to sit here were
-              removed.  Rationale traced in RES-0171 §3.5: the
-              transcription path (step1.tsx:460 / 478) captures
-              `activeFontId` at transcribe-time and writes it into
-              every new row's `fontId` — those rows are pinned, not
-              inheriting, so a mid-session default change never
-              retroactively repaints them anyway.  The only paths
-              that leave `entry.fontId === undefined` (inherit) are
-              (a) STEP 2's manual "Add row" (step2.tsx:647-660,
-              deliberately no `fontId` field), (b) uninstall
-              recovery (font-picker.tsx:373 writes `undefined` when
-              the referenced font disappears), and (c) fixture data
-              (dev-only).  None of those are triggered from the
-              bulk-edit bar, so the bulk "clear to inherit" button
-              had no user-visible workflow paired with it.  The
-              button also carried the "デフォルト" label that
-              REQ-0164/0169 already erased everywhere else, making
-              its continued presence inconsistent.  Compare with
-              row-font-selector.tsx (REQ-0170): the row-picker's
-              list `onClick` already coalesces `m.id === activeFontId
-              → undefined`, so the row-picker button was purely
-              redundant; the bulk picker's list `onClick={() =>
-              pick(m.id)}` has no such coalesce, so this removal
-              consciously drops the "bulk-clear to undefined"
-              affordance — the `undefined` semantic itself is
-              preserved (uninstall recovery + add-row still write
-              it), only the UI trigger is gone. */}
-          {selectable.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => pick(m.id)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-fg-secondary hover:bg-accent/40"
-            >
-              <span className="h-2 w-2 rounded-full bg-surface-4 shrink-0" aria-hidden="true" />
-              <span
-                className="flex-1 min-w-0 truncate"
-                style={{ fontFamily: `'${m.cssFontFamily}'`, fontWeight: m.weight }}
-              >
-                {m.displayName}
-              </span>
-              <FontLangBadges languages={m.languages} />
-              {m.lacksRareKanji && (
-                <span
-                  className="inline-flex items-center shrink-0 text-warning-soft/80"
-                  title={t('step1:fontPicker.note.missingRareKanjiHelp')}
-                >
-                  <AlertCircle className="h-3 w-3" aria-hidden="true" />
-                </span>
-              )}
-            </button>
-          ))}
-
-          {/* REQ-091 — tier-locked discovery rows, mirror of the same
-              block in row-font-selector.tsx.  Empty in MSIX. */}
-          {tierLocked.length > 0 && (
-            <>
-              <div className="my-1 h-px bg-surface-2" />
-              {tierLocked.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => { openUpsell(); setOpen(false) }}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded text-body-sm text-left text-fg-muted hover:bg-accent/40"
-                  title={t('step1:fontPicker.action.lockedPaidOnly')}
-                >
-                  <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
-                  <span
-                    className="flex-1 min-w-0 truncate"
-                    style={{ fontFamily: `'${m.cssFontFamily}'`, fontWeight: m.weight }}
-                  >
-                    {m.displayName}
-                  </span>
-                  <FontLangBadges languages={m.languages} />
-                </button>
-              ))}
-            </>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}

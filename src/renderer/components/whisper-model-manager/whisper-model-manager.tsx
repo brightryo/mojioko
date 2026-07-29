@@ -36,6 +36,7 @@ import {
   downloadModel
 } from '@/services/transcription'
 import { DownloadFailedError, type DownloadRun } from '@/services/transcription'
+import { useSettingsStore } from '@/stores/settings-store'
 import {
   useDownloadActiveStore,
   selectActiveKeys,
@@ -289,12 +290,38 @@ export function WhisperModelManager({
     runsRef.current.get(modelId)?.cancel()
   }
 
+  /**
+   * REQ-0315 §3 — mirror main's write of `transcriptionDefaults.whisperModel`
+   * back into the renderer store.
+   *
+   * `transcription.ts` (`setActiveModel` / `uninstallModel`) writes BOTH
+   * `activeModelId` and `transcriptionDefaults.whisperModel` to settings.json.
+   * Nothing used to write `whisperModel` back into the Zustand store, so it
+   * stayed at its boot-hydrated value; App.tsx's debounced save then sent that
+   * stale `transcriptionDefaults` object and — because the field merges as
+   * `incoming-wins` at whole-object granularity — reverted the on-disk value.
+   *
+   * That was NOT a race (RES-0314 §3): no timing was required, any later
+   * settings change at all reproduced it, and the value stayed reverted until
+   * the next restart.  Making the store the truth is the smallest fix that
+   * removes the cause rather than compensating for it in the merge.
+   *
+   * `activeModelId` needs no equivalent — the renderer sends `null` for it and
+   * the merge rule is `incoming-else-existing`, so main's value already
+   * survives.
+   */
+  function syncWhisperModelToStore(activeModelId: WhisperModelId | null): void {
+    if (!activeModelId) return
+    useSettingsStore.getState().updateTranscriptionDefaults({ whisperModel: activeModelId })
+  }
+
   // --- Activate ---
 
   async function handleActivate(model: ModelInfo) {
     const result = await setActiveModel(model.id)
     if (result.ok) {
       setState(result.data)
+      syncWhisperModelToStore(result.data.activeModelId)
       onActiveModelChange?.(result.data.activeModelId)
       toast.success(t('model.activate_success', { modelName: model.displayName }))
       setIsOpen(false) // switched active model → collapse
@@ -314,6 +341,7 @@ export function WhisperModelManager({
     const result = await uninstallModel(model.id)
     if (result.ok) {
       setState(result.data)
+      syncWhisperModelToStore(result.data.activeModelId)
       onActiveModelChange?.(result.data.activeModelId)
       toast.success(t('model.uninstall_success', { modelName: model.displayName }))
       if (!result.data.activeModelId) {

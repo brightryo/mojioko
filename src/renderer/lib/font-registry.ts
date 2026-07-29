@@ -1,4 +1,5 @@
 import { getFontMeta, type FontId, type FontMeta } from '../../shared/fonts'
+import { bumpFontCacheVersion } from '@/stores/font-cache-version-store'
 
 /**
  * Runtime font loader for the renderer side.
@@ -29,10 +30,19 @@ async function loadOne(meta: FontMeta): Promise<FontFace | null> {
     // Bundled font is registered via fonts.css already.  Wait for the family
     // to actually report ready so callers awaiting this promise can rely on
     // the family being usable for measurement / canvas-draw.
+    //
+    // REQ-0355 — this early return is an UNCHECKED CONTRACT with fonts.css:
+    // marking a font `bundled` without declaring an `@font-face` for its exact
+    // weight leaves it with no face at all, and CSS font matching then falls
+    // back to a neighbouring weight instead of failing.  Nothing here can
+    // detect that (`document.fonts.load`/`.check` both report success against
+    // the fallback), which is how REQ-0353 shipped six weights that rendered
+    // as two.  `npm run verify:font-weights` is the gate that does detect it.
     if ('fonts' in document) {
       try { await document.fonts.load(`${meta.weight} 100px '${meta.cssFontFamily}'`) } catch { /* swallow */ }
     }
     console.info(`[font-registry] bundled ${meta.id} (${meta.cssFontFamily}) — fonts.css covers it`)
+    notifyFamilyUsable()
     return null
   }
 
@@ -89,7 +99,39 @@ async function loadOne(meta: FontMeta): Promise<FontFace | null> {
   // report can include it.
   const check = document.fonts.check(`${meta.weight} 16px "${meta.cssFontFamily}"`)
   console.info(`[font-registry] ✓ ${meta.id} registered (status=${face.status}, document.fonts.check=${check})`)
+  notifyFamilyUsable()
   return face
+}
+
+/**
+ * REQ-0314 §1-1 — tell the React layer that a family just became renderable.
+ *
+ * The CSS side (this file) and the metrics side (`font-metrics.ts`) are two
+ * INDEPENDENT loads kicked off together.  Only the metrics side used to signal
+ * React, via `bumpFontCacheVersion()` after the opentype parse.  When the CSS
+ * side won the race, the DOM reflowed into the real font with no React render
+ * — and `subtitle-overlay`'s canvas outline ring, which is measured from the
+ * live DOM, kept tracing the fallback glyphs.  Measured drift: 5.53px
+ * horizontally, 10.00px vertically.
+ *
+ * Detecting the reflow downstream does not work.  `document.fonts`
+ * `loadingdone` never fires for this path, because `face.load()` is awaited
+ * BEFORE `document.fonts.add()`, so the set never enters a loading state
+ * (measured: 0 events).  A `ResizeObserver` on the text wrapper does not fire
+ * either — the wrapper is `display: inline`, which ResizeObserver does not
+ * observe (measured: 0 callbacks).  Signalling at the point where WE change
+ * the font set is both reliable and cheaper than either.
+ *
+ * Cost: one store bump per font registration — an event that happens a handful
+ * of times per session (startup, font install), never per frame.  The playback
+ * rAF path is untouched (REQ-0313 §6).
+ */
+function notifyFamilyUsable(): void {
+  try {
+    bumpFontCacheVersion()
+  } catch {
+    /* store unavailable (non-React harness) — registration itself still succeeded */
+  }
 }
 
 /**

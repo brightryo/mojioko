@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { SETTINGS_DEBOUNCE_MS } from '../shared/constants'
 import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Toaster } from 'sonner'
@@ -21,7 +22,7 @@ import { useAppEnvStore } from '@/stores/app-env-store'
 import { loadSettings, saveSettings } from '@/services/settings'
 import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
-import { listFonts } from '@/services/font'
+import { refreshInstalledFonts, getInstalledFontIds } from '@/stores/installed-fonts-store'
 import { initDownloadActiveStore } from '@/services/download-active'
 import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts'
 import { toast } from 'sonner'
@@ -157,14 +158,17 @@ function AppInner() {
   // character-class width estimate (over-counts wide glyphs by ~45 %).
   // Best-effort: failures (e.g. a font was uninstalled mid-session) just
   // mean that font's row degrades to the fallback when measured.
+  //
+  // REQ-0339 §2 — routed through `refreshInstalledFonts` so this startup pass
+  // ALSO seeds the shared installed-font set.  Every `useInstalledFontIds`
+  // consumer that mounts later then reads a resolved value synchronously
+  // instead of starting from an empty set (which made each subtitle overlay
+  // paint its first frame in `DEFAULT_FONT_ID`).  One IPC, two jobs.
   useEffect(() => {
-    listFonts().then((r) => {
-      if (!r.ok) return
-      for (const f of r.data.fonts) {
-        if (f.status === 'bundled' || f.status === 'installed') {
-          loadSubtitleFontFor(f.id).catch(() => {})
-          ensureFontLoaded(f.id).catch(() => {})
-        }
+    refreshInstalledFonts(useUiStore.getState().fontInventoryVersion).then(() => {
+      for (const id of getInstalledFontIds()) {
+        loadSubtitleFontFor(id).catch(() => {})
+        ensureFontLoaded(id).catch(() => {})
       }
     }).catch(() => {})
   }, [])
@@ -204,7 +208,12 @@ function AppInner() {
           defaultAudioTrackIndex: s.defaultAudioTrackIndex,
           fadeDurationSec: s.fadeDurationSec,
           activeModelId: null,
-          activeFontId: s.activeFontId,
+          // REQ-0315 §4 — `activeFontId` is deliberately NOT sent.
+          // Main owns it exclusively (font.ts `fontSetActive` /
+          // `fontUninstall` / `fontUninstallAll` are the only writers), and the
+          // merge rule is `presence-wins`, which only preserves the on-disk
+          // value while the key is ABSENT.  Sending it would defeat the rule —
+          // same two-part shape as `fontSetInstalledVersion` (REQ-0279).
           lastInputDir: null,
           lastOutputDir: null,
           // REQ-0158 — the Settings-dialog user-preferred fixed folders
@@ -219,10 +228,14 @@ function AppInner() {
           // REQ-0194 — same include-always contract as the input/output
           // folders above (a null must propagate to disk so a manual
           // "clear" round-trips).
-          defaultProjectDir: s.defaultProjectDir
+          defaultProjectDir: s.defaultProjectDir,
+          // REQ-0335 §3-6 — renderer-owned (`incoming-wins`), so it MUST be
+          // sent on every save: omitting it would make main keep the
+          // previous list and a deletion would never reach disk.
+          stylePresets: s.stylePresets
         }
         saveSettings(settings).catch(() => { /* ignore IPC failures */ })
-      }, 500)
+      }, SETTINGS_DEBOUNCE_MS)
     }
     const unsub = useSettingsStore.subscribe(save)
     return () => {

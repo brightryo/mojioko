@@ -450,12 +450,73 @@ def transcribe(msg: dict) -> None:
                     "min_speech_duration_ms": min_speech_ms,
                     "min_silence_duration_ms": min_silence_ms,
                 }
-            # REQ-0207 — request per-word timestamps ONLY when the
-            # experimental feature is requested.  In the default case the
-            # key is never inserted, so the call to model.transcribe is
-            # keyword-for-keyword identical to the pre-REQ-0207 build.
-            if word_subtitle:
-                transcribe_kwargs["word_timestamps"] = True
+            # REQ-0285 — request per-word timestamps ALWAYS (was previously
+            # gated on `word_subtitle` per REQ-0207).  The word data flows
+            # through as an optional `words` field on each segment event so
+            # renderers that don't consume it (pre-REQ-0285 builds, or the
+            # default word-subtitle-off code path) still work byte-identically
+            # at the receiving end.
+            #
+            # Cost impact (faster-whisper docs + REQ-0207 shipping observation):
+            # ~10-25 % transcribe-time overhead vs. the pre-REQ-0285 default.
+            # The cost buys the Phase B feature surface (karaoke fill /
+            # keyword highlight / speaking-word pill) unconditionally — no
+            # runtime toggle, no coordination between renderer UI and IPC
+            # payload.  If a future REQ needs to disable it (e.g. very long
+            # audio + CPU-only + tight timing), reintroduce a flag here.
+            transcribe_kwargs["word_timestamps"] = True
+
+            def _serialize_words(words):
+                """REQ-0285 — convert a faster-whisper `.words` iterable into
+                the IPC `words` array shape: `[{startSec, endSec, text}, ...]`.
+                Handles the rare None-timed word case per RES-0205 §6.5 by
+                folding into a zero-duration span at 0.0 (defensive; the
+                renderer's validity helper will re-check).  `text` keeps
+                faster-whisper's leading space so downstream re-tokenisation
+                is possible if ever needed.
+                """
+                out = []
+                for w in words or ():
+                    start = w.start if w.start is not None else 0.0
+                    end = w.end if w.end is not None else start
+                    out.append({
+                        "startSec": start,
+                        "endSec": end,
+                        "text": w.word,
+                    })
+                return out
+
+            def _bucket_words_into_cues(cues, words):
+                """REQ-0285 — for the REQ-0207 resplit path (word_subtitle=True),
+                distribute the flat `seg.words` list across the multiple
+                sub-cues that `resplit_segment` produced.  A word is assigned
+                to the cue whose time window contains its start; words that
+                fall in a gap between cues (rare, from the resplit's silence-
+                gap boundary) are attached to the nearest cue by edge
+                distance — Phase B validity checks will just fall back to
+                "no per-word render" on those pathological cases.
+                """
+                buckets = [[] for _ in cues]
+                if not cues or not words:
+                    return buckets
+                for w in words:
+                    w_start = w.start if w.start is not None else 0.0
+                    placed = False
+                    for i, c in enumerate(cues):
+                        if c.startSec <= w_start <= c.endSec:
+                            buckets[i].append(w)
+                            placed = True
+                            break
+                    if not placed:
+                        best = 0
+                        best_dist = float('inf')
+                        for i, c in enumerate(cues):
+                            d = min(abs(c.startSec - w_start), abs(c.endSec - w_start))
+                            if d < best_dist:
+                                best = i
+                                best_dist = d
+                        buckets[best].append(w)
+                return buckets
 
             collected = []
             try:
@@ -473,24 +534,35 @@ def transcribe(msg: dict) -> None:
                         # "more segments, same schema."  Import is lazy so
                         # a startup import failure in word_split.py does not
                         # affect the default path (which never touches it).
+                        # REQ-0285 — additionally bucket `seg.words` into the
+                        # emitted sub-cues so each carries its share (optional
+                        # `words` field on the IPC).
                         from word_split import resplit_segment
                         cues = resplit_segment(seg.start, seg.words)
-                        for cue in cues:
+                        cue_words = _bucket_words_into_cues(cues, seg.words)
+                        for cue, bucket in zip(cues, cue_words):
                             send({
                                 "event": "segment",
                                 "segment": {
                                     "startSec": cue.startSec,
                                     "endSec": cue.endSec,
                                     "text": cue.text,
+                                    "words": _serialize_words(bucket),
                                 },
                             })
                     else:
+                        # REQ-0285 — default path also attaches words now.
+                        # `seg.words` may be empty when the segment contained
+                        # no speech (silence-only fragment); serialize_words
+                        # tolerates None / empty and returns [].  Renderers
+                        # treat empty words as "no per-word data".
                         send({
                             "event": "segment",
                             "segment": {
                                 "startSec": seg.start,
                                 "endSec": seg.end,
                                 "text": seg.text.strip(),
+                                "words": _serialize_words(seg.words),
                             },
                         })
                     if total_duration > 0:

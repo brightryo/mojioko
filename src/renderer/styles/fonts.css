@@ -1,11 +1,60 @@
 /*
- * Noto Sans JP — bundled Japanese font (static TTF builds).
- * Only three weights are loaded to minimise render overhead:
- *   400 Regular, 500 Medium, 600 SemiBold.
- * Files are served from resources/fonts/Noto_Sans_JP/static/.
+ * MOJIOKO Noto Sans JP — bundled Japanese font (static TTF builds).
+ * All NINE weights are declared here.  Files are served from
+ * resources/fonts/Noto_Sans_JP/static/ via Vite publicDir.
+ *
+ * REQ-0355 — this file must declare a face for EVERY weight the registry
+ * marks `bundled`, because `font-registry.ts::loadOne` returns early for a
+ * bundled font on exactly that assumption ("fonts.css covers it").  History:
+ *
+ *   REQ-0269 B shipped six weights (100 Thin, 200 ExtraLight, 300 Light,
+ *   700 Bold, 800 ExtraBold, 900 Black) as DOWNLOADS, registered at runtime
+ *   through the Blob-URL `FontFace` path with an explicit `weight` descriptor.
+ *   That worked, so only 400/500/600 needed to live here.
+ *
+ *   REQ-0353 bundled those six into the installer to open weight selection in
+ *   the free edition — which flipped them onto `loadOne`'s early return, and
+ *   they were not declared here.  Result: no face existed for six of the nine
+ *   selectable weights, so CSS font matching silently fell back to a
+ *   neighbouring face.  100/200/300 rendered as 400 and 700/800/900 as 600 —
+ *   in the PREVIEW only, since the burn-in path resolves a per-weight
+ *   `assFontName` against the real TTF and was always correct.
+ *
+ * `npm run verify:font-weights` measures this and fails if any two selectable
+ * weights render identically.  `document.fonts.check()` cannot catch it — see
+ * the note in scripts/verify-font-weights/verify-font-weights.mjs.
+ *
+ * REQ-0275 §2 renamed the CSS family from `Noto Sans JP` to
+ * `MOJIOKO Noto Sans JP` so libass' DirectWrite provider on Windows
+ * cannot silently substitute a system-installed Noto Sans JP of a
+ * different revision.  See SPECIFICATION §24.3.1.
  */
 @font-face {
-  font-family: 'Noto Sans JP';
+  font-family: 'MOJIOKO Noto Sans JP';
+  font-style: normal;
+  font-weight: 100;
+  font-display: block;
+  src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-Thin.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'MOJIOKO Noto Sans JP';
+  font-style: normal;
+  font-weight: 200;
+  font-display: block;
+  src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-ExtraLight.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'MOJIOKO Noto Sans JP';
+  font-style: normal;
+  font-weight: 300;
+  font-display: block;
+  src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-Light.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'MOJIOKO Noto Sans JP';
   font-style: normal;
   font-weight: 400;
   /* REQ-20260615-040 B — was `swap`, which let the browser paint the
@@ -21,33 +70,41 @@
 }
 
 @font-face {
-  font-family: 'Noto Sans JP';
+  font-family: 'MOJIOKO Noto Sans JP';
   font-style: normal;
   font-weight: 500;
-  /* REQ-20260615-040 B — was `swap`, which let the browser paint the
-   * first frame in the system fallback and then swap to Noto Sans JP
-   * once bytes arrived, producing a visible FOUT.  `block` keeps the
-   * text invisible until the face loads (capped at 3 s by the spec, but
-   * the bundled TTF resolves in < 100 ms locally), so on-screen text
-   * never displays in the fallback metrics.  `main.tsx` also gates the
-   * first React mount on `document.fonts.load(...)` resolving, so in
-   * practice the block period is never visible. */
   font-display: block;
   src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-Medium.ttf') format('truetype');
 }
 
 @font-face {
-  font-family: 'Noto Sans JP';
+  font-family: 'MOJIOKO Noto Sans JP';
   font-style: normal;
   font-weight: 600;
-  /* REQ-20260615-040 B — was `swap`, which let the browser paint the
-   * first frame in the system fallback and then swap to Noto Sans JP
-   * once bytes arrived, producing a visible FOUT.  `block` keeps the
-   * text invisible until the face loads (capped at 3 s by the spec, but
-   * the bundled TTF resolves in < 100 ms locally), so on-screen text
-   * never displays in the fallback metrics.  `main.tsx` also gates the
-   * first React mount on `document.fonts.load(...)` resolving, so in
-   * practice the block period is never visible. */
   font-display: block;
   src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-SemiBold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'MOJIOKO Noto Sans JP';
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'MOJIOKO Noto Sans JP';
+  font-style: normal;
+  font-weight: 800;
+  font-display: block;
+  src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-ExtraBold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'MOJIOKO Noto Sans JP';
+  font-style: normal;
+  font-weight: 900;
+  font-display: block;
+  src: url('/fonts/Noto_Sans_JP/static/NotoSansJP-Black.ttf') format('truetype');
 }

@@ -42,6 +42,33 @@ interface ProjectStore {
    */
   updateEntryPreview: (id: string, patch: Partial<SubtitleEntry>) => void
   updateEntriesPreview: (ids: readonly string[], patch: Partial<SubtitleEntry>) => void
+  /**
+   * REQ-0342 §3 — apply a DIFFERENT patch to each of many entries in ONE
+   * `set()`.
+   *
+   * `applyBulk` used to loop `updateEntry` once per selected row.  Each call
+   * is its own store write, and each write walks the whole entries array and
+   * notifies every subscriber — so a select-all edit was O(selected x total)
+   * array rebuilds plus N store notifications.  Measured on the subtitle-table
+   * view at 3000 cues, one font-size click: **12,666 ms** in that loop.  The
+   * same click with the same code in the timeline view cost 97 ms, which is
+   * what identified the cost as per-write subscriber work (the unvirtualised
+   * table re-measures its framer-motion `layout` rows on every commit), not
+   * the array maps.  One write instead of N removes N-1 of them: the same
+   * click measures **19.6 ms** after.
+   *
+   * A Map rather than `(ids, patch)` because the layout-anchor branch of
+   * `applyBulk` computes a per-row `posX` / `posY`, and Undo restores a
+   * different whole snapshot per row — both need distinct patches, and
+   * splitting them back into per-row writes would reintroduce exactly what
+   * this exists to remove.  Entries absent from the map are returned by
+   * identity, so React's `memo` and every downstream `useMemo` still see them
+   * as unchanged.
+   *
+   * History is the caller's business, same as `updateEntry`: `applyBulk`
+   * pushes one entry whose undo/redo both route back through here.
+   */
+  updateEntriesBatch: (patches: ReadonlyMap<string, Partial<SubtitleEntry>>) => void
   addEntry: (entry: SubtitleEntry, atIndex: number) => void
   /**
    * Re-order `entries` by `startSec` ascending (stable sort — equal-startSec
@@ -136,6 +163,18 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       return {
         entries: s.entries.map((e) => {
           if (!idSet.has(e.id)) return e
+          const merged = { ...e, ...patch }
+          return { ...merged, isEdited: isEditedFromOriginal(merged) }
+        })
+      }
+    }),
+  updateEntriesBatch: (patches) =>
+    set((s) => {
+      if (patches.size === 0) return {}
+      return {
+        entries: s.entries.map((e) => {
+          const patch = patches.get(e.id)
+          if (patch === undefined) return e
           const merged = { ...e, ...patch }
           return { ...merged, isEdited: isEditedFromOriginal(merged) }
         })

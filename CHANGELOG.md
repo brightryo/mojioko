@@ -9,6 +9,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.6] - unreleased
+
+**Every feature in this release works in both editions.**  The only
+difference between them is the font package: the paid (Microsoft Store)
+edition adds 12 subtitle fonts, while the free (GitHub) edition includes
+Noto Sans JP in all nine weights (Thin through Black).  Weight selection
+is no longer a paid-tier feature.
+
+This release is mostly about subtitle *styling* — the things that make a
+caption look like yours rather than like a default.
+
+### Added
+
+- **Karaoke highlighting.**  Words change colour as they are spoken.
+  Choose per subtitle between **Switch** (each word flips when it
+  starts) and **Sweep** (the colour fills across each word).  Spoken
+  and unspoken colours are yours to pick.  Subtitles created by
+  transcription follow the actual speech timing; imported or
+  hand-typed subtitles split the time evenly instead.
+- **Keyword emphasis.**  Give chosen words their own colour and size
+  inside a subtitle, so one phrase can stand out from the line.
+- **Appear / disappear animations** — fade, scale, pop, and blur, with
+  adjustable duration and strength.
+- **Style presets.**  Save the look you have built and apply it to
+  other subtitles in one click.
+- **Line spacing.**  Adjust the gap between lines of a multi-line
+  subtitle — useful for tightening Latin fonts, which tend to sit
+  further apart than Japanese ones.
+- **Text and outline opacity**, set separately.  Making the text fully
+  transparent while keeping the outline gives you hollow lettering.
+- **Drop shadow**, **ALL CAPS**, and **rotation**.
+- **Smarter line breaking.**  English wraps at word boundaries instead
+  of mid-word, and Japanese follows kinsoku rules so a line never
+  begins with a comma or full stop.
+- Per-family weight selection for **Noto Sans JP** (9 weights, Thin
+  through Black) and **Poppins** (9 weights).  Every subtitle style
+  surface (inspector, bulk-edit, settings) now uses a two-tier picker
+  where family and weight are chosen separately; switching family
+  applies that family's default weight, and a single Undo restores
+  both fields together.
+- **Progress dialog while importing an SRT**, with a Cancel button.
+  Cancelling leaves your existing subtitles completely untouched.
+- Vertical margin ceiling raised from 300 px to 9,999 px so extreme
+  off-frame offsets are reachable for short-form / 4K editing.
+
+### Changed
+
+- **Large projects are much faster to work with.**  The subtitle list
+  now renders only the rows on screen, so opening the list view and
+  selecting a row stay quick even with thousands of subtitles — where
+  they previously took several seconds each.
+- The font menus in the inspector and bulk-edit bar show font names
+  only.  Language coverage and rare-kanji notes still appear in
+  Settings → Fonts, where fonts are compared side by side.
+
+- **Paid-tier users:** after upgrading, downloaded fonts appear as
+  "not installed" and must be re-downloaded once via the "Download
+  all" button in Settings → Fonts.  This is a one-time re-fetch that
+  replaces the pre-v1.3.6 font files with the newly-namespaced set
+  required for correct weight rendering.  Free-tier users have nothing
+  to re-download — all nine Noto Sans JP weights ship in the installer.
+- Font downloads are now bundled into a single "Download all"
+  action; per-font Download buttons were removed from the picker.
+
+### Fixed
+
+- **Exported SRT files could contain an invalid timestamp.**  A
+  subtitle whose time landed just under a whole second could be
+  written as `00:19:54,1000` — the milliseconds field must be 000-999
+  — which other tools may reject.  Files already exported with this
+  problem can now be re-imported into MOJIOKO; previously the import
+  refused the whole file.
+- Turning on the background box while the outline width was 0 produced
+  no background at all in the exported video, because the box is drawn
+  by thickening the outline.  The outline can no longer be set to 0
+  while the background box is on, and an existing subtitle in that
+  state is now flagged instead of silently exporting without its box.
+- Still-image export ignored the karaoke display style.
+- Silent burn-in weight-substitution when a system-installed font
+  shared a family name with a MOJIOKO-shipped font (e.g. a Windows
+  install of Noto Sans JP could cause "Bold" burn-ins to render as
+  Regular).  All shipped fonts now use `MOJIOKO`-namespaced family
+  names internally so libass cannot pick up a system font by
+  mistake; the previewed weight and the burned-in weight now match.
+
+---
+
 ## [1.3.5] - 2026-07-21
 
 ### Changed

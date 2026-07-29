@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FileText, Clock, ChevronUp, ChevronDown } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
@@ -24,7 +25,6 @@ import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { commitTextEditWithHistory } from '@/lib/commit-text-edit'
-import { filterEntries } from '@/lib/subtitle-filter'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
 import { effectiveEntryState, type ClipStatus, type CutList } from '../../../shared/cuts'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
@@ -240,7 +240,6 @@ interface SubtitleRowProps {
   /** Full warning bitmap for this entry — drives both badges and the Ready filter. */
   warnings: EntryWarnings
   /** Register / unregister the row's DOM element for auto-scroll coordination. */
-  registerRef: (id: string, el: HTMLDivElement | null) => void
   /** True when entry.startSec exceeds the video's total duration. */
   isStartExceedsDuration: boolean
   /** True when entry.endSec exceeds the video's total duration. */
@@ -270,7 +269,7 @@ interface SubtitleRowProps {
   cuts: CutList
 }
 
-function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, onSelect, warnings, registerRef, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick, clipStatus, cuts }: SubtitleRowProps) {
+function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, onSelect, warnings, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick, clipStatus, cuts }: SubtitleRowProps) {
   const isOverflow = overflowStartIndex !== -1
   const isStartOverlap = warnings.overlap
   // step1 namespace included so the size input's `title` tooltip can
@@ -296,13 +295,11 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
   const [editingText, setEditingText] = useState(false)
   const [sizeWarning, setSizeWarning] = useState(false)
 
-  // Register this row's DOM element so SubtitleTable can scroll it into view.
+  // REQ-0345 §3-6 — no DOM registry any more.  Both auto-scroll paths
+  // resolve a row's INDEX and call `scrollToIndex`, which works for rows the
+  // virtualizer has not mounted; a per-row element registry could only ever
+  // describe the ~20 rows on screen, and cost an effect on each of them.
   const rowDivRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    registerRef(entry.id, rowDivRef.current)
-    return () => registerRef(entry.id, null)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry.id])
 
   const rowState = getRowState(entry, isOverflow)
   // REQ-118 [2] — trim-deleted entries are frozen by spec §2.1.  Mirror
@@ -857,11 +854,36 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
 /** Milliseconds after a manual scroll during which auto-scroll is suppressed. */
 const AUTO_SCROLL_DEBOUNCE_MS = 3000
 
+/**
+ * REQ-0345 §3-2 — seed height for a row that has not been measured yet.
+ *
+ * Only a starting guess: every mounted row is measured for real via
+ * `measureElement`, and the virtualizer corrects both the total height and
+ * the offsets from those measurements.  A row is `min-h-[36px]` plus the
+ * cell's `py-2`, and grows with the caption's wrapped line count, so this is
+ * the single-line case — the common one.
+ *
+ * It is deliberately NOT derived from `overflowMap`.  That map measures where
+ * the SUBTITLE overflows the video frame in the burn-in font (opentype.js);
+ * it says nothing about how this table cell wraps at this column width in the
+ * UI font.  Using it here would create a second, wrong source of truth for
+ * row height — the failure mode this project keeps repeating.
+ */
+const ROW_ESTIMATED_HEIGHT_PX = 52
+
+/**
+ * How long a newly-inserted row animates in (REQ-0345 §3-3).  Matches the
+ * 150 ms the pre-virtualization `AnimatePresence` used, so an added row still
+ * arrives the way it always has.
+ */
+const ROW_ENTER_ANIM_MS = 150
+
 export function SubtitleTable({
   overflowMap,
   warningsMap,
   videoDurationSec,
   onAdjustTime,
+  visibleEntries,
 }: {
   /**
    * Where each entry's text overflows (-1 = no overflow).  Required separately
@@ -875,9 +897,24 @@ export function SubtitleTable({
   videoDurationSec: number
   /** Open the shared time-editor dialog for the given entry. */
   onAdjustTime: (entryId: string) => void
+  /**
+   * The rows to display, already filtered by the active tab — memoised in
+   * `step2.tsx` as `visibleEntries` (REQ-0345 §4-A).
+   *
+   * The table must NOT re-derive this.  It used to call the identical
+   * `filterEntries(...)` itself with no `useMemo`, so every render paid an
+   * O(N) pass AND produced a new array identity, which silently disabled
+   * `selectableIds` and `selectableSelectedCount` below — both of which list
+   * it as a dependency.  One filter, computed once, is also the only way the
+   * table and the route's Ctrl+A target list cannot drift.
+   */
+  visibleEntries: readonly SubtitleEntry[]
 }) {
   const { t } = useTranslation(['step2'])
-  const entries = useProjectStore((s) => s.entries)
+  // REQ-0345 §4-A — no `entries` subscription.  The rows arrive already
+  // filtered via `visibleEntries`, which `step2.tsx` recomputes when
+  // `entries` changes, so subscribing here would only add a second wake-up
+  // for the same event.
   // REQ-102: filterEntries is now cut-aware so the table tabs / counts
   // agree with the timeline view and the ffmpeg burnin output.  See
   // src/renderer/lib/subtitle-filter.ts for the predicate; this
@@ -892,7 +929,17 @@ export function SubtitleTable({
   // focusedRowId は下の scrollIntoView effect だけが参照する。)
   const selectedEntryId = useUiStore((s) => s.selectedEntryId)
   const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
-  const focusedRowId = useUiStore((s) => s.focusedRowId)
+  // REQ-0345 §4-A — `focusedRowId` is deliberately NOT subscribed here.
+  //
+  // Nothing in this component's OUTPUT depends on it: the only reader is the
+  // auto-scroll effect below.  Subscribing at the top level made it an input
+  // to rendering anyway, and that cost a second full pass over every row on
+  // every row click — the click writes `videoSeekRequestSec`, the preview
+  // panel seeks, the resulting `timeupdate` writes `focusedRowId`
+  // (`video-preview-panel.tsx`), and the table re-rendered because of it.
+  // Two renders of N rows for one click.  The effect subscribes to the store
+  // directly instead, so the scroll still follows playback and the render is
+  // no longer involved.
   // REQ-028: blank out the "Size" / "Style" header labels when the
   // input is audio-only so the dead columns don't advertise themselves.
   // Column widths stay reserved (TABLE_GRID_COLS unchanged) — only the
@@ -905,24 +952,16 @@ export function SubtitleTable({
   const toggleRowSelected = useUiStore((s) => s.toggleRowSelected)
   const selectRowRange = useUiStore((s) => s.selectRowRange)
 
-  // Row DOM-element registry for programmatic scrolling.
-  const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  // The scroll viewport — also what the virtualizer measures against.
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   // Timestamp of the last user-initiated scroll.
   // Auto-scroll is suppressed for AUTO_SCROLL_DEBOUNCE_MS after this.
   const lastUserScrollAt = useRef<number>(0)
-  // True while our own scrollIntoView() is executing so handleScroll
+  // True while our own auto-scroll is executing so handleScroll
   // does not misinterpret it as a user scroll and block the next auto-scroll.
   const isAutoScrollingRef = useRef(false)
   const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const registerRef = useCallback((id: string, el: HTMLDivElement | null) => {
-    if (el) {
-      rowRefs.current.set(id, el)
-    } else {
-      rowRefs.current.delete(id)
-    }
-  }, [])
 
   // REQ-20260614-001 Phase 3 — auto-scroll continues to track the
   // playback-active entry (= `focusedRowId`).  User clicks land on a
@@ -931,22 +970,39 @@ export function SubtitleTable({
   // through the dedicated `scrollToRowId` signal below (centred, deferred).
   //
   // Suppressed while the user is actively scrolling the table manually.
+  //
+  // REQ-0345 §4-A — driven by a direct store subscription rather than by a
+  // rendered value, so a playback tick moves the scroll without re-rendering
+  // the rows.  `useUiStore.subscribe` fires on every store write, so the
+  // handler filters for an actual `focusedRowId` change itself; that check is
+  // two comparisons against N rows of reconciliation.
   useEffect(() => {
-    if (!focusedRowId) return
-    if (Date.now() - lastUserScrollAt.current < AUTO_SCROLL_DEBOUNCE_MS) return
-    const el = rowRefs.current.get(focusedRowId)
-    if (!el) return
-    // Mark auto-scroll in progress so handleScroll ignores the scroll event
-    // that scrollIntoView() itself fires (which would otherwise reset the
-    // debounce timer and block the *next* auto-scroll for 3 seconds).
-    if (autoScrollTimerRef.current !== null) clearTimeout(autoScrollTimerRef.current)
-    isAutoScrollingRef.current = true
-    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    autoScrollTimerRef.current = setTimeout(() => {
-      isAutoScrollingRef.current = false
-      autoScrollTimerRef.current = null
-    }, 600)
-  }, [focusedRowId])
+    let prevFocused = useUiStore.getState().focusedRowId
+    const runAutoScroll = (focusedRowId: string | null) => {
+      if (!focusedRowId) return
+      if (Date.now() - lastUserScrollAt.current < AUTO_SCROLL_DEBOUNCE_MS) return
+      // REQ-0345 §3-6 — index, not element.  `align: 'auto'` reproduces the
+      // old `block: 'nearest'`: a row already on screen does not move.
+      const index = indexByIdRef.current.get(focusedRowId)
+      if (index === undefined) return
+      // Mark auto-scroll in progress so handleScroll ignores the scroll event
+      // that our own scroll fires (which would otherwise reset the debounce
+      // timer and block the *next* auto-scroll for 3 seconds).
+      if (autoScrollTimerRef.current !== null) clearTimeout(autoScrollTimerRef.current)
+      isAutoScrollingRef.current = true
+      virtualizerRef.current.scrollToIndex(index, { align: 'auto', behavior: 'smooth' })
+      autoScrollTimerRef.current = setTimeout(() => {
+        isAutoScrollingRef.current = false
+        autoScrollTimerRef.current = null
+      }, 600)
+    }
+    runAutoScroll(prevFocused)
+    return useUiStore.subscribe((s) => {
+      if (s.focusedRowId === prevFocused) return
+      prevFocused = s.focusedRowId
+      runAutoScroll(s.focusedRowId)
+    })
+  }, [])
 
   function handleScroll() {
     // Skip scroll events that originate from our own scrollIntoView() calls.
@@ -979,14 +1035,18 @@ export function SubtitleTable({
     if (!scrollToRowId) return
     const targetId = scrollToRowId
     const timer = setTimeout(() => {
-      const el = rowRefs.current.get(targetId)
-      if (el) {
+      // REQ-0345 §3-6 — index, not element, so this reaches a row that is
+      // off-screen and therefore not mounted.  `align: 'center'` is the old
+      // `block: 'center'`: an added or time-edited row lands well inside the
+      // viewport rather than at its nearest edge.
+      const index = indexByIdRef.current.get(targetId)
+      if (index !== undefined) {
         // Coordinate with the focus-based debounce so our own scroll event
         // is not mistaken for a manual scroll (which would suppress the next
         // auto-scroll for 3 seconds).
         if (autoScrollTimerRef.current !== null) clearTimeout(autoScrollTimerRef.current)
         isAutoScrollingRef.current = true
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        virtualizerRef.current.scrollToIndex(index, { align: 'center', behavior: 'smooth' })
         autoScrollTimerRef.current = setTimeout(() => {
           isAutoScrollingRef.current = false
           autoScrollTimerRef.current = null
@@ -997,7 +1057,89 @@ export function SubtitleTable({
     return () => clearTimeout(timer)
   }, [scrollToRowId, setScrollToRowId])
 
-  const filtered = filterEntries(entries, tableFilter, warningsMap, cuts)
+  // REQ-0345 §4-A — computed once in `step2.tsx`; see the prop's JSDoc.
+  const filtered = visibleEntries
+
+  /**
+   * REQ-0345 §3 — render only the rows in (and near) the viewport.
+   *
+   * Every entry used to be a live DOM subtree: 10,000 rows measured 339,348
+   * elements, ~34 per row, including three Radix Popover roots and ~9 store
+   * subscriptions each.  Opening the list tab at that size took 41 s and
+   * selecting one row took 25 s — and neither is fixable by memoisation,
+   * because the first is the cost of MOUNTING those nodes and the second is
+   * the cost of reconciling them.  The only cure is not to create them.
+   *
+   * `getItemKey` returns the entry id rather than the index so React keeps a
+   * row's state attached to the row (not to a slot) when entries are inserted
+   * or removed above it — the same reason the previous `.map` keyed on
+   * `entry.id`.
+   */
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => ROW_ESTIMATED_HEIGHT_PX,
+    getItemKey: (index) => filtered[index]?.id ?? index,
+    // Rows above and below the viewport, so a fast wheel scroll has content
+    // ready instead of blank space.  Cheap: each one is a normal row.
+    overscan: 8,
+  })
+
+  /**
+   * id → position in `filtered`, for the two auto-scroll paths below.
+   *
+   * They used to look the row's DOM element up in `rowRefs` and call
+   * `scrollIntoView`.  With virtualization an off-screen row HAS no element,
+   * so that lookup would return undefined and the scroll would silently not
+   * happen — which is exactly how playback-follow would break without any
+   * error to notice.  Both now resolve an INDEX and let the virtualizer
+   * scroll to it, which works whether or not the row is currently mounted.
+   */
+  const indexById = useMemo(() => {
+    const m = new Map<string, number>()
+    for (let i = 0; i < filtered.length; i++) m.set(filtered[i].id, i)
+    return m
+  }, [filtered])
+  // Held in refs so the store-subscription effect below can stay mounted once
+  // (`[]` deps) instead of re-subscribing on every list change.
+  const indexByIdRef = useRef(indexById)
+  indexByIdRef.current = indexById
+  const virtualizerRef = useRef(rowVirtualizer)
+  virtualizerRef.current = rowVirtualizer
+
+  /**
+   * REQ-0345 §3-3 — ids that just appeared, so only THEY animate in.
+   *
+   * Pre-virtualization every row lived inside `<AnimatePresence>` with
+   * `layout`, which animated height on mount and unmount.  Under
+   * virtualization mount/unmount is what SCROLLING does, so keeping that
+   * would replay the insert animation on every row that scrolls into view —
+   * visibly wrong, and expensive.  The animation users actually care about is
+   * the one that marks a row being added, so that is the one kept: this set
+   * holds ids present now but absent from the previous list, and only those
+   * rows get the transition.
+   *
+   * Exit animation is not preserved; see the RES.  A removed row's slot is
+   * reclaimed by the virtualizer immediately, so there is nothing left to
+   * animate out.
+   */
+  const [enteringIds, setEnteringIds] = useState<ReadonlySet<string>>(() => new Set())
+  const knownIdsRef = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const current = new Set(filtered.map((e) => e.id))
+    const known = knownIdsRef.current
+    knownIdsRef.current = current
+    // First population (mount, view switch, or an import) must not animate:
+    // that is the `initial={false}` the old AnimatePresence carried, and
+    // animating 10,000 rows at once is precisely what this REQ removes.
+    if (known === null) return
+    const fresh: string[] = []
+    for (const id of current) if (!known.has(id)) fresh.push(id)
+    if (fresh.length === 0) return
+    setEnteringIds(new Set(fresh))
+    const timer = setTimeout(() => setEnteringIds(new Set()), ROW_ENTER_ANIM_MS)
+    return () => clearTimeout(timer)
+  }, [filtered])
 
   const emptyKey =
     tableFilter === 'all'      ? 'empty.all'      :
@@ -1134,20 +1276,46 @@ export function SubtitleTable({
             <p className="text-body font-medium text-fg-tertiary">{t(emptyKey)}</p>
           </motion.div>
         ) : (
-          <AnimatePresence initial={false}>
-            {filtered.map((entry, i) => (
-              <motion.div
-                key={entry.id}
-                layout
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.15, ease: 'easeOut' }}
-                style={{ overflow: 'hidden' }}
-              >
+          // REQ-0345 §3 — the spacer carries the FULL scroll height so the
+          // scrollbar is honest about how many rows exist, while only the
+          // windowed rows are in the DOM.  Absolute positioning inside it is
+          // what lets the list skip straight to an offset.
+          <div
+            style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const entry = filtered[virtualRow.index]
+              if (!entry) return null
+              const isEntering = enteringIds.has(entry.id)
+              return (
+                <div
+                  key={virtualRow.key}
+                  // `data-index` + this ref are how `measureElement` reports
+                  // the row's REAL height back (REQ-0345 §3-2): rows grow with
+                  // the caption's wrapped line count, so the seed estimate is
+                  // corrected per row as each one mounts.
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  {/* REQ-0345 §3-3 — only a row that was just INSERTED
+                      animates.  Scrolling mounts and unmounts rows constantly
+                      now, so animating on mount would fire on every scroll. */}
+                  <div
+                    className={cn(
+                      isEntering && 'motion-safe:animate-in motion-safe:fade-in',
+                    )}
+                    style={isEntering ? { animationDuration: `${ROW_ENTER_ANIM_MS}ms` } : undefined}
+                  >
                 <SubtitleRow
                   entry={entry}
-                  displayIndex={i + 1}
+                  displayIndex={virtualRow.index + 1}
                   overflowStartIndex={overflowMap.get(entry.id) ?? -1}
                   // user single-selection drives the green left-border + the
                   // inspector content.  (補遺⑬: sky 廃止により isPlaybackActive
@@ -1156,7 +1324,6 @@ export function SubtitleTable({
                   isUserSelected={selectedEntryId === entry.id}
                   onSelect={setSelectedEntryId}
                   warnings={warningsMap.get(entry.id) ?? NO_WARNINGS}
-                  registerRef={registerRef}
                   isStartExceedsDuration={entry.startSec > videoDurationSec}
                   isEndExceedsDuration={entry.endSec > videoDurationSec}
                   onAdjustTime={onAdjustTime}
@@ -1170,9 +1337,11 @@ export function SubtitleTable({
                   // TimeInputs display Edited-axis timecodes.
                   cuts={cuts}
                 />
-              </motion.div>
-            ))}
-          </AnimatePresence>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         )}
       </div>
     </div>

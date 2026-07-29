@@ -79,8 +79,67 @@ export const FONT_SIZE_MIN_PX = 30
  * are easy to hit accidentally via a typo, so the cap stops here.
  */
 export const FONT_SIZE_MAX_PX = 600
-/** Maximum outline thickness in pixels (inclusive, integer). Range is 0–OUTLINE_THICKNESS_MAX_PX. */
-export const OUTLINE_THICKNESS_MAX_PX = 10
+/**
+ * Maximum outline thickness in pixels (inclusive, integer). Range is
+ * 0–OUTLINE_THICKNESS_MAX_PX.
+ *
+ * REQ-0292 §5 raised the ceiling from 10 to 20 so users can build the
+ * heavier chunky-outline look common in short-form / kawaii captions.
+ * Every consumer (slider `max`, settings-store clamp, ass-generator
+ * `\bord`, subtitle-overlay's canvas ring) reads from this
+ * constant so bumping it here propagates end-to-end in one step.
+ */
+export const OUTLINE_THICKNESS_MAX_PX = 20
+
+/**
+ * REQ-0311 §2 — how far the inspector's subtitle `<textarea>` may be dragged
+ * open, as a multiple of its own default (`rows={3}`) height.  The floor is the
+ * default height itself, so the row can never be made smaller than it ships.
+ *
+ * Expressed as a ratio rather than a px cap because the default height is a
+ * product of the design tokens (`text-body` + `leading-snug` + `py-1.5`); a
+ * hardcoded px ceiling would silently drift the moment those tokens change.
+ * The bounds are applied imperatively from the measured natural height — see
+ * `timeline-block-inspector.tsx`.
+ */
+export const INSPECTOR_TEXTAREA_MAX_HEIGHT_RATIO = 2
+
+/**
+ * Maximum drop-shadow depth in pixels (inclusive, integer).  Range is
+ * 0–SHADOW_DEPTH_MAX_PX; depth of `0` means "no shadow".
+ *
+ * REQ-0293 §1 collapsed the shadow ON/OFF Switch into the depth
+ * itself: depth > 0 draws a shadow, depth = 0 draws nothing.  The
+ * ceiling dropped from 100 → 50 so the 0=OFF slider still has
+ * useful resolution near the low end (typical usable depths are
+ * 2–8 px; 50 covers the "as big as it gets before it becomes
+ * absurd" range the owner wanted, without wasting slider real
+ * estate on 51–100).
+ *
+ * All three shadow paths (inspector slider max, ass-generator
+ * `\shad` clamp, subtitle-overlay CSS `text-shadow` depth clamp)
+ * must read from this constant so bumping it in one place cannot
+ * leave any path capped behind the others (a silent
+ * preview↔burn-in divergence).
+ */
+export const SHADOW_DEPTH_MAX_PX = 50
+
+/** Minimum vertical margin in pixels (inclusive, integer). */
+export const MARGIN_V_MIN_PX = 0
+/**
+ * Maximum vertical margin in pixels (inclusive, integer).
+ *
+ * REQ-0269 A raises the ceiling from the pre-v1.3.6 hardcoded 300 to 9999
+ * so short-form (vertical / 4K) editors can push subtitles far off the
+ * visible frame when they want extreme offsets.  Values that place the
+ * subtitle beyond the video edge are intentionally allowed — libass draws
+ * off-canvas, and the user's own preview panel shows when the row leaves
+ * the frame.  4 digits fits comfortably in the widened NumberStepperInput
+ * `widthClass="w-16"` used at both call sites; the legacy 300 cap is not
+ * enforced anywhere else in the pipeline (`verticalMarginPx` flows
+ * unclamped through ass-generator → libass `MarginV`).
+ */
+export const MARGIN_V_MAX_PX = 9999
 
 /**
  * Feature flag: show the video preview panel (D-1) in Step 2.
@@ -162,3 +221,28 @@ export const TRANSCRIPTION_DEFAULTS = {
   /** Target language — 'auto' means language=None (auto-detect) in the sidecar. */
   language: 'auto',
 } as const
+
+/**
+ * REQ-0324 §2 — ASS `lur N` to CSS `filter: blur()` conversion.
+ *
+ * Measured against real libass (bundled ffmpeg) and real Chromium (the
+ * app's own Electron build, via `capturePage`), fitting sigma as the
+ * second central moment of the edge-profile derivative:
+ *
+ *   libass  `lur N`      -> sigma = 0.834 x N   (linear to <1% for N>=4)
+ *   Chromium `blur(Npx)`   -> sigma ~ 0.956 x N   (+-8%, kinks at N~5
+ *                                                 where Skia switches
+ *                                                 blur approximation)
+ *
+ * so sigma_ASS / sigma_CSS = 0.84 (mean; +-9% spread, all of it
+ * Chromium's non-linearity rather than libass's).
+ *
+ * ALSO measured: `lur` is in OUTPUT DEVICE pixels and, unlike `ord`
+ * and `\shad`, does NOT scale with PlayRes->frame. Since the generator
+ * sets PlayRes to the video's pixel size, an ASS blur radius is already
+ * in video pixels, so the preview must additionally multiply by its own
+ * `containerWidthPx / videoWidthPx`. Omitting that term makes the preview
+ * roughly 6x blurrier than the burn at a typical preview scale of 0.2 --
+ * a far larger error than this factor corrects.
+ */
+export const ASS_BLUR_TO_CSS_SIGMA = 0.84

@@ -3,8 +3,11 @@ import { persist } from 'zustand/middleware'
 import type { TranscriptionDefaults, TranscriptionAdvancedParams, AppSettings, AppTheme, BaseColor, EncoderSetting, AudioMode, OutputContainer } from '../../shared/types'
 import { BURNIN_DEFAULTS } from '../../shared/burnin-defaults'
 import { DEFAULT_LANGUAGE } from '../../shared/app-info'
-import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
+import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, SHADOW_DEPTH_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
 import { DEFAULT_FONT_ID, isFontId, type FontId } from '../../shared/fonts'
+import { clampLineSpacingPercent } from '../../shared/line-spacing'
+import { STYLE_PRESET_MAX, validatePresetName, type StylePreset } from '../../shared/style-preset'
+// REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 
 interface SettingsStore {
   language: string
@@ -15,6 +18,7 @@ interface SettingsStore {
   transcriptionDefaults: TranscriptionDefaults
   transcriptionAdvanced: TranscriptionAdvancedParams
   autoLineBreak: boolean
+  /** REQ-0311 §4 / REQ-0315 §2 — karaoke display style (see shared/karaoke-style). */
   encoder: EncoderSetting
   audioMode: AudioMode
   defaultAudioTrackIndex: number
@@ -66,6 +70,12 @@ interface SettingsStore {
    * and cannot be clobbered by an incomplete settings.json.
    */
   hasClickedStoreReview: boolean
+  /**
+   * REQ-0335 §3 — user-saved subtitle style presets, newest last.  Empty on
+   * a fresh install; the owner's built-in presets are a separate list that
+   * this array never contains.
+   */
+  stylePresets: StylePreset[]
 
   setLanguage: (lang: string) => void
   setTheme: (t: AppTheme) => void
@@ -91,6 +101,17 @@ interface SettingsStore {
   markStoreReviewClicked: () => void
 
   /**
+   * REQ-0335 §3-6 — append a preset.  Returns `false` (and changes nothing)
+   * when the name is invalid or the cap is reached; the caller has already
+   * validated with `validatePresetName` and surfaces the reason, so this is
+   * a belt-and-braces guard rather than the user-facing check.
+   */
+  addStylePreset: (preset: StylePreset) => boolean
+  /** Rename in place, keeping the id (the picker keys on it). */
+  renameStylePreset: (id: string, name: string) => boolean
+  deleteStylePreset: (id: string) => void
+
+  /**
    * REQ-20260613-016 Phase 4 — `burnin` / `subtitleBackground` were dropped
    * from the store along with the global panel UI; the per-row data
    * model on each SubtitleEntry replaces them.  `resetStep3Settings`
@@ -100,7 +121,7 @@ interface SettingsStore {
   resetStep3Settings: () => void
 
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'stylePresets'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -130,6 +151,9 @@ export const useSettingsStore = create<SettingsStore>()(
       // REQ-0208 — user has not yet clicked the Store review CTA.  Once
       // true, stays true across sessions via the persist middleware.
       hasClickedStoreReview: false,
+      // REQ-0335 §3 — no built-in presets ship in v1.3.6 (the owner will
+      // author their contents later); the mechanism starts empty.
+      stylePresets: [],
 
       setLanguage: (lang) => set({ language: lang }),
       setTheme: (t) => set({ theme: t }),
@@ -151,6 +175,31 @@ export const useSettingsStore = create<SettingsStore>()(
       setDefaultOutputDir: (path) => set({ defaultOutputDir: path }),
       setDefaultProjectDir: (path) => set({ defaultProjectDir: path }),
       markStoreReviewClicked: () => set({ hasClickedStoreReview: true }),
+
+      addStylePreset: (preset) => {
+        let ok = false
+        set((s) => {
+          if (validatePresetName(preset.name, s.stylePresets) !== null) return s
+          ok = true
+          return { stylePresets: [...s.stylePresets, preset] }
+        })
+        return ok
+      },
+      renameStylePreset: (id, name) => {
+        let ok = false
+        set((s) => {
+          if (validatePresetName(name, s.stylePresets, { ignoreId: id }) !== null) return s
+          ok = true
+          return {
+            stylePresets: s.stylePresets.map((p) =>
+              p.id === id ? { ...p, name: name.trim() } : p,
+            ),
+          }
+        })
+        return ok
+      },
+      deleteStylePreset: (id) =>
+        set((s) => ({ stylePresets: s.stylePresets.filter((p) => p.id !== id) })),
 
       resetStep3Settings: () =>
         set({
@@ -191,9 +240,72 @@ export const useSettingsStore = create<SettingsStore>()(
             ? (s.baseColor as BaseColor)
             : 'neutral',
           transcriptionDefaults: {
+            // REQ-0295 — explicit field-by-field passthrough of every
+            // TranscriptionDefaults key, driven by
+            // `Object.prototype.hasOwnProperty` semantics via the `td.<key>`
+            // reads.  The trailing `...tdCleaned` spread ONLY appears to
+            // preserve `whisperModel` (the one required field the code
+            // above doesn't clamp explicitly).  A future refactor that
+            // introduces `AppSettings.transcriptionDefaults` schema
+            // migration should replace this with a proper allowlist —
+            // REQ-0279 documented the class of clobber bug that happens
+            // when nested-object hydrate silently drops fields.  For
+            // v1.3.6 the additive-optional contract + the trailing
+            // spread is enough: any legacy save that has more keys than
+            // the current type declares still flows through, and any
+            // new key added here is preserved because the ALL-optional
+            // fields hydrate via the explicit line below.
             ...tdCleaned,
             fontSizePx: Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, td.fontSizePx ?? 100)),
-            outlineThicknessPx: Math.min(OUTLINE_THICKNESS_MAX_PX, Math.max(0, td.outlineThicknessPx ?? 3))
+            outlineThicknessPx: Math.min(OUTLINE_THICKNESS_MAX_PX, Math.max(0, td.outlineThicknessPx ?? 3)),
+
+            // REQ-0295 — additive optional fields.  Clamp what needs
+            // clamping (shadowDepth, shadowAlpha, rotation) and pass
+            // string / boolean fields through unchanged.  `undefined`
+            // stays `undefined` (falls back to the per-cue neutral
+            // default at render time — see TranscriptionDefaults
+            // docstring for the mapping).
+            shadowDepth: td.shadowDepth === undefined
+              ? undefined
+              : Math.min(SHADOW_DEPTH_MAX_PX, Math.max(0, td.shadowDepth)),
+            shadowColor: td.shadowColor,
+            shadowAlpha: td.shadowAlpha === undefined
+              ? undefined
+              : Math.min(100, Math.max(0, td.shadowAlpha)),
+            // REQ-0310 — text / outline opacity.  `undefined` MUST stay
+            // `undefined`: writing `?? 100` here would turn "the user never
+            // touched this" into a persisted 100 and defeat the
+            // additive-optional contract (the REQ-0279 clobber class).  0 is a
+            // legal saved value and is clamped only against out-of-range junk.
+            textAlpha: td.textAlpha === undefined
+              ? undefined
+              : Math.min(100, Math.max(0, td.textAlpha)),
+            outlineAlpha: td.outlineAlpha === undefined
+              ? undefined
+              : Math.min(100, Math.max(0, td.outlineAlpha)),
+            karaokeEnabled: td.karaokeEnabled,
+            karaokeHighlightColor: td.karaokeHighlightColor,
+            casing: td.casing === 'uppercase' ? 'uppercase' : td.casing === 'none' ? 'none' : undefined,
+            rotation: td.rotation === undefined
+              ? undefined
+              : (((td.rotation % 360) + 360) % 360),
+            horizontalPosition: td.horizontalPosition === 'left' || td.horizontalPosition === 'center' || td.horizontalPosition === 'right'
+              ? td.horizontalPosition
+              : undefined,
+            verticalPosition: td.verticalPosition === 'top' || td.verticalPosition === 'center' || td.verticalPosition === 'bottom'
+              ? td.verticalPosition
+              : undefined,
+            verticalMarginPx: td.verticalMarginPx === undefined
+              ? undefined
+              : Math.max(0, Math.floor(td.verticalMarginPx)),
+            // REQ-0332 — line spacing (行間), clamped on load like every
+            // other numeric default so a hand-edited settings.json cannot
+            // push the slider out of range.
+            lineSpacingPercent: td.lineSpacingPercent === undefined
+              ? undefined
+              : clampLineSpacingPercent(Math.round(td.lineSpacingPercent)),
+            posOffsetX: td.posOffsetX === undefined ? undefined : Math.floor(td.posOffsetX),
+            posOffsetY: td.posOffsetY === undefined ? undefined : Math.floor(td.posOffsetY),
           },
           transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS, ...ta },
           autoLineBreak: s.autoLineBreak ?? true,
@@ -213,7 +325,26 @@ export const useSettingsStore = create<SettingsStore>()(
           defaultOutputDir: typeof s.defaultOutputDir === 'string' ? s.defaultOutputDir : null,
           // REQ-0194 — optional for backward compat with settings.json files
           // that predate the project-save feature.  Same fallback semantics.
-          defaultProjectDir: typeof s.defaultProjectDir === 'string' ? s.defaultProjectDir : null
+          defaultProjectDir: typeof s.defaultProjectDir === 'string' ? s.defaultProjectDir : null,
+          // REQ-0335 §3 — presets from settings.json.  Only the envelope is
+          // validated here (id / name / style object); individual style
+          // fields are NOT clamped, because a preset written by a NEWER
+          // build may legitimately carry keys this build does not know, and
+          // dropping them would corrupt the file on the next save.  Unknown
+          // keys are inert: `resolveStylePresetPatch` iterates the keys this
+          // build classifies, so it simply does not read them.
+          stylePresets: Array.isArray(s.stylePresets)
+            ? s.stylePresets
+                .filter(
+                  (p): p is StylePreset =>
+                    !!p &&
+                    typeof p.id === 'string' &&
+                    typeof p.name === 'string' &&
+                    !!p.style &&
+                    typeof p.style === 'object',
+                )
+                .slice(0, STYLE_PRESET_MAX)
+            : []
         })
       }
     }),
@@ -239,7 +370,12 @@ export const useSettingsStore = create<SettingsStore>()(
         // REQ-0208 — persist through localStorage only.  See interface
         // doc-comment for why this field is NOT in the AppSettings /
         // hydrate() path.
-        hasClickedStoreReview: state.hasClickedStoreReview
+        hasClickedStoreReview: state.hasClickedStoreReview,
+        // REQ-0335 §3-6 — presets round-trip through BOTH localStorage
+        // (here) and settings.json (via App.tsx's debounced save + the
+        // `incoming-wins` merge rule).  Same dual persistence every other
+        // renderer-owned setting already has.
+        stylePresets: state.stylePresets
       })
     }
   )

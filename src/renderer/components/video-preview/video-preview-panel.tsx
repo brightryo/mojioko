@@ -16,6 +16,8 @@ import { SubtitleOverlay, estimateOverlayHeightPx } from '@/components/subtitle-
 import { PositionGuideOverlay } from '@/components/subtitle-overlay/position-guide-overlay'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
+import { KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
+import { hexWithOpacity } from '../../../shared/alpha'
 import { findActiveEntryId, findActiveEntryIds, computeFixedStackOffsets } from '@/lib/active-entry'
 import {
   previewPxToAss,
@@ -23,7 +25,8 @@ import {
   clampAssPosition,
 } from '@/lib/preview-coords'
 import { editedDuration, editedToOrig, effectiveEntryState, origToEdited } from '../../../shared/cuts'
-import { computeFadeOpacity } from '@/lib/fade-opacity'
+import { resolveAnimation, animationTransformAt, NEUTRAL_TRANSFORM } from '../../../shared/cue-animation'
+import { applyCueAnimationPaint } from '@/lib/cue-anim-paint'
 import { createPreviewSeeker, type PreviewSeeker } from '@/lib/preview-seek'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -298,6 +301,10 @@ export function VideoPreviewPanel() {
   // down and re-spawn the rAF every time the active set changed, which
   // happens at every entry boundary.
   const activeEntryMapRef = useRef<Map<string, SubtitleEntry>>(new Map())
+  // REQ-0323 §1-3 — the rAF loop needs the ASS→preview px ratio to scale
+  // the blur radius and (later) the slide offset.  Held in refs so the
+  // loop never closes over a stale render's value and never re-subscribes.
+  const previewScaleRef = useRef(1)
   // REQ-20260615-050 — fade duration now lives per-entry, so no global
   // ref is needed.  The rAF reads `entry.fadeDurationSec` straight from
   // the `activeEntryMapRef` snapshot.
@@ -311,7 +318,7 @@ export function VideoPreviewPanel() {
   // typical overlay counts (< 10 simultaneous captions).
   //
   // REQ-0196 §2 — the pre-0196 initial-write here used the raw
-  // computeFadeOpacity() and painted opacity 0 for any entry mounted
+  // the animation curve and painted opacity 0 for any entry mounted
   // while its startSec matched the video's currentTime (owner repro:
   // opening a project with a 0-second caption — video is paused at
   // currentTime = 0, entry.startSec = 0 sits exactly on the fade-in
@@ -333,15 +340,24 @@ export function VideoPreviewPanel() {
         const v = videoRef.current
         const t = v?.currentTime ?? 0
         const isPaused = v?.paused ?? true
-        const opacity = isPaused
-          ? (t >= entry.startSec && t < entry.endSec ? 1 : 0)
-          : computeFadeOpacity({
-              currentTimeSec: t,
-              startSec: entry.startSec,
-              endSec: entry.endSec,
-              fadeDurationSec: entry.fadeDurationSec,
-            })
-        el.style.opacity = String(opacity)
+        // REQ-0323 §1 — mount-time paint uses the same shared curve as the
+        // rAF loop, so the first frame after mount is already correct
+        // instead of flashing at full opacity for one tick.
+        const inRange = t >= entry.startSec && t < entry.endSec
+        const anim = (isPaused && t <= entry.startSec) || !inRange
+          ? NEUTRAL_TRANSFORM
+          : animationTransformAt(resolveAnimation(entry), entry.startSec, entry.endSec, t)
+        // REQ-0339 §2 — write the WHOLE animation state, not just opacity.
+        // This callback fires during the commit phase, i.e. before the browser
+        // paints the cue's first frame; the rAF loop only gets to run
+        // afterwards.  Writing opacity alone painted every cue's first frame
+        // UNBLURRED and UNSCALED — measured against the real component at
+        // 1.36x the intended width for `pop` and 1.25x for `scale`, and fully
+        // sharp for `blur`.  That is half of the "an unfinished subtitle, then
+        // the styled one" flash the owner reported.  Shared with the rAF loop
+        // because two writers covering different subsets of one state is
+        // exactly how they end up disagreeing for a frame.
+        applyCueAnimationPaint(el, anim, inRange, previewScaleRef.current)
       } else {
         overlayOuterRefs.current.delete(entry.id)
       }
@@ -479,25 +495,145 @@ export function VideoPreviewPanel() {
       // painted at full opacity instead of the fade-in start (= 0 →
       // invisible).  During playback the burn-in-accurate ramp still
       // applies.  Same defensive out-of-range guard as
-      // computeFadeOpacity: if the paused playhead is outside the
+      // animationTransformAt: if the paused playhead is outside the
       // active entry's range, keep the caption hidden.
       const isPaused = v?.paused ?? true
       const entries = activeEntryMapRef.current
       for (const [id, el] of overlayOuterRefs.current) {
         const entry = entries.get(id)
         if (!entry) continue
-        const opacity = isPaused
-          ? (t >= entry.startSec && t < entry.endSec ? 1 : 0)
-          : computeFadeOpacity({
-              currentTimeSec: t,
-              startSec: entry.startSec,
-              endSec: entry.endSec,
-              fadeDurationSec: entry.fadeDurationSec,
-            })
-        const next = String(opacity)
-        // Guard CSSOM writes so a steady-state caption (mid-plateau,
-        // opacity = "1") does not invalidate style every frame.
-        if (el.style.opacity !== next) el.style.opacity = next
+        // REQ-0323 §1-2 — the animation state is sampled from the video's
+        // OWN clock every frame, never from a CSS `animation`/`transition`.
+        // Wall-clock CSS animation cannot follow a seek, a pause, or a
+        // frame-step; recomputing from `currentTime` follows all three for
+        // free, because the value is a pure function of `t`.
+        //
+        // The curve comes from `shared/cue-animation.ts`, the same module
+        // the ASS writer transcribes — there is no second copy of the
+        // maths to drift (REQ-0320 §1's failure mode).
+        const inRange = t >= entry.startSec && t < entry.endSec
+        const spec = resolveAnimation(entry)
+        // REQ-0195 §2 preserved, but NARROWED (REQ-0323 §1-2).  That REQ
+        // snapped the whole ramp to "settled" whenever paused, so a cue
+        // parked at `currentTime = 0` on mount was not invisible.  A blanket
+        // snap now contradicts §1-2, which requires a paused playhead
+        // 1 s into a 3 s animation to SHOW the 1 s state.  So the snap is
+        // kept only for the original repro — paused at or before the cue's
+        // own start — and scrubbing anywhere inside the cue shows the real
+        // animation state.
+        const snapToSettled = isPaused && t <= entry.startSec
+        const anim = snapToSettled || !inRange
+          ? NEUTRAL_TRANSFORM
+          : animationTransformAt(spec, entry.startSec, entry.endSec, t)
+
+        // REQ-0323 §1-3 — transform + filter go on the OUTER span, which
+        // contains the outline/shadow canvases as well as the text.  A
+        // transform does not affect layout, so the ring rides along and
+        // `measureRuns` is never re-run.  `--cue-anim-transform` is a
+        // custom property so React keeps ownership of the base transform.
+        //
+        // REQ-0339 §2 — the writes themselves moved into
+        // `applyCueAnimationPaint`, shared with the mount-time callback ref
+        // above.  Blur's layer choice is REQ-0339 §1's `cue-blur-layer.ts`.
+        applyCueAnimationPaint(el, anim, inRange, previewScaleRef.current)
+
+        // REQ-0286 §3 / REQ-0289 — karaoke per-word highlight, piggy-
+        // backed on the same rAF loop so we don't spin a second
+        // animation frame driver.  For each active karaoke cue, query
+        // its per-unit spans (`data-karaoke-word-idx`) and write
+        // `span.style.color` directly.  Fast-path guard is just
+        // `entry.karaokeEnabled` — we NO LONGER gate on `entry.words`
+        // because REQ-0289 added an equal-split fallback whose units
+        // exist as DOM spans but NOT in `entry.words`.  The tier check
+        // (`canUseKaraokeInTier`) already ran at render time in
+        // subtitle-overlay — if it failed there, no
+        // `data-karaoke-word-idx` spans exist and `querySelectorAll`
+        // returns empty, so this branch is a cheap no-op for free-tier
+        // and karaoke-off cues alike.
+        if (entry.karaokeEnabled) {
+          const wordSpans = el.querySelectorAll<HTMLElement>('[data-karaoke-word-idx]')
+          if (wordSpans.length === 0) continue
+          // REQ-0308 §5 — was a hardcoded '#FFFF00' duplicating the constant's
+          // old value.  It now reads the constant, so changing the default
+          // cannot make this rAF loop disagree with subtitle-overlay and the
+          // ass-generator (both of which already used the constant).
+          const highlightColor = entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR
+          // REQ-0293 §2 — base colour is ALWAYS `textColorHex` now.
+          // The pre-REQ-0293 per-cue `karaokeBaseColor` override was
+          // removed so the sweep swaps between "the cue's own text
+          // colour" and the user-picked accent (highlight).  Same
+          // rule mirrored in ass-generator's `\2c` emit and
+          // subtitle-overlay's `karaokeBaseColorResolved`.
+          // REQ-0310 — the unspoken half carries the cue's text opacity (the
+          // preview's counterpart to `\2a`); the spoken half stays opaque so a
+          // 0 % cue reads as words appearing exactly as they are spoken.
+          // Emphasised runs also stay opaque, matching the ass-generator's
+          // `\1a`-reset inside the emphasis override.
+          const baseColor = hexWithOpacity(entry.textColorHex, entry.textAlpha)
+          for (const span of wordSpans) {
+            const startSecAttr = span.getAttribute('data-karaoke-word-start-sec')
+            if (startSecAttr === null) continue
+            const wordStart = parseFloat(startSecAttr)
+            // Same "sticky highlight" rule as libass \k: once the
+            // playhead has passed the word's start, it stays lit.
+            // Paused case: honour the current playhead position too
+            // so a scrub reveals the correct karaoke state instantly.
+            const shouldHighlight = t >= wordStart
+            // REQ-0306 §3 (Option A) — an emphasised word (carries
+            // `data-karaoke-emph-color`) lights up in the emphasis colour when
+            // spoken instead of the karaoke highlight; unspoken it stays base
+            // like everyone else.  Mirrors the ass-generator `\c<emph>` overlay
+            // on the emphasised word's `\k` block.
+            const emphColor = span.getAttribute('data-karaoke-emph-color')
+            const spokenColor = emphColor ?? highlightColor
+            // REQ-0311 §4 — experimental sweep (`\kf`).  Instead of flipping
+            // the colour, paint a hard-stop gradient whose stop advances with
+            // the word's own speech duration — the same duration the emitter
+            // gives `\kf`, so preview and burn-in sweep together.
+            //
+            // The gradient is SIZED AND OFFSET TO THE WHOLE WORD, not to this
+            // run: an emphasised word is several runs, and libass sweeps the
+            // whole `\kf` syllable continuously.  `data-karaoke-word-box` is
+            // `position: relative`, so `offsetLeft` is already word-relative.
+            // Each run keeps its own spoken colour this way.
+            //
+            // DELETE THIS BLOCK with the sweep feature; the `else` arm below is
+            // the untouched shipping `\k` path.
+            const durAttr = span.getAttribute('data-karaoke-word-dur-sec')
+            if (durAttr !== null) {
+              const durSec = parseFloat(durAttr)
+              const p =
+                durSec > 0
+                  ? Math.min(1, Math.max(0, (t - wordStart) / durSec))
+                  : shouldHighlight
+                    ? 1
+                    : 0
+              const box = span.parentElement
+              const wordW = box?.offsetWidth ?? span.offsetWidth
+              const runX = box ? span.offsetLeft : 0
+              const pct = (p * 100).toFixed(2)
+              const image =
+                `linear-gradient(90deg, ${spokenColor} 0 ${pct}%, ${baseColor} ${pct}% 100%)`
+              if (span.style.backgroundImage !== image) {
+                span.style.backgroundImage = image
+                span.style.backgroundRepeat = 'no-repeat'
+                span.style.backgroundSize = `${wordW}px 100%`
+                span.style.backgroundPosition = `${-runX}px 0`
+                span.style.webkitBackgroundClip = 'text'
+                span.style.backgroundClip = 'text'
+                span.style.color = 'transparent'
+              }
+              continue
+            }
+            const targetColor = shouldHighlight ? spokenColor : baseColor
+            // Guard CSSOM writes at steady state — same rationale as
+            // opacity above.  A cue mid-plateau touches at most one
+            // span per frame (the one that just flipped).
+            if (span.style.color !== targetColor) {
+              span.style.color = targetColor
+            }
+          }
+        }
       }
       // REQ-086 — audio drift check piggy-backs on the same rAF.  The
       // guards (no audio element / video paused / video mid-seek) keep
@@ -553,12 +689,15 @@ export function VideoPreviewPanel() {
   // actual pixel size.  Replaces the old separate ResizeObserver on
   // videoContainerRef.
   const videoContainerWidth = videoFrameW
+  previewScaleRef.current = videoWidthPx > 0 && videoContainerWidth > 0
+    ? videoContainerWidth / videoWidthPx
+    : 1
 
   const stackOffsetsByEntryId = useMemo(() => {
     if (videoWidthPx <= 0 || videoContainerWidth <= 0) {
       return new Map<string, number>()
     }
-    return computeFixedStackOffsets(
+    return measureSync('vpp.stackOffsets', () => computeFixedStackOffsets(
       sortedActiveEntries,
       (entry) => estimateOverlayHeightPx(
         entry,
@@ -566,7 +705,7 @@ export function VideoPreviewPanel() {
         videoWidthPx,
         videoContainerWidth,
       ),
-    )
+    ))
   }, [sortedActiveEntries, activeFontId, videoWidthPx, videoContainerWidth])
 
   // Load the subtitle font on mount and refresh whenever the active font

@@ -2,9 +2,10 @@ import { existsSync, readdirSync, statSync, mkdirSync, createWriteStream, unlink
 import { join } from 'path'
 import {
   FONT_REGISTRY,
+  FONT_SET_VERSION,
+  deriveFontStatus,
   type FontId,
   type FontInfo,
-  type FontStatus,
   type FontsState,
   type DownloadFontEvent,
   getFontMeta
@@ -46,27 +47,40 @@ export function checkFontInstalled(fontId: FontId): { installed: boolean; bundle
  * Build the full FontsState snapshot for the renderer.  Pulls the active
  * font ID from the caller (settings) to avoid coupling this module to
  * settings-store.
+ *
+ * REQ-0275 §3 — `recordedSetVersion` is the value the caller loaded from
+ * `settings.json` (`fontSetInstalledVersion`).  When it does NOT match
+ * the current `FONT_SET_VERSION`, every non-bundled font on disk is
+ * reported as `not-installed` even if its bytes exist.  This is the
+ * safeguard against a v1.3.5 user's `fonts-v1` files being picked up
+ * with the wrong upstream family name after the v1.3.6 rename:
+ * detecting the stale set forces a re-download of the MOJIOKO-
+ * namespaced replacements, avoiding the silent preview↔burn-in
+ * divergence RES-0274 documented.  Bundled fonts are never affected
+ * (they ship with the installer and are always in sync).
+ *
+ * REQ-0276 §3 — `recordedSetVersion` is also echoed back in the returned
+ * `FontsState.fontSetInstalledVersion` so the renderer can distinguish
+ * "brand-new install (unset)" from "outdated (recorded but < current)"
+ * for the upgrade-notice banner.
  */
-export function buildFontsState(activeFontId: FontId): FontsState {
+export function buildFontsState(activeFontId: FontId, recordedSetVersion?: number): FontsState {
+  const setIsCurrent = recordedSetVersion === FONT_SET_VERSION
   let totalUsedBytes = 0
   const fonts: FontInfo[] = FONT_REGISTRY.map((meta) => {
     const { installed, bundled, sizeBytes } = checkFontInstalled(meta.id)
     totalUsedBytes += sizeBytes
-    let status: FontStatus
-    if (bundled) status = 'bundled'
-    else if (installed) status = 'installed'
-    else status = 'not-installed'
     return {
       id: meta.id,
       displayName: meta.displayName,
-      status,
+      status: deriveFontStatus(bundled, installed, setIsCurrent),
       sizeBytes,
       expectedSizeBytes: meta.expectedSizeBytes,
       bundled,
       hasDownloadUrl: meta.downloadUrl !== null
     }
   })
-  return { fonts, activeFontId, totalUsedBytes }
+  return { fonts, activeFontId, totalUsedBytes, fontSetInstalledVersion: recordedSetVersion }
 }
 
 /**
@@ -236,4 +250,45 @@ export function uninstallFont(fontId: FontId): void {
     rmSync(dir, { recursive: true, force: true })
     log.info(`[font-downloader] uninstalled ${fontId}`)
   }
+}
+
+/**
+ * REQ-0281 §4 — sweep every downloaded non-bundled font off disk.
+ *
+ * Called from two paths:
+ *  1. Batch-DL cancel / failure — REQ-0281 §4-3 says a partial batch must
+ *     leave zero downloaded files behind, so the next batch always starts
+ *     from the clean slate.  Combined with the caller clearing
+ *     `fontSetInstalledVersion` back to `undefined`, this pins the binary
+ *     state at 0 (`not-installed`).
+ *  2. The "Uninstall all additional fonts" button on the FontPicker
+ *     (REQ-0281 §4-5, owner-approved: individual per-row trash was
+ *     replaced by a single set-wide operation because per-row deletion
+ *     contradicts the binary state model).
+ *
+ * Bundled Noto weights are never touched — their TTFs live in the
+ * installer payload (`resources/fonts/Noto_Sans_JP/static/`) which
+ * this process has no business modifying at runtime.
+ *
+ * Returns the list of fontIds that were actually removed (empty when
+ * the disk was already clean) so callers can log or toast a count.
+ */
+export function uninstallAllDownloaded(): FontId[] {
+  const removed: FontId[] = []
+  for (const meta of FONT_REGISTRY) {
+    if (meta.bundled) continue
+    const dir = getFontUserDir(meta.id)
+    if (!existsSync(dir)) continue
+    try {
+      rmSync(dir, { recursive: true, force: true })
+      removed.push(meta.id)
+    } catch (err) {
+      log.warn(`[font-downloader] uninstallAllDownloaded: failed to remove ${meta.id}: ${(err as Error).message}`)
+      // Continue with the rest — one failure shouldn't strand the others.
+    }
+  }
+  if (removed.length > 0) {
+    log.info(`[font-downloader] uninstallAllDownloaded removed ${removed.length} font(s): ${removed.join(', ')}`)
+  }
+  return removed
 }

@@ -1,5 +1,6 @@
-import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams } from './types'
+import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams, WordSpan } from './types'
 import type { FontId } from './fonts'
+import type { KaraokeStyle } from './karaoke-style'
 import type { Cut } from './cuts'
 export type { ModelsState }
 
@@ -88,6 +89,15 @@ export interface BurninStartRequest {
    * caller predating Phase 1d).
    */
   cuts?: Cut[]
+  /**
+   * REQ-0311 §4 / REQ-0315 §2 — karaoke rendering style, app-wide setting.
+   *
+   * OPTIONAL, and REQ-0320 §1 is the price of that: `services/burnin.ts`
+   * rebuilds this payload field by field and simply omitted the key, so the
+   * writer silently used its default and every export came out as `\k` while
+   * the preview swept.  Optional + explicit re-construction = silent drop.
+   */
+  karaokeStyle?: KaraokeStyle
 }
 
 /**
@@ -113,6 +123,21 @@ export interface ExportFrameRequest {
   // REQ-20260615-050 — same per-entry consolidation as BurninStartRequest.
   subtitleBackground?: SubtitleBackground
   fontId?: FontId
+  /**
+   * REQ-0344 §2-2 — fallback karaoke style for cues that carry no
+   * `entry.karaokeStyle` of their own.
+   *
+   * **Required**, unlike `BurninStartRequest.karaokeStyle` above, and the
+   * asymmetry is deliberate.  The burn-in payload is assembled by
+   * `services/burnin.ts`, where `BURNIN_FIELD_DISPOSITION` (REQ-0321 §1) is a
+   * mapped type over every `BurninOptions` key — adding a field without
+   * classifying it does not compile, so optionality there costs nothing.
+   * The frame-export request has no such map: `export-frame-button.tsx` builds
+   * the object literal by hand, which is exactly how `karaokeStyle` came to be
+   * missing from the still-export path in the first place (RES-0340 §6-2).
+   * Requiring the field is the cheapest equivalent forcing function.
+   */
+  karaokeStyle: KaraokeStyle
 }
 
 export interface ExportFrameResult {
@@ -143,9 +168,24 @@ export interface BuildInfo {
 // Streaming event shapes (pushed main → renderer via channelId)
 // ---------------------------------------------------------------------------
 
+// REQ-0285 — `WordSpan` (per-word timing carried on the `segment`
+// event and on `SubtitleEntry.words`) lives in `./types` so
+// domain-shape and wire-shape share a single declaration.  Re-exported
+// here as a convenience for consumers that import types via
+// `ipc-contracts.ts`.
+export type { WordSpan } from './types'
+
 export type TranscriptionEvent =
   | { event: 'started'; totalDurationSec: number }
-  | { event: 'segment'; segment: { startSec: number; endSec: number; text: string } }
+  /**
+   * REQ-0285 — segment gained an optional `words` array.  Always
+   * populated (possibly empty) when the sidecar is Post-REQ-0285;
+   * `undefined` for older builds or when faster-whisper produced no
+   * word data for the segment (silence-only chunk).  Renderers that
+   * don't consume it must simply ignore the field — the pre-existing
+   * `startSec / endSec / text` shape is unchanged.
+   */
+  | { event: 'segment'; segment: { startSec: number; endSec: number; text: string; words?: WordSpan[] } }
   | { event: 'progress'; percent: number }
   /**
    * REQ-086 / REQ-0142 — phase change.  Two distinct sources share this

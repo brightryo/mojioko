@@ -6,7 +6,13 @@ import { useUiStore } from '@/stores/ui-store'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { isFontId } from '../../shared/fonts'
+import {
+  resolveEmphasisRanges,
+  mapRangesAcrossBreakCollapse,
+  clampEmphasisScalePercent,
+} from '../../shared/emphasis'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
+import { buildDuplicateEntry } from '@/lib/duplicate-entry'
 
 /**
  * Row-level edit operations that are shared between the list view
@@ -294,18 +300,42 @@ async function wrapRow(
   // existing `\N` intact (applyAutoLineBreak then splits on `\N` and
   // measures each segment independently — see auto-line-break.ts:51).
   const input = mode === 'pack' ? latest.text.replace(/\\N/g, '') : latest.text
+  // REQ-0306 §2 / REQ-0307 — feed the row's keyword emphasis into the break
+  // finder so a cue whose emphasised characters are enlarged actually wraps
+  // (pre-REQ-0306 the width was measured at base size and the wrap button
+  // reported "no change").  The spans are anchored against `latest.text`, so
+  // in "pack" mode — where `input` has had every `\N` deleted — the ranges are
+  // shifted onto the packed coordinates rather than left to drift.
+  const emphasis = latest.keywordEmphasisEnabled === true
+    ? {
+        ranges: mode === 'pack'
+          ? mapRangesAcrossBreakCollapse(latest.text, resolveEmphasisRanges(latest), 0)
+          : resolveEmphasisRanges(latest),
+        scale: clampEmphasisScalePercent(latest.emphasisScalePercent) / 100,
+      }
+    : undefined
   const rewrapped = applyAutoLineBreak(
     input,
     latest.fontSizePx,
     latest.outlineThicknessPx,
     videoWidthPx,
     font,
-    latest.fontId
+    latest.fontId,
+    emphasis
   )
   if (rewrapped === latest.text) {
     toast.info(labels.noChangeToast)
     return
   }
+  // REQ-0288 — retained words on auto-line-break.  Pre-REQ-0288 this
+  // path cleared `words: undefined` "defensively" (Layer 1).  Removed
+  // for the same reason as commit-text-edit's Layer 1 clear (see the
+  // REQ-0288 docblock there): the destructive clear breaks the
+  // "revert restores karaoke" invariant, and Layer 2
+  // (`areWordsValidForText`, REQ-0287's strip-all-whitespace
+  // normaliser) already tolerates `\N` insertion so karaoke stays on
+  // through wrap operations naturally.  Undo restores from the
+  // snapshot (which preserves the pre-edit words) exactly as before.
   const snapshot = { ...latest }
   pushHistory({
     label: labels.history,
@@ -394,37 +424,14 @@ export function duplicateRow(
     ? `dup-${crypto.randomUUID()}`
     : `dup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-  const base = {
-    startSec: entry.startSec,
-    endSec: entry.endSec,
-    text: entry.text,
-    fontSizePx: entry.fontSizePx,
-    textColorHex: entry.textColorHex,
-    outlineColorHex: entry.outlineColorHex,
-    outlineThicknessPx: entry.outlineThicknessPx,
-    fadeDurationSec: entry.fadeDurationSec,
-    fontId: entry.fontId,
-    // REQ-20260613-016 / v1.2.2 機能A+B: copy per-row layout / background /
-    // free-position fields from the source row.  subtitleBackground is
-    // deep-copied so the duplicate doesn't share object identity with the
-    // source.  posX/posY copy through verbatim — duplicating a pinned row
-    // gives a pinned duplicate, which the user can then drag elsewhere.
-    horizontalPosition: entry.horizontalPosition,
-    verticalPosition: entry.verticalPosition,
-    verticalMarginPx: entry.verticalMarginPx,
-    subtitleBackground: { ...entry.subtitleBackground },
-    posX: entry.posX,
-    posY: entry.posY
-  }
-  const duplicate: SubtitleEntry = {
-    id: newId,
-    ...base,
-    isDeleted: false,
-    isEdited: true,
-    // Deep-copy subtitleBackground a second time for the original snapshot
-    // so live + original do not share object identity.
-    original: { ...base, subtitleBackground: { ...base.subtitleBackground } }
-  }
+  // REQ-0322 §2 — the field list used to live inline here and had drifted
+  // 16 fields behind `SubtitleEntry` (style effects, karaoke `words`,
+  // emphasis spans).  It now lives in `duplicate-entry.ts` behind a
+  // `{ [K in keyof SubtitleEntry]-?: DuplicationRule }` classification, so
+  // a new field that nobody classifies fails `tsc` instead of being
+  // silently dropped from every duplicate.  See that module for the
+  // per-field copy / deep-copy / regenerate / reset / snapshot table.
+  const duplicate: SubtitleEntry = buildDuplicateEntry(entry, newId)
 
   pushHistory({
     label: labels.history,

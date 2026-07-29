@@ -1,0 +1,188 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>ring-paint stage</title>
+<style>
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    overflow: hidden;
+  }
+  .absolute {
+    position: absolute;
+  }
+  .pointer-events-none {
+    pointer-events: none;
+  }
+</style>
+<div id="stage"></div>
+<script src="./ring.js"></script>
+<script src="./cue-blur.js"></script>
+<script>
+  /**
+   * REQ-0327 §2 — the page half of the ring-paint gate.
+   *
+   * The PAINT is production code: `runRingEffect` below calls
+   * `Ring.paintOutlineLayers`, i.e. the real
+   * `src/renderer/lib/outline-ring.ts` bundled by index.mjs, which is the same
+   * function `subtitle-overlay.tsx`'s layout effect calls.  Nothing about
+   * measuring, sizing, painting or neutralising the transform is duplicated
+   * here any more (REQ-0328 §1).
+   *
+   * What IS still a replica: `buildCue` — the cue's DOM shape and inline
+   * styles, copied from `subtitle-overlay.tsx`'s returned JSX.  It cannot call
+   * the component (React would have to render, and `renderToStaticMarkup`
+   * never runs the layout effect, which is the whole reason this gate exists).
+   * So a change to the overlay's DOM — renaming
+   * `[data-subtitle-text-wrapper]`, moving the transform onto a different
+   * element, changing `white-space` or `transform-origin` — will NOT be
+   * reflected here automatically.  Keep the two in step; the smaller surface
+   * is the point, not its absence.
+   */
+  const STAGE = document.getElementById('stage')
+  let measureCtx = null
+
+  /** Registers the face the cases render with, mirroring the app's @font-face. */
+  window.__setup = async function (opts) {
+    if (opts.fontUrl) {
+      const face = new FontFace(opts.fontFamily, `url("${opts.fontUrl}")`, {
+        weight: String(opts.fontWeight),
+        style: 'normal'
+      })
+      await face.load()
+      document.fonts.add(face)
+    }
+    await document.fonts.ready
+    return { dpr: window.devicePixelRatio, fonts: document.fonts.size }
+  }
+
+  /**
+   * Builds the production cue DOM: outer span (absolute, `white-space: pre`,
+   * transform composed from `var(--cue-anim-transform)`, anchored
+   * transform-origin) > [shadow canvas, ring canvas, text wrapper span].
+   */
+  function buildCue(spec) {
+    STAGE.innerHTML = ''
+    const outer = document.createElement('span')
+    outer.className = 'absolute pointer-events-none'
+    const s = outer.style
+    s.left = spec.left + 'px'
+    s.top = spec.top + 'px'
+    s.fontFamily = `'${spec.fontFamily}'`
+    s.fontWeight = String(spec.fontWeight)
+    s.fontSize = spec.fontSizePx + 'px'
+    s.lineHeight = String(spec.lineHeight)
+    s.color = spec.textColor
+    s.whiteSpace = 'pre'
+    // The rAF animation layer, exactly as REQ-0323 composes it.
+    s.setProperty('--cue-anim-transform', 'translate(0px, 0px) scale(1)')
+    s.transform = 'var(--cue-anim-transform)'
+    // Bottom-centre: what `animScales` picks for a default bottom-centred cue.
+    s.transformOrigin = '50% 100%'
+
+    const shadowCanvas = document.createElement('canvas')
+    shadowCanvas.width = 0
+    shadowCanvas.height = 0
+    shadowCanvas.className = 'absolute pointer-events-none'
+    const ringCanvas = document.createElement('canvas')
+    ringCanvas.width = 0
+    ringCanvas.height = 0
+    ringCanvas.className = 'absolute pointer-events-none'
+
+    const wrapper = document.createElement('span')
+    wrapper.setAttribute('data-subtitle-text-wrapper', '')
+    wrapper.style.position = 'relative'
+    wrapper.style.zIndex = '1'
+    wrapper.style.display = 'inline'
+    wrapper.textContent = spec.text
+
+    outer.appendChild(shadowCanvas)
+    outer.appendChild(ringCanvas)
+    outer.appendChild(wrapper)
+    STAGE.appendChild(outer)
+    return { outer, ringCanvas, shadowCanvas }
+  }
+
+  /** Writes the animation transform the rAF loop owns. */
+  function setAnimScale(outer, scale) {
+    outer.style.setProperty('--cue-anim-transform', `translate(0px, 0px) scale(${scale})`)
+    // Force a style/layout flush so the capture cannot race the write.
+    void outer.getBoundingClientRect()
+  }
+
+  /**
+   * Calls the PRODUCTION paint procedure — `paintOutlineLayers` out of the real
+   * `src/renderer/lib/outline-ring.ts`, the same function
+   * `subtitle-overlay.tsx`'s layout effect calls.  REQ-0328 §1 pulled it out of
+   * the component precisely so this harness would stop maintaining a second
+   * copy: a copy drifts, and a drifted harness passes while production breaks.
+   *
+   * The negative control is expressed the same way: `skipTransformNeutralisation`
+   * is an option OF THE SHARED FUNCTION, so `RING_PAINT_BREAK` perturbs the code
+   * production runs rather than a look-alike.  'rotation-only' reproduces the
+   * pre-REQ-0326 condition (neutralise only when rotated) by skipping whenever
+   * rotation is 0, which is the case for every fixture here.
+   */
+  function runRingEffect(els, spec) {
+    if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d')
+    const rotationDeg = spec.rotationDeg || 0
+    const skip =
+      spec.neutralise === 'never'
+        ? true
+        : spec.neutralise === 'rotation-only'
+          ? rotationDeg === 0
+          : false
+    Ring.paintOutlineLayers({
+      outer: els.outer,
+      ringCanvas: els.ringCanvas,
+      shadowCanvas: els.shadowCanvas,
+      measureCtx,
+      outlinePx: spec.outlinePx,
+      outlineColorOpaque: spec.ringColor,
+      outlineOpacity01: 1,
+      // These cases isolate the ring; the shadow canvas stays cleared so the
+      // capture contains exactly two colours to separate.
+      shadowOffsetPx: 0,
+      shadowColorOpaque: '#000000',
+      shadowOpacity01: 1,
+      dpr: window.devicePixelRatio || 1,
+      skipTransformNeutralisation: skip
+    })
+  }
+
+  /**
+   * Runs one case and leaves the stage in its final painted state for capture.
+   *
+   *   order 'paint-then-scale' — paint at scale 1, then the animation scales it.
+   *   order 'scale-then-paint' — the animation is already active when the
+   *                              layout effect re-runs (REQ-0326's bug).
+   */
+  window.__case = function (spec) {
+    const els = buildCue(spec)
+    if (spec.order === 'scale-then-paint') {
+      setAnimScale(els.outer, spec.scale)
+      runRingEffect(els, spec)
+    } else {
+      setAnimScale(els.outer, 1)
+      runRingEffect(els, spec)
+      setAnimScale(els.outer, spec.scale)
+    }
+    // REQ-0339 §1 — the entrance/exit blur.  Production code again
+    // (`src/renderer/lib/cue-blur-layer.ts`), so the gate perturbs the very
+    // function the rAF loop calls.  `blurTarget: 'outer'` is the NEGATIVE
+    // CONTROL: it reproduces the pre-REQ-0339 behaviour of filtering the whole
+    // composite, which blurs the text along with the ring.
+    if (spec.blurPx > 0) {
+      if (spec.blurTarget === 'outer') els.outer.style.filter = `blur(${spec.blurPx}px)`
+      else CueBlur.applyCueBlurToLayer(els.outer, spec.blurPx)
+      void els.outer.getBoundingClientRect()
+    }
+    const r = els.ringCanvas
+    return {
+      canvasPx: [r.width, r.height],
+      canvasCss: [parseFloat(r.style.width) || 0, parseFloat(r.style.height) || 0],
+      dpr: window.devicePixelRatio
+    }
+  }
+</script>

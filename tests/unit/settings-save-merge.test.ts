@@ -205,6 +205,73 @@ describe('mergeSettingsForSave — REQ-0157 activeAccelerator preservation', () 
     expect(merged.defaultOutputDir).toBe('D:/exports')
   })
 
+  // -------------------------------------------------------------------
+  // REQ-0279 — fontSetInstalledVersion preservation.  This is the exact
+  // REQ-0157/0158 pattern applied to the font-set version stamp: the
+  // main-side `fontList:recordSetVersion` IPC writes it, but the
+  // renderer's debounced auto-save payload has no such key, so the
+  // pre-fix merge silently wiped the stamp back to `undefined`.  On
+  // the next `fontList` call, `deriveFontStatus` treated setIsCurrent
+  // as false and every non-bundled font was reported not-installed
+  // even though the bytes were on disk — the inspector's FamilyWeight-
+  // Selector then filtered them all out and users saw "only the
+  // default font is selectable" after a successful bulk download.
+  // -------------------------------------------------------------------
+
+  it('preserves fontSetInstalledVersion=3 from existing when renderer omits the key entirely', () => {
+    // The REQ-0279 regression scenario.  Bulk DL wrote 3 via the
+    // recordSetVersion IPC; a debounced auto-save scheduled by any
+    // pre-DL store change (hydrate, family pick, etc.) then fired
+    // WITHOUT the key and — before the fix — clobbered the value to
+    // undefined.  The fix uses `'key' in incoming` so the merge
+    // preserves the on-disk value instead.
+    const incoming = baseIncoming()
+    // The renderer's App.tsx payload has no such property to begin
+    // with, but delete defensively so the test does not depend on
+    // baseIncoming's exact shape.
+    delete (incoming as { fontSetInstalledVersion?: unknown }).fontSetInstalledVersion
+    const existing = baseExisting({ fontSetInstalledVersion: 3 })
+    const merged = mergeSettingsForSave(incoming, existing)
+    expect(merged.fontSetInstalledVersion).toBe(3)
+  })
+
+  it('leaves fontSetInstalledVersion undefined when neither side has it (fresh install)', () => {
+    // A never-bulk-downloaded user must NOT accidentally gain a
+    // fabricated version stamp.  `deriveFontStatus` needs the true
+    // `undefined` here to keep reporting all non-bundled fonts as
+    // not-installed until a real bulk DL happens.
+    const incoming = baseIncoming()
+    delete (incoming as { fontSetInstalledVersion?: unknown }).fontSetInstalledVersion
+    const existing = baseExisting()
+    const merged = mergeSettingsForSave(incoming, existing)
+    expect(merged.fontSetInstalledVersion).toBeUndefined()
+  })
+
+  it('respects a renderer sending fontSetInstalledVersion explicitly (defensive future-proofing)', () => {
+    // Today's App.tsx never sends the key, but a hypothetical
+    // future settings-import / user-triggered "mark set as
+    // downloaded" flow would.  `'key' in incoming` semantics let
+    // that value win.
+    const incoming = baseIncoming({ fontSetInstalledVersion: 3 })
+    const existing = baseExisting({ fontSetInstalledVersion: 2 })
+    const merged = mergeSettingsForSave(incoming, existing)
+    expect(merged.fontSetInstalledVersion).toBe(3)
+  })
+
+  it('respects a renderer sending fontSetInstalledVersion=undefined explicitly (would only be a bug in the caller, but the merge should honour the key)', () => {
+    // If a hypothetical future flow ever wants to CLEAR the stamp
+    // (e.g. "downgrade to force re-download"), the caller passes
+    // the key explicitly with `undefined`.  Distinguishing
+    // "omitted" from "present-but-undefined" is what `'key' in
+    // incoming` buys.  This case is defensive — the current codebase
+    // never triggers it — but pins the semantics.
+    const incoming = baseIncoming()
+    ;(incoming as { fontSetInstalledVersion?: number }).fontSetInstalledVersion = undefined
+    const existing = baseExisting({ fontSetInstalledVersion: 3 })
+    const merged = mergeSettingsForSave(incoming, existing)
+    expect(merged.fontSetInstalledVersion).toBeUndefined()
+  })
+
   it('strips Step-3-only UI state (burnin, subtitleBackground, audioMode) from the result', () => {
     // These fields are session-only by design — the settings-save
     // handler must always drop them before writing so a stale entry

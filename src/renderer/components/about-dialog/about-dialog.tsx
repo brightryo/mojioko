@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useUiStore } from '@/stores/ui-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
 import { getBuildInfo } from '@/services/build-info'
 import type { BuildInfo } from '@/services/build-info'
 import {
@@ -17,6 +18,19 @@ export function AboutDialog() {
   const setOpen = useUiStore((s) => s.setAboutDialogOpen)
 
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null)
+  // REQ-0280 — surface the paid (MSIX) vs free (NSIS) distinction so
+  // the owner can confirm at a glance which container the process is
+  // running under.  Read-only view of `isPackagedAsMsix` (main-side
+  // detection is untouched — see `src/main/lib/msix.ts:56`).  `null`
+  // is the pre-IPC window; render "…" like the other build-info rows
+  // so the layout doesn't jump when the value lands.
+  const isMsix = useAppEnvStore((s) => s.isMsix)
+  const editionValue =
+    isMsix === null
+      ? '…'
+      : isMsix
+        ? t('settings:about.editionMsix')
+        : t('settings:about.editionNsis')
 
   useEffect(() => {
     if (!isOpen) return
@@ -58,6 +72,12 @@ export function AboutDialog() {
           </div>
           <div className="border-t border-line pt-3 space-y-2">
             <InfoRow label={t('settings:about.license')} value={t('settings:about.licenseValue')} />
+            {/* REQ-0280 — edition row sits between license and build-info
+                so it groups with "what is this build" identity rather than
+                with the runtime component versions below.  Value text is
+                localised per §1 (ja "Microsoft Store版（有料版）" / en
+                "Microsoft Store (Paid)"). */}
+            <InfoRow label={t('settings:about.edition')} value={editionValue} />
             <InfoRow label="Electron" value={buildInfo?.electronVersion ?? '…'} />
             <InfoRow label="Node.js" value={buildInfo?.nodeVersion ?? '…'} />
             <InfoRow label="Chromium" value={buildInfo?.chromeVersion ?? '…'} />

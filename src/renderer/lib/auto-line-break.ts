@@ -1,4 +1,6 @@
 import { ASS_MARGIN_LR_PX } from './tokens'
+// REQ-0312 §2 — 禁則処理 (kinsoku) tables + break adjustment.
+import { applyKinsoku, isNoLineStartChar, isNoLineEndChar } from '../../shared/kinsoku'
 import {
   getSubtitleFont,
   getLibassScale,
@@ -11,6 +13,16 @@ import {
 } from './font-metrics'
 import type { SubtitleFont } from './font-metrics'
 import type { FontId } from '../../shared/fonts'
+import { isEmphasizedAt, type EmphasisRange } from '../../shared/emphasis'
+
+/**
+ * REQ-0306 §2 — emphasis width descriptor threaded through the break finder.
+ * `ranges` are code-unit ranges into the ORIGINAL `text` (with `\N`), `scale`
+ * is the emphasis size multiplier — REQ-0308 §4-4 allows 0.5–2.0, so it may be
+ * BELOW 1 (a shrunk span measures narrower).  `null` everywhere = pre-REQ-0306
+ * behaviour, byte-identical.
+ */
+type EmphAdvance = { ranges: readonly EmphasisRange[]; scale: number } | null
 
 /**
  * Insert ASS \N line breaks into `text` wherever a line would exceed the
@@ -22,6 +34,12 @@ import type { FontId } from '../../shared/fonts'
  * - Existing \N separators are preserved; each sub-line is processed independently.
  * - Recursive: a single line that needs more than one break is handled correctly.
  * - Falls back to character-class width estimates when the font is not loaded.
+ * - REQ-0303 — script-aware break placement.  The pixel budget still decides
+ *   *how much* fits on a line, but where that budget lands inside a Latin word
+ *   the break is moved back to the preceding word boundary so English words are
+ *   never split (`wonder` → `won` / `der`).  CJK runs have no whitespace, so
+ *   they keep the character-level behaviour byte-for-byte — Japanese-only cues
+ *   wrap at exactly the same positions as before REQ-0303.  See `adjustBreak`.
  *
  * @param text               Raw subtitle text (may already contain \N).
  * @param fontSizePx         Subtitle font size in pixels.
@@ -41,7 +59,16 @@ export function applyAutoLineBreak(
   outlineThicknessPx: number,
   videoWidthPx: number,
   font?: SubtitleFont | null,
-  fontId?: FontId
+  fontId?: FontId,
+  // REQ-0306 §2 / REQ-0307 — when the cue has keyword emphasis, the emphasised
+  // glyphs are physically larger, so the break finder must measure them at
+  // `scale` to wrap correctly.  `ranges` are the caller's already-resolved
+  // emphasis ranges in ORIGINAL-`text` coordinates (REQ-0307 moved resolution
+  // to `shared/emphasis.ts:resolveEmphasis` so the anchored spans are matched
+  // once, consistently, everywhere).  Omitted / empty ⇒ pre-REQ-0306
+  // behaviour, byte-identical (Japanese-only cues without emphasis are
+  // untouched).
+  emphasis?: { ranges: readonly EmphasisRange[]; scale: number }
 ): string {
   const f = fontId !== undefined
     ? getSubtitleFontFor(fontId)
@@ -57,12 +84,29 @@ export function applyAutoLineBreak(
   const cmap = getCmapCoverageFor(effectiveFontId)
   const tofu = getTofuSubstituteFor(effectiveFontId)
 
-  // Process each existing \N-separated segment independently,
-  // then rejoin — preserves intentional manual breaks already in the text.
-  return text
-    .split('\\N')
-    .map((seg) => breakSegment(seg, fontSizePx, effectivePx, f, libassScale, cmap, tofu))
-    .join('\\N')
+  // REQ-0306 §2 — `null` (no emphasis / no surviving span / scale exactly 1)
+  // makes every path below byte-identical to the pre-REQ-0306 measurement.
+  // REQ-0308 §4-4 — the guard is `!== 1` rather than `> 1`, because emphasis can
+  // now shrink a span as well as grow it (50–200 %).  Measuring a shrunk span at
+  // base size would break the line earlier than the burn-in needs.
+  const emph: EmphAdvance =
+    emphasis && emphasis.scale > 0 && emphasis.scale !== 1 && emphasis.ranges.length > 0
+      ? { ranges: emphasis.ranges, scale: emphasis.scale }
+      : null
+
+  // Process each existing \N-separated segment independently, then rejoin —
+  // preserves intentional manual breaks already in the text.  `base` tracks
+  // each segment's start offset in the ORIGINAL text so `emph.ranges`
+  // (original-text coords) map onto segment-local glyphs; the `+ 2` accounts
+  // for the stripped `\N` separator between segments.
+  const segments = text.split('\\N')
+  const out: string[] = []
+  let base = 0
+  for (const seg of segments) {
+    out.push(breakSegment(seg, fontSizePx, effectivePx, f, libassScale, cmap, tofu, emph, base))
+    base += seg.length + 2
+  }
+  return out.join('\\N')
 }
 
 // ---------------------------------------------------------------------------
@@ -70,8 +114,97 @@ export function applyAutoLineBreak(
 // ---------------------------------------------------------------------------
 
 /**
+ * REQ-0303 — a "word character" for the purpose of *not* splitting a Latin
+ * word across a line break.  Covers ASCII letters + digits, the Latin-1 /
+ * Latin-Extended letter blocks (accented Latin, IPA), and the two apostrophe
+ * forms so `don't` / `l'ami` stay intact.  Deliberately excludes:
+ *   - whitespace (that's where we *want* to break);
+ *   - the hyphen / other punctuation (breaking after `state-of-` reads fine);
+ *   - every CJK / wide code point (those match none of these ranges, so a
+ *     CJK boundary is never treated as "mid-word" and keeps character-level
+ *     wrapping — this is what preserves the pre-REQ-0303 Japanese positions).
+ */
+const WORD_CHAR = /[0-9A-Za-zÀ-ɏɐ-ʯ'’]/
+
+/**
+ * REQ-0303 — translate the pixel-accurate break index into the break that is
+ * actually used, respecting Latin word boundaries.
+ *
+ * `hardBreak` is the index BEFORE which `seg` would overflow (the position the
+ * pre-REQ-0303 algorithm broke at unconditionally).  Returns the code-unit
+ * offsets `{ leftEnd, rightStart }` at which to split — `leftEnd < rightStart`
+ * means the whitespace at `leftEnd` is consumed by the break (the standard
+ * word-wrap behaviour where the wrapping space disappears).
+ *
+ * Rules:
+ *   - If the split at `hardBreak` does NOT fall between two Latin word
+ *     characters — i.e. either side is whitespace, punctuation, or a CJK /
+ *     wide glyph — the position is returned unchanged.  Pure-CJK text always
+ *     hits this branch (no `WORD_CHAR` ever matches a kana / kanji), so its
+ *     break positions stay byte-identical to before REQ-0303.
+ *   - Otherwise the break is mid-word: scan back to the last whitespace and
+ *     break there, moving the whole word to the next line and consuming that
+ *     one space.
+ *   - If there is no whitespace before the break, the segment is a single word
+ *     longer than one line — the forced mid-word split is kept as the
+ *     unavoidable fallback (REQ-0303 §1 exception, "はみ出させない").
+ */
+function adjustBreak(seg: string, hardBreak: number): { leftEnd: number; rightStart: number } {
+  const before = seg[hardBreak - 1]
+  const after  = seg[hardBreak]
+  // Not a Latin word split → keep the pixel-accurate position verbatim.
+  if (!before || !after || !WORD_CHAR.test(before) || !WORD_CHAR.test(after)) {
+    return { leftEnd: hardBreak, rightStart: hardBreak }
+  }
+  // Mid-word: back off to the last whitespace so the word is not cut.  `w >= 1`
+  // keeps the left line non-empty (a leading space is never a break point).
+  for (let w = hardBreak - 1; w >= 1; w--) {
+    if (/\s/.test(seg[w])) {
+      return { leftEnd: w, rightStart: w + 1 }
+    }
+  }
+  // Single over-long word → unavoidable mid-word break (fallback).
+  return { leftEnd: hardBreak, rightStart: hardBreak }
+}
+
+/**
+ * REQ-0309 §3(B) — if the pixel-accurate break falls strictly INSIDE an
+ * emphasised range, return the segment-local offset of that range's start so
+ * the whole run moves to the next line together.  Returns `null` when there is
+ * no emphasis, when the break already sits on a range boundary, or when pulling
+ * back is impossible (the range starts at or before the segment's start — i.e.
+ * the run is wider than one line, and the caller keeps the original break).
+ *
+ * `emph.ranges` are ORIGINAL-text offsets, so the segment's `baseOffset` is
+ * added before testing and subtracted from the result.  Byte-identical to
+ * pre-REQ-0309 when `emph` is null — which is every cue without emphasis, so
+ * the REQ-0303 Japanese wrap positions are untouched.
+ */
+function pullBreakOutOfEmphasis(
+  seg: string,
+  hardBreak: number,
+  emph: EmphAdvance,
+  baseOffset: number,
+): number | null {
+  if (emph === null) return null
+  const abs = baseOffset + hardBreak
+  for (const [s, e] of emph.ranges) {
+    // Strictly inside: a break exactly at `s` or `e` already keeps the run whole.
+    if (abs > s && abs < e) {
+      const local = s - baseOffset
+      return local > 0 ? local : null
+    }
+  }
+  return null
+}
+
+/**
  * Recursively insert \N into a single segment (no existing \N) until every
  * resulting sub-line fits within `effectivePx`.
+ *
+ * The pixel budget (`findBreakIndex`) decides how many glyphs fit; REQ-0303's
+ * `adjustBreak` then nudges the split to a Latin word boundary when it would
+ * otherwise fall inside a word.  CJK segments are unaffected by the nudge.
  */
 function breakSegment(
   seg: string,
@@ -81,15 +214,90 @@ function breakSegment(
   libassScale: number,
   cmap: Set<number> | null,
   tofu: string | null,
+  emph: EmphAdvance,
+  baseOffset: number,
 ): string {
   if (!seg) return seg
 
-  const breakPos = findBreakIndex(seg, fontSizePx, effectivePx, font, libassScale, cmap, tofu)
+  const breakPos = findBreakIndex(seg, fontSizePx, effectivePx, font, libassScale, cmap, tofu, emph, baseOffset)
   if (breakPos === -1) return seg  // entire segment fits
 
-  const left  = seg.slice(0, breakPos)
-  const right = seg.slice(breakPos)
-  return left + '\\N' + breakSegment(right, fontSizePx, effectivePx, font, libassScale, cmap, tofu)
+  // REQ-0312 §2 — kinsoku runs FIRST, directly on the pixel-accurate position,
+  // and everything downstream sees its result instead of the raw index.  Order
+  // is: pixel → 禁則 → Latin word → emphasis.
+  //
+  // Kinsoku is first because it is the only rule expressed purely in terms of
+  // the two characters straddling the break, so it is the cheapest to satisfy
+  // and the least likely to be undone: `adjustBreak` only fires when BOTH sides
+  // are Latin word characters, which no kinsoku character is, so the two are
+  // mutually exclusive in practice and cannot argue.
+  //
+  // Emphasis is LAST and therefore wins outright when it disagrees — an
+  // emphasised run is an explicit per-character user choice, where kinsoku is a
+  // typographic default.  Kinsoku is re-applied to the pulled-back position so
+  // the emphasis outcome is still tidied when it can be.
+  //
+  // Termination: every one of these three only ever moves the break EARLIER,
+  // so the composition is strictly decreasing and bounded below by the
+  // `leftEnd <= 0` guard.  No rule can undo another's move by pushing the
+  // break later, which is why no iteration limit or convergence check is
+  // needed here.  A no-kinsoku segment returns `breakPos` unchanged, so cues
+  // without these characters wrap byte-identically to before (REQ-0303 pin).
+  // REQ-0315 §6 — kinsoku and the Latin word rule are applied to a FIXED POINT,
+  // not once each.
+  //
+  // Running kinsoku only before `adjustBreak` was not enough: `adjustBreak`
+  // moves the break back to the preceding whitespace, and the character that
+  // then ends the line is whatever sat before that space — which may itself be
+  // prohibited.  Measured example (RES-0314 §4-3):
+  //
+  //   'あ'x50 + '「 supercalifragilistic'  ->  line 1 ended with '「'
+  //
+  // A single extra pass is not enough either, because that pass can land the
+  // break inside a Latin word and require `adjustBreak` again.  Alternating
+  // until neither rule wants to move is the only version that is actually
+  // closed under both.
+  //
+  // Termination is structural, not a retry budget: every step assigns
+  // `pos = result.leftEnd - 1`, and `adjustBreak(applyKinsoku(pos)) <= pos`, so
+  // `pos` strictly decreases and is bounded below by the `leftEnd > 1` guard.
+  // Neither rule can push the break later, so they cannot cycle.
+  const violates = (le: number, rs: number): boolean => {
+    const endChar = seg[le - 1]
+    const startChar = seg[rs]
+    return (
+      (endChar !== undefined && isNoLineEndChar(endChar)) ||
+      (startChar !== undefined && isNoLineStartChar(startChar))
+    )
+  }
+  const resolve = (from: number) => adjustBreak(seg, applyKinsoku(seg, from))
+  let settled = resolve(breakPos)
+  let probe = breakPos
+  while (violates(settled.leftEnd, settled.rightStart) && settled.leftEnd > 1) {
+    probe = settled.leftEnd - 1
+    settled = resolve(probe)
+  }
+  // Fallback (REQ-0312 §2 precedence): if no legal position exists, keep the
+  // pixel-accurate one.  Never overflow, never empty a line.
+  if (violates(settled.leftEnd, settled.rightStart)) settled = resolve(breakPos)
+  const kinsokuPos = settled.leftEnd
+  let { leftEnd, rightStart } = settled
+  const pulled = pullBreakOutOfEmphasis(seg, kinsokuPos, emph, baseOffset)
+  if (pulled !== null) {
+    const adjusted = adjustBreak(seg, applyKinsoku(seg, pulled))
+    if (adjusted.leftEnd > 0) ({ leftEnd, rightStart } = adjusted)
+  }
+  // Defensive: an empty left line would recurse forever (only reachable if a
+  // single glyph is wider than the whole line — impossible at real video
+  // widths).  Leave the segment unbroken rather than loop.
+  if (leftEnd <= 0) return seg
+
+  const left  = seg.slice(0, leftEnd)
+  const right = seg.slice(rightStart)
+  if (!right) return seg  // nothing left to move to the next line
+  // Recurse on the tail; its glyphs start at `baseOffset + rightStart` in the
+  // ORIGINAL text so emphasis ranges keep lining up (REQ-0306 §2).
+  return left + '\\N' + breakSegment(right, fontSizePx, effectivePx, font, libassScale, cmap, tofu, emph, baseOffset + rightStart)
 }
 
 /**
@@ -111,7 +319,14 @@ function findBreakIndex(
   libassScale: number,
   cmap: Set<number> | null,
   tofu: string | null,
+  emph: EmphAdvance,
+  baseOffset: number,
 ): number {
+  // REQ-0306 — advance multiplier for the glyph whose original-text offset is
+  // `off`.  1 (identity) when there is no emphasis or the glyph isn't in an
+  // emphasised range, so non-emphasised text measures exactly as before.
+  const mult = (off: number): number =>
+    emph !== null && isEmphasizedAt(off, emph.ranges) ? emph.scale : 1
   if (font) {
     const scale      = (fontSizePx / font.unitsPerEm) * libassScale
     // REQ-0160 — pre-fetch the tofu character's advance so per-character
@@ -142,7 +357,9 @@ function findBreakIndex(
       } else {
         advance = font.charToGlyph(ch).advanceWidth ?? 0
       }
-      cumulative += advance * scale
+      // REQ-0306 — inflate the emphasised glyph's advance so wrapping fires
+      // where the larger burn-in glyph actually overflows.
+      cumulative += advance * scale * mult(baseOffset + byteOffset)
 
       if (cumulative > effectivePx) {
         return byteOffset  // break BEFORE this glyph
@@ -175,9 +392,9 @@ function findBreakIndex(
     let i          = 0
     for (const char of seg) {
       const cp        = seg.codePointAt(i) ?? 0
-      const charWidth = isWideCp(cp)
+      const charWidth = (isWideCp(cp)
         ? fontSizePx * FALLBACK_LIBASS_SCALE
-        : fontSizePx * 0.55 * FALLBACK_LIBASS_SCALE
+        : fontSizePx * 0.55 * FALLBACK_LIBASS_SCALE) * mult(baseOffset + i)
       cumulative += charWidth
       if (cumulative > effectivePx) {
         return i  // break BEFORE this character

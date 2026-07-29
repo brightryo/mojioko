@@ -11,6 +11,7 @@ import { FontPicker } from '@/components/font-picker/font-picker'
 import { DefaultStyleControls } from '@/components/default-style-controls/default-style-controls'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
 
 interface SubtitleStyleDialogProps {
   open: boolean
@@ -59,6 +60,11 @@ export function SubtitleStyleDialog({
   const setDefaults = useSettingsStore((s) => s.updateTranscriptionDefaults)
   const autoLineBreak = useSettingsStore((s) => s.autoLineBreak)
   const setAutoLineBreak = useSettingsStore((s) => s.setAutoLineBreak)
+  // REQ-0295 — fade + tier gate props for DefaultStyleControls's
+  // expanded row list (shadow / karaoke / casing / rotation / fade /
+  // layout).  Same store slots the Settings dialog uses.
+  const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -100,13 +106,12 @@ export function SubtitleStyleDialog({
               REQ-20260615-050: fade default for new entries moved to the
               Settings dialog's General-tab FadeDurationSlider. */}
           <DefaultStyleControls
-            fontSizePx={defaults.fontSizePx}
-            textColorHex={defaults.textColorHex}
-            outlineColorHex={defaults.outlineColorHex}
-            outlineThicknessPx={defaults.outlineThicknessPx}
-            autoLineBreak={autoLineBreak}
+            defaults={defaults}
             onUpdateDefaults={setDefaults}
+            autoLineBreak={autoLineBreak}
             onSetAutoLineBreak={setAutoLineBreak}
+            fadeDurationSec={fadeDurationSec}
+            isMsix={isMsix}
           />
         </div>
       </DialogContent>

@@ -54,6 +54,9 @@
     "developedBy": "このアプリはBrightRyoによって開発されました",
     "license": "ライセンス",
     "licenseValue": "プロプライエタリ",
+    "edition": "エディション",
+    "editionMsix": "Microsoft Store版（有料版）",
+    "editionNsis": "GitHub版（無料版）",
     "available": "利用可能",
     "notAvailable": "利用不可"
   }

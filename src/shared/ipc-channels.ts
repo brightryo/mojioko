@@ -22,6 +22,14 @@ export const Channels = {
   fontList: 'font:list',
   fontDownload: 'font:download',
   fontUninstall: 'font:uninstall',
+  /**
+   * REQ-0281 §4 — sweep every downloaded (non-bundled) font off disk AND
+   * clear `fontSetInstalledVersion` so the binary set state pins back to
+   * 0 (`not-installed`).  Serves both the batch-DL cancel/failure path
+   * and the user-triggered "Uninstall all additional fonts" button that
+   * replaced the pre-REQ-0281 per-row trash icons.
+   */
+  fontUninstallAll: 'font:uninstallAll',
   fontSetActive: 'font:setActive',
   fontReadOfl: 'font:readOfl',
   fontReadBytes: 'font:readBytes',

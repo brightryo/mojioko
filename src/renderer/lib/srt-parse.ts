@@ -47,8 +47,24 @@ export interface ParseSrtResult {
   errors: string[]
 }
 
+/**
+ * REQ-0347 §1-4 — the millisecond field accepts FOUR digits, not three.
+ *
+ * Three is what the format allows, and what MOJIOKO now writes.  Four is what
+ * MOJIOKO wrote up to v1.3.5: `formatSrtTime` computed the seconds and the
+ * milliseconds independently, so a time whose fraction rounded up to a whole
+ * second emitted `00:19:54,1000`.  The writer is fixed (`shared/srt-time.ts`),
+ * but the files are already on users' disks.
+ *
+ * That is not a rare shape.  The overflow needs a fractional part ≥ 0.9995 —
+ * a 0.05 % window per timestamp — so a 3,000-cue project had roughly a 95 %
+ * chance of containing at least one, assuming fractions land uniformly.  And
+ * because `parseSrt`'s errors are a hard refusal (RES-0223 §6), ONE such
+ * timestamp made the whole file unimportable.  Refusing to read back what
+ * this app itself wrote is the worse of the two bugs.
+ */
 const TIME_LINE_RE =
-  /^(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,3})\s*$/
+  /^(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,4})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{1,4})\s*$/
 
 /**
  * Convert `HH:MM:SS,mmm` (or its `.` variant emitted by some tools) to
@@ -69,8 +85,17 @@ export function parseSrtTime(s: string): number | null {
   // `1` → `100 ms`, `12` → `120 ms`, `123` → `123 ms`.  Matches
   // ffmpeg / SubtitleEdit's read behaviour on truncated writes.
   const msRaw = parts[1]
-  if (!/^\d{1,3}$/.test(msRaw)) return null
-  const ms = Number((msRaw + '000').slice(0, 3))
+  if (!/^\d{1,4}$/.test(msRaw)) return null
+  // 1-3 digits are a FRACTION of a second, so they pad to the right.  A
+  // 4-digit field cannot be — `1000` padded that way would read as `100` ms,
+  // i.e. the legacy overflow would silently become a tenth of a second
+  // instead of the whole one it stood for.  Taken as a literal millisecond
+  // count it carries correctly through the sum below: 19:54 + 1000 ms = 19:55,
+  // which is the instant the writer meant before it lost the carry
+  // (REQ-0347 §1-4).
+  const ms = msRaw.length === 4
+    ? Number(msRaw)
+    : Number((msRaw + '000').slice(0, 3))
   if (!Number.isFinite(h) || !Number.isFinite(m) || !Number.isFinite(sec)) return null
   if (m >= 60 || sec >= 60) return null
   return h * 3600 + m * 60 + sec + ms / 1000
