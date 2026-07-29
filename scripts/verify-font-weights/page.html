@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      REQ-0355 §2 — the stage for the font-weight gate.
+
+      `fonts.css` beside this file is the REAL src/renderer/styles/fonts.css
+      with only its `url('/fonts/…')` roots rewritten to absolute file: URLs
+      (index.mjs does the rewrite; the shipped build gets the same mapping from
+      Vite's publicDir = `resources`).  Nothing else is touched, so a weight
+      that has no `@font-face` in the real file has none here either — which is
+      the whole point of the gate.
+    -->
+    <link rel="stylesheet" href="./fonts.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      /**
+       * Measures one advance width per (family, weight).
+       *
+       * Canvas `measureText` is used rather than a DOM node because it takes
+       * the font shorthand verbatim, so the weight under test is unambiguous
+       * and no layout/line-box rounding sits between the face and the number.
+       */
+      window.__measure = async (job) => {
+        const out = []
+        for (const fam of job.families) {
+          // Ask for every weight up front so `font-display: block` faces are
+          // resolved before anything is measured.  A face that does not exist
+          // resolves too — silently, against the fallback — which is exactly
+          // the failure this gate exists to catch, so nothing is asserted here.
+          for (const w of fam.weights) {
+            try {
+              await document.fonts.load(`${w.weight} ${job.sizePx}px '${fam.family}'`)
+            } catch (e) {
+              /* a missing face is a measurement result, not a harness error */
+            }
+          }
+
+          const canvas = document.createElement('canvas')
+          const ctx = canvas.getContext('2d')
+          const rows = []
+          for (const w of fam.weights) {
+            ctx.font = `${w.weight} ${job.sizePx}px '${fam.family}'`
+            const m = ctx.measureText(job.sample)
+            rows.push({
+              id: w.id,
+              weight: w.weight,
+              // Rounded here so the JSON carries the same value the policy
+              // compares; sub-0.01px differences are not meaningful signal.
+              width: Math.round(m.width * 100) / 100,
+              // DIAGNOSTIC ONLY — never a pass/fail input.  See index.mjs.
+              check: document.fonts.check(`${w.weight} 16px "${fam.family}"`)
+            })
+          }
+
+          // Which faces the document actually holds for this family.  Also
+          // diagnostic: it makes a failure immediately legible ("3 faces for 9
+          // weights") instead of leaving only a width table to interpret.
+          const faces = []
+          document.fonts.forEach((f) => {
+            if (f.family === fam.family) faces.push({ weight: f.weight, status: f.status })
+          })
+
+          out.push({ family: fam.family, rows, faces })
+        }
+        return out
+      }
+    </script>
+  </body>
+</html>

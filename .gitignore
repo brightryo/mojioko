@@ -237,3 +237,9 @@ benchmark-results/
 
 # Playwright runtime output
 /test-results/
+
+# REQ-0355 — scratch dirs the verify:* gates rebuild on every run
+# (verify-outline-ring / verify-ring-paint / verify-font-weights).  These were
+# untracked only because nobody had run `git add -A`; CLAUDE.md §18 wants the
+# safety net written down rather than relied on by luck.
+scripts/*/.work/
