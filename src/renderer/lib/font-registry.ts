@@ -30,6 +30,14 @@ async function loadOne(meta: FontMeta): Promise<FontFace | null> {
     // Bundled font is registered via fonts.css already.  Wait for the family
     // to actually report ready so callers awaiting this promise can rely on
     // the family being usable for measurement / canvas-draw.
+    //
+    // REQ-0355 — this early return is an UNCHECKED CONTRACT with fonts.css:
+    // marking a font `bundled` without declaring an `@font-face` for its exact
+    // weight leaves it with no face at all, and CSS font matching then falls
+    // back to a neighbouring weight instead of failing.  Nothing here can
+    // detect that (`document.fonts.load`/`.check` both report success against
+    // the fallback), which is how REQ-0353 shipped six weights that rendered
+    // as two.  `npm run verify:font-weights` is the gate that does detect it.
     if ('fonts' in document) {
       try { await document.fonts.load(`${meta.weight} 100px '${meta.cssFontFamily}'`) } catch { /* swallow */ }
     }
