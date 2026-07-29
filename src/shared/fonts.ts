@@ -263,14 +263,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     assFontName: 'MOJIOKO Noto Sans JP Thin',
     fileName: 'NotoSansJP-Thin.ttf',
     weight: 100,
-    bundled: false,
-    downloadUrl: assetUrl('NotoSansJP-Thin.ttf'),
-    oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_769_992,
+    bundled: true,
+    downloadUrl: null,
+    oflUrl: null,
+    expectedSizeBytes: 0,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null,
+    bundledRelativeDir: NOTO_BUNDLED_DIR,
     languages: ['en', 'ja']
   },
   {
@@ -280,14 +280,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     assFontName: 'MOJIOKO Noto Sans JP ExtraLight',
     fileName: 'NotoSansJP-ExtraLight.ttf',
     weight: 200,
-    bundled: false,
-    downloadUrl: assetUrl('NotoSansJP-ExtraLight.ttf'),
-    oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_771_360,
+    bundled: true,
+    downloadUrl: null,
+    oflUrl: null,
+    expectedSizeBytes: 0,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null,
+    bundledRelativeDir: NOTO_BUNDLED_DIR,
     languages: ['en', 'ja']
   },
   {
@@ -297,14 +297,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     assFontName: 'MOJIOKO Noto Sans JP Light',
     fileName: 'NotoSansJP-Light.ttf',
     weight: 300,
-    bundled: false,
-    downloadUrl: assetUrl('NotoSansJP-Light.ttf'),
-    oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_770_904,
+    bundled: true,
+    downloadUrl: null,
+    oflUrl: null,
+    expectedSizeBytes: 0,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null,
+    bundledRelativeDir: NOTO_BUNDLED_DIR,
     languages: ['en', 'ja']
   },
   {
@@ -365,14 +365,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     assFontName: 'MOJIOKO Noto Sans JP Bold',
     fileName: 'NotoSansJP-Bold.ttf',
     weight: 700,
-    bundled: false,
-    downloadUrl: assetUrl('NotoSansJP-Bold.ttf'),
-    oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_761_772,
+    bundled: true,
+    downloadUrl: null,
+    oflUrl: null,
+    expectedSizeBytes: 0,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null,
+    bundledRelativeDir: NOTO_BUNDLED_DIR,
     languages: ['en', 'ja']
   },
   {
@@ -382,14 +382,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     assFontName: 'MOJIOKO Noto Sans JP ExtraBold',
     fileName: 'NotoSansJP-ExtraBold.ttf',
     weight: 800,
-    bundled: false,
-    downloadUrl: assetUrl('NotoSansJP-ExtraBold.ttf'),
-    oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_758_996,
+    bundled: true,
+    downloadUrl: null,
+    oflUrl: null,
+    expectedSizeBytes: 0,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null,
+    bundledRelativeDir: NOTO_BUNDLED_DIR,
     languages: ['en', 'ja']
   },
   {
@@ -399,14 +399,14 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
     assFontName: 'MOJIOKO Noto Sans JP Black',
     fileName: 'NotoSansJP-Black.ttf',
     weight: 900,
-    bundled: false,
-    downloadUrl: assetUrl('NotoSansJP-Black.ttf'),
-    oflUrl: assetUrl('NotoSansJP-OFL.txt'),
-    expectedSizeBytes: 5_756_616,
+    bundled: true,
+    downloadUrl: null,
+    oflUrl: null,
+    expectedSizeBytes: 0,
     copyright: NOTO_COPYRIGHT,
     sourceUrl: NOTO_SOURCE_URL,
     license: 'SIL-OFL-1.1',
-    bundledRelativeDir: null,
+    bundledRelativeDir: NOTO_BUNDLED_DIR,
     languages: ['en', 'ja']
   },
   {
@@ -785,6 +785,26 @@ export const FONT_REGISTRY: readonly FontMeta[] = [
 export const DEFAULT_FONT_ID: FontId = 'noto-sans-jp-semibold'
 
 /**
+ * REQ-0353 — is this font part of the family every edition ships with?
+ *
+ * This is the free/paid line, and it is the ONE place it is drawn.  Before
+ * REQ-0353 the line was `fontId === DEFAULT_FONT_ID`, so the free edition
+ * could use exactly one weight — SemiBold — and could not even select the
+ * Regular and Medium files it already had on disk.  The owner's decision is
+ * that the free edition gets the whole Noto Sans JP family (all nine weights,
+ * now all bundled) and the paid edition is differentiated by the twelve
+ * ADDITIONAL families.
+ *
+ * Derived from the registry rather than listing weights: the answer is "same
+ * `cssFontFamily` as the default font", so adding a tenth Noto weight needs no
+ * edit here, and no other family can be admitted by accident.  A hardcoded id
+ * list is how the twelve paid families would eventually leak in one at a time.
+ */
+export function isBundledFamilyFontId(fontId: FontId): boolean {
+  return getFontMeta(fontId).cssFontFamily === getFontMeta(DEFAULT_FONT_ID).cssFontFamily
+}
+
+/**
  * REQ-0269 B-5 — per-family default weight, applied whenever the user
  * switches a subtitle's font FAMILY.  Guarantees the previously-selected
  * weight is NOT carried across family switches (Regular Noto → Bold
@@ -992,12 +1012,17 @@ export function selectableWeightsForFamily(
   isMsix: boolean,
 ): FontFamily['weights'] {
   const canSelect = (id: FontId): boolean => {
-    // Duplicates the runtime `canSelectFontInTier` policy (paid tier =
-    // everything, free tier = DEFAULT_FONT_ID only).  Kept inline so
-    // this module stays free of a renderer-side lib dep; the
-    // `weight-selector-tier-gate` test pins that the two agree.
+    // Mirrors the runtime `canSelectFontInTier` policy (paid tier =
+    // everything, free tier = the bundled family).  Kept inline so this module
+    // stays free of a renderer-side lib dep; the `weight-selector-tier-gate`
+    // test pins that the two agree.
+    //
+    // REQ-0353 — both sides now call `isBundledFamilyFontId`, so the two
+    // copies share the PREDICATE even though the `isMsix` short-circuit is
+    // still written twice.  Before this they each spelled out
+    // `id === DEFAULT_FONT_ID`, i.e. the actual policy existed twice.
     if (isMsix) return true
-    return id === DEFAULT_FONT_ID
+    return isBundledFamilyFontId(id)
   }
   return family.weights.filter((w) => isInstalledOnDisk(w.fontId) && canSelect(w.fontId))
 }

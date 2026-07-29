@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { canSelectFontInTier, canDownloadFontInTier } from '../../src/renderer/lib/font-tier'
-import { DEFAULT_FONT_ID, FONT_REGISTRY } from '../../src/shared/fonts'
+import { DEFAULT_FONT_ID, FONT_REGISTRY, getFontMeta } from '../../src/shared/fonts'
 
 /**
  * REQ-088 #4 — tier policy contract.
@@ -19,10 +19,19 @@ describe('canSelectFontInTier', () => {
     }
   })
 
-  it('NSIS (free) allows only the bundled default', () => {
+  it('NSIS (free) allows the whole bundled FAMILY and nothing else', () => {
+    // REQ-0353 widened this from `DEFAULT_FONT_ID` (SemiBold alone) to every
+    // weight of the family the app ships with.  The paid edition is now
+    // differentiated by the twelve ADDITIONAL families only, so the assertion
+    // is stated as "same family as the default" — the same derivation the
+    // production predicate uses, checked here against the whole registry.
+    const bundledFamily = getFontMeta(DEFAULT_FONT_ID).cssFontFamily
     for (const meta of FONT_REGISTRY) {
-      const expected = meta.id === DEFAULT_FONT_ID
-      expect(canSelectFontInTier(false, meta.id)).toBe(expected)
+      const expected = meta.cssFontFamily === bundledFamily
+      expect(
+        canSelectFontInTier(false, meta.id),
+        `${meta.id} (${meta.cssFontFamily})`,
+      ).toBe(expected)
     }
   })
 

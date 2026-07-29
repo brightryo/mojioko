@@ -1,12 +1,18 @@
-import { DEFAULT_FONT_ID, type FontId } from '../../shared/fonts'
+import { DEFAULT_FONT_ID, isBundledFamilyFontId, type FontId } from '../../shared/fonts'
 
 /**
  * REQ-088 #4 — tier policy: which fonts can a given build select?
  *
  * - MSIX (paid / store build): every registered font.
- * - NSIS (free / GitHub build): only the bundled default
- *   (`DEFAULT_FONT_ID`).  Even if a downloaded font is present on disk
- *   from an older state, the picker must not let the user activate it.
+ * - NSIS (free / GitHub build): the bundled FAMILY — all nine Noto Sans JP
+ *   weights (REQ-0353).  Even if a downloaded font from one of the twelve
+ *   additional families is present on disk from an older state, the picker
+ *   must not let the user activate it.
+ *
+ * REQ-0353 widened the free tier from `DEFAULT_FONT_ID` (SemiBold alone) to
+ * the whole family, and bundled the six weights that were previously
+ * download-only so the choice is real offline.  The paid edition is now
+ * differentiated by the additional families only.
  *
  * Pure function with no Electron / DOM / Zustand dependencies so the
  * test in `font-tier.test.ts` can pin the policy without any IPC
@@ -16,7 +22,7 @@ import { DEFAULT_FONT_ID, type FontId } from '../../shared/fonts'
  */
 export function canSelectFontInTier(isMsix: boolean, fontId: FontId): boolean {
   if (isMsix) return true
-  return fontId === DEFAULT_FONT_ID
+  return isBundledFamilyFontId(fontId)
 }
 
 /**

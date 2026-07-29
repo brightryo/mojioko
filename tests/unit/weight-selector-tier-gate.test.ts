@@ -63,21 +63,29 @@ const bundledIds = new Set<FontId>(FONT_REGISTRY.filter((m) => m.bundled).map((m
 const onlyBundledOnDisk = (id: FontId): boolean => bundledIds.has(id)
 
 describe('REQ-0282 — free-tier weight gate (NSIS, isMsix=false)', () => {
-  it('Noto Sans JP family, all weights on disk → weight list = [SemiBold] only', () => {
-    // The critical case.  Regular / Medium / SemiBold are all bundled
-    // (installed=true) so a pure `installed.has` filter would return
-    // all three.  The tier gate must strip Regular + Medium.
+  it('Noto Sans JP family, all weights on disk → EVERY weight is offered', () => {
+    // REQ-0353 — the free tier now gets the whole bundled family.  Before it
+    // got `DEFAULT_FONT_ID` alone, so this case asserted `[SemiBold]` and the
+    // user could not even pick the Regular and Medium files already on disk.
     const weights = selectableWeightsForFamily(notoFamily, everythingOnDisk, false)
-    expect(weights.map((w) => w.fontId)).toEqual([DEFAULT_FONT_ID])
-    expect(weights.length).toBe(1)
+    expect(weights.map((w) => w.fontId)).toEqual(notoFamily.weights.map((w) => w.fontId))
+    expect(weights.length).toBe(notoFamily.weights.length)
   })
 
-  it('Noto Sans JP family, only bundled on disk → same result (Regular/Medium still bundled but tier-gated)', () => {
-    // Even when the downloadable Noto weights (Thin/Light/Bold/etc.)
-    // are absent, Regular and Medium are still bundled (on-disk = true).
-    // The tier gate is what keeps them out, not the disk check.
+  it('Noto Sans JP family, only bundled on disk → still every weight, because all nine ARE bundled', () => {
+    // REQ-0353 bundled the six weights that used to be download-only, so for
+    // this family the "bundled" and "everything" fixtures now agree.  That
+    // agreement is the point worth pinning: it is what makes the free tier's
+    // weight choice work OFFLINE, with no download step and no paid-tier
+    // download gate involved.
+    //
+    // Before REQ-0353 this asserted `[SemiBold]` and its comment explained
+    // that the tier gate, not the disk check, was what excluded Regular and
+    // Medium.  Both halves of that changed: the gate now admits them, and the
+    // disk check now finds all nine.
     const weights = selectableWeightsForFamily(notoFamily, onlyBundledOnDisk, false)
-    expect(weights.map((w) => w.fontId)).toEqual([DEFAULT_FONT_ID])
+    expect(weights.map((w) => w.fontId)).toEqual(notoFamily.weights.map((w) => w.fontId))
+    expect(weights.length, 'all nine Noto weights ship with every edition').toBe(9)
   })
 
   it('non-Noto family (Poppins), all weights on disk → weight list is empty', () => {
