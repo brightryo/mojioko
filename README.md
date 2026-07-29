@@ -15,7 +15,7 @@ burn-in, SRT / text export) are identical in both.
 - **Local processing** — All transcription and rendering happens on your PC. No cloud, no telemetry.
 - **Multi-format support** — Import MKV, MP4 for video, and MP3 / WAV / M4A / AAC / FLAC / OGG for audio.
 - **Audio file input** — Transcribe audio files directly with text/SRT export (no burn-in step).
-- **Custom subtitle fonts** — 13 fonts ship in-app (Noto Sans JP plus 12 Google Fonts: 8 Japanese + 4 Latin) with per-row font override. The paid edition unlocks the 12 additional fonts; the free edition uses Noto Sans JP only.
+- **Custom subtitle fonts** — 13 fonts ship in-app (Noto Sans JP plus 12 Google Fonts: 8 Japanese + 4 Latin) with per-row font override. The paid edition unlocks the 12 additional fonts; the free edition includes Noto Sans JP in all 9 weights (Thin through Black).
 - **Vertical video support** — Generate subtitles for TikTok, YouTube Shorts, and Instagram Reels.
 - **MP4 export** — Direct export to MP4 with `+faststart` for optimized SNS uploads.
 - **Multilingual transcription** — Powered by OpenAI Whisper, supports 11 languages.

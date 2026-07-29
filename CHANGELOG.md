@@ -11,11 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.6] - unreleased
 
-**Karaoke is now available in the free edition.**  The only difference
-between the free and paid editions is the font package: the paid
-(Microsoft Store) edition adds 12 subtitle fonts and lets you choose a
-weight, while the free (GitHub) edition uses the bundled Noto Sans JP.
-Every other feature below works in both.
+**Every feature in this release works in both editions.**  The only
+difference between them is the font package: the paid (Microsoft Store)
+edition adds 12 subtitle fonts, while the free (GitHub) edition includes
+Noto Sans JP in all nine weights (Thin through Black).  Weight selection
+is no longer a paid-tier feature.
 
 This release is mostly about subtitle *styling* — the things that make a
 caption look like yours rather than like a default.
@@ -68,8 +68,8 @@ caption look like yours rather than like a default.
   "not installed" and must be re-downloaded once via the "Download
   all" button in Settings → Fonts.  This is a one-time re-fetch that
   replaces the pre-v1.3.6 font files with the newly-namespaced set
-  required for correct weight rendering.  Free-tier users are not
-  affected (the bundled Noto Sans JP works as before).
+  required for correct weight rendering.  Free-tier users have nothing
+  to re-download — all nine Noto Sans JP weights ship in the installer.
 - Font downloads are now bundled into a single "Download all"
   action; per-font Download buttons were removed from the picker.
 
