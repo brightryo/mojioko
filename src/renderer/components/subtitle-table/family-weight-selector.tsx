@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Lock } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { useAppEnvStore } from '@/stores/app-env-store'
+import { useStoreUpsellStore } from '@/stores/store-upsell-store'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
+import { isFamilyTierLocked } from '@/lib/font-tier'
 import { cn } from '@/lib/utils'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 import { FontFamilyBadges } from '@/components/font-lang-badge/font-family-badges'
@@ -100,6 +102,8 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels, sh
   const [weightOpen, setWeightOpen] = useState(false)
   const installed = useInstalledFontIds()
   const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
+  // REQ-0356 — same upsell entry point Settings ▸ Fonts uses.
+  const openUpsell = useStoreUpsellStore((s) => s.openUpsell)
 
   const currentMeta = getFontMeta(value)
   const families = getFontFamilies()
@@ -111,6 +115,19 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels, sh
     isSelectable: true as const,
     displayLabel: stripFamilyNamespacePrefix(fam.cssFontFamily),
   }))
+
+  /**
+   * REQ-0356 — the paid-only families, shown but not pickable.
+   *
+   * `selectableFamilies` above drops a family for either of two reasons: it is
+   * tier-locked, or it is not installed on disk.  Only the FIRST is something
+   * the user can act on, so only that one is listed here — a paid build with a
+   * family not yet downloaded keeps today's behaviour of hiding it, and gains
+   * no padlocks (empty list whenever `isMsix`).
+   */
+  const lockedFamilies = families
+    .filter((fam) => isFamilyTierLocked(isMsix, fam))
+    .map((fam) => ({ ...fam, displayLabel: stripFamilyNamespacePrefix(fam.cssFontFamily) }))
 
   function pickFamily(family: typeof familiesUi[number]) {
     setFamilyOpen(false)
@@ -229,6 +246,50 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels, sh
               </button>
             )
           })}
+
+          {/* REQ-0356 — paid-only families, restored to the editing surfaces.
+              This is the shape `RowFontSelector` shipped with in v1.3.5
+              (REQ-091): listed AFTER the pickable rows behind a separator, so
+              what the user can actually choose still comes first, and muted +
+              padlocked so they read as "available with the paid version"
+              rather than "broken".  Clicking opens the same Store upsell
+              Settings ▸ Fonts opens, with the same string.
+
+              Empty in the paid tier, so its list is byte-identical to before.
+
+              No coverage chips here: REQ-0348 §1 removed the badge vocabulary
+              from the editing surfaces, and that decision stands — the lock is
+              the only thing being added back. */}
+          {lockedFamilies.length > 0 && (
+            <>
+              <div className="my-1 h-px bg-surface-2" aria-hidden="true" />
+              {lockedFamilies.map((fam) => (
+                <button
+                  key={fam.cssFontFamily}
+                  type="button"
+                  data-font-locked="true"
+                  onClick={() => { setFamilyOpen(false); openUpsell() }}
+                  className={cn(
+                    'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
+                    'hover:bg-accent/40 text-fg-muted',
+                  )}
+                  title={t('step1:fontPicker.action.lockedPaidOnly')}
+                  aria-label={t('step1:fontPicker.action.lockedPaidOnly')}
+                >
+                  <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  <span
+                    className="flex-1 min-w-0 truncate"
+                    style={{
+                      fontFamily: `'${fam.cssFontFamily}'`,
+                      fontWeight: fam.defaultFontId ? getFontMeta(fam.defaultFontId).weight : 400,
+                    }}
+                  >
+                    {fam.displayLabel}
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
         </div>
       </PopoverContent>
     </Popover>

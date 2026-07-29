@@ -16,7 +16,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useProjectStore } from '@/stores/project-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { useStoreUpsellStore } from '@/stores/store-upsell-store'
-import { canSelectFontInTier, canDownloadFontInTier } from '@/lib/font-tier'
+import { canDownloadFontInTier, isFamilyTierLocked } from '@/lib/font-tier'
 import {
   listFonts,
   setActiveFont,
@@ -558,11 +558,10 @@ export function FontPicker({ onChange }: FontPickerProps) {
             // Tier gate: the family is tier-locked (paid-only in free
             // build) when none of its weights are selectable AND none
             // are downloadable in the current tier.  Bundled Noto is
-            // never tier-locked.
-            const anyWeightSelectable = family.weights.some((w) => canSelectFontInTier(isMsix, w.fontId))
-            const anyWeightDownloadable = family.weights.some((w) => canDownloadFontInTier(isMsix, w.fontId))
-            const isTierLocked =
-              !family.hasBundledWeight && !anyWeightSelectable && !anyWeightDownloadable
+            // never tier-locked.  REQ-0356 lifted this out to
+            // `isFamilyTierLocked` so the editing surfaces decide it the
+            // same way — when it lived only here, they did not.
+            const isTierLocked = isFamilyTierLocked(isMsix, family)
             return (
               <FontFamilyRow
                 key={family.cssFontFamily}
