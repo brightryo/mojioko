@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MOJIOKO - Auto-Subtitle Tool for Videos (Free &amp; Paid Editions)</title>
-  <meta name="description" content="MOJIOKO is a desktop application that automatically transcribes video audio and burns subtitles into your videos. Available as a free edition on GitHub and a paid edition on the Microsoft Store. All processing is done locally on your PC.">
+  <meta name="description" content="MOJIOKO is a desktop application that transcribes the audio of your finished video with AI and burns subtitles into it. Your video is never uploaded — all processing runs on your own PC. Choose the free edition on GitHub or the paid edition on the Microsoft Store (one-time purchase).">
   <link rel="icon" type="image/png" href="../images/icon.png">
   <link rel="stylesheet" href="../assets/style.css">
   <script defer src="../assets/main.js"></script>
@@ -24,13 +24,19 @@
       </div>
     </nav>
 
-    <!-- Hero Section -->
+    <!-- ============================================================
+         Hero (REQ-0360 §2-1)
+         The download / Store pair stays here so a visitor who has
+         already decided is not made to scroll past the explanation.
+         The full free-vs-paid comparison moved down to .editions.
+         Structure mirrors the JA page one-for-one (REQ-0360 §5).
+         ============================================================ -->
     <section class="hero">
       <h1>MOJIOKO</h1>
-      <p class="tagline">Transcribe and create subtitled videos</p>
+      <p class="tagline">AI transcription and subtitles for videos, stream archives, and vertical clips</p>
+      <p class="hero-sub">For the last step after your edit is done. Every stage runs on your own PC.</p>
       <!-- Intro video: swap the "embed/<YouTube ID>" portion of the iframe
-           src to update.  Uses youtube-nocookie.com for privacy.  Mirrors
-           the JA top page's hero video block one-for-one (REQ-0267). -->
+           src to update.  Uses youtube-nocookie.com for privacy. -->
       <div class="hero-video">
         <iframe
           src="https://www.youtube-nocookie.com/embed/rDNQixHiiZI"
@@ -40,63 +46,150 @@
           referrerpolicy="strict-origin-when-cross-origin"
           allowfullscreen></iframe>
       </div>
-      <div class="version-cards">
-        <div class="version-card">
-          <h2 class="version-card-title">Free</h2>
-          <ul class="version-card-features">
-            <li>All core features are free: transcription, editing, subtitle text export, and subtitle video export.</li>
-            <li>Includes one font family, Noto Sans JP. Weights are selectable across 9 steps, Thin to Black.</li>
-          </ul>
-          <a href="https://github.com/brightryo/mojioko/releases/download/v1.3.6/MOJIOKO.Setup.1.3.6.exe" class="version-card-btn">
-            Download
-          </a>
-        </div>
-        <div class="version-card">
-          <h2 class="version-card-title">Paid</h2>
-          <ul class="version-card-features">
-            <li>Use the 12 additional fonts, plus any paid-only features added in future updates.</li>
-            <li>Use 12 additional fonts prepared by MOJIOKO (8 Japanese + 4 Latin), with more possibly added in future updates.</li>
-            <li>Available on the Microsoft Store, with automatic updates to always stay on the latest version.</li>
-          </ul>
-          <a href="https://apps.microsoft.com/detail/9N03JMH9LF6M" class="version-card-btn" target="_blank" rel="noopener">
-            Get it on Microsoft Store
-          </a>
-        </div>
+      <div class="cta-actions">
+        <a href="https://github.com/brightryo/mojioko/releases/download/v1.3.6/MOJIOKO.Setup.1.3.6.exe" class="cta-btn">
+          Download (Free)
+        </a>
+        <a href="https://apps.microsoft.com/detail/9N03JMH9LF6M" class="cta-btn" target="_blank" rel="noopener">
+          Get it on Microsoft Store
+        </a>
       </div>
-
-      <!-- System requirements (REQ-0254): shown directly below the download
-           cards so OS / memory / storage / GPU expectations register before a
-           user clicks a download CTA. Prevents mistaken downloads by users
-           on macOS or Linux since MOJIOKO ships Windows-only. -->
-      <div class="sysreq-card">
-        <h3 class="sysreq-title">System Requirements</h3>
-        <ul class="sysreq-list">
-          <li><span class="sysreq-label">OS:</span>Windows 10 / 11 (64-bit)</li>
-          <li><span class="sysreq-label">Memory:</span>16 GB or more recommended</li>
-          <li><span class="sysreq-label">Storage:</span>10 GB or more free space recommended (includes AI model downloads)</li>
-          <li><span class="sysreq-label">GPU (optional):</span>Faster processing with an NVIDIA GPU (CUDA). Also runs on CPU without a GPU.</li>
-        </ul>
-      </div>
-
       <p class="release-notes-link">
         <a href="https://github.com/brightryo/mojioko/releases" target="_blank" rel="noopener">View release notes</a>
       </p>
-      <a href="./guide/" class="guide-btn">
-        <span class="guide-btn-label">User Guide</span>
-        <span class="guide-btn-sub">FAQ, OBS Setup, and More</span>
-      </a>
-      <a href="./feedback/" class="guide-btn">
-        <span class="guide-btn-label">Feedback</span>
-        <span class="guide-btn-sub">Bug reports &amp; feature requests</span>
-      </a>
     </section>
 
-    <!-- Features Section — REQ-0111: what MOJIOKO can do (4 features).
-         Replaces the earlier "3 steps" storytelling.  Image slots are
-         placeholders for now; each has an HTML comment naming the target
-         screenshot so the swap point is obvious. -->
+    <!-- ============================================================
+         What this tool is / is not (REQ-0360 §3-2)
+         Stating the non-goals up front costs some visitors, but the
+         ones it costs were going to be disappointed later.  "The last
+         step" gives MOJIOKO a defined role, so the section reads as
+         positioning rather than as a list of missing features.
+         ============================================================ -->
+    <section class="whatis">
+      <h2>What this tool does</h2>
+      <p class="whatis-lead">
+        MOJIOKO turns a finished video (an archive of something you already edited)<br>
+        into a subtitled video and a transcript.
+      </p>
+      <div class="whatis-flow">
+        <span class="whatis-step">Load a video</span>
+        <span class="whatis-arrow" aria-hidden="true">→</span>
+        <span class="whatis-step">AI transcribes it</span>
+        <span class="whatis-arrow" aria-hidden="true">→</span>
+        <span class="whatis-step">Edit the subtitles</span>
+        <span class="whatis-arrow" aria-hidden="true">→</span>
+        <span class="whatis-step">Burn them in and export</span>
+      </div>
+      <div class="whatis-not">
+        <h3>MOJIOKO is not a video editor</h3>
+        <p>It cannot insert images, apply transitions, or join clips together.</p>
+        <p>Use it after your video editing is finished, as the last step.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Outcomes gallery (REQ-0360 §3-3)
+         Image slots are placeholders: the <img> 404s and the onerror
+         handler swaps in a dashed box naming the expected file — the
+         same swap-friendly pattern already used by e-gpu.png and
+         screenshot-shorts-en.png.  Drop the real file in and it just
+         appears; no markup change needed.
+         Karaoke and the appear animations CANNOT be shown with a still
+         frame, so those two slots are sized for a GIF or short muted
+         loop (see the commented <video> markup below each).
+         ============================================================ -->
+    <section class="outcomes">
+      <h2>What you can make</h2>
+      <p class="outcomes-intro">Examples of subtitles you can build with MOJIOKO.</p>
+      <div class="outcome-grid">
+
+        <div class="outcome-card">
+          <img src="../images/out-karaoke-en.gif" alt="Karaoke subtitles changing colour as words are spoken" class="outcome-media" loading="lazy"
+               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Karaoke subtitles (motion asset)<br>(images/out-karaoke-en.gif)</div>';">
+          <!-- To use a short clip instead of a GIF, replace the <img> above with:
+               <video class="outcome-media" src="../images/out-karaoke-en.mp4"
+                      autoplay muted loop playsinline></video> -->
+          <h3>Karaoke highlighting</h3>
+          <p>Words change colour as they are spoken. Pick between each word flipping when it starts, and the colour filling across each word.</p>
+          <span class="outcome-motion-note">Shown with a motion asset</span>
+        </div>
+
+        <div class="outcome-card">
+          <img src="../images/out-emphasis-en.png" alt="Keyword emphasis giving chosen words their own colour and size" class="outcome-media" loading="lazy"
+               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Keyword emphasis<br>(images/out-emphasis-en.png)</div>';">
+          <h3>Keyword emphasis</h3>
+          <p>Give chosen words their own colour and size, so one phrase stands out from the line.</p>
+        </div>
+
+        <div class="outcome-card">
+          <img src="../images/out-animation-en.gif" alt="Subtitles appearing with an animation" class="outcome-media" loading="lazy"
+               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Appear animation (motion asset)<br>(images/out-animation-en.gif)</div>';">
+          <!-- To use a short clip instead of a GIF, replace the <img> above with:
+               <video class="outcome-media" src="../images/out-animation-en.mp4"
+                      autoplay muted loop playsinline></video> -->
+          <h3>Appear / disappear animations</h3>
+          <p>Fade, scale, pop, and blur, with adjustable duration and strength.</p>
+          <span class="outcome-motion-note">Shown with a motion asset</span>
+        </div>
+
+        <div class="outcome-card">
+          <img src="../images/out-vertical-en.png" alt="Subtitles on a vertical video" class="outcome-media vertical" loading="lazy"
+               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder vertical&quot;>Vertical video subtitles<br>(images/out-vertical-en.png)</div>';">
+          <h3>Subtitles on vertical video</h3>
+          <p>You can subtitle vertical (9:16) videos too.</p>
+        </div>
+
+        <div class="outcome-card">
+          <img src="../images/out-style-en.png" alt="Subtitles with outline, drop shadow, and a background box" class="outcome-media" loading="lazy"
+               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Outline, shadow, and background box<br>(images/out-style-en.png)</div>';">
+          <h3>Outline, shadow, background box</h3>
+          <p>Outline colour and thickness, drop shadow, and a background band — tune them for readability.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Three pillars (REQ-0360 §3-4)
+         ★ ACCURACY: the claim is "your video is never uploaded", NOT
+         "works offline".  MOJIOKO downloads Whisper models, the CUDA
+         runtime (~1.1 GB) and the additional fonts over the network,
+         so "works offline" / "never connects" would be false.  The
+         .pillar-note qualifier below is what makes the privacy claim
+         true — do not delete it when editing this copy.
+         ============================================================ -->
+    <section class="pillars">
+      <h2>Three things that define MOJIOKO</h2>
+      <div class="pillar-grid">
+        <div class="pillar-card">
+          <h3>Your video is never uploaded</h3>
+          <p>Transcription and subtitle burn-in both happen entirely on your own PC.</p>
+          <span class="pillar-note">Note: the app connects to the internet only to download AI models and additional fonts.</span>
+        </div>
+        <div class="pillar-card">
+          <h3>Not a subscription</h3>
+          <p>The free edition stays free. The paid edition is a one-time purchase — there is no monthly fee.</p>
+        </div>
+        <div class="pillar-card">
+          <h3>A Windows desktop app</h3>
+          <p>No browser, no account sign-up.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Features — REQ-0111, restructured by REQ-0360 §3-5.
+         Changes from the previous version:
+           * the trimming tile was removed (owner decision) and replaced
+             by style presets so the 2×2 grid stays whole
+           * a v1.3.6 "Subtitle styling" block was added, deliberately
+             without image slots — those features are already shown in
+             the outcomes gallery above
+           * the burn-in copy no longer implies MOJIOKO finishes the edit
+         ============================================================ -->
     <section class="features">
-      <h2>What you can do with MOJIOKO</h2>
+      <h2>Main features</h2>
 
       <!-- Feature 1: High-accuracy automatic transcription -->
       <div class="feature-item">
@@ -111,10 +204,7 @@
         </div>
       </div>
 
-      <!-- Feature 1.5: GPU Acceleration (added in REQ-0227).
-           Owner will provide the screenshot at ../images/e-gpu.png;
-           until then the onerror fallback renders a placeholder card,
-           matching the pattern used for the shorts screenshot below. -->
+      <!-- Feature 1.5: GPU Acceleration (added in REQ-0227) -->
       <div class="feature-item reverse">
         <div>
           <img src="../images/e-gpu.png" alt="GPU acceleration settings" class="feature-image" loading="lazy"
@@ -148,15 +238,43 @@
           <div class="feature-grid-cell">
             <img src="../images/e4.png" alt="List view for reviewing and editing subtitles" class="feature-image" loading="lazy">
             <h4>Review and edit in a list view</h4>
-            <p>See all subtitles at once and edit them in bulk.</p>
+            <p>See all subtitles at once and edit them in bulk. It stays quick even with thousands of subtitles.</p>
           </div>
           <div class="feature-grid-cell">
-            <img src="../images/e5.png" alt="Trimming unwanted sections on the timeline" class="feature-image" loading="lazy">
-            <h4>Trim out unwanted parts</h4>
-            <p>Cut unneeded sections on the timeline.</p>
+            <img src="../images/e-preset.png" alt="Saving and applying a subtitle style preset" class="feature-image" loading="lazy"
+                 onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Style presets screen<br>(images/e-preset.png)</div>';">
+            <h4>Reuse a look with style presets</h4>
+            <p>Save a look you have built and apply it to other subtitles in one click.</p>
           </div>
         </div>
         <p class="feature-hint"><span class="feature-hint-label">💡 Timeline?</span>A horizontal bar showing the flow of time in your video, so you can edit when each subtitle appears.</p>
+      </div>
+
+      <!-- Feature 2.5: Subtitle styling (added in v1.3.6).  Deliberately
+           text-only — these are already shown in the outcomes gallery
+           above, so repeating the screenshots here would be redundant. -->
+      <div class="feature-block">
+        <div class="feature-block-header">
+          <h3>Subtitle styling</h3>
+        </div>
+        <div class="feature-grid">
+          <div class="feature-grid-cell">
+            <h4>Karaoke highlighting</h4>
+            <p>Words change colour as they are spoken. Choose Switch or Sweep per subtitle.</p>
+          </div>
+          <div class="feature-grid-cell">
+            <h4>Keyword emphasis</h4>
+            <p>Give chosen words their own colour and size.</p>
+          </div>
+          <div class="feature-grid-cell">
+            <h4>Appear / disappear animations</h4>
+            <p>Fade, scale, pop, and blur, with adjustable duration and strength.</p>
+          </div>
+          <div class="feature-grid-cell">
+            <h4>Fine appearance controls</h4>
+            <p>Line spacing, text and outline opacity (set separately — full transparency on the text with the outline kept gives hollow lettering), drop shadow, ALL CAPS, and rotation.</p>
+          </div>
+        </div>
       </div>
 
       <!-- Feature 3: Export as text or SRT -->
@@ -181,13 +299,16 @@
         <div class="feature-content">
           <h3>Burn in subtitles and export video</h3>
           <p>Burn your edited subtitles directly into the video.</p>
-          <p>Merge multiple audio tracks into one, ready to upload to YouTube and more.</p>
+          <p>Merge multiple audio tracks into one. Burn subtitles into your already-edited video and export it in a form you can upload as-is.</p>
           <p class="feature-hint"><span class="feature-hint-label">💡 Burn-in?</span>Embedding subtitles into the video itself, so they always show on any player.</p>
         </div>
       </div>
     </section>
 
-    <!-- Shorts Section -->
+    <!-- Shorts Section — REQ-0360 §3-5 #2: wording weakened from
+         "Works with Short-form Videos" so it cannot be read as "MOJIOKO
+         makes short-form videos".  It reads vertical video in, and puts
+         subtitles on it. -->
     <section class="shorts">
       <div class="shorts-content reverse">
         <div>
@@ -195,10 +316,70 @@
                onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Shorts screenshot<br>(screenshot-shorts-en.png)</div>';">
         </div>
         <div class="shorts-text">
-          <span class="step-label">Works with Short-form Videos</span>
+          <span class="step-label">Vertical video</span>
           <h3 style="font-size: 28px; font-weight: 700; margin: 8px 0 16px;">Subtitle vertical videos with ease</h3>
-          <p>Supports vertical videos (9:16). Import MKV and MP4 files, then export as MP4 for direct uploading to TikTok, YouTube Shorts, and Instagram Reels.</p>
+          <p>Load a vertical (9:16) video and add subtitles to your short-form clips. Import MKV and MP4 files, then export as MP4 for uploading to TikTok, YouTube Shorts, and Instagram Reels.</p>
         </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Editions + restated CTA (REQ-0360 §2-6)
+         Second CTA placement: a reader who needed the explanation
+         above arrives here ready to choose, without scrolling back up.
+         ============================================================ -->
+    <section class="editions">
+      <h2>Free and paid editions</h2>
+      <p class="editions-intro">The difference is the fonts you can use for subtitles, plus some experimental features.</p>
+      <div class="version-cards">
+        <div class="version-card">
+          <h2 class="version-card-title">Free</h2>
+          <ul class="version-card-features">
+            <li>All core features are free: transcription, editing, subtitle text export, and subtitle video export.</li>
+            <li>Includes one font family, Noto Sans JP. Weights are selectable across 9 steps, Thin to Black.</li>
+          </ul>
+          <a href="https://github.com/brightryo/mojioko/releases/download/v1.3.6/MOJIOKO.Setup.1.3.6.exe" class="version-card-btn">
+            Download
+          </a>
+        </div>
+        <div class="version-card">
+          <h2 class="version-card-title">Paid</h2>
+          <ul class="version-card-features">
+            <li>All features are available.</li>
+            <li>Create subtitles with 12 additional distinctive fonts provided by MOJIOKO.</li>
+            <li>Some experimental features are available.</li>
+            <li>Available from the Microsoft Store, with automatic updates so you always have the latest version.</li>
+          </ul>
+          <a href="https://apps.microsoft.com/detail/9N03JMH9LF6M" class="version-card-btn" target="_blank" rel="noopener">
+            Get it on Microsoft Store
+          </a>
+        </div>
+      </div>
+      <div class="cta-actions">
+        <a href="https://github.com/brightryo/mojioko/releases/download/v1.3.6/MOJIOKO.Setup.1.3.6.exe" class="cta-btn">
+          Download (Free)
+        </a>
+        <a href="https://apps.microsoft.com/detail/9N03JMH9LF6M" class="cta-btn" target="_blank" rel="noopener">
+          Get it on Microsoft Store
+        </a>
+      </div>
+    </section>
+
+    <!-- System requirements (REQ-0254, moved late by REQ-0360 §2-7).
+         Spec now follows the value story rather than preceding it, but
+         it still sits directly under the second CTA's decision point —
+         a macOS / Linux visitor sees "Windows 10 / 11" before acting on
+         the buttons above. -->
+    <section class="sysreq-section">
+      <h2>System Requirements</h2>
+      <div class="sysreq-card">
+        <h3 class="sysreq-title">System Requirements</h3>
+        <ul class="sysreq-list">
+          <li><span class="sysreq-label">OS:</span>Windows 10 / 11 (64-bit)</li>
+          <li><span class="sysreq-label">Memory:</span>16 GB or more recommended</li>
+          <li><span class="sysreq-label">Storage:</span>10 GB or more free space recommended (includes AI model downloads)</li>
+          <li><span class="sysreq-label">GPU (optional):</span>Faster processing with an NVIDIA GPU (CUDA). Also runs on CPU without a GPU.</li>
+        </ul>
       </div>
     </section>
 
@@ -242,21 +423,12 @@
       </div>
     </section>
 
-    <!-- CTA Section -->
+    <!-- Links Section (REQ-0360 §2-9).  The download buttons are not
+         repeated a third time here — they sit directly above in
+         .editions. -->
     <section class="cta">
-      <h2>Get Started</h2>
-      <p>All processing runs locally on your PC. Your video data is never uploaded anywhere.</p>
-      <div class="cta-actions">
-        <a href="https://github.com/brightryo/mojioko/releases/download/v1.3.6/MOJIOKO.Setup.1.3.6.exe" class="cta-btn">
-          Download (Free)
-        </a>
-        <a href="https://apps.microsoft.com/detail/9N03JMH9LF6M" class="cta-btn" target="_blank" rel="noopener">
-          Get it on Microsoft Store
-        </a>
-      </div>
-      <p class="release-notes-link">
-        <a href="https://github.com/brightryo/mojioko/releases" target="_blank" rel="noopener">View release notes</a>
-      </p>
+      <h2>Guides &amp; support</h2>
+      <p>If you get stuck installing or configuring MOJIOKO, start with the User Guide.</p>
       <a href="./guide/" class="guide-btn">
         <span class="guide-btn-label">User Guide</span>
         <span class="guide-btn-sub">FAQ, OBS Setup, and More</span>
@@ -265,6 +437,9 @@
         <span class="guide-btn-label">Feedback</span>
         <span class="guide-btn-sub">Bug reports &amp; feature requests</span>
       </a>
+      <p class="release-notes-link">
+        <a href="https://github.com/brightryo/mojioko/releases" target="_blank" rel="noopener">View release notes</a>
+      </p>
       <p class="cta-back-to-top">
         <a href="#top">↑ Back to top</a>
       </p>

@@ -1516,3 +1516,287 @@ footer a:hover {
     font-size: 15px;
   }
 }
+
+/* =====================================
+   Top page restructure — REQ-0360
+   =====================================
+   The landing page was reordered so value comes before spec: hero →
+   what-this-is → outcomes → pillars → features → editions → system
+   requirements.  Everything below reuses the existing tokens
+   (--bg-secondary / --border / --text-secondary) and the same section
+   rhythm (60px padding, 32px centred h2) as .features / .screenshots, so
+   the new blocks read as part of the original design rather than a
+   bolted-on second system.  All grids are mobile-first (1 column by
+   default, widened at a min-width breakpoint) — nothing here introduces a
+   fixed width that could overflow a phone viewport. */
+
+/* Hero sub-line under the tagline.  Separate from `.hero .tagline` so the
+   positioning sentence can be quieter than the one-line pitch above it. */
+.hero-sub {
+  font-size: 16px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  max-width: 640px;
+  margin: 0 auto 32px;
+}
+
+/* --- "What this tool is" ------------------------------------------- */
+.whatis {
+  padding: 60px 0;
+  border-top: 1px solid var(--border);
+}
+
+.whatis h2 {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 28px;
+}
+
+.whatis-lead {
+  max-width: 720px;
+  margin: 0 auto 32px;
+  text-align: center;
+  font-size: 17px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+/* The four-stage pipeline chip row.  Flex + wrap rather than a grid so a
+   narrow phone breaks it into however many rows it needs without leaving
+   half-empty columns. */
+.whatis-flow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  max-width: 860px;
+  margin: 0 auto 36px;
+}
+
+.whatis-step {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.whatis-arrow {
+  color: var(--text-tertiary);
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Non-goal callout.  Deliberately styled as a neutral aside (grey left
+   rule, not the green accent) — it is a scope clarification, not a
+   warning, and must not read as an error state. */
+.whatis-not {
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text-tertiary);
+  border-radius: 0 10px 10px 0;
+  padding: 20px 24px;
+}
+
+.whatis-not h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.whatis-not p {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.75;
+  margin-bottom: 8px;
+}
+
+.whatis-not p:last-child {
+  margin-bottom: 0;
+}
+
+/* --- Outcomes gallery ---------------------------------------------- */
+.outcomes {
+  padding: 60px 0;
+  border-top: 1px solid var(--border);
+}
+
+.outcomes h2 {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.outcomes-intro {
+  max-width: 680px;
+  margin: 0 auto 44px;
+  text-align: center;
+  font-size: 16px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.outcome-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 36px;
+}
+
+@media (min-width: 800px) {
+  .outcome-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 44px 32px;
+  }
+}
+
+/* Media slot.  Matches `.feature-image` (radius / border / shadow) so a
+   dropped-in screenshot sits in the same visual family as the rest of the
+   page.  `height: auto` keeps whatever aspect ratio the real asset has. */
+.outcome-media {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  display: block;
+}
+
+/* Vertical (9:16) sample — capped so a portrait still does not tower over
+   the landscape cards beside it. */
+.outcome-media.vertical,
+.screenshot-placeholder.vertical {
+  max-width: 280px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.screenshot-placeholder.vertical {
+  aspect-ratio: 9 / 16;
+}
+
+.outcome-card h3 {
+  font-size: 19px;
+  font-weight: 700;
+  margin: 16px 0 8px;
+}
+
+.outcome-card p {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* Marks the one or two slots meant to hold motion (GIF / short muted
+   loop).  Static stills cannot convey karaoke or the appear animations. */
+.outcome-motion-note {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* --- Three pillars -------------------------------------------------- */
+.pillars {
+  padding: 60px 0;
+  border-top: 1px solid var(--border);
+}
+
+.pillars h2 {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 44px;
+}
+
+.pillar-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+@media (min-width: 800px) {
+  .pillar-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+}
+
+.pillar-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.pillar-card h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.pillar-card p {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* Precision footnote (e.g. "model / font downloads do use the network").
+   Small, but load-bearing: the privacy claim above it is only true
+   because this line qualifies it.  Never drop it. */
+.pillar-note {
+  display: block;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  line-height: 1.6;
+}
+
+/* --- Editions (free vs paid) ---------------------------------------- */
+/* Reuses `.version-cards` / `.version-card` from the old hero placement;
+   only the section wrapper is new. */
+.editions {
+  padding: 60px 0;
+  border-top: 1px solid var(--border);
+}
+
+.editions h2 {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.editions-intro {
+  max-width: 680px;
+  margin: 0 auto 40px;
+  text-align: center;
+  font-size: 16px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+/* Spacing when the CTA pair is restated directly under the edition cards. */
+.editions .cta-actions {
+  margin-top: 40px;
+}
+
+/* --- System requirements as a standalone late section ---------------- */
+.sysreq-section {
+  padding: 60px 0;
+  border-top: 1px solid var(--border);
+}
+
+.sysreq-section h2 {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 32px;
+}
