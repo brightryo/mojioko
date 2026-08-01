@@ -10,6 +10,7 @@ import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } fr
 import type { ExportFrameRequest, ExportFrameResult } from '../../shared/ipc-contracts'
 import type { SubtitleEntry } from '../../shared/types'
 import { FfmpegError } from '../../shared/errors'
+import { displayedFrameSeekSec } from '../../shared/frame-seek'
 import log from '../lib/logger'
 
 /**
@@ -78,6 +79,14 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
 
   const ffmpeg = getBinPath('ffmpeg')
 
+  // REQ-0375 §3 — align the extracted frame with the one the preview shows.
+  // The preview <video> at `currentTime = timeSec` displays the frame with
+  // pts <= timeSec, but output-side `-ss timeSec` selects the first frame with
+  // pts >= timeSec — the NEXT frame whenever the playhead is between boundaries
+  // (owner's §3 repro).  `displayedFrameSeekSec` snaps the seek so ffmpeg
+  // extracts the displayed frame instead.
+  const seekSec = displayedFrameSeekSec(timeSec, req.video.fps)
+
   // Codec choice — ffmpeg auto-picks by extension when the output filename
   // matches, but we set it explicitly for predictability and consistency
   // with the existing thumbnail-extraction path.
@@ -122,14 +131,13 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
 
       const subtitlesFilter = `subtitles='${escapeAssPath(assPath)}':fontsdir='${escapeAssPath(fontsDir)}'`
 
-      // Two-pass seek: coarse `-ss` before `-i` for speed, then a
-      // frame-accurate `-ss 0` after `-i` would normally be needed for
-      // precision.  Here we put `-ss` AFTER `-i` so ffmpeg decodes from
-      // the previous keyframe up to timeSec — slower but exact and
-      // required for the subtitles filter to see the correct time.
+      // Output-side `-ss` (after `-i`) so ffmpeg decodes from the previous
+      // keyframe up to the seek point — slower but frame-accurate and
+      // required for the subtitles filter to see the correct time.  `seekSec`
+      // is snapped (see above) so the extracted frame matches the preview.
       args.push(
         '-i', inputPath,
-        '-ss', String(timeSec),
+        '-ss', String(seekSec),
         '-frames:v', '1',
         '-vf', subtitlesFilter,
         ...codecArgs,
@@ -137,10 +145,11 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
       )
     } else {
       // No subtitles — straight single-frame extract.  Output-side `-ss`
-      // is frame-accurate at the cost of decoding from the prior keyframe.
+      // is frame-accurate at the cost of decoding from the prior keyframe;
+      // `seekSec` is snapped (see above) so the frame matches the preview.
       args.push(
         '-i', inputPath,
-        '-ss', String(timeSec),
+        '-ss', String(seekSec),
         '-frames:v', '1',
         ...codecArgs,
         outputPath
