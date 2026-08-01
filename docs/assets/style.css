@@ -165,7 +165,11 @@ body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 20px;
-  margin: 32px auto 24px;
+  /* REQ-0368: top margin dropped — it used to buy space below the
+     editions-intro paragraph, removed by REQ-0368 §1. version-cards is
+     now .editions's first child, so its own 40px section padding is
+     the only gap above it, matching every other section on the page. */
+  margin: 0 auto 24px;
   /* REQ-0110 — widened 720 → 880 so the 2 cards visibly outsize the 520-wide
      walkthrough video above.  The eye moves down from the tight video into a
      wider primary CTA, which reads as "the choice opens up" rather than
@@ -611,16 +615,20 @@ p.feature-hint {
   text-align: center;
 }
 
-.cta h2 {
-  font-size: 36px;
-  font-weight: 700;
-  margin-bottom: 16px;
-}
-
-.cta p {
-  font-size: 16px;
-  color: var(--text-secondary);
-  margin-bottom: 32px;
+/* REQ-0368: the first guide-btn is now .cta's first child (its heading
+   was removed). Two stacked issues kept a gap here even after zeroing
+   margin-top: (1) the 18px top margin itself, meant for spacing below
+   the now-gone heading, and (2) `.guide-btn` is inline-flex with the
+   default `vertical-align: baseline`, so as the first inline-level box
+   in .cta's (block, line-height 25.6px) formatting context it still sat
+   inside an invisible line box below the whitespace text node preceding
+   it — an 18px "phantom" gap independent of any margin. `vertical-align:
+   top` removes that strut. Scoped to this context rather than changed on
+   `.guide-btn` itself, since that class is shared with docs/guide/ (out
+   of scope for this REQ). */
+.cta a.guide-btn:first-of-type {
+  margin-top: 0;
+  vertical-align: top;
 }
 
 /* Equal-weight 2-button pair for the bottom CTA (REQ-0113 §2).  Mirrors
@@ -1701,30 +1709,7 @@ footer a:hover {
   padding: 40px 0;
 }
 
-.editions h2 {
-  text-align: center;
-  font-size: 32px;
-  font-weight: 700;
-  margin-bottom: 16px;
-}
-
-.editions-intro {
-  max-width: 680px;
-  margin: 0 auto 40px;
-  text-align: center;
-  font-size: 16px;
-  color: var(--text-secondary);
-  line-height: 1.7;
-}
-
 /* --- System requirements as a standalone late section ---------------- */
 .sysreq-section {
   padding: 40px 0;
-}
-
-.sysreq-section h2 {
-  text-align: center;
-  font-size: 32px;
-  font-weight: 700;
-  margin-bottom: 32px;
 }
