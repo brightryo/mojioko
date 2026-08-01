@@ -101,7 +101,7 @@ body {
    60 because the next section supplies its own top padding.  See REQ-0109
    for the earlier 80 → 40 pass. */
 .hero {
-  padding: 20px 0 60px;
+  padding: 20px 0 40px;
   text-align: center;
 }
 
@@ -470,7 +470,7 @@ body {
    padding, same h2 size. */
 
 .features {
-  padding: 60px 0;
+  padding: 40px 0;
 }
 
 .features h2 {
@@ -607,7 +607,7 @@ p.feature-hint {
 
 /* CTA Section */
 .cta {
-  padding: 80px 0;
+  padding: 40px 0;
   text-align: center;
 }
 
@@ -841,7 +841,7 @@ footer a:hover {
    ===================================== */
 
 .support {
-  padding: 80px 0;
+  padding: 40px 0;
 }
 
 .support-header {
@@ -1442,7 +1442,7 @@ footer a:hover {
 }
 
 /* =====================================
-   Top page restructure — REQ-0360, reordered again by REQ-0364
+   Top page restructure — REQ-0360, reordered by REQ-0364, spacing by REQ-0366
    =====================================
    Current order (REQ-0364): hero → editions → guide nav (.cta) → system
    requirements → what-this-is → outcomes → pillars → features → support →
@@ -1450,18 +1450,22 @@ footer a:hover {
    visitor who already knows MOJIOKO can choose and check compatibility
    without scrolling through the full pitch first; the explanatory
    sections (what-this-is, outcomes, pillars, features) now follow for
-   readers who need convincing. Everything below reuses the existing
-   tokens (--bg-secondary / --border / --text-secondary) and the same
-   section rhythm (60px padding, 32px centred h2) as .features /
-   .screenshots, so the new blocks read as part of the original design
-   rather than a bolted-on second system. All grids are mobile-first (1
-   column by default, widened at a min-width breakpoint) — nothing here
-   introduces a fixed width that could overflow a phone viewport.
-   REQ-0364 §3-4 also dropped the border-top divider each of these
-   sections used to draw between itself and the section above — the page
-   now relies on padding/whitespace and each section's own visual
-   character (card grids vs. text vs. the whatis image) to read as
-   distinct blocks instead of a ruled line between every section. */
+   readers who need convincing. All grids are mobile-first (1 column by
+   default, widened at a min-width breakpoint) — nothing here introduces a
+   fixed width that could overflow a phone viewport.
+   REQ-0364 §3-4 dropped the border-top divider each of these sections
+   used to draw between itself and the section above — the page relies on
+   padding/whitespace and each section's own visual character (card grids
+   vs. text vs. the whatis image) to read as distinct blocks instead of a
+   ruled line between every section.
+   REQ-0366 §3-2: every section's own padding-top/bottom (was 60px, or
+   80px for .cta/.support) is now 40px, matching footer's padding — the
+   one section boundary the owner's annotated reference did NOT flag as
+   having excess space. Once the dividers were gone (REQ-0364), the old
+   60-80px padding read as a big gap with a heading floating in it rather
+   than a section break; footer's 40px was the one on-page example of a
+   boundary that still read as appropriately tight, so it became the
+   shared target instead of an arbitrary new number. */
 
 /* Hero sub-line under the tagline.  Separate from `.hero .tagline` so the
    positioning sentence can be quieter than the one-line pitch above it.
@@ -1481,7 +1485,7 @@ footer a:hover {
 
 /* --- "What this tool is" ------------------------------------------- */
 .whatis {
-  padding: 60px 0;
+  padding: 40px 0;
 }
 
 .whatis h2 {
@@ -1537,7 +1541,7 @@ footer a:hover {
 
 /* --- Outcomes gallery ---------------------------------------------- */
 .outcomes {
-  padding: 60px 0;
+  padding: 40px 0;
 }
 
 .outcomes h2 {
@@ -1566,6 +1570,21 @@ footer a:hover {
   .outcome-grid {
     grid-template-columns: 1fr 1fr;
     gap: 44px 32px;
+  }
+
+  /* REQ-0366 §3-1: with the アウトライン・影・背景ボックス card removed,
+     the gallery dropped from 4 cards to 3, leaving the last card alone in
+     a half-empty row. :last-child:nth-child(odd) matches only that "alone
+     in its row" case (an odd position that is also the last child) — a
+     future even-numbered card count would not trigger this rule. */
+  .outcome-card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+
+  .outcome-card:last-child:nth-child(odd) .outcome-media {
+    margin-left: auto;
+    margin-right: auto;
   }
 }
 
@@ -1618,7 +1637,7 @@ footer a:hover {
 
 /* --- Three pillars -------------------------------------------------- */
 .pillars {
-  padding: 60px 0;
+  padding: 40px 0;
 }
 
 .pillars h2 {
@@ -1679,7 +1698,7 @@ footer a:hover {
    restate the same two links below the cards — with the cards this close
    to the top, the restatement had nothing left to do. */
 .editions {
-  padding: 60px 0;
+  padding: 40px 0;
 }
 
 .editions h2 {
@@ -1700,7 +1719,7 @@ footer a:hover {
 
 /* --- System requirements as a standalone late section ---------------- */
 .sysreq-section {
-  padding: 60px 0;
+  padding: 40px 0;
 }
 
 .sysreq-section h2 {
