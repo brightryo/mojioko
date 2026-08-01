@@ -1660,6 +1660,41 @@ footer a:hover {
   color: var(--text-tertiary);
 }
 
+/* --- Vertical-video ("shorts") showcase (REQ-0370 §2) ---------------- */
+/* Two-column block below the outcome-grid: image left, copy right,
+   vertically centred. Mobile-first — a single column (image over text) by
+   default, widening to two columns at 800px like the gallery above it. The
+   left column is sized to the capped portrait width (.outcome-media.vertical
+   is max-width 280) so the copy takes the remaining space. margin-top keeps
+   the block on the same vertical rhythm as the gallery's own row gap. */
+.vertical-showcase {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  align-items: center;
+  margin-top: 44px;
+}
+
+@media (min-width: 800px) {
+  .vertical-showcase {
+    grid-template-columns: minmax(0, 280px) 1fr;
+    gap: 48px;
+  }
+}
+
+.vertical-showcase-text h3 {
+  font-size: 19px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.vertical-showcase-text p {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin: 0;
+}
+
 /* --- Three pillars -------------------------------------------------- */
 .pillars {
   padding: 28px 0;
