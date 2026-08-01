@@ -161,80 +161,22 @@
     </section>
 
     <!-- ============================================================
-         Outcomes gallery (REQ-0360 §3-3, edited by REQ-0364 §3-2/§3-3)
-         Image slots are placeholders: the <img> 404s and the onerror
-         handler swaps in a dashed box naming the expected file, which
-         is the same swap-friendly pattern already used elsewhere.
-         Drop the real file in and it just appears — no markup change
-         needed. Karaoke CANNOT be shown with a still frame, so that
-         slot is sized for a GIF or a short muted loop.
-
-         REQ-0364 changes:
-           * the 登場・退場アニメーション card is removed (§3-3) — the
-             feature still exists in the app, it is just no longer
-             demonstrated on this page
-           * the old standalone .shorts section is folded into the
-             縦型動画の字幕 card below (§3-2): its richer copy (platform
-             names, MKV/MP4 in, MP4 out) replaces the old one-line
-             blurb.  screenshot-shorts.png is NOT reused here — it is a
-             3840x2160 landscape app screenshot, while this card uses
-             the existing out-vertical.png (a 1080x1920 portrait result
-             shot already styled with the `.vertical` treatment other
-             cards don't have). Mixing the two aspect ratios into one
-             card would have broken the "look like every other outcome
-             card" instruction, so the image stayed and only the copy
-             merged.
-
-         REQ-0366 §3-1: the アウトライン・影・背景ボックス card (image was
-         still an unfilled placeholder, per RES-0363) is removed — the
-         owner's annotated reference confirmed this one, unlike the
-         アニメーション card removal above which the same reference
-         appeared to contradict (see RES-0366). Gallery is now 3 cards.
+         Outcomes — single sample GIF (REQ-0372)
+         The karaoke / keyword-emphasis cards and the vertical-video
+         showcase (REQ-0370/0371) are all removed; the section is now just
+         the heading plus one centred GIF (assets/out_sub.gif) with no
+         caption. The GIF file is NOT created in this REQ — the owner
+         supplies it later (§2-4); only the reference path and layout are in
+         place, so the <img> 404s until then and its onerror swaps in a
+         labelled placeholder box (the same swap-friendly pattern used
+         elsewhere). ja and en reference the SAME asset; only the alt text
+         is localised. The display size lives in .outcome-sample's max-width
+         (480px placeholder pending the real asset's dimensions).
          ============================================================ -->
     <section class="outcomes">
       <h2>できあがるもの</h2>
-      <p class="outcomes-intro">MOJIOKO で作れる字幕の例です。</p>
-      <div class="outcome-grid">
-
-        <div class="outcome-card">
-          <img src="images/out-karaoke.gif" alt="発話に合わせて色が変わるカラオケ字幕の例" class="outcome-media" loading="lazy"
-               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>カラオケ字幕（動きのある素材）<br>(images/out-karaoke.gif)</div>';">
-          <!-- GIF ではなく短い動画にする場合は、上の <img> を下に差し替える:
-               <video class="outcome-media" src="images/out-karaoke.mp4"
-                      autoplay muted loop playsinline></video> -->
-          <h3>カラオケ表示</h3>
-          <p>発話に合わせて文字の色が変わります。単語の先頭で切り替える方法と、色が流れるように塗られる方法を選べます。</p>
-          <span class="outcome-motion-note">※ 動きのある素材で紹介します</span>
-        </div>
-
-        <div class="outcome-card">
-          <img src="images/out-emphasis.png" alt="指定した文字だけ色と大きさを変えたキーワード強調の例" class="outcome-media" loading="lazy"
-               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>キーワード強調<br>(images/out-emphasis.png)</div>';">
-          <h3>キーワード強調</h3>
-          <p>指定した文字だけ色と大きさを変えて、一言だけを目立たせられます。</p>
-        </div>
-
-      </div>
-
-      <!-- ============================================================
-           Vertical-video ("shorts") showcase (REQ-0370 §2)
-           Pulled out of the outcome-grid above into a dedicated 2-column
-           block — image left, copy right, vertically centred — that stacks
-           to image-over-text on phone widths. The gallery keeps its other
-           two cards (karaoke / keyword emphasis). The intro copy is
-           unchanged from its previous card form (REQ-0360-era wording
-           kept per §2-4).
-           ============================================================ -->
-      <div class="vertical-showcase">
-        <div class="vertical-showcase-media">
-          <img src="images/out-vertical.png" alt="縦型動画に字幕を付けた例" class="outcome-media vertical" loading="lazy"
-               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder vertical&quot;>縦型動画の字幕<br>(images/out-vertical.png)</div>';">
-        </div>
-        <div class="vertical-showcase-text">
-          <h3>縦型動画の字幕</h3>
-          <p>縦型動画（9:16）を読み込んで字幕を付けられます。MKV・MP4 を読み込み、MP4 形式で書き出し可能。TikTok、YouTube Shorts、Instagram Reels 向けの字幕制作に活用できます。</p>
-        </div>
-      </div>
+      <img src="assets/out_sub.gif" alt="MOJIOKO の字幕サンプル" class="outcome-sample" loading="lazy"
+           onerror="this.outerHTML='<div class=&quot;screenshot-placeholder outcome-sample&quot;>out_sub.gif<br>(assets/out_sub.gif)</div>';">
     </section>
 
     <!-- ============================================================

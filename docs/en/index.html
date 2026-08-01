@@ -163,80 +163,22 @@
     </section>
 
     <!-- ============================================================
-         Outcomes gallery (REQ-0360 §3-3, edited by REQ-0364 §3-2/§3-3)
-         Image slots are placeholders: the <img> 404s and the onerror
-         handler swaps in a dashed box naming the expected file — the
-         same swap-friendly pattern already used elsewhere.  Drop the
-         real file in and it just appears; no markup change needed.
-         Karaoke CANNOT be shown with a still frame, so that slot is
-         sized for a GIF or short muted loop.
-
-         REQ-0364 changes:
-           * the Appear / disappear animations card is removed (§3-3) —
-             the feature still exists in the app, it is just no longer
-             demonstrated on this page
-           * the old standalone .shorts section is folded into the
-             Subtitles on vertical video card below (§3-2): its richer
-             copy (platform names, MKV/MP4 in, MP4 out) replaces the old
-             one-line blurb. screenshot-shorts-en.png is NOT reused here
-             — it is a 3840x2160 landscape app screenshot, while this
-             card uses the existing out-vertical-en.png (a 1080x1920
-             portrait result shot already styled with the `.vertical`
-             treatment other cards don't have). Mixing the two aspect
-             ratios into one card would have broken the "look like every
-             other outcome card" instruction, so the image stayed and
-             only the copy merged.
-
-         REQ-0366 §3-1: the Outline, shadow, background box card (image
-         was still an unfilled placeholder, per RES-0363) is removed —
-         the owner's annotated reference confirmed this one, unlike the
-         animations card removal above which the same reference appeared
-         to contradict (see RES-0366). Gallery is now 3 cards.
+         Outcomes — single sample GIF (REQ-0372)
+         The karaoke / keyword-emphasis cards and the vertical-video
+         showcase (REQ-0370/0371) are all removed; the section is now just
+         the heading plus one centred GIF (assets/out_sub.gif) with no
+         caption. The GIF file is NOT created in this REQ — the owner
+         supplies it later (§2-4); only the reference path and layout are in
+         place, so the <img> 404s until then and its onerror swaps in a
+         labelled placeholder box (the same swap-friendly pattern used
+         elsewhere). ja and en reference the SAME asset; only the alt text
+         is localised. The display size lives in .outcome-sample's max-width
+         (480px placeholder pending the real asset's dimensions).
          ============================================================ -->
     <section class="outcomes">
       <h2>What you can make</h2>
-      <p class="outcomes-intro">Examples of subtitles you can build with MOJIOKO.</p>
-      <div class="outcome-grid">
-
-        <div class="outcome-card">
-          <img src="../images/out-karaoke-en.gif" alt="Karaoke subtitles changing colour as words are spoken" class="outcome-media" loading="lazy"
-               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Karaoke subtitles (motion asset)<br>(images/out-karaoke-en.gif)</div>';">
-          <!-- To use a short clip instead of a GIF, replace the <img> above with:
-               <video class="outcome-media" src="../images/out-karaoke-en.mp4"
-                      autoplay muted loop playsinline></video> -->
-          <h3>Karaoke highlighting</h3>
-          <p>Words change colour as they are spoken. Pick between each word flipping when it starts, and the colour filling across each word.</p>
-          <span class="outcome-motion-note">Shown with a motion asset</span>
-        </div>
-
-        <div class="outcome-card">
-          <img src="../images/out-emphasis-en.png" alt="Keyword emphasis giving chosen words their own colour and size" class="outcome-media" loading="lazy"
-               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Keyword emphasis<br>(images/out-emphasis-en.png)</div>';">
-          <h3>Keyword emphasis</h3>
-          <p>Give chosen words their own colour and size, so one phrase stands out from the line.</p>
-        </div>
-
-      </div>
-
-      <!-- ============================================================
-           Vertical-video ("shorts") showcase (REQ-0370 §2)
-           Pulled out of the outcome-grid above into a dedicated 2-column
-           block — image left, copy right, vertically centred — that stacks
-           to image-over-text on phone widths. The gallery keeps its other
-           two cards (karaoke / keyword emphasis). The intro copy is
-           unchanged from its previous card form (REQ-0360-era wording
-           kept per §2-4). Structure mirrors the JA page one-for-one.
-           ============================================================ -->
-      <div class="vertical-showcase">
-        <div class="vertical-showcase-media">
-          <img src="../images/out-vertical-en.png" alt="Subtitles on a vertical video" class="outcome-media vertical" loading="lazy"
-               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder vertical&quot;>Vertical video subtitles<br>(images/out-vertical-en.png)</div>';">
-        </div>
-        <div class="vertical-showcase-text">
-          <h3>Subtitles on vertical video</h3>
-          <p>Load a vertical (9:16) video and add subtitles. Import MKV and MP4 files, then export as MP4 — great for TikTok, YouTube Shorts, and Instagram Reels.</p>
-        </div>
-      </div>
+      <img src="../assets/out_sub.gif" alt="MOJIOKO subtitle sample" class="outcome-sample" loading="lazy"
+           onerror="this.outerHTML='<div class=&quot;screenshot-placeholder outcome-sample&quot;>out_sub.gif<br>(assets/out_sub.gif)</div>';">
     </section>
 
     <!-- ============================================================
