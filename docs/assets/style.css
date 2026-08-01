@@ -74,6 +74,20 @@ body {
   border-radius: 6px;
 }
 
+/* REQ-0370 §3-1: Poppins wordmark for the "MOJIOKO" logotype. Applied via a
+   shared class (never inline) to just the two logotype instances — the nav
+   brand span and the hero H1 — NOT to the name where it appears inside body
+   copy. font-family only, so each element keeps its own size/weight; the
+   current system stack is retained as the fallback (font-display: swap paints
+   in it until Poppins loads). Poppins is loaded at 600 and 700: the nav brand
+   keeps its existing 600 (the more frequent, base wordmark weight, §3-1's
+   first choice), and the single large hero H1 uses 700 — see `.hero h1`. */
+.wordmark {
+  font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans",
+    Meiryo, sans-serif;
+}
+
 .lang-switch {
   font-size: 14px;
   color: var(--text-secondary);
@@ -113,10 +127,14 @@ body {
 }
 
 /* REQ-0110 — h1 → tagline gap trimmed 16 → 12 to reclaim a few more px of
-   fold budget without making the wordmark feel crowded. */
+   fold budget without making the wordmark feel crowded.
+   REQ-0370 §3-1: weight lowered 800 → 700 so the Poppins wordmark maps to a
+   weight actually loaded from Google Fonts (600/700) instead of synthesizing
+   a faux-bold 800. Poppins 700 already reads heavier than the previous
+   system-stack 800, so the hero keeps its bold presence. */
 .hero h1 {
   font-size: 64px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.02em;
   margin-bottom: 12px;
   line-height: 1;
@@ -720,13 +738,17 @@ p.feature-hint {
 
 /* Footer */
 /* REQ-0370 §1-1/§1-3: padding folded into the 28px base and the top
-   divider removed (区切り用途 border-top). */
+   divider removed (区切り用途 border-top). §3-2: children are laid out
+   centred and stacked (link row, then FreeType credit, then the site
+   copyright as the bottom-most line) — justify-content is centre now (was
+   space-between, which only balanced while the © line shared the top row
+   with the link list). */
 footer {
   padding: 28px 0;
   font-size: 13px;
   color: var(--text-tertiary);
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
@@ -768,6 +790,14 @@ footer a:hover {
 
 .footer-credit a {
   margin: 0;
+}
+
+/* REQ-0370 §3-2: the site copyright, moved to the footer's last child, is
+   full-width + centred so it reads as the footer's single closing line
+   below the FreeType credit. */
+.footer-copyright {
+  flex-basis: 100%;
+  text-align: center;
 }
 
 /* Responsive */

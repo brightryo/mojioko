@@ -6,6 +6,12 @@
   <title>MOJIOKO - 文字起こし字幕動画作成ツール（無料版・有料版）</title>
   <meta name="description" content="MOJIOKO は、編集を終えた動画の音声を AI で文字起こしし、字幕を付けて書き出すデスクトップアプリです。動画を外部にアップロードせず、すべての処理をあなたの PC で行います。GitHub の無料版と、Microsoft Store の有料版（買い切り）から選べます。">
   <link rel="icon" type="image/png" href="images/icon.png">
+  <!-- REQ-0370 §3-1: Poppins for the MOJIOKO wordmark (nav brand + hero H1).
+       preconnect + font-display: swap so the wordmark paints in the fallback
+       stack immediately and swaps to Poppins once it loads. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&display=swap">
   <link rel="stylesheet" href="assets/style.css">
   <script defer src="assets/main.js"></script>
 </head>
@@ -16,7 +22,7 @@
     <nav class="top-nav" id="top">
       <div class="brand">
         <img src="images/icon.png" alt="" class="brand-icon">
-        <span>MOJIOKO</span>
+        <span class="wordmark">MOJIOKO</span>
       </div>
       <div class="lang-switch">
         <a href="index.html" class="active" data-lang-link="ja">日本語</a>
@@ -37,7 +43,7 @@
          owner's annotated reference — the tagline now flows directly
          into .editions. -->
     <section class="hero">
-      <h1>MOJIOKO</h1>
+      <h1 class="wordmark">MOJIOKO</h1>
       <p class="tagline">動画・配信アーカイブ・縦型動画の音声から、AI 文字起こし＆字幕作成</p>
     </section>
 
@@ -409,8 +415,11 @@
          top of the page (§2-4), and this page is short enough now that
          restating them at the bottom would just be clutter next to the
          legal/meta links this footer otherwise carries. -->
+    <!-- REQ-0370 §3-2: the site copyright is moved to the footer's last
+         child so it reads as the single bottom-most line. The FreeType
+         attribution (REQ-0257, a license credit) is kept, unchanged, above
+         it — nothing is deleted, only the display order is tidied. -->
     <footer>
-      <div>&copy; 2026 BrightRyo</div>
       <div class="footer-links">
         <a href="https://github.com/brightryo/mojioko" target="_blank" rel="noopener">GitHub</a>
         <a href="https://github.com/brightryo/mojioko/issues" target="_blank" rel="noopener">お問い合わせ</a>
@@ -422,6 +431,7 @@
         Project (<a href="https://freetype.org" target="_blank" rel="noopener">https://freetype.org</a>).
         All rights reserved.
       </div>
+      <div class="footer-copyright">&copy; 2026 BrightRyo</div>
     </footer>
 
   </div>
