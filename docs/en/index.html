@@ -34,10 +34,12 @@
          repeating it a screen higher would just be noise.
          Structure mirrors the JA page one-for-one (REQ-0360 §5).
          ============================================================ -->
+    <!-- REQ-0369 §1-1: the hero-sub positioning line is removed per the
+         owner's annotated reference — the tagline now flows directly
+         into .editions. -->
     <section class="hero">
       <h1>MOJIOKO</h1>
       <p class="tagline">AI transcription and subtitles for videos, stream archives, and vertical clips</p>
-      <p class="hero-sub">For the last step after your edit is done. Every stage runs on your own PC.</p>
     </section>
 
     <!-- ============================================================
@@ -94,14 +96,19 @@
          intro line are removed per the owner's annotated reference — the
          guide/feedback buttons and release-notes link below are unchanged. -->
     <section class="cta">
-      <a href="./guide/" class="guide-btn">
-        <span class="guide-btn-label">User Guide</span>
-        <span class="guide-btn-sub">FAQ, OBS Setup, and More</span>
-      </a>
-      <a href="./feedback/" class="guide-btn">
-        <span class="guide-btn-label">Feedback</span>
-        <span class="guide-btn-sub">Bug reports &amp; feature requests</span>
-      </a>
+      <!-- REQ-0369 §2: wrapped in .guide-buttons (flex row) so the two
+           buttons stretch to equal height instead of misaligning at the
+           bottom when their sub-labels take different widths. -->
+      <div class="guide-buttons">
+        <a href="./guide/" class="guide-btn">
+          <span class="guide-btn-label">User Guide</span>
+          <span class="guide-btn-sub">FAQ, OBS Setup, and More</span>
+        </a>
+        <a href="./feedback/" class="guide-btn">
+          <span class="guide-btn-label">Feedback</span>
+          <span class="guide-btn-sub">Bug reports &amp; feature requests</span>
+        </a>
+      </div>
       <p class="release-notes-link">
         <a href="https://github.com/brightryo/mojioko/releases" target="_blank" rel="noopener">View release notes</a>
       </p>

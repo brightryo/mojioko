@@ -168,8 +168,13 @@ body {
   /* REQ-0368: top margin dropped — it used to buy space below the
      editions-intro paragraph, removed by REQ-0368 §1. version-cards is
      now .editions's first child, so its own 40px section padding is
-     the only gap above it, matching every other section on the page. */
-  margin: 0 auto 24px;
+     the only gap above it, matching every other section on the page.
+     REQ-0369 §1-2: bottom margin dropped too, for the same reason on the
+     other side — it was adding 24px on top of .editions's own 40px
+     bottom padding + .cta's 40px top padding, making this one transition
+     104px against the page's uniform 80px (40+40) rhythm everywhere
+     else. */
+  margin: 0 auto;
   /* REQ-0110 — widened 720 → 880 so the 2 cards visibly outsize the 520-wide
      walkthrough video above.  The eye moves down from the tight video into a
      wider primary CTA, which reads as "the choice opens up" rather than
@@ -615,20 +620,27 @@ p.feature-hint {
   text-align: center;
 }
 
-/* REQ-0368: the first guide-btn is now .cta's first child (its heading
-   was removed). Two stacked issues kept a gap here even after zeroing
-   margin-top: (1) the 18px top margin itself, meant for spacing below
-   the now-gone heading, and (2) `.guide-btn` is inline-flex with the
-   default `vertical-align: baseline`, so as the first inline-level box
-   in .cta's (block, line-height 25.6px) formatting context it still sat
-   inside an invisible line box below the whitespace text node preceding
-   it — an 18px "phantom" gap independent of any margin. `vertical-align:
-   top` removes that strut. Scoped to this context rather than changed on
-   `.guide-btn` itself, since that class is shared with docs/guide/ (out
-   of scope for this REQ). */
-.cta a.guide-btn:first-of-type {
+/* REQ-0369 §2: wraps the two guide-btn links so they lay out as an actual
+   flex row instead of two independently-wrapping inline-flex boxes. This
+   replaces the REQ-0368 `:first-of-type` patch — that fix only zeroed the
+   top gap for the FIRST button, so the two buttons no longer shared a
+   common top edge (the second button kept `.guide-btn`'s own 18px
+   margin-top plus baseline alignment, landing it 18px lower even though
+   both buttons are the same 58px content height). align-items: stretch
+   (flex default, stated explicitly) keeps both buttons equal-height if a
+   future copy change makes one taller than the other. gap supplies the
+   spacing both between the two buttons on desktop and between wrapped
+   rows on mobile, so neither button needs its own margin-top here. */
+.guide-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.guide-buttons .guide-btn {
   margin-top: 0;
-  vertical-align: top;
 }
 
 /* Equal-weight 2-button pair for the bottom CTA (REQ-0113 §2).  Mirrors
@@ -1475,21 +1487,9 @@ footer a:hover {
    boundary that still read as appropriately tight, so it became the
    shared target instead of an arbitrary new number. */
 
-/* Hero sub-line under the tagline.  Separate from `.hero .tagline` so the
-   positioning sentence can be quieter than the one-line pitch above it.
-   REQ-0365: dropped the 32px bottom margin — it used to buy space before
-   the walkthrough video/CTA row that followed in .hero, both removed by
-   REQ-0364. With hero-sub now the last element in .hero, that margin was
-   stacking with .hero's own 60px bottom padding, giving the hero→editions
-   gap ~32px more than every other section-to-section transition on the
-   page. .hero's padding alone now matches that rhythm. */
-.hero-sub {
-  font-size: 16px;
-  color: var(--text-secondary);
-  line-height: 1.7;
-  max-width: 640px;
-  margin: 0 auto;
-}
+/* REQ-0369 §1-1: the .hero-sub positioning line was removed from both
+   pages, so its rule (previously here) is gone too — nothing references
+   the class anymore. */
 
 /* --- "What this tool is" ------------------------------------------- */
 .whatis {

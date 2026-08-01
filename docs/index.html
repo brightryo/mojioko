@@ -33,10 +33,12 @@
          — .editions sits immediately below with the same choice, so
          repeating it a screen higher would just be noise.
          ============================================================ -->
+    <!-- REQ-0369 §1-1: the hero-sub positioning line is removed per the
+         owner's annotated reference — the tagline now flows directly
+         into .editions. -->
     <section class="hero">
       <h1>MOJIOKO</h1>
       <p class="tagline">動画・配信アーカイブ・縦型動画の音声から、AI 文字起こし＆字幕作成</p>
-      <p class="hero-sub">編集を終えた動画の、最後の工程に。すべての処理はあなたの PC で完結します。</p>
     </section>
 
     <!-- ============================================================
@@ -93,14 +95,19 @@
          intro line are removed per the owner's annotated reference — the
          guide/feedback buttons and release-notes link below are unchanged. -->
     <section class="cta">
-      <a href="./guide/" class="guide-btn">
-        <span class="guide-btn-label">使い方ガイド</span>
-        <span class="guide-btn-sub">よくある質問・OBS 設定方法</span>
-      </a>
-      <a href="./feedback/" class="guide-btn">
-        <span class="guide-btn-label">不具合報告 &amp; ご要望</span>
-        <span class="guide-btn-sub">ご意見・ご要望はこちら</span>
-      </a>
+      <!-- REQ-0369 §2: wrapped in .guide-buttons (flex row) so the two
+           buttons stretch to equal height instead of misaligning at the
+           bottom when their sub-labels take different widths. -->
+      <div class="guide-buttons">
+        <a href="./guide/" class="guide-btn">
+          <span class="guide-btn-label">使い方ガイド</span>
+          <span class="guide-btn-sub">よくある質問・OBS 設定方法</span>
+        </a>
+        <a href="./feedback/" class="guide-btn">
+          <span class="guide-btn-label">不具合報告 &amp; ご要望</span>
+          <span class="guide-btn-sub">ご意見・ご要望はこちら</span>
+        </a>
+      </div>
       <p class="release-notes-link">
         <a href="https://github.com/brightryo/mojioko/releases" target="_blank" rel="noopener">リリースノートを見る</a>
       </p>
