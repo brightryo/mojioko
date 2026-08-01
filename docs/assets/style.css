@@ -122,33 +122,10 @@ body {
   margin-bottom: 24px;
 }
 
-/* REQ-0108 (updated by REQ-0109 and REQ-0110) — walkthrough video sits
-   between the tagline and the 2-card choice.  REQ-0110 pulled max-width
-   560 → 520 (video height 315 → 293) and margin-bottom 28 → 20 so both
-   the video AND the newly-widened 2-card block clear the fold on a
-   1366×768 laptop.  The video now sits visibly narrower than the cards
-   below (520 vs 880), giving a subtle "opening up" effect toward the
-   primary CTA.  Uses a fixed 16:9 aspect-ratio container so the iframe
-   scales with the parent width without a JavaScript resize handler.
-   `youtube-nocookie.com` is chosen in the HTML for privacy consistency
-   with MOJIOKO's local-only stance. */
-.hero-video {
-  max-width: 520px;
-  margin: 0 auto 20px;
-  aspect-ratio: 16 / 9;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  background: var(--bg-secondary);
-}
-
-.hero-video iframe {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  display: block;
-}
+/* REQ-0364 §3-1: the walkthrough video (.hero-video) that used to sit here
+   is removed — its content no longer matches the current version. This is
+   a one-time removal pending a reshoot, not a decision against having a
+   video here again. */
 
 .download-btn {
   display: inline-flex;
@@ -490,8 +467,7 @@ body {
    Replaces the 3-step storytelling with a feature-focused layout
    ("MOJIOKO でできること" / "What you can do with MOJIOKO").  Kept
    deliberately parallel to the existing .screenshots rhythm — same section
-   padding, same h2 size — so the flow into .shorts below stays visually
-   consistent for readers who arrive expecting the old order. */
+   padding, same h2 size. */
 
 .features {
   padding: 60px 0;
@@ -633,7 +609,6 @@ p.feature-hint {
 .cta {
   padding: 80px 0;
   text-align: center;
-  border-top: 1px solid var(--border);
 }
 
 .cta h2 {
@@ -800,61 +775,11 @@ footer a:hover {
   }
 }
 
-/* =====================================
-   Shorts Section
-   ===================================== */
-
-.shorts {
-  padding: 80px 0;
-  border-top: 1px solid var(--border);
-}
-
-.shorts h2 {
-  text-align: center;
-  font-size: 32px;
-  font-weight: 700;
-  margin-bottom: 48px;
-}
-
-.shorts-content {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 32px;
-  align-items: center;
-}
-
-@media (min-width: 900px) {
-  .shorts-content {
-    grid-template-columns: 1fr 1fr;
-    gap: 48px;
-  }
-
-  /* Image-right / text-left flip for the shorts section.  Mirrors the
-     .screenshot-item.reverse mechanism used by Step 2 so the four-section
-     left/right rhythm (step1 left, step2 right, step3 left, shorts right)
-     stays consistent.  Below 900px the grid collapses to a single column
-     and this rule has no effect, so mobile layout is unchanged. */
-  .shorts-content.reverse {
-    direction: rtl;
-  }
-  .shorts-content.reverse > * {
-    direction: ltr;
-  }
-}
-
-.shorts-image {
-  width: 100%;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  display: block;
-}
-
-.shorts-text p {
-  font-size: 16px;
-  color: var(--text-secondary);
-  line-height: 1.8;
-}
+/* REQ-0364 §3-2: the standalone Shorts Section (.shorts / .shorts-content /
+   .shorts-image / .shorts-text) was removed here — its one card was folded
+   into the できあがるもの／What you can make gallery's existing vertical-
+   video card (.outcome-card / .outcome-media.vertical), so this dedicated
+   layout is no longer referenced anywhere. */
 
 /* =====================================
    Planned Features Section
@@ -917,7 +842,6 @@ footer a:hover {
 
 .support {
   padding: 80px 0;
-  border-top: 1px solid var(--border);
 }
 
 .support-header {
@@ -1518,32 +1442,46 @@ footer a:hover {
 }
 
 /* =====================================
-   Top page restructure — REQ-0360
+   Top page restructure — REQ-0360, reordered again by REQ-0364
    =====================================
-   The landing page was reordered so value comes before spec: hero →
-   what-this-is → outcomes → pillars → features → editions → system
-   requirements.  Everything below reuses the existing tokens
-   (--bg-secondary / --border / --text-secondary) and the same section
-   rhythm (60px padding, 32px centred h2) as .features / .screenshots, so
-   the new blocks read as part of the original design rather than a
-   bolted-on second system.  All grids are mobile-first (1 column by
-   default, widened at a min-width breakpoint) — nothing here introduces a
-   fixed width that could overflow a phone viewport. */
+   Current order (REQ-0364): hero → editions → guide nav (.cta) → system
+   requirements → what-this-is → outcomes → pillars → features → support →
+   footer. Editions and system requirements moved up near the top so a
+   visitor who already knows MOJIOKO can choose and check compatibility
+   without scrolling through the full pitch first; the explanatory
+   sections (what-this-is, outcomes, pillars, features) now follow for
+   readers who need convincing. Everything below reuses the existing
+   tokens (--bg-secondary / --border / --text-secondary) and the same
+   section rhythm (60px padding, 32px centred h2) as .features /
+   .screenshots, so the new blocks read as part of the original design
+   rather than a bolted-on second system. All grids are mobile-first (1
+   column by default, widened at a min-width breakpoint) — nothing here
+   introduces a fixed width that could overflow a phone viewport.
+   REQ-0364 §3-4 also dropped the border-top divider each of these
+   sections used to draw between itself and the section above — the page
+   now relies on padding/whitespace and each section's own visual
+   character (card grids vs. text vs. the whatis image) to read as
+   distinct blocks instead of a ruled line between every section. */
 
 /* Hero sub-line under the tagline.  Separate from `.hero .tagline` so the
-   positioning sentence can be quieter than the one-line pitch above it. */
+   positioning sentence can be quieter than the one-line pitch above it.
+   REQ-0365: dropped the 32px bottom margin — it used to buy space before
+   the walkthrough video/CTA row that followed in .hero, both removed by
+   REQ-0364. With hero-sub now the last element in .hero, that margin was
+   stacking with .hero's own 60px bottom padding, giving the hero→editions
+   gap ~32px more than every other section-to-section transition on the
+   page. .hero's padding alone now matches that rhythm. */
 .hero-sub {
   font-size: 16px;
   color: var(--text-secondary);
   line-height: 1.7;
   max-width: 640px;
-  margin: 0 auto 32px;
+  margin: 0 auto;
 }
 
 /* --- "What this tool is" ------------------------------------------- */
 .whatis {
   padding: 60px 0;
-  border-top: 1px solid var(--border);
 }
 
 .whatis h2 {
@@ -1600,7 +1538,6 @@ footer a:hover {
 /* --- Outcomes gallery ---------------------------------------------- */
 .outcomes {
   padding: 60px 0;
-  border-top: 1px solid var(--border);
 }
 
 .outcomes h2 {
@@ -1682,7 +1619,6 @@ footer a:hover {
 /* --- Three pillars -------------------------------------------------- */
 .pillars {
   padding: 60px 0;
-  border-top: 1px solid var(--border);
 }
 
 .pillars h2 {
@@ -1738,10 +1674,12 @@ footer a:hover {
 
 /* --- Editions (free vs paid) ---------------------------------------- */
 /* Reuses `.version-cards` / `.version-card` from the old hero placement;
-   only the section wrapper is new. */
+   only the section wrapper is new. REQ-0364 §2-3 moved this section to
+   right after the hero and dropped the .cta-actions row that used to
+   restate the same two links below the cards — with the cards this close
+   to the top, the restatement had nothing left to do. */
 .editions {
   padding: 60px 0;
-  border-top: 1px solid var(--border);
 }
 
 .editions h2 {
@@ -1760,15 +1698,9 @@ footer a:hover {
   line-height: 1.7;
 }
 
-/* Spacing when the CTA pair is restated directly under the edition cards. */
-.editions .cta-actions {
-  margin-top: 40px;
-}
-
 /* --- System requirements as a standalone late section ---------------- */
 .sysreq-section {
   padding: 60px 0;
-  border-top: 1px solid var(--border);
 }
 
 .sysreq-section h2 {
