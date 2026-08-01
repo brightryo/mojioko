@@ -1612,12 +1612,12 @@ footer a:hover {
   margin-bottom: 16px;
 }
 
-/* Single sample GIF: capped and horizontally centred. The real out_sub.gif
-   is supplied by the owner later (REQ-0372 §2-4); until then the <img> 404s
-   and its onerror swaps in a labelled placeholder, so the layout reads the
-   same either way. max-width is the one knob for the display size — 480px is
-   a placeholder pending the real asset's dimensions. Radius / border / shadow
-   match the page's other media so it sits in the same visual family. */
+/* Single sample GIF: capped and horizontally centred. Each page points at
+   its own demo GIF under images/ (out_ja.gif / out_en.gif), generated in
+   REQ-0373 at 480x270. max-width:480px is the one knob for the display size
+   and matches the GIFs' native width, so they render 1:1 without upscaling;
+   the onerror placeholder below is only a safety net. Radius / border /
+   shadow match the page's other media so it sits in the same visual family. */
 .outcome-sample {
   display: block;
   width: 100%;

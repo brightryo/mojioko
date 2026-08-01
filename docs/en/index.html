@@ -163,22 +163,21 @@
     </section>
 
     <!-- ============================================================
-         Outcomes — single sample GIF (REQ-0372)
+         Outcomes — single sample GIF (REQ-0372, sourced REQ-0373)
          The karaoke / keyword-emphasis cards and the vertical-video
          showcase (REQ-0370/0371) are all removed; the section is now just
-         the heading plus one centred GIF (assets/out_sub.gif) with no
-         caption. The GIF file is NOT created in this REQ — the owner
-         supplies it later (§2-4); only the reference path and layout are in
-         place, so the <img> 404s until then and its onerror swaps in a
-         labelled placeholder box (the same swap-friendly pattern used
-         elsewhere). ja and en reference the SAME asset; only the alt text
-         is localised. The display size lives in .outcome-sample's max-width
-         (480px placeholder pending the real asset's dimensions).
+         the heading plus one centred GIF with no caption. REQ-0373 replaced
+         the REQ-0372 placeholder path (assets/out_sub.gif, never created)
+         with the real per-page GIF under images/ — this page uses the en
+         demo (images/out_en.gif; ../ because this page lives in docs/en/),
+         the ja page uses images/out_ja.gif. The onerror placeholder is kept
+         only as a safety net. The display size lives in .outcome-sample's
+         max-width (480px, matching the GIF's render width).
          ============================================================ -->
     <section class="outcomes">
       <h2>What you can make</h2>
-      <img src="../assets/out_sub.gif" alt="MOJIOKO subtitle sample" class="outcome-sample" loading="lazy"
-           onerror="this.outerHTML='<div class=&quot;screenshot-placeholder outcome-sample&quot;>out_sub.gif<br>(assets/out_sub.gif)</div>';">
+      <img src="../images/out_en.gif" alt="MOJIOKO subtitle sample" class="outcome-sample" loading="lazy"
+           onerror="this.outerHTML='<div class=&quot;screenshot-placeholder outcome-sample&quot;>out_en.gif<br>(images/out_en.gif)</div>';">
     </section>
 
     <!-- ============================================================
