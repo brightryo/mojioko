@@ -48,12 +48,16 @@ body {
    1366×768 laptop clears the version cards' buttons.  Kept out of position:
    fixed / sticky on purpose — the nav should scroll away with the hero, not
    consume viewport height on every subsequent section. */
+/* REQ-0370 §1-3: the nav's bottom divider is removed — it was a
+   separation-purpose border (区切り用途), which this REQ abolishes across
+   the top pages. The nav now reads as distinct from the hero through
+   whitespace alone, matching the divider-free rhythm the rest of the page
+   already adopted in REQ-0364/0366. */
 .top-nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 12px 0;
-  border-bottom: 1px solid var(--border);
 }
 
 .brand {
@@ -99,9 +103,12 @@ body {
    thinner .top-nav so both the walkthrough video AND the version-card
    buttons clear the fold on a 1366×768 laptop.  Bottom padding stays at
    60 because the next section supplies its own top padding.  See REQ-0109
-   for the earlier 80 → 40 pass. */
+   for the earlier 80 → 40 pass.
+   REQ-0370 §1-1/§1-2: the hero is folded into the page's single spacing
+   base — 28px top and bottom like every other section — so the hero no
+   longer carries its own asymmetric (20 top / 40 bottom) exception. */
 .hero {
-  padding: 20px 0 40px;
+  padding: 28px 0;
   text-align: center;
 }
 
@@ -277,7 +284,11 @@ body {
   border-radius: 12px;
   padding: 20px 24px;
   max-width: 880px;
-  margin: 0 auto 24px;
+  /* REQ-0370 §1-2: the 24px bottom margin is dropped — it stacked on top of
+     .sysreq-section's own bottom padding, making this the only card that
+     pushed extra slack below itself. The section padding is the single
+     source of the gap now. */
+  margin: 0 auto;
   text-align: left;
 }
 
@@ -479,7 +490,7 @@ body {
    padding, same h2 size. */
 
 .features {
-  padding: 40px 0;
+  padding: 28px 0;
 }
 
 .features h2 {
@@ -616,7 +627,7 @@ p.feature-hint {
 
 /* CTA Section */
 .cta {
-  padding: 40px 0;
+  padding: 28px 0;
   text-align: center;
 }
 
@@ -708,9 +719,10 @@ p.feature-hint {
 }
 
 /* Footer */
+/* REQ-0370 §1-1/§1-3: padding folded into the 28px base and the top
+   divider removed (区切り用途 border-top). */
 footer {
-  padding: 40px 0;
-  border-top: 1px solid var(--border);
+  padding: 28px 0;
   font-size: 13px;
   color: var(--text-tertiary);
   display: flex;
@@ -746,9 +758,9 @@ footer a:hover {
    colour keep it a legal notice rather than a promoted claim. */
 .footer-credit {
   flex-basis: 100%;
-  padding-top: 12px;
-  margin-top: 4px;
-  border-top: 1px dashed var(--border);
+  /* REQ-0370 §1-3: the dashed separator border-top (plus the padding/margin
+     that fed it) is removed; the footer's own flex `gap` supplies the space
+     between this full-width row and the ones around it. */
   font-size: 11px;
   color: var(--text-tertiary);
   text-align: center;
@@ -760,12 +772,9 @@ footer a:hover {
 
 /* Responsive */
 @media (max-width: 640px) {
-  /* REQ-0110 — mobile hero top padding cut 28 → 16 to match the desktop
-     tightening pass (20 top).  Kept slightly below the desktop value so the
-     phone header + h1 reads as a tighter unit. */
-  .hero {
-    padding: 16px 0 40px;
-  }
+  /* REQ-0370 §1-1/§1-2: the mobile hero padding exception (16 top / 40
+     bottom) is dropped so the hero uses the same 28px top/bottom base as
+     every other section on phone widths too — no per-viewport exception. */
 
   .hero h1 {
     font-size: 44px;
@@ -861,12 +870,16 @@ footer a:hover {
    ===================================== */
 
 .support {
-  padding: 40px 0;
+  padding: 28px 0;
 }
 
+/* REQ-0370 §1-4: this was the one section whose heading + intro were
+   left-aligned while every other section centres its heading. Centre it so
+   the heading alignment is uniform across the page. */
 .support-header {
   max-width: 700px;
   margin: 0 auto 32px;
+  text-align: center;
 }
 
 .support h2 {
@@ -1485,7 +1498,11 @@ footer a:hover {
    60-80px padding read as a big gap with a heading floating in it rather
    than a section break; footer's 40px was the one on-page example of a
    boundary that still read as appropriately tight, so it became the
-   shared target instead of an arbitrary new number. */
+   shared target instead of an arbitrary new number.
+   REQ-0370 §1-1: the shared per-section padding is tightened one more
+   step, 40px → 28px, so every section boundary is 28+28 = 56px (was 80).
+   This is the single spacing base for the whole top page — hero, footer,
+   and every section in between use 28px top/bottom with no exceptions. */
 
 /* REQ-0369 §1-1: the .hero-sub positioning line was removed from both
    pages, so its rule (previously here) is gone too — nothing references
@@ -1493,7 +1510,7 @@ footer a:hover {
 
 /* --- "What this tool is" ------------------------------------------- */
 .whatis {
-  padding: 40px 0;
+  padding: 28px 0;
 }
 
 .whatis h2 {
@@ -1549,7 +1566,7 @@ footer a:hover {
 
 /* --- Outcomes gallery ---------------------------------------------- */
 .outcomes {
-  padding: 40px 0;
+  padding: 28px 0;
 }
 
 .outcomes h2 {
@@ -1645,7 +1662,7 @@ footer a:hover {
 
 /* --- Three pillars -------------------------------------------------- */
 .pillars {
-  padding: 40px 0;
+  padding: 28px 0;
 }
 
 .pillars h2 {
@@ -1706,10 +1723,10 @@ footer a:hover {
    restate the same two links below the cards — with the cards this close
    to the top, the restatement had nothing left to do. */
 .editions {
-  padding: 40px 0;
+  padding: 28px 0;
 }
 
 /* --- System requirements as a standalone late section ---------------- */
 .sysreq-section {
-  padding: 40px 0;
+  padding: 28px 0;
 }
