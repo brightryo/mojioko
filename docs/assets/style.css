@@ -1690,19 +1690,28 @@ footer a:hover {
   color: var(--text-tertiary);
 }
 
-/* --- Vertical-video ("shorts") showcase (REQ-0370 §2) ---------------- */
+/* --- Vertical-video ("shorts") showcase (REQ-0370 §2, REQ-0371 §1) ---- */
 /* Two-column block below the outcome-grid: image left, copy right,
    vertically centred. Mobile-first — a single column (image over text) by
    default, widening to two columns at 800px like the gallery above it. The
    left column is sized to the capped portrait width (.outcome-media.vertical
    is max-width 280) so the copy takes the remaining space. margin-top keeps
-   the block on the same vertical rhythm as the gallery's own row gap. */
+   the block on the same vertical rhythm as the gallery's own row gap.
+   REQ-0371 §1: the block is capped and centred (max-width + margin auto)
+   rather than spanning the full container — that stops the image from
+   sticking to the far left with the copy stretched across a wide right
+   gutter. With the 280px image + 48px gap, a 640px cap leaves the copy
+   column ~312px wide, so the text wraps into short lines *without* any
+   manual <br> (which would break differently in ja/en). This single
+   max-width is the one knob that controls the wrap width — narrow or widen
+   the whole block by changing it alone. */
 .vertical-showcase {
   display: grid;
   grid-template-columns: 1fr;
   gap: 24px;
   align-items: center;
-  margin-top: 44px;
+  max-width: 640px;
+  margin: 44px auto 0;
 }
 
 @media (min-width: 800px) {
