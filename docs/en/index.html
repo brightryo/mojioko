@@ -4,8 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MOJIOKO - Auto-Subtitle Tool for Videos (Free &amp; Paid Editions)</title>
-  <meta name="description" content="MOJIOKO is a desktop application that automatically transcribes video audio and burns subtitles into your videos. Available as a free edition on GitHub and a paid edition on the Microsoft Store. All processing is done locally on your PC.">
+  <meta name="description" content="MOJIOKO is a desktop application that transcribes the audio of your finished video with AI and burns subtitles into it. Your video is never uploaded — all processing runs on your own PC. Choose the free edition on GitHub or the paid edition on the Microsoft Store (one-time purchase).">
   <link rel="icon" type="image/png" href="../images/icon.png">
+  <!-- REQ-0370 §3-1: Poppins for the MOJIOKO wordmark (nav brand + hero H1).
+       preconnect + font-display: swap so the wordmark paints in the fallback
+       stack immediately and swaps to Poppins once it loads. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&display=swap">
   <link rel="stylesheet" href="../assets/style.css">
   <script defer src="../assets/main.js"></script>
 </head>
@@ -16,7 +22,7 @@
     <nav class="top-nav" id="top">
       <div class="brand">
         <img src="../images/icon.png" alt="" class="brand-icon">
-        <span>MOJIOKO</span>
+        <span class="wordmark">MOJIOKO</span>
       </div>
       <div class="lang-switch">
         <a href="../index.html" data-lang-link="ja">日本語</a>
@@ -24,22 +30,38 @@
       </div>
     </nav>
 
-    <!-- Hero Section -->
+    <!-- ============================================================
+         Hero (REQ-0364 §3-1)
+         The walkthrough video was pulled: its content no longer matches
+         the current version and a reshoot is planned, so this is a
+         one-time removal, not a permanent decision against having a
+         demo video here. Download/Store CTAs no longer live here either
+         — .editions sits immediately below with the same choice, so
+         repeating it a screen higher would just be noise.
+         Structure mirrors the JA page one-for-one (REQ-0360 §5).
+         ============================================================ -->
+    <!-- REQ-0369 §1-1: the hero-sub positioning line is removed per the
+         owner's annotated reference — the tagline now flows directly
+         into .editions. -->
     <section class="hero">
-      <h1>MOJIOKO</h1>
-      <p class="tagline">Transcribe and create subtitled videos</p>
-      <!-- Intro video: swap the "embed/<YouTube ID>" portion of the iframe
-           src to update.  Uses youtube-nocookie.com for privacy.  Mirrors
-           the JA top page's hero video block one-for-one (REQ-0267). -->
-      <div class="hero-video">
-        <iframe
-          src="https://www.youtube-nocookie.com/embed/rDNQixHiiZI"
-          title="How to use MOJIOKO"
-          loading="lazy"
-          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          referrerpolicy="strict-origin-when-cross-origin"
-          allowfullscreen></iframe>
-      </div>
+      <h1 class="wordmark">MOJIOKO</h1>
+      <p class="tagline">AI transcription and subtitles for videos, stream archives, and vertical clips</p>
+    </section>
+
+    <!-- ============================================================
+         Editions (REQ-0364 §2-3)
+         Moved up from deep in the page to right after the hero, so a
+         visitor who already knows what MOJIOKO is can choose and leave
+         without scrolling through the full pitch first. The CTA row that
+         used to repeat under the cards (REQ-0360 §2-6, written for when
+         this section sat far below the hero's own CTA) is dropped here:
+         with the cards this close to the top, restating the same two
+         links immediately below them added nothing.
+         ============================================================ -->
+    <!-- REQ-0368 §1: the section heading ("Free and paid editions") and
+         its intro line are removed per the owner's annotated reference —
+         the cards below are unchanged. -->
+    <section class="editions">
       <div class="version-cards">
         <div class="version-card">
           <h2 class="version-card-title">Free</h2>
@@ -54,20 +76,58 @@
         <div class="version-card">
           <h2 class="version-card-title">Paid</h2>
           <ul class="version-card-features">
-            <li>Use the 12 additional fonts, plus any paid-only features added in future updates.</li>
-            <li>Use 12 additional fonts prepared by MOJIOKO (8 Japanese + 4 Latin), with more possibly added in future updates.</li>
-            <li>Available on the Microsoft Store, with automatic updates to always stay on the latest version.</li>
+            <li>All features are available.</li>
+            <li>Create subtitles with 12 additional distinctive fonts provided by MOJIOKO.</li>
+            <li>Some experimental features are available.</li>
+            <li>Available from the Microsoft Store, with automatic updates so you always have the latest version.</li>
           </ul>
           <a href="https://apps.microsoft.com/detail/9N03JMH9LF6M" class="version-card-btn" target="_blank" rel="noopener">
             Get it on Microsoft Store
           </a>
         </div>
       </div>
+    </section>
 
-      <!-- System requirements (REQ-0254): shown directly below the download
-           cards so OS / memory / storage / GPU expectations register before a
-           user clicks a download CTA. Prevents mistaken downloads by users
-           on macOS or Linux since MOJIOKO ships Windows-only. -->
+    <!-- ============================================================
+         Guide navigation (REQ-0364 §2-4)
+         Decomposed from the old end-of-page .cta section ("Guides &
+         support"), which is dismantled by this REQ. Sits right after a
+         visitor has just picked an edition, so "if setup trips you up,
+         start here" reads in context rather than out of nowhere. The
+         "back to top" link that used to close this section moved to the
+         footer instead (§4) — it belongs at the page's true end, not at
+         section 4 of 11.
+         ============================================================ -->
+    <!-- REQ-0368 §1: the section heading ("Guides & support") and its
+         intro line are removed per the owner's annotated reference — the
+         guide/feedback buttons and release-notes link below are unchanged. -->
+    <section class="cta">
+      <!-- REQ-0369 §2: wrapped in .guide-buttons (flex row) so the two
+           buttons stretch to equal height instead of misaligning at the
+           bottom when their sub-labels take different widths. -->
+      <div class="guide-buttons">
+        <a href="./guide/" class="guide-btn">
+          <span class="guide-btn-label">User Guide</span>
+          <span class="guide-btn-sub">FAQ, OBS Setup, and More</span>
+        </a>
+        <a href="./feedback/" class="guide-btn">
+          <span class="guide-btn-label">Feedback</span>
+          <span class="guide-btn-sub">Bug reports &amp; feature requests</span>
+        </a>
+      </div>
+      <p class="release-notes-link">
+        <a href="https://github.com/brightryo/mojioko/releases" target="_blank" rel="noopener">View release notes</a>
+      </p>
+    </section>
+
+    <!-- System requirements (REQ-0254; REQ-0364 §2-5 moved up further,
+         now directly under the guide/support links).
+         REQ-0368 §1: the section heading ("System Requirements") is
+         removed per the owner's annotated reference — the sysreq-card
+         below already carries its own "System Requirements" title (h3),
+         so the heading is not lost, just no longer duplicated at the
+         section level. -->
+    <section class="sysreq-section">
       <div class="sysreq-card">
         <h3 class="sysreq-title">System Requirements</h3>
         <ul class="sysreq-list">
@@ -77,26 +137,94 @@
           <li><span class="sysreq-label">GPU (optional):</span>Faster processing with an NVIDIA GPU (CUDA). Also runs on CPU without a GPU.</li>
         </ul>
       </div>
-
-      <p class="release-notes-link">
-        <a href="https://github.com/brightryo/mojioko/releases" target="_blank" rel="noopener">View release notes</a>
-      </p>
-      <a href="./guide/" class="guide-btn">
-        <span class="guide-btn-label">User Guide</span>
-        <span class="guide-btn-sub">FAQ, OBS Setup, and More</span>
-      </a>
-      <a href="./feedback/" class="guide-btn">
-        <span class="guide-btn-label">Feedback</span>
-        <span class="guide-btn-sub">Bug reports &amp; feature requests</span>
-      </a>
     </section>
 
-    <!-- Features Section — REQ-0111: what MOJIOKO can do (4 features).
-         Replaces the earlier "3 steps" storytelling.  Image slots are
-         placeholders for now; each has an HTML comment naming the target
-         screenshot so the swap point is obvious. -->
+    <!-- ============================================================
+         What this tool is / is not (REQ-0360 §3-2, image swap REQ-0362)
+         Stating the non-goals up front costs some visitors, but the
+         ones it costs were going to be disappointed later.  "The last
+         step" gives MOJIOKO a defined role, so the section reads as
+         positioning rather than as a list of missing features.
+         REQ-0364 §2-6: moved down past the spec/CTA block, unchanged.
+         ============================================================ -->
+    <section class="whatis">
+      <h2>What this tool does</h2>
+      <!-- REQ-0362: the positioning paragraph + 4-step arrow diagram (text)
+           replaced with a single explainer image carrying the same content.
+           Text version superseded by mojioko_step_en.png, so removed. -->
+      <img src="../images/mojioko_step_en.png"
+           alt="MOJIOKO's 4-step workflow: 1) Prepare a video (an OBS recording, a saved stream archive, an already-edited video, a short-form clip, etc.) → 2) AI transcription (powered by Whisper, runs on your PC, GPU acceleration supported) → 3) Edit and refine captions (fine-tune timing on the timeline, style captions with karaoke effect or keyword emphasis) → 4) Export the captioned video and a transcript (SRT format supported)"
+           class="whatis-image" loading="lazy">
+      <div class="whatis-not">
+        <h3>MOJIOKO is not a video editor</h3>
+        <p>It cannot insert images, apply transitions, or join clips together.</p>
+        <p>Use it after your video editing is finished, as the last step.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Outcomes — single sample GIF (REQ-0372, sourced REQ-0373)
+         The karaoke / keyword-emphasis cards and the vertical-video
+         showcase (REQ-0370/0371) are all removed; the section is now just
+         the heading plus one centred GIF with no caption. REQ-0373 replaced
+         the REQ-0372 placeholder path (assets/out_sub.gif, never created)
+         with the real per-page GIF under images/ — this page uses the en
+         demo (images/out_en.gif; ../ because this page lives in docs/en/),
+         the ja page uses images/out_ja.gif. The onerror placeholder is kept
+         only as a safety net. The display size lives in .outcome-sample's
+         max-width (480px, matching the GIF's render width).
+         ============================================================ -->
+    <section class="outcomes">
+      <h2>What you can make</h2>
+      <img src="../images/out_en.gif" alt="MOJIOKO subtitle sample" class="outcome-sample" loading="lazy"
+           onerror="this.outerHTML='<div class=&quot;screenshot-placeholder outcome-sample&quot;>out_en.gif<br>(images/out_en.gif)</div>';">
+    </section>
+
+    <!-- ============================================================
+         Three pillars (REQ-0360 §3-4; REQ-0364 moved down, unchanged)
+         ★ ACCURACY: the claim is "your video is never uploaded", NOT
+         "works offline".  MOJIOKO downloads Whisper models, the CUDA
+         runtime (~1.1 GB) and the additional fonts over the network,
+         so "works offline" / "never connects" would be false.  The
+         .pillar-note qualifier below is what makes the privacy claim
+         true — do not delete it when editing this copy.
+         ============================================================ -->
+    <section class="pillars">
+      <h2>Three things that define MOJIOKO</h2>
+      <div class="pillar-grid">
+        <div class="pillar-card">
+          <h3>Your video is never uploaded</h3>
+          <p>Transcription and subtitle burn-in both happen entirely on your own PC.</p>
+          <span class="pillar-note">Note: the app connects to the internet only to download AI models and additional fonts.</span>
+        </div>
+        <div class="pillar-card">
+          <h3>Not a subscription</h3>
+          <p>The free edition stays free. The paid edition is a one-time purchase — there is no monthly fee.</p>
+        </div>
+        <div class="pillar-card">
+          <h3>A Windows desktop app</h3>
+          <p>No browser, no account sign-up.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Features — REQ-0111, restructured by REQ-0360 §3-5, edited by
+         REQ-0364 §3-3.
+           * the trimming tile was removed (owner decision) and replaced
+             by style presets so the 2×2 grid stays whole
+           * the v1.3.6 "Subtitle styling" block (text-only 2×2 grid:
+             Karaoke highlighting・Keyword emphasis・Appear/disappear
+             animations・Fine appearance controls) is REMOVED by
+             REQ-0364 §3-3. It never covered style presets — that
+             content lives in the "Reuse a look with style presets" cell
+             of Flexible subtitle editing below, which this REQ does not
+             touch, so the preset feature is still documented on the
+             page (see RES-0364 for the full check of this claim).
+           * the burn-in copy no longer implies MOJIOKO finishes the edit
+         ============================================================ -->
     <section class="features">
-      <h2>What you can do with MOJIOKO</h2>
+      <h2>Main features</h2>
 
       <!-- Feature 1: High-accuracy automatic transcription -->
       <div class="feature-item">
@@ -111,10 +239,7 @@
         </div>
       </div>
 
-      <!-- Feature 1.5: GPU Acceleration (added in REQ-0227).
-           Owner will provide the screenshot at ../images/e-gpu.png;
-           until then the onerror fallback renders a placeholder card,
-           matching the pattern used for the shorts screenshot below. -->
+      <!-- Feature 1.5: GPU Acceleration (added in REQ-0227) -->
       <div class="feature-item reverse">
         <div>
           <img src="../images/e-gpu.png" alt="GPU acceleration settings" class="feature-image" loading="lazy"
@@ -148,12 +273,13 @@
           <div class="feature-grid-cell">
             <img src="../images/e4.png" alt="List view for reviewing and editing subtitles" class="feature-image" loading="lazy">
             <h4>Review and edit in a list view</h4>
-            <p>See all subtitles at once and edit them in bulk.</p>
+            <p>See all subtitles at once and edit them in bulk. It stays quick even with thousands of subtitles.</p>
           </div>
           <div class="feature-grid-cell">
-            <img src="../images/e5.png" alt="Trimming unwanted sections on the timeline" class="feature-image" loading="lazy">
-            <h4>Trim out unwanted parts</h4>
-            <p>Cut unneeded sections on the timeline.</p>
+            <img src="../images/e-preset.png" alt="Saving and applying a subtitle style preset" class="feature-image" loading="lazy"
+                 onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Style presets screen<br>(images/e-preset.png)</div>';">
+            <h4>Reuse a look with style presets</h4>
+            <p>Save a look you have built and apply it to other subtitles in one click.</p>
           </div>
         </div>
         <p class="feature-hint"><span class="feature-hint-label">💡 Timeline?</span>A horizontal bar showing the flow of time in your video, so you can edit when each subtitle appears.</p>
@@ -181,28 +307,13 @@
         <div class="feature-content">
           <h3>Burn in subtitles and export video</h3>
           <p>Burn your edited subtitles directly into the video.</p>
-          <p>Merge multiple audio tracks into one, ready to upload to YouTube and more.</p>
+          <p>Merge multiple audio tracks into one. Burn subtitles into your already-edited video and export it in a form you can upload as-is.</p>
           <p class="feature-hint"><span class="feature-hint-label">💡 Burn-in?</span>Embedding subtitles into the video itself, so they always show on any player.</p>
         </div>
       </div>
     </section>
 
-    <!-- Shorts Section -->
-    <section class="shorts">
-      <div class="shorts-content reverse">
-        <div>
-          <img src="../images/screenshot-shorts-en.png" alt="Vertical video input example" class="shorts-image"
-               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Shorts screenshot<br>(screenshot-shorts-en.png)</div>';">
-        </div>
-        <div class="shorts-text">
-          <span class="step-label">Works with Short-form Videos</span>
-          <h3 style="font-size: 28px; font-weight: 700; margin: 8px 0 16px;">Subtitle vertical videos with ease</h3>
-          <p>Supports vertical videos (9:16). Import MKV and MP4 files, then export as MP4 for direct uploading to TikTok, YouTube Shorts, and Instagram Reels.</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- Support Section -->
+    <!-- Support Section (REQ-0364: moved down, unchanged) -->
     <section class="support">
       <div class="support-header">
         <h2>Support this Project</h2>
@@ -242,47 +353,29 @@
       </div>
     </section>
 
-    <!-- CTA Section -->
-    <section class="cta">
-      <h2>Get Started</h2>
-      <p>All processing runs locally on your PC. Your video data is never uploaded anywhere.</p>
-      <div class="cta-actions">
-        <a href="https://github.com/brightryo/mojioko/releases/download/v1.3.6/MOJIOKO.Setup.1.3.6.exe" class="cta-btn">
-          Download (Free)
-        </a>
-        <a href="https://apps.microsoft.com/detail/9N03JMH9LF6M" class="cta-btn" target="_blank" rel="noopener">
-          Get it on Microsoft Store
-        </a>
-      </div>
-      <p class="release-notes-link">
-        <a href="https://github.com/brightryo/mojioko/releases" target="_blank" rel="noopener">View release notes</a>
-      </p>
-      <a href="./guide/" class="guide-btn">
-        <span class="guide-btn-label">User Guide</span>
-        <span class="guide-btn-sub">FAQ, OBS Setup, and More</span>
-      </a>
-      <a href="./feedback/" class="guide-btn">
-        <span class="guide-btn-label">Feedback</span>
-        <span class="guide-btn-sub">Bug reports &amp; feature requests</span>
-      </a>
-      <p class="cta-back-to-top">
-        <a href="#top">↑ Back to top</a>
-      </p>
-    </section>
-
-    <!-- Footer -->
+    <!-- Footer (REQ-0364 §4: extended with a "back to top" link. The
+         guide/feedback/release-notes links are deliberately NOT repeated
+         here — they already sit prominently in the .cta section near the
+         top of the page (§2-4), and this page is short enough now that
+         restating them at the bottom would just be clutter next to the
+         legal/meta links this footer otherwise carries. -->
+    <!-- REQ-0370 §3-2: the site copyright is moved to the footer's last
+         child so it reads as the single bottom-most line. The FreeType
+         attribution (REQ-0257, a license credit) is kept, unchanged, above
+         it — nothing is deleted, only the display order is tidied. -->
     <footer>
-      <div>&copy; 2026 BrightRyo</div>
       <div class="footer-links">
         <a href="https://github.com/brightryo/mojioko" target="_blank" rel="noopener">GitHub</a>
         <a href="https://github.com/brightryo/mojioko/issues" target="_blank" rel="noopener">Contact</a>
         <a href="./privacy/">Privacy Policy</a>
+        <a href="#top">↑ Back to top</a>
       </div>
       <div class="footer-credit">
         Portions of this software are copyright &copy; 2006-2026 The FreeType
         Project (<a href="https://freetype.org" target="_blank" rel="noopener">https://freetype.org</a>).
         All rights reserved.
       </div>
+      <div class="footer-copyright">&copy; 2026 BrightRyo</div>
     </footer>
 
   </div>
