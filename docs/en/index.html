@@ -68,19 +68,12 @@
          ============================================================ -->
     <section class="whatis">
       <h2>What this tool does</h2>
-      <p class="whatis-lead">
-        MOJIOKO turns a finished video (an archive of something you already edited)<br>
-        into a subtitled video and a transcript.
-      </p>
-      <div class="whatis-flow">
-        <span class="whatis-step">Load a video</span>
-        <span class="whatis-arrow" aria-hidden="true">→</span>
-        <span class="whatis-step">AI transcribes it</span>
-        <span class="whatis-arrow" aria-hidden="true">→</span>
-        <span class="whatis-step">Edit the subtitles</span>
-        <span class="whatis-arrow" aria-hidden="true">→</span>
-        <span class="whatis-step">Burn them in and export</span>
-      </div>
+      <!-- REQ-0362: the positioning paragraph + 4-step arrow diagram (text)
+           replaced with a single explainer image carrying the same content.
+           Text version superseded by mojioko_step_en.png, so removed. -->
+      <img src="../images/mojioko_step_en.png"
+           alt="MOJIOKO's 4-step workflow: 1) Prepare a video (an OBS recording, a saved stream archive, an already-edited video, a short-form clip, etc.) → 2) AI transcription (powered by Whisper, runs on your PC, GPU acceleration supported) → 3) Edit and refine captions (fine-tune timing on the timeline, style captions with karaoke effect or keyword emphasis) → 4) Export the captioned video and a transcript (SRT format supported)"
+           class="whatis-image" loading="lazy">
       <div class="whatis-not">
         <h3>MOJIOKO is not a video editor</h3>
         <p>It cannot insert images, apply transitions, or join clips together.</p>

@@ -68,19 +68,12 @@
          ============================================================ -->
     <section class="whatis">
       <h2>これは何をするツールか</h2>
-      <p class="whatis-lead">
-        MOJIOKO は、編集を終えた動画（アーカイブ動画）から<br>
-        「字幕付き動画」と「文字起こしテキスト」を作るためのツールです。
-      </p>
-      <div class="whatis-flow">
-        <span class="whatis-step">動画を読み込む</span>
-        <span class="whatis-arrow" aria-hidden="true">→</span>
-        <span class="whatis-step">AI が文字起こし</span>
-        <span class="whatis-arrow" aria-hidden="true">→</span>
-        <span class="whatis-step">字幕を編集</span>
-        <span class="whatis-arrow" aria-hidden="true">→</span>
-        <span class="whatis-step">字幕を焼き込んで書き出す</span>
-      </div>
+      <!-- REQ-0362: 位置づけの説明文＋4ステップ矢印図（テキスト）を、
+           同内容を伝える説明画像 1 枚に差し替え。テキスト版は
+           mojioko_step_ja.png に置き換わったため削除。 -->
+      <img src="images/mojioko_step_ja.png"
+           alt="MOJIOKOの4ステップ: ①動画を用意する（OBS録画・配信アーカイブ・編集済み動画・ショート動画など）→ ②AIが文字起こし（Whisperを使用し、PCローカルで処理、GPUアクセラレーション対応）→ ③字幕を編集・調整（タイムラインで表示タイミングを調整、カラオケ字幕やキーワード強調などのデザイン調整）→ ④字幕を焼き込んだ動画と文字起こしテキスト（SRT形式対応）を書き出す"
+           class="whatis-image" loading="lazy">
       <div class="whatis-not">
         <h3>MOJIOKO は動画編集ソフトではありません</h3>
         <p>画像の挿入、トランジション、動画同士の連結などはできません。</p>

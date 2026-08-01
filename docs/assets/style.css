@@ -1553,41 +1553,18 @@ footer a:hover {
   margin-bottom: 28px;
 }
 
-.whatis-lead {
-  max-width: 720px;
-  margin: 0 auto 32px;
-  text-align: center;
-  font-size: 17px;
-  color: var(--text-secondary);
-  line-height: 1.8;
-}
-
-/* The four-stage pipeline chip row.  Flex + wrap rather than a grid so a
-   narrow phone breaks it into however many rows it needs without leaving
-   half-empty columns. */
-.whatis-flow {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  max-width: 860px;
+/* Explainer infographic (REQ-0362) replacing the whatis-lead paragraph and
+   whatis-flow chip row.  Source is a full-HD (1920x1080) PNG; height: auto
+   keeps its aspect ratio at any container width. Radius / border / shadow
+   match `.feature-image` so it reads as part of the same visual family. */
+.whatis-image {
+  width: 100%;
+  height: auto;
+  display: block;
   margin: 0 auto 36px;
-}
-
-.whatis-step {
-  background: var(--bg-secondary);
+  border-radius: 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 18px;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.whatis-arrow {
-  color: var(--text-tertiary);
-  font-size: 16px;
-  line-height: 1;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
 /* Non-goal callout.  Deliberately styled as a neutral aside (grey left
