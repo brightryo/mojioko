@@ -23,6 +23,7 @@ import {
 } from '../../shared/line-spacing'
 import { computeFixedStackOffsets } from '../../shared/stack-offsets'
 import { computeCuePlacement, resolveLayer } from '../../shared/cue-placement'
+import { computeEffectiveLayers } from '../../shared/effective-layer'
 import { groupByTimeOverlap } from '../../shared/simultaneous-groups'
 import { buildAnimationTags } from '../../shared/cue-animation-ass'
 import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
@@ -876,6 +877,16 @@ export function generateAss(
   // unpinned cue self-position, which is the all-`\pos` runtime Phase 1b adopts.
   const selfPositioned = resolveSelfPositionedCues(renders, video, isMsix, forceSelfPositionAll)
 
+  // REQ-0394 — in the production all-`\pos` path the Dialogue Layer column
+  // carries the EFFECTIVE z-order (stored `layer` intent + time-overlap
+  // separation), the same derivation the timeline rows and the preview z-index
+  // read, so all three agree.  Non-overlapping default cues resolve to 0
+  // (→ `Dialogue: 0,`, baseline byte-identical); overlapping cues get distinct
+  // layers (later/higher-intent on top).  The historical reference path
+  // (`forceSelfPositionAll === false`, verify:pos-parity only) keeps the stored
+  // `resolveLayer` so it reproduces the pre-REQ-0394 Layer emission for the gate.
+  const effectiveLayers = forceSelfPositionAll ? computeEffectiveLayers(entries) : null
+
   const events = [
     '[Events]',
     'Format: Layer, Start, End, Style, MarginL, MarginR, MarginV, Effect, Text',
@@ -895,11 +906,11 @@ export function generateAss(
           r.buildStyleTag(`\\pos(${formatAssCoord(a.x)},${formatAssCoord(a.y)})`),
         ),
       }).map((piece) =>
-        // REQ-0392 — the ASS Dialogue Layer column carries the cue's z-order
-        // (higher = drawn on top).  Default 0 emits `Dialogue: 0,` exactly as
-        // before, so the baseline stays byte-identical; within one layer libass
-        // paints later Dialogues on top (the emission-order tie-break).
-        `Dialogue: ${resolveLayer(r.entry)},${formatAssTime(piece.startSec)},${formatAssTime(piece.endSec)},` +
+        // REQ-0392/0394 — ASS Dialogue Layer column = the cue's EFFECTIVE z-order
+        // (higher = drawn on top).  Default (non-overlapping, no intent) → 0, so
+        // `Dialogue: 0,` and the baseline stays byte-identical; within one layer
+        // libass paints later Dialogues on top (the emission-order tie-break).
+        `Dialogue: ${effectiveLayers ? (effectiveLayers.get(r.entry.id) ?? 0) : resolveLayer(r.entry)},${formatAssTime(piece.startSec)},${formatAssTime(piece.endSec)},` +
         `${r.styleName},0,0,${piece.marginV},,{${piece.styleTag}}${piece.body}`
       )
     }),

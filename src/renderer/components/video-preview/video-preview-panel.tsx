@@ -19,6 +19,7 @@ import { ensureFontLoaded } from '@/lib/font-registry'
 import { KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { hexWithOpacity } from '../../../shared/alpha'
 import { findActiveEntryId, findActiveEntryIds } from '@/lib/active-entry'
+import { computeEffectiveLayers } from '../../../shared/effective-layer'
 import {
   previewPxToAss,
   getAnchorAssPosition,
@@ -383,6 +384,15 @@ export function VideoPreviewPanel() {
       .filter((e) => !effectiveEntryState(e, cuts).effectivelyDeleted)
       .sort((a, b) => a.startSec - b.startSec)
   }, [entries, cuts])
+
+  // REQ-0394 — EFFECTIVE z-order layers, computed over the full non-deleted set
+  // (the same set the burn generates from) so the preview's overlay z-index
+  // matches the burned ASS Layer column and the timeline's row order.  Memoised
+  // on the entries/cuts only (not the playhead), like the removed stack memo.
+  const effectiveLayers = useMemo(
+    () => computeEffectiveLayers(sortedActiveEntries),
+    [sortedActiveEntries],
+  )
 
   /**
    * REQ-080 #1 + REQ-20260613-004: source of truth for the overlay — EVERY
@@ -1424,6 +1434,7 @@ export function VideoPreviewPanel() {
                   videoWidthPx={video.widthPx}
                   containerWidthPx={videoContainerWidth}
                   stackOffsetPx={offset}
+                  effectiveLayer={effectiveLayers.get(entry.id)}
                   onPointerDown={handleOverlayPointerDown}
                   spanRef={setOverlaySpanRef(entry.id)}
                   outerSpanRef={setOverlayOuterRef(entry)}

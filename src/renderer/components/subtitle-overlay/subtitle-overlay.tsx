@@ -98,6 +98,14 @@ export interface SubtitleOverlayProps {
    */
   stackOffsetPx?: number
   /**
+   * REQ-0394 — EFFECTIVE z-order layer (stored `layer` intent + overlap
+   * separation), computed by the parent over the full cue set via
+   * `computeEffectiveLayers` so the preview's CSS z-index matches the burn's ASS
+   * Layer column and the timeline's row order.  Omitted (e.g. the style-sample
+   * preview, which renders a lone cue) → falls back to `resolveLayer(entry)`.
+   */
+  effectiveLayer?: number
+  /**
    * REQ-20260613-016 Phase 6 — pointerdown handler installed only when the
    * parent wants the overlay to be draggable.  Caller hooks pointermove
    * and pointerup via `setPointerCapture` itself; the overlay just
@@ -248,6 +256,7 @@ export function SubtitleOverlay({
   videoWidthPx,
   containerWidthPx,
   stackOffsetPx,
+  effectiveLayer,
   onPointerDown,
   spanRef,
   showAffordance,
@@ -819,7 +828,7 @@ export function SubtitleOverlay({
         // (higher = in front).  Overlays with equal z-index fall back to DOM
         // paint order (later on top), matching libass' same-layer tie-break, so
         // preview and burn agree.  Default 0 = today's behaviour.
-        zIndex: resolveLayer(entry),
+        zIndex: effectiveLayer ?? resolveLayer(entry),
         fontFamily: `'${fontMeta.cssFontFamily}'`,
         fontWeight: fontMeta.weight,
         // REQ-0323 §1-3 — animation transform layer.

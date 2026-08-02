@@ -49,13 +49,15 @@ describe('layoutEntries — contact vs overlap', () => {
     expect(result.placements.map((p) => p.trackIndex)).toEqual([0, 0, 0])
   })
 
-  it('still puts genuinely overlapping entries on separate tracks', () => {
-    // A 0–1.5, B 1.0–2.5 — 0.5s of real overlap.
+  it('still puts genuinely overlapping entries on separate tracks (REQ-0394: later = front = top)', () => {
+    // A 0–1.5, B 1.0–2.5 — 0.5s of real overlap.  REQ-0394: rows are z-order.
+    // Both are layer-0 intent; the later cue B gets the higher effective layer
+    // (front) → the TOP row (trackIndex 0); A sits below it.
     const result = layoutEntries([entry('a', 0, 1.5), entry('b', 1.0, 2.5)], 10)
     expect(result.trackCount).toBe(2)
     const trackOf = new Map(result.placements.map((p) => [p.entry.id, p.trackIndex]))
-    expect(trackOf.get('a')).toBe(0)
-    expect(trackOf.get('b')).toBe(1)
+    expect(trackOf.get('b')).toBe(0) // overlapping later cue → front → top row
+    expect(trackOf.get('a')).toBe(1) // earlier cue → back → bottom row
   })
 
   it('tolerates sub-millisecond float drift as contact (single track)', () => {
@@ -165,27 +167,32 @@ describe('layoutEntries — contact vs overlap', () => {
    * catches a regression to ANY id-based tiebreaker, not only
    * alphabetical.
    */
-  it('duplicate inserted after original gets the lower track (REQ-031)', () => {
-    // 'd' < 'e', so the alphabetical tiebreaker would have given 'dup-x'
-    // track 0 and 'e-001' track 1 — the bug REQ-031 fixes.
+  it('duplicate inserted after original lands on the FRONT (top) row (REQ-031 / REQ-0394)', () => {
+    // Same-time original + duplicate overlap → distinct effective layers by
+    // input order.  REQ-0394: the later-in-array duplicate gets the higher
+    // (front) layer → the TOP row (trackIndex 0); the original sits below it.
+    // (This is "複製は前面" — consistent with the burn's emission-order z-order.)
+    // The id-alphabetical tiebreaker REQ-031 removed must NOT resurface: 'dup-x'
+    // must not sort ahead of 'e-001' and steal the ordering.
     const result = layoutEntries(
       [entry('e-001', 5, 10), entry('dup-x', 5, 10)],
       10,
     )
     const trackOf = new Map(result.placements.map((p) => [p.entry.id, p.trackIndex]))
-    expect(trackOf.get('e-001')).toBe(0)
-    expect(trackOf.get('dup-x')).toBe(1)
+    expect(trackOf.get('dup-x')).toBe(0) // duplicate → front → top row
+    expect(trackOf.get('e-001')).toBe(1) // original → back → bottom row
   })
 
-  it('insertion order wins regardless of id alphabetical order (REQ-031)', () => {
-    // 'a' < 'z', but if 'z' is inserted FIRST the array order must win.
+  it('insertion order wins regardless of id alphabetical order (REQ-031 / REQ-0394)', () => {
+    // 'a' < 'z', but if 'z' is inserted FIRST the array order must win: the
+    // later-inserted 'a-second' gets the front (top) row, not the alphabetical one.
     const result = layoutEntries(
       [entry('z-first', 5, 10), entry('a-second', 5, 10)],
       10,
     )
     const trackOf = new Map(result.placements.map((p) => [p.entry.id, p.trackIndex]))
-    expect(trackOf.get('z-first')).toBe(0)
-    expect(trackOf.get('a-second')).toBe(1)
+    expect(trackOf.get('a-second')).toBe(0) // later-inserted → front → top
+    expect(trackOf.get('z-first')).toBe(1)
   })
 })
 
@@ -218,18 +225,20 @@ describe('layoutEntries — minBlockSec (REQ-088 #2)', () => {
     expect(result.trackCount).toBe(1)
   })
 
-  it('with minBlockSec = 0.05 adjacent 0.02-s blocks split across two tracks', () => {
-    // Same degenerate input, the production path through timeline-view:
-    // adjacent 0.02-s blocks land on separate tracks so the rendered
-    // min-width has clearance to the right edge of the previous block.
+  it('REQ-0394: minBlockSec no longer splits non-overlapping short blocks (rows are z-order)', () => {
+    // a[123.53,123.55] and b[123.55,123.57] are contact (not a real time
+    // overlap), so under the z-order row model they share layer 0 = one row.
+    // minBlockSec is ignored for row assignment now (rows mean z-order, not a
+    // visual time-packing); it is kept only for call-site compatibility.  The
+    // minor cost: two very-short near-adjacent blocks can render touching on one
+    // row — accepted so timeline rows == burn Layer == preview z-index.
     const result = layoutEntries(
       [entry('a', 123.53, 123.55), entry('b', 123.55, 123.57)],
       200,
       LAYOUT_MIN_BLOCK_SEC,
     )
-    expect(result.trackCount).toBe(2)
-    const trackOf = new Map(result.placements.map((p) => [p.entry.id, p.trackIndex]))
-    expect(trackOf.get('a')).not.toBe(trackOf.get('b'))
+    expect(result.trackCount).toBe(1)
+    expect(result.placements.map((p) => p.trackIndex)).toEqual([0, 0])
   })
 
   it('two 0.02-s blocks far apart still share a track', () => {
@@ -287,17 +296,16 @@ describe('layoutEntries — minBlockSec (REQ-088 #2)', () => {
     expect(result.trackCount).toBe(1)
   })
 
-  it('short block then another short block within the reserved window splits tracks', () => {
-    // 0.02-s block at [10.00, 10.02]; another 0.02-s block at
-    // [10.03, 10.05] would render with min-width and overlap the
-    // first block visually.  The 0.05-s reservation pushes the second
-    // onto a new track.
+  it('REQ-0394: near-adjacent short blocks with a gap share a row (minBlockSec ignored for rows)', () => {
+    // a[10.00,10.02] and b[10.03,10.05] have a real gap → no time overlap →
+    // same effective layer → one row.  (Pre-REQ-0394 minBlockSec split them; now
+    // rows are z-order so only genuine time overlap separates rows.)
     const result = layoutEntries(
       [entry('a', 10.00, 10.02), entry('b', 10.03, 10.05)],
       20,
       LAYOUT_MIN_BLOCK_SEC,
     )
-    expect(result.trackCount).toBe(2)
+    expect(result.trackCount).toBe(1)
   })
 })
 
@@ -314,30 +322,32 @@ describe('layoutEntries — minBlockSec (REQ-088 #2)', () => {
  * tests exercise the same code path the production drag handler invokes.
  */
 describe('layoutEntries — greedyTimes override (REQ-20260613-002)', () => {
-  it('without override, same-time clips swap tracks when one moves earlier', () => {
-    // Pre-drag: a (id "a") and b (id "b") share startSec.  Id tie-break
-    // puts a on track 0, b on track 1.
+  it('without override, same-time clips swap rows when one moves earlier', () => {
+    // Pre-drag: a and b share startSec (input order a,b) → b is the later cue →
+    // front → top row (0); a below it (1).
     const before = layoutEntries([entry('a', 10, 15), entry('b', 10, 15)], 20)
     const beforeTracks = new Map(before.placements.map((p) => [p.entry.id, p.trackIndex]))
-    expect(beforeTracks.get('a')).toBe(0)
-    expect(beforeTracks.get('b')).toBe(1)
+    expect(beforeTracks.get('a')).toBe(1)
+    expect(beforeTracks.get('b')).toBe(0)
 
-    // Mid-drag (b moved left 0.1s): no override → greedy now sorts b
-    // first and assigns it track 0.  This IS the reported bug.
+    // Mid-drag (b moved left 0.1s): no override → b now sorts first (earlier
+    // start) so a becomes the higher effective layer → top row.  The rows swap
+    // (a: 1→0, b: 0→1).  This IS the reported bug the override below fixes.
     const during = layoutEntries([entry('a', 10, 15), entry('b', 9.9, 14.9)], 20)
     const duringTracks = new Map(during.placements.map((p) => [p.entry.id, p.trackIndex]))
-    expect(duringTracks.get('b')).toBe(0)
-    expect(duringTracks.get('a')).toBe(1)
+    expect(duringTracks.get('a')).toBe(0)
+    expect(duringTracks.get('b')).toBe(1)
   })
 
   it('with override (snapshot times for the dragged entry) tracks stay pinned', () => {
     const before = layoutEntries([entry('a', 10, 15), entry('b', 10, 15)], 20)
     const beforeTracks = new Map(before.placements.map((p) => [p.entry.id, p.trackIndex]))
-    expect(beforeTracks.get('a')).toBe(0)
-    expect(beforeTracks.get('b')).toBe(1)
+    expect(beforeTracks.get('a')).toBe(1)
+    expect(beforeTracks.get('b')).toBe(0)
 
-    // Mid-drag (b moved left 0.1s) WITH the production override —
-    // greedyTimes pins b's sort key to its pre-drag startSec.
+    // Mid-drag (b moved left 0.1s) WITH the production override — greedyTimes
+    // pins b's overlap/effective-layer to its pre-drag snapshot, so the rows
+    // stay exactly as before the drag (a below, b on top).
     const during = layoutEntries(
       [entry('a', 10, 15), entry('b', 9.9, 14.9)],
       20,
@@ -345,14 +355,14 @@ describe('layoutEntries — greedyTimes override (REQ-20260613-002)', () => {
       { greedyTimes: new Map([['b', { startSec: 10, endSec: 15 }]]) },
     )
     const duringTracks = new Map(during.placements.map((p) => [p.entry.id, p.trackIndex]))
-    expect(duringTracks.get('a')).toBe(0)
-    expect(duringTracks.get('b')).toBe(1)
+    expect(duringTracks.get('a')).toBe(1)
+    expect(duringTracks.get('b')).toBe(0)
   })
 
   it('override keeps b pinned even when it drags far right past a', () => {
-    // b dragged so far right that its live interval no longer overlaps a.
-    // Without override, b would merge down to track 0.  With override, b
-    // stays on track 1 (= the row the user grabbed) for the whole drag.
+    // b dragged so far right that its live interval no longer overlaps a.  With
+    // the override, b's overlap is still computed from its pre-drag snapshot
+    // (10-15, overlapping a), so b keeps the front (top) row it was grabbed on.
     const during = layoutEntries(
       [entry('a', 10, 15), entry('b', 20, 25)],
       30,
@@ -360,23 +370,23 @@ describe('layoutEntries — greedyTimes override (REQ-20260613-002)', () => {
       { greedyTimes: new Map([['b', { startSec: 10, endSec: 15 }]]) },
     )
     const tracks = new Map(during.placements.map((p) => [p.entry.id, p.trackIndex]))
-    expect(tracks.get('a')).toBe(0)
-    expect(tracks.get('b')).toBe(1)
+    expect(tracks.get('a')).toBe(1)
+    expect(tracks.get('b')).toBe(0)
   })
 
   it('override on a does not affect b when only b is dragging', () => {
-    // Smoke check: the override only acts on the entry whose id is in the
-    // map.  An override for 'a' does not silently freeze 'b' too.
+    // Smoke check: the override only acts on the entry whose id is in the map.
     const result = layoutEntries(
       [entry('a', 10, 15), entry('b', 11, 16)],
       20,
       0,
       { greedyTimes: new Map([['a', { startSec: 10, endSec: 15 }]]) },
     )
-    // a and b overlap → two tracks; a (sorts first by override) → 0, b → 1.
+    // a and b overlap → two rows; a sorts first (start 10) → back → bottom (1),
+    // b is the later/front cue → top (0).
     const tracks = new Map(result.placements.map((p) => [p.entry.id, p.trackIndex]))
-    expect(tracks.get('a')).toBe(0)
-    expect(tracks.get('b')).toBe(1)
+    expect(tracks.get('a')).toBe(1)
+    expect(tracks.get('b')).toBe(0)
   })
 
   it('empty override map → identical behaviour to no override', () => {
@@ -396,10 +406,11 @@ describe('layoutEntries — greedyTimes override (REQ-20260613-002)', () => {
     expect(withEmpty.trackCount).toBe(without.trackCount)
   })
 
-  it('three same-time clips: pinning the bottom one keeps the other two stable', () => {
-    // Repro for the "three duplicates" stress case (REQ §5 #4).  c on
-    // track 2.  User drags c left.  Without pin, c would crowd onto a
-    // lower track and reshuffle a / b.  With pin, c stays on track 2.
+  it('three same-time clips: pinning the dragged one keeps all three rows stable', () => {
+    // Three same-time cues (input order a,b,c) → effective 0,1,2 → rows: c is the
+    // last/front cue on the TOP row (0), b in the middle (1), a at the bottom (2).
+    // User grabs c (pre-drag snapshot 10-15) and drags it left to 9-14; the
+    // override pins c's overlap to the snapshot so every row stays put.
     const during = layoutEntries(
       [entry('a', 10, 15), entry('b', 10, 15), entry('c', 9, 14)],
       20,
@@ -407,8 +418,8 @@ describe('layoutEntries — greedyTimes override (REQ-20260613-002)', () => {
       { greedyTimes: new Map([['c', { startSec: 10, endSec: 15 }]]) },
     )
     const tracks = new Map(during.placements.map((p) => [p.entry.id, p.trackIndex]))
-    expect(tracks.get('a')).toBe(0)
+    expect(tracks.get('c')).toBe(0) // front → top
     expect(tracks.get('b')).toBe(1)
-    expect(tracks.get('c')).toBe(2)
+    expect(tracks.get('a')).toBe(2) // back → bottom
   })
 })

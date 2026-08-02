@@ -1,13 +1,5 @@
 import type { SubtitleEntry } from '../../shared/types'
-
-/**
- * Floating-point tolerance (seconds) when comparing one block's end to the
- * next block's start.  Whisper output frequently has `A.endSec === B.startSec`
- * (contiguous segments); we treat exact contact — and contact within this
- * tolerance — as non-overlapping so the two blocks share a track.  A genuine
- * overlap of more than this tolerance still forces a new track.
- */
-const TIME_EPS_SEC = 1e-3
+import { computeEffectiveLayers } from '../../shared/effective-layer'
 
 /**
  * REQ-088 #2: minimum amount of track-time each block is treated as
@@ -71,63 +63,20 @@ export interface TimelineLayoutOverrides {
 }
 
 /**
- * Stable tiebreaker for entries that share `startSec`.
+ * Lay entries out into timeline rows where **row order = z-order** (REQ-0394).
  *
- * REQ-20260615-031: the tiebreaker used to be `a.id < b.id ? -1 : ...`
- * (alphabetical on id).  That bit the duplicate-row flow:
- * `runDuplicateRow` mints the new id as `'dup-' + crypto.randomUUID()`
- * and inserts it immediately AFTER the original in the entries array,
- * but `dup-…` often sorts BEFORE the original id (e.g. when the
- * original is a UUID starting with a hex digit > 'd', or a fixture id
- * like `e-001`).  The greedy allocator then assigned track 0 to the
- * duplicate, pushing the original onto track 1 — visually swapping
- * the rows.
+ * Each cue's `trackIndex` is the rank of its EFFECTIVE layer
+ * (`computeEffectiveLayers` — stored `layer` intent + time-overlap separation)
+ * among the distinct layers present, ordered DESCENDING: the top row
+ * (`trackIndex` 0) is the front-most layer, layer 0 sits at the bottom.  Because
+ * overlapping cues always get distinct effective layers, cues sharing a row
+ * never overlap in time, so their blocks never collide — the property the old
+ * greedy time-packer provided, now expressed as z-order.
  *
- * Fix: return 0 on tie.  `Array.prototype.sort` is stable since ES2019,
- * so the sort preserves the input order.  The input array always has
- * a duplicate inserted at `originalIdx + 1` (see runDuplicateRow), so
- * original keeps track 0 and the duplicate spills onto track 1.
- *
- * Cross-render determinism (the reason the alphabetical tiebreaker
- * existed) is unaffected because `useProjectStore.entries` is itself
- * stable across renders: `updateEntry` does not reorder, `addEntry`
- * inserts at a fixed index, and `sortByStartSec` is a stable sort.
- *
- * `greedyTimes` (REQ-20260613-002): when supplied, the override startSec
- * is used for the primary sort key in place of the live `entry.startSec`.
- * Keeps the dragged entry pinned to its starting sort position even as
- * its live startSec diverges from neighbouring clips during a drag.
- */
-function compareForLayout(
-  a: SubtitleEntry,
-  b: SubtitleEntry,
-  greedyTimes?: ReadonlyMap<string, { startSec: number; endSec: number }>
-): number {
-  const aStart = greedyTimes?.get(a.id)?.startSec ?? a.startSec
-  const bStart = greedyTimes?.get(b.id)?.startSec ?? b.startSec
-  if (aStart !== bStart) return aStart - bStart
-  return 0
-}
-
-/**
- * Greedy interval graph coloring: assign each entry to the first track whose
- * last block has already ended.  Spawn a new track only when no existing
- * track fits.
- *
- * Inputs are not mutated.  Entries are read in `startSec` ascending order
- * (with `id` tiebreak); the returned `placements` array preserves the input
- * entry order so callers can render rows by their input position without
- * re-sorting.
- *
- * Deleted rows are passed through to the caller; the caller decides whether
- * to filter them out before invoking.  This keeps the function pure and
- * lets the "Deleted" filter still produce a visual layout.
- *
- * `minBlockSec` (REQ-088 #2) lets the caller reserve a minimum amount of
- * track-time per block so very-short blocks (Whisper sometimes emits
- * 0.02-s segments) don't sit beside another block on the same track and
- * visually overlap at min-render-width.  Default is 0 = legacy
- * boundary-only behaviour (unit tests rely on this).
+ * Inputs are not mutated; `placements` preserves input entry order so the caller
+ * renders each Block by its own id without re-sorting.  Deleted rows are passed
+ * through (the caller filters).  `minBlockSec` (REQ-088 #2) no longer affects row
+ * assignment and is retained only for call-site compatibility.
  */
 export function layoutEntries(
   entries: readonly SubtitleEntry[],
@@ -140,65 +89,42 @@ export function layoutEntries(
   }
 
   const greedyTimes = overrides?.greedyTimes
-  // REQ-20260613-002: when an entry has a greedy-time override, the
-  // sort key AND the interval-fit check both use those override values
-  // (= snapshot times for a dragged entry).  Live values are preserved
-  // on the entry itself so the caller's `editedBlockPositions` still
-  // renders the block at its live position; only the trackIndex gets
-  // pinned.
-  function timesFor(e: SubtitleEntry): { startSec: number; endSec: number } {
-    const o = greedyTimes?.get(e.id)
-    if (o !== undefined) return o
-    return { startSec: e.startSec, endSec: e.endSec }
-  }
-
-  const sorted = [...entries].sort((a, b) => compareForLayout(a, b, greedyTimes))
-  // trackEndSec[i] = effective endSec of the most recent block placed on
-  // track i, where "effective" means max(actualEnd, start + minBlockSec).
-  // Reserving `minBlockSec` past actualEnd is what stops the rendered
-  // min-width of a 0.02-s block from overlapping the next block on the
-  // same track (REQ-088 #2).
-  const trackEndSec: number[] = []
-  const trackOf = new Map<string, number>()
-
-  for (const e of sorted) {
-    const t = timesFor(e)
-    const effectiveEnd = t.endSec > t.startSec + minBlockSec
-      ? t.endSec
-      : t.startSec + minBlockSec
-    let assigned = -1
-    for (let i = 0; i < trackEndSec.length; i++) {
-      if (trackEndSec[i] <= t.startSec + TIME_EPS_SEC) {
-        assigned = i
-        break
-      }
-    }
-    if (assigned === -1) {
-      assigned = trackEndSec.length
-      trackEndSec.push(effectiveEnd)
-    } else {
-      trackEndSec[assigned] = effectiveEnd
-    }
-    trackOf.set(e.id, assigned)
-  }
+  // REQ-0394 — rows ARE z-order now.  A cue's `trackIndex` is the RANK of its
+  // EFFECTIVE layer (`computeEffectiveLayers` = stored `layer` intent + overlap
+  // separation) among the distinct layers present, ordered DESCENDING: the TOP
+  // row (trackIndex 0) is the front-most (highest) layer and layer 0 sits at the
+  // BOTTOM.  Overlapping cues always get distinct effective layers → distinct
+  // rows, so blocks on one row never collide (the property the old greedy time
+  // packer provided, now expressed through z-order).
+  //
+  // REQ-20260613-002 drag pinning: `greedyTimes` is forwarded as the effective-
+  // layer time override, so a dragged cue's overlap (and therefore its row) is
+  // computed from its snapshot times and does not jump mid-drag.  The block's
+  // live leftPx/widthPx still come from the caller, so it follows the cursor
+  // laterally while its row stays pinned until pointer-up resettles it.
+  //
+  // `minBlockSec` no longer affects row assignment (rows are z-order, not a time
+  // packing).  It is retained in the signature for call-site compatibility.
+  void minBlockSec
+  const effLayers = computeEffectiveLayers(entries, greedyTimes)
+  const distinct = Array.from(new Set(entries.map((e) => effLayers.get(e.id) ?? 0)))
+    .sort((a, b) => b - a) // DESC → highest layer = row 0 = top = front
+  const rankOf = new Map<number, number>(distinct.map((v, i) => [v, i]))
 
   const placements: TimelinePlacement[] = entries.map((e) => ({
     entry: e,
-    trackIndex: trackOf.get(e.id) ?? 0
+    trackIndex: rankOf.get(effLayers.get(e.id) ?? 0) ?? 0,
   }))
 
-  // totalSec is sourced from the LIVE entry endSecs, never the
-  // greedy-time overrides — the visible timeline width must always
-  // accommodate the rightmost block as the user sees it (a drag that
-  // pushes a clip past the previous timeline end should extend the
-  // ruler, not let the block escape it).
+  // totalSec is sourced from the LIVE entry endSecs — the visible timeline width
+  // must always accommodate the rightmost block as the user sees it.
   const maxEntryEnd = entries.reduce((m, e) => (e.endSec > m ? e.endSec : m), 0)
   const totalSec = Math.max(fallbackDurationSec, maxEntryEnd)
 
   return {
     placements,
-    trackCount: trackEndSec.length,
-    totalSec
+    trackCount: distinct.length,
+    totalSec,
   }
 }
 
