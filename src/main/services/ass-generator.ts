@@ -285,25 +285,31 @@ export function generateAss(
    */
   karaokeStyle: KaraokeStyle,
   /**
-   * REQ-0389 (positioning-redesign Phase 1a) — **shadow seam, default off.**
+   * REQ-0391 (positioning-redesign Phase 1b) — **all-`\pos` is now the
+   * unconditional production default (`true`).**
    *
-   * When `true`, EVERY unpinned cue self-positions via `\pos` (routed through
-   * `computeCuePlacement`), instead of only the split / animated-overlap cues
-   * that already do.  This is the all-`\pos` runtime Phase 1b will switch to; in
-   * Phase 1a it stays off and is exercised only by `verify:pos-parity`, which
-   * needs the REAL generator to emit the `\pos` side (REQ-0316 forbids
-   * hand-authored ASS fixtures).
+   * MOJIOKO is the single positioning authority: EVERY unpinned cue
+   * self-positions via per-line `\pos` (routed through `computeCuePlacement`),
+   * and there is NO runtime auto-stacking — overlapping cues render where they
+   * are authored (WYSIWYG), matching the preview.  `verticalMarginPx = 0` is
+   * honoured literally (the old MarginV-column path let a 0 fall back to the
+   * Style default of 40px).
    *
-   * Unlike `assFontName` / `isMsix` / `karaokeStyle` above, a DEFAULT is the
-   * correct shape here: forgetting the argument yields `false` = today's
-   * production behaviour, i.e. the safe/no-op path — not the "plausible but
-   * wrong" output those three guard against.  Because the default sits after the
-   * seven required params, `generateAss.length` stays 7 and the arity pins
-   * (REQ-0340 / REQ-0344) are unaffected.  Nothing in `src/` passes `true`, so
-   * the production render path is unchanged and `ass-generator-baseline`
-   * stays byte-identical.
+   * `false` selects the **historical libass-MarginV reference** (only split /
+   * animated-overlap cues self-position, others emit a MarginV column and libass
+   * places + auto-stacks them).  It is retained solely so `verify:pos-parity`
+   * can burn the pre-Phase-1b placement as the ground-truth the all-`\pos`
+   * output is measured against (Phase 1a proved they match at Δ0 for a single
+   * cue).  **No production caller passes `false`** — the seam is unconditional in
+   * the app (REQ §1 "無条件化").
+   *
+   * A DEFAULT is the correct shape here (unlike `assFontName` / `isMsix` /
+   * `karaokeStyle`): the default IS the production behaviour, and forgetting the
+   * argument yields it.  Because the default sits after the seven required
+   * params, `generateAss.length` stays 7 and the arity pins (REQ-0340 /
+   * REQ-0344) are unaffected.
    */
-  forceSelfPositionAll: boolean = false,
+  forceSelfPositionAll: boolean = true,
 ): string {
   // `burnin` / `subtitleBackground` are vestigial (see JSDoc above).  Reference
   // them once so `noUnusedParameters` stays quiet without disabling lint.
@@ -1000,22 +1006,30 @@ function resolveSelfPositionedCues(
 
   if (selfIds.size === 0) return out
 
-  // Stack offsets are computed over ALL unpinned rows, sorted by startSec as
-  // `computeFixedStackOffsets` requires.  Ties keep the array order, which is
-  // the ASS Dialogue order — the same tie-break the preview relies on.
-  const stacked = unpinned
-    .map((r) => r.entry)
-    .map((entry, i) => ({ entry, i }))
-    .sort((a, b) => a.entry.startSec - b.entry.startSec || a.i - b.i)
-    .map((x) => x.entry)
-  // REQ-0376 §A — feed the emphasis-aware height so the stack gap matches the
-  // taller box libass reserves for a keyword-emphasised cue.  The tier gate is
-  // the same one the emit path uses, so a free-tier cue (emphasis rendered off)
-  // measures at its base size and nothing shifts.
-  const emphasisTierAllowed = canUseKeywordEmphasisInTier(isMsix)
-  const offsets = computeFixedStackOffsets(stacked, (e) =>
-    estimateCueHeightAssPx(e, cueMaxRenderedFontAssPx(e, emphasisTierAllowed)),
-  )
+  // REQ-0391 — all-`\pos` (production default) is WYSIWYG: there is NO
+  // auto-stacking, so every cue keeps its own MarginV-derived anchor and
+  // overlapping cues overlap (matching the preview).  `computeFixedStackOffsets`
+  // is consulted ONLY for the historical reference path
+  // (`forceSelfPositionAll === false`, verify:pos-parity) — and stays available
+  // for the Phase 4 migration — never for live positioning.  An empty map makes
+  // every `offsets.get(id) ?? 0` below resolve to 0.
+  const offsets = forceSelfPositionAll
+    ? new Map<string, number>()
+    : (() => {
+        // Stack offsets over ALL unpinned rows, sorted by startSec as
+        // `computeFixedStackOffsets` requires.  Ties keep the array order (= the
+        // ASS Dialogue order), the same tie-break the preview relies on.
+        const stacked = unpinned
+          .map((r) => r.entry)
+          .map((entry, i) => ({ entry, i }))
+          .sort((a, b) => a.entry.startSec - b.entry.startSec || a.i - b.i)
+          .map((x) => x.entry)
+        // REQ-0376 §A — emphasis-aware height so the stack gap matches the
+        // taller box libass reserves for a keyword-emphasised cue.
+        const emphasisTierAllowed = canUseKeywordEmphasisInTier(isMsix)
+        return computeFixedStackOffsets(stacked, (e) =>
+          estimateCueHeightAssPx(e, cueMaxRenderedFontAssPx(e, emphasisTierAllowed)))
+      })()
 
   for (const r of renders) {
     if (!selfIds.has(r.entry.id)) continue

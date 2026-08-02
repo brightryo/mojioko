@@ -125,8 +125,8 @@ describe('generateAss — per-row alignment (\\an)', () => {
   }
 })
 
-describe('generateAss — per-row MarginV', () => {
-  it('uses entry.verticalMarginPx in the Dialogue MarginV column', () => {
+describe('generateAss — per-row vertical margin', () => {
+  it('encodes entry.verticalMarginPx in the \\pos Y (all-\\pos, REQ-0391)', () => {
     const ass = generateAss(
       [
         makeEntry('e1', 0, 1, 'a', { verticalMarginPx: 40 }),
@@ -136,9 +136,15 @@ describe('generateAss — per-row MarginV', () => {
       VESTIGIAL_BURNIN,
     )
     const dialogues = ass.split('\n').filter((l) => l.startsWith('Dialogue:'))
-    // Dialogue format: Layer, Start, End, Style, MarginL, MarginR, MarginV, Effect, Text
-    expect(dialogues[0].split(',').slice(0, 8).join(',')).toMatch(/,0,0,40,/)
-    expect(dialogues[1].split(',').slice(0, 8).join(',')).toMatch(/,0,0,120,/)
+    // REQ-0391 — all-\pos: MOJIOKO positions every cue itself, so the Dialogue
+    // MarginV COLUMN is now always 0 and the vertical margin is encoded in the
+    // \pos Y instead.  A bottom-anchored single-line cue on 1080p sits at
+    // y = 1080 − verticalMarginPx.  (Dialogue format columns 1–7:
+    // Layer, Start, End, Style, MarginL, MarginR, MarginV.)
+    expect(dialogues[0].split(',').slice(0, 8).join(',')).toMatch(/,0,0,0,/)
+    expect(dialogues[1].split(',').slice(0, 8).join(',')).toMatch(/,0,0,0,/)
+    expect(dialogues[0]).toContain('\\pos(960,1040)') // 1080 − 40
+    expect(dialogues[1]).toContain('\\pos(960,960)')  // 1080 − 120
   })
 })
 
@@ -445,27 +451,33 @@ describe('generateAss — free position \\pos (REQ-20260613-016 Phase 6 / 機能
     expect(dialogue).not.toContain(',999,')
   })
 
-  it('row with only posX (no posY) is NOT pinned — no \\pos emitted', () => {
+  it('row with only posX (no posY) is NOT pinned — placed at the alignment anchor, partial pin ignored (REQ-0391)', () => {
     const ass = generateAss(
       [makeEntry('e1', 0, 1, 'half', { posX: 100 })],
       VIDEO,
       VESTIGIAL_BURNIN,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
-    expect(dialogue).not.toContain('\\pos')
+    // REQ-0391 — all-\pos: every cue is \pos'd now, but a partial pin (posX
+    // without posY) is still NOT a pin.  The cue is placed at its ALIGNMENT
+    // anchor (centre x = 960), so the stray posX=100 must be ignored.
+    expect(dialogue).toContain('\\pos(')
+    expect(dialogue).not.toContain('\\pos(100,')
   })
 
-  it('row with only posY (no posX) is NOT pinned — no \\pos emitted', () => {
+  it('row with only posY (no posX) is NOT pinned — placed at the alignment anchor, partial pin ignored (REQ-0391)', () => {
     const ass = generateAss(
       [makeEntry('e1', 0, 1, 'half', { posY: 200 })],
       VIDEO,
       VESTIGIAL_BURNIN,
     )
     const dialogue = ass.split('\n').find((l) => l.startsWith('Dialogue:'))!
-    expect(dialogue).not.toContain('\\pos')
+    // Bottom-centre anchor y = 1040, so the stray posY=200 must be ignored.
+    expect(dialogue).toContain('\\pos(')
+    expect(dialogue).not.toContain(',200)')
   })
 
-  it('mixed pinned + unpinned rows each emit their own form', () => {
+  it('mixed pinned + unpinned rows each emit their own \\pos (REQ-0391)', () => {
     const ass = generateAss(
       [
         makeEntry('free', 0, 1, 'unpinned'),
@@ -475,7 +487,9 @@ describe('generateAss — free position \\pos (REQ-20260613-016 Phase 6 / 機能
       VESTIGIAL_BURNIN,
     )
     const dialogues = ass.split('\n').filter((l) => l.startsWith('Dialogue:'))
-    expect(dialogues[0]).not.toContain('\\pos')
+    // REQ-0391 — all-\pos: the unpinned row now ALSO emits \pos, but at its
+    // alignment anchor (960,1040); the pinned row emits its own \pos(100,200).
+    expect(dialogues[0]).toContain('\\pos(960,1040)')
     expect(dialogues[0]).toContain('\\an2') // unpinned still uses alignment
     expect(dialogues[1]).toContain('\\pos(100,200)')
     expect(dialogues[1]).toContain('\\an2') // pinned still has \an for anchor

@@ -5,12 +5,13 @@
  * Bundled to CJS by index.mjs and `require`d.  It builds real `SubtitleEntry`s
  * and calls the REAL `generateAss` twice per case (REQ-0316 forbids
  * hand-authored ASS fixtures):
- *   - LEGACY: `generateAss(...7)` — today's output.  A single, static,
- *     non-split cue is NOT in the self-position set, so libass places it from
- *     `MarginV` (the "現行 MarginV レンダ").
- *   - POS:    `generateAss(...7, forceSelfPositionAll=true)` — the shadow
- *     seam that routes every cue through `computeCuePlacement` → per-line
- *     `\pos` (the all-`\pos` render Phase 1b adopts).
+ *   - LEGACY: `generateAss(...7, forceSelfPositionAll=false)` — the historical
+ *     libass-MarginV placement.  Post-Phase-1b this is no longer the production
+ *     default, so it is requested explicitly; it is the ground-truth reference
+ *     the all-`\pos` output is measured against.
+ *   - POS:    `generateAss(...7, forceSelfPositionAll=true)` — the production
+ *     all-`\pos` render (routes every cue through `computeCuePlacement`).  This
+ *     is also the default now, but passed explicitly for symmetry.
  *
  * The gate then burns both through libass and compares ink positions in pixels.
  */
@@ -98,7 +99,7 @@ export function renderPair(spec: CaseSpec): {
   // isMsix false throughout — keyword emphasis is free-tier
   // (canUseKeywordEmphasisInTier === true) so it renders in both sides anyway,
   // and karaoke is off (no karaokeEnabled cue).
-  const legacyAss = generateAss(entries, video, burnin, undefined, ASS_FONT_NAME, false, 'switch')
+  const legacyAss = generateAss(entries, video, burnin, undefined, ASS_FONT_NAME, false, 'switch', false)
   const posAss = generateAss(entries, video, burnin, undefined, ASS_FONT_NAME, false, 'switch', true)
   return { legacyAss, posAss, expectedLines: spec.L }
 }

@@ -1,14 +1,17 @@
-// REQ-0389 (positioning-redesign Phase 1a) — verify:pos-parity
+// REQ-0389 / REQ-0391 (positioning-redesign) — verify:pos-parity
 //
-// Real-MP4 pixel gate: for a single cue per case, burn TODAY's output (libass
-// places from MarginV) and the shadow all-`\pos` output (computeCuePlacement)
-// through the app's real ffmpeg/libass with the real bundled font, then compare
-// ink-band positions in pixels.  Passes only when the `\pos` render lands within
-// tolerance of the MarginV render for every case, a negative control (a
+// Real-MP4 pixel gate: for a single cue per case, burn the historical
+// libass-MarginV placement (`forceSelfPositionAll = false`) and the production
+// all-`\pos` placement (`= true`, via computeCuePlacement) through the app's
+// real ffmpeg/libass with the real bundled font, then compare ink-band
+// positions in pixels.  Passes only when the `\pos` render lands within
+// tolerance of the MarginV reference for every case, a negative control (a
 // deliberately displaced cue) is detected, and no case renders zero ink.
 //
-// Runtime is UNCHANGED: `generateAss` self-positions all cues only when the
-// gate passes `forceSelfPositionAll = true`; nothing in src/ does.
+// As of Phase 1b (REQ-0391) all-`\pos` is the production default; the MarginV
+// path (`false`) is retained solely as this gate's ground-truth reference, so
+// this remains a permanent guard that the shipping placement still matches what
+// libass' own MarginV placement produced.
 //
 // Exit 0 = pass, 1 = a parity/scope failure, 2 = environment (no ffmpeg).
 

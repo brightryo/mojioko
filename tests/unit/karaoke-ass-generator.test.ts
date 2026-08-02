@@ -557,27 +557,36 @@ describe('REQ-0294 — multiline karaoke (\\N preserved through the emit)', () =
     return dialogueLine.slice(commas[7] + 1)
   }
 
-  it('Whisper timing + 2-line cue: `\\N` emitted between the two words', () => {
-    // Cue `hello\Nworld` with two Whisper words.  Pre-REQ-0294 the
-    // karaoke body was `{\k50}hello{\k150} world` (1 line, `\N`
-    // silently dropped).  Post-REQ-0294 it's `{\k50}hello\N{\k150}
-    // world` (2 lines, `world`'s leading space stripped).
+  // REQ-0391 — all-\pos: a multi-line cue is now emitted as one \pos event PER
+  // display line, so the wrap manifests as TWO Dialogue lines rather than a `\N`
+  // inside one body.  These tests still pin the SAME wrap logic (which word goes
+  // on which line, leading-space stripping) — just read across the split events.
+  const dialogueLinesOf = (ass: string): string[] =>
+    ass.split('\n').filter((l) => l.startsWith('Dialogue:'))
+  const visibleOfDialogue = (l: string): string =>
+    textFieldOfDialogue(l).replace(/\{[^}]*\}/g, '')
+
+  it('Whisper timing + 2-line cue: the wrap splits the two words across two \\pos events (REQ-0391)', () => {
+    // Cue `hello\Nworld` with two Whisper words.  The wrap still lands between
+    // the two words: 'hello' on line 1, 'world' (leading space stripped) on
+    // line 2 — now as two separate \pos events, with no `\N` in either body.
     const entry = makeEntry({
       startSec: 0, endSec: 2,
       text: 'hello\\Nworld',
       karaokeEnabled: true,
       words: validWords, // [{0,0.5,hello}, {0.5,1.0,' world'}]
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
-    const line = dialogueLineOf(ass)
-    // The literal `\N` MUST appear between the two `{\k}` blocks.
-    expect(line).toMatch(/\{\\k\d+\}hello\\N\{\\k\d+\}world/)
-    // And the leading space of the original ' world' MUST have been
-    // stripped when the break was inserted.
-    expect(line).not.toMatch(/\\N\{\\k\d+\} world/)
+    const lines = dialogueLinesOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
+    expect(lines).toHaveLength(2)
+    for (const l of lines) expect(l).not.toContain('\\N')
+    expect(lines[0]).toMatch(/\{\\k\d+\}hello/)
+    expect(lines[0]).not.toContain('world')
+    // Line 2 carries 'world' with its leading space stripped ({\k} then world).
+    expect(lines[1]).toMatch(/\{\\k\d+\}world/)
+    expect(lines[1]).not.toMatch(/\{\\k\d+\} world/)
   })
 
-  it('Whisper timing + JA 2-line cue: `\\N` emitted between the two words', () => {
+  it('Whisper timing + JA 2-line cue: the wrap splits the two runs across two \\pos events (REQ-0391)', () => {
     const jaWords: WordSpan[] = [
       { startSec: 0, endSec: 0.5, text: 'こんにちは' },
       { startSec: 0.5, endSec: 1.0, text: '世界' },
@@ -588,66 +597,63 @@ describe('REQ-0294 — multiline karaoke (\\N preserved through the emit)', () =
       karaokeEnabled: true,
       words: jaWords,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
-    const line = dialogueLineOf(ass)
-    expect(line).toMatch(/\{\\k\d+\}こんにちは\\N\{\\k\d+\}世界/)
+    const lines = dialogueLinesOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
+    expect(lines).toHaveLength(2)
+    for (const l of lines) expect(l).not.toContain('\\N')
+    expect(lines[0]).toMatch(/\{\\k\d+\}こんにちは/)
+    expect(lines[1]).toMatch(/\{\\k\d+\}世界/)
   })
 
-  it('Equal-split fallback + 2-line cue: `\\N` emitted at the right unit boundary', () => {
-    // `hello world\Nedited again` with no valid Whisper words → 4
-    // fallback units [hello,  world,  edited,  again].  The `\N`
-    // sits between "world" (unit 1) and "edited" (unit 2), so break
-    // is before unit 2.
+  it('Equal-split fallback + 2-line cue: the wrap lands at the right unit boundary across events (REQ-0391)', () => {
+    // `hello world\Nedited again` with no valid Whisper words → 4 fallback units
+    // [hello,  world,  edited,  again].  The wrap sits between "world" (line 1)
+    // and "edited" (line 2).
     const entry = makeEntry({
       startSec: 0, endSec: 4,
       text: 'hello world\\Nedited again',
       karaokeEnabled: true,
       words: undefined,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
-    const line = dialogueLineOf(ass)
-    expect(line).toMatch(/\{\\k\d+\}hello\{\\k\d+\} world\\N\{\\k\d+\}edited\{\\k\d+\} again/)
+    const lines = dialogueLinesOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
+    expect(lines).toHaveLength(2)
+    for (const l of lines) expect(l).not.toContain('\\N')
+    expect(lines[0]).toMatch(/\{\\k\d+\}hello\{\\k\d+\} world/)
+    expect(lines[1]).toMatch(/\{\\k\d+\}edited\{\\k\d+\} again/)
   })
 
-  it('Equal-split fallback + JA 2-line cue: `\\N` between the two CJK runs', () => {
-    // 10 single-char units, `\N` between positions 4 (す) and 5 (こ).
+  it('Equal-split fallback + JA 2-line cue: the wrap splits the two CJK runs across events (REQ-0391)', () => {
+    // 10 single-char units, wrap between positions 4 (す) and 5 (こ).
     const entry = makeEntry({
       startSec: 0, endSec: 2,
       text: 'テストです\\Nこんにちは',
       karaokeEnabled: true,
       words: undefined,
     })
-    const ass = generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')
-    const line = dialogueLineOf(ass)
-    // 5 CJK chars per line: テストです\Nこんにちは
-    expect(line).toMatch(/\{\\k\d+\}テ\{\\k\d+\}ス\{\\k\d+\}ト\{\\k\d+\}で\{\\k\d+\}す\\N\{\\k\d+\}こ/)
+    const lines = dialogueLinesOf(generateAss([entry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
+    expect(lines).toHaveLength(2)
+    for (const l of lines) expect(l).not.toContain('\\N')
+    // 5 CJK chars per line: テストです | こんにちは
+    expect(lines[0]).toMatch(/\{\\k\d+\}テ\{\\k\d+\}ス\{\\k\d+\}ト\{\\k\d+\}で\{\\k\d+\}す/)
+    expect(lines[1]).toMatch(/\{\\k\d+\}こ\{\\k\d+\}ん\{\\k\d+\}に\{\\k\d+\}ち\{\\k\d+\}は/)
   })
 
-  it('Karaoke ON and OFF wrap at the same position (parity pin, REQ-0294 §3)', () => {
-    // Both renders MUST place `\N` at the same character boundary in
-    // the emitted text field.  Verified structurally: after
-    // stripping every `{...}` override block and dropping the `\N`
-    // line-break sentinel, both should yield the same visible-text
-    // concatenation ("helloworld" here) and both should contain
-    // exactly one `\N`.
+  it('Karaoke ON and OFF wrap at the same position (parity pin, REQ-0294 §3 / REQ-0391)', () => {
+    // REQ-0391 — all-\pos: both renders split into TWO \pos events (no `\N`).
+    // Parity now means: same visible text PER LINE, same number of lines.
     const offEntry = makeEntry({ text: 'hello\\Nworld', karaokeEnabled: false })
     const onEntry = makeEntry({
       text: 'hello\\Nworld',
       karaokeEnabled: true,
       words: validWords,
     })
-    const offField = textFieldOfDialogue(dialogueLineOf(generateAss([offEntry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')))
-    const onField = textFieldOfDialogue(dialogueLineOf(generateAss([onEntry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch')))
-    // OFF field: `{style}hello\Nworld`.  ON field: `{style}{\k}hello\N{\k}world`.
-    // Both must contain exactly one `\N` at a position that maps to
-    // the same word boundary.
-    const countBackslashN = (s: string) => (s.match(/\\N/g) ?? []).length
-    expect(countBackslashN(offField)).toBe(1)
-    expect(countBackslashN(onField)).toBe(1)
-    // Same visible text after stripping tags + \N.
-    const visibleOff = offField.replace(/\{[^}]*\}/g, '').replace(/\\N/g, '')
-    const visibleOn = onField.replace(/\{[^}]*\}/g, '').replace(/\\N/g, '')
-    expect(visibleOff).toBe(visibleOn)
+    const offLines = dialogueLinesOf(generateAss([offEntry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
+    const onLines = dialogueLinesOf(generateAss([onEntry], video, burnin, undefined, undefined, true, /* REQ-0324 §4-1: this suite pins the \k shape, so ask for it explicitly */ 'switch'))
+    expect(offLines).toHaveLength(2)
+    expect(onLines).toHaveLength(2)
+    for (const l of [...offLines, ...onLines]) expect(l).not.toContain('\\N')
+    // Same visible text per line for both renders (the wrap boundary matches).
+    expect(offLines.map(visibleOfDialogue)).toEqual(['hello', 'world'])
+    expect(onLines.map(visibleOfDialogue)).toEqual(['hello', 'world'])
   })
 
   it('Single-line cue: NO `\\N` in body (no regression on non-multiline cues)', () => {

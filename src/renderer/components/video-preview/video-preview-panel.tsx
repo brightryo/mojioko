@@ -6,20 +6,19 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore, isAnyOverlayOpen } from '@/stores/ui-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { usePreviewMixStore } from '@/stores/preview-mix-store'
-import { useAppEnvStore } from '@/stores/app-env-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { shellShowInFolder } from '@/services/dialog'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
-import { SubtitleOverlay, estimateOverlayHeightPx } from '@/components/subtitle-overlay/subtitle-overlay'
+import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
 import { PositionGuideOverlay } from '@/components/subtitle-overlay/position-guide-overlay'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { hexWithOpacity } from '../../../shared/alpha'
-import { findActiveEntryId, findActiveEntryIds, computeFixedStackOffsets } from '@/lib/active-entry'
+import { findActiveEntryId, findActiveEntryIds } from '@/lib/active-entry'
 import {
   previewPxToAss,
   getAnchorAssPosition,
@@ -128,14 +127,15 @@ export function VideoPreviewPanel() {
   // REQ-20260613-016 Phase 4: the global "字幕レイアウト" + "文字背景"
   // panels that previously lived in this component were retired — each
   // SubtitleEntry now carries its own per-row layout / background, edited
-  // from the Style column in SubtitleTable (機能A).  Only `activeFontId`
-  // is still consumed here to feed estimateOverlayHeightPx via the stack
-  // memo below; the global burnin / subtitleBackground store slices were
-  // dropped from settings-store in the same phase.
+  // from the Style column in SubtitleTable (機能A).  `activeFontId` is still
+  // consumed here to pre-load the subtitle font (ensureFontLoaded below); the
+  // global burnin / subtitleBackground store slices were dropped from
+  // settings-store in the same phase.
+  //
+  // REQ-0391 — the emphasis-aware stack-height memo that also read `activeFontId`
+  // / `isMsix` is gone: all-`\pos` is WYSIWYG with no runtime auto-stacking, so
+  // the preview no longer computes stack offsets (see the overlay map below).
   const activeFontId       = useSettingsStore((s) => s.activeFontId)
-  // REQ-0376 §A — tier flag for the emphasis-aware stack height (mirrors
-  // subtitle-overlay's `isMsix ?? false`; null pre-boot renders as free tier).
-  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
   // REQ-20260615-050 — fade duration is now per-entry; no global slice
   // is read here.  The rAF loop below pulls `entry.fadeDurationSec`
   // from each active SubtitleEntry.
@@ -674,23 +674,16 @@ export function VideoPreviewPanel() {
     ? videoContainerWidth / videoWidthPx
     : 1
 
-  const stackOffsetsByEntryId = useMemo(() => {
-    if (videoWidthPx <= 0 || videoContainerWidth <= 0) {
-      return new Map<string, number>()
-    }
-    return measureSync('vpp.stackOffsets', () => computeFixedStackOffsets(
-      sortedActiveEntries,
-      (entry) => estimateOverlayHeightPx(
-        entry,
-        activeFontId,
-        videoWidthPx,
-        videoContainerWidth,
-        // REQ-0376 §A — tier gate for emphasis-aware height; matches the emit
-        // path so preview and burn-in reserve the same box for an emphasised cue.
-        isMsix,
-      ),
-    ))
-  }, [sortedActiveEntries, activeFontId, videoWidthPx, videoContainerWidth, isMsix])
+  // REQ-0391 (positioning-redesign Phase 1b) — runtime auto-stacking is GONE.
+  // MOJIOKO is the single positioning authority (all-`\pos`) and it is WYSIWYG:
+  // every cue renders at its own authored position and overlapping cues overlap,
+  // exactly as the burn-in now does.  The preview therefore no longer computes
+  // `computeFixedStackOffsets` for live positioning; `stackOffsetPx` is 0 for
+  // every overlay.  (`computeFixedStackOffsets` / `estimateOverlayHeightPx`
+  // remain in the codebase for the Phase 4 migration and the verify:pos-parity
+  // reference path.)  z-order is unchanged: `overlayEntries` DOM paint order
+  // equals the ASS Dialogue emission order, so a later / duplicated cue paints
+  // on top in both preview and burn.
 
   // Load the subtitle font on mount and refresh whenever the active font
   // changes so the preview reflects the new metrics without requiring a
@@ -1411,7 +1404,7 @@ export function VideoPreviewPanel() {
               />
             )}
             {videoContainerWidth > 0 && overlayEntries.map((entry) => {
-              const offset = stackOffsetsByEntryId.get(entry.id) ?? 0
+              const offset = 0 // REQ-0391 — no runtime auto-stacking (WYSIWYG)
               const isSelected = entry.id === selectedEntryId
               const isDragging = entry.id === draggingEntryId
               // REQ-0378 — seed the overlay's animation custom properties from
