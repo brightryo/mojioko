@@ -226,9 +226,11 @@ export const ANIMATION_DISTANCE_DEFAULT_PX = 50
  * — that reintroduces the degeneration, and a user who wants a plain fade
  * already has `fade` in the type list.
  *
- * Provenance: the blur range (20–40, default 30) is the owner's decision.
- * The scale/pop floor of 10 was inferred by applying the same principle,
- * not instructed — see RES-0337.
+ * Provenance: the blur range (20–80 since REQ-0377 §B, default 30) is the
+ * owner's decision; the 40 → 80 ceiling raise is bounded by the measured
+ * preview↔burn parity limit (~100, libass `\blur` saturates there).  The
+ * scale/pop floor of 10 was inferred by applying the same principle, not
+ * instructed — see RES-0337.
  */
 export const ANIMATION_STRENGTH_SCALE_MIN = 10
 export const ANIMATION_STRENGTH_SCALE_MAX = 100
@@ -248,7 +250,22 @@ export const ANIMATION_START_SCALE_STEP_PCT = ANIMATION_STRENGTH_SCALE_STEP
 
 /** Blur's stored value already rises with strength, so these are both. */
 export const ANIMATION_BLUR_MIN_PX = 20
-export const ANIMATION_BLUR_MAX_PX = 40
+/**
+ * REQ-0377 §B — raised 40 → 80.  The minimum is unchanged and the default
+ * (`BLUR_MAX_PX = ANIMATION_TYPE_DEFAULTS.blur.strength`, 30) is a SEPARATE
+ * constant, so nothing existing moves: `animationBlurPx` is stored in absolute
+ * ASS px and `resolveAnimation`'s `clamp([MIN, MAX])` passes every prior value
+ * (≤ 40) through unchanged — the burn stays byte-identical (no migration).
+ *
+ * 80 is safe because preview↔burn blur parity was MEASURED to hold there:
+ * `scripts/verify-blur-parity` (chromium CSS `blur(N·0.84)` vs ffmpeg libass
+ * `\blur N`, edge σ) gives |Δσ|/σ ≤ ~4 % for every N ≤ 100, with σ/N ≈ 0.84
+ * constant on both engines.  libass's `\blur` SATURATES around N ≈ 100
+ * (σ ≈ 84 at N = 100/110/120) while CSS keeps growing, so the parity-safe
+ * ceiling is ~100; 80 leaves margin.  Going past ~100 would ship a divergence
+ * (|Δ| 15.7 % at N = 120) — do NOT raise this above ~100 without re-measuring.
+ */
+export const ANIMATION_BLUR_MAX_PX = 80
 export const ANIMATION_BLUR_STEP_PX = 1
 
 /**
