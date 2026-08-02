@@ -485,6 +485,43 @@ export function resolveEmphasisRanges(src: EmphasisSource): EmphasisRange[] {
 }
 
 /**
+ * REQ-0376 §A — the largest font size the cue actually RENDERS, in ASS px,
+ * accounting for keyword emphasis.
+ *
+ * Keyword emphasis emits an enlarged run with `\fs<scaled>` where
+ * `scaled = round(fontSizePx × emphasisScalePercent / 100)` (the exact value
+ * `ass-generator` writes, REQ-0308 §4-4).  libass's `fix_collisions` reserves
+ * space for the ACTUAL rendered bitmap, so an emphasised cue is taller than its
+ * base `fontSizePx` — measured in REQ-0376 §A: a `\fs240` run under a base
+ * `\fs160` cue pushed the cue above it 80 px higher (= 240 − 160).
+ *
+ * `estimateCueHeightAssPx` used the nominal `fontSizePx`, so the preview's
+ * stack estimate under-shot libass and overlapping emphasised cues sat at
+ * different heights in the preview vs the burn.  Feeding this value in fixes
+ * the parity.
+ *
+ * Gated exactly like the render/emit path (`keywordEmphasisEnabled` AND the
+ * tier gate AND at least one resolved range), so it returns the base size
+ * whenever nothing is actually enlarged — which keeps every non-emphasis cue,
+ * and every free-tier cue, byte-identical.  A shrunk span (scale < 100 %)
+ * cannot lower the height below the base because of the `Math.max`.
+ */
+export function cueMaxRenderedFontAssPx(
+  entry: EmphasisSource & {
+    fontSizePx: number
+    keywordEmphasisEnabled?: boolean
+    emphasisScalePercent?: number
+  },
+  emphasisTierAllowed: boolean,
+): number {
+  const base = entry.fontSizePx
+  if (!emphasisTierAllowed || entry.keywordEmphasisEnabled !== true) return base
+  if (resolveEmphasis(entry).ranges.length === 0) return base
+  const scaled = Math.round(base * (clampEmphasisScalePercent(entry.emphasisScalePercent) / 100))
+  return Math.max(base, scaled)
+}
+
+/**
  * REQ-0307 §1 — turn the picker's per-character selection into storable spans.
  *
  * `selectedStarts` holds the code-unit offset of each selected character CELL

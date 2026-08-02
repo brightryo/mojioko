@@ -34,6 +34,7 @@ import {
   buildEmphasisBody,
   clipRangesToWindow,
   emphasizedWordRanges,
+  cueMaxRenderedFontAssPx,
   EMPHASIS_DEFAULT_COLOR,
   type EmphasisRange,
 } from '../../shared/emphasis'
@@ -844,7 +845,7 @@ export function generateAss(
   ]
 
   // REQ-0332 §3 — decide, ACROSS cues, which ones position themselves.
-  const selfPositioned = resolveSelfPositionedCues(renders, video)
+  const selfPositioned = resolveSelfPositionedCues(renders, video, isMsix)
 
   const events = [
     '[Events]',
@@ -927,6 +928,7 @@ interface CueRender {
 function resolveSelfPositionedCues(
   renders: readonly CueRender[],
   video: VideoInfo,
+  isMsix: boolean,
 ): Map<string, { x: number; y: number }[]> {
   const out = new Map<string, { x: number; y: number }[]>()
 
@@ -956,7 +958,14 @@ function resolveSelfPositionedCues(
     .map((entry, i) => ({ entry, i }))
     .sort((a, b) => a.entry.startSec - b.entry.startSec || a.i - b.i)
     .map((x) => x.entry)
-  const offsets = computeFixedStackOffsets(stacked, estimateCueHeightAssPx)
+  // REQ-0376 §A — feed the emphasis-aware height so the stack gap matches the
+  // taller box libass reserves for a keyword-emphasised cue.  The tier gate is
+  // the same one the emit path uses, so a free-tier cue (emphasis rendered off)
+  // measures at its base size and nothing shifts.
+  const emphasisTierAllowed = canUseKeywordEmphasisInTier(isMsix)
+  const offsets = computeFixedStackOffsets(stacked, (e) =>
+    estimateCueHeightAssPx(e, cueMaxRenderedFontAssPx(e, emphasisTierAllowed)),
+  )
 
   for (const r of renders) {
     if (!selfIds.has(r.entry.id)) continue

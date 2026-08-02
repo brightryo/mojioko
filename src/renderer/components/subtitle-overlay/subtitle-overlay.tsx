@@ -38,6 +38,7 @@ import {
   emphasizedWordRanges,
   splitTextByLocalRanges,
   clampEmphasisScalePercent,
+  cueMaxRenderedFontAssPx,
   type EmphasisRange,
   EMPHASIS_DEFAULT_COLOR,
 } from '../../../shared/emphasis'
@@ -171,6 +172,7 @@ export function estimateOverlayHeightPx(
   activeFontId: FontId,
   videoWidthPx: number,
   containerWidthPx: number,
+  isMsix: boolean,
 ): number {
   // Per-row font override is irrelevant for the height because the line
   // pitch comes from `\fs` alone (font-independent in libass for the CJK
@@ -183,7 +185,10 @@ export function estimateOverlayHeightPx(
   // `computeFixedStackOffsets`.  It is now line-spacing aware: a tightened cue
   // must also take less room in a stack, or preview and burn-in would part
   // company the moment two cues overlap.
-  return estimateCueHeightAssPx(entry) * scale
+  // REQ-0376 §A — and emphasis-aware: an enlarged keyword makes libass reserve
+  // a taller box, so the same max font (tier-gated, exactly as the emit path)
+  // feeds the height or the preview under-stacks overlapping emphasised cues.
+  return estimateCueHeightAssPx(entry, cueMaxRenderedFontAssPx(entry, canUseKeywordEmphasisInTier(isMsix))) * scale
 }
 
 /**

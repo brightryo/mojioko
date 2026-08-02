@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore, isAnyOverlayOpen } from '@/stores/ui-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { usePreviewMixStore } from '@/stores/preview-mix-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shortcutHint } from '@/lib/shortcut-hint'
@@ -143,6 +144,9 @@ export function VideoPreviewPanel() {
   // memo below; the global burnin / subtitleBackground store slices were
   // dropped from settings-store in the same phase.
   const activeFontId       = useSettingsStore((s) => s.activeFontId)
+  // REQ-0376 §A — tier flag for the emphasis-aware stack height (mirrors
+  // subtitle-overlay's `isMsix ?? false`; null pre-boot renders as free tier).
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
   // REQ-20260615-050 — fade duration is now per-entry; no global slice
   // is read here.  The rAF loop below pulls `entry.fadeDurationSec`
   // from each active SubtitleEntry.
@@ -704,9 +708,12 @@ export function VideoPreviewPanel() {
         activeFontId,
         videoWidthPx,
         videoContainerWidth,
+        // REQ-0376 §A — tier gate for emphasis-aware height; matches the emit
+        // path so preview and burn-in reserve the same box for an emphasised cue.
+        isMsix,
       ),
     ))
-  }, [sortedActiveEntries, activeFontId, videoWidthPx, videoContainerWidth])
+  }, [sortedActiveEntries, activeFontId, videoWidthPx, videoContainerWidth, isMsix])
 
   // Load the subtitle font on mount and refresh whenever the active font
   // changes so the preview reflects the new metrics without requiring a
