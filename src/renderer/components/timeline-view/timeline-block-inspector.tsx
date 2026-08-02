@@ -159,28 +159,35 @@ export function TimelineBlockInspector({
   // is still loading; the offset row hides itself in that case.
   const video = useProjectStore((s) => s.video)
 
-  // REQ-20260615-033 — derive the offset row's display values from the
-  // alignment-based anchor.  When `posX`/`posY` are undefined the row
-  // is unpinned and offsets display as 0; entering non-zero values
-  // pins it via `applyOffset` below.  Recomputes whenever the entry
-  // changes (drag, undo/redo) OR a layout field changes (anchor moves),
-  // so the displayed offset always reflects the live distance from the
-  // current anchor (= the home position the row would snap back to on
-  // unpin).
+  // REQ-0395 (positioning-redesign Phase 3a) — the position row shows the
+  // cue's ANCHOR POINT as ABSOLUTE X/Y in video pixels (was the relative offset
+  // of REQ-20260615-033).  The single source of truth stays `posX`/`posY`:
+  //   - pinned   → show posX/posY directly (editable).
+  //   - unpinned → show the alignment-derived anchor (getAnchorAssPosition) =
+  //     the current on-screen position.  Editing it PINS the cue at that
+  //     coordinate (unlike the old offset row, absolute 0,0 is a real position,
+  //     so unpin is only via the explicit reset button).
+  // Recomputes whenever the entry changes (drag, undo/redo) or a layout field
+  // moves the anchor, so the shown X/Y always reflects the live position.
   const isPinned = entry.posX !== undefined && entry.posY !== undefined
-  const showOffsetRow = !isAudioOnly && !!video && video.hasVideoStream
-  let offsetX = 0
-  let offsetY = 0
-  if (showOffsetRow && video) {
-    const anchor = getAnchorAssPosition(
-      entry.horizontalPosition,
-      entry.verticalPosition,
-      entry.verticalMarginPx,
-      video.widthPx,
-      video.heightPx,
-    )
-    offsetX = isPinned ? Math.round((entry.posX as number) - anchor.x) : 0
-    offsetY = isPinned ? Math.round((entry.posY as number) - anchor.y) : 0
+  const showPositionRow = !isAudioOnly && !!video && video.hasVideoStream
+  let posDisplayX = 0
+  let posDisplayY = 0
+  if (showPositionRow && video) {
+    if (isPinned) {
+      posDisplayX = Math.round(entry.posX as number)
+      posDisplayY = Math.round(entry.posY as number)
+    } else {
+      const anchor = getAnchorAssPosition(
+        entry.horizontalPosition,
+        entry.verticalPosition,
+        entry.verticalMarginPx,
+        video.widthPx,
+        video.heightPx,
+      )
+      posDisplayX = Math.round(anchor.x)
+      posDisplayY = Math.round(anchor.y)
+    }
   }
 
   // Local draft so typing doesn't dispatch on every keystroke.  Initial
@@ -672,48 +679,39 @@ export function TimelineBlockInspector({
   // see.  Both posX/posY are set together (libass needs both for `\pos`)
   // and cleared together (unpin → row falls back to alignment-based
   // layout).  Reset = unpin without touching anything else.
-  function applyOffset(nextOffsetX: number, nextOffsetY: number) {
+  // REQ-0395 — set the ABSOLUTE anchor position (video px).  Always pins
+  // (posX/posY set as a pair); unpin is the explicit reset button below, since
+  // an absolute 0,0 is a legitimate coordinate (top-left), not "unset".  Clamped
+  // to the frame and integer-rounded, exactly as the drag handler does.
+  function applyAbsolutePosition(nextX: number, nextY: number) {
     if (!video || !video.hasVideoStream) return
-    if (nextOffsetX === 0 && nextOffsetY === 0) {
-      if (entry.posX === undefined && entry.posY === undefined) return
-      applyStyleEdit(t('history.editOffset'), { posX: undefined, posY: undefined })
-      return
-    }
-    const anchor = getAnchorAssPosition(
-      entry.horizontalPosition,
-      entry.verticalPosition,
-      entry.verticalMarginPx,
-      video.widthPx,
-      video.heightPx,
-    )
-    const clamped = clampAssPosition(
-      anchor.x + nextOffsetX,
-      anchor.y + nextOffsetY,
-      video.widthPx,
-      video.heightPx,
-    )
+    const clamped = clampAssPosition(nextX, nextY, video.widthPx, video.heightPx)
     const newPosX = Math.round(clamped.x)
     const newPosY = Math.round(clamped.y)
     if (newPosX === entry.posX && newPosY === entry.posY) return
-    applyStyleEdit(t('history.editOffset'), { posX: newPosX, posY: newPosY })
+    applyStyleEdit(t('history.editPosition'), { posX: newPosX, posY: newPosY })
   }
-  function handleOffsetXBlur(e: React.FocusEvent<HTMLInputElement>) {
+  function handlePosXBlur(e: React.FocusEvent<HTMLInputElement>) {
     const raw = parseInt(e.target.value, 10)
     if (isNaN(raw)) return
-    applyOffset(raw, offsetY)
+    // Editing one axis keeps the other at its current displayed value (which is
+    // posY when pinned, or the anchor's Y when unpinned — either way the value
+    // shown in the sibling input).
+    applyAbsolutePosition(raw, posDisplayY)
   }
-  function handleOffsetYBlur(e: React.FocusEvent<HTMLInputElement>) {
+  function handlePosYBlur(e: React.FocusEvent<HTMLInputElement>) {
     const raw = parseInt(e.target.value, 10)
     if (isNaN(raw)) return
-    applyOffset(offsetX, raw)
+    applyAbsolutePosition(posDisplayX, raw)
   }
-  function handleResetOffset() {
+  function handleResetPosition() {
+    // Unpin → fall back to alignment-based layout (margin respected again).
     if (entry.posX === undefined && entry.posY === undefined) return
-    applyStyleEdit(t('history.editOffset'), { posX: undefined, posY: undefined })
+    applyStyleEdit(t('history.editPosition'), { posX: undefined, posY: undefined })
   }
   /**
    * REQ-0127 Phase 2 — Enter on any of the inline numeric inputs
-   * (font size / offsetX / offsetY) commits the typed value via the
+   * (font size / position X / position Y) commits the typed value via the
    * existing onBlur path.  Blurring the input triggers the handler
    * with `e.target.value` still holding the typed string, matching
    * the click-away gesture and preserving the `key={entry.field}`
@@ -1608,9 +1606,11 @@ export function TimelineBlockInspector({
             label={t('styleCell.marginV')}
             stopControlClickPropagation
             title={
-              entry.verticalPosition === 'center'
-                ? t('subtitlePosition.marginDisabledCenter')
-                : undefined
+              isPinned
+                ? t('subtitlePosition.marginDisabledPinned')
+                : entry.verticalPosition === 'center'
+                  ? t('subtitlePosition.marginDisabledCenter')
+                  : undefined
             }
           >
             {/* REQ-20260615-059 B — margin gets the ±10 chevron stepper
@@ -1635,7 +1635,7 @@ export function TimelineBlockInspector({
                 applyStyleEdit(t('history.editMargin'),
                   patchWithPreservedOffset({ verticalMarginPx: next }))
               }}
-              disabled={isFrozen || entry.verticalPosition === 'center'}
+              disabled={isFrozen || entry.verticalPosition === 'center' || isPinned}
               ariaLabel={t('subtitlePosition.margin')}
             />
           </StyleRow>
@@ -1706,18 +1706,22 @@ export function TimelineBlockInspector({
               now lives in the preview's position-guide overlay (drag
               affordance + distance rulers), which is more discoverable
               than a hover-only tooltip. */}
-          {showOffsetRow && (
-            <StyleRow label={t('styleCell.offset')} stopControlClickPropagation>
+          {showPositionRow && (
+            <StyleRow
+              label={t('styleCell.position')}
+              stopControlClickPropagation
+              title={t('styleCell.positionHint')}
+            >
               <div className="flex items-center gap-1">
                 <span className="text-caption text-fg-tertiary">X</span>
                 <input
                   type="number"
-                  defaultValue={offsetX}
-                  key={`offsetX-${entry.id}-${offsetX}`}
-                  onBlur={handleOffsetXBlur}
+                  defaultValue={posDisplayX}
+                  key={`posX-${entry.id}-${posDisplayX}`}
+                  onBlur={handlePosXBlur}
                   onKeyDown={handleNumericInputKeyDown}
                   disabled={isFrozen}
-                  aria-label={t('styleCell.offsetX')}
+                  aria-label={t('styleCell.positionX')}
                   className={cn(
                     'w-14 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
                     'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30',
@@ -1728,12 +1732,12 @@ export function TimelineBlockInspector({
                 <span className="text-caption text-fg-tertiary ml-1">Y</span>
                 <input
                   type="number"
-                  defaultValue={offsetY}
-                  key={`offsetY-${entry.id}-${offsetY}`}
-                  onBlur={handleOffsetYBlur}
+                  defaultValue={posDisplayY}
+                  key={`posY-${entry.id}-${posDisplayY}`}
+                  onBlur={handlePosYBlur}
                   onKeyDown={handleNumericInputKeyDown}
                   disabled={isFrozen}
-                  aria-label={t('styleCell.offsetY')}
+                  aria-label={t('styleCell.positionY')}
                   className={cn(
                     'w-14 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
                     'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30',
@@ -1743,9 +1747,9 @@ export function TimelineBlockInspector({
                 />
                 <button
                   type="button"
-                  title={t('styleCell.offsetResetTitle')}
-                  aria-label={t('styleCell.offsetResetTitle')}
-                  onClick={handleResetOffset}
+                  title={t('styleCell.positionResetTitle')}
+                  aria-label={t('styleCell.positionResetTitle')}
+                  onClick={handleResetPosition}
                   disabled={isFrozen || !isPinned}
                   className={cn(
                     'flex items-center justify-center h-7 w-7 rounded ml-0.5',
