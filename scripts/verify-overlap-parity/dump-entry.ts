@@ -63,3 +63,17 @@ export function buildZOrderAss(forceSelfPositionAll: boolean) {
   const ass = generateAss(entries, video, burnin, undefined, 'Arial', false, 'switch', forceSelfPositionAll)
   return { ass, W: video.widthPx, H: video.heightPx }
 }
+
+/**
+ * REQ-0392 — z-order via the `layer` field OVERRIDES emission order.  Red is
+ * emitted FIRST (so plain emission order would paint blue on top) but is given
+ * the higher `layer`, so it must paint in front: the visible colour is red.
+ */
+export function buildLayerOverrideAss() {
+  const entries = [
+    { ...cue('back', 'OVERLAP', '#ff0000'), layer: 1 },
+    { ...cue('front', 'OVERLAP', '#0000ff'), layer: 0 },
+  ]
+  const ass = generateAss(entries, video, burnin, undefined, 'Arial', false, 'switch', true)
+  return { ass, W: video.widthPx, H: video.heightPx }
+}

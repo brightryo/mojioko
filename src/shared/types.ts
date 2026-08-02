@@ -142,6 +142,21 @@ export interface SubtitleEntryOriginal {
    * gap to change, so no split happens and nothing about the output moves.
    */
   lineSpacingPercent?: number
+  /**
+   * REQ-0392 (positioning-redesign Phase 2) — z-order.  Higher = nearer the
+   * front (drawn on top).  Additive field, `undefined` ≡ `0` — read everywhere
+   * through `resolveLayer` (mirrors `lineSpacingPercent` / `resolveLineSpacingPercent`).
+   *
+   * Maps to the ASS Dialogue **Layer** column on burn-in and to the overlay's
+   * CSS `z-index` in the preview; within one layer the tie-break is emission /
+   * DOM order (later on top), so a new or duplicated cue — appended after its
+   * peers — still paints in front at the default layer 0 (the Phase 1b default,
+   * unchanged).  `\pos` (positioning) and Layer (z-order) are orthogonal.
+   *
+   * z-order is a POSITION attribute, so it is deliberately NOT carried by a
+   * style preset (a preset must not reshuffle front/back — REQ-0392 §1).
+   */
+  layer?: number
 
   // ---------------------------------------------------------------------------
   // REQ-0277 Phase A — additional per-row style effects.  All optional +

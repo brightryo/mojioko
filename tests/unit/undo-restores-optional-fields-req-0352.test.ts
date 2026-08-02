@@ -47,6 +47,8 @@ const SAMPLES = {
   posX: 100,
   posY: 200,
   lineSpacingPercent: -30,
+  layer: 5, // REQ-0392 — z-order
+
   casing: 'uppercase',
   rotation: 90,
   shadowDepth: 12,

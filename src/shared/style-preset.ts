@@ -148,6 +148,9 @@ export const STYLE_PRESET_FIELDS = {
   verticalPosition: 'store',
   verticalMarginPx: 'store',
   subtitleBackground: 'store',
+  // REQ-0392 — z-order is a POSITION attribute, not a look: a preset must not
+  // reshuffle which cue sits in front of which, so `layer` never travels.
+  layer: 'per-cue',
   // --- 「オフセット」(REQ-20260615-033) ----------------------------------
   posX: 'store-as-offset',
   posY: 'store-as-offset',

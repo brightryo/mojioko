@@ -33,6 +33,8 @@ function makeRichEntry(): SubtitleEntry {
     // REQ-0332 — line spacing (行間); a non-default value so a dropped
     // `copy` classification shows up as a missing field, not a matching zero.
     lineSpacingPercent: -25,
+    // REQ-0392 — z-order; non-default so a dropped `copy` shows up as a miss.
+    layer: 7,
     casing: 'uppercase' as const,
     shadowDepth: 8, shadowColor: '#112233', shadowAlpha: 70,
     textAlpha: 90, outlineAlpha: 80,

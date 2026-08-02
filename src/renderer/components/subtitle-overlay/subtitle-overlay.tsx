@@ -31,6 +31,7 @@ import {
   lineLeadingCorrectionAssPx,
   resolveLineSpacingPercent,
 } from '../../../shared/line-spacing'
+import { resolveLayer } from '../../../shared/cue-placement'
 import {
   canUseKeywordEmphasisInTier,
   resolveEmphasisRanges,
@@ -814,6 +815,11 @@ export function SubtitleOverlay({
       style={{
         ...vStyle,
         ...hStyle,
+        // REQ-0392 — z-order: CSS z-index mirrors the ASS Dialogue Layer column
+        // (higher = in front).  Overlays with equal z-index fall back to DOM
+        // paint order (later on top), matching libass' same-layer tie-break, so
+        // preview and burn agree.  Default 0 = today's behaviour.
+        zIndex: resolveLayer(entry),
         fontFamily: `'${fontMeta.cssFontFamily}'`,
         fontWeight: fontMeta.weight,
         // REQ-0323 §1-3 — animation transform layer.

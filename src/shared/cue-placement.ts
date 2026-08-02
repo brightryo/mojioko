@@ -44,6 +44,15 @@ import { cueLineAnchors, type CueLineAnchorInput } from './line-spacing'
  * runtime is wired to `computeCuePlacement` (until then the shared copy must not
  * change the runtime, so it cannot own the mapping yet).
  */
+/**
+ * REQ-0392 — a cue's z-order, `undefined` ≡ 0.  Single reader of the additive
+ * `layer` field (mirrors `resolveLineSpacingPercent`), so the ASS Dialogue Layer
+ * column and the preview's CSS z-index can never disagree about the default.
+ */
+export function resolveLayer(entry: { layer?: number }): number {
+  return typeof entry.layer === 'number' && Number.isFinite(entry.layer) ? entry.layer : 0
+}
+
 export function alignmentNumpad(
   horizontalPosition: 'left' | 'center' | 'right',
   verticalPosition: 'top' | 'center' | 'bottom',

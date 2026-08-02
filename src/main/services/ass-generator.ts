@@ -22,7 +22,7 @@ import {
   resolveLineSpacingPercent,
 } from '../../shared/line-spacing'
 import { computeFixedStackOffsets } from '../../shared/stack-offsets'
-import { computeCuePlacement } from '../../shared/cue-placement'
+import { computeCuePlacement, resolveLayer } from '../../shared/cue-placement'
 import { groupByTimeOverlap } from '../../shared/simultaneous-groups'
 import { buildAnimationTags } from '../../shared/cue-animation-ass'
 import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
@@ -895,7 +895,11 @@ export function generateAss(
           r.buildStyleTag(`\\pos(${formatAssCoord(a.x)},${formatAssCoord(a.y)})`),
         ),
       }).map((piece) =>
-        `Dialogue: 0,${formatAssTime(piece.startSec)},${formatAssTime(piece.endSec)},` +
+        // REQ-0392 — the ASS Dialogue Layer column carries the cue's z-order
+        // (higher = drawn on top).  Default 0 emits `Dialogue: 0,` exactly as
+        // before, so the baseline stays byte-identical; within one layer libass
+        // paints later Dialogues on top (the emission-order tie-break).
+        `Dialogue: ${resolveLayer(r.entry)},${formatAssTime(piece.startSec)},${formatAssTime(piece.endSec)},` +
         `${r.styleName},0,0,${piece.marginV},,{${piece.styleTag}}${piece.body}`
       )
     }),

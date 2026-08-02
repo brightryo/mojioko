@@ -204,6 +204,11 @@ export function resetRow(
     // as the `fontId: original.fontId` line above (REQ-022 step 7).
     posX: original.posX,
     posY: original.posY,
+    // REQ-0392: same optional-field pattern as posX/posY above — `original` from
+    // rows created via makeEntryLayoutDefaults() has no `layer` key, so a bare
+    // `...original` spread would leave the live entry's z-order in place on
+    // Reset.  Restore it explicitly (undefined ⇒ resolveLayer 0 = default).
+    layer: original.layer,
     // REQ-20260613-016: deep-copy subtitleBackground out of `original` so
     // subsequent edits to the live entry's background don't retroactively
     // mutate the reset target.

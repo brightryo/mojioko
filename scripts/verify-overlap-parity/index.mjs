@@ -39,7 +39,7 @@ esbuild.buildSync({
   loader: { '.css': 'empty', '.png': 'empty' }, alias: { '@': path.join(REPO, 'src/renderer') },
   logLevel: 'silent',
 })
-const { buildOverlapAss, buildZOrderAss } = require(OUT)
+const { buildOverlapAss, buildZOrderAss, buildLayerOverrideAss } = require(OUT)
 
 const STACK_MIN = 40 // reference (stacked) vertical spread must be at least this
 const OVERLAP_MAX = 12 // all-\pos overlap: the three bands must coincide within this
@@ -131,6 +131,17 @@ if (!(zPosBlue > 100 && zPosRed < zPosBlue * 0.1)) {
 // Control: stacked, both colours are separately visible.
 if (!(zRefBlue > 100 && zRefRed > 100)) {
   fail = true; console.log('  FAIL — reference did not show both colours: the z-order control proves nothing.')
+}
+
+// ---- Check 3: an explicit `layer` overrides emission order ------------------
+const loAss = buildLayerOverrideAss()
+const lo = burn(loAss.ass, loAss.W, loAss.H, 'lo')
+const loRed = pixelCount(lo, 'R'), loBlue = pixelCount(lo, 'B')
+console.log('===== Check 3: layer overrides emission order =====')
+console.log(`  red(layer 1, emitted first) vs blue(layer 0, emitted last): red=${loRed}px blue=${loBlue}px  (want red on top)`)
+// Red carries the higher layer, so it must win despite being emitted first.
+if (!(loRed > 100 && loBlue < loRed * 0.1)) {
+  fail = true; console.log('  FAIL — the higher `layer` did not paint on top (z-order not honoured).')
 }
 
 rmSync(DIR, { recursive: true, force: true })

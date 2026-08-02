@@ -22,8 +22,20 @@
 import type { SubtitleEntry, SubtitleEntryOriginal, VideoInfo, AudioTrack, TranscriptionDefaults, WhisperModelId } from './types'
 import type { Cut } from './cuts'
 
-/** Current file-format version.  Bump on breaking changes. */
-export const PROJECT_FILE_FORMAT_VERSION = 1
+/**
+ * Current file-format version.  Bump on breaking changes.
+ *
+ * - **1** — v1.0 … v1.4.0 (pre-Phase-2).
+ * - **2** — REQ-0392 (positioning-redesign Phase 2): adds the per-cue `layer`
+ *   (z-order) field.  A **v1** project loads unchanged — `layer` is optional and
+ *   every reader goes through `resolveLayer` (absent ⇒ 0), which reproduces the
+ *   Phase 1b emission-order z-order exactly.  The bump also establishes the
+ *   version-migration discipline the spec placed in "Phase 1" (deferred through
+ *   1a/1b) ahead of the breaking X/Y data-model change (decision C / Phase 4).
+ *   Forward direction is gated as usual: a v1 build refuses to open a v2 file
+ *   (parse rejects `fileFormatVersion > PROJECT_FILE_FORMAT_VERSION`).
+ */
+export const PROJECT_FILE_FORMAT_VERSION = 2
 
 /** Filename extension including the leading dot. */
 export const PROJECT_FILE_EXTENSION = 'mojioko'

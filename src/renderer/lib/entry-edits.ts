@@ -1,4 +1,5 @@
 import type { SubtitleEntry } from '../../shared/types'
+import { resolveLayer } from '../../shared/cue-placement'
 
 /**
  * Centisecond precision (= 1 / 100 s).  This is the precision at which:
@@ -91,6 +92,10 @@ export function isEditedFromOriginal(e: SubtitleEntry): boolean {
     // an unpinned row, or releasing a pinned row, both flip isEdited.
     // Two NaN-free numbers compare bitwise so no precision rule applies.
     e.posX !== o.posX ||
-    e.posY !== o.posY
+    e.posY !== o.posY ||
+    // REQ-0392 — z-order.  Compared through `resolveLayer` so an explicit 0 and
+    // an absent field (both = layer 0) are equal; only a real front/back change
+    // flips isEdited.
+    resolveLayer(e) !== resolveLayer(o)
   )
 }

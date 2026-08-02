@@ -91,6 +91,11 @@ export const SUBTITLE_ENTRY_DUPLICATION = {
   posY: 'copy',
   // REQ-0332 — line spacing (行間).
   lineSpacingPercent: 'copy',
+  // REQ-0392 — z-order.  `copy`: the duplicate keeps the source's layer, and
+  // because it is inserted immediately AFTER the source (later emission / DOM
+  // order = the same-layer tie-break) it paints just in front of it — the
+  // "複製は前面（1つ上）" behaviour, unchanged from Phase 1b.
+  layer: 'copy',
   // --- style effects (REQ-0277 / REQ-0310) ----------------------------
   casing: 'copy',
   shadowDepth: 'copy',
