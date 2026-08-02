@@ -33,15 +33,32 @@ export function formatTimecode(sec: number, fps: number): string {
 }
 
 /**
- * The time one video frame away from `currentSec`, snapped to the frame grid
- * and clamped to `[0, maxSec]`.  `dir` is +1 (forward) or −1 (back).  Snapping
- * current to the nearest frame first makes repeated steps land on exact
- * `k / fps` boundaries regardless of where the playhead started.
+ * The seek time for stepping ONE video frame from `currentSec`, with the frame
+ * INDEX as the source of truth.  `dir` is +1 (forward) / −1 (back).
+ *
+ * REQ-0383: the previous version snapped to the frame grid and returned the
+ * frame BOUNDARY `k/fps`.  Seeking a `<video>` to an exact frame boundary is
+ * ambiguous — Chromium reads the position back a hair UNDER it (verified: it
+ * lands on `k/fps − ~1µs`), so `floor(currentTime·fps)` drops to `k−1` and the
+ * boundary itself decodes inconsistently.  Feeding that drifted read-back into
+ * the next step duplicated and skipped frames (owner: `f0,f0,f1,f3,f3,f4,f6`).
+ *
+ * The displayed frame is `index = floor(currentSec·fps)`.  We step that index,
+ * clamp to `[0, lastFrame]`, and seek to the frame's CENTER `(index+0.5)/fps`
+ * — half a frame (≈8ms at 60 fps) from either boundary, dwarfing the ~1µs seek
+ * drift, so the video lands squarely on `index` and `floor(readback·fps)`
+ * recovers it every time.  Verified in real Chromium at 60 AND 59.94 fps by
+ * `scripts/verify-frame-step`; the pure-function tests are supporting.
+ * `fps ≤ 0` falls back to 30 so the step never divides by zero before metadata.
  */
 export function frameStepSec(currentSec: number, fps: number, dir: 1 | -1, maxSec: number): number {
   const f = Number.isFinite(fps) && fps > 0 ? fps : 30
-  const maxFrame = Math.max(0, Math.floor((Number.isFinite(maxSec) && maxSec > 0 ? maxSec : 0) * f + 1e-6))
-  const cur = Math.round((Number.isFinite(currentSec) && currentSec > 0 ? currentSec : 0) * f)
-  const next = Math.min(maxFrame, Math.max(0, cur + dir))
-  return next / f
+  const dur = Number.isFinite(maxSec) && maxSec > 0 ? maxSec : 0
+  // Last addressable frame index (0-based).  A `dur`-second clip at `f` fps has
+  // frames 0 … ceil(dur·f)−1; `dur·f` itself is the exclusive end.
+  const lastFrame = Math.max(0, Math.ceil(dur * f - 1e-6) - 1)
+  const raw = Math.floor((Number.isFinite(currentSec) && currentSec > 0 ? currentSec : 0) * f + 1e-6)
+  const cur = Math.min(lastFrame, Math.max(0, raw))
+  const next = Math.min(lastFrame, Math.max(0, cur + dir))
+  return (next + 0.5) / f
 }

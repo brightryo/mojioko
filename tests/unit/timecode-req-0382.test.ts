@@ -29,24 +29,54 @@ describe('formatTimecode (REQ-0382 §A)', () => {
   })
 })
 
-describe('frameStepSec (REQ-0382 §B)', () => {
-  it('steps exactly one frame, snapped to the frame grid', () => {
-    expect(frameStepSec(2.5, 30, 1, 7)).toBeCloseTo(76 / 30, 9)
-    expect(frameStepSec(2.5, 30, -1, 7)).toBeCloseTo(74 / 30, 9)
-    // an off-grid start snaps to the nearest frame first
-    expect(frameStepSec(0.02, 30, 1, 7)).toBeCloseTo(2 / 30, 9)
+describe('frameStepSec (REQ-0382 §B / REQ-0383)', () => {
+  // REQ-0383: the step now returns the frame CENTER (index+0.5)/fps — seeking a
+  // <video> to an exact boundary undershoots and dup/skips frames.  The
+  // meaningful property is that the DISPLAYED frame (floor(seek·fps)) advances
+  // by exactly one.  Real-Chromium round-trip is pinned by verify:frame-step.
+  const displayedFrame = (t: number, fps: number) => Math.floor(t * fps + 1e-6)
+
+  it('steps one frame and returns that frame’s centre', () => {
+    expect(frameStepSec(2.5, 30, 1, 7)).toBeCloseTo(76.5 / 30, 9)   // 2.5s = f75 → f76 centre
+    expect(frameStepSec(2.5, 30, -1, 7)).toBeCloseTo(74.5 / 30, 9)  // → f74 centre
+    // an off-grid start floors to its displayed frame first (f0), then +1 = f1
+    expect(frameStepSec(0.02, 30, 1, 7)).toBeCloseTo(1.5 / 30, 9)
+    // the returned time always decodes to the intended frame
+    expect(displayedFrame(frameStepSec(2.5, 30, 1, 7), 30)).toBe(76)
+    expect(displayedFrame(frameStepSec(0.02, 30, 1, 7), 30)).toBe(1)
   })
-  it('clamps at 0 and at the duration (no out-of-range)', () => {
-    expect(frameStepSec(0, 30, -1, 7)).toBe(0)
-    expect(frameStepSec(7, 30, 1, 7)).toBeCloseTo(7, 9) // last frame = 210/30
-    expect(frameStepSec(6.999, 30, 1, 7)).toBeCloseTo(7, 9)
+
+  it('advances the displayed frame by exactly one, forward then back (no dup/skip)', () => {
+    const fps = 30, dur = 7
+    let t = 0
+    for (let expected = 1; expected <= 20; expected++) {
+      t = frameStepSec(t, fps, 1, dur)
+      expect(displayedFrame(t, fps)).toBe(expected)
+    }
+    for (let expected = 19; expected >= 0; expected--) {
+      t = frameStepSec(t, fps, -1, dur)
+      expect(displayedFrame(t, fps)).toBe(expected)
+    }
   })
-  it('repeated steps land on exact k/fps boundaries', () => {
-    let t = 1.234
-    for (let i = 0; i < 5; i++) t = frameStepSec(t, 30, 1, 10)
-    expect(t * 30).toBeCloseTo(Math.round(t * 30), 9) // integer frame index
+
+  it('works at non-integer fps (59.94) — one frame per step', () => {
+    const fps = 60000 / 1001, dur = 2.002
+    let t = 0
+    for (let expected = 1; expected <= 20; expected++) {
+      t = frameStepSec(t, fps, 1, dur)
+      expect(displayedFrame(t, fps)).toBe(expected)
+    }
   })
+
+  it('clamps at 0 and at the last frame (no out-of-range, no reverse)', () => {
+    expect(displayedFrame(frameStepSec(0, 30, -1, 7), 30)).toBe(0)         // can't go below f0
+    // 7s @ 30fps = frames 0..209; stepping forward at/after the end holds f209
+    expect(displayedFrame(frameStepSec(7, 30, 1, 7), 30)).toBe(209)
+    expect(frameStepSec(7, 30, 1, 7)).toBeLessThan(7)                      // never seeks past duration
+    expect(displayedFrame(frameStepSec(6.999, 30, 1, 7), 30)).toBe(209)
+  })
+
   it('falls back to 30fps for non-positive fps', () => {
-    expect(frameStepSec(1, 0, 1, 7)).toBeCloseTo(31 / 30, 9)
+    expect(displayedFrame(frameStepSec(1, 0, 1, 7), 30)).toBe(31) // f30 → f31
   })
 })

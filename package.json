@@ -21,6 +21,7 @@
     "verify:anim-first-frame": "node scripts/verify-anim-first-frame/index.mjs",
     "verify:overlap-parity": "node scripts/verify-overlap-parity/index.mjs",
     "verify:karaoke-frame-parity": "node scripts/verify-karaoke-frame-parity/index.mjs",
+    "verify:frame-step": "node scripts/verify-frame-step/index.mjs",
     "verify:font-weights": "node scripts/verify-font-weights/index.mjs",
     "verify:sidecar": "node scripts/verify-sidecar-fresh.mjs",
     "verify:docs-layout": "node scripts/verify-docs-layout.mjs",
