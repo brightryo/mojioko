@@ -143,6 +143,19 @@ export interface SubtitleOverlayProps {
    * — legacy call sites such as `style-sample-preview.tsx` are unaffected.
    */
   outerSpanRef?: Ref<HTMLSpanElement>
+  /**
+   * REQ-0378 — the cue's animation state AT RENDER TIME, seeded into the
+   * `--cue-anim-opacity` / `--cue-anim-transform` custom properties so the
+   * FIRST painted frame of a playback activation already shows the animated
+   * state.  Before this, opacity defaulted to the browser 1 and the transform
+   * to `scale(1)` (both the SETTLED state), which flashed for one frame on
+   * every activation before the imperative rAF/mount writer took over.  The
+   * imperative writer overrides the same custom properties every frame, so
+   * these are only the pre-first-write defaults.  Omitted (legacy call sites)
+   * ⇒ settled defaults, i.e. exactly the previous behaviour.
+   */
+  initialOpacity?: number
+  initialAnimTransform?: string
 }
 
 /**
@@ -238,6 +251,8 @@ export function SubtitleOverlay({
   spanRef,
   showAffordance,
   outerSpanRef,
+  initialOpacity,
+  initialAnimTransform,
 }: SubtitleOverlayProps) {
   bumpRenderCount('SubtitleOverlay')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
@@ -821,7 +836,14 @@ export function SubtitleOverlay({
         // layout effect has no dependency array and re-runs on every render.
         // What makes that safe is the unconditional transform neutralisation
         // in that effect, not the absence of re-measurement.
-        ['--cue-anim-transform' as string]: 'translate(0px, 0px) scale(1)',
+        // REQ-0378 — seed the animation custom properties from the cue's state
+        // AT RENDER TIME so the first painted frame of a playback activation is
+        // already the animated state, not the settled default (which flashed
+        // for one frame).  The rAF/mount writer overrides these every frame.
+        // Omitted props (legacy call sites) fall back to the settled defaults.
+        ['--cue-anim-transform' as string]: initialAnimTransform ?? 'translate(0px, 0px) scale(1)',
+        ['--cue-anim-opacity' as string]: initialOpacity ?? 1,
+        opacity: 'var(--cue-anim-opacity, 1)',
         // Scale from the cue's own alignment anchor so the text grows in
         // place.  libass scales `\fscx\fscy` about the `\an` anchor, so
         // matching the origin to the alignment is the parity-correct

@@ -739,6 +739,33 @@ export function animationTransformAt(
 }
 
 /**
+ * REQ-0378 — the ONE decision for "what animation state does this cue show at
+ * time `tSec`", shared by the preview's mount-time callback ref, its rAF loop,
+ * AND its React render (which seeds the `--cue-anim-*` custom-property defaults
+ * so the FIRST painted frame of a playback activation is already the animated
+ * state, not the settled default that used to flash for one frame).
+ *
+ * Three copies of this predicate is exactly how the render default and the
+ * imperative writer would drift apart and reintroduce the flash — so there is
+ * one.  The paused-at-or-before-start snap (REQ-0195 / REQ-0323 §1-2) keeps a
+ * cue parked on its own start visible-and-settled for editing; out of range is
+ * hidden; everything else samples the burn-in-accurate curve.
+ */
+export function resolveCueAnimState(
+  entry: Parameters<typeof resolveAnimation>[0] & { startSec: number; endSec: number },
+  tSec: number,
+  isPaused: boolean,
+): { anim: AnimationTransform; inRange: boolean } {
+  const inRange = tSec >= entry.startSec && tSec < entry.endSec
+  const snapToSettled = isPaused && tSec <= entry.startSec
+  const anim =
+    snapToSettled || !inRange
+      ? { ...NEUTRAL_TRANSFORM }
+      : animationTransformAt(resolveAnimation(entry), entry.startSec, entry.endSec, tSec)
+  return { anim, inRange }
+}
+
+/**
  * REQ-0331 §2-2 — how far a piecewise-LINEAR chord may sit from the real
  * curve before the sampler splits the interval.
  *
