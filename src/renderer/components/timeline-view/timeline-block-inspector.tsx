@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight, ChevronDown, RotateCcw, Pencil } from 'lucide-react'
+import { Clock, Trash2, Undo2, Eraser, WrapText, AlignJustify, CopyPlus, ChevronLeft, ChevronRight, ChevronDown, ChevronsUp, ChevronsDown, RotateCcw, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
@@ -17,6 +17,7 @@ import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-i
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
 import { LineSpacingSlider } from '@/components/subtitle-table/line-spacing-slider'
 import { resolveLineSpacingPercent } from '../../../shared/line-spacing'
+import { resolveLayer } from '../../../shared/cue-placement'
 import { SegmentGroup } from '@/components/subtitle-table/segment-group'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
@@ -641,6 +642,23 @@ export function TimelineBlockInspector({
     applyStyleEdit(t('history.editLayout'),
       patchWithPreservedOffset({ verticalPosition: v }))
   }
+  // REQ-0392 — z-order.  "Bring to front" / "send to back" set `layer` beyond
+  // the current global extreme so the cue paints unambiguously in front of / behind
+  // every other cue; within one layer the tie-break stays emission/DOM order.
+  // Reads all entries via getState() (a click handler, no need to subscribe).
+  function bringToFront() {
+    const layers = useProjectStore.getState().entries.map(resolveLayer)
+    const next = Math.max(0, ...layers) + 1
+    if (resolveLayer(entry) === next) return
+    applyStyleEdit(t('history.editZOrder'), { layer: next })
+  }
+  function sendToBack() {
+    const layers = useProjectStore.getState().entries.map(resolveLayer)
+    const next = Math.min(0, ...layers) - 1
+    if (resolveLayer(entry) === next) return
+    applyStyleEdit(t('history.editZOrder'), { layer: next })
+  }
+
   // REQ-20260615-059 B — `handleVerticalMarginBlur` retired here.
   // Margin commits now flow through `NumberStepperInput`'s `onCommit`
   // (still wrapped with `patchWithPreservedOffset` to preserve the
@@ -1643,6 +1661,38 @@ export function TimelineBlockInspector({
               ariaLabel={t('styleCell.lineSpacing')}
               fullWidth
             />
+          </StyleRow>
+          {/* REQ-0392 — z-order (重ね順).  Only matters when cues overlap
+              (all-\pos is WYSIWYG, no auto-stacking).  "最前面へ / 最背面へ"
+              set `layer` past the current extreme; new/duplicated cues already
+              paint in front by emission order at the default layer. */}
+          <StyleRow label={t('styleCell.zOrder')} stopControlClickPropagation>
+            <div className="flex gap-1.5 w-full">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="flex-1 gap-1"
+                disabled={isFrozen}
+                onClick={bringToFront}
+                aria-label={t('subtitleZOrder.bringToFront')}
+              >
+                <ChevronsUp className="h-3.5 w-3.5" aria-hidden="true" />
+                {t('subtitleZOrder.front')}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="flex-1 gap-1"
+                disabled={isFrozen}
+                onClick={sendToBack}
+                aria-label={t('subtitleZOrder.sendToBack')}
+              >
+                <ChevronsDown className="h-3.5 w-3.5" aria-hidden="true" />
+                {t('subtitleZOrder.back')}
+              </Button>
+            </div>
           </StyleRow>
           {/* REQ-20260615-033 — オフセット行.  Displays `posX-anchor.x` /
               `posY-anchor.y`; entering values writes back

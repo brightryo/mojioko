@@ -175,6 +175,7 @@
     "marginV": "マージン",
     "lineSpacing": "行間",
     "lineSpacingHint": "複数行の字幕の行と行の間隔。フォントサイズに対する % で、0% が既定です。",
+    "zOrder": "重ね順",
     "offset": "オフセット",
     "offsetX": "X オフセット",
     "offsetY": "Y オフセット",
@@ -245,6 +246,7 @@
     "editLayout": "配置を変更",
     "editMargin": "マージンを変更",
     "editLineSpacing": "行間を変更",
+    "editZOrder": "重ね順を変更",
     "editOffset": "位置オフセットを変更",
     "editBackground": "背景を変更",
     "editCasing": "大文字化を変更",
@@ -353,6 +355,12 @@
     "right": "右",
     "top": "上",
     "bottom": "下"
+  },
+  "subtitleZOrder": {
+    "front": "最前面へ",
+    "back": "最背面へ",
+    "bringToFront": "この字幕を最前面へ移動",
+    "sendToBack": "この字幕を最背面へ移動"
   },
   "background": {
     "title": "字幕の背景",

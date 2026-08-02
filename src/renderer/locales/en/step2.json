@@ -175,6 +175,7 @@
     "marginV": "Margin",
     "lineSpacing": "Line spacing",
     "lineSpacingHint": "Gap between the lines of a multi-line caption, as a percentage of the font size. 0% is the default.",
+    "zOrder": "Z-order",
     "offset": "Offset",
     "offsetX": "X offset",
     "offsetY": "Y offset",
@@ -245,6 +246,7 @@
     "editLayout": "Change layout",
     "editMargin": "Change margin",
     "editLineSpacing": "Change line spacing",
+    "editZOrder": "Change z-order",
     "editOffset": "Change offset",
     "editBackground": "Change background",
     "editCasing": "Change casing",
@@ -353,6 +355,12 @@
     "right": "Right",
     "top": "Top",
     "bottom": "Bottom"
+  },
+  "subtitleZOrder": {
+    "front": "Front",
+    "back": "Back",
+    "bringToFront": "Bring this caption to the front",
+    "sendToBack": "Send this caption to the back"
   },
   "background": {
     "title": "Subtitle background",
