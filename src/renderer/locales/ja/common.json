@@ -71,6 +71,8 @@
     "timelineEnd": "末尾へ",
     "timelineZoomIn": "ズームイン",
     "timelineZoomOut": "ズームアウト",
+    "frameStepPrev": "1フレーム戻る",
+    "frameStepNext": "1フレーム進む",
     "modalCancel": "キャンセル",
     "modalConfirm": "OK / 確定"
   },

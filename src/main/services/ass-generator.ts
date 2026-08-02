@@ -34,6 +34,7 @@ import {
   buildEmphasisBody,
   clipRangesToWindow,
   emphasizedWordRanges,
+  cueMaxRenderedFontAssPx,
   EMPHASIS_DEFAULT_COLOR,
   type EmphasisRange,
 } from '../../shared/emphasis'
@@ -844,7 +845,7 @@ export function generateAss(
   ]
 
   // REQ-0332 §3 — decide, ACROSS cues, which ones position themselves.
-  const selfPositioned = resolveSelfPositionedCues(renders, video)
+  const selfPositioned = resolveSelfPositionedCues(renders, video, isMsix)
 
   const events = [
     '[Events]',
@@ -927,11 +928,24 @@ interface CueRender {
 function resolveSelfPositionedCues(
   renders: readonly CueRender[],
   video: VideoInfo,
+  isMsix: boolean,
 ): Map<string, { x: number; y: number }[]> {
   const out = new Map<string, { x: number; y: number }[]>()
 
   const needsSplit = (r: CueRender): boolean =>
     r.lineBodies.length > 1 && resolveLineSpacingPercent(r.entry) !== 0
+
+  // REQ-0380 — a cue whose override carries `\fad` / `\t` / `\move` (i.e. ANY
+  // entrance/exit animation) is NOT repositioned by libass's `fix_collisions`:
+  // measured (scripts/verify-overlap-parity) that three time-overlapping blur
+  // cues, all emitted at the same MarginV, collapse onto one line in the burn
+  // while the preview stacks them.  So — exactly like a split cue, which libass
+  // also cannot collide — an animated cue in a MULTI-cue simultaneous group
+  // must self-position via `\pos`.  Detected from the emitted body (one
+  // authority) so it cannot disagree with what libass is handed.  A lone
+  // (non-overlapping) animated cue needs no offset, so it stays on MarginV and
+  // its bytes are unchanged.
+  const isAnimated = (r: CueRender): boolean => /\\fad\(|\\t\(|\\move\(/.test(r.buildStyleTag(''))
 
   // Pinned rows first — independent of every group.
   const unpinned = renders.filter((r) => !r.isPinned)
@@ -940,9 +954,15 @@ function resolveSelfPositionedCues(
     if (r.isPinned && needsSplit(r)) selfIds.add(r.entry.id)
   }
 
-  // Groups over the unpinned rows only.
+  // Groups over the unpinned rows only.  A group self-positions when any cue
+  // needs splitting (line spacing) OR — when the group actually overlaps — any
+  // cue is animated (libass will not collide it).  The whole group then shares
+  // one positioning authority, so animated and static siblings cannot be placed
+  // by two systems that can't see each other.
   for (const group of groupByTimeOverlap(unpinned.map((r) => r.entry))) {
-    if (!group.some((i) => needsSplit(unpinned[i]))) continue
+    const hasSplit = group.some((i) => needsSplit(unpinned[i]))
+    const animatedOverlap = group.length > 1 && group.some((i) => isAnimated(unpinned[i]))
+    if (!hasSplit && !animatedOverlap) continue
     for (const i of group) selfIds.add(unpinned[i].entry.id)
   }
 
@@ -956,7 +976,14 @@ function resolveSelfPositionedCues(
     .map((entry, i) => ({ entry, i }))
     .sort((a, b) => a.entry.startSec - b.entry.startSec || a.i - b.i)
     .map((x) => x.entry)
-  const offsets = computeFixedStackOffsets(stacked, estimateCueHeightAssPx)
+  // REQ-0376 §A — feed the emphasis-aware height so the stack gap matches the
+  // taller box libass reserves for a keyword-emphasised cue.  The tier gate is
+  // the same one the emit path uses, so a free-tier cue (emphasis rendered off)
+  // measures at its base size and nothing shifts.
+  const emphasisTierAllowed = canUseKeywordEmphasisInTier(isMsix)
+  const offsets = computeFixedStackOffsets(stacked, (e) =>
+    estimateCueHeightAssPx(e, cueMaxRenderedFontAssPx(e, emphasisTierAllowed)),
+  )
 
   for (const r of renders) {
     if (!selfIds.has(r.entry.id)) continue

@@ -10,6 +10,7 @@ import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } fr
 import type { ExportFrameRequest, ExportFrameResult } from '../../shared/ipc-contracts'
 import type { SubtitleEntry } from '../../shared/types'
 import { FfmpegError } from '../../shared/errors'
+import { displayedFrameSeekSec, frameExportSubtitleFilter } from '../../shared/frame-seek'
 import log from '../lib/logger'
 
 /**
@@ -78,6 +79,14 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
 
   const ffmpeg = getBinPath('ffmpeg')
 
+  // REQ-0375 §3 — align the extracted frame with the one the preview shows.
+  // The preview <video> at `currentTime = timeSec` displays the frame with
+  // pts <= timeSec, but output-side `-ss timeSec` selects the first frame with
+  // pts >= timeSec — the NEXT frame whenever the playhead is between boundaries
+  // (owner's §3 repro).  `displayedFrameSeekSec` snaps the seek so ffmpeg
+  // extracts the displayed frame instead.
+  const seekSec = displayedFrameSeekSec(timeSec, req.video.fps)
+
   // Codec choice — ffmpeg auto-picks by extension when the output filename
   // matches, but we set it explicitly for predictability and consistency
   // with the existing thumbnail-extraction path.
@@ -87,9 +96,36 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
 
   let assPath: string | null = null
   let fontsDir: string | null = null
+  // REQ-0381 — pass-1 still for the two-pass subtitle export (see below).
+  let rawFramePath: string | null = null
+
+  // Spawn ffmpeg once with the given args and resolve on exit code 0.  Shared
+  // by the single-pass (no-subtitle) path and both passes of the two-pass
+  // subtitle path so error handling and logging stay identical.
+  const runFfmpeg = (args: string[]): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+      // REQ-0103 — explicit `shell: false` (see ffmpeg-burnin.ts for rationale).
+      const proc = spawn(ffmpeg, args, { shell: false })
+      let stderrAccum = ''
+      proc.stderr.on('data', (chunk: Buffer) => {
+        stderrAccum += chunk.toString()
+      })
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+        } else {
+          const errMsg = stderrAccum.slice(-600)
+          log.error(`[frame-exporter] failed (code ${code}): ${errMsg}`)
+          reject(new FfmpegError(`ffmpeg exited with code ${code}`, { stderr: errMsg }))
+        }
+      })
+      proc.on('error', (err) => {
+        reject(new FfmpegError(`Failed to spawn ffmpeg: ${err.message}`))
+      })
+    })
 
   try {
-    const args: string[] = ['-y']
+    log.info(`[frame-exporter] start: ${inputPath} @ ${timeSec.toFixed(3)}s → ${outputPath} (format=${format}, includeSubtitles=${includeSubtitles})`)
 
     if (includeSubtitles && entries.length > 0) {
       // Reuse the burn-in font staging + ASS generation so the still is
@@ -122,53 +158,53 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
 
       const subtitlesFilter = `subtitles='${escapeAssPath(assPath)}':fontsdir='${escapeAssPath(fontsDir)}'`
 
-      // Two-pass seek: coarse `-ss` before `-i` for speed, then a
-      // frame-accurate `-ss 0` after `-i` would normally be needed for
-      // precision.  Here we put `-ss` AFTER `-i` so ffmpeg decodes from
-      // the previous keyframe up to timeSec — slower but exact and
-      // required for the subtitles filter to see the correct time.
-      args.push(
+      // REQ-0381 — TWO-PASS so the burned subtitle matches the preview at the
+      // playhead.  The `subtitles` (libass) filter evaluates karaoke `\k`/`\kf`
+      // and animation `\fad`/`\t` at the frame's pts; a single-pass render with
+      // output-side `-ss` leaves that pts at the extracted frame's own time
+      // (`floor(timeSec·fps)/fps`), so the colouring lags the playhead by up to
+      // one frame.  It cannot be fixed in one pass: output `-ss` trims frames on
+      // the POST-filter pts, so any `setpts` that moves the clock to `timeSec`
+      // also discards the wrong frames.
+      //
+      // Pass 1 extracts the displayed frame with NO filters — byte-identical to
+      // the no-subtitle path below, so §3 (REQ-0375) frame selection is exactly
+      // preserved — into a lossless PNG.  Pass 2 burns the subtitle onto that
+      // still at the continuous playhead time (`frameExportSubtitleFilter` →
+      // `settb=AVTB,setpts=<timeSec>/TB,subtitles=…`).  The still carries no
+      // meaningful pts, so `setpts` here is safe and only sets libass's clock.
+      rawFramePath = join(tmpdir(), `mojioko-frame-raw-${randomUUID()}.png`)
+      await runFfmpeg([
+        '-y',
         '-i', inputPath,
-        '-ss', String(timeSec),
+        '-ss', String(seekSec),
         '-frames:v', '1',
-        '-vf', subtitlesFilter,
+        '-c:v', 'png',
+        rawFramePath,
+      ])
+
+      const vf = frameExportSubtitleFilter(timeSec, subtitlesFilter)
+      await runFfmpeg([
+        '-y',
+        '-i', rawFramePath,
+        '-vf', vf,
+        '-frames:v', '1',
         ...codecArgs,
-        outputPath
-      )
+        outputPath,
+      ])
     } else {
       // No subtitles — straight single-frame extract.  Output-side `-ss`
-      // is frame-accurate at the cost of decoding from the prior keyframe.
-      args.push(
+      // is frame-accurate at the cost of decoding from the prior keyframe;
+      // `seekSec` is snapped (see above) so the frame matches the preview.
+      await runFfmpeg([
+        '-y',
         '-i', inputPath,
-        '-ss', String(timeSec),
+        '-ss', String(seekSec),
         '-frames:v', '1',
         ...codecArgs,
-        outputPath
-      )
+        outputPath,
+      ])
     }
-
-    log.info(`[frame-exporter] start: ${inputPath} @ ${timeSec.toFixed(3)}s → ${outputPath} (format=${format}, includeSubtitles=${includeSubtitles})`)
-
-    await new Promise<void>((resolve, reject) => {
-      // REQ-0103 — explicit `shell: false` (see ffmpeg-burnin.ts for rationale).
-      const proc = spawn(ffmpeg, args, { shell: false })
-      let stderrAccum = ''
-      proc.stderr.on('data', (chunk: Buffer) => {
-        stderrAccum += chunk.toString()
-      })
-      proc.on('close', (code) => {
-        if (code === 0) {
-          resolve()
-        } else {
-          const errMsg = stderrAccum.slice(-600)
-          log.error(`[frame-exporter] failed (code ${code}): ${errMsg}`)
-          reject(new FfmpegError(`ffmpeg exited with code ${code}`, { stderr: errMsg }))
-        }
-      })
-      proc.on('error', (err) => {
-        reject(new FfmpegError(`Failed to spawn ffmpeg: ${err.message}`))
-      })
-    })
 
     const stat = await fs.stat(outputPath)
     return { outputPath, sizeBytes: stat.size }
@@ -184,6 +220,11 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
     if (fontsDir) {
       try { await fs.rm(fontsDir, { recursive: true, force: true }) } catch (cleanupErr) {
         log.warn(`[frame-exporter] could not remove staged fontsdir ${fontsDir}: ${String(cleanupErr)}`)
+      }
+    }
+    if (rawFramePath) {
+      try { await fs.unlink(rawFramePath) } catch (cleanupErr) {
+        log.warn(`[frame-exporter] could not unlink temp frame ${rawFramePath}: ${String(cleanupErr)}`)
       }
     }
   }

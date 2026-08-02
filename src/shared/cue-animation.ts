@@ -226,9 +226,11 @@ export const ANIMATION_DISTANCE_DEFAULT_PX = 50
  * — that reintroduces the degeneration, and a user who wants a plain fade
  * already has `fade` in the type list.
  *
- * Provenance: the blur range (20–40, default 30) is the owner's decision.
- * The scale/pop floor of 10 was inferred by applying the same principle,
- * not instructed — see RES-0337.
+ * Provenance: the blur range (20–80 since REQ-0377 §B, default 30) is the
+ * owner's decision; the 40 → 80 ceiling raise is bounded by the measured
+ * preview↔burn parity limit (~100, libass `\blur` saturates there).  The
+ * scale/pop floor of 10 was inferred by applying the same principle, not
+ * instructed — see RES-0337.
  */
 export const ANIMATION_STRENGTH_SCALE_MIN = 10
 export const ANIMATION_STRENGTH_SCALE_MAX = 100
@@ -248,7 +250,22 @@ export const ANIMATION_START_SCALE_STEP_PCT = ANIMATION_STRENGTH_SCALE_STEP
 
 /** Blur's stored value already rises with strength, so these are both. */
 export const ANIMATION_BLUR_MIN_PX = 20
-export const ANIMATION_BLUR_MAX_PX = 40
+/**
+ * REQ-0377 §B — raised 40 → 80.  The minimum is unchanged and the default
+ * (`BLUR_MAX_PX = ANIMATION_TYPE_DEFAULTS.blur.strength`, 30) is a SEPARATE
+ * constant, so nothing existing moves: `animationBlurPx` is stored in absolute
+ * ASS px and `resolveAnimation`'s `clamp([MIN, MAX])` passes every prior value
+ * (≤ 40) through unchanged — the burn stays byte-identical (no migration).
+ *
+ * 80 is safe because preview↔burn blur parity was MEASURED to hold there:
+ * `scripts/verify-blur-parity` (chromium CSS `blur(N·0.84)` vs ffmpeg libass
+ * `\blur N`, edge σ) gives |Δσ|/σ ≤ ~4 % for every N ≤ 100, with σ/N ≈ 0.84
+ * constant on both engines.  libass's `\blur` SATURATES around N ≈ 100
+ * (σ ≈ 84 at N = 100/110/120) while CSS keeps growing, so the parity-safe
+ * ceiling is ~100; 80 leaves margin.  Going past ~100 would ship a divergence
+ * (|Δ| 15.7 % at N = 120) — do NOT raise this above ~100 without re-measuring.
+ */
+export const ANIMATION_BLUR_MAX_PX = 80
 export const ANIMATION_BLUR_STEP_PX = 1
 
 /**
@@ -719,6 +736,43 @@ export function animationTransformAt(
 ): AnimationTransform {
   if (isAnimationInert(spec)) return { ...NEUTRAL_TRANSFORM }
   return curve(spec, rampProgress(spec, startSec, endSec, tSec))
+}
+
+/**
+ * REQ-0378 — the ONE decision for "what animation state does this cue show at
+ * time `tSec`", shared by the preview's mount-time callback ref, its rAF loop,
+ * AND its React render (which seeds the `--cue-anim-*` custom-property defaults
+ * so the FIRST painted frame of a playback activation is already the animated
+ * state, not the settled default that used to flash for one frame).
+ *
+ * Three copies of this predicate is exactly how the render default and the
+ * imperative writer would drift apart and reintroduce the flash — so there is
+ * one.  The paused-at-or-before-start snap (REQ-0195 / REQ-0323 §1-2) keeps a
+ * cue parked on its own start visible-and-settled for editing; out of range is
+ * hidden; everything else samples the burn-in-accurate curve.
+ */
+export function resolveCueAnimState(
+  entry: Parameters<typeof resolveAnimation>[0] & { startSec: number; endSec: number },
+  tSec: number,
+  isPaused: boolean,
+): { anim: AnimationTransform; inRange: boolean } {
+  const inRange = tSec >= entry.startSec && tSec < entry.endSec
+  const spec = resolveAnimation(entry)
+  // REQ-0379 (owner decision B) — the paused-at-start "settled" snap
+  // (REQ-0195/0323) exists so a cue with NO entrance to play — the 0-second
+  // caption parked at currentTime 0 — is visible and editable.  A cue WITH an
+  // entrance animation instead shows its entrance INITIAL when the paused
+  // playhead sits at its start: that matches what scrubbing a hair into the cue
+  // already shows, and it is what makes playing from that position start the
+  // entrance cleanly with no settled frame flashing in front of it (the
+  // real-pixel finding of RES-0379).  Verified in scripts/verify-anim-first-frame.
+  const hasEntrance = spec.type !== 'none' && spec.inEnabled
+  const snapToSettled = isPaused && tSec <= entry.startSec && !hasEntrance
+  const anim =
+    snapToSettled || !inRange
+      ? { ...NEUTRAL_TRANSFORM }
+      : animationTransformAt(spec, entry.startSec, entry.endSec, tSec)
+  return { anim, inRange }
 }
 
 /**

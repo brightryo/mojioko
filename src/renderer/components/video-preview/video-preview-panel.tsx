@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore, isAnyOverlayOpen } from '@/stores/ui-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { usePreviewMixStore } from '@/stores/preview-mix-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shortcutHint } from '@/lib/shortcut-hint'
@@ -25,8 +26,9 @@ import {
   clampAssPosition,
 } from '@/lib/preview-coords'
 import { editedDuration, editedToOrig, effectiveEntryState, origToEdited } from '../../../shared/cuts'
-import { resolveAnimation, animationTransformAt, NEUTRAL_TRANSFORM } from '../../../shared/cue-animation'
-import { applyCueAnimationPaint } from '@/lib/cue-anim-paint'
+import { resolveCueAnimState } from '../../../shared/cue-animation'
+import { formatTimecode } from '../../../shared/timecode'
+import { applyCueAnimationPaint, cueAnimOpacityCss, cueAnimTransformCss } from '@/lib/cue-anim-paint'
 import { createPreviewSeeker, type PreviewSeeker } from '@/lib/preview-seek'
 import type { SubtitleEntry } from '../../../shared/types'
 
@@ -75,20 +77,8 @@ function getBasename(filePath: string): string {
   return filePath.split(/[\\/]/).pop() ?? filePath
 }
 
-/**
- * Format seconds to "M:SS" or "H:MM:SS".
- * Returns "0:00" for non-finite / negative values (before metadata loads).
- */
-function formatTime(sec: number): string {
-  if (!isFinite(sec) || isNaN(sec) || sec < 0) return '0:00'
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  const s = Math.floor(sec % 60)
-  if (h > 0) {
-    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-  }
-  return `${m}:${String(s).padStart(2, '0')}`
-}
+// REQ-0382 §A — the seekbar timecode is now `M:SS.mmm (fF)` (frame-precision),
+// formatted by the pure `formatTimecode` in `shared/timecode.ts`.
 
 // findActiveEntryId moved to @/lib/active-entry for shared use + unit tests.
 // REQ-080 #1: range semantics changed to [start, end) — end exclusive.
@@ -143,6 +133,9 @@ export function VideoPreviewPanel() {
   // memo below; the global burnin / subtitleBackground store slices were
   // dropped from settings-store in the same phase.
   const activeFontId       = useSettingsStore((s) => s.activeFontId)
+  // REQ-0376 §A — tier flag for the emphasis-aware stack height (mirrors
+  // subtitle-overlay's `isMsix ?? false`; null pre-boot renders as free tier).
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
   // REQ-20260615-050 — fade duration is now per-entry; no global slice
   // is read here.  The rAF loop below pulls `entry.fadeDurationSec`
   // from each active SubtitleEntry.
@@ -340,13 +333,10 @@ export function VideoPreviewPanel() {
         const v = videoRef.current
         const t = v?.currentTime ?? 0
         const isPaused = v?.paused ?? true
-        // REQ-0323 §1 — mount-time paint uses the same shared curve as the
-        // rAF loop, so the first frame after mount is already correct
-        // instead of flashing at full opacity for one tick.
-        const inRange = t >= entry.startSec && t < entry.endSec
-        const anim = (isPaused && t <= entry.startSec) || !inRange
-          ? NEUTRAL_TRANSFORM
-          : animationTransformAt(resolveAnimation(entry), entry.startSec, entry.endSec, t)
+        // REQ-0323 §1 / REQ-0378 — mount-time paint uses the same shared
+        // decision as the rAF loop AND the render-time seed, so the first
+        // frame after mount is already correct instead of flashing settled.
+        const { anim, inRange } = resolveCueAnimState(entry, t, isPaused)
         // REQ-0339 §2 — write the WHOLE animation state, not just opacity.
         // This callback fires during the commit phase, i.e. before the browser
         // paints the cue's first frame; the rAF loop only gets to run
@@ -511,20 +501,11 @@ export function VideoPreviewPanel() {
         // The curve comes from `shared/cue-animation.ts`, the same module
         // the ASS writer transcribes — there is no second copy of the
         // maths to drift (REQ-0320 §1's failure mode).
-        const inRange = t >= entry.startSec && t < entry.endSec
-        const spec = resolveAnimation(entry)
-        // REQ-0195 §2 preserved, but NARROWED (REQ-0323 §1-2).  That REQ
-        // snapped the whole ramp to "settled" whenever paused, so a cue
-        // parked at `currentTime = 0` on mount was not invisible.  A blanket
-        // snap now contradicts §1-2, which requires a paused playhead
-        // 1 s into a 3 s animation to SHOW the 1 s state.  So the snap is
-        // kept only for the original repro — paused at or before the cue's
-        // own start — and scrubbing anywhere inside the cue shows the real
-        // animation state.
-        const snapToSettled = isPaused && t <= entry.startSec
-        const anim = snapToSettled || !inRange
-          ? NEUTRAL_TRANSFORM
-          : animationTransformAt(spec, entry.startSec, entry.endSec, t)
+        // REQ-0195 §2 / REQ-0323 §1-2 / REQ-0378 — the paused-at-or-before-start
+        // snap, out-of-range hide, and burn-in-accurate curve are all folded
+        // into the one shared decision so this loop, the mount ref, and the
+        // render-time seed cannot drift.
+        const { anim, inRange } = resolveCueAnimState(entry, t, isPaused)
 
         // REQ-0323 §1-3 — transform + filter go on the OUTER span, which
         // contains the outline/shadow canvases as well as the text.  A
@@ -704,9 +685,12 @@ export function VideoPreviewPanel() {
         activeFontId,
         videoWidthPx,
         videoContainerWidth,
+        // REQ-0376 §A — tier gate for emphasis-aware height; matches the emit
+        // path so preview and burn-in reserve the same box for an emphasised cue.
+        isMsix,
       ),
     ))
-  }, [sortedActiveEntries, activeFontId, videoWidthPx, videoContainerWidth])
+  }, [sortedActiveEntries, activeFontId, videoWidthPx, videoContainerWidth, isMsix])
 
   // Load the subtitle font on mount and refresh whenever the active font
   // changes so the preview reflects the new metrics without requiring a
@@ -1430,6 +1414,16 @@ export function VideoPreviewPanel() {
               const offset = stackOffsetsByEntryId.get(entry.id) ?? 0
               const isSelected = entry.id === selectedEntryId
               const isDragging = entry.id === draggingEntryId
+              // REQ-0378 — seed the overlay's animation custom properties from
+              // the cue's state at the current playhead, so the FIRST painted
+              // frame of a playback activation shows the animated state rather
+              // than the settled default that used to flash for one frame.  The
+              // same shared decision the mount ref / rAF use, sampled from the
+              // React-visible `currentTime` (the imperative writer refines it to
+              // the live clock every frame afterwards).
+              const { anim: initAnim, inRange: initInRange } = resolveCueAnimState(
+                entry, currentTime, videoRef.current?.paused ?? true,
+              )
               return (
                 <SubtitleOverlay
                   key={entry.id}
@@ -1441,6 +1435,8 @@ export function VideoPreviewPanel() {
                   spanRef={setOverlaySpanRef(entry.id)}
                   outerSpanRef={setOverlayOuterRef(entry)}
                   showAffordance={isSelected || isDragging}
+                  initialOpacity={Number(cueAnimOpacityCss(initAnim, initInRange))}
+                  initialAnimTransform={cueAnimTransformCss(initAnim, previewScaleRef.current)}
                 />
               )
             })}
@@ -1512,7 +1508,8 @@ export function VideoPreviewPanel() {
           className="flex-1 h-1.5 cursor-pointer disabled:cursor-default disabled:opacity-40"
         />
         <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-muted-foreground">
-          {formatTime(editedCurrentTime)}&nbsp;/&nbsp;{formatTime(editedTotalSec)}
+          {/* REQ-0382 §A — frame-precision timecode: M:SS.mmm (f‹frame in second›). */}
+          {formatTimecode(editedCurrentTime, video.fps)}&nbsp;/&nbsp;{formatTimecode(editedTotalSec, video.fps)}
         </span>
       </div>
 

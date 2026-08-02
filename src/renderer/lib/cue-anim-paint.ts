@@ -21,21 +21,43 @@ import { applyCueBlurToLayer } from './cue-blur-layer'
  * Every CSSOM write is guarded by a read so a steady-state caption (mid-plateau,
  * opacity "1") does not invalidate style on every one of 60 frames per second.
  */
+/**
+ * The CSS opacity value for an animation state.  Shared so React's render-time
+ * default (the `--cue-anim-opacity` custom property it seeds) and this
+ * imperative writer produce byte-identical strings — the whole point of
+ * REQ-0378 is that the two never disagree on a cue's FIRST painted frame.
+ */
+export function cueAnimOpacityCss(anim: AnimationTransform, inRange: boolean): string {
+  return String(inRange ? anim.opacity : 0)
+}
+
+/** The CSS transform value for an animation state (preview px). Shared, same reason. */
+export function cueAnimTransformCss(anim: AnimationTransform, scalePx: number): string {
+  // `offset*Px` is in ASS px; multiply into preview px like every other
+  // ASS-space quantity.
+  return `translate(${anim.offsetXPx * scalePx}px, ${anim.offsetYPx * scalePx}px) scale(${anim.scale})`
+}
+
 export function applyCueAnimationPaint(
   outer: HTMLElement,
   anim: AnimationTransform,
   inRange: boolean,
   scalePx: number,
 ): void {
-  const opacity = String(inRange ? anim.opacity : 0)
-  if (outer.style.opacity !== opacity) outer.style.opacity = opacity
+  // REQ-0378 — opacity is written through the `--cue-anim-opacity` custom
+  // property (not `style.opacity`), exactly like `--cue-anim-transform` below.
+  // React seeds both custom properties in the JSX from the cue's animation
+  // state at render time, so even the pre-first-imperative-write paint on a
+  // playback activation shows the animation's CURRENT state — never the
+  // settled default (opacity 1 / scale 1) that flashed for one frame before.
+  // React and this writer share the same custom property, so neither clobbers
+  // the other's `opacity` / `transform` property.
+  const opacity = cueAnimOpacityCss(anim, inRange)
+  if (outer.style.getPropertyValue('--cue-anim-opacity') !== opacity) {
+    outer.style.setProperty('--cue-anim-opacity', opacity)
+  }
 
-  // `offset*Px` is in ASS px; multiply into preview px like every other
-  // ASS-space quantity.  React owns the BASE transform (pinned-anchor offset,
-  // rotation) and composes it with this custom property through `var()`, so
-  // the two writers stay off each other's toes.
-  const transform =
-    `translate(${anim.offsetXPx * scalePx}px, ${anim.offsetYPx * scalePx}px) scale(${anim.scale})`
+  const transform = cueAnimTransformCss(anim, scalePx)
   if (outer.style.getPropertyValue('--cue-anim-transform') !== transform) {
     outer.style.setProperty('--cue-anim-transform', transform)
   }

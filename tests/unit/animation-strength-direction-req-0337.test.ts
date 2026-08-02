@@ -112,9 +112,12 @@ describe('REQ-0337 §2 — strength runs the same way for every type', () => {
   })
 
   describe('§2-4 — the ranges the owner specified', () => {
-    it('blur is 20–40 px, step 1, default 30', () => {
+    // REQ-0377 §B raised the ceiling 40 → 80 (parity measured safe to ~100 by
+    // scripts/verify-blur-parity).  Min/step/default are unchanged, so existing
+    // cues are byte-identical.
+    it('blur is 20–80 px, step 1, default 30', () => {
       expect(ANIMATION_BLUR_MIN_PX).toBe(20)
-      expect(ANIMATION_BLUR_MAX_PX).toBe(40)
+      expect(ANIMATION_BLUR_MAX_PX).toBe(80)
       expect(ANIMATION_BLUR_STEP_PX).toBe(1)
       expect(BLUR_MAX_PX).toBe(30)
     })

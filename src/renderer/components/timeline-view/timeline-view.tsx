@@ -15,6 +15,7 @@ import {
 } from '@/stores/ui-store'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { cn } from '@/lib/utils'
+import { blurActiveEditable } from '@/lib/focus'
 import { filterEntries } from '@/lib/subtitle-filter'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { formatEditedTimecode } from '@/lib/time'
@@ -146,6 +147,10 @@ function RulerImpl({ pixelsPerSec, totalSec, onSeek, onScrubEnd }: RulerProps) {
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return
     e.preventDefault()
+    // REQ-0384 §B — `preventDefault` above suppresses the native focus change,
+    // so a click on this scrub `<div>` would otherwise leave the inspector
+    // subtitle field focused (Space → space char, Shift+←/→ → text select).
+    blurActiveEditable()
     isScrubbingRef.current = true
     // REQ-096: signal a scrub session start so the optimistic-playhead
     // path in handleSeek (parent) and the throttle-guard in VPP /
@@ -1199,6 +1204,10 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   function handleTracksPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.button !== 0) return
     e.preventDefault()
+    // REQ-0384 §B — same as the Ruler: releasing focus from the inspector field
+    // when the playhead is scrubbed from the tracks lane keeps Space / Shift+←→
+    // working (they are swallowed while a text field is focused).
+    blurActiveEditable()
     tracksScrubRef.current = true
     if (SCRUB_SEEK_THROTTLE_ENABLED) {
       scrubState.inProgress = true

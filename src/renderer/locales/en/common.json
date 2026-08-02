@@ -71,6 +71,8 @@
     "timelineEnd": "Jump to end",
     "timelineZoomIn": "Zoom in",
     "timelineZoomOut": "Zoom out",
+    "frameStepPrev": "Back one frame",
+    "frameStepNext": "Forward one frame",
     "modalCancel": "Cancel",
     "modalConfirm": "OK / Confirm"
   },

@@ -171,11 +171,23 @@ export interface LineSpacingCueGeometry extends LineSpacingCarrier {
  * REQ-0332 moved this out of `estimateOverlayHeightPx` so the ASS writer can
  * feed the very same number into `computeFixedStackOffsets`.  The preview
  * function is now `estimateCueHeightAssPx(entry) * scale`.
+ *
+ * REQ-0376 §A — `maxFontPx` overrides the base `fontSizePx` used throughout the
+ * formula with the cue's actual largest rendered font (keyword emphasis emits
+ * an enlarged `\fs` run, so libass's `fix_collisions` reserves the taller box).
+ * Callers pass `cueMaxRenderedFontAssPx(entry, tierAllowed)`.  Omitted (or equal
+ * to `fontSizePx`, i.e. no emphasis / free tier) it reduces to the original
+ * expression exactly, so non-emphasis cues stay byte-identical.  It replaces
+ * `fontSizePx` in BOTH the pitch and the top-line ink term: for the common
+ * single-line overlapping cue this is exact (measured 240 + 2·bord = 248 px);
+ * for a multi-line cue where only some lines are enlarged it is a conservative
+ * over-estimate (never the under-stack this REQ fixes).
  */
-export function estimateCueHeightAssPx(entry: LineSpacingCueGeometry): number {
-  const pitch = linePitchAssPx(entry.fontSizePx, resolveLineSpacingPercent(entry))
+export function estimateCueHeightAssPx(entry: LineSpacingCueGeometry, maxFontPx?: number): number {
+  const f = maxFontPx ?? entry.fontSizePx
+  const pitch = linePitchAssPx(f, resolveLineSpacingPercent(entry))
   const lines = cueLineCount(entry.text)
-  return (lines - 1) * pitch + entry.fontSizePx + 2 * entry.outlineThicknessPx
+  return (lines - 1) * pitch + f + 2 * entry.outlineThicknessPx
 }
 
 /**
