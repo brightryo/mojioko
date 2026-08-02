@@ -18,6 +18,7 @@
     "verify:ring-paint": "node scripts/verify-ring-paint/index.mjs",
     "verify:stack-emphasis": "node scripts/verify-stack-emphasis/index.mjs",
     "verify:blur-parity": "node scripts/verify-blur-parity/index.mjs",
+    "verify:anim-first-frame": "node scripts/verify-anim-first-frame/index.mjs",
     "verify:font-weights": "node scripts/verify-font-weights/index.mjs",
     "verify:sidecar": "node scripts/verify-sidecar-fresh.mjs",
     "verify:docs-layout": "node scripts/verify-docs-layout.mjs",

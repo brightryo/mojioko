@@ -49,12 +49,21 @@ describe('REQ-0378 §C — no settled flash on entrance-animation activation', (
     expect(seedOpacity(fadeInCue(), 6.5, false)).toBe(1)
   })
 
-  it('paused AT the start stays settled+visible (editing case, REQ-0195/0323)', () => {
-    // A paused playhead parked on the cue's own start shows the settled cue so
-    // it can be edited, rather than the invisible fade-in frame.
-    expect(seedOpacity(fadeInCue(), 5, true)).toBe(1)
-    // Scrubbed one second in while paused shows the real 1s animation state.
+  it('paused AT the start of an ANIMATED cue shows the entrance initial (REQ-0379 decision B)', () => {
+    // Real-pixel finding (RES-0379): the settled "flash" was the paused-at-start
+    // editing view.  For a cue WITH an entrance animation the paused view is now
+    // the entrance initial (opacity 0), so playing from there starts cleanly.
+    expect(seedOpacity(fadeInCue(), 5, true)).toBe(0)
+    // Scrubbed one second in while paused still shows the real 1s animation state.
     expect(seedOpacity(fadeInCue(), 6.5, true)).toBe(1) // plateau
+  })
+
+  it('paused AT the start of a NON-animated cue stays settled+visible (REQ-0195/0323 preserved)', () => {
+    // The snap still applies where there is no entrance to play — the 0-second
+    // caption stays visible/editable.
+    expect(seedOpacity(fadeInCue({ animationType: 'none' }), 5, true)).toBe(1)
+    // and a cue with only an EXIT animation (no entrance) also keeps the snap.
+    expect(seedOpacity(fadeInCue({ animationInEnabled: false }), 5, true)).toBe(1)
   })
 
   it('out of range seeds hidden (opacity 0)', () => {

@@ -757,11 +757,21 @@ export function resolveCueAnimState(
   isPaused: boolean,
 ): { anim: AnimationTransform; inRange: boolean } {
   const inRange = tSec >= entry.startSec && tSec < entry.endSec
-  const snapToSettled = isPaused && tSec <= entry.startSec
+  const spec = resolveAnimation(entry)
+  // REQ-0379 (owner decision B) — the paused-at-start "settled" snap
+  // (REQ-0195/0323) exists so a cue with NO entrance to play — the 0-second
+  // caption parked at currentTime 0 — is visible and editable.  A cue WITH an
+  // entrance animation instead shows its entrance INITIAL when the paused
+  // playhead sits at its start: that matches what scrubbing a hair into the cue
+  // already shows, and it is what makes playing from that position start the
+  // entrance cleanly with no settled frame flashing in front of it (the
+  // real-pixel finding of RES-0379).  Verified in scripts/verify-anim-first-frame.
+  const hasEntrance = spec.type !== 'none' && spec.inEnabled
+  const snapToSettled = isPaused && tSec <= entry.startSec && !hasEntrance
   const anim =
     snapToSettled || !inRange
       ? { ...NEUTRAL_TRANSFORM }
-      : animationTransformAt(resolveAnimation(entry), entry.startSec, entry.endSec, tSec)
+      : animationTransformAt(spec, entry.startSec, entry.endSec, tSec)
   return { anim, inRange }
 }
 
