@@ -22,6 +22,7 @@ import {
   resolveLineSpacingPercent,
 } from '../../shared/line-spacing'
 import { computeFixedStackOffsets } from '../../shared/stack-offsets'
+import { computeCuePlacement } from '../../shared/cue-placement'
 import { groupByTimeOverlap } from '../../shared/simultaneous-groups'
 import { buildAnimationTags } from '../../shared/cue-animation-ass'
 import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
@@ -283,6 +284,26 @@ export function generateAss(
    * `tests/unit/ass-karaoke-style-required-req-0344.test.ts` pins the arity.
    */
   karaokeStyle: KaraokeStyle,
+  /**
+   * REQ-0389 (positioning-redesign Phase 1a) — **shadow seam, default off.**
+   *
+   * When `true`, EVERY unpinned cue self-positions via `\pos` (routed through
+   * `computeCuePlacement`), instead of only the split / animated-overlap cues
+   * that already do.  This is the all-`\pos` runtime Phase 1b will switch to; in
+   * Phase 1a it stays off and is exercised only by `verify:pos-parity`, which
+   * needs the REAL generator to emit the `\pos` side (REQ-0316 forbids
+   * hand-authored ASS fixtures).
+   *
+   * Unlike `assFontName` / `isMsix` / `karaokeStyle` above, a DEFAULT is the
+   * correct shape here: forgetting the argument yields `false` = today's
+   * production behaviour, i.e. the safe/no-op path — not the "plausible but
+   * wrong" output those three guard against.  Because the default sits after the
+   * seven required params, `generateAss.length` stays 7 and the arity pins
+   * (REQ-0340 / REQ-0344) are unaffected.  Nothing in `src/` passes `true`, so
+   * the production render path is unchanged and `ass-generator-baseline`
+   * stays byte-identical.
+   */
+  forceSelfPositionAll: boolean = false,
 ): string {
   // `burnin` / `subtitleBackground` are vestigial (see JSDoc above).  Reference
   // them once so `noUnusedParameters` stays quiet without disabling lint.
@@ -845,7 +866,9 @@ export function generateAss(
   ]
 
   // REQ-0332 §3 — decide, ACROSS cues, which ones position themselves.
-  const selfPositioned = resolveSelfPositionedCues(renders, video, isMsix)
+  // REQ-0389 — `forceSelfPositionAll` (shadow, off in production) makes EVERY
+  // unpinned cue self-position, which is the all-`\pos` runtime Phase 1b adopts.
+  const selfPositioned = resolveSelfPositionedCues(renders, video, isMsix, forceSelfPositionAll)
 
   const events = [
     '[Events]',
@@ -929,6 +952,10 @@ function resolveSelfPositionedCues(
   renders: readonly CueRender[],
   video: VideoInfo,
   isMsix: boolean,
+  // REQ-0389 shadow — when true, every unpinned cue is added to the
+  // self-positioning set (all-`\pos`), and its anchors are resolved through
+  // `computeCuePlacement` rather than `cueLineAnchors`.  Off in production.
+  forceSelfPositionAll: boolean,
 ): Map<string, { x: number; y: number }[]> {
   const out = new Map<string, { x: number; y: number }[]>()
 
@@ -966,6 +993,11 @@ function resolveSelfPositionedCues(
     for (const i of group) selfIds.add(unpinned[i].entry.id)
   }
 
+  // REQ-0389 shadow — force every unpinned cue onto the `\pos` path.  Pinned
+  // rows already emit their own `\pos` via `ownPosTag`, so they need nothing
+  // here.  This is the all-`\pos` runtime Phase 1b will make unconditional.
+  if (forceSelfPositionAll) for (const r of unpinned) selfIds.add(r.entry.id)
+
   if (selfIds.size === 0) return out
 
   // Stack offsets are computed over ALL unpinned rows, sorted by startSec as
@@ -995,7 +1027,7 @@ function resolveSelfPositionedCues(
     // anchors position.
     const lineMaxFontSizes = r.splitLineBodies.map((body) =>
       maxFontSizeInLineBodyAssPx(body, e.fontSizePx))
-    out.set(e.id, cueLineAnchors({
+    const anchorInput = {
       lineHeightsPx: lineHeightsAssPx(lineMaxFontSizes, resolveLineSpacingPercent(e)),
       horizontalPosition: e.horizontalPosition,
       verticalPosition: e.verticalPosition,
@@ -1006,7 +1038,19 @@ function resolveSelfPositionedCues(
       marginLrPx: ASS_MARGIN_LR_PX,
       posX: e.posX,
       posY: e.posY,
-    }))
+    }
+    // REQ-0389 — the shadow all-`\pos` path resolves anchors through the single
+    // positioning authority `computeCuePlacement`; the established split /
+    // animated path keeps calling `cueLineAnchors` directly.  The two return
+    // identical anchor values (computeCuePlacement wraps cueLineAnchors), so no
+    // existing (non-forced) output changes — `computeCuePlacement` runs only
+    // when the gate forces it.
+    if (forceSelfPositionAll) {
+      const placement = computeCuePlacement({ ...anchorInput, outlineThicknessPx: e.outlineThicknessPx })
+      out.set(e.id, placement.lines.map((l) => ({ x: l.anchorX, y: l.anchorY })))
+    } else {
+      out.set(e.id, cueLineAnchors(anchorInput))
+    }
   }
   return out
 }
