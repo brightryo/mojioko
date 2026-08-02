@@ -15,6 +15,7 @@ import {
   TIMELINE_ZOOM_STEP_PX,
 } from '@/lib/timeline-nav'
 import { editedDuration, editedToOrig } from '../../shared/cuts'
+import { frameStepSec } from '../../shared/timecode'
 
 /**
  * REQ-0131 §4.1 / REQ-0132 §4.1 — single capture-phase document
@@ -169,11 +170,31 @@ export function useGlobalShortcuts(): void {
         return
       }
 
+      // REQ-0382 §B — Shift+←/→ steps the preview playhead ONE video frame
+      // (1/fps).  Runs in BOTH timeline and list view (the preview is always
+      // visible in Step 2), so it is placed before the timeline-only bail
+      // below; and before the bare-arrow branch so Shift never falls through
+      // to the boundary jump.  `videoCurrentTimeSec` is the ORIGINAL-axis
+      // playhead (see timeline-nav's `playheadOrigSec`), which is exactly what
+      // the seek request and `frameStepSec` (frame-snapped, clamped) want.
+      if (shiftKey && !ctrlKey && !altKey && !metaKey && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+        const proj = useProjectStore.getState()
+        if (proj.video) {
+          const playheadOrig = useUiStore.getState().videoCurrentTimeSec
+          const next = frameStepSec(
+            playheadOrig, proj.video.fps, key === 'ArrowRight' ? 1 : -1, proj.video.durationSec,
+          )
+          useUiStore.getState().setVideoSeekRequest(next)
+          e.preventDefault()
+          e.stopPropagation()
+        }
+        return
+      }
+
       // REQ-0132 §1.3 — timeline-view-only arrow shortcuts.  Bail out
       // early when the list view is active so the arrows revert to
       // native focus navigation.  Bail on Alt / Meta so future
-      // combos remain available; Shift is intentionally ignored (kept
-      // for future range-select style semantics if we add them).
+      // combos remain available; Shift is handled above (frame step).
       const isTimeline = useUiStore.getState().editorViewMode === 'timeline'
       if (!isTimeline || altKey || metaKey) return
 

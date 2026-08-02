@@ -33,6 +33,8 @@ export type ShortcutId =
   | 'timelineEnd'
   | 'timelineZoomIn'
   | 'timelineZoomOut'
+  | 'frameStepPrev'
+  | 'frameStepNext'
   | 'modalCancel'
   | 'modalConfirm'
 
@@ -67,6 +69,9 @@ export const SHORTCUTS: readonly ShortcutSpec[] = [
   { id: 'reset',       keys: ['Ctrl+R'],                      labelKey: 'shortcuts.reset',       context: 'editor' },
   { id: 'selectAll',   keys: ['Ctrl+A'],                      labelKey: 'shortcuts.selectAll',   context: 'editor' },
   { id: 'clearSel',    keys: ['Ctrl+Shift+A'],                labelKey: 'shortcuts.clearSel',    context: 'editor' },
+  // REQ-0382 §B — step the preview playhead one video frame (both views).
+  { id: 'frameStepPrev', keys: ['Shift+←'],                   labelKey: 'shortcuts.frameStepPrev', context: 'editor' },
+  { id: 'frameStepNext', keys: ['Shift+→'],                   labelKey: 'shortcuts.frameStepNext', context: 'editor' },
   // Context B' — timeline view active, no overlay, focus outside any
   // input.  In the list view these are inert (native arrow-key focus
   // navigation takes over).

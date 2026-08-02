@@ -27,6 +27,7 @@ import {
 } from '@/lib/preview-coords'
 import { editedDuration, editedToOrig, effectiveEntryState, origToEdited } from '../../../shared/cuts'
 import { resolveCueAnimState } from '../../../shared/cue-animation'
+import { formatTimecode } from '../../../shared/timecode'
 import { applyCueAnimationPaint, cueAnimOpacityCss, cueAnimTransformCss } from '@/lib/cue-anim-paint'
 import { createPreviewSeeker, type PreviewSeeker } from '@/lib/preview-seek'
 import type { SubtitleEntry } from '../../../shared/types'
@@ -76,20 +77,8 @@ function getBasename(filePath: string): string {
   return filePath.split(/[\\/]/).pop() ?? filePath
 }
 
-/**
- * Format seconds to "M:SS" or "H:MM:SS".
- * Returns "0:00" for non-finite / negative values (before metadata loads).
- */
-function formatTime(sec: number): string {
-  if (!isFinite(sec) || isNaN(sec) || sec < 0) return '0:00'
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  const s = Math.floor(sec % 60)
-  if (h > 0) {
-    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-  }
-  return `${m}:${String(s).padStart(2, '0')}`
-}
+// REQ-0382 §A — the seekbar timecode is now `M:SS.mmm (fF)` (frame-precision),
+// formatted by the pure `formatTimecode` in `shared/timecode.ts`.
 
 // findActiveEntryId moved to @/lib/active-entry for shared use + unit tests.
 // REQ-080 #1: range semantics changed to [start, end) — end exclusive.
@@ -1519,7 +1508,8 @@ export function VideoPreviewPanel() {
           className="flex-1 h-1.5 cursor-pointer disabled:cursor-default disabled:opacity-40"
         />
         <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-muted-foreground">
-          {formatTime(editedCurrentTime)}&nbsp;/&nbsp;{formatTime(editedTotalSec)}
+          {/* REQ-0382 §A — frame-precision timecode: M:SS.mmm (f‹frame in second›). */}
+          {formatTimecode(editedCurrentTime, video.fps)}&nbsp;/&nbsp;{formatTimecode(editedTotalSec, video.fps)}
         </span>
       </div>
 
