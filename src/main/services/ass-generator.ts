@@ -935,6 +935,18 @@ function resolveSelfPositionedCues(
   const needsSplit = (r: CueRender): boolean =>
     r.lineBodies.length > 1 && resolveLineSpacingPercent(r.entry) !== 0
 
+  // REQ-0380 — a cue whose override carries `\fad` / `\t` / `\move` (i.e. ANY
+  // entrance/exit animation) is NOT repositioned by libass's `fix_collisions`:
+  // measured (scripts/verify-overlap-parity) that three time-overlapping blur
+  // cues, all emitted at the same MarginV, collapse onto one line in the burn
+  // while the preview stacks them.  So — exactly like a split cue, which libass
+  // also cannot collide — an animated cue in a MULTI-cue simultaneous group
+  // must self-position via `\pos`.  Detected from the emitted body (one
+  // authority) so it cannot disagree with what libass is handed.  A lone
+  // (non-overlapping) animated cue needs no offset, so it stays on MarginV and
+  // its bytes are unchanged.
+  const isAnimated = (r: CueRender): boolean => /\\fad\(|\\t\(|\\move\(/.test(r.buildStyleTag(''))
+
   // Pinned rows first — independent of every group.
   const unpinned = renders.filter((r) => !r.isPinned)
   const selfIds = new Set<string>()
@@ -942,9 +954,15 @@ function resolveSelfPositionedCues(
     if (r.isPinned && needsSplit(r)) selfIds.add(r.entry.id)
   }
 
-  // Groups over the unpinned rows only.
+  // Groups over the unpinned rows only.  A group self-positions when any cue
+  // needs splitting (line spacing) OR — when the group actually overlaps — any
+  // cue is animated (libass will not collide it).  The whole group then shares
+  // one positioning authority, so animated and static siblings cannot be placed
+  // by two systems that can't see each other.
   for (const group of groupByTimeOverlap(unpinned.map((r) => r.entry))) {
-    if (!group.some((i) => needsSplit(unpinned[i]))) continue
+    const hasSplit = group.some((i) => needsSplit(unpinned[i]))
+    const animatedOverlap = group.length > 1 && group.some((i) => isAnimated(unpinned[i]))
+    if (!hasSplit && !animatedOverlap) continue
     for (const i of group) selfIds.add(unpinned[i].entry.id)
   }
 
