@@ -196,9 +196,19 @@ const FILES = [
   'src/renderer/components/video-preview/video-preview-panel.tsx',
 ]
 let neg = {}
-console.log('\n=== negative control (pre-fix HEAD~1) ===')
+// Resolve the pre-fix state by the REQ-0379 commit's PARENT rather than a
+// hardcoded HEAD~1, which drifts (and silently defeats the control) as soon as
+// any later commit lands on top.
+// Path-limited to the fixed source files so it resolves the commit that
+// actually changed them for REQ-0379, not a later commit that merely mentions
+// REQ-0379 in its message (e.g. a gate-maintenance commit).
+const FIX_COMMIT = execSync(
+  `git rev-list -1 --grep=REQ-0379 HEAD -- ${FILES.join(' ')}`,
+  { cwd: REPO }).toString().trim()
+const PRE_FIX = `${FIX_COMMIT}~1`
+console.log(`\n=== negative control (pre-fix ${PRE_FIX.slice(0, 11)}) ===`)
 try {
-  execSync(`git checkout HEAD~1 -- ${FILES.join(' ')}`, { cwd: REPO, stdio: 'pipe' })
+  execSync(`git checkout ${PRE_FIX} -- ${FILES.join(' ')}`, { cwd: REPO, stdio: 'pipe' })
   neg = await runAll('PRE ')
 } finally {
   execSync(`git checkout HEAD -- ${FILES.join(' ')}`, { cwd: REPO, stdio: 'pipe' })

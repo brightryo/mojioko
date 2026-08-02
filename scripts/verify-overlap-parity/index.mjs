@@ -88,11 +88,20 @@ for (const animType of ['none', 'fade', 'blur', 'scale', 'pop']) {
   if (collapsed) fail = true
 }
 // Negative control — the pre-fix ass-generator MUST collapse the blur case, so
-// a pass above is proof of the fix, not of a blind gate.
-console.log('\n===== negative control (pre-fix HEAD~1, blur) =====')
+// a pass above is proof of the fix, not of a blind gate.  Resolve the pre-fix
+// state by the REQ-0380 commit's PARENT (not a hardcoded HEAD~1, which drifts
+// the moment any later commit lands on top and silently defeats the control).
+// Path-limited so it resolves the commit that actually changed the burn code
+// for REQ-0380, not some later commit that merely mentions REQ-0380 in its
+// message (e.g. a gate-maintenance commit).
+const FIX_COMMIT = execSync(
+  'git rev-list -1 --grep=REQ-0380 HEAD -- src/main/services/ass-generator.ts',
+  { cwd: REPO }).toString().trim()
+const PRE_FIX = `${FIX_COMMIT}~1`
+console.log(`\n===== negative control (pre-fix ${PRE_FIX.slice(0, 11)}, blur) =====`)
 let negCollapsed = false
 try {
-  execSync('git checkout HEAD~1 -- src/main/services/ass-generator.ts', { cwd: REPO, stdio: 'pipe' })
+  execSync(`git checkout ${PRE_FIX} -- src/main/services/ass-generator.ts`, { cwd: REPO, stdio: 'pipe' })
   buildAss = loadBuildAss()
   const { bands } = bandsFor('blur')
   const mids = bands.map((b) => b.mid).filter((m) => m != null).sort((a, b) => a - b)
