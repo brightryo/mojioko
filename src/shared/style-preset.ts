@@ -188,6 +188,9 @@ export const STYLE_PRESET_FIELDS = {
 
   // --- identity / bookkeeping -------------------------------------------
   id: 'not-style',
+  // REQ-0400 — the display number is identity, never a style attribute; a preset
+  // must not carry or reshuffle it.
+  cueNumber: 'not-style',
   isDeleted: 'not-style',
   isEdited: 'not-style',
   original: 'not-style',

@@ -48,6 +48,7 @@ const SAMPLES = {
   posY: 200,
   lineSpacingPercent: -30,
   layer: 5, // REQ-0392 — z-order
+  cueNumber: 5, // REQ-0400 — display number (identity; assigned by the store)
 
   casing: 'uppercase',
   rotation: 90,

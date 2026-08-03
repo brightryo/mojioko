@@ -172,6 +172,17 @@ describe('duplicateRow — REQ-0398 §3 max-layer guard', () => {
     expect(vi.mocked(toast.error)).not.toHaveBeenCalled()
   })
 
+  it('REQ-0400 — the duplicate gets a fresh cueNumber, distinct from the source', () => {
+    useProjectStore.getState().setEntries([makeEntry()])
+    const sourceNumber = getEntry().cueNumber // assigned by setEntries
+    expect(typeof sourceNumber).toBe('number')
+    duplicateRow(getEntry(), DUP_LABELS)
+    const entries = useProjectStore.getState().entries
+    expect(entries).toHaveLength(2)
+    expect(typeof entries[1].cueNumber).toBe('number')
+    expect(entries[1].cueNumber).not.toBe(sourceNumber) // distinguishable
+  })
+
   it('blocks duplication at the cap and raises the blocked toast (no row added)', () => {
     useProjectStore.getState().setEntries([makeEntry({ layer: MAX_LAYER })])
     duplicateRow(getEntry(), DUP_LABELS)

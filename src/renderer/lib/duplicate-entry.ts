@@ -133,6 +133,12 @@ export const SUBTITLE_ENTRY_DUPLICATION = {
   emphasizedWordIndices: 'deep-copy',
   // --- identity / bookkeeping -----------------------------------------
   id: 'regenerate',
+  // REQ-0400 — the duplicate must be DISTINGUISHABLE from its source, so it does
+  // NOT inherit the source's display number.  `reset` to `undefined` here; the
+  // store's `addEntry` then mints a fresh monotonic `cueNumber` (a pure builder
+  // cannot know the project-wide max).  Same reasoning as `id`, but the value
+  // is assigned by the store rather than passed in.
+  cueNumber: 'reset',
   isDeleted: 'reset',
   isEdited: 'reset',
   original: 'snapshot',
@@ -213,6 +219,9 @@ export function buildDuplicateEntry(entry: SubtitleEntry, newId: string): Subtit
     KeysWithRule<'regenerate'> | KeysWithRule<'reset'> | KeysWithRule<'snapshot'>
   > = {
     id: newId,
+    // REQ-0400 — left unset so the store's addEntry mints a fresh display number
+    // (the duplicate must not share the source's 字幕ID).
+    cueNumber: undefined,
     isDeleted: false,
     isEdited: true,
     // Independently cloned so the live row and its original snapshot

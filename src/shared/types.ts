@@ -476,6 +476,21 @@ export interface SubtitleEntry extends SubtitleEntryOriginal {
   /** Stable UUID — survives reordering. Display index recomputed at render time. */
   id: string
 
+  /**
+   * REQ-0400 — stable, human-readable display number for the cue ("字幕ID").
+   * The internal `id` is a UUID (unfriendly + hard to tell a duplicate from its
+   * source), so this additive field carries a small integer the inspector shows.
+   *
+   * Assigned once at creation in `assignCueNumbers` (`shared/cue-number.ts`),
+   * funnelled through the store's `setEntries` / `addEntry`, and monotonic per
+   * project — it is NOT the list-order index (sorting or filtering never changes
+   * it) and a duplicate always gets a fresh number so it is distinguishable.
+   * Persists verbatim with the entry (project file), so it is stable across
+   * reloads; legacy projects (field absent) are back-filled in array order on
+   * load.  Optional so pre-REQ-0400 files hydrate without migration.
+   */
+  cueNumber?: number
+
   isDeleted: boolean
   /** True when any field diverges from `original`. */
   isEdited: boolean

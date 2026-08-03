@@ -67,6 +67,8 @@ function makeRichEntry(): SubtitleEntry {
   }
   return {
     id: 'src-1',
+    // REQ-0400 — display number present so the completeness check exercises it.
+    cueNumber: 12,
     ...original,
     isDeleted: false,
     isEdited: false,
@@ -164,6 +166,12 @@ describe('REQ-0322 §2 — duplicateRow carries every SubtitleEntry field', () =
     const src = { ...makeRichEntry(), layer: undefined, original: { ...makeRichEntry().original, layer: undefined } }
     const dup = buildDuplicateEntry(src, 'dup-default-layer')
     expect(dup.layer).toBe(1) // resolveLayer(undefined) 0 → +1
+  })
+
+  it('REQ-0400 — the duplicate does NOT inherit the source cueNumber (reset for the store to mint)', () => {
+    const src = makeRichEntry() // cueNumber: 12
+    const dup = buildDuplicateEntry(src, 'dup-cuenum')
+    expect(dup.cueNumber).toBeUndefined() // store's addEntry assigns a fresh one
   })
 
   it('REQ-0397 §2 — the duplicate layer is never negative (legacy negative source clamps to 0)', () => {

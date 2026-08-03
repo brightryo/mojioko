@@ -912,6 +912,16 @@ export function TimelineBlockInspector({
     // Inspector has exactly one scroll axis end-to-end.  `w-full`
     // replaces the legacy `w-[320px]` popover width.
     <div className="flex flex-col gap-3 w-full text-fg-primary">
+      {/* REQ-0400 — cue display number ("字幕ID"), pinned to the TOP-RIGHT so a
+          duplicate is instantly distinguishable from its source.  The rest of
+          the inspector is left-aligned; only this identifier is right-aligned.
+          `cueNumber` is assigned by the store for every cue, so the `?? '—'`
+          only guards a transient before the first assignment. */}
+      <div className="flex justify-end">
+        <span className="text-caption font-mono tabular-nums text-fg-muted select-none">
+          {t('inspector.cueId', { n: entry.cueNumber ?? '—' })}
+        </span>
+      </div>
       {/* § 1 — Action icons.  REQ-20260614-001 補遺③: × close button
           retired.  Common cluster: 敷き詰め改行 → はみ出し改行 →
           削除/復元 → リセット → 複製.  Wrap buttons suppressed in
