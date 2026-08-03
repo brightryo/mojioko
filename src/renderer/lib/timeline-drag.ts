@@ -60,6 +60,10 @@ export function decideDragAxis(
  * `[MIN_LAYER, MAX_LAYER]`.  Up (negative `dyPx`) moves toward the FRONT
  * (higher layer) to match the bottom-anchored timeline where layer 0 sits at
  * the bottom (REQ-0397 §3).  `trackHeightPx` is `TRACK_HEIGHT_PX`.
+ *
+ * Retained from REQ-0399; the REQ-0402 cursor-following drag uses
+ * `computeLayerDragVisual` instead (it needs the follow position and the
+ * on-screen row too, and it clamps to the RENDERED rows).
  */
 export function computeLayerDrag(
   baseLayer: number,
@@ -68,6 +72,53 @@ export function computeLayerDrag(
 ): number {
   const delta = Math.round(-dyPx / trackHeightPx) // up (dy<0) → +layer (front)
   return Math.max(MIN_LAYER, Math.min(MAX_LAYER, baseLayer + delta))
+}
+
+export interface LayerDragVisual {
+  /**
+   * Band-relative top (px) for the FLOATING dragged block — it follows the
+   * cursor 1:1, clamped to stay within the rendered rows so the clip never
+   * flies off the track area (REQ-0402 §2).
+   */
+  blockTopPx: number
+  /** The row (top = 0) the clip will snap to when released. */
+  targetRowIndex: number
+  /** The z-order layer that target row represents. */
+  targetLayer: number
+}
+
+/**
+ * REQ-0402 §2 — resolve a vertical (layer-axis) drag into the floating block's
+ * follow position AND the track it will snap to.  Unlike `computeLayerDrag`
+ * (which just returns a layer), this keeps the block gliding under the cursor
+ * (`blockTopPx = baseTop + dyPx`, clamped to the rows) and derives the snap
+ * target by rounding that position to the nearest row — so the clip follows the
+ * cursor smoothly and snaps to a track on release rather than hopping discretely.
+ *
+ * The reference frame is the RENDERED rows 0..`maxRow` (bottom-anchored: row 0 =
+ * top = layer `maxRow`, row `maxRow` = bottom = layer 0), matching
+ * `layoutEntries` (REQ-0402 §1).  `trackHeightPx` = `TRACK_HEIGHT_PX`,
+ * `blockPadPx` = `BLOCK_VERTICAL_PAD_PX`.  The target layer is therefore clamped
+ * to `[0, maxRow]` — a single drag reaches at most the one spare track above the
+ * current max (raising it again reveals the next spare).
+ */
+export function computeLayerDragVisual(
+  baseLayer: number,
+  dyPx: number,
+  maxRow: number,
+  trackHeightPx: number,
+  blockPadPx: number,
+): LayerDragVisual {
+  const h = trackHeightPx
+  const baseLayerClamped = Math.max(MIN_LAYER, Math.min(maxRow, baseLayer))
+  const baseRowIndex = maxRow - baseLayerClamped
+  const baseTopPx = baseRowIndex * h + blockPadPx
+  const minTop = blockPadPx
+  const maxTop = maxRow * h + blockPadPx
+  const blockTopPx = Math.max(minTop, Math.min(maxTop, baseTopPx + dyPx))
+  const targetRowIndex = Math.max(0, Math.min(maxRow, Math.round((blockTopPx - blockPadPx) / h)))
+  const targetLayer = maxRow - targetRowIndex
+  return { blockTopPx, targetRowIndex, targetLayer }
 }
 
 /**

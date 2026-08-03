@@ -28,7 +28,7 @@ import {
 import {
   computeDragPatch,
   decideDragAxis,
-  computeLayerDrag,
+  computeLayerDragVisual,
   type DragAxis,
 } from '@/lib/timeline-drag'
 import { resolveLayer } from '../../../shared/cue-placement'
@@ -294,6 +294,12 @@ interface BlockProps {
    * prop (= 3.9 perf budget unchanged).
    */
   cuts: CutList
+  /**
+   * REQ-0402 — true while THIS block is the one being dragged vertically (layer
+   * axis).  It floats under the cursor: lifted above its neighbours (`z`) with a
+   * grabbing ring, and its `topPx` is the follow position rather than its row.
+   */
+  isDragFloating?: boolean
 }
 
 function BlockImpl({
@@ -308,6 +314,7 @@ function BlockImpl({
   onSelect,
   onStartDrag,
   cuts,
+  isDragFloating = false,
 }: BlockProps) {
   bumpRenderCount('Block')
   const { t } = useTranslation(['step2'])
@@ -416,12 +423,15 @@ function BlockImpl({
   // resize handles.
   return (
     <div
-      className="absolute"
+      className={cn('absolute', isDragFloating && 'z-30')}
       style={{
         left: `${leftPx}px`,
         top: `${topPx}px`,
         width: `${Math.max(2, widthPx)}px`,
-        height: `${BLOCK_HEIGHT_PX}px`
+        height: `${BLOCK_HEIGHT_PX}px`,
+        // REQ-0402 — a floating (vertically-dragged) block lifts above its
+        // neighbours so it reads as "picked up" while it glides between tracks.
+        ...(isDragFloating ? { boxShadow: '0 4px 12px hsl(0 0% 0% / 0.45)' } : null),
       }}
     >
       {/* Left edge handle.  z-index lifts it above the body so its 6 px
@@ -837,6 +847,13 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
      * never consult this.
      */
     axis: DragAxis | null
+    /**
+     * REQ-0402 — the layer a `layer`-axis drag will commit on release.  Updated
+     * each pointermove from the follow position; read once in `onUp`.  Unlike
+     * REQ-0399, the layer is NOT written to the store during the drag (the block
+     * floats under the cursor instead), so this carries the pending value.
+     */
+    pendingLayer?: number
   }
 
   const activeDragRef = useRef<ActiveDrag | null>(null)
@@ -878,6 +895,21 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   // `computeDragPatch` (unit-tested in `tests/unit/timeline-drag.test.ts`)
   // but no longer kept on the component.
   const [snapGuidePx, setSnapGuidePx] = useState<number | null>(null)
+
+  // REQ-0402 — live visual for a vertical (layer) drag: the floating block's
+  // band-relative top (follows the cursor) and the row it will snap to (drives
+  // the target-track highlight).  Null except during a layer-axis drag.
+  const [layerDragVisual, setLayerDragVisual] = useState<
+    { entryId: string; blockTopPx: number; targetRowIndex: number } | null
+  >(null)
+
+  // REQ-0402 — the current top row index (= trackCount − 1), mirrored into a ref
+  // so the mount-once pointer handlers clamp a layer drag to exactly the rows
+  // that are rendered (matches the filtered layout the user sees).
+  const dragMaxRowRef = useRef(0)
+  useEffect(() => {
+    dragMaxRowRef.current = Math.max(0, layout.trackCount - 1)
+  })
 
   const handleStartDrag = useCallback(
     (kind: DragKind, entry: SubtitleEntry, clientX: number, clientY: number) => {
@@ -931,20 +963,25 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
           if (d.axis === null) return // still ambiguous — wait for more travel
         }
         if (d.axis === 'layer') {
-          // Vertical drag → change the z-order layer live so the block hops
-          // rows under the cursor.  One layer step per track-row; clamp 0-50.
+          // REQ-0402 — vertical drag: the block FLOATS under the cursor (no
+          // discrete row hops, no live layer write); it snaps to the nearest
+          // track only on release.  `computeLayerDragVisual` gives the clamped
+          // follow position + the row it will land on, in the same 0..maxRow
+          // frame `layoutEntries` renders.
           setSnapGuidePx(null)
-          const nextLayer = computeLayerDrag(
+          const vis = computeLayerDragVisual(
             resolveLayer(d.snapshot),
             dyPx,
+            dragMaxRowRef.current,
             TRACK_HEIGHT_PX,
+            BLOCK_VERTICAL_PAD_PX,
           )
-          const live = useProjectStore
-            .getState()
-            .entries.find((x) => x.id === d.entryId)
-          if (live && resolveLayer(live) !== nextLayer) {
-            useProjectStore.getState().updateEntry(d.entryId, { layer: nextLayer })
-          }
+          d.pendingLayer = vis.targetLayer
+          setLayerDragVisual({
+            entryId: d.entryId,
+            blockTopPx: vis.blockTopPx,
+            targetRowIndex: vis.targetRowIndex,
+          })
           return
         }
         // d.axis === 'time' → fall through to the existing time pipeline.
@@ -1035,25 +1072,29 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       const cur = useProjectStore
         .getState()
         .entries.find((x) => x.id === d.entryId)
-      // REQ-0399 — a locked 'layer' drag commits a z-order change (no time
-      // touched, so no re-sort / commitTimeEdit).  One history op restores the
-      // source layer on undo; `updateEntry` recomputes `isEdited` from the
-      // merged value vs `original`, so both directions settle isEdited itself.
+      // REQ-0402 — a locked 'layer' drag commits its PENDING layer here (the
+      // drag floated the block without writing the store).  No time touched, so
+      // no re-sort / commitTimeEdit.  One history op restores the source layer
+      // on undo; `updateEntry` recomputes `isEdited` from the merged value vs
+      // `original`, so both directions settle isEdited itself.
+      const beforeLayer = resolveLayer(d.snapshot)
       const movedLayer =
         d.axis === 'layer' &&
         cur !== undefined &&
-        resolveLayer(cur) !== resolveLayer(d.snapshot)
+        d.pendingLayer !== undefined &&
+        d.pendingLayer !== beforeLayer
       const movedTime =
         d.axis !== 'layer' &&
         cur !== undefined &&
         (cur.startSec !== d.snapshot.startSec || cur.endSec !== d.snapshot.endSec)
       if (cur && movedLayer) {
         const beforeId = d.snapshot.id
-        const beforeLayer = d.snapshot.layer
-        const afterLayer = cur.layer
+        const beforeLayerVal = d.snapshot.layer
+        const afterLayer = d.pendingLayer as number
+        useProjectStore.getState().updateEntry(beforeId, { layer: afterLayer })
         useHistoryStore.getState().push({
           label: zOrderHistoryLabelRef.current,
-          undo: () => useProjectStore.getState().updateEntry(beforeId, { layer: beforeLayer }),
+          undo: () => useProjectStore.getState().updateEntry(beforeId, { layer: beforeLayerVal }),
           redo: () => useProjectStore.getState().updateEntry(beforeId, { layer: afterLayer }),
         })
       } else if (cur && movedTime) {
@@ -1074,6 +1115,9 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       }
       activeDragRef.current = null
       setSnapGuidePx(null)
+      // REQ-0402 — drop the floating-block visual; the committed layer now
+      // places the block on its final row via the normal layout.
+      setLayerDragVisual(null)
       // REQ-20260613-002: release the greedy-time pin so the next
       // layout pass reflects the final live times.  Block trackIndex
       // is now allowed to settle to whatever greedy decides given the
@@ -2180,6 +2224,20 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                   className="absolute inset-x-0 bottom-0"
                   style={{ height: `${tracksHeightPx}px` }}
                 >
+                  {/* REQ-0402 — target-track highlight during a vertical (layer)
+                      drag.  Shows which track the floating clip will snap to when
+                      released.  Rendered first so it sits behind the blocks. */}
+                  {layerDragVisual && (
+                    <div
+                      aria-hidden
+                      className="absolute left-0 right-0 pointer-events-none bg-primary/15 border-y border-primary/50"
+                      style={{
+                        top: `${layerDragVisual.targetRowIndex * TRACK_HEIGHT_PX}px`,
+                        height: `${TRACK_HEIGHT_PX}px`,
+                      }}
+                    />
+                  )}
+
                   {/* Track horizontal separators */}
                   {Array.from({ length: trackCount }).map((_, i) => (
                     <div
@@ -2209,7 +2267,13 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                     const pos = editedBlockPositions.get(entry.id)
                     const leftPx  = pos?.leftPx ?? entry.startSec * pixelsPerSec
                     const widthBl = pos?.widthPx ?? (entry.endSec - entry.startSec) * pixelsPerSec
-                    const topPx   = trackIndex * TRACK_HEIGHT_PX + BLOCK_VERTICAL_PAD_PX
+                    // REQ-0402 — while THIS clip is being dragged vertically it
+                    // floats under the cursor: use the live follow position
+                    // instead of its committed row's top.
+                    const isDragFloating = layerDragVisual?.entryId === entry.id
+                    const topPx   = isDragFloating
+                      ? layerDragVisual.blockTopPx
+                      : trackIndex * TRACK_HEIGHT_PX + BLOCK_VERTICAL_PAD_PX
                     const w       = warningsMap.get(entry.id) ?? null
                     // Overflow tint suppressed in audio-only mode (matches the
                     // table — `overflowMap` is empty there).
@@ -2228,6 +2292,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                         onSelect={handleSelectBlock}
                         onStartDrag={handleStartDrag}
                         cuts={cuts}
+                        isDragFloating={isDragFloating}
                       />
                     )
                   })}

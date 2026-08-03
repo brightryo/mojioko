@@ -3,6 +3,7 @@ import {
   computeDragPatch,
   decideDragAxis,
   computeLayerDrag,
+  computeLayerDragVisual,
   AXIS_LOCK_THRESHOLD_PX,
   type DragPatchInputs,
 } from '../../src/renderer/lib/timeline-drag'
@@ -638,5 +639,60 @@ describe('computeLayerDrag — REQ-0399', () => {
 
   it('no vertical travel keeps the layer', () => {
     expect(computeLayerDrag(7, 0, H)).toBe(7)
+  })
+})
+
+/**
+ * REQ-0402 — cursor-following vertical drag.  `computeLayerDragVisual` returns
+ * the floating block's follow position AND the track it snaps to, in the
+ * rendered 0..maxRow frame (row 0 = top = layer maxRow; row maxRow = bottom =
+ * layer 0).  H = TRACK_HEIGHT_PX (88), PAD = BLOCK_VERTICAL_PAD_PX (12).
+ */
+describe('computeLayerDragVisual — REQ-0402', () => {
+  const H = 88
+  const PAD = 12
+
+  it('no travel keeps the clip on its own row/layer', () => {
+    // A single layer-0 clip: maxRow 1 (one spare above). base row index 1.
+    const v = computeLayerDragVisual(0, 0, 1, H, PAD)
+    expect(v.blockTopPx).toBe(1 * H + PAD) // 100
+    expect(v.targetRowIndex).toBe(1)
+    expect(v.targetLayer).toBe(0)
+  })
+
+  it('the block follows the cursor 1:1 (blockTopPx = baseTop + dy)', () => {
+    const v = computeLayerDragVisual(0, -30, 1, H, PAD)
+    expect(v.blockTopPx).toBe(1 * H + PAD - 30) // 70 — glides, not a discrete hop
+  })
+
+  it('dragging up ~one row snaps to the spare track above (layer +1)', () => {
+    const v = computeLayerDragVisual(0, -H, 1, H, PAD)
+    expect(v.targetRowIndex).toBe(0)
+    expect(v.targetLayer).toBe(1)
+  })
+
+  it('rounds to the nearest row for the snap target', () => {
+    expect(computeLayerDragVisual(0, -H * 0.4, 1, H, PAD).targetLayer).toBe(0) // <½ up
+    expect(computeLayerDragVisual(0, -H * 0.6, 1, H, PAD).targetLayer).toBe(1) // >½ up
+  })
+
+  it('clamps the follow position AND the target to the rendered rows (0..maxRow)', () => {
+    // Drag far up on a clip at layer 2 (maxRow 3): can't go past the top spare.
+    const up = computeLayerDragVisual(2, -10 * H, 3, H, PAD)
+    expect(up.blockTopPx).toBe(PAD) // pinned to the top row
+    expect(up.targetRowIndex).toBe(0)
+    expect(up.targetLayer).toBe(3) // the spare — one above the max, never higher
+    // Drag far down: pinned to the bottom row (layer 0).
+    const down = computeLayerDragVisual(2, 10 * H, 3, H, PAD)
+    expect(down.blockTopPx).toBe(3 * H + PAD)
+    expect(down.targetRowIndex).toBe(3)
+    expect(down.targetLayer).toBe(0)
+  })
+
+  it('a mid drag on a taller stack lands on the expected intermediate layer', () => {
+    // clips at 0,1,2 → maxRow 3. Drag the layer-2 clip (row 1) down one row.
+    const v = computeLayerDragVisual(2, H, 3, H, PAD)
+    expect(v.targetRowIndex).toBe(2)
+    expect(v.targetLayer).toBe(1)
   })
 })
