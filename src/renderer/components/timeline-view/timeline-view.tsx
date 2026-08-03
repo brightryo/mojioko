@@ -513,8 +513,6 @@ interface PlayheadProps {
   cuts: CutList
   /** Current zoom (px / sec). */
   pixelsPerSec: number
-  /** Combined height of ruler + tracks, in pixels. */
-  totalHeightPx: number
 }
 
 /**
@@ -525,12 +523,13 @@ interface PlayheadProps {
  * volume shifts from "TimelineView + every memo + every Block prop
  * recompare" per tick to "this tiny sub-tree" per tick.
  *
- * The wrapping `memo` guards against `cuts` / `pixelsPerSec` /
- * `totalHeightPx` props churning identity on unrelated re-renders;
- * the body subscribes to the playhead slice so only playhead-driven
- * updates land in this component.
+ * The wrapping `memo` guards against `cuts` / `pixelsPerSec` props
+ * churning identity on unrelated re-renders; the body subscribes to the
+ * playhead slice so only playhead-driven updates land in this component.
+ * The line itself spans the full column via `top-0 bottom-0` (REQ-0397 §3),
+ * so it needs no height prop.
  */
-function PlayheadImpl({ cuts, pixelsPerSec, totalHeightPx }: PlayheadProps) {
+function PlayheadImpl({ cuts, pixelsPerSec }: PlayheadProps) {
   bumpRenderCount('Playhead')
   const videoCurrentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
   if (videoCurrentTimeSec < 0) return null
@@ -547,11 +546,16 @@ function PlayheadImpl({ cuts, pixelsPerSec, totalHeightPx }: PlayheadProps) {
       // rendered before the scissor markers, so a scissor passing
       // through the same column visually sits on top of the playhead
       // (matches the existing v1.2.0 behaviour).
-      className="absolute top-0 z-20 pointer-events-none"
+      //
+      // REQ-0397 §3 — `top-0 bottom-0` instead of a fixed height so the
+      // line always spans the full time-content column, including the
+      // bottom-anchor gap between the ruler and the bottom-justified
+      // tracks (the column is now taller than ruler + tracks when the
+      // viewport has slack).
+      className="absolute top-0 bottom-0 z-20 pointer-events-none"
       style={{
         left: `${leftPx}px`,
         width: '1px',
-        height: `${totalHeightPx}px`,
         background: 'hsl(var(--playhead))'
       }}
     >
@@ -1905,13 +1909,16 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       )}
       </div>
 
-      {/* Scroll container */}
+      {/* Scroll container.
+          REQ-0397 §3 — `flex flex-col` so the content wrapper below can be a
+          `flex-1` item that stretches to the viewport height, letting the tracks
+          bottom-justify (layer 0 pinned to the bottom of the timeline area). */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-auto"
+        className="flex-1 overflow-auto flex flex-col"
       >
         {!hasAnyVisible ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-fg-muted">
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-fg-muted">
             <GanttChartSquare className="h-8 w-8 text-fg-faint" />
             {/* REQ-117 [2] — the timeline can never render deleted
                 entries by design (cuts collapsed their position, manual
@@ -1931,33 +1938,37 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
           </div>
         ) : (
           <div
-            className="relative"
+            className="relative flex-1"
             style={{
               width: `${TRACK_GUTTER_LEFT_PX + widthPx}px`,
               minHeight: `${RULER_HEIGHT_PX + tracksHeightPx}px`
             }}
           >
-            {/* Track-label gutter — sticky to the left so labels stay visible
-                while the user scrolls horizontally. */}
+            {/* Track-label gutter — spans the full column height.
+                REQ-0397 §3 — the label rows are bottom-justified (a `flex-1`
+                spacer sits between the ruler-height spacer and the labels) so
+                they line up with the bottom-anchored track rows: layer 0 at the
+                bottom, higher layers above. */}
             <div
-              className="absolute top-0 left-0 z-10 bg-surface-1 border-r border-line"
-              style={{
-                width: `${TRACK_GUTTER_LEFT_PX}px`,
-                height: `${RULER_HEIGHT_PX + tracksHeightPx}px`
-              }}
+              className="absolute top-0 bottom-0 left-0 z-10 flex flex-col bg-surface-1 border-r border-line"
+              style={{ width: `${TRACK_GUTTER_LEFT_PX}px` }}
             >
-              {/* Spacer matching ruler height so labels line up with their tracks. */}
-              <div style={{ height: `${RULER_HEIGHT_PX}px` }} />
+              {/* Spacer matching ruler height so the labels never slide under
+                  the sticky ruler. */}
+              <div className="shrink-0" style={{ height: `${RULER_HEIGHT_PX}px` }} />
+              {/* Bottom-anchor spacer — eats the viewport slack above the labels. */}
+              <div className="flex-1" />
               {Array.from({ length: trackCount }).map((_, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-center border-b border-line/50"
+                  className="flex shrink-0 items-center justify-center border-b border-line/50"
                   style={{ height: `${TRACK_HEIGHT_PX}px` }}
                 >
-                  {/* REQ-0396 — row number == the row's z-order LAYER value, so
-                      the bottom row is 0 and higher rows are 1, 2, … (matching
-                      the stored `layer`).  `trackLayers[i]` is the layer for row
-                      i (row 0 = top = highest layer). */}
+                  {/* REQ-0396 / REQ-0397 §3 — row number == the row's z-order
+                      LAYER value.  Rows are bottom-anchored, so the bottom row is
+                      layer 0 and higher rows (1, 2, …) stack upward.
+                      `trackLayers[i]` is the layer for row i (row 0 = top =
+                      highest layer). */}
                   <span className="text-caption font-mono text-fg-muted select-none">
                     {t('timeline.trackLabel', { index: layout.trackLayers[i] ?? 0 })}
                   </span>
@@ -1965,9 +1976,11 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               ))}
             </div>
 
-            {/* Time-axis content (ruler + tracks + playhead) — offset by the gutter. */}
+            {/* Time-axis content (ruler + tracks + playhead) — offset by the
+                gutter, spans the full column height (`top-0 bottom-0`) so the
+                tracks can bottom-justify and the overlays span the whole area. */}
             <div
-              className="absolute top-0"
+              className="absolute top-0 bottom-0"
               style={{
                 left: `${TRACK_GUTTER_LEFT_PX}px`,
                 width: `${widthPx}px`
@@ -2012,7 +2025,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 />
               </div>
 
-              {/* Tracks area — REQ-20260613-009 §2-2: pointerdown +
+              {/* Tracks well — REQ-20260613-009 §2-2: pointerdown +
                   pointermove + pointerup implement a seek + scrub
                   gesture identical to the Ruler's.  Replaces the
                   previous click-only handler so the user can scrub
@@ -2020,7 +2033,16 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                   has been scrolled out of reach.  `touch-none`
                   matches the Ruler so touch devices route through
                   the pointer events instead of synthesised mouse
-                  events with delay. */}
+                  events with delay.
+
+                  REQ-0397 §3 — the well now spans the whole area below the
+                  ruler (`top: RULER, bottom: 0`) and the track ROWS are pinned
+                  to its bottom (the inner band below).  When the viewport has
+                  vertical slack the well shows dark headroom above the rows so
+                  layer 0 stays glued to the bottom of the timeline and higher
+                  layers grow upward — adding a layer (or duplicating up) never
+                  pushes the existing bottom rows down.  Scrub/seek works over
+                  the entire well, headroom included. */}
               <div
                 onPointerDown={handleTracksPointerDown}
                 onPointerMove={handleTracksPointerMove}
@@ -2034,26 +2056,14 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 // pick up the depth without introducing another
                 // divider line.  Ruler / gutter / toolbar stay at
                 // surface-1 (L 16 %) above.
-                className="relative touch-none bg-[hsl(0_0%_10%)]"
+                className="absolute left-0 right-0 touch-none bg-[hsl(0_0%_10%)]"
                 style={{
-                  width: `${widthPx}px`,
-                  height: `${tracksHeightPx}px`
+                  top: `${RULER_HEIGHT_PX}px`,
+                  bottom: '0'
                 }}
               >
-                {/* Track horizontal separators */}
-                {Array.from({ length: trackCount }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="absolute left-0 right-0 border-b border-line/50"
-                    style={{
-                      top: `${(i + 1) * TRACK_HEIGHT_PX}px`,
-                      height: '0'
-                    }}
-                  />
-                ))}
-
-                {/* Major-tick vertical gridlines that extend through tracks
-                    for visual continuity with the ruler.  Edited axis. */}
+                {/* Major-tick vertical gridlines that extend through the whole
+                    well for visual continuity with the ruler.  Edited axis. */}
                 {(() => {
                   const stepSec = chooseRulerStepSec(pixelsPerSec)
                   const lines = []
@@ -2069,45 +2079,67 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                   return lines
                 })()}
 
-                {/* Blocks */}
-                {/* Blocks rendered directly inside the tracks container
-                    (no per-block wrapper).  The previous wrapper had
-                    `left:0 right:0` which made every entry's invisible
-                    wrapper span the entire track width — multiple entries
-                    on the same track ended up stacked in DOM order with
-                    the latest one intercepting all clicks on the track.
-                    Each Block is now absolutely positioned with its own
-                    explicit left/top/width so only the visible block
-                    rectangle catches pointer events. */}
-                {layout.placements.map(({ entry, trackIndex }) => {
-                  // REQ-074 1c: read pre-computed Edited-axis position
-                  // (origToEdited * pps).  Empty cuts → identical to the
-                  // legacy `entry.startSec * pixelsPerSec` calculation.
-                  const pos = editedBlockPositions.get(entry.id)
-                  const leftPx  = pos?.leftPx ?? entry.startSec * pixelsPerSec
-                  const widthBl = pos?.widthPx ?? (entry.endSec - entry.startSec) * pixelsPerSec
-                  const topPx   = trackIndex * TRACK_HEIGHT_PX + BLOCK_VERTICAL_PAD_PX
-                  const w       = warningsMap.get(entry.id) ?? null
-                  // Overflow tint suppressed in audio-only mode (matches the
-                  // table — `overflowMap` is empty there).
-                  const isOverflow = !isAudioOnly && (w?.overflow ?? false)
-                  return (
-                    <Block
-                      key={entry.id}
-                      entry={entry}
-                      leftPx={leftPx}
-                      widthPx={widthBl}
-                      topPx={topPx}
-                      trackIndex={trackIndex}
-                      isUserSelected={selectedEntryId === entry.id}
-                      isOverflow={isOverflow}
-                      displayIndex={indexOfEntry.get(entry.id) ?? 0}
-                      onSelect={handleSelectBlock}
-                      onStartDrag={handleStartDrag}
-                      cuts={cuts}
+                {/* Track-row band — pinned to the BOTTOM of the well so layer 0
+                    is the bottom-most row and higher layers stack upward
+                    (REQ-0397 §3).  Fixed height = trackCount rows; the block /
+                    separator `top` offsets are relative to this band, so the
+                    bottom-anchoring is purely the band's `bottom-0`. */}
+                <div
+                  className="absolute inset-x-0 bottom-0"
+                  style={{ height: `${tracksHeightPx}px` }}
+                >
+                  {/* Track horizontal separators */}
+                  {Array.from({ length: trackCount }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="absolute left-0 right-0 border-b border-line/50"
+                      style={{
+                        top: `${(i + 1) * TRACK_HEIGHT_PX}px`,
+                        height: '0'
+                      }}
                     />
-                  )
-                })}
+                  ))}
+
+                  {/* Blocks */}
+                  {/* Blocks rendered directly inside the row band
+                      (no per-block wrapper).  The previous wrapper had
+                      `left:0 right:0` which made every entry's invisible
+                      wrapper span the entire track width — multiple entries
+                      on the same track ended up stacked in DOM order with
+                      the latest one intercepting all clicks on the track.
+                      Each Block is now absolutely positioned with its own
+                      explicit left/top/width so only the visible block
+                      rectangle catches pointer events. */}
+                  {layout.placements.map(({ entry, trackIndex }) => {
+                    // REQ-074 1c: read pre-computed Edited-axis position
+                    // (origToEdited * pps).  Empty cuts → identical to the
+                    // legacy `entry.startSec * pixelsPerSec` calculation.
+                    const pos = editedBlockPositions.get(entry.id)
+                    const leftPx  = pos?.leftPx ?? entry.startSec * pixelsPerSec
+                    const widthBl = pos?.widthPx ?? (entry.endSec - entry.startSec) * pixelsPerSec
+                    const topPx   = trackIndex * TRACK_HEIGHT_PX + BLOCK_VERTICAL_PAD_PX
+                    const w       = warningsMap.get(entry.id) ?? null
+                    // Overflow tint suppressed in audio-only mode (matches the
+                    // table — `overflowMap` is empty there).
+                    const isOverflow = !isAudioOnly && (w?.overflow ?? false)
+                    return (
+                      <Block
+                        key={entry.id}
+                        entry={entry}
+                        leftPx={leftPx}
+                        widthPx={widthBl}
+                        topPx={topPx}
+                        trackIndex={trackIndex}
+                        isUserSelected={selectedEntryId === entry.id}
+                        isOverflow={isOverflow}
+                        displayIndex={indexOfEntry.get(entry.id) ?? 0}
+                        onSelect={handleSelectBlock}
+                        onStartDrag={handleStartDrag}
+                        cuts={cuts}
+                      />
+                    )
+                  })}
+                </div>
               </div>
 
               {/* Snap guide — vertical line at the snap target's
@@ -2136,11 +2168,12 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               {snapGuidePx !== null && (
                 <div
                   aria-hidden
-                  className="absolute top-0 pointer-events-none"
+                  // REQ-0397 §3 — full-height (`top-0 bottom-0`) so the guide
+                  // spans the ruler, the bottom-anchor headroom, and the tracks.
+                  className="absolute top-0 bottom-0 pointer-events-none"
                   style={{
                     left: `${snapGuidePx}px`,
                     width: '1px',
-                    height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
                     background: 'hsl(var(--cursor-active) / 0.9)'
                   }}
                 />
@@ -2181,20 +2214,19 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                         start: formatEditedTimecode(c.startSec, cuts),
                         end: formatEditedTimecode(c.endSec, cuts),
                       })}
-                      className="absolute top-0 z-20 flex flex-col items-center pointer-events-auto"
+                      // REQ-0397 §3 — full-height marker (`top-0 bottom-0`); the
+                      // scissor icon sits at the top and the line (`flex-1`)
+                      // fills the rest down to the bottom of the tracks.
+                      className="absolute top-0 bottom-0 z-20 flex flex-col items-center pointer-events-auto"
                       style={{
                         left: `${xPx - 7}px`,
-                        width: '14px',
-                        height: `${RULER_HEIGHT_PX + tracksHeightPx}px`
+                        width: '14px'
                       }}
                     >
-                      <div className="flex h-4 w-4 items-center justify-center rounded-sm bg-surface-2 text-warning-faint hover:bg-warning/30 hover:text-warning-very-faint transition-colors duration-150">
+                      <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-surface-2 text-warning-faint hover:bg-warning/30 hover:text-warning-very-faint transition-colors duration-150">
                         <Scissors className="h-3 w-3" />
                       </div>
-                      <div
-                        className="w-px bg-warning-soft/60 pointer-events-none"
-                        style={{ height: `${RULER_HEIGHT_PX + tracksHeightPx - 16}px` }}
-                      />
+                      <div className="w-px flex-1 bg-warning-soft/60 pointer-events-none" />
                     </button>
                   )
                 })}
@@ -2207,7 +2239,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 pendingCutInSec < pendingCutOutSec && (
                   <div
                     aria-hidden
-                    className="absolute top-0 pointer-events-none"
+                    className="absolute top-0 bottom-0 pointer-events-none"
                     style={{
                       left: `${origToEdited(pendingCutInSec, cuts) * pixelsPerSec}px`,
                       width: `${
@@ -2215,7 +2247,6 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                           origToEdited(pendingCutInSec, cuts)) *
                         pixelsPerSec
                       }px`,
-                      height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
                       background: 'hsl(var(--trim-overlay) / 0.15)'
                     }}
                   />
@@ -2223,11 +2254,10 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               {pendingCutInSec !== null && (
                 <div
                   aria-hidden
-                  className="absolute top-0 pointer-events-none"
+                  className="absolute top-0 bottom-0 pointer-events-none"
                   style={{
                     left: `${origToEdited(pendingCutInSec, cuts) * pixelsPerSec}px`,
                     width: '1px',
-                    height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
                     background: 'hsl(var(--trim-overlay) / 0.9)'
                   }}
                 />
@@ -2235,11 +2265,10 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               {pendingCutOutSec !== null && (
                 <div
                   aria-hidden
-                  className="absolute top-0 pointer-events-none"
+                  className="absolute top-0 bottom-0 pointer-events-none"
                   style={{
                     left: `${origToEdited(pendingCutOutSec, cuts) * pixelsPerSec}px`,
                     width: '1px',
-                    height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
                     background: 'hsl(var(--trim-overlay) / 0.9)'
                   }}
                 />
@@ -2253,7 +2282,6 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               <Playhead
                 cuts={cuts}
                 pixelsPerSec={pixelsPerSec}
-                totalHeightPx={RULER_HEIGHT_PX + tracksHeightPx}
               />
             </div>
           </div>
