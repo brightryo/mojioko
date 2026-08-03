@@ -25,7 +25,13 @@ import {
   formatRulerLabel,
   LAYOUT_MIN_BLOCK_SEC
 } from '@/lib/timeline-layout'
-import { computeDragPatch } from '@/lib/timeline-drag'
+import {
+  computeDragPatch,
+  decideDragAxis,
+  computeLayerDrag,
+  type DragAxis,
+} from '@/lib/timeline-drag'
+import { resolveLayer } from '../../../shared/cue-placement'
 import {
   editedDuration,
   editedToOrig,
@@ -274,8 +280,12 @@ interface BlockProps {
    * forwarded through Block.
    */
   onSelect: (id: string, startSec: number) => void
-  /** Start a drag (resize or move) — TimelineView attaches window listeners. */
-  onStartDrag: (kind: DragKind, entry: SubtitleEntry, clientX: number) => void
+  /**
+   * Start a drag (resize or move) — TimelineView attaches window listeners.
+   * REQ-0399 — `clientY` is threaded through too so a body 'move' drag can
+   * resolve to the vertical LAYER axis (see `decideDragAxis`).
+   */
+  onStartDrag: (kind: DragKind, entry: SubtitleEntry, clientX: number, clientY: number) => void
   /**
    * REQ-115 — live cut list, used to render the block-internal start/end
    * timecodes on the EDITED axis (= matches the ruler and burnin output).
@@ -312,7 +322,12 @@ function BlockImpl({
   // the 3 px threshold; click swallows the open-popover action if `moved`
   // was set so a real drag never pops the inspector mid-motion.  Refs
   // (not state) so writes do not retrigger renders during the drag.
+  // REQ-0399 — the origin is now 2-D and `moved` trips on horizontal OR
+  // vertical travel, so a purely VERTICAL (layer) drag also swallows the
+  // trailing click (otherwise dropping a clip onto another track would
+  // additionally select + seek).
   const bodyDownXRef = useRef<number | null>(null)
+  const bodyDownYRef = useRef<number | null>(null)
   const bodyMovedRef = useRef(false)
   const BODY_DRAG_THRESHOLD_PX = 3
 
@@ -322,7 +337,7 @@ function BlockImpl({
       if (e.button !== 0) return
       e.stopPropagation()
       e.preventDefault()
-      onStartDrag(kind, entry, e.clientX)
+      onStartDrag(kind, entry, e.clientX, e.clientY)
     }
   }
 
@@ -337,19 +352,26 @@ function BlockImpl({
     // stopPropagation for the same kind of reason).
     e.stopPropagation()
     bodyDownXRef.current = e.clientX
+    bodyDownYRef.current = e.clientY
     bodyMovedRef.current = false
     // Kick off the 'move' drag eagerly — TimelineView's handler defers any
     // entry mutation until the pointer crosses the threshold (see the
     // dxPx check in applyDragPatch's 'move' branch).  Doing it on
     // pointerdown rather than after a debounce avoids a perceptible
     // "stickiness" at drag start.
-    onStartDrag('move', entry, e.clientX)
+    onStartDrag('move', entry, e.clientX, e.clientY)
   }
 
   function handleBodyPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
-    const down = bodyDownXRef.current
-    if (down === null) return
-    if (Math.abs(e.clientX - down) > BODY_DRAG_THRESHOLD_PX) {
+    const downX = bodyDownXRef.current
+    const downY = bodyDownYRef.current
+    if (downX === null || downY === null) return
+    // REQ-0399 — trip on horizontal OR vertical travel so a layer (vertical)
+    // drag is recognised as a drag and its trailing click is swallowed.
+    if (
+      Math.abs(e.clientX - downX) > BODY_DRAG_THRESHOLD_PX ||
+      Math.abs(e.clientY - downY) > BODY_DRAG_THRESHOLD_PX
+    ) {
       bodyMovedRef.current = true
     }
   }
@@ -357,6 +379,7 @@ function BlockImpl({
   function handleBodyClick(e: React.MouseEvent<HTMLButtonElement>) {
     e.stopPropagation()
     bodyDownXRef.current = null
+    bodyDownYRef.current = null
     if (bodyMovedRef.current) {
       // A drag happened — swallow the click so the inspector doesn't
       // pop open on top of the freshly-moved block.
@@ -804,6 +827,16 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
     snapshot: SubtitleEntry
     /** Pointer clientX at drag-start — drag delta is computed from this. */
     originClientX: number
+    /** Pointer clientY at drag-start — REQ-0399 vertical (layer) delta. */
+    originClientY: number
+    /**
+     * REQ-0399 — the locked axis for a body 'move' drag: `time` (legacy
+     * horizontal) or `layer` (vertical z-order).  `null` until the pointer
+     * leaves the dead-zone and an axis is chosen; then LOCKED for the gesture
+     * so a diagonal drag never edits both.  Resize kinds are always time and
+     * never consult this.
+     */
+    axis: DragAxis | null
   }
 
   const activeDragRef = useRef<ActiveDrag | null>(null)
@@ -847,12 +880,16 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   const [snapGuidePx, setSnapGuidePx] = useState<number | null>(null)
 
   const handleStartDrag = useCallback(
-    (kind: DragKind, entry: SubtitleEntry, clientX: number) => {
+    (kind: DragKind, entry: SubtitleEntry, clientX: number, clientY: number) => {
       activeDragRef.current = {
         kind,
         entryId: entry.id,
         snapshot: { ...entry, original: { ...entry.original } },
-        originClientX: clientX
+        originClientX: clientX,
+        originClientY: clientY,
+        // Resize handles only ever move time; body 'move' drags decide their
+        // axis on the first significant travel (REQ-0399).
+        axis: kind === 'move' ? null : 'time',
       }
       // REQ-20260613-002: pin the dragged entry's greedy slot to its
       // pre-drag times so its trackIndex never changes mid-drag.  This
@@ -883,6 +920,35 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       // TimelineView does not need to subscribe to videoCurrentTimeSec.
       const playhead = useUiStore.getState().videoCurrentTimeSec
       const dxPx = e.clientX - d.originClientX
+      const dyPx = e.clientY - d.originClientY
+
+      // REQ-0399 — axis discrimination for body 'move' drags.  Lock the axis
+      // once the pointer leaves the dead-zone; before then, do nothing (a click
+      // or jitter).  Resize kinds keep axis 'time' from drag-start.
+      if (d.kind === 'move') {
+        if (d.axis === null) {
+          d.axis = decideDragAxis(dxPx, dyPx)
+          if (d.axis === null) return // still ambiguous — wait for more travel
+        }
+        if (d.axis === 'layer') {
+          // Vertical drag → change the z-order layer live so the block hops
+          // rows under the cursor.  One layer step per track-row; clamp 0-50.
+          setSnapGuidePx(null)
+          const nextLayer = computeLayerDrag(
+            resolveLayer(d.snapshot),
+            dyPx,
+            TRACK_HEIGHT_PX,
+          )
+          const live = useProjectStore
+            .getState()
+            .entries.find((x) => x.id === d.entryId)
+          if (live && resolveLayer(live) !== nextLayer) {
+            useProjectStore.getState().updateEntry(d.entryId, { layer: nextLayer })
+          }
+          return
+        }
+        // d.axis === 'time' → fall through to the existing time pipeline.
+      }
 
       // REQ-085 #1: the previous inline snap / clamp / round pipeline was
       // declared "verified" in RES-084 §1.1 on the strength of the snap-
@@ -969,10 +1035,28 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       const cur = useProjectStore
         .getState()
         .entries.find((x) => x.id === d.entryId)
+      // REQ-0399 — a locked 'layer' drag commits a z-order change (no time
+      // touched, so no re-sort / commitTimeEdit).  One history op restores the
+      // source layer on undo; `updateEntry` recomputes `isEdited` from the
+      // merged value vs `original`, so both directions settle isEdited itself.
+      const movedLayer =
+        d.axis === 'layer' &&
+        cur !== undefined &&
+        resolveLayer(cur) !== resolveLayer(d.snapshot)
       const movedTime =
+        d.axis !== 'layer' &&
         cur !== undefined &&
         (cur.startSec !== d.snapshot.startSec || cur.endSec !== d.snapshot.endSec)
-      if (cur && movedTime) {
+      if (cur && movedLayer) {
+        const beforeId = d.snapshot.id
+        const beforeLayer = d.snapshot.layer
+        const afterLayer = cur.layer
+        useHistoryStore.getState().push({
+          label: zOrderHistoryLabelRef.current,
+          undo: () => useProjectStore.getState().updateEntry(beforeId, { layer: beforeLayer }),
+          redo: () => useProjectStore.getState().updateEntry(beforeId, { layer: afterLayer }),
+        })
+      } else if (cur && movedTime) {
         const before = d.snapshot
         const after = { ...cur }
         useHistoryStore.getState().push({
@@ -1011,6 +1095,14 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   const timelineHistoryLabelRef = useRef('')
   useEffect(() => {
     timelineHistoryLabelRef.current = t('history.editTime')
+  })
+
+  // REQ-0399 — label for a vertical (layer / z-order) drag, same ref pattern
+  // so the mount-once pointerup handler reads a fresh translation.  Reuses the
+  // existing z-order history string the inspector's front/back buttons use.
+  const zOrderHistoryLabelRef = useRef('')
+  useEffect(() => {
+    zOrderHistoryLabelRef.current = t('history.editZOrder')
   })
 
   // -------------------------------------------------------------------------
