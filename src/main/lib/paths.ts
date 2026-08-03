@@ -169,6 +169,27 @@ export function getModelsDir(): string {
 }
 
 /**
+ * REQ-0405 — physical directory for downloaded translation tools
+ * (`%APPDATA%/MOJIOKO/translation-tools/`), mirroring {@link getModelsDir}'s
+ * MSIX-virtualization handling so `shell.openPath` sees the real path.
+ */
+export function getTranslationToolsDir(): string {
+  const ctx = getCurrentProcessContext()
+  if (isPackagedAsMsix(ctx)) {
+    const pfn = getMsixPackageFamilyName(ctx.execPath)
+    if (pfn) {
+      return buildMsixVirtualizedAppDataPath(
+        app.getPath('home'),
+        pfn,
+        APP_DATA_FOLDER,
+        'translation-tools'
+      )
+    }
+  }
+  return join(getAppDataPath(), 'translation-tools')
+}
+
+/**
  * REQ-0149 — physical directory holding the user-downloaded GPU
  * acceleration DLLs (CUDA runtime + cuBLAS + cuDNN redistributables).
  *

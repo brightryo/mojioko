@@ -3,6 +3,7 @@ import { Channels } from '../shared/ipc-channels'
 import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
 import type { GpuToolState } from '../shared/gpu-tool'
+import type { TranslationToolId, TranslationToolsState } from '../shared/translation-tools'
 import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult, ActiveDownloadInfo } from '../shared/ipc-contracts'
 
 type OkResult<T> = { ok: true; data: T }
@@ -73,6 +74,16 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.transcriptionUninstallModel, modelId),
   transcriptionSetActiveModel: (modelId: WhisperModelId): Promise<IpcResult<ModelsState>> =>
     ipcRenderer.invoke(Channels.transcriptionSetActiveModel, modelId),
+
+  // Translation tools (REQ-0405 — Phase 1: list / download / uninstall / setActive)
+  translationToolList: (): Promise<IpcResult<TranslationToolsState>> =>
+    ipcRenderer.invoke(Channels.translationToolList),
+  translationToolDownload: (toolId: TranslationToolId): Promise<IpcResult<{ channelId: string }>> =>
+    ipcRenderer.invoke(Channels.translationToolDownload, toolId),
+  translationToolUninstall: (toolId: TranslationToolId): Promise<IpcResult<TranslationToolsState>> =>
+    ipcRenderer.invoke(Channels.translationToolUninstall, toolId),
+  translationToolSetActive: (toolId: TranslationToolId | null): Promise<IpcResult<TranslationToolsState>> =>
+    ipcRenderer.invoke(Channels.translationToolSetActive, toolId),
 
   // Fonts
   fontList: (): Promise<IpcResult<FontsState>> =>

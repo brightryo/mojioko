@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { HelpIcon } from '@/components/help-icon'
 import { WhisperModelManager } from '@/components/whisper-model-manager/whisper-model-manager'
+import { TranslationToolManager } from '@/components/translation-tool-manager/translation-tool-manager'
 import { GpuToolManager } from '@/components/gpu-tool-manager/gpu-tool-manager'
 import { TranscriptionDrawer } from '@/components/step1/transcription-drawer'
 import { SubtitleStyleDialog } from '@/components/step1/subtitle-style-dialog'
@@ -202,7 +203,7 @@ export default function Step1Route(_: Step1RouteProps) {
   // `'whisper' | 'inputVideo'` union so the newly-promoted device
   // accordion joins the mutual-exclusion group; `null` is the "all
   // closed" state the REQ explicitly allows.
-  const [openSection, setOpenSection] = useState<'whisper' | 'device' | 'inputVideo' | null>(null)
+  const [openSection, setOpenSection] = useState<'whisper' | 'device' | 'translation' | 'inputVideo' | null>(null)
   // Set on the first `handleActiveModelChange` callback, OR when the
   // user toggles the accordion header before that callback arrives.
   // Subsequent listModels-triggered callbacks (after install / uninstall
@@ -881,6 +882,21 @@ export default function Step1Route(_: Step1RouteProps) {
             disabled={isTranscribing}
             isOpen={openSection === 'device'}
             onOpenChange={(open) => setOpenSection(open ? 'device' : null)}
+          />
+        </div>
+
+        {/* REQ-0405 — optional translation tool (MADLAD-400), directly under
+            the 処理デバイス section.  Phase 1: download / enable / delete only
+            (no translation execution).  Participates in the same single-open
+            accordion group. */}
+        <div className={cn(
+          'py-3 transition-opacity duration-200',
+          isTranscribing && 'opacity-50 pointer-events-none'
+        )}>
+          <TranslationToolManager
+            disabled={isTranscribing}
+            isOpen={openSection === 'translation'}
+            onOpenChange={(open) => setOpenSection(open ? 'translation' : null)}
           />
         </div>
 

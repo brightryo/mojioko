@@ -19,6 +19,14 @@ export const Channels = {
   transcriptionUninstallModel: 'transcription:uninstallModel',
   transcriptionSetActiveModel: 'transcription:setActiveModel',
 
+  // REQ-0405 — translation-tool management (Phase 1: DL / enable / delete).
+  // Same shape as the Whisper model channels; download streams progress on a
+  // per-run channel (`translationTool:download:<uuid>`) with a `:cancel` sibling.
+  translationToolList: 'translationTool:list',
+  translationToolDownload: 'translationTool:download',
+  translationToolUninstall: 'translationTool:uninstall',
+  translationToolSetActive: 'translationTool:setActive',
+
   fontList: 'font:list',
   fontDownload: 'font:download',
   fontUninstall: 'font:uninstall',

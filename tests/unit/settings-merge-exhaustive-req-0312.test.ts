@@ -72,6 +72,7 @@ describe('REQ-0312 §1 — the rule table pins every field s classification', ()
     // App.tsx always sends the key, so a deletion round-trips to disk.
     stylePresets: 'incoming-wins',
     activeModelId: 'incoming-else-existing',
+    translationToolActiveId: 'incoming-else-existing',
     lastInputDir: 'incoming-else-existing',
     lastOutputDir: 'incoming-else-existing',
     activeAccelerator: 'incoming-else-existing',

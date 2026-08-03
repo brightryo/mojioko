@@ -114,6 +114,9 @@ export const SETTINGS_MERGE_RULES: { readonly [K in keyof AppSettings]-?: MergeR
 
   // --- main-owned, renderer sends a null sentinel each save ----------------
   activeModelId: 'incoming-else-existing',
+  // REQ-0405 — same rule as activeModelId: the incoming value wins unless it is
+  // undefined (a client that never sends the field keeps the persisted choice).
+  translationToolActiveId: 'incoming-else-existing',
   lastInputDir: 'incoming-else-existing',
   lastOutputDir: 'incoming-else-existing',
   // REQ-0157: written only by the `gpu-tool:select` IPC; the renderer's store

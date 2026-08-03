@@ -9,6 +9,7 @@ import type { AnimationType, AnimationDirection } from './cue-animation'
 // `style-preset.ts`.  Type-only (that module imports `SubtitleEntry` back),
 // so this does not create a runtime import cycle — same shape as `emphasis`.
 import type { StylePreset } from './style-preset'
+import type { TranslationToolId } from './translation-tools'
 export type { WhisperModelId }
 
 // ---------------------------------------------------------------------------
@@ -744,6 +745,13 @@ export interface AppSettings {
    */
   fadeDurationSec: number
   activeModelId: WhisperModelId | null
+  /**
+   * REQ-0405 — the currently ENABLED translation tool (MADLAD-400 size), or
+   * `null` when none is enabled.  Optional so settings files predating the
+   * translation feature hydrate cleanly (absent ≡ null ≡ disabled).  Phase 1
+   * only stores the selection; the translation itself is Phase 2.
+   */
+  translationToolActiveId?: TranslationToolId | null
   /**
    * Currently selected subtitle font ID.  Drives both the CSS preview family
    * and the ASS `Style:` `Fontname` at burn-in time.  Optional because

@@ -3,6 +3,7 @@
 import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
 import type { GpuToolState } from '../shared/gpu-tool'
+import type { TranslationToolId, TranslationToolsState } from '../shared/translation-tools'
 import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult, ActiveDownloadInfo } from '../shared/ipc-contracts'
 
 type IpcOk<T> = { ok: true; data: T }
@@ -48,6 +49,10 @@ declare global {
       transcriptionListModels: () => Promise<IpcResult<ModelsState>>
       transcriptionUninstallModel: (modelId: WhisperModelId) => Promise<IpcResult<ModelsState>>
       transcriptionSetActiveModel: (modelId: WhisperModelId) => Promise<IpcResult<ModelsState>>
+      translationToolList: () => Promise<IpcResult<TranslationToolsState>>
+      translationToolDownload: (toolId: TranslationToolId) => Promise<IpcResult<{ channelId: string }>>
+      translationToolUninstall: (toolId: TranslationToolId) => Promise<IpcResult<TranslationToolsState>>
+      translationToolSetActive: (toolId: TranslationToolId | null) => Promise<IpcResult<TranslationToolsState>>
 
       fontList: () => Promise<IpcResult<FontsState>>
       fontDownload: (fontId: FontId) => Promise<IpcResult<{ channelId: string }>>
