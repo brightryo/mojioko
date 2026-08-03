@@ -1044,26 +1044,19 @@ export function TimelineBlockInspector({
               multi-select): the inspector always targets exactly one row,
               and saving only READS it, so even a frozen row can be
               snapshotted. */}
-          {/* REQ-0401 — right-end group of the header row: the style-preset
-              control (kept at the right per REQ-0337 §3) and the cue display
-              number ("字幕ID"), with the ID as the RIGHT-MOST element so it reads
-              as "the inspector for this ID".  `ml-auto` on the wrapper right-
-              aligns the whole group, so the ID stays right-aligned even in
-              audio-only mode where the preset control is hidden.  `cueNumber` is
-              assigned by the store for every cue; `?? '—'` only guards the
-              transient before the first assignment. */}
-          <div className="ml-auto flex items-center gap-2">
-            {!isAudioOnly && (
-              <StylePresetControls
-                triggerVariant="toolbar"
-                onSaveCurrent={handleSavePreset}
-                onApply={handleApplyPreset}
-              />
-            )}
-            <span className="text-caption font-mono tabular-nums text-fg-muted select-none whitespace-nowrap">
-              {t('inspector.cueId', { n: entry.cueNumber ?? '—' })}
-            </span>
-          </div>
+          {/* REQ-0337 §3 — style presets, pushed to the RIGHT END of the icon
+              row with `ml-auto` (those icons act on THIS ROW; a preset acts on
+              the whole style).  REQ-0404 — the cue display number ("字幕ID") is
+              NOT here; it lives at the right end of the panel TITLE row (see
+              step2.tsx `inspectorSlot`). */}
+          {!isAudioOnly && (
+            <StylePresetControls
+              triggerVariant="toolbar"
+              className="ml-auto"
+              onSaveCurrent={handleSavePreset}
+              onApply={handleApplyPreset}
+            />
+          )}
       </div>
 
       {/* § 2 — Status badges.  `state.edited` first, then warnings in the

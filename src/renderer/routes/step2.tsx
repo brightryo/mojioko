@@ -1341,11 +1341,23 @@ export default function Step2Route(_: Step2RouteProps) {
       <div className="flex-shrink-0 px-3 py-2 border-b border-line">
         {/* REQ-20260615-051 A — bulk-mode heading gets a `?` HelpIcon
             explaining what the list-view checkboxes target.  The single
-            inspector heading keeps its plain label. */}
-        <h2 className="text-callout font-semibold text-fg-secondary flex items-center gap-1.5">
-          <span>{inspectorHeading}</span>
-          {isBulkMode && <HelpIcon content={t('inspector.bulkHelp')} />}
-        </h2>
+            inspector heading keeps its plain label.
+            REQ-0404 — the cue display number ("字幕ID") sits at the RIGHT END of
+            this title row (「インスペクタ」 と同じ行), so the panel reads as "the
+            inspector for cue N".  Shown only in single-cue mode (a real
+            selected entry); bulk / empty modes have no single cue.  `justify-
+            between` right-aligns it regardless of audio-only. */}
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-callout font-semibold text-fg-secondary flex items-center gap-1.5">
+            <span>{inspectorHeading}</span>
+            {isBulkMode && <HelpIcon content={t('inspector.bulkHelp')} />}
+          </h2>
+          {!isBulkMode && selectedEntry !== null && (
+            <span className="text-caption font-mono tabular-nums text-fg-muted select-none whitespace-nowrap">
+              {t('inspector.cueId', { n: selectedEntry.cueNumber ?? '—' })}
+            </span>
+          )}
+        </div>
       </div>
       <div
         ref={inspectorScrollRef}
