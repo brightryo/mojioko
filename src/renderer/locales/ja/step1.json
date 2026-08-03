@@ -105,15 +105,16 @@
     "descriptionLong": "MADLAD-400（Apache-2.0）は 1 つのモデルで 400 以上の言語に対応するローカル翻訳エンジンです。int8 量子化モデルをダウンロードして有効化します。翻訳の実行機能は今後のアップデートで提供予定です。",
     "size3b": "MADLAD-400 3B",
     "size7b": "MADLAD-400 7B",
-    "size10b": "MADLAD-400 10B",
     "approx": "約 {{size}}",
     "download": "ダウンロード",
     "downloading": "ダウンロード中…",
+    "downloaded": "ダウンロードしました",
+    "downloadFailed": "ダウンロードに失敗しました",
+    "cancel": "キャンセル",
     "enable": "有効化",
     "enabled": "有効",
     "enabledBadge": "有効",
     "delete": "削除",
-    "comingSoon": "準備中です。翻訳ツールのダウンロードは今後のアップデートで提供します。",
     "actionFailed": "操作に失敗しました"
   },
   "gpuTool": {

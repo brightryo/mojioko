@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Languages, ChevronDown, ChevronUp, Check, Trash2, Download } from 'lucide-react'
+import { Languages, ChevronDown, ChevronUp, Check, Trash2, Download, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { OptionalBadge } from '@/components/ui/optional-badge'
@@ -19,17 +19,20 @@ import {
   listTranslationTools,
   uninstallTranslationTool,
   setActiveTranslationTool,
+  startTranslationToolDownload,
+  TranslationToolDownloadError,
+  type TranslationToolDownloadRun,
 } from '@/services/translation-tool'
 
 /**
- * REQ-0405 — translation-tool management section (Phase 1: download / enable /
+ * REQ-0405 / REQ-0407 — translation-tool management section (download / enable /
  * delete).  Sits directly under the "処理デバイス" section in STEP 1 and mirrors
  * the Whisper model manager's accordion + row layout.
  *
- * Phase 1 tools are placeholders (no download source), so clicking Download
- * shows a "coming soon" message WITHOUT touching the network — the whole UI
- * stays offline (REQ-0405 §6).  Enable / delete work against disk + settings so
- * they light up the moment a real model is present (or wired in a later REQ).
+ * REQ-0407 wired the real streaming download (2 tools, MADLAD-400 3B/7B, pinned
+ * Nextcloud-AI CT2 int8 repos).  The in-flight "downloading NN%" + Cancel state
+ * is tracked locally (the list IPC only reflects disk state); enable / delete
+ * work against disk + settings.  No network traffic except an explicit download.
  */
 export interface TranslationToolManagerProps {
   disabled?: boolean
@@ -49,6 +52,11 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
 
   const [state, setState] = useState<TranslationToolsState | null>(null)
   const [busyId, setBusyId] = useState<TranslationToolId | null>(null)
+  // REQ-0407 — local in-flight download state (the list IPC only knows disk
+  // state, so the "downloading" UI is tracked here like the Whisper/GPU managers).
+  const [downloadingId, setDownloadingId] = useState<TranslationToolId | null>(null)
+  const [downloadPercent, setDownloadPercent] = useState(0)
+  const runRef = useRef<TranslationToolDownloadRun | null>(null)
 
   const refresh = useCallback(async () => {
     const res = await listTranslationTools()
@@ -64,14 +72,33 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
     setIsOpen(!isOpen)
   }
 
-  function handleDownload(id: TranslationToolId) {
-    // Phase 1 — every tool is a placeholder (no repo).  Show a "coming soon"
-    // message and make NO network call, keeping the app fully offline.
-    if (getTranslationTool(id).repo === null) {
-      toast.info(t('translationTool.comingSoon'))
-      return
+  async function handleDownload(id: TranslationToolId) {
+    if (downloadingId !== null) return // one at a time from the UI
+    setDownloadingId(id)
+    setDownloadPercent(0)
+    const run = startTranslationToolDownload(id, (evt) => {
+      if (evt.event === 'progress') setDownloadPercent(evt.percent)
+    })
+    runRef.current = run
+    try {
+      await run.promise
+      await refresh()
+      toast.success(t('translationTool.downloaded'))
+    } catch (err) {
+      // User cancel resolves as an 'aborted' error — silent, matching the
+      // Whisper/GPU download UX.
+      if (!(err instanceof TranslationToolDownloadError && err.errorCode === 'aborted')) {
+        toast.error(t('translationTool.downloadFailed'))
+      }
+    } finally {
+      runRef.current = null
+      setDownloadingId(null)
+      setDownloadPercent(0)
     }
-    // (When a real repo is wired, the streaming download starts here.)
+  }
+
+  function handleCancelDownload() {
+    runRef.current?.cancel()
   }
 
   const handleToggleActive = useCallback(
@@ -143,6 +170,7 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
           <div className="space-y-2">
             {TRANSLATION_TOOLS.map((def) => {
               const info = toolInfo(def.id)
+              const isDownloading = downloadingId === def.id
               const status = info?.status ?? 'not-downloaded'
               const active = info?.active ?? false
               const sizeLabel =
@@ -162,18 +190,31 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
                     <div className="text-caption font-mono tabular-nums text-fg-muted">{sizeLabel}</div>
                   </div>
 
-                  {status === 'not-downloaded' && (
-                    <Button variant="secondary" size="sm" onClick={() => handleDownload(def.id)} className="flex-shrink-0 gap-1.5">
+                  {isDownloading && (
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-caption font-mono tabular-nums text-fg-secondary">
+                        {t('translationTool.downloading')} {downloadPercent}%
+                      </span>
+                      <Button variant="ghost" size="icon" onClick={handleCancelDownload} aria-label={t('translationTool.cancel')} title={t('translationTool.cancel')}>
+                        <X className="h-3.5 w-3.5 text-fg-tertiary" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {!isDownloading && status === 'not-downloaded' && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={downloadingId !== null}
+                      onClick={() => handleDownload(def.id)}
+                      className="flex-shrink-0 gap-1.5"
+                    >
                       <Download className="h-3.5 w-3.5" />
                       {t('translationTool.download')}
                     </Button>
                   )}
 
-                  {status === 'downloading' && (
-                    <span className="text-caption text-fg-muted flex-shrink-0">{t('translationTool.downloading')}</span>
-                  )}
-
-                  {status === 'downloaded' && (
+                  {!isDownloading && status === 'downloaded' && (
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <Button
                         variant={active ? 'primary' : 'secondary'}

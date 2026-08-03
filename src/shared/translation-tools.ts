@@ -12,41 +12,98 @@
  * unit tests exercise the same logic.
  */
 
-export type TranslationToolId = 'madlad400-3b' | 'madlad400-7b' | 'madlad400-10b'
+export type TranslationToolId = 'madlad400-3b' | 'madlad400-7b'
 
 export interface TranslationToolDef {
   id: TranslationToolId
   /** i18n key suffix under `translationTool.*` for the size label. */
   labelKey: string
   /**
-   * Approximate int8 download size, bytes.  Placeholder estimate until the real
-   * CTranslate2 repo is wired (Phase 1 shows "約 N GB"; the installed size is
-   * read from disk once downloaded).
+   * Download size, bytes — the exact sum of `files` at the pinned revision (used
+   * for the "約 N GB" estimate before install; the installed size is read from
+   * disk once downloaded).
    */
   expectedSizeBytes: number
   /**
-   * HuggingFace repo id of the CTranslate2/int8 conversion, or `null` while the
-   * tool is a Phase-1 PLACEHOLDER — download is then gated (`not-configured`),
-   * so no network call is made until a real repo is set (REQ-0405 §6).
+   * HuggingFace repo id of the CTranslate2/int8 conversion, or `null` for a
+   * placeholder whose download is gated.  REQ-0407 wired both tools to real,
+   * Apache-2.0, org-managed (Nextcloud-AI) repos, so `repo` is now non-null.
    */
   repo: string | null
-  /** CT2 model files to fetch from `repo` (filled when the repo is wired). */
+  /**
+   * REQ-0407 — the commit hash to PIN the download to, so a later force-push /
+   * re-quantization of the repo can never change what a given app version
+   * fetches.  `null` only for a placeholder.
+   */
+  revision: string | null
+  /** CT2 model files to fetch from `repo@revision` (all required for runtime). */
   files: readonly string[]
+  /** sha256 of `model.bin` at the pinned revision, verified after download. */
+  modelBinSha256?: string
 }
 
-const GB = 1_000_000_000
+/** Base URL for the HuggingFace `resolve` endpoint (public, no auth). */
+export const HF_RESOLVE_BASE = 'https://huggingface.co'
 
 /**
- * Offered sizes (D4, owner-confirmed): MADLAD-400 3B / 7B / 10B, int8.
- * `repo`/`files` are placeholders (Phase 1) — see the module docblock.
+ * The CTranslate2 runtime files a MADLAD-400 tool needs.  Both tools share the
+ * same layout (verified via the HF tree API at pin time).  README / .gitattr /
+ * safetensors index are intentionally excluded — not needed to run.
+ */
+const CT2_FILES: readonly string[] = [
+  'model.bin',
+  'config.json',
+  'shared_vocabulary.json',
+  'spiece.model',
+  'tokenizer.json',
+  'tokenizer_config.json',
+  'special_tokens_map.json',
+  'added_tokens.json',
+  'generation_config.json',
+]
+
+/**
+ * Offered sizes (REQ-0405 D4 → REQ-0407): MADLAD-400 **3B / 7B** (int8 CT2).
+ * 10B was dropped — no int8 CT2 conversion exists (fp32 43 GB is impractical).
+ * Both repos are Nextcloud-AI org-managed (lower disappearance risk than a
+ * personal repo), Apache-2.0 (commercial OK), pinned by `revision`.
+ * `expectedSizeBytes` / `modelBinSha256` were read from the pinned revisions.
  */
 export const TRANSLATION_TOOLS: readonly TranslationToolDef[] = [
-  { id: 'madlad400-3b', labelKey: 'size3b', expectedSizeBytes: 3 * GB, repo: null, files: [] },
-  { id: 'madlad400-7b', labelKey: 'size7b', expectedSizeBytes: 7 * GB, repo: null, files: [] },
-  { id: 'madlad400-10b', labelKey: 'size10b', expectedSizeBytes: 10 * GB, repo: null, files: [] },
+  {
+    id: 'madlad400-3b',
+    labelKey: 'size3b',
+    repo: 'Nextcloud-AI/madlad400-3b-mt-ct2-int8',
+    revision: 'aa32bbdeba7880eff2096ec044cb155a340a9400',
+    files: CT2_FILES,
+    expectedSizeBytes: 2_976_755_501,
+    modelBinSha256: '77b9fd9ab97c1259d07089b5f854393dad81bc5fb5647d3f9a5d101c94f40daa',
+  },
+  {
+    id: 'madlad400-7b',
+    labelKey: 'size7b',
+    repo: 'Nextcloud-AI/madlad400-7b-mt-bt-ct2-int8',
+    revision: '35c8ee23db1906ef28970fe7e6e9c4dfbe8a39d7',
+    files: CT2_FILES,
+    expectedSizeBytes: 8_338_927_875,
+    modelBinSha256: '028675a47ec8a287161d24c01a62796595124d48e9972eacba4b08150ef09ba5',
+  },
 ]
 
 export const TRANSLATION_TOOL_IDS: readonly TranslationToolId[] = TRANSLATION_TOOLS.map((t) => t.id)
+
+/**
+ * REQ-0407 — the pinned HuggingFace `resolve` URL for one file of a tool:
+ * `https://huggingface.co/<repo>/resolve/<revision>/<file>`.  Pure + testable so
+ * the URL construction is pinned by a unit test.  Throws for a placeholder
+ * (no repo/revision) — the caller gates on that before downloading.
+ */
+export function translationToolFileUrl(def: TranslationToolDef, file: string): string {
+  if (def.repo === null || def.revision === null) {
+    throw new Error(`Translation tool ${def.id} has no download source`)
+  }
+  return `${HF_RESOLVE_BASE}/${def.repo}/resolve/${def.revision}/${file}`
+}
 
 export function isTranslationToolId(x: unknown): x is TranslationToolId {
   return typeof x === 'string' && TRANSLATION_TOOLS.some((t) => t.id === x)

@@ -48,7 +48,7 @@ import log from '../lib/logger'
  * slot that later took the same key.
  */
 
-export type DownloadKind = 'model' | 'gpu-tool' | 'font'
+export type DownloadKind = 'model' | 'gpu-tool' | 'font' | 'translation-tool'
 
 export interface ActiveDownloadInfo {
   kind: DownloadKind

@@ -280,7 +280,7 @@ export type { DownloadGpuToolEvent, GpuToolState } from './gpu-tool'
  * snapshot IPC.  `DownloadKind` and the busy-error code stay for
  * the (rare) same-target duplicate rejection path.
  */
-export type DownloadKind = 'model' | 'gpu-tool' | 'font'
+export type DownloadKind = 'model' | 'gpu-tool' | 'font' | 'translation-tool'
 
 export interface ActiveDownloadInfo {
   kind: DownloadKind

@@ -68,9 +68,4 @@ export function buildTranslationToolsState(
   return buildToolsState({ installed, activeId }, { sizeBytes })
 }
 
-/** True when the tool has no real download source yet (Phase-1 placeholder). */
-export function isToolPlaceholder(id: TranslationToolId): boolean {
-  return getTranslationTool(id).repo === null
-}
-
 export { TRANSLATION_TOOLS }

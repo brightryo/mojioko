@@ -80,6 +80,8 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.translationToolList),
   translationToolDownload: (toolId: TranslationToolId): Promise<IpcResult<{ channelId: string }>> =>
     ipcRenderer.invoke(Channels.translationToolDownload, toolId),
+  translationToolDownloadCancel: (channelId: string): Promise<void> =>
+    ipcRenderer.invoke(`${Channels.translationToolDownload}:cancel`, channelId),
   translationToolUninstall: (toolId: TranslationToolId): Promise<IpcResult<TranslationToolsState>> =>
     ipcRenderer.invoke(Channels.translationToolUninstall, toolId),
   translationToolSetActive: (toolId: TranslationToolId | null): Promise<IpcResult<TranslationToolsState>> =>

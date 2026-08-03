@@ -51,6 +51,7 @@ declare global {
       transcriptionSetActiveModel: (modelId: WhisperModelId) => Promise<IpcResult<ModelsState>>
       translationToolList: () => Promise<IpcResult<TranslationToolsState>>
       translationToolDownload: (toolId: TranslationToolId) => Promise<IpcResult<{ channelId: string }>>
+      translationToolDownloadCancel: (channelId: string) => Promise<void>
       translationToolUninstall: (toolId: TranslationToolId) => Promise<IpcResult<TranslationToolsState>>
       translationToolSetActive: (toolId: TranslationToolId | null) => Promise<IpcResult<TranslationToolsState>>
 

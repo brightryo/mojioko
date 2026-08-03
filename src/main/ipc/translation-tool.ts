@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { randomUUID } from 'crypto'
 import { existsSync, rmSync } from 'fs'
 import { join } from 'path'
 import { Channels } from '../../shared/ipc-channels'
@@ -7,8 +8,10 @@ import { loadSettings, mutateSettings } from '../services/settings-store'
 import {
   buildTranslationToolsState,
   isToolInstalled,
-  isToolPlaceholder,
 } from '../services/translation-tool-store'
+import { downloadTranslationTool } from '../services/translation-tool-downloader'
+import { downloadManager, type DownloadToken } from '../services/download-manager'
+import { DownloadError } from '../services/model-downloader'
 import { isTranslationToolId, type TranslationToolId, type TranslationToolsState } from '../../shared/translation-tools'
 import log from '../lib/logger'
 
@@ -24,6 +27,9 @@ type ErrResult = { ok: false; error: { code: string; message: string } }
  * streaming download lands with the repo in a follow-up REQ.
  */
 export function registerTranslationToolHandlers(): void {
+  // Per-run cancel tokens, keyed by the streaming download channel id.
+  const activeDownloads = new Map<string, DownloadToken>()
+
   ipcMain.handle(
     Channels.translationToolList,
     async (): Promise<OkResult<TranslationToolsState> | ErrResult> => {
@@ -41,22 +47,56 @@ export function registerTranslationToolHandlers(): void {
 
   ipcMain.handle(
     Channels.translationToolDownload,
-    async (_event, toolId: string): Promise<OkResult<{ channelId: string }> | ErrResult> => {
+    async (event, toolId: string): Promise<OkResult<{ channelId: string }> | ErrResult> => {
       if (!isTranslationToolId(toolId)) {
         return { ok: false, error: { code: 'INVALID_TOOL_ID', message: `Unknown translation tool: ${toolId}` } }
       }
-      // Phase 1 — every tool is a placeholder (no download source), so the real
-      // streaming download is not wired yet.  Report it cleanly; the renderer
-      // shows a "coming soon" message and never hits the network.
-      if (isToolPlaceholder(toolId)) {
-        return {
-          ok: false,
-          error: { code: 'TOOL_NOT_CONFIGURED', message: `Translation tool ${toolId} has no download source yet (Phase 1)` },
-        }
+      // REQ-0244-style per-target acquire so a same-tool double-invoke is
+      // refused (the UI already swaps Download → Cancel while in flight).
+      const acquired = downloadManager.acquire('translation-tool', toolId, toolId)
+      if ('busy' in acquired) {
+        return { ok: false, error: { code: 'DOWNLOAD_BUSY', message: `Download already in progress for ${toolId}` } }
       }
-      // (Unreachable in Phase 1.)  When a real repo is wired, the streaming
-      // download — same shape as `transcriptionDownloadModel` — is added here.
-      return { ok: false, error: { code: 'TOOL_NOT_CONFIGURED', message: 'Not implemented' } }
+      const token = acquired
+      const channelId = `translationTool:download:${randomUUID()}`
+      activeDownloads.set(channelId, token)
+
+      const toolsDir = getTranslationToolsDir()
+      log.info(`[ipc/translation-tool] download ${toolId}, channelId=${channelId}`)
+
+      // REQ-0407 — real streaming download (Whisper downloader reused).  Runs
+      // detached; progress / completed / failed stream on `channelId`.
+      downloadTranslationTool(
+        toolId,
+        toolsDir,
+        (evt) => {
+          if (!event.sender.isDestroyed()) event.sender.send(channelId, evt)
+        },
+        token.signal,
+      )
+        .catch((err) => {
+          log.error('[ipc/translation-tool] download error', err)
+          if (!event.sender.isDestroyed()) {
+            const errorCode = err instanceof DownloadError ? err.code : 'fatal'
+            const inner = err instanceof DownloadError ? err.inner : err
+            const innerMsg = inner instanceof Error ? inner.message : String(inner)
+            event.sender.send(channelId, { event: 'failed', error: innerMsg, errorCode })
+          }
+        })
+        .finally(() => {
+          token.release()
+          activeDownloads.delete(channelId)
+        })
+
+      return { ok: true, data: { channelId } }
+    },
+  )
+
+  ipcMain.handle(
+    `${Channels.translationToolDownload}:cancel`,
+    (_event, channelId: string): void => {
+      activeDownloads.get(channelId)?.cancel()
+      activeDownloads.delete(channelId)
     },
   )
 

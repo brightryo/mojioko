@@ -106,15 +106,16 @@
     "descriptionLong": "MADLAD-400 (Apache-2.0) is a local translation engine that covers 400+ languages with a single model. Download an int8 model and enable it. The translation feature itself is coming in a future update.",
     "size3b": "MADLAD-400 3B",
     "size7b": "MADLAD-400 7B",
-    "size10b": "MADLAD-400 10B",
     "approx": "~{{size}}",
     "download": "Download",
     "downloading": "Downloading…",
+    "downloaded": "Downloaded",
+    "downloadFailed": "Download failed",
+    "cancel": "Cancel",
     "enable": "Enable",
     "enabled": "Enabled",
     "enabledBadge": "Enabled",
     "delete": "Delete",
-    "comingSoon": "Coming soon — translation-tool download will be available in a future update.",
     "actionFailed": "Action failed"
   },
   "gpuTool": {
