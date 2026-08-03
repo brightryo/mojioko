@@ -30,6 +30,7 @@
  */
 
 import type { SubtitleEntry, SubtitleEntryOriginal } from '../../shared/types'
+import { resolveLayer } from '../../shared/cue-placement'
 
 /**
  * What happens to a field when a row is duplicated.
@@ -91,11 +92,10 @@ export const SUBTITLE_ENTRY_DUPLICATION = {
   posY: 'copy',
   // REQ-0332 — line spacing (行間).
   lineSpacingPercent: 'copy',
-  // REQ-0392 — z-order.  `copy`: the duplicate keeps the source's layer, and
-  // because it is inserted immediately AFTER the source (later emission / DOM
-  // order = the same-layer tie-break) it paints just in front of it — the
-  // "複製は前面（1つ上）" behaviour, unchanged from Phase 1b.
-  layer: 'copy',
+  // REQ-0392/0396 — z-order.  `shift`: the duplicate is placed on the layer ONE
+  // ABOVE the source (front), so it lands on the row above the original instead
+  // of sharing (and overlapping) its row.  Recomputed in `buildDuplicateEntry`.
+  layer: 'shift',
   // --- style effects (REQ-0277 / REQ-0310) ----------------------------
   casing: 'copy',
   shadowDepth: 'copy',
@@ -191,12 +191,15 @@ function carryFields(entry: SubtitleEntry): SubtitleEntryOriginal {
 export function buildDuplicateEntry(entry: SubtitleEntry, newId: string): SubtitleEntry {
   const carried = carryFields(entry)
 
-  // `shift` currently classifies no field.  Typed as a `Pick` over the
-  // `shift` keys so that the moment someone reclassifies a field to
-  // `shift`, this object stops satisfying its type and `tsc` demands the
-  // recomputation be written — the classification cannot be changed
-  // without the behaviour following it.
-  const shifted: Pick<SubtitleEntryOriginal, KeysWithRule<'shift'>> = {}
+  // REQ-0396 — `shift` fields are recomputed for the duplicate rather than
+  // copied.  `layer` shifts up by one so the duplicate paints on the row/layer
+  // ABOVE the source (front), instead of sharing — and overlapping — its row.
+  // (The `Pick` over `KeysWithRule<'shift'>` makes tsc demand exactly the shift
+  // fields, so reclassifying a field to `shift` without computing it fails.)
+  const shiftedLayer = resolveLayer(entry) + 1
+  const shifted: Pick<SubtitleEntryOriginal, KeysWithRule<'shift'>> = {
+    layer: shiftedLayer,
+  }
 
   // Likewise for the non-carried rules: classifying a field as
   // `regenerate` / `reset` / `snapshot` and then forgetting to compute it
@@ -209,8 +212,11 @@ export function buildDuplicateEntry(entry: SubtitleEntry, newId: string): Subtit
     isDeleted: false,
     isEdited: true,
     // Independently cloned so the live row and its original snapshot
-    // never share object identity for any `deep-copy` field.
-    original: carryFields(entry),
+    // never share object identity for any `deep-copy` field.  REQ-0396: the
+    // snapshot carries the SHIFTED layer too, so the duplicate's baseline (and
+    // therefore Reset / isEdited) is the row it actually starts on, not the
+    // source's layer.
+    original: { ...carryFields(entry), layer: shiftedLayer },
   }
 
   return { ...carried, ...shifted, ...minted }

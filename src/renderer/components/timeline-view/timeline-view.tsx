@@ -1954,13 +1954,12 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                   className="flex items-center justify-center border-b border-line/50"
                   style={{ height: `${TRACK_HEIGHT_PX}px` }}
                 >
-                  {/* 1-based labels: video-editing tools conventionally
-                      count tracks from 1 (Final Cut, Premiere, Resolve).
-                      The 0-based aria-label in Block stays 0-based for
-                      consistency with the placement.trackIndex value the
-                      smoke scripts query. */}
+                  {/* REQ-0396 — row number == the row's z-order LAYER value, so
+                      the bottom row is 0 and higher rows are 1, 2, … (matching
+                      the stored `layer`).  `trackLayers[i]` is the layer for row
+                      i (row 0 = top = highest layer). */}
                   <span className="text-caption font-mono text-fg-muted select-none">
-                    {t('timeline.trackLabel', { index: i + 1 })}
+                    {t('timeline.trackLabel', { index: layout.trackLayers[i] ?? 0 })}
                   </span>
                 </div>
               ))}

@@ -150,6 +150,22 @@ describe('REQ-0322 §2 — duplicateRow carries every SubtitleEntry field', () =
     expect(dup.endSec).toBe(src.endSec)
   })
 
+  it('REQ-0396 — the duplicate lands on the layer ONE ABOVE the source (front)', () => {
+    // makeRichEntry has layer 7 → the duplicate shifts up to 8 (front / upper
+    // row), so it does not share and overlap the source's row.  The snapshot
+    // carries the shifted layer too, so the duplicate is not "edited" on layer.
+    const src = makeRichEntry() // layer: 7
+    const dup = buildDuplicateEntry(src, 'dup-layer')
+    expect(dup.layer).toBe(8)
+    expect(dup.original.layer).toBe(8)
+  })
+
+  it('REQ-0396 — a default (layer-absent) source duplicates to layer 1', () => {
+    const src = { ...makeRichEntry(), layer: undefined, original: { ...makeRichEntry().original, layer: undefined } }
+    const dup = buildDuplicateEntry(src, 'dup-default-layer')
+    expect(dup.layer).toBe(1) // resolveLayer(undefined) 0 → +1
+  })
+
   it('deep-copies mutable structures: no shared identity anywhere', () => {
     const src = makeRichEntry()
     const dup = buildDuplicateEntry(src, 'dup-6')

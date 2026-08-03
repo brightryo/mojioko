@@ -1,5 +1,5 @@
 import type { SubtitleEntry } from '../../shared/types'
-import { computeEffectiveLayers } from '../../shared/effective-layer'
+import { resolveLayer } from '../../shared/cue-placement'
 
 /**
  * REQ-088 #2: minimum amount of track-time each block is treated as
@@ -22,14 +22,25 @@ export const LAYOUT_MIN_BLOCK_SEC = 0.05
 
 export interface TimelinePlacement {
   entry: SubtitleEntry
-  /** 0-based track index. Higher = lower visually. */
+  /**
+   * 0-based track/row index, top → bottom.  REQ-0396: this is the RANK of the
+   * cue's stored `layer` among the distinct layers present, DESCENDING — row 0
+   * is the highest layer (front, top); the highest index is layer 0 (back,
+   * bottom).  Read the row's LAYER value from `TimelineLayout.trackLayers`.
+   */
   trackIndex: number
 }
 
 export interface TimelineLayout {
   placements: TimelinePlacement[]
-  /** Total number of tracks needed (always ≥ 1 when entries is non-empty). */
+  /** Total number of rows (= distinct `layer` values; ≥ 1 when non-empty). */
   trackCount: number
+  /**
+   * REQ-0396 — the stored `layer` value for each row, indexed by `trackIndex`
+   * (row 0 = top = highest layer, last = bottom = lowest/0).  The timeline
+   * gutter labels rows with these values so the row number == the layer number.
+   */
+  trackLayers: number[]
   /** Total horizontal duration (seconds) the timeline should span. */
   totalSec: number
 }
@@ -63,20 +74,24 @@ export interface TimelineLayoutOverrides {
 }
 
 /**
- * Lay entries out into timeline rows where **row order = z-order** (REQ-0394).
+ * Lay entries out into timeline rows where **row = the stored z-order layer**
+ * (REQ-0394 introduced row=z-order; REQ-0396 made the row the stored `layer`
+ * itself, dropping the automatic time-overlap separation).
  *
- * Each cue's `trackIndex` is the rank of its EFFECTIVE layer
- * (`computeEffectiveLayers` — stored `layer` intent + time-overlap separation)
- * among the distinct layers present, ordered DESCENDING: the top row
- * (`trackIndex` 0) is the front-most layer, layer 0 sits at the bottom.  Because
- * overlapping cues always get distinct effective layers, cues sharing a row
- * never overlap in time, so their blocks never collide — the property the old
- * greedy time-packer provided, now expressed as z-order.
+ * Each cue's `trackIndex` is the rank of its `resolveLayer` value among the
+ * distinct layers present, DESCENDING: the top row (`trackIndex` 0) is the
+ * highest layer (front); the bottom row is layer 0 (back).  A cue never leaves
+ * the row its own `layer` names — there is no automatic layer movement.  Cues
+ * that share a layer share a row (and, if they also overlap in time, overlap
+ * on it — the user separates them by changing a layer).  `trackLayers` gives the
+ * layer value per row so the gutter can label rows with the layer number.
  *
  * Inputs are not mutated; `placements` preserves input entry order so the caller
  * renders each Block by its own id without re-sorting.  Deleted rows are passed
- * through (the caller filters).  `minBlockSec` (REQ-088 #2) no longer affects row
- * assignment and is retained only for call-site compatibility.
+ * through (the caller filters).  Rows depend only on `layer`, not time, so
+ * `minBlockSec` (REQ-088 #2) and `overrides.greedyTimes` (REQ-20260613-002 drag
+ * pinning) no longer affect row assignment and are kept only for call-site
+ * signature compatibility.
  */
 export function layoutEntries(
   entries: readonly SubtitleEntry[],
@@ -85,35 +100,33 @@ export function layoutEntries(
   overrides?: TimelineLayoutOverrides,
 ): TimelineLayout {
   if (entries.length === 0) {
-    return { placements: [], trackCount: 0, totalSec: Math.max(1, fallbackDurationSec) }
+    return { placements: [], trackCount: 0, trackLayers: [], totalSec: Math.max(1, fallbackDurationSec) }
   }
 
-  const greedyTimes = overrides?.greedyTimes
-  // REQ-0394 — rows ARE z-order now.  A cue's `trackIndex` is the RANK of its
-  // EFFECTIVE layer (`computeEffectiveLayers` = stored `layer` intent + overlap
-  // separation) among the distinct layers present, ordered DESCENDING: the TOP
-  // row (trackIndex 0) is the front-most (highest) layer and layer 0 sits at the
-  // BOTTOM.  Overlapping cues always get distinct effective layers → distinct
-  // rows, so blocks on one row never collide (the property the old greedy time
-  // packer provided, now expressed through z-order).
+  // REQ-0396 — rows ARE the stored z-order layer (no auto-separation).  A cue's
+  // `trackIndex` is the RANK of its `resolveLayer` value among the distinct
+  // layers present, ordered DESCENDING: the TOP row (trackIndex 0) is the
+  // highest layer (front); the BOTTOM row is layer 0 (back).  A cue therefore
+  // never leaves the row its own `layer` names — no automatic layer movement.
   //
-  // REQ-20260613-002 drag pinning: `greedyTimes` is forwarded as the effective-
-  // layer time override, so a dragged cue's overlap (and therefore its row) is
-  // computed from its snapshot times and does not jump mid-drag.  The block's
-  // live leftPx/widthPx still come from the caller, so it follows the cursor
-  // laterally while its row stays pinned until pointer-up resettles it.
+  // Cues that share a layer occupy the SAME row.  If two such cues overlap in
+  // time their blocks overlap horizontally on that row (WYSIWYG — they also
+  // overlap in the burn at the same z-order); the user separates them by moving
+  // one to another layer (inspector "bring to front / send to back").
   //
-  // `minBlockSec` no longer affects row assignment (rows are z-order, not a time
-  // packing).  It is retained in the signature for call-site compatibility.
+  // Because rows depend only on `layer` (not on time), a horizontal drag never
+  // changes a cue's row — so the old `greedyTimes` drag row-pinning is no longer
+  // needed.  `minBlockSec` / `overrides` are retained only for call-site
+  // signature compatibility.
   void minBlockSec
-  const effLayers = computeEffectiveLayers(entries, greedyTimes)
-  const distinct = Array.from(new Set(entries.map((e) => effLayers.get(e.id) ?? 0)))
-    .sort((a, b) => b - a) // DESC → highest layer = row 0 = top = front
+  void overrides
+  const distinct = Array.from(new Set(entries.map((e) => resolveLayer(e))))
+    .sort((a, b) => b - a) // DESC → highest layer = row 0 = top = front; layer 0 at bottom
   const rankOf = new Map<number, number>(distinct.map((v, i) => [v, i]))
 
   const placements: TimelinePlacement[] = entries.map((e) => ({
     entry: e,
-    trackIndex: rankOf.get(effLayers.get(e.id) ?? 0) ?? 0,
+    trackIndex: rankOf.get(resolveLayer(e)) ?? 0,
   }))
 
   // totalSec is sourced from the LIVE entry endSecs — the visible timeline width
@@ -124,6 +137,7 @@ export function layoutEntries(
   return {
     placements,
     trackCount: distinct.length,
+    trackLayers: distinct,
     totalSec,
   }
 }
