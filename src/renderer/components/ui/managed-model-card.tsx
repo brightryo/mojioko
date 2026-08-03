@@ -45,6 +45,8 @@ export interface ManagedModelCardProps {
   downloadPercent?: number
   /** Current file being fetched (optional; falls back to `labels.downloading`). */
   downloadFile?: string
+  /** REQ-0409 — optional throughput/ETA line under the progress bar (e.g. "12.3 MB/s · 2:30"). */
+  downloadDetail?: string
   onDownload?: () => void
   onSelect?: () => void
   onDelete?: () => void
@@ -67,6 +69,7 @@ export function ManagedModelCard({
   isDownloading = false,
   downloadPercent = 0,
   downloadFile = '',
+  downloadDetail = '',
   onDownload,
   onSelect,
   onDelete,
@@ -126,6 +129,9 @@ export function ManagedModelCard({
               style={{ width: `${downloadPercent}%` }}
             />
           </div>
+          {downloadDetail && (
+            <div className="text-caption font-mono tabular-nums text-fg-muted text-right">{downloadDetail}</div>
+          )}
           <Button variant="ghost" size="sm" className="w-full h-7 text-caption" onClick={onCancel}>
             {labels.cancel}
           </Button>

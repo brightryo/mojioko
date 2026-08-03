@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, renameSync, existsSync, statSync, createReadStream }
 import { join } from 'path'
 import { createHash } from 'crypto'
 import type { DownloadModelEvent } from '../../shared/ipc-contracts'
-import { downloadFile } from './model-downloader'
+import { downloadFile, STALL_TIMEOUT_MS } from './model-downloader'
 import { writeModelMeta } from './model-meta'
 import {
   getTranslationTool,
@@ -58,12 +58,24 @@ export async function downloadTranslationTool(
       await downloadFile(
         url,
         destPath,
-        (received) => {
+        (received, _total, bytesPerSec) => {
           lastFileBytes = received
-          const pct = totalBytes > 0 ? Math.min(100, Math.floor(((completedBytes + received) / totalBytes) * 100)) : 0
-          onEvent({ event: 'progress', file: filename, fileIndex: i, totalFiles: def.files.length, percent: pct })
+          const overallReceived = completedBytes + received
+          const pct = totalBytes > 0 ? Math.min(100, Math.floor((overallReceived / totalBytes) * 100)) : 0
+          onEvent({
+            event: 'progress',
+            file: filename,
+            fileIndex: i,
+            totalFiles: def.files.length,
+            percent: pct,
+            bytesPerSec,
+            receivedBytes: overallReceived,
+            totalBytes,
+          })
         },
         signal,
+        // REQ-0409 — stall detection + retry/resume for the multi-GB models.
+        { stallTimeoutMs: STALL_TIMEOUT_MS },
       )
       completedBytes += lastFileBytes || (existsSync(destPath) ? statSync(destPath).size : 0)
     }

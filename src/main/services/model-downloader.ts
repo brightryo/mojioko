@@ -107,11 +107,26 @@ const MODEL_REPOS: Record<string, string> = {
  * Range resume integration coverage).  Not part of the public IPC
  * surface — production callers go through `downloadModel`.
  */
+/**
+ * REQ-0409 — default idle-stall timeout for the resilient download path.  If no
+ * bytes arrive for this long (a hung TCP connection / silent CDN drop — the
+ * suspected cause of the 30-min non-completion), the attempt is aborted and
+ * retried with an HTTP Range resume.  Opt-in via `opts.stallTimeoutMs`, so the
+ * pre-REQ-0409 tests + call sites that pass no options are byte-identical.
+ */
+export const STALL_TIMEOUT_MS = 45_000
+
+export interface DownloadFileOpts {
+  /** Abort + retry an attempt if no bytes arrive for this long (0/undefined = off). */
+  stallTimeoutMs?: number
+}
+
 export async function downloadFile(
   url: string,
   destPath: string,
-  onProgress: (received: number, total: number) => void,
-  signal: AbortSignal
+  onProgress: (received: number, total: number, bytesPerSec: number) => void,
+  signal: AbortSignal,
+  opts?: DownloadFileOpts,
 ): Promise<void> {
   // Persistent state across retries within a single downloadFile call.
   // Survives reopen of the dest stream; the next attempt reissues
@@ -121,6 +136,7 @@ export async function downloadFile(
   let contentLengthTotal = 0
   let attempt = 0
   let lastErr: unknown = null
+  const stallMs = opts?.stallTimeoutMs && opts.stallTimeoutMs > 0 ? opts.stallTimeoutMs : 0
 
   while (attempt < MAX_DOWNLOAD_ATTEMPTS) {
     attempt++
@@ -133,17 +149,48 @@ export async function downloadFile(
     const headers: Record<string, string> = {}
     if (isResume) headers['Range'] = `bytes=${received}-`
 
+    // REQ-0409 — per-attempt controller so an idle stall can abort THIS attempt
+    // (and only it) without touching the caller's signal.  A user cancel on the
+    // external signal is forwarded; a stall sets `stalled` so the catch retries
+    // (resume) instead of treating it as a user abort.
+    let stalled = false
+    let watchdog: ReturnType<typeof setTimeout> | null = null
+    let attemptSignal = signal
+    let onExtAbort: (() => void) | null = null
+    let attemptCtrl: AbortController | null = null
+    if (stallMs) {
+      attemptCtrl = new AbortController()
+      if (signal.aborted) attemptCtrl.abort()
+      else {
+        onExtAbort = () => attemptCtrl?.abort()
+        signal.addEventListener('abort', onExtAbort)
+      }
+      attemptSignal = attemptCtrl.signal
+    }
+    const armWatchdog = () => {
+      if (!attemptCtrl) return
+      if (watchdog) clearTimeout(watchdog)
+      watchdog = setTimeout(() => { stalled = true; attemptCtrl?.abort() }, stallMs)
+    }
+    const cleanupAttempt = () => {
+      if (watchdog) { clearTimeout(watchdog); watchdog = null }
+      if (onExtAbort) signal.removeEventListener('abort', onExtAbort)
+    }
+
     let resp: Response
     try {
-      resp = await fetch(url, { signal, redirect: 'follow', headers })
+      armWatchdog() // covers a hung connect (no response headers)
+      resp = await fetch(url, { signal: attemptSignal, redirect: 'follow', headers })
     } catch (err) {
+      cleanupAttempt()
       lastErr = err
-      const cls = classifyDownloadError(err)
+      if (signal.aborted) throw new DownloadError('aborted', err) // real user cancel
+      const cls = stalled ? 'transient' : classifyDownloadError(err)
       if (cls === 'abort') throw new DownloadError('aborted', err)
       if (shouldRetry(attempt, cls)) {
         const sleep = nextBackoffMs(attempt)
         log.warn(
-          `[downloader] fetch failed for ${url} (attempt ${attempt}/${MAX_DOWNLOAD_ATTEMPTS}, ` +
+          `[downloader] ${stalled ? 'stalled' : 'fetch failed'} for ${url} (attempt ${attempt}/${MAX_DOWNLOAD_ATTEMPTS}, ` +
           `received=${received}B): ${err instanceof Error ? err.message : String(err)} — ` +
           `retrying in ${sleep}ms`,
         )
@@ -200,15 +247,32 @@ export async function downloadFile(
     })
     const reader = resp.body.getReader()
 
+    // REQ-0409 — instantaneous throughput (EMA over ~300 ms windows), emitted
+    // to the caller so the UI can show MB/s + ETA.  Always computed (0 in the
+    // sub-window fast path); the watchdog reset only runs when stall is enabled.
+    let rateWinTime = Date.now()
+    let rateWinBytes = received
+    let bytesPerSec = 0
+
     let streamError: unknown = null
     try {
       for (;;) {
         const { done, value } = await reader.read()
         if (done) break
+        armWatchdog() // bytes arrived → reset the idle timer
         dest.write(value)
         received += value.length
-        if (contentLengthTotal > 0) onProgress(received, contentLengthTotal)
+        const now = Date.now()
+        const dt = now - rateWinTime
+        if (dt >= 300) {
+          const inst = ((received - rateWinBytes) / dt) * 1000
+          bytesPerSec = bytesPerSec > 0 ? bytesPerSec * 0.6 + inst * 0.4 : inst
+          rateWinTime = now
+          rateWinBytes = received
+        }
+        if (contentLengthTotal > 0) onProgress(received, contentLengthTotal, bytesPerSec)
       }
+      if (watchdog) { clearTimeout(watchdog); watchdog = null }
       await new Promise<void>((res, rej) =>
         dest.end((err: Error | null | undefined) => (err ? rej(err) : res())),
       )
@@ -225,16 +289,18 @@ export async function downloadFile(
       }).catch(() => { /* ignore secondary close errors */ })
     } finally {
       try { reader.releaseLock() } catch { /* ignore */ }
+      cleanupAttempt()
     }
 
     if (streamError !== null) {
       lastErr = streamError
-      const cls = classifyDownloadError(streamError)
+      if (signal.aborted) throw new DownloadError('aborted', streamError) // real user cancel
+      const cls = stalled ? 'transient' : classifyDownloadError(streamError)
       if (cls === 'abort') throw new DownloadError('aborted', streamError)
       if (shouldRetry(attempt, cls)) {
         const sleep = nextBackoffMs(attempt)
         log.warn(
-          `[downloader] stream interrupted for ${url} ` +
+          `[downloader] ${stalled ? 'stalled' : 'stream interrupted'} for ${url} ` +
           `(attempt ${attempt}/${MAX_DOWNLOAD_ATTEMPTS}, received=${received}B): ` +
           `${streamError instanceof Error ? streamError.message : String(streamError)} — ` +
           `retrying in ${sleep}ms with Range resume`,
@@ -341,7 +407,10 @@ export async function downloadModel(
           const overallPct = Math.floor(((i + received / total) / totalFiles) * 100)
           onEvent({ event: 'progress', file: filename, fileIndex: i, totalFiles, percent: overallPct })
         },
-        signal
+        signal,
+        // REQ-0409 — Whisper shares the stall/resume robustness (no UI change:
+        // the extra throughput arg to onProgress is ignored here).
+        { stallTimeoutMs: STALL_TIMEOUT_MS },
       )
 
       downloadedPaths.push(destPath)

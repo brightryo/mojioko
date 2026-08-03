@@ -111,6 +111,7 @@
     "approx": "~{{size}}",
     "download": "Download",
     "downloading": "Downloading…",
+    "eta": "{{time}} left",
     "downloaded": "Downloaded",
     "downloadFailed": "Download failed",
     "cancel": "Cancel",

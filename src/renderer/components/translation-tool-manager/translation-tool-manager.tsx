@@ -6,7 +6,7 @@ import { OptionalBadge } from '@/components/ui/optional-badge'
 import { AccordionCollapse } from '@/components/ui/accordion-collapse'
 import { ManagedModelCard, ManagedModelDiskFooter } from '@/components/ui/managed-model-card'
 import { HelpIcon } from '@/components/help-icon'
-import { formatBytes } from '@/lib/format'
+import { formatBytes, formatBytesPerSec, formatEtaSeconds } from '@/lib/format'
 import { toast } from 'sonner'
 import {
   TRANSLATION_TOOLS,
@@ -52,11 +52,12 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
   }
 
   const [state, setState] = useState<TranslationToolsState | null>(null)
-  // REQ-0407 — local in-flight download state (the list IPC only knows disk
-  // state, so the "downloading" UI is tracked here like the Whisper/GPU managers).
-  const [downloadingId, setDownloadingId] = useState<TranslationToolId | null>(null)
-  const [downloadPercent, setDownloadPercent] = useState(0)
-  const runRef = useRef<TranslationToolDownloadRun | null>(null)
+  // REQ-0407/0409 — PER-TOOL in-flight download state so 3B and 7B (and the
+  // Whisper models) run in PARALLEL, each with its own progress % + MB/s · ETA
+  // detail + cancel.  A key present in this record means that tool is
+  // downloading; the runs ref holds each tool's cancel handle.
+  const [downloads, setDownloads] = useState<Record<string, { percent: number; detail: string }>>({})
+  const runsRef = useRef<Map<TranslationToolId, TranslationToolDownloadRun>>(new Map())
 
   const refresh = useCallback(async () => {
     const res = await listTranslationTools()
@@ -72,33 +73,52 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
     setIsOpen(!isOpen)
   }
 
-  async function handleDownload(id: TranslationToolId) {
-    if (downloadingId !== null) return // one at a time from the UI
-    setDownloadingId(id)
-    setDownloadPercent(0)
-    const run = startTranslationToolDownload(id, (evt) => {
-      if (evt.event === 'progress') setDownloadPercent(evt.percent)
-    })
-    runRef.current = run
-    try {
-      await run.promise
-      await refresh()
-      toast.success(t('translationTool.downloaded'))
-    } catch (err) {
-      // User cancel resolves as an 'aborted' error — silent, matching the
-      // Whisper/GPU download UX.
-      if (!(err instanceof TranslationToolDownloadError && err.errorCode === 'aborted')) {
-        toast.error(t('translationTool.downloadFailed'))
-      }
-    } finally {
-      runRef.current = null
-      setDownloadingId(null)
-      setDownloadPercent(0)
-    }
-  }
+  const setToolProgress = useCallback((id: TranslationToolId, percent: number, detail: string) => {
+    setDownloads((d) => ({ ...d, [id]: { percent, detail } }))
+  }, [])
 
-  function handleCancelDownload() {
-    runRef.current?.cancel()
+  const clearToolDownload = useCallback((id: TranslationToolId) => {
+    runsRef.current.delete(id)
+    setDownloads((d) => {
+      const next = { ...d }
+      delete next[id]
+      return next
+    })
+  }, [])
+
+  const handleDownload = useCallback(
+    async (id: TranslationToolId) => {
+      if (runsRef.current.has(id)) return // this tool is already downloading
+      setToolProgress(id, 0, '')
+      const run = startTranslationToolDownload(id, (evt) => {
+        if (evt.event !== 'progress') return
+        const mbps = formatBytesPerSec(evt.bytesPerSec ?? 0)
+        const eta =
+          evt.receivedBytes !== undefined && evt.totalBytes !== undefined
+            ? formatEtaSeconds(evt.totalBytes - evt.receivedBytes, evt.bytesPerSec ?? 0)
+            : ''
+        const detail = [mbps, eta ? t('translationTool.eta', { time: eta }) : ''].filter(Boolean).join(' · ')
+        setToolProgress(id, evt.percent, detail)
+      })
+      runsRef.current.set(id, run)
+      try {
+        await run.promise
+        await refresh()
+        toast.success(t('translationTool.downloaded'))
+      } catch (err) {
+        // User cancel resolves as an 'aborted' error — silent (Whisper/GPU UX).
+        if (!(err instanceof TranslationToolDownloadError && err.errorCode === 'aborted')) {
+          toast.error(t('translationTool.downloadFailed'))
+        }
+      } finally {
+        clearToolDownload(id)
+      }
+    },
+    [t, refresh, setToolProgress, clearToolDownload],
+  )
+
+  function handleCancelDownload(id: TranslationToolId) {
+    runsRef.current.get(id)?.cancel()
   }
 
   const handleToggleActive = useCallback(
@@ -169,7 +189,8 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
           <div className="grid grid-cols-2 gap-3 mx-auto max-w-[38rem]">
             {TRANSLATION_TOOLS.map((def) => {
               const info = toolInfo(def.id)
-              const isDownloading = downloadingId === def.id
+              const dl = downloads[def.id]
+              const isDownloading = dl !== undefined
               const status = info?.status ?? 'not-downloaded'
               const active = info?.active ?? false
               const cardState = active ? 'active' : status === 'downloaded' ? 'downloaded' : 'not-downloaded'
@@ -185,12 +206,13 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
                   description={t(def.id === 'madlad400-3b' ? 'translationTool.desc3b' : 'translationTool.desc7b')}
                   state={cardState}
                   isDownloading={isDownloading}
-                  downloadPercent={downloadPercent}
+                  downloadPercent={dl?.percent ?? 0}
+                  downloadDetail={dl?.detail ?? ''}
                   onDownload={() => handleDownload(def.id)}
                   onSelect={() => handleToggleActive(def.id, false)}
                   onDeselect={() => handleToggleActive(def.id, true)}
                   onDelete={() => handleDelete(def.id)}
-                  onCancel={handleCancelDownload}
+                  onCancel={() => handleCancelDownload(def.id)}
                   labels={{
                     download: t('translationTool.download'),
                     downloading: t('model.downloading'),

@@ -259,7 +259,19 @@ export type BurninEvent =
  * main process feeding a v1.3.2+ renderer).
  */
 export type DownloadModelEvent =
-  | { event: 'progress'; file: string; fileIndex: number; totalFiles: number; percent: number }
+  | {
+      event: 'progress'
+      file: string
+      fileIndex: number
+      totalFiles: number
+      percent: number
+      // REQ-0409 — optional throughput/ETA figures (translation-tool download
+      // fills these; the Whisper model download omits them, so its card is
+      // unchanged).
+      bytesPerSec?: number
+      receivedBytes?: number
+      totalBytes?: number
+    }
   | { event: 'completed' }
   | { event: 'failed'; error: string; errorCode?: 'network' | 'fatal' | 'aborted' }
 

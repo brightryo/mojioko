@@ -110,6 +110,7 @@
     "approx": "約 {{size}}",
     "download": "ダウンロード",
     "downloading": "ダウンロード中…",
+    "eta": "残り {{time}}",
     "downloaded": "ダウンロードしました",
     "downloadFailed": "ダウンロードに失敗しました",
     "cancel": "キャンセル",

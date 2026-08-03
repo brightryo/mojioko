@@ -15,6 +15,30 @@ export function formatResolution(w: number, h: number): string {
   return `${w}×${h}`
 }
 
+/**
+ * REQ-0409 — download throughput, e.g. "12.3 MB/s".  Sub-1 MB/s shows KB/s so a
+ * slow link still reads as moving rather than frozen.  Returns '' for 0/invalid.
+ */
+export function formatBytesPerSec(bps: number): string {
+  if (!Number.isFinite(bps) || bps <= 0) return ''
+  if (bps < 1_000_000) return `${(bps / 1_000).toFixed(0)} KB/s`
+  return `${(bps / 1_000_000).toFixed(1)} MB/s`
+}
+
+/**
+ * REQ-0409 — a compact ETA as "m:ss" (or "h:mm:ss" past an hour).  Returns ''
+ * when the inputs cannot yield a finite estimate (no rate yet, done, invalid).
+ */
+export function formatEtaSeconds(remainingBytes: number, bytesPerSec: number): string {
+  if (!Number.isFinite(bytesPerSec) || bytesPerSec <= 0 || remainingBytes <= 0) return ''
+  const sec = Math.round(remainingBytes / bytesPerSec)
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
+}
+
 /** Rough estimated output file size in MB. */
 export function estimateOutputSizeMB(durationSec: number): number {
   const bitrateEstimateBps = 8_000_000
