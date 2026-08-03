@@ -2,6 +2,7 @@
   "app": {
     "name": "MOJIOKO"
   },
+  "optional": "オプション",
   "nav": {
     "back": "戻る",
     "continue": "次へ",

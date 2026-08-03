@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AccordionCollapse } from '@/components/ui/accordion-collapse'
 import {
   Sparkles,
   Download,
@@ -435,15 +435,7 @@ export function WhisperModelManager({
       </div>
 
       {/* ---- Accordion Content ---- */}
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
+      <AccordionCollapse open={isOpen}>
             <div className="space-y-3 pt-3">
               {/* Long description */}
               <p className="text-body-sm text-fg-muted leading-relaxed">
@@ -542,9 +534,7 @@ export function WhisperModelManager({
                 </div>
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </AccordionCollapse>
 
       {/* ---- Dialogs ---- */}
       {dialog?.kind === 'disk-full' && (

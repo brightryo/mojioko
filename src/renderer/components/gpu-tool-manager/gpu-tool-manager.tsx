@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   Zap,
   Cpu,
@@ -23,6 +22,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { HelpIcon } from '@/components/help-icon'
+import { OptionalBadge } from '@/components/ui/optional-badge'
+import { AccordionCollapse } from '@/components/ui/accordion-collapse'
 import { cn } from '@/lib/utils'
 import { formatBytes } from '@/lib/format'
 import {
@@ -235,6 +236,8 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
         <span className="text-headline font-semibold text-fg-secondary uppercase tracking-wider">
           {t('gpuTool.label')}
         </span>
+        {/* REQ-0406 §1 — same [オプション] badge as the translation-tool section. */}
+        <OptionalBadge />
         <span onClick={(e) => e.stopPropagation()}>
           <HelpIcon content={t('gpuTool.tooltip')} />
         </span>
@@ -276,15 +279,8 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
       {/* Accordion body — 2 cards side-by-side.  Grid mirrors the
           Whisper model accordion's `grid grid-cols-2 gap-3` + width
           cap so the pair sits centred in the section. */}
-      <AnimatePresence initial={false}>
-        {isOpen && canOpen && state && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
+      <AccordionCollapse open={isOpen && canOpen && state !== null}>
+        {state && (
             <div className="space-y-3 pt-3">
               {/* REQ-0248 — mirror the Whisper model section's Long
                   description slot (`whisperModel.descriptionLong` at
@@ -318,9 +314,8 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
                 />
               </div>
             </div>
-          </motion.div>
         )}
-      </AnimatePresence>
+      </AccordionCollapse>
 
       {/* Install-confirm dialog */}
       {dialogKind === 'install' && state && (

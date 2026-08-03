@@ -3,7 +3,7 @@ import { animationFieldsForNewCue } from '../../shared/cue-animation'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform, Check, Circle } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AccordionCollapse } from '@/components/ui/accordion-collapse'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { AppShell } from '@/components/app-shell/app-shell'
@@ -1002,15 +1002,7 @@ export default function Step1Route(_: Step1RouteProps) {
           {/* Collapsible body — same animation pattern WhisperModelManager
               uses, so the two cards' open / close transitions feel like
               the same control. */}
-          <AnimatePresence initial={false}>
-            {openSection === 'inputVideo' && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
-                className="overflow-hidden"
-              >
+          <AccordionCollapse open={openSection === 'inputVideo'}>
                 <div className="space-y-4 pt-3">
           {/* REQ-20260615-020: supported file-format hint moved here from
               the header.  Right-aligned, muted, so it reads as a small
@@ -1157,9 +1149,7 @@ export default function Step1Route(_: Step1RouteProps) {
             </div>
           </div>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </AccordionCollapse>
         </div>
 
       </div>

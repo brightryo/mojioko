@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { Languages, ChevronDown, ChevronUp, Check, Trash2, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { OptionalBadge } from '@/components/ui/optional-badge'
+import { AccordionCollapse } from '@/components/ui/accordion-collapse'
 import { HelpIcon } from '@/components/help-icon'
 import { formatBytes } from '@/lib/format'
 import { toast } from 'sonner'
@@ -111,9 +113,7 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
         <span className="text-headline font-semibold text-fg-secondary uppercase tracking-wider">
           {t('translationTool.label')}
         </span>
-        <span className="text-caption font-medium text-fg-muted border border-line rounded px-1.5 py-0.5 flex-shrink-0">
-          {t('translationTool.optionalTag')}
-        </span>
+        <OptionalBadge />
         <span onClick={(e) => e.stopPropagation()}>
           <HelpIcon content={t('translationTool.tooltip')} />
         </span>
@@ -135,7 +135,7 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
         )}
       </div>
 
-      {isOpen && (
+      <AccordionCollapse open={isOpen}>
         <div className="space-y-3 pt-3">
           <p className="text-body-sm text-fg-muted leading-relaxed">
             {t('translationTool.descriptionLong')}
@@ -202,7 +202,7 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
             })}
           </div>
         </div>
-      )}
+      </AccordionCollapse>
     </div>
   )
 }
