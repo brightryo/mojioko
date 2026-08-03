@@ -4,6 +4,7 @@ import {
   decideDragAxis,
   computeLayerDrag,
   computeLayerDragVisual,
+  buildMoveCommit,
   AXIS_LOCK_THRESHOLD_PX,
   type DragPatchInputs,
 } from '../../src/renderer/lib/timeline-drag'
@@ -694,5 +695,62 @@ describe('computeLayerDragVisual — REQ-0402', () => {
     const v = computeLayerDragVisual(2, H, 3, H, PAD)
     expect(v.targetRowIndex).toBe(2)
     expect(v.targetLayer).toBe(1)
+  })
+})
+
+/**
+ * REQ-0403 — a 2D move commits time AND layer in ONE undo step.  `buildMoveCommit`
+ * builds that step's before/after pair (time is live-committed, layer is
+ * pending), so a single history op restores both axes.  These pin the three
+ * cases the REQ calls out: time-only, layer-only, both — plus the no-op.
+ */
+describe('buildMoveCommit — REQ-0403 single-undo for 2D move', () => {
+  const withLayer = (id: string, s: number, e: number, layer?: number): SubtitleEntry =>
+    layer === undefined ? entry(id, s, e) : { ...entry(id, s, e), layer }
+
+  it('no movement → null (no history pushed, no re-sort)', () => {
+    const before = withLayer('a', 0, 1, 0)
+    const final = withLayer('a', 0, 1, 0)
+    expect(buildMoveCommit(before, final, 0)).toBeNull()
+  })
+
+  it('time only → after carries the new time, layer unchanged', () => {
+    const before = withLayer('a', 0, 1, 0)
+    const final = withLayer('a', 2, 3, 0) // time moved live
+    const commit = buildMoveCommit(before, final, 0) // pending layer == before
+    expect(commit).not.toBeNull()
+    expect(commit!.after.startSec).toBe(2)
+    expect(commit!.after.endSec).toBe(3)
+    expect(commit!.after.layer).toBe(0)
+    expect(commit!.before).toBe(before) // undo restores the pre-drag entry
+  })
+
+  it('layer only → after carries the new layer, time unchanged', () => {
+    const before = withLayer('a', 0, 1, 0)
+    const final = withLayer('a', 0, 1, 0) // time untouched
+    const commit = buildMoveCommit(before, final, 3) // pending layer moved
+    expect(commit).not.toBeNull()
+    expect(commit!.after.layer).toBe(3)
+    expect(commit!.after.startSec).toBe(0)
+    expect(commit!.after.endSec).toBe(1)
+  })
+
+  it('★ both axes → ONE commit carries the new time AND the new layer', () => {
+    const before = withLayer('a', 0, 1, 0)
+    const final = withLayer('a', 2, 3, 0) // time moved live (layer still 0 in store)
+    const commit = buildMoveCommit(before, final, 5) // pending layer moved to 5
+    expect(commit).not.toBeNull()
+    expect(commit!.after.startSec).toBe(2)
+    expect(commit!.after.endSec).toBe(3)
+    expect(commit!.after.layer).toBe(5) // single undo reverts BOTH from this pair
+    expect(commit!.before.startSec).toBe(0)
+    expect(commit!.before.endSec).toBe(1)
+  })
+
+  it('layer change detected through resolveLayer (undefined ≡ 0)', () => {
+    const before = entry('a', 0, 1) // no layer → resolveLayer 0
+    const final = entry('a', 0, 1)
+    expect(buildMoveCommit(before, final, 0)).toBeNull() // 0 == 0 → no change
+    expect(buildMoveCommit(before, final, 1)).not.toBeNull() // 1 != 0 → change
   })
 })

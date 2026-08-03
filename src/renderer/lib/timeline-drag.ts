@@ -7,7 +7,7 @@ import {
 } from './timeline-snap'
 import { chooseRulerStepSec } from './timeline-layout'
 import { roundToCs } from './entry-edits'
-import { MIN_LAYER, MAX_LAYER } from '../../shared/cue-placement'
+import { MIN_LAYER, MAX_LAYER, resolveLayer } from '../../shared/cue-placement'
 import {
   origToEdited,
   editedToOrig,
@@ -119,6 +119,40 @@ export function computeLayerDragVisual(
   const targetRowIndex = Math.max(0, Math.min(maxRow, Math.round((blockTopPx - blockPadPx) / h)))
   const targetLayer = maxRow - targetRowIndex
   return { blockTopPx, targetRowIndex, targetLayer }
+}
+
+export interface MoveCommit {
+  /** The pre-drag entry — `undo` restores this (both time and layer). */
+  before: SubtitleEntry
+  /** The post-drag entry: the final (live-committed) time plus the pending layer. */
+  after: SubtitleEntry
+}
+
+/**
+ * REQ-0403 — build the SINGLE undo step for a 2D clip move.  A move drag writes
+ * time to the store live but keeps the layer pending (the block floats), so on
+ * release the two axes must be committed together and reverted together.
+ *
+ * `before` is the pre-drag snapshot; `finalTimeEntry` is the entry as it stands
+ * in the store after the live time writes (its layer is still the pre-drag
+ * value); `pendingLayer` is where the vertical drag landed.  Returns `null` when
+ * NOTHING moved (so the caller pushes no history and skips the re-sort), else a
+ * `{before, after}` pair where `after` carries the final time AND the pending
+ * layer — so one history op restores both whether the user moved in X, Y or both.
+ */
+export function buildMoveCommit(
+  before: SubtitleEntry,
+  finalTimeEntry: SubtitleEntry,
+  pendingLayer: number,
+): MoveCommit | null {
+  const timeChanged =
+    finalTimeEntry.startSec !== before.startSec || finalTimeEntry.endSec !== before.endSec
+  const layerChanged = pendingLayer !== resolveLayer(before)
+  if (!timeChanged && !layerChanged) return null
+  return {
+    before,
+    after: { ...finalTimeEntry, layer: pendingLayer },
+  }
 }
 
 /**

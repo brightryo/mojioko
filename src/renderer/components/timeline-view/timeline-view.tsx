@@ -27,9 +27,9 @@ import {
 } from '@/lib/timeline-layout'
 import {
   computeDragPatch,
-  decideDragAxis,
   computeLayerDragVisual,
-  type DragAxis,
+  buildMoveCommit,
+  AXIS_LOCK_THRESHOLD_PX,
 } from '@/lib/timeline-drag'
 import { resolveLayer } from '../../../shared/cue-placement'
 import {
@@ -282,8 +282,8 @@ interface BlockProps {
   onSelect: (id: string, startSec: number) => void
   /**
    * Start a drag (resize or move) — TimelineView attaches window listeners.
-   * REQ-0399 — `clientY` is threaded through too so a body 'move' drag can
-   * resolve to the vertical LAYER axis (see `decideDragAxis`).
+   * REQ-0399/0403 — `clientY` is threaded through too so a body 'move' drag can
+   * move the clip in 2D (time on X, layer on Y) at once.
    */
   onStartDrag: (kind: DragKind, entry: SubtitleEntry, clientX: number, clientY: number) => void
   /**
@@ -840,18 +840,16 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
     /** Pointer clientY at drag-start — REQ-0399 vertical (layer) delta. */
     originClientY: number
     /**
-     * REQ-0399 — the locked axis for a body 'move' drag: `time` (legacy
-     * horizontal) or `layer` (vertical z-order).  `null` until the pointer
-     * leaves the dead-zone and an axis is chosen; then LOCKED for the gesture
-     * so a diagonal drag never edits both.  Resize kinds are always time and
-     * never consult this.
+     * REQ-0403 — a body 'move' drag has left the 4px click dead-zone and is now
+     * actively moving (2D).  Until then a click never nudges the clip.  Resize
+     * kinds ignore this (they move from the first pointermove).
      */
-    axis: DragAxis | null
+    moveStarted?: boolean
     /**
-     * REQ-0402 — the layer a `layer`-axis drag will commit on release.  Updated
-     * each pointermove from the follow position; read once in `onUp`.  Unlike
-     * REQ-0399, the layer is NOT written to the store during the drag (the block
-     * floats under the cursor instead), so this carries the pending value.
+     * REQ-0402/0403 — the layer a 'move' drag will commit on release.  Updated
+     * each pointermove from the follow position; read once in `onUp`.  The layer
+     * is NOT written to the store during the drag (the block floats under the
+     * cursor instead), so this carries the pending value.
      */
     pendingLayer?: number
   }
@@ -919,9 +917,9 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
         snapshot: { ...entry, original: { ...entry.original } },
         originClientX: clientX,
         originClientY: clientY,
-        // Resize handles only ever move time; body 'move' drags decide their
-        // axis on the first significant travel (REQ-0399).
-        axis: kind === 'move' ? null : 'time',
+        // REQ-0403 — a 'move' starts inert; it begins moving (2D) once the
+        // pointer leaves the 4px click dead-zone.  Resize kinds don't use this.
+        moveStarted: false,
       }
       // REQ-20260613-002: pin the dragged entry's greedy slot to its
       // pre-drag times so its trackIndex never changes mid-drag.  This
@@ -954,37 +952,39 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       const dxPx = e.clientX - d.originClientX
       const dyPx = e.clientY - d.originClientY
 
-      // REQ-0399 — axis discrimination for body 'move' drags.  Lock the axis
-      // once the pointer leaves the dead-zone; before then, do nothing (a click
-      // or jitter).  Resize kinds keep axis 'time' from drag-start.
+      // REQ-0403 — 2D move.  A body 'move' drag now updates BOTH time (X, via the
+      // computeDragPatch pipeline below) and layer (Y, here) at once — no axis
+      // lock, so diagonal drags work and the clip never "freezes" when the
+      // cursor changes direction (the REQ-0399 lock is gone).  A 4px dead-zone
+      // still gates the START so a click never nudges the clip or mis-fires
+      // select/seek.  Resize kinds skip this and run the time pipeline directly.
       if (d.kind === 'move') {
-        if (d.axis === null) {
-          d.axis = decideDragAxis(dxPx, dyPx)
-          if (d.axis === null) return // still ambiguous — wait for more travel
+        if (!d.moveStarted) {
+          if (
+            Math.abs(dxPx) < AXIS_LOCK_THRESHOLD_PX &&
+            Math.abs(dyPx) < AXIS_LOCK_THRESHOLD_PX
+          ) {
+            return // still inside the click dead-zone
+          }
+          d.moveStarted = true
         }
-        if (d.axis === 'layer') {
-          // REQ-0402 — vertical drag: the block FLOATS under the cursor (no
-          // discrete row hops, no live layer write); it snaps to the nearest
-          // track only on release.  `computeLayerDragVisual` gives the clamped
-          // follow position + the row it will land on, in the same 0..maxRow
-          // frame `layoutEntries` renders.
-          setSnapGuidePx(null)
-          const vis = computeLayerDragVisual(
-            resolveLayer(d.snapshot),
-            dyPx,
-            dragMaxRowRef.current,
-            TRACK_HEIGHT_PX,
-            BLOCK_VERTICAL_PAD_PX,
-          )
-          d.pendingLayer = vis.targetLayer
-          setLayerDragVisual({
-            entryId: d.entryId,
-            blockTopPx: vis.blockTopPx,
-            targetRowIndex: vis.targetRowIndex,
-          })
-          return
-        }
-        // d.axis === 'time' → fall through to the existing time pipeline.
+        // Y — the block floats under the cursor and previews the track it will
+        // snap to; the layer is committed once on release (REQ-0402 math, now
+        // running every move regardless of the X displacement).
+        const vis = computeLayerDragVisual(
+          resolveLayer(d.snapshot),
+          dyPx,
+          dragMaxRowRef.current,
+          TRACK_HEIGHT_PX,
+          BLOCK_VERTICAL_PAD_PX,
+        )
+        d.pendingLayer = vis.targetLayer
+        setLayerDragVisual({
+          entryId: d.entryId,
+          blockTopPx: vis.blockTopPx,
+          targetRowIndex: vis.targetRowIndex,
+        })
+        // Fall through → X (time) pipeline (computeDragPatch), committed live.
       }
 
       // REQ-085 #1: the previous inline snap / clamp / round pipeline was
@@ -1072,32 +1072,42 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       const cur = useProjectStore
         .getState()
         .entries.find((x) => x.id === d.entryId)
-      // REQ-0402 — a locked 'layer' drag commits its PENDING layer here (the
-      // drag floated the block without writing the store).  No time touched, so
-      // no re-sort / commitTimeEdit.  One history op restores the source layer
-      // on undo; `updateEntry` recomputes `isEdited` from the merged value vs
-      // `original`, so both directions settle isEdited itself.
-      const beforeLayer = resolveLayer(d.snapshot)
-      const movedLayer =
-        d.axis === 'layer' &&
-        cur !== undefined &&
-        d.pendingLayer !== undefined &&
-        d.pendingLayer !== beforeLayer
-      const movedTime =
-        d.axis !== 'layer' &&
+      if (d.kind === 'move') {
+        // REQ-0403 — a 2D move commits time AND layer in a SINGLE undo step.
+        // Time was written live during the drag; the layer is pending here.
+        // `buildMoveCommit` decides whether anything moved and produces the
+        // before/after entries (after = final time + pending layer), so one
+        // history op restores BOTH axes — whether the user moved in X, Y, or
+        // both.  `updateEntry` recomputes `isEdited`; `commitTimeEdit` re-sorts
+        // and scrolls to the row at its final time.
+        const before = d.snapshot
+        const commit =
+          cur !== undefined
+            ? buildMoveCommit(before, cur, d.pendingLayer ?? resolveLayer(before))
+            : null
+        if (commit) {
+          // Apply the pending layer now (time already applied live).  Reading
+          // `after` back from the store is unnecessary — `commit.after` already
+          // carries the final time (from `cur`) plus the pending layer.
+          useProjectStore.getState().updateEntry(before.id, { layer: commit.after.layer })
+          useHistoryStore.getState().push({
+            label: moveClipHistoryLabelRef.current,
+            undo: () => {
+              useProjectStore.getState().updateEntry(before.id, commit.before)
+              commitTimeEdit(before.id)
+            },
+            redo: () => {
+              useProjectStore.getState().updateEntry(before.id, commit.after)
+              commitTimeEdit(before.id)
+            },
+          })
+          commitTimeEdit(before.id)
+        }
+      } else if (
         cur !== undefined &&
         (cur.startSec !== d.snapshot.startSec || cur.endSec !== d.snapshot.endSec)
-      if (cur && movedLayer) {
-        const beforeId = d.snapshot.id
-        const beforeLayerVal = d.snapshot.layer
-        const afterLayer = d.pendingLayer as number
-        useProjectStore.getState().updateEntry(beforeId, { layer: afterLayer })
-        useHistoryStore.getState().push({
-          label: zOrderHistoryLabelRef.current,
-          undo: () => useProjectStore.getState().updateEntry(beforeId, { layer: beforeLayerVal }),
-          redo: () => useProjectStore.getState().updateEntry(beforeId, { layer: afterLayer }),
-        })
-      } else if (cur && movedTime) {
+      ) {
+        // Resize (start/end handle) — time-only, unchanged.
         const before = d.snapshot
         const after = { ...cur }
         useHistoryStore.getState().push({
@@ -1141,12 +1151,12 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
     timelineHistoryLabelRef.current = t('history.editTime')
   })
 
-  // REQ-0399 — label for a vertical (layer / z-order) drag, same ref pattern
-  // so the mount-once pointerup handler reads a fresh translation.  Reuses the
-  // existing z-order history string the inspector's front/back buttons use.
-  const zOrderHistoryLabelRef = useRef('')
+  // REQ-0403 — label for a 2D clip move (time and/or layer), same ref pattern so
+  // the mount-once pointerup handler reads a fresh translation.  One label
+  // covers the whole move; resize keeps `editTime`.
+  const moveClipHistoryLabelRef = useRef('')
   useEffect(() => {
-    zOrderHistoryLabelRef.current = t('history.editZOrder')
+    moveClipHistoryLabelRef.current = t('history.moveClip')
   })
 
   // -------------------------------------------------------------------------
