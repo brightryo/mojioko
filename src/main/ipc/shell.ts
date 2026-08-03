@@ -4,7 +4,7 @@ import { resolve, relative, isAbsolute, join } from 'path'
 import { homedir } from 'os'
 import { Channels } from '../../shared/ipc-channels'
 import { ALLOWED_EXTERNAL_URLS } from '../../shared/app-info'
-import { getModelsDir, getResourcesPath } from '../lib/paths'
+import { getModelsDir, getResourcesPath, getTranslationToolsDir } from '../lib/paths'
 import log from '../lib/logger'
 
 /** Resolved home directory — computed once at module load time. */
@@ -51,6 +51,13 @@ export function registerShellHandlers(): void {
 
   ipcMain.handle(Channels.shellOpenModelsFolder, async (): Promise<void> => {
     const dir = getModelsDir()
+    mkdirSync(dir, { recursive: true })
+    await shell.openPath(dir)
+  })
+
+  // REQ-0408 — open the translation-tools directory (same pattern as models).
+  ipcMain.handle(Channels.shellOpenTranslationToolsFolder, async (): Promise<void> => {
+    const dir = getTranslationToolsDir()
     mkdirSync(dir, { recursive: true })
     await shell.openPath(dir)
   })

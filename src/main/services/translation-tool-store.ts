@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, statSync } from 'fs'
-import { join } from 'path'
+import { existsSync, readdirSync, statSync, statfsSync } from 'fs'
+import { join, parse } from 'path'
 import {
   TRANSLATION_TOOLS,
   TRANSLATION_TOOL_IDS,
@@ -65,7 +65,21 @@ export function buildTranslationToolsState(
   const installed = installedToolIds(toolsDir)
   const sizeBytes: Partial<Record<TranslationToolId, number>> = {}
   for (const id of installed) sizeBytes[id] = toolDirSizeBytes(id, toolsDir)
-  return buildToolsState({ installed, activeId }, { sizeBytes })
+  const { freeBytes, drive } = getDiskFree(toolsDir)
+  return buildToolsState({ installed, activeId }, { sizeBytes, diskFreeBytes: freeBytes, diskDrive: drive })
+}
+
+/** Free bytes on the drive holding `dirPath` (mirrors the Whisper model store). */
+function getDiskFree(dirPath: string): { freeBytes: number; drive: string } {
+  const { root } = parse(dirPath)
+  const drive = root || 'C:\\'
+  const statPath = existsSync(dirPath) ? dirPath : existsSync(drive) ? drive : '.'
+  try {
+    const stats = statfsSync(statPath)
+    return { freeBytes: stats.bavail * stats.bsize, drive }
+  } catch {
+    return { freeBytes: 0, drive }
+  }
 }
 
 export { TRANSLATION_TOOLS }

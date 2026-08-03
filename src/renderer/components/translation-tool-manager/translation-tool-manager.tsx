@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Languages, ChevronDown, ChevronUp, Check, Trash2, Download, X } from 'lucide-react'
+import { Languages, ChevronDown, ChevronUp, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import { OptionalBadge } from '@/components/ui/optional-badge'
 import { AccordionCollapse } from '@/components/ui/accordion-collapse'
+import { ManagedModelCard, ManagedModelDiskFooter } from '@/components/ui/managed-model-card'
 import { HelpIcon } from '@/components/help-icon'
 import { formatBytes } from '@/lib/format'
 import { toast } from 'sonner'
@@ -20,6 +20,7 @@ import {
   uninstallTranslationTool,
   setActiveTranslationTool,
   startTranslationToolDownload,
+  openTranslationToolsFolder,
   TranslationToolDownloadError,
   type TranslationToolDownloadRun,
 } from '@/services/translation-tool'
@@ -51,7 +52,6 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
   }
 
   const [state, setState] = useState<TranslationToolsState | null>(null)
-  const [busyId, setBusyId] = useState<TranslationToolId | null>(null)
   // REQ-0407 — local in-flight download state (the list IPC only knows disk
   // state, so the "downloading" UI is tracked here like the Whisper/GPU managers).
   const [downloadingId, setDownloadingId] = useState<TranslationToolId | null>(null)
@@ -103,9 +103,7 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
 
   const handleToggleActive = useCallback(
     async (id: TranslationToolId, currentlyActive: boolean) => {
-      setBusyId(id)
       const res = await setActiveTranslationTool(currentlyActive ? null : id)
-      setBusyId(null)
       if (res.ok) setState(res.data)
       else toast.error(t('translationTool.actionFailed'))
     },
@@ -114,9 +112,7 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
 
   const handleDelete = useCallback(
     async (id: TranslationToolId) => {
-      setBusyId(id)
       const res = await uninstallTranslationTool(id)
-      setBusyId(null)
       if (res.ok) setState(res.data)
       else toast.error(t('translationTool.actionFailed'))
     },
@@ -164,84 +160,62 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
 
       <AccordionCollapse open={isOpen}>
         <div className="space-y-3 pt-3">
+          {/* MADLAD explanation + "translation coming later" note (kept). */}
           <p className="text-body-sm text-fg-muted leading-relaxed">
             {t('translationTool.descriptionLong')}
           </p>
-          <div className="space-y-2">
+          {/* REQ-0408 — same 2-column card grid + disk footer as the Whisper
+              model picker, via the shared ManagedModelCard. */}
+          <div className="grid grid-cols-2 gap-3 mx-auto max-w-[38rem]">
             {TRANSLATION_TOOLS.map((def) => {
               const info = toolInfo(def.id)
               const isDownloading = downloadingId === def.id
               const status = info?.status ?? 'not-downloaded'
               const active = info?.active ?? false
+              const cardState = active ? 'active' : status === 'downloaded' ? 'downloaded' : 'not-downloaded'
               const sizeLabel =
                 status === 'downloaded' && info && info.sizeBytes > 0
                   ? formatBytes(info.sizeBytes)
                   : t('translationTool.approx', { size: formatBytes(def.expectedSizeBytes) })
-              const isBusy = busyId === def.id
               return (
-                <div
+                <ManagedModelCard
                   key={def.id}
-                  className="flex items-center gap-3 rounded-md border border-line bg-surface-1 px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="text-body-sm font-medium text-fg-primary truncate">
-                      {t(`translationTool.${def.labelKey}`)}
-                    </div>
-                    <div className="text-caption font-mono tabular-nums text-fg-muted">{sizeLabel}</div>
-                  </div>
-
-                  {isDownloading && (
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-caption font-mono tabular-nums text-fg-secondary">
-                        {t('translationTool.downloading')} {downloadPercent}%
-                      </span>
-                      <Button variant="ghost" size="icon" onClick={handleCancelDownload} aria-label={t('translationTool.cancel')} title={t('translationTool.cancel')}>
-                        <X className="h-3.5 w-3.5 text-fg-tertiary" />
-                      </Button>
-                    </div>
-                  )}
-
-                  {!isDownloading && status === 'not-downloaded' && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={downloadingId !== null}
-                      onClick={() => handleDownload(def.id)}
-                      className="flex-shrink-0 gap-1.5"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      {t('translationTool.download')}
-                    </Button>
-                  )}
-
-                  {!isDownloading && status === 'downloaded' && (
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <Button
-                        variant={active ? 'primary' : 'secondary'}
-                        size="sm"
-                        disabled={isBusy}
-                        onClick={() => handleToggleActive(def.id, active)}
-                        className="gap-1.5"
-                      >
-                        {active && <Check className="h-3.5 w-3.5" />}
-                        {active ? t('translationTool.enabled') : t('translationTool.enable')}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        disabled={isBusy}
-                        onClick={() => handleDelete(def.id)}
-                        aria-label={t('translationTool.delete')}
-                        title={t('translationTool.delete')}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-fg-tertiary" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
+                  title={t(`translationTool.${def.labelKey}`)}
+                  sizeLabel={sizeLabel}
+                  description={t(def.id === 'madlad400-3b' ? 'translationTool.desc3b' : 'translationTool.desc7b')}
+                  state={cardState}
+                  isDownloading={isDownloading}
+                  downloadPercent={downloadPercent}
+                  onDownload={() => handleDownload(def.id)}
+                  onSelect={() => handleToggleActive(def.id, false)}
+                  onDeselect={() => handleToggleActive(def.id, true)}
+                  onDelete={() => handleDelete(def.id)}
+                  onCancel={handleCancelDownload}
+                  labels={{
+                    download: t('translationTool.download'),
+                    downloading: t('model.downloading'),
+                    cancel: t('model.cancelDownload'),
+                    useThis: t('translationTool.useThis'),
+                    selected: t('translationTool.inUse'),
+                    installedBadge: t('translationTool.installedBadge'),
+                    activeBadge: t('translationTool.inUse'),
+                    deleteTitle: t('translationTool.delete'),
+                  }}
+                />
               )
             })}
           </div>
+          <ManagedModelDiskFooter
+            totalUsedBytes={state ? state.totalUsedBytes : null}
+            diskDrive={state?.diskDrive || 'C:\\'}
+            diskFreeBytes={state?.diskFreeBytes ?? 0}
+            onOpenFolder={() => { openTranslationToolsFolder().catch(() => {}) }}
+            labels={{
+              totalUsed: t('model.totalUsed'),
+              diskFree: t('model.diskFree'),
+              openFolder: t('model.openFolder'),
+            }}
+          />
         </div>
       </AccordionCollapse>
     </div>

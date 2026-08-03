@@ -106,6 +106,7 @@ export const Channels = {
   shellShowInFolder: 'shell:showInFolder',
   shellOpenExternal: 'shell:openExternal',
   shellOpenModelsFolder: 'shell:openModelsFolder',
+  shellOpenTranslationToolsFolder: 'shell:openTranslationToolsFolder',
   shellOpenThirdPartyLicensesFolder: 'shell:openThirdPartyLicensesFolder',
   shellWriteTextFile: 'shell:writeTextFile',
   shellFileExists: 'shell:fileExists',

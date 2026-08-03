@@ -132,6 +132,10 @@ export interface TranslationToolInfo {
 export interface TranslationToolsState {
   tools: TranslationToolInfo[]
   activeId: TranslationToolId | null
+  /** REQ-0408 — footer figures for the `translation-tools` directory. */
+  totalUsedBytes: number
+  diskFreeBytes: number
+  diskDrive: string
 }
 
 // ---------------------------------------------------------------------------
@@ -190,12 +194,16 @@ export function buildToolsState(
   opts: {
     downloading?: readonly TranslationToolId[]
     sizeBytes?: Partial<Record<TranslationToolId, number>>
+    /** REQ-0408 — disk figures for the footer (main process fills these in). */
+    diskFreeBytes?: number
+    diskDrive?: string
   } = {},
 ): TranslationToolsState {
   const downloading = opts.downloading ?? []
   const sizes = opts.sizeBytes ?? {}
   const activeId =
     state.activeId !== null && state.installed.includes(state.activeId) ? state.activeId : null
+  let totalUsedBytes = 0
   const tools: TranslationToolInfo[] = TRANSLATION_TOOLS.map((def) => {
     const installed = state.installed.includes(def.id)
     const status: TranslationToolStatus = installed
@@ -203,13 +211,21 @@ export function buildToolsState(
       : downloading.includes(def.id)
         ? 'downloading'
         : 'not-downloaded'
+    const sizeBytes = installed ? (sizes[def.id] ?? 0) : 0
+    totalUsedBytes += sizeBytes
     return {
       id: def.id,
       status,
-      sizeBytes: installed ? (sizes[def.id] ?? 0) : 0,
+      sizeBytes,
       expectedSizeBytes: def.expectedSizeBytes,
       active: activeId === def.id,
     }
   })
-  return { tools, activeId }
+  return {
+    tools,
+    activeId,
+    totalUsedBytes,
+    diskFreeBytes: opts.diskFreeBytes ?? 0,
+    diskDrive: opts.diskDrive ?? '',
+  }
 }

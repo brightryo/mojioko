@@ -148,6 +148,8 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.shellOpenExternal, url),
   shellOpenModelsFolder: (): Promise<void> =>
     ipcRenderer.invoke(Channels.shellOpenModelsFolder),
+  shellOpenTranslationToolsFolder: (): Promise<void> =>
+    ipcRenderer.invoke(Channels.shellOpenTranslationToolsFolder),
   shellOpenThirdPartyLicensesFolder: (): Promise<void> =>
     ipcRenderer.invoke(Channels.shellOpenThirdPartyLicensesFolder),
   shellWriteTextFile: (filePath: string, content: string): Promise<void> =>

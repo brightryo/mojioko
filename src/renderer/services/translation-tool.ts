@@ -90,3 +90,7 @@ export async function setActiveTranslationTool(
 ): Promise<IpcResult<TranslationToolsState>> {
   return window.electronAPI.translationToolSetActive(toolId)
 }
+
+export async function openTranslationToolsFolder(): Promise<void> {
+  return window.electronAPI.shellOpenTranslationToolsFolder()
+}
