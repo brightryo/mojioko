@@ -53,6 +53,35 @@ export function resolveLayer(entry: { layer?: number }): number {
   return typeof entry.layer === 'number' && Number.isFinite(entry.layer) ? entry.layer : 0
 }
 
+/**
+ * REQ-0397 §1 — the smallest layer the z-order UI is allowed to assign.  The
+ * timeline is bottom-anchored (layer 0 = the backmost / bottom-most track), so
+ * there is no row to represent a negative layer; "send to back" therefore floors
+ * at 0 and negative layers are never generated.  (Projects saved before this
+ * clamp may still carry a legacy negative layer — the layout / ASS paths stay
+ * tolerant of that; this floor only governs what the UI newly writes.)
+ */
+export const MIN_LAYER = 0
+
+/**
+ * The layer "bring to front" assigns: one above the current maximum among
+ * `layers`, but never below `MIN_LAYER + 1` (so a fresh front is always ≥ 1).
+ * `layers` are the resolved layer values of every cue in the project.
+ */
+export function bringToFrontLayer(layers: readonly number[]): number {
+  return Math.max(MIN_LAYER, ...layers) + 1
+}
+
+/**
+ * The layer "send to back" assigns: one below the current minimum among
+ * `layers`, floored at `MIN_LAYER` so it never descends into negatives
+ * (REQ-0397 §1).  An all-layer-0 project therefore resolves to 0 — a no-op the
+ * caller detects by comparing against the cue's current layer.
+ */
+export function sendToBackLayer(layers: readonly number[]): number {
+  return Math.max(MIN_LAYER, Math.min(...layers) - 1)
+}
+
 export function alignmentNumpad(
   horizontalPosition: 'left' | 'center' | 'right',
   verticalPosition: 'top' | 'center' | 'bottom',

@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { computeCuePlacement, alignmentNumpad } from '../../src/shared/cue-placement'
+import {
+  computeCuePlacement,
+  alignmentNumpad,
+  bringToFrontLayer,
+  sendToBackLayer,
+  MIN_LAYER,
+} from '../../src/shared/cue-placement'
 import { cueLineAnchors, lineHeightsAssPx, type CueLineAnchorInput } from '../../src/shared/line-spacing'
 
 /**
@@ -137,5 +143,37 @@ describe('REQ-0389 — layer passthrough (z-order, spec decision E)', () => {
     expect(
       computeCuePlacement({ ...anchorInput(1, 100, 0, 'center', 'bottom'), outlineThicknessPx: 3, layer: 4 }).layer,
     ).toBe(4)
+  })
+})
+
+describe('REQ-0397 §1 — z-order front/back arithmetic clamps at MIN_LAYER (0)', () => {
+  it('MIN_LAYER is 0', () => {
+    expect(MIN_LAYER).toBe(0)
+  })
+
+  it('bring to front = max + 1', () => {
+    expect(bringToFrontLayer([0, 0, 0])).toBe(1)
+    expect(bringToFrontLayer([0, 2, 1])).toBe(3)
+    expect(bringToFrontLayer([5])).toBe(6)
+  })
+
+  it('send to back never goes negative — floors at 0', () => {
+    // All-layer-0 project: send-to-back resolves to 0 (a no-op the caller drops).
+    expect(sendToBackLayer([0, 0, 0])).toBe(0)
+    // A single layer-0 cue: still 0, not -1.
+    expect(sendToBackLayer([0])).toBe(0)
+    // Mixed with a 0 present: one-below-min would be -1 → floored to 0.
+    expect(sendToBackLayer([0, 2, 3])).toBe(0)
+  })
+
+  it('send to back = min - 1 when that stays ≥ 0', () => {
+    // Backmost cue sits at layer 2 → sending another behind it lands on layer 1.
+    expect(sendToBackLayer([2, 3])).toBe(1)
+    expect(sendToBackLayer([1, 4, 7])).toBe(0)
+  })
+
+  it('a legacy negative layer does not drag new send-to-back below 0', () => {
+    // Even if an old project carries a -1, the clamp keeps new writes ≥ 0.
+    expect(sendToBackLayer([-1, 0, 1])).toBe(0)
   })
 })

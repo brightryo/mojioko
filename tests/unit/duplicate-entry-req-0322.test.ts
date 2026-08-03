@@ -166,6 +166,18 @@ describe('REQ-0322 §2 — duplicateRow carries every SubtitleEntry field', () =
     expect(dup.layer).toBe(1) // resolveLayer(undefined) 0 → +1
   })
 
+  it('REQ-0397 §2 — the duplicate layer is never negative (legacy negative source clamps to 0)', () => {
+    // A project saved before the REQ-0397 §1 clamp may carry a negative layer.
+    // Duplicating such a cue must not produce another negative: -1 + 1 = 0, and
+    // an even-lower legacy layer is floored at 0 rather than staying negative.
+    const src = { ...makeRichEntry(), layer: -1, original: { ...makeRichEntry().original, layer: -1 } }
+    const dup = buildDuplicateEntry(src, 'dup-neg-layer')
+    expect(dup.layer).toBe(0)
+    expect(dup.original.layer).toBe(0)
+    const deep = { ...makeRichEntry(), layer: -5, original: { ...makeRichEntry().original, layer: -5 } }
+    expect(buildDuplicateEntry(deep, 'dup-neg-deep').layer).toBe(0)
+  })
+
   it('deep-copies mutable structures: no shared identity anywhere', () => {
     const src = makeRichEntry()
     const dup = buildDuplicateEntry(src, 'dup-6')

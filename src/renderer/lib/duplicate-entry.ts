@@ -30,7 +30,7 @@
  */
 
 import type { SubtitleEntry, SubtitleEntryOriginal } from '../../shared/types'
-import { resolveLayer } from '../../shared/cue-placement'
+import { resolveLayer, MIN_LAYER } from '../../shared/cue-placement'
 
 /**
  * What happens to a field when a row is duplicated.
@@ -194,9 +194,13 @@ export function buildDuplicateEntry(entry: SubtitleEntry, newId: string): Subtit
   // REQ-0396 — `shift` fields are recomputed for the duplicate rather than
   // copied.  `layer` shifts up by one so the duplicate paints on the row/layer
   // ABOVE the source (front), instead of sharing — and overlapping — its row.
+  // REQ-0397 §2 — clamped to `MIN_LAYER` so the copy is never negative (source+1
+  // is already ≥ 1 for any non-legacy source; the floor only guards a project
+  // that carries a legacy negative layer).  The timeline is bottom-anchored, so
+  // "one above" (front) is literally one row up the stack.
   // (The `Pick` over `KeysWithRule<'shift'>` makes tsc demand exactly the shift
   // fields, so reclassifying a field to `shift` without computing it fails.)
-  const shiftedLayer = resolveLayer(entry) + 1
+  const shiftedLayer = Math.max(MIN_LAYER, resolveLayer(entry) + 1)
   const shifted: Pick<SubtitleEntryOriginal, KeysWithRule<'shift'>> = {
     layer: shiftedLayer,
   }

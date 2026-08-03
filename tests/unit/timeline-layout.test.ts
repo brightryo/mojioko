@@ -96,7 +96,10 @@ describe('layoutEntries — rows = stored layer (REQ-0396)', () => {
     expect(t.get('a')).toBe(1) // layer 0 → bottom row
   })
 
-  it('negative layer (send-to-back) sits below layer 0', () => {
+  it('legacy negative layer still sorts below layer 0 (layoutEntries tolerant)', () => {
+    // REQ-0397 §1 — the UI no longer GENERATES negative layers ("send to back"
+    // floors at 0), but a project saved before that clamp may still carry one.
+    // layoutEntries must remain tolerant: a negative layer sorts below layer 0.
     const result = layoutEntries([entry('a', 0, 1, 0), entry('back', 0, 1, -1)], 10)
     expect(result.trackLayers).toEqual([0, -1])
     const t = trackOf(result)

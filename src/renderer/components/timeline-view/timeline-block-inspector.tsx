@@ -17,7 +17,7 @@ import { NumberStepperInput } from '@/components/subtitle-table/number-stepper-i
 import { ShadowDepthSlider } from '@/components/subtitle-table/shadow-depth-slider'
 import { LineSpacingSlider } from '@/components/subtitle-table/line-spacing-slider'
 import { resolveLineSpacingPercent } from '../../../shared/line-spacing'
-import { resolveLayer } from '../../../shared/cue-placement'
+import { resolveLayer, bringToFrontLayer, sendToBackLayer } from '../../../shared/cue-placement'
 import { SegmentGroup } from '@/components/subtitle-table/segment-group'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
@@ -653,15 +653,23 @@ export function TimelineBlockInspector({
   // the current global extreme so the cue paints unambiguously in front of / behind
   // every other cue; within one layer the tie-break stays emission/DOM order.
   // Reads all entries via getState() (a click handler, no need to subscribe).
+  //
+  // REQ-0397 §1 — layer is clamped to a floor of 0: negative layers are never
+  // generated.  The timeline is bottom-anchored (layer 0 = the lowest/backmost
+  // track, §3), so there is no row below layer 0 to represent a negative layer;
+  // "send to back" therefore stops AT layer 0 rather than descending into -1, -2…
+  // ("最背面へ" は layer 0 で止まる).
   function bringToFront() {
     const layers = useProjectStore.getState().entries.map(resolveLayer)
-    const next = Math.max(0, ...layers) + 1
+    const next = bringToFrontLayer(layers)
     if (resolveLayer(entry) === next) return
     applyStyleEdit(t('history.editZOrder'), { layer: next })
   }
   function sendToBack() {
     const layers = useProjectStore.getState().entries.map(resolveLayer)
-    const next = Math.min(0, ...layers) - 1
+    // Floor at 0 (REQ-0397 §1) — one step behind the current minimum, but never
+    // below 0.  All-layer-0 projects therefore no-op here (next === 0 === current).
+    const next = sendToBackLayer(layers)
     if (resolveLayer(entry) === next) return
     applyStyleEdit(t('history.editZOrder'), { layer: next })
   }
