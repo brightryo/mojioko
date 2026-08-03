@@ -912,16 +912,6 @@ export function TimelineBlockInspector({
     // Inspector has exactly one scroll axis end-to-end.  `w-full`
     // replaces the legacy `w-[320px]` popover width.
     <div className="flex flex-col gap-3 w-full text-fg-primary">
-      {/* REQ-0400 — cue display number ("字幕ID"), pinned to the TOP-RIGHT so a
-          duplicate is instantly distinguishable from its source.  The rest of
-          the inspector is left-aligned; only this identifier is right-aligned.
-          `cueNumber` is assigned by the store for every cue, so the `?? '—'`
-          only guards a transient before the first assignment. */}
-      <div className="flex justify-end">
-        <span className="text-caption font-mono tabular-nums text-fg-muted select-none">
-          {t('inspector.cueId', { n: entry.cueNumber ?? '—' })}
-        </span>
-      </div>
       {/* § 1 — Action icons.  REQ-20260614-001 補遺③: × close button
           retired.  Common cluster: 敷き詰め改行 → はみ出し改行 →
           削除/復元 → リセット → 複製.  Wrap buttons suppressed in
@@ -1054,14 +1044,26 @@ export function TimelineBlockInspector({
               multi-select): the inspector always targets exactly one row,
               and saving only READS it, so even a frozen row can be
               snapshotted. */}
-          {!isAudioOnly && (
-            <StylePresetControls
-              triggerVariant="toolbar"
-              className="ml-auto"
-              onSaveCurrent={handleSavePreset}
-              onApply={handleApplyPreset}
-            />
-          )}
+          {/* REQ-0401 — right-end group of the header row: the style-preset
+              control (kept at the right per REQ-0337 §3) and the cue display
+              number ("字幕ID"), with the ID as the RIGHT-MOST element so it reads
+              as "the inspector for this ID".  `ml-auto` on the wrapper right-
+              aligns the whole group, so the ID stays right-aligned even in
+              audio-only mode where the preset control is hidden.  `cueNumber` is
+              assigned by the store for every cue; `?? '—'` only guards the
+              transient before the first assignment. */}
+          <div className="ml-auto flex items-center gap-2">
+            {!isAudioOnly && (
+              <StylePresetControls
+                triggerVariant="toolbar"
+                onSaveCurrent={handleSavePreset}
+                onApply={handleApplyPreset}
+              />
+            )}
+            <span className="text-caption font-mono tabular-nums text-fg-muted select-none whitespace-nowrap">
+              {t('inspector.cueId', { n: entry.cueNumber ?? '—' })}
+            </span>
+          </div>
       </div>
 
       {/* § 2 — Status badges.  `state.edited` first, then warnings in the
