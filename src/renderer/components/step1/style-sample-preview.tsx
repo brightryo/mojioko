@@ -259,7 +259,11 @@ export function StyleSamplePreview({
       <div className="flex justify-center w-full">
         <div
           ref={containerRef}
-          className="rounded-md bg-input border border-border relative overflow-hidden"
+          // REQ-0398 §1 — same overlay stacking-context isolation as the main
+          // video preview: `isolate` keeps the sample cue's z-index (mirrors its
+          // z-order layer) contained so it can never rise above the surrounding
+          // dialog chrome.
+          className="rounded-md bg-input border border-border relative overflow-hidden isolate"
           style={{
             aspectRatio,
             maxHeight: `${FRAME_MAX_HEIGHT_PX}px`,

@@ -137,6 +137,7 @@
     "transcriptionNoSpeech": "No speech was detected.  You can add subtitles manually with \"Add.\"",
     "rowAdded": "Added at position {{index}}",
     "rowDuplicated": "Row duplicated",
+    "rowDuplicateMaxLayer": "Can't duplicate: this would exceed the maximum layer (50). Duplicate from a lower layer instead.",
     "rowDeleted": "Deleted",
     "rowRestored": "Restored",
     "rowReset": "Reset",

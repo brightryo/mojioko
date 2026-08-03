@@ -840,7 +840,8 @@ export function TimelineBlockInspector({
     commitText(draft)
     runDuplicateRow(entry, {
       history: t('history.duplicateRow'),
-      successToast: t('toast.rowDuplicated')
+      successToast: t('toast.rowDuplicated'),
+      maxLayerBlocked: t('toast.rowDuplicateMaxLayer')
     })
   }
 

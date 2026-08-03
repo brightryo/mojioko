@@ -13,6 +13,7 @@ import {
 } from '../../shared/emphasis'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { buildDuplicateEntry } from '@/lib/duplicate-entry'
+import { resolveLayer, MAX_LAYER } from '../../shared/cue-placement'
 
 /**
  * Row-level edit operations that are shared between the list view
@@ -415,12 +416,22 @@ export function overflowWrapRow(
  */
 export function duplicateRow(
   entry: SubtitleEntry,
-  labels: { history: string; successToast: string }
+  labels: { history: string; successToast: string; maxLayerBlocked: string }
 ): void {
   const projectStore = useProjectStore.getState()
   const pushHistory = useHistoryStore.getState().push
   const originalIdx = projectStore.entries.findIndex((e) => e.id === entry.id)
   if (originalIdx === -1) return
+
+  // REQ-0398 §3 — the duplicate lands one layer above the source (front,
+  // REQ-0397 §2).  If the source already sits at the top of the [0, MAX_LAYER]
+  // z-order range there is no free layer above it, so block the duplication
+  // outright (rather than silently clamping to the same layer, which would put
+  // the copy on the source's row and overlap it) and tell the user why.
+  if (resolveLayer(entry) >= MAX_LAYER) {
+    toast.error(labels.maxLayerBlocked)
+    return
+  }
 
   // REQ-079 #2 / REQ-052 style id — collision-resistant when two
   // duplicates land within the same millisecond.  `dup-` prefix makes

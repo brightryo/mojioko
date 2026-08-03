@@ -1347,7 +1347,15 @@ export function VideoPreviewPanel() {
         ) : videoFrameW > 0 && videoFrameH > 0 ? (
           <div
             ref={videoContainerRef}
-            className="relative bg-input rounded overflow-hidden"
+            // REQ-0398 §1 — `isolate` (isolation: isolate) confines the subtitle
+            // overlays to their OWN stacking context.  Each cue's CSS `z-index`
+            // mirrors its z-order `layer` (subtitle-overlay.tsx), so without this
+            // a high layer produced a high z-index that competed with the app's
+            // chrome and could paint the subtitle ABOVE a drawer's scrim or the
+            // export-result dialog.  Isolated, the whole preview participates in
+            // the parent stacking order as a single unit (z-auto), so no cue
+            // z-index — however large — can rise above the surrounding UI.
+            className="relative bg-input rounded overflow-hidden isolate"
             style={{
               width: `${videoFrameW}px`,
               height: `${videoFrameH}px`,

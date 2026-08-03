@@ -120,6 +120,7 @@ export function useGlobalShortcuts(): void {
             duplicateRow(entry, {
               history: t('history.duplicateRow', { ns: 'step2' }),
               successToast: t('toast.rowDuplicated', { ns: 'step2' }),
+              maxLayerBlocked: t('toast.rowDuplicateMaxLayer', { ns: 'step2' }),
             })
           }
         }

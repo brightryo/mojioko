@@ -1,9 +1,15 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import { useProjectStore } from '../../src/renderer/stores/project-store'
 import { useHistoryStore } from '../../src/renderer/stores/history-store'
-import { resetRow, toggleDeleteRow } from '../../src/renderer/lib/entry-row-actions'
+import { resetRow, toggleDeleteRow, duplicateRow } from '../../src/renderer/lib/entry-row-actions'
 import type { SubtitleEntry } from '../../src/shared/types'
 import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
+import { MAX_LAYER } from '../../src/shared/cue-placement'
+
+// duplicateRow raises sonner toasts; stub them so the assertions can inspect
+// which toast fired without mounting a <Toaster>.
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }))
 
 /**
  * REQ-062 regression — the timeline inspector's Reset button must
@@ -144,5 +150,33 @@ describe('toggleDeleteRow', () => {
     toggleDeleteRow(getEntry(), { delete: 'del', restore: 'res' })
     expect(getEntry().isDeleted).toBe(false)
     expect(useHistoryStore.getState().past.at(-1)?.label).toBe('res')
+  })
+})
+
+describe('duplicateRow — REQ-0398 §3 max-layer guard', () => {
+  const DUP_LABELS = { history: 'dup', successToast: 'ok', maxLayerBlocked: 'BLOCKED' }
+
+  beforeEach(() => {
+    vi.mocked(toast.success).mockClear()
+    vi.mocked(toast.error).mockClear()
+  })
+
+  it('duplicates a cue below the cap and adds a row one layer above', () => {
+    useProjectStore.getState().setEntries([makeEntry({ layer: MAX_LAYER - 1 })])
+    duplicateRow(getEntry(), DUP_LABELS)
+    const entries = useProjectStore.getState().entries
+    expect(entries).toHaveLength(2)
+    // The freshly-inserted copy sits directly after the source, one layer up.
+    expect(entries[1].layer).toBe(MAX_LAYER) // (MAX_LAYER - 1) + 1
+    expect(vi.mocked(toast.success)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(toast.error)).not.toHaveBeenCalled()
+  })
+
+  it('blocks duplication at the cap and raises the blocked toast (no row added)', () => {
+    useProjectStore.getState().setEntries([makeEntry({ layer: MAX_LAYER })])
+    duplicateRow(getEntry(), DUP_LABELS)
+    expect(useProjectStore.getState().entries).toHaveLength(1) // nothing added
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith('BLOCKED')
+    expect(vi.mocked(toast.success)).not.toHaveBeenCalled()
   })
 })

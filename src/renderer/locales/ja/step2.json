@@ -137,6 +137,7 @@
     "transcriptionNoSpeech": "発話を検出できませんでした。字幕は「追加」から手動で作成できます。",
     "rowAdded": "{{index}}番目に追加しました",
     "rowDuplicated": "行を複製しました",
+    "rowDuplicateMaxLayer": "最大レイヤー数(50)を超えるため複製できません。下位レイヤーで複製してください。",
     "rowDeleted": "削除しました",
     "rowRestored": "復元しました",
     "rowReset": "リセットしました",

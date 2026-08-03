@@ -5,6 +5,7 @@ import {
   bringToFrontLayer,
   sendToBackLayer,
   MIN_LAYER,
+  MAX_LAYER,
 } from '../../src/shared/cue-placement'
 import { cueLineAnchors, lineHeightsAssPx, type CueLineAnchorInput } from '../../src/shared/line-spacing'
 
@@ -175,5 +176,26 @@ describe('REQ-0397 §1 — z-order front/back arithmetic clamps at MIN_LAYER (0)
   it('a legacy negative layer does not drag new send-to-back below 0', () => {
     // Even if an old project carries a -1, the clamp keeps new writes ≥ 0.
     expect(sendToBackLayer([-1, 0, 1])).toBe(0)
+  })
+})
+
+describe('REQ-0398 §2 — z-order caps at MAX_LAYER (50)', () => {
+  it('MAX_LAYER is 50', () => {
+    expect(MAX_LAYER).toBe(50)
+  })
+
+  it('bring to front never exceeds MAX_LAYER', () => {
+    // At the cap: front resolves to 50, not 51 (the caller no-ops on equality).
+    expect(bringToFrontLayer([50])).toBe(MAX_LAYER)
+    expect(bringToFrontLayer([48, 50, 49])).toBe(MAX_LAYER)
+    // A legacy over-cap layer still clamps a NEW front down to 50.
+    expect(bringToFrontLayer([9999])).toBe(MAX_LAYER)
+  })
+
+  it('bring to front is still max + 1 below the cap', () => {
+    expect(bringToFrontLayer([0])).toBe(1)
+    expect(bringToFrontLayer([10, 3])).toBe(11)
+    expect(bringToFrontLayer([48])).toBe(49)
+    expect(bringToFrontLayer([49])).toBe(MAX_LAYER)
   })
 })

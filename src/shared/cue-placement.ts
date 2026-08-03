@@ -64,12 +64,25 @@ export function resolveLayer(entry: { layer?: number }): number {
 export const MIN_LAYER = 0
 
 /**
+ * REQ-0398 §2 — the largest layer the z-order UI is allowed to assign.  Layers
+ * are also mirrored 1:1 onto the preview overlay's CSS `z-index`
+ * (`subtitle-overlay.tsx`), so an unbounded layer produced an unbounded z-index
+ * that could climb above the app's own chrome (drawers, dialogs).  The preview
+ * is now isolated into its own stacking context (§1) so that leak is contained
+ * regardless, but the layer range is still capped at a sane [0, 50] so a user
+ * cannot mint arbitrarily many tracks.  "Bring to front" stops at 50 and
+ * duplicating a layer-50 cue is blocked (`duplicateRow`, §3).
+ */
+export const MAX_LAYER = 50
+
+/**
  * The layer "bring to front" assigns: one above the current maximum among
- * `layers`, but never below `MIN_LAYER + 1` (so a fresh front is always ≥ 1).
- * `layers` are the resolved layer values of every cue in the project.
+ * `layers`, clamped to `[MIN_LAYER + 1, MAX_LAYER]` (a fresh front is always
+ * ≥ 1 and never exceeds the cap — REQ-0398 §2).  `layers` are the resolved
+ * layer values of every cue in the project.
  */
 export function bringToFrontLayer(layers: readonly number[]): number {
-  return Math.max(MIN_LAYER, ...layers) + 1
+  return Math.min(MAX_LAYER, Math.max(MIN_LAYER, ...layers) + 1)
 }
 
 /**
