@@ -27,6 +27,10 @@ export const Channels = {
   translationToolUninstall: 'translationTool:uninstall',
   translationToolSetActive: 'translationTool:setActive',
 
+  // REQ-0410 — one-shot translate for the inspector auto-translate prototype.
+  // Resolves via the resident MADLAD sidecar; result is non-persisted.
+  translationTranslate: 'translation:translate',
+
   fontList: 'font:list',
   fontDownload: 'font:download',
   fontUninstall: 'font:uninstall',

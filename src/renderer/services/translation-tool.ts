@@ -1,5 +1,6 @@
 import type { IpcResult } from '../../shared/types'
 import type { TranslationToolId, TranslationToolsState } from '../../shared/translation-tools'
+import type { TranslateResult } from '../../shared/translation'
 import type { DownloadModelEvent } from '../../shared/ipc-contracts'
 
 /**
@@ -93,4 +94,14 @@ export async function setActiveTranslationTool(
 
 export async function openTranslationToolsFolder(): Promise<void> {
   return window.electronAPI.shellOpenTranslationToolsFolder()
+}
+
+/**
+ * REQ-0410 — one-shot translate (prototype).  Resolves via the resident MADLAD
+ * sidecar; the result is shown in a throwaway inspector field and never
+ * persisted.  Returns the raw {@link IpcResult} so callers can branch on the
+ * typed error code (NO_ACTIVE_TOOL / PYTHON_MISSING / SIDECAR_ERROR).
+ */
+export async function translateCue(text: string): Promise<IpcResult<TranslateResult>> {
+  return window.electronAPI.translationTranslate(text)
 }

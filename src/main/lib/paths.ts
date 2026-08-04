@@ -336,6 +336,13 @@ export function getPythonSidecarPath(): string {
     : join(process.resourcesPath, 'python-sidecar', 'main.py')
 }
 
+/** REQ-0410 — path to the MADLAD translation sidecar script (prototype). */
+export function getTranslateSidecarPath(): string {
+  return isDev
+    ? join(app.getAppPath(), 'python-sidecar', 'translate.py')
+    : join(process.resourcesPath, 'python-sidecar', 'translate.py')
+}
+
 /**
  * Returns the path to the PyInstaller-built standalone transcriber binary
  * shipped with packaged installs.  When --onedir is used, PyInstaller writes

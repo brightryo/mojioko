@@ -440,7 +440,16 @@
       "layoutSection": "Layout",
       "backgroundSection": "Background",
       "backgroundSectionHelp": "Enabling the background disables the outline color.",
-      "animationSection": "Animation"
+      "animationSection": "Animation",
+      "translate": {
+        "label": "English (preview)",
+        "loading": "Translating…",
+        "error": "Translation failed",
+        "noActiveTool": "Enable a translation tool",
+        "cached": "cached",
+        "warmTime": "{{ms}}ms",
+        "coldTime": "{{ms}}ms (incl. first load)"
+      }
     },
     "nav": {
       "first": "Jump to start",

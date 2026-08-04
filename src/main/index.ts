@@ -12,8 +12,10 @@ import { registerShellHandlers } from './ipc/shell'
 import { registerFontHandlers } from './ipc/font'
 import { registerGpuToolHandlers } from './ipc/gpu-tool'
 import { registerTranslationToolHandlers } from './ipc/translation-tool'
+import { registerTranslationHandlers } from './ipc/translation'
 import { registerDownloadHandlers } from './ipc/download'
 import { terminateSidecar } from './services/transcription-sidecar'
+import { terminateTranslationSidecar } from './services/translation-sidecar'
 import { execFileAsync } from './lib/child-process'
 import { detectAvailableEncoders, getBestEncoder } from './services/encoder-detector'
 import { buildMenu, rebuildMenu, setMenuLocked } from './menu'
@@ -221,6 +223,7 @@ function registerIpcHandlers(): void {
   registerFontHandlers()
   registerGpuToolHandlers()
   registerTranslationToolHandlers()
+  registerTranslationHandlers()
   registerDownloadHandlers()
 }
 
@@ -289,6 +292,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   log.info('[main] before-quit: terminating sidecar')
   terminateSidecar()
+  terminateTranslationSidecar()
 })
 
 app.on('web-contents-created', (_event, contents) => {

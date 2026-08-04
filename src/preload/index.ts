@@ -4,6 +4,7 @@ import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../sha
 import type { FontsState, FontId } from '../shared/fonts'
 import type { GpuToolState } from '../shared/gpu-tool'
 import type { TranslationToolId, TranslationToolsState } from '../shared/translation-tools'
+import type { TranslateResult } from '../shared/translation'
 import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult, ActiveDownloadInfo } from '../shared/ipc-contracts'
 
 type OkResult<T> = { ok: true; data: T }
@@ -86,6 +87,9 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.translationToolUninstall, toolId),
   translationToolSetActive: (toolId: TranslationToolId | null): Promise<IpcResult<TranslationToolsState>> =>
     ipcRenderer.invoke(Channels.translationToolSetActive, toolId),
+  // REQ-0410 — one-shot translate for the inspector auto-translate prototype.
+  translationTranslate: (text: string): Promise<IpcResult<TranslateResult>> =>
+    ipcRenderer.invoke(Channels.translationTranslate, text),
 
   // Fonts
   fontList: (): Promise<IpcResult<FontsState>> =>

@@ -4,3 +4,7 @@
 # The 1.0.3-era `requests` runtime-import hack is no longer needed —
 # faster_whisper 1.2.1's metadata declares it correctly.
 faster-whisper==1.2.1
+
+# REQ-0410 — MADLAD-400 translation prototype needs SentencePiece for the
+# `spiece.model` tokenizer (CTranslate2 is already pulled in via faster-whisper).
+sentencepiece==0.2.0
