@@ -446,6 +446,7 @@
         "loading": "Translating…",
         "error": "Translation failed",
         "noActiveTool": "Enable a translation tool",
+        "depsMissing": "The translation sidecar is missing a dependency. Run:",
         "cached": "cached",
         "warmTime": "{{ms}}ms",
         "coldTime": "{{ms}}ms (incl. first load)"

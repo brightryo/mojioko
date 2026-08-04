@@ -1,4 +1,4 @@
-# REQ-0105 — pinned build-time dependencies for the PyInstaller sidecar
+# REQ-0105 -- pinned build-time dependencies for the PyInstaller sidecar
 # rebuild.  Split from requirements.lock.txt so the runtime lock stays clean
 # of build-only tools.
 #

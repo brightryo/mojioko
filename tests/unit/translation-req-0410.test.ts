@@ -5,6 +5,9 @@ import {
   translationCacheKey,
   isLatestRequest,
   isTranslatableText,
+  detectMissingPythonModule,
+  isDepsMissingError,
+  buildDepsMissingMessage,
 } from '../../src/shared/translation'
 
 /**
@@ -53,5 +56,43 @@ describe('isTranslatableText', () => {
     expect(isTranslatableText('   ')).toBe(false)
     expect(isTranslatableText('\\N')).toBe(false)
     expect(isTranslatableText('')).toBe(false)
+  })
+})
+
+// REQ-0411 — clearer sidecar dependency error mapping.
+describe('detectMissingPythonModule', () => {
+  it('extracts the module name from a "No module named" error', () => {
+    expect(detectMissingPythonModule("No module named 'sentencepiece'")).toBe('sentencepiece')
+    expect(
+      detectMissingPythonModule("ModuleNotFoundError: No module named 'ctranslate2'"),
+    ).toBe('ctranslate2')
+    // Dotted submodule names are captured whole.
+    expect(detectMissingPythonModule('No module named "pkg.sub"')).toBe('pkg.sub')
+  })
+  it('returns null when the error is unrelated', () => {
+    expect(detectMissingPythonModule('CUDA out of memory')).toBeNull()
+  })
+})
+
+describe('isDepsMissingError', () => {
+  it('true for missing-module / import errors, false otherwise', () => {
+    expect(isDepsMissingError("No module named 'sentencepiece'")).toBe(true)
+    expect(isDepsMissingError('ImportError: cannot import name X')).toBe(true)
+    expect(isDepsMissingError('ModuleNotFoundError: whatever')).toBe(true)
+    expect(isDepsMissingError('CUDA out of memory')).toBe(false)
+  })
+})
+
+describe('buildDepsMissingMessage', () => {
+  it('embeds the venv python + the pip install command', () => {
+    const msg = buildDepsMissingMessage('C:\\venv\\python.exe', 'sentencepiece')
+    expect(msg).toContain('C:\\venv\\python.exe')
+    expect(msg).toContain('-m pip install -r python-sidecar/requirements.txt')
+    expect(msg).toContain('sentencepiece')
+  })
+  it('falls back to "python" and omits the module clause when unknown', () => {
+    const msg = buildDepsMissingMessage('', null)
+    expect(msg).toContain('"python" -m pip install')
+    expect(msg).not.toContain('missing module')
   })
 })

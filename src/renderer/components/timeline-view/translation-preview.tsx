@@ -41,7 +41,7 @@ type ViewState =
   | { status: 'empty' }
   | { status: 'loading' }
   | { status: 'result'; entry: CacheEntry; cached: boolean }
-  | { status: 'error'; code: TranslateErrorCode }
+  | { status: 'error'; code: TranslateErrorCode; message: string }
 
 export function TranslationPreview({ sourceText }: { sourceText: string }): JSX.Element | null {
   const { t } = useTranslation(['step2'])
@@ -83,7 +83,7 @@ export function TranslationPreview({ sourceText }: { sourceText: string }): JSX.
           setView({ status: 'result', entry, cached: false })
         } else {
           const code = res.error.code as TranslateErrorCode
-          setView({ status: 'error', code })
+          setView({ status: 'error', code, message: res.error.message })
         }
       })
     }, DEBOUNCE_MS)
@@ -127,13 +127,29 @@ export function TranslationPreview({ sourceText }: { sourceText: string }): JSX.
         {view.status === 'result' && (
           <span className="text-fg-secondary">{view.entry.text}</span>
         )}
-        {view.status === 'error' && (
+        {view.status === 'error' && view.code === 'NO_ACTIVE_TOOL' && (
           <span className="text-destructive">
-            {view.code === 'NO_ACTIVE_TOOL'
-              ? t('timeline.inspector.translate.noActiveTool')
-              : t('timeline.inspector.translate.error')}
+            {t('timeline.inspector.translate.noActiveTool')}
           </span>
         )}
+        {view.status === 'error' && view.code === 'SIDECAR_DEPS_MISSING' && (
+          <div className="space-y-1">
+            <span className="text-destructive">
+              {t('timeline.inspector.translate.depsMissing')}
+            </span>
+            {/* The concrete `python -m pip install …` command from main. */}
+            <code className="block whitespace-pre-wrap break-all text-caption text-fg-tertiary">
+              {view.message}
+            </code>
+          </div>
+        )}
+        {view.status === 'error' &&
+          view.code !== 'NO_ACTIVE_TOOL' &&
+          view.code !== 'SIDECAR_DEPS_MISSING' && (
+            <span className="text-destructive">
+              {t('timeline.inspector.translate.error')}
+            </span>
+          )}
       </div>
     </div>
   )

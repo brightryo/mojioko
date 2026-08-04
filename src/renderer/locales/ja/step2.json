@@ -446,6 +446,7 @@
         "loading": "翻訳中…",
         "error": "翻訳に失敗しました",
         "noActiveTool": "翻訳ツールを有効化してください",
+        "depsMissing": "翻訳サイドカーの依存が不足しています。以下を実行してください:",
         "cached": "cached",
         "warmTime": "{{ms}}ms",
         "coldTime": "{{ms}}ms（初回ロード込み）"

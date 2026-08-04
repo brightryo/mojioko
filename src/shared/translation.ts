@@ -20,7 +20,40 @@ export interface TranslateResult {
 }
 
 /** Error codes the translate IPC can return (mapped to i18n in the renderer). */
-export type TranslateErrorCode = 'NO_ACTIVE_TOOL' | 'PYTHON_MISSING' | 'SIDECAR_ERROR'
+export type TranslateErrorCode =
+  | 'NO_ACTIVE_TOOL'
+  | 'PYTHON_MISSING'
+  /** The sidecar started but a Python dependency (e.g. sentencepiece) is absent. */
+  | 'SIDECAR_DEPS_MISSING'
+  | 'SIDECAR_ERROR'
+
+/**
+ * REQ-0411 — pull the module name out of a Python import failure so the
+ * renderer can say "the translation sidecar is missing <module>" instead of a
+ * generic "translation failed".  Matches `No module named 'x'` (raised by both
+ * `ModuleNotFoundError` and bare `ImportError`).  Returns null when the error
+ * is not a missing-module failure.
+ */
+export function detectMissingPythonModule(raw: string): string | null {
+  const m = /No module named ['"]([\w.]+)['"]/.exec(raw)
+  return m ? m[1] : null
+}
+
+/** Whether a raw sidecar error string looks like a missing-dependency failure. */
+export function isDepsMissingError(raw: string): boolean {
+  return detectMissingPythonModule(raw) !== null || /ModuleNotFoundError|ImportError/.test(raw)
+}
+
+/**
+ * Build the actionable "install the dependencies" message shown when the
+ * translation sidecar is missing a Python package.  Embeds the concrete venv
+ * python + pip command so the developer can copy-paste it.
+ */
+export function buildDepsMissingMessage(pythonExe: string, module: string | null): string {
+  const py = pythonExe || 'python'
+  const mod = module ? ` (missing module: ${module})` : ''
+  return `Translation sidecar dependency missing${mod}. Run: "${py}" -m pip install -r python-sidecar/requirements.txt`
+}
 
 /**
  * MADLAD-400 encodes the target language as a `<2xx>` token prefixed onto the
