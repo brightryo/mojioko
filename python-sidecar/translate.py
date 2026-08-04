@@ -29,17 +29,20 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 MODEL_DIR = os.environ.get("MOJIOKO_TRANSLATION_MODEL_DIR", "")
 DEVICE = os.environ.get("MOJIOKO_TRANSLATION_DEVICE", "cpu")
-GPU_DIR = os.environ.get("MOJIOKO_GPU_TOOL_DIR")
 
-if DEVICE == "cuda" and GPU_DIR and os.path.isdir(GPU_DIR):
-    # Best-effort: let ctranslate2's LoadLibrary find the bundled CUDA DLLs.
-    try:
-        os.add_dll_directory(GPU_DIR)  # type: ignore[attr-defined]
-    except Exception as e:  # noqa: BLE001
-        print(f"[translate] add_dll_directory failed: {e}", file=sys.stderr)
+# REQ-0412 — resolve the bundled CUDA/cuDNN DLLs BEFORE ctranslate2 is imported
+# (which happens lazily inside `_ensure_loaded`).  Shared with the Whisper
+# sidecar (`gpu_dll.py`): an ordered absolute-path preload — NOT a bare
+# `os.add_dll_directory` — is what makes ctranslate2's internal
+# `LoadLibrary("cublas64_12.dll")` resolve on Toolkit-less machines.  No-op when
+# MOJIOKO_GPU_TOOL_DIR is unset (the CPU path).
+from gpu_dll import preload_bundled_cuda_dlls
+
+preload_bundled_cuda_dlls()
 
 _translator = None
 _sp = None
+_active_device = "cpu"
 
 
 def _emit(obj):
@@ -49,23 +52,46 @@ def _emit(obj):
 
 def _ensure_loaded():
     """Load the model + tokenizer once.  Returns load time in ms (0 if warm)."""
-    global _translator, _sp
+    global _translator, _sp, _active_device
     if _translator is not None:
         return 0
     import ctranslate2  # noqa: PLC0415
     import sentencepiece as spm  # noqa: PLC0415
 
     t0 = time.perf_counter()
-    dev = DEVICE
-    try:
-        translator = ctranslate2.Translator(MODEL_DIR, device=dev)
-    except Exception as e:  # noqa: BLE001 — CUDA missing / OOM → fall back to CPU
-        print(f"[translate] device={dev} failed ({e}); falling back to CPU", file=sys.stderr)
-        translator = ctranslate2.Translator(MODEL_DIR, device="cpu")
+    # Load the tokenizer first so the warm-up translate below can build a real
+    # source sequence.
     sp = spm.SentencePieceProcessor()
     sp.Load(os.path.join(MODEL_DIR, "spiece.model"))
+
+    def _build(device):
+        # REQ-0412 — build AND warm up: run one tiny translate so the CUDA GEMM
+        # path (and thus the cuBLAS DLL resolution) executes NOW, during load.
+        # ctranslate2 constructs a `Translator(device="cuda")` lazily and only
+        # touches cuBLAS at the first GEMM; without this warm-up a missing
+        # `cublas64_12.dll` would slip past the try/except below and surface
+        # much later as a per-request SIDECAR_ERROR.  Warming up here means any
+        # device/DLL failure is caught where the CPU fallback can handle it.
+        tr = ctranslate2.Translator(MODEL_DIR, device=device)
+        warm = sp.encode("<2en> ok", out_type=str)
+        tr.translate_batch([warm], beam_size=1)
+        return tr
+
+    requested = DEVICE if DEVICE in ("cpu", "cuda") else "cpu"
+    try:
+        translator = _build(requested)
+        _active_device = requested
+    except Exception as e:  # noqa: BLE001 — CUDA missing / DLL / OOM → CPU
+        if requested != "cpu":
+            print(f"[translate] device={requested} load failed ({e}); falling back to CPU",
+                  file=sys.stderr)
+            translator = _build("cpu")
+            _active_device = "cpu"
+        else:
+            raise
     _translator = translator
     _sp = sp
+    print(f"[translate] model loaded on device={_active_device}", file=sys.stderr)
     return int((time.perf_counter() - t0) * 1000)
 
 

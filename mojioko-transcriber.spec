@@ -9,7 +9,10 @@ binaries = []
 # belt-and-braces measure.  Removing this line would probably still
 # work today, but any future refactor that hoists the import out of the
 # branch shouldn't be able to accidentally break the packaged build.
-hiddenimports = ['word_split']
+# REQ-0412 — gpu_dll.py sits next to main.py and is imported at module top
+# for the CUDA/cuDNN DLL preload.  Declared explicitly so the packaged build
+# always bundles it (same belt-and-braces reasoning as word_split above).
+hiddenimports = ['word_split', 'gpu_dll']
 tmp_ret = collect_all('faster_whisper')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('ctranslate2')
