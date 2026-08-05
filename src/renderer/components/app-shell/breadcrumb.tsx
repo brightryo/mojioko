@@ -55,11 +55,10 @@ export function Breadcrumb({ title, description }: BreadcrumbProps) {
         centering wrapper is enough to make the pinning obvious.
       */}
       <div className="w-full flex items-baseline gap-3 px-4">
-        {/* REQ-0419 ★ — top-strip title uses the `title` type token (was
-            text-body-sm, which only responded to the body-sm token so editing
-            title/body in the dev editor never moved it — read as "hardcoded").
-            Now follows the `title` token. */}
-        <h1 className="text-title font-semibold text-fg-primary select-none">{title}</h1>
+        {/* REQ-0419 — role rule: screen name / page title = `display` (step
+            大見出し). Was text-body-sm (looked hardcoded — only followed the
+            body-sm token), briefly text-title; now `display`. */}
+        <h1 className="text-display font-semibold text-fg-primary select-none">{title}</h1>
         {description ? (
           <p
             // REQ-0186 §2 — top-strip description at text-body-sm.

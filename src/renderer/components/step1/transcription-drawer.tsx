@@ -236,7 +236,7 @@ export function TranscriptionDrawer({
               <div className="py-3 space-y-3">
                 <div className="flex items-center gap-1.5">
                   <Settings2 className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-                  <Label>{t('drawer.advancedSection')}</Label>
+                  <Label className="text-title">{t('drawer.advancedSection')}</Label>
                 </div>
                 <WhisperAdvancedControls
                   transcriptionAdvanced={transcriptionAdvanced}
@@ -337,7 +337,7 @@ export function TranscriptionDrawer({
               <div className="py-3 space-y-3">
                 <div className="flex items-center gap-1.5">
                   <Mic className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-                  <Label>{t('drawer.trackSection')}</Label>
+                  <Label className="text-title">{t('drawer.trackSection')}</Label>
                   <HelpIcon content={t('audioTracks.help')} />
                   {audioTracks.length > 0 && (
                     <Badge variant="muted" className="ml-1">

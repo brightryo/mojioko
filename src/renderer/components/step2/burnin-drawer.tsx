@@ -419,7 +419,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                 <div className="py-3 space-y-2">
                   <div className="flex items-center gap-1.5">
                     <Music className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-                    <Label>{t('audio.label')}</Label>
+                    <Label className="text-title">{t('audio.label')}</Label>
                   </div>
                   <div className="flex flex-col gap-2">
                     {/*
@@ -822,7 +822,7 @@ function OutputFormatCard({
     <div className="py-3 space-y-2">
       <div className="flex items-center gap-1.5">
         <FileVideo className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-        <Label>
+        <Label className="text-title">
           {inputExt
             ? t('outputFormat.labelWithInput', { ext: inputExt })
             : t('outputFormat.label')}

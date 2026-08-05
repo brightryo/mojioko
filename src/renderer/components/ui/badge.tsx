@@ -6,7 +6,9 @@ import { cn } from '@/lib/utils'
 // gap-1.  The 5 MOJIOKO variants (default / success / warning / danger / muted) are kept so
 // call sites do not change.
 const badgeVariants = cva(
-  'inline-flex h-5 items-center gap-1 rounded-full border border-transparent px-2 py-0.5 text-micro font-medium transition-colors',
+  // REQ-0419 — role rule: badge = caption (was text-micro). h-auto so the
+  // taller caption text isn't clipped by the old h-5 pill.
+  'inline-flex items-center gap-1 rounded-full border border-transparent px-2 py-0.5 text-caption font-medium transition-colors',
   {
     variants: {
       variant: {

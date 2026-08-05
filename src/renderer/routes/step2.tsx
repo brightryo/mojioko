@@ -1348,7 +1348,7 @@ export default function Step2Route(_: Step2RouteProps) {
             selected entry); bulk / empty modes have no single cue.  `justify-
             between` right-aligns it regardless of audio-only. */}
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-body-sm font-semibold text-fg-secondary flex items-center gap-1.5">
+          <h2 className="text-title font-semibold text-fg-secondary flex items-center gap-1.5">
             <span>{inspectorHeading}</span>
             {isBulkMode && <HelpIcon content={t('inspector.bulkHelp')} />}
           </h2>

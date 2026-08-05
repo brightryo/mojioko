@@ -438,7 +438,7 @@ export function FontPicker({ onChange }: FontPickerProps) {
       {/* Section 1 — Select default subtitle font (REQ-0281 §2)         */}
       {/* ============================================================== */}
       <section className="space-y-1.5">
-        <h3 className="text-body font-medium text-fg-primary">
+        <h3 className="text-title font-medium text-fg-primary">
           {t('fontPicker.title')}
         </h3>
         <p className="text-body-sm text-fg-secondary leading-relaxed">
@@ -463,7 +463,7 @@ export function FontPicker({ onChange }: FontPickerProps) {
       {/* Section 2 — Font list (REQ-0281 §2 / §3 / §4)                  */}
       {/* ============================================================== */}
       <section className="space-y-1.5">
-        <h3 className="text-body font-medium text-fg-primary">
+        <h3 className="text-title font-medium text-fg-primary">
           {t('fontPicker.listSectionTitle')}
         </h3>
         <p className="text-body-sm text-fg-secondary leading-relaxed">

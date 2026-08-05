@@ -118,7 +118,8 @@ const SheetTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('text-body font-semibold text-fg-primary leading-none', className)}
+    // REQ-0419 — role rule: drawer title = panel heading → text-title (was text-body).
+    className={cn('text-title font-semibold text-fg-primary leading-none', className)}
     {...props}
   />
 ))
