@@ -4,51 +4,48 @@
  */
 
 export const colors = {
-  // Background scale — mirrors the --neutral-N ladder in globals.css.
-  // REQ-0177 Phase A: lifted from 4 % to 11 % L to leave near-black.
-  // REQ-0178 Phase B-1: further +2 % L on top of Phase A (surface-0
-  // now at 13 %) after owner Phase A feedback "still reads too
-  // black".  Values here are used by canvas / JS callers
-  // (subtitle-overlay compositing, overflow calculations, timeline
-  // drawing) that can't read the CSS vars directly.
-  bgBase: '#212121',       // was #1c1c1c — neutral-1 at 13 %
-  bgSurface: '#292929',    // was #242424 — neutral-2 at 16 %
-  bgElevated: '#2e2e2e',   // was #2b2b2b — neutral-4 at 18 %
-  bgInput: '#212121',      // was #1c1c1c — matches bgBase
-  bgHover: '#363636',      // was #333333 — neutral-5 at 21 %
+  // Background scale — mirrors the DARK --neutral-N ladder in globals.css.
+  // REQ-0418 v2 contrast overhaul: cool 220° blue-grey ramp (was zero-hue
+  // grey).  These hex values are the resolved equivalents of the new
+  // --surface-* triplets; used by canvas / JS callers (subtitle-overlay
+  // compositing, overflow calculations, timeline drawing) that can't read
+  // the CSS vars directly.  Keep in sync with globals.css :root.
+  bgBase: '#14161a',       // surface-0  220 14% 9%
+  bgSurface: '#1d2025',    // surface-1  220 12% 13%
+  bgElevated: '#272a30',   // surface-2  220 11% 17%
+  bgInput: '#14161a',      // = surface-0
+  bgHover: '#2c2f35',      // neutral-5  220 10% 19%
 
   // Border scale
-  borderDefault: '#3f3f3f',   // was #3d3d3d — neutral-6 at 25 %
-  borderStrong: '#474747',    // unchanged — neutral-7 at 28 %
-  borderSubtle: '#262626',    // was #212121 — neutral-3 at 15 %
+  borderDefault: '#373b43',   // border-default 220 10% 24%
+  borderStrong: '#4e545f',    // border-strong  220 10% 34%
+  borderSubtle: '#22252a',    // neutral-3      220 11% 15%
 
   // Text scale
-  textPrimary: '#fafafa',
-  textSecondary: '#a1a1aa',
-  textTertiary: '#71717a',
-  textMuted: '#52525b',
-  textOnAccent: '#052e16',
+  textPrimary: '#f3f4f7',     // 220 20% 96%
+  textSecondary: '#b5bac5',   // 220 12% 74%
+  textTertiary: '#8f96a3',    // 220 10% 60%
+  textMuted: '#6f7785',       // 220 9% 48%
+  textOnAccent: '#0b2317',    // primary-foreground 150 52% 9%
 
-  // Accent: desaturated green — REQ-0177 tone-down from #22c55e emerald.
-  // H 152 / S 42 % / L 47 % ≈ #45AA7A, brand-recognisable but calmer.
-  accent: '#45aa7a',
-  accentHover: '#388d63',
-  accentActive: '#2b6d4c',
-  accentSoft: 'rgba(69,170,122,0.10)',
-  accentSoftBorder: 'rgba(69,170,122,0.20)',
+  // Accent: vivid green — REQ-0418 v2 (was desaturated #45aa7a).
+  // H 148 / S 64 % / L 54 % ≈ #3FD585.
+  accent: '#3fd585',          // primary        148 64% 54%
+  accentHover: '#31b971',     // primary-hover  148 58% 46%
+  accentActive: '#2bab67',    // primary-active 148 60% 42%
+  accentSoft: 'rgba(63,213,133,0.10)',
+  accentSoftBorder: 'rgba(63,213,133,0.20)',
 
-  // Semantic — REQ-0177: success tracks the desaturated accent so the
-  // brand-green ladder stays coherent; info desaturated to a Resolve-
-  // friendly muted blue.  warning / danger untouched (their vividness
-  // is load-bearing for user attention).
-  warning: '#fbbf24',
-  warningSoft: 'rgba(251,191,36,0.10)',
-  danger: '#ef4444',
-  dangerSoft: 'rgba(239,68,68,0.10)',
-  success: '#45aa7a',                       // was #22c55e — tracks accent
-  successSoft: 'rgba(69,170,122,0.10)',     // was rgba(34,197,94,0.10)
-  info: '#5989b9',                          // was #3b82f6 — desaturated
-  infoSoft: 'rgba(89,137,185,0.10)'
+  // Semantic — REQ-0418 v2: success tracks the vivid accent; warning /
+  // danger / info brightened per the target palette.
+  warning: '#f7b23b',                       // 38 92% 60%
+  warningSoft: 'rgba(247,178,59,0.10)',
+  danger: '#f16f6f',                        // 0 82% 69%
+  dangerSoft: 'rgba(241,111,111,0.10)',
+  success: '#3fd585',                       // tracks accent
+  successSoft: 'rgba(63,213,133,0.10)',
+  info: '#5ba6f1',                          // 210 84% 65%
+  infoSoft: 'rgba(91,166,241,0.10)'
 } as const
 
 // REQ-0177 Phase A — flat radius scale.  Mirrors tailwind.config.ts

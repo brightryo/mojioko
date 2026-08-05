@@ -66,13 +66,23 @@
      * mist/taupe) keep their pre-0177 numbers so the "Resolve base" is
      * still scoped to data-base=neutral only.
      */
-    --neutral-1:  0 0% 13%;    /* 11 % → 13 % (REQ-0178) — surface-0 = bg-base  */
-    --neutral-2:  0 0% 16%;    /* 14 % → 16 % (REQ-0178) — surface-1 = card / panel */
-    --neutral-3:  0 0% 15%;    /* 13 % → 15 % (REQ-0178) — popover */
-    --neutral-4:  0 0% 18%;    /* 17 % → 18 % (REQ-0178) — surface-2 = elevated / muted */
-    --neutral-5:  0 0% 21%;    /* 20 % → 21 % (REQ-0178) */
-    --neutral-6:  0 0% 25%;    /* 24 % → 25 % (REQ-0178) — surface-3 = scroll thumb (kept; border broken out below) */
-    --neutral-7:  0 0% 28%;    /* unchanged — surface-4 (inverse); text-faint keeps sub-visible tint */
+    /* REQ-0418 — v2 contrast overhaul.  The default DARK ramp moves from
+     * zero-hue grey to a cool 220° blue-grey and the surface/text steps are
+     * retuned to the target resolved values (課題①②: grey-on-grey / low
+     * contrast / not vivid).  Retuning the ramp (not the semantic tokens)
+     * keeps the three-layer indirection intact, so :root.light and the
+     * per-base palettes (which redefine --neutral-N) are untouched.  Mapping:
+     *   n1→surface-0  n2→surface-1  n4→surface-2  n6→surface-3  n7→surface-4
+     *   n8→text-disabled n9→text-muted n10→text-tertiary n11→text-secondary
+     *   n12→text-primary.  n3/n5 are unused by any token (popover now aliases
+     *   surface-1) — interpolated to keep the ramp monotonic. */
+    --neutral-1:  220 14% 9%;    /* surface-0 = bg-base */
+    --neutral-2:  220 12% 13%;   /* surface-1 = card / panel */
+    --neutral-3:  220 11% 15%;   /* interpolated (unused; was popover) */
+    --neutral-4:  220 11% 17%;   /* surface-2 = elevated / muted */
+    --neutral-5:  220 10% 19%;   /* interpolated (unused) */
+    --neutral-6:  220 10% 21%;   /* surface-3 = scroll thumb */
+    --neutral-7:  220 10% 26%;   /* surface-4 (inverse) */
 
     /*
      * REQ-0179 s1 — bumped neutral-8..11 to hit WCAG contrast tiers
@@ -92,11 +102,11 @@
      * (L 96) → 14.72:1, and primary→secondary→muted deltas remain
      * ~7 → 5 → 3 ratio steps so the hierarchy is visually obvious.
      */
-    --neutral-8:  0 0% 42%;    /* 32 % → 42 % (REQ-0179) — text-disabled at ~3:1 */
-    --neutral-9:  0 0% 54%;    /* 45 % → 54 % (REQ-0179) — text-muted at 4.66:1 AA */
-    --neutral-10: 0 0% 63%;    /* 55 % → 63 % (REQ-0179) — text-tertiary at 6.20:1 */
-    --neutral-11: 0 0% 72%;    /* 64 % → 72 % (REQ-0179) — text-secondary at 8.07:1 AAA */
-    --neutral-12: 0 0% 96%;    /* neutral-100 — text-primary, ratio 14.72:1 */
+    --neutral-8:  220 8% 38%;    /* text-disabled */
+    --neutral-9:  220 9% 48%;    /* text-muted */
+    --neutral-10: 220 10% 60%;   /* text-tertiary */
+    --neutral-11: 220 12% 74%;   /* text-secondary */
+    --neutral-12: 220 20% 96%;   /* text-primary */
 
     /* Background scale (shadcn semantic — kept for primitive compat)
      *
@@ -132,8 +142,8 @@
        REQ-071 Phase 3.7 note (retained): --primary-foreground stays
        on the darkest neutral so the checkmark / play-button icon
        reads as clean dark-on-green rather than dark-forest-on-green. */
-    --primary: 152 42% 47%;      /* was 142.1 70.6% 45.3% */
-    --primary-foreground: var(--neutral-1); /* darkest neutral, near-black on light + on green */
+    --primary: 148 64% 54%;      /* REQ-0418 v2 — vivid green (was 152 42% 47%) */
+    --primary-foreground: 150 52% 9%; /* REQ-0418 — dark green-tinted, on the primary green (light theme overrides to white) */
 
     /* Secondary mapped to base surface — REQ-0417 alias of --surface-2
        (was var(--neutral-4) = --surface-2, value unchanged). */
@@ -157,7 +167,7 @@
     --accent-foreground: var(--text-primary);
 
     /* Destructive: red-500 */
-    --destructive: 0 72.2% 50.6%;
+    --destructive: 0 82% 69%;    /* REQ-0418 v2 (was 0 72.2% 50.6%) */
     --destructive-foreground: 0 0% 98%;
 
     /* Borders and inputs */
@@ -245,7 +255,7 @@
      * Light: amber-600-ish (deeper for contrast against light bg)
      *        will be defined when the light theme block is added.
      */
-    --warning: 38 92% 50%;
+    --warning: 38 92% 60%;       /* REQ-0418 v2 (was 38 92% 50%) */
     --warning-foreground: 0 0% 9%;
 
     /* -------------------------------------------------------------------
@@ -330,18 +340,16 @@
      * remain accented via --primary (>7:1) so accessibility is
      * preserved where it actually matters.
      */
-    --border-default: 0 0% 22%;      /* REQ-0187 — was 43 % */
-    --border-strong:  0 0% 32%;      /* REQ-0187 — was 54 %; input frames */
+    --border-default: 220 10% 24%;   /* REQ-0418 v2 — cool line (was 0 0% 22%) */
+    --border-strong:  220 10% 34%;   /* REQ-0418 v2 — input frames (was 0 0% 32%) */
     /* REQ-0416 — --border-subtle removed (was unused). */
 
-    /* Action accent variants (green family) — REQ-0177: track the
-       toned-down --primary above.  Same relative L ladder as before
-       (hover -9, active -18, soft +11, faint +26) but at the new
-       H 152 / S 42 % base so the whole ladder feels one shade cooler
-       and less shouty. */
-    --primary-hover:  152 44% 38%;       /* was 142 76% 36% */
-    --primary-active: 152 46% 29%;       /* was 142 72% 29% */
-    --primary-soft:   152 40% 58%;       /* was 142 71% 58% */
+    /* Action accent variants (green family) — REQ-0418 v2: retuned to the
+       vivid --primary 148 64% 54% base.  hover/active step down in L for
+       press states; soft is a muted dark-green surface tint. */
+    --primary-hover:  148 58% 46%;       /* REQ-0418 (was 152 44% 38%) */
+    --primary-active: 148 60% 42%;       /* REQ-0418 (was 152 46% 29%) */
+    --primary-soft:   148 42% 34%;       /* REQ-0418 (was 152 40% 58%) */
     /* REQ-0416 — --primary-faint removed (1 use migrated to --primary-soft). */
 
     /* Destructive variants (red family) */
@@ -353,8 +361,8 @@
     --warning-faint:      46 97% 65%;    /* amber-300 #fcd34d */
     --warning-very-faint: 48 96% 89%;    /* amber-100 #fef3c7 */
 
-    /* Info accent (single-use blue) — REQ-0177 desaturated */
-    --info: 213 45% 62%;                 /* was 213 94% 68% */
+    /* Info accent (single-use blue) — REQ-0418 v2 */
+    --info: 210 84% 65%;                 /* was 213 45% 62% */
 
     --row-edited:  43 96% 56%;           /* amber-400 */
     --row-error:   0 84% 60%;            /* red-500 */
@@ -362,7 +370,7 @@
 
     --playhead:      0 84% 60%;          /* red-500 — kept vivid for playhead legibility */
     --trim-overlay: 38 92% 50%;          /* amber-500 */
-    --cursor-active: 152 42% 47%;        /* REQ-0177 — track --primary (was green-500) */
+    --cursor-active: var(--primary);     /* REQ-0418 — alias --primary so it tracks the accent */
 
     /* -------------------------------------------------------------------
      * REQ-0413 — WYSIWYG preview-overlay chrome.  Extracted verbatim from
