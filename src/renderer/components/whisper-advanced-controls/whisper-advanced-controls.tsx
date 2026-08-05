@@ -92,7 +92,8 @@ export function WhisperAdvancedControls({
 
   function numberInputClass(modified: boolean): string {
     return cn(
-      'w-20 h-7 rounded-md border bg-input px-2 text-center text-body',
+      // REQ-0421 — overlay reassignment: number inputs body → body-sm.
+      'w-20 h-7 rounded-md border bg-input px-2 text-center text-body-sm',
       'focus:outline-none focus-visible:ring-2 tabular-nums',
       '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
       modified
@@ -221,7 +222,10 @@ export function WhisperAdvancedControls({
 
       {/* ── Recognition ─────────────────────────────────────────────── */}
       <div className="space-y-0.5">
-        <p className="text-caption font-medium uppercase tracking-wider text-fg-primary mb-2">
+        {/* REQ-0421 — overlay reassignment: 認識設定 caption → title.
+            NB: the sibling VAD header above (line ~108) was NOT listed in the
+            REQ and stays caption; flagged in RES-0421 as a possible oversight. */}
+        <p className="text-title font-medium uppercase tracking-wider text-fg-primary mb-2">
           {t('advanced.recognition')}
         </p>
         <AdvancedParamRow
@@ -259,7 +263,8 @@ export function WhisperAdvancedControls({
           >
             <SelectTrigger
               className={cn(
-                'w-36 h-7 text-body border bg-input',
+                // REQ-0421 — overlay reassignment: language select (自動検出) body → body-sm.
+                'w-36 h-7 text-body-sm border bg-input',
                 transcriptionAdvanced.language !== TRANSCRIPTION_DEFAULTS.language
                   ? 'border-[hsl(var(--warning)/0.6)] text-[hsl(var(--warning))]'
                   : 'border-line text-fg-primary'

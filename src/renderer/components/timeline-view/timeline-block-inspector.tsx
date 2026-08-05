@@ -1102,7 +1102,8 @@ export function TimelineBlockInspector({
           type="button"
           onClick={handleAdjustTime}
           className={cn(
-            'self-start flex items-center gap-1 h-6 px-2 rounded text-caption text-fg-tertiary',
+            // REQ-0421 (step2) — overlay reassignment: 時間を調整 button caption → body-sm.
+            'self-start flex items-center gap-1 h-6 px-2 rounded text-body-sm text-fg-tertiary',
             'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
           )}
         >

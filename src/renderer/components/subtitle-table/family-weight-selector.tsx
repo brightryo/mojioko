@@ -149,7 +149,8 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels, sh
 
   const triggerBase = cn(
     'inline-flex items-center justify-between gap-1.5 w-full',
-    'h-6 px-2 rounded-md border text-caption text-left transition-colors duration-150',
+    // REQ-0421 (step2) — overlay reassignment: font/weight trigger (Noto Sans JP・Black) caption → body-sm.
+    'h-6 px-2 rounded-md border text-body-sm text-left transition-colors duration-150',
     'border-line bg-surface-0 hover:border-line-strong',
     'focus:outline-none focus-visible:outline-none',
     'disabled:opacity-40 disabled:cursor-not-allowed',

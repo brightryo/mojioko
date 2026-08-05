@@ -12,7 +12,7 @@
  * scrolls; only the individual boxes and the toolbar capture clicks.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X, Copy, RefreshCw } from 'lucide-react'
 import {
   TYPE_SCALE_TOKENS,
@@ -22,6 +22,7 @@ import {
   type TypeScaleToken,
   type TokenReassignment,
 } from '@/lib/dev-tokens'
+import { useRadixModalIsolation } from './use-radix-isolation'
 
 const SIZE_SELECTOR = TYPE_SCALE_TOKENS.map((t) => `.text-${t}`).join(', ')
 
@@ -56,6 +57,9 @@ export function TokenOverlay({ onClose }: { onClose: () => void }): JSX.Element 
   const [selected, setSelected] = useState<number | null>(null)
   const [changes, setChanges] = useState<Change[]>([])
   const [exportOpen, setExportOpen] = useState(false)
+  // REQ-0421 — stay operable when a Radix modal (Sheet/drawer) is open.
+  const rootRef = useRef<HTMLDivElement>(null)
+  useRadixModalIsolation(rootRef)
 
   const scan = useCallback(() => {
     const nodes = Array.from(document.querySelectorAll<HTMLElement>(SIZE_SELECTOR))
@@ -131,6 +135,7 @@ export function TokenOverlay({ onClose }: { onClose: () => void }): JSX.Element 
 
   return (
     <div
+      ref={rootRef}
       data-dev-overlay=""
       className="pointer-events-none fixed inset-0 z-[9998]"
       aria-hidden="true"

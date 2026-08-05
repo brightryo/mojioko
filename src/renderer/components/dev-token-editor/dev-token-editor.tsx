@@ -14,8 +14,9 @@
  * family is fixed (Noto Sans JP) and shown read-only.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X, Copy, RotateCcw } from 'lucide-react'
+import { useRadixModalIsolation } from './use-radix-isolation'
 import {
   DEV_TOKEN_GROUPS,
   FIXED_FONT_FAMILY,
@@ -188,10 +189,15 @@ function DevTokenPanel({
   const globalsBlock = useMemo(() => serializeGlobalsCss(snapshot), [snapshot])
   const tailwindBlock = useMemo(() => serializeTailwindFontSize(snapshot), [snapshot])
 
+  // REQ-0421 — stay operable when a Radix modal (Sheet/drawer) is open.
+  const rootRef = useRef<HTMLDivElement>(null)
+  useRadixModalIsolation(rootRef)
+
   return (
     <div
+      ref={rootRef}
       data-dev-panel=""
-      className="fixed right-0 top-0 z-[9999] flex h-full w-[340px] flex-col border-l border-line-strong bg-surface-1 text-fg-primary shadow-2xl shadow-black/50"
+      className="pointer-events-auto fixed right-0 top-0 z-[9999] flex h-full w-[340px] flex-col border-l border-line-strong bg-surface-1 text-fg-primary shadow-2xl shadow-black/50"
       role="dialog"
       aria-label="Developer token editor"
     >

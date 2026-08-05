@@ -56,7 +56,8 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between py-1.5">
       <span className="text-body-sm font-semibold text-fg-secondary">{label}</span>
-      <span className="text-body text-fg-primary font-mono tabular-nums">{value}</span>
+      {/* REQ-0421 — overlay reassignment: InfoRow value body → body-sm. */}
+      <span className="text-body-sm text-fg-primary font-mono tabular-nums">{value}</span>
     </div>
   )
 }
@@ -942,7 +943,8 @@ export default function Step1Route(_: Step1RouteProps) {
           >
             <div className="flex items-center gap-1.5">
               <Video className="h-4 w-4 text-fg-secondary flex-shrink-0" />
-              <Label className="cursor-pointer text-title">
+              {/* REQ-0421 — overlay reassignment: 入力ファイル title → body. */}
+              <Label className="cursor-pointer text-body">
                 {t('inputVideo.label')}
               </Label>
               <span onClick={(e) => e.stopPropagation()}>
@@ -1139,7 +1141,8 @@ export default function Step1Route(_: Step1RouteProps) {
           )}>
             <div className="flex items-center gap-1.5">
               <Mic className="h-4 w-4 text-fg-secondary flex-shrink-0" />
-              <Label className="text-title">{t('audioTracks.label')}</Label>
+              {/* REQ-0421 — overlay reassignment: 音声トラック title → body. */}
+              <Label className="text-body">{t('audioTracks.label')}</Label>
               <HelpIcon content={t('audioTracks.help')} />
               {/* REQ-0419 — detection result is a badge → caption (via the
                   Badge default; no per-instance size override). */}

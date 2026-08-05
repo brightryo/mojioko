@@ -305,7 +305,8 @@ export function TranscriptionDrawer({
                       <label
                         htmlFor="word-subtitle-experimental"
                         className={cn(
-                          'text-body-sm font-medium',
+                          // REQ-0421 — overlay reassignment: 単語ごとに文字起こし label body-sm → title.
+                          'text-title font-medium',
                           wordSubtitleLocked && 'text-fg-secondary/70',
                         )}
                       >
@@ -320,7 +321,8 @@ export function TranscriptionDrawer({
                     </div>
                     <p
                       className={cn(
-                        'text-caption text-fg-muted leading-relaxed',
+                        // REQ-0421 — overlay reassignment: word-subtitle description caption → body-sm.
+                        'text-body-sm text-fg-muted leading-relaxed',
                         wordSubtitleLocked && 'text-fg-secondary/60',
                       )}
                     >
@@ -337,7 +339,10 @@ export function TranscriptionDrawer({
               <div className="py-3 space-y-3">
                 <div className="flex items-center gap-1.5">
                   <Mic className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-                  <Label className="text-title">{t('drawer.trackSection')}</Label>
+                  {/* REQ-0421 — overlay reassignment: 音声トラック title → body.
+                      NB: the sibling 詳細設定 header (advancedSection, line ~239)
+                      was NOT listed and stays title; flagged in RES-0421. */}
+                  <Label className="text-body">{t('drawer.trackSection')}</Label>
                   <HelpIcon content={t('audioTracks.help')} />
                   {audioTracks.length > 0 && (
                     <Badge variant="muted" className="ml-1">
@@ -364,7 +369,8 @@ export function TranscriptionDrawer({
                       <span className="h-2 w-2 rounded-full flex-shrink-0 bg-primary" />
                       <span
                         className={cn(
-                          'text-body font-medium flex-shrink-0',
+                          // REQ-0421 — overlay reassignment: track label (トラック N) body → body-sm.
+                          'text-body-sm font-medium flex-shrink-0',
                           selectedTrack === track.index
                             ? 'text-primary'
                             : 'text-fg-primary',

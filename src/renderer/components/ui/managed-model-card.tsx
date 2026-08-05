@@ -103,7 +103,8 @@ export function ManagedModelCard({
         {isInstalled && (
           <span
             className={cn(
-              'flex-shrink-0 flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
+              // REQ-0421 — overlay reassignment: status pill (使用中 / ダウンロード済) caption → body-sm.
+              'flex-shrink-0 flex items-center gap-1 text-body-sm font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
               isActive ? 'bg-primary text-fg-inverse' : 'bg-row-selected/15 text-info',
             )}
           >
@@ -231,7 +232,7 @@ export function ManagedModelDiskFooter({
       <Button
         variant="ghost"
         size="sm"
-        className="h-6 px-2 text-caption text-fg-muted hover:text-fg-secondary"
+        className="h-6 px-2 text-body-sm text-fg-muted hover:text-fg-secondary" /* REQ-0421 — 開く caption → body-sm */
         onClick={(e) => {
           e.stopPropagation()
           onOpenFolder()

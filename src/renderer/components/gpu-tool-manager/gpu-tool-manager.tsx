@@ -417,7 +417,8 @@ function CpuCard({
           </p>
         </div>
         {isActive && (
-          <span className="flex-shrink-0 flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-primary text-fg-inverse">
+          <span className="flex-shrink-0 flex items-center gap-1 text-body-sm font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-primary text-fg-inverse">
+            {/* REQ-0421 — overlay reassignment: 使用中 pill caption → body-sm (matches ManagedModelCard) */}
             <Check className="h-2.5 w-2.5" />
             {t('gpuTool.cpu.activeBadge')}
           </span>
@@ -505,7 +506,8 @@ function GpuCard({
         {isInstalled && (
           <span
             className={cn(
-              'flex-shrink-0 flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
+              // REQ-0421 — overlay reassignment: 使用中 / 使用可能 pill caption → body-sm (matches ManagedModelCard).
+              'flex-shrink-0 flex items-center gap-1 text-body-sm font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
               isActive ? 'bg-primary text-fg-inverse' : 'bg-row-selected/15 text-info',
             )}
           >

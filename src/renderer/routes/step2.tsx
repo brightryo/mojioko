@@ -1353,7 +1353,8 @@ export default function Step2Route(_: Step2RouteProps) {
             {isBulkMode && <HelpIcon content={t('inspector.bulkHelp')} />}
           </h2>
           {!isBulkMode && selectedEntry !== null && (
-            <span className="text-caption font-mono tabular-nums text-fg-muted select-none whitespace-nowrap">
+            // REQ-0421 (step2) — overlay reassignment: 字幕ID caption → body-sm.
+            <span className="text-body-sm font-mono tabular-nums text-fg-muted select-none whitespace-nowrap">
               {t('inspector.cueId', { n: selectedEntry.cueNumber ?? '—' })}
             </span>
           )}

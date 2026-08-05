@@ -105,8 +105,17 @@
     --neutral-8:  220 8% 38%;    /* text-disabled */
     --neutral-9:  220 9% 48%;    /* text-muted */
     --neutral-10: 220 10% 60%;   /* text-tertiary */
-    --neutral-11: 220 12% 74%;   /* text-secondary */
-    --neutral-12: 220 20% 96%;   /* text-primary */
+    /* REQ-0421 — updated dev-editor export: text-primary / text-secondary
+       move to a PURE grey (hue 0, sat 0) so the top of the ramp reads as
+       neutral white rather than the faint cool 220° cast REQ-0418 gave it.
+       text-secondary also lifts L 74 → 78.  n8..n10 (muted/tertiary/disabled)
+       keep their 220° cool cast per the export (unchanged).  Applied via the
+       ramp — NOT a flat --text-* literal in :root — so :root.light (which
+       redefines --neutral-11/-12 to 0 0% 32% / 0 0% 9%) is untouched.  Side
+       effect (accepted, same as REQ-0418's ramp retune): --surface-inverse-0/-1
+       track n12/n11, so the secondary-button slab loses its faint blue tint. */
+    --neutral-11: 0 0% 78%;      /* text-secondary — REQ-0421 (was 220 12% 74%) */
+    --neutral-12: 0 0% 96%;      /* text-primary   — REQ-0421 (was 220 20% 96%) */
 
     /* Background scale (shadcn semantic — kept for primitive compat)
      *
@@ -342,7 +351,13 @@
      */
     --border-default: 220 10% 24%;   /* REQ-0418 v2 — cool line (was 0 0% 22%) */
     --border-strong:  220 10% 34%;   /* REQ-0418 v2 — input frames (was 0 0% 32%) */
-    /* REQ-0416 — --border-subtle removed (was unused). */
+    /* REQ-0421 — re-added per the dev-editor export.  Currently INERT: no
+       tailwind utility maps to it (the `line.subtle` mapping stays removed since
+       REQ-0416) and nothing consumes `var(--border-subtle)`, so this has no
+       visual effect.  NOTE the export value is near-white (96% L) — if a future
+       call site consumes it, it would render as a BRIGHT line on the dark
+       surfaces; revisit the value then. */
+    --border-subtle:  225 20% 96%;
 
     /* Action accent variants (green family) — REQ-0418 v2: retuned to the
        vivid --primary 148 64% 54% base.  hover/active step down in L for

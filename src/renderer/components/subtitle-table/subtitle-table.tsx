@@ -761,16 +761,16 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
             multiline
           />
         ) : isFrozen ? (
-          <span className="text-body leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-fg-muted cursor-text select-text">
+          <span className="text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-fg-muted cursor-text select-text">
             {entry.text.replace(/\\N/g, '\n')}
           </span>
         ) : isOverflow ? (
-          <span className="text-body leading-relaxed break-words whitespace-pre-wrap line-clamp-3 cursor-text select-text">
+          <span className="text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 cursor-text select-text">
             <span className="text-fg-primary">{entry.text.replace(/\\N/g, '\n').slice(0, overflowStartIndex)}</span>
             <span className="text-destructive">{entry.text.replace(/\\N/g, '\n').slice(overflowStartIndex)}</span>
           </span>
         ) : (
-          <span className="text-body leading-relaxed break-words whitespace-pre-wrap line-clamp-3 text-fg-primary cursor-text select-text">
+          <span className="text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 text-fg-primary cursor-text select-text">
             {entry.text.replace(/\\N/g, '\n')}
           </span>
         )}

@@ -126,7 +126,8 @@ function AnimationSlider({
         className="flex-1 min-w-0"
         style={{ accentColor: 'hsl(var(--primary))' }}
       />
-      <span className="w-10 text-caption text-fg-secondary font-mono tabular-nums text-right shrink-0">
+      {/* REQ-0421 (step2) — slider readout caption → body-sm (extended for inspector consistency). */}
+      <span className="w-10 text-body-sm text-fg-secondary font-mono tabular-nums text-right shrink-0">
         {readout}
       </span>
     </div>

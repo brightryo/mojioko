@@ -116,7 +116,8 @@ export function FadeDurationSlider({
         style={{ accentColor: 'hsl(var(--primary))' }}
         aria-label={ariaLabel}
       />
-      <span className="w-10 text-caption text-fg-secondary font-mono tabular-nums text-right">
+      {/* REQ-0421 (step2) — slider readout caption → body-sm. */}
+      <span className="w-10 text-body-sm text-fg-secondary font-mono tabular-nums text-right">
         {readout}
       </span>
     </div>

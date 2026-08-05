@@ -42,7 +42,7 @@ const buttonVariants = cva(
         link: 'bg-transparent text-fg-tertiary hover:text-fg-primary underline-offset-4 hover:underline'
       },
       size: {
-        sm: 'h-6 px-2 text-caption',
+        sm: 'h-6 px-2 text-body-sm', // REQ-0421 — overlay reassignment: sm caption → body-sm (14px, lh 18→20)
         md: 'h-7 px-2.5 text-body-sm',
         lg: 'h-9 px-3 text-body-sm',
         /** Square icon button. */
