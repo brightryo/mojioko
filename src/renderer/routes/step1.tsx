@@ -942,7 +942,7 @@ export default function Step1Route(_: Step1RouteProps) {
           >
             <div className="flex items-center gap-1.5">
               <Video className="h-4 w-4 text-fg-secondary flex-shrink-0" />
-              <Label className="cursor-pointer">
+              <Label className="cursor-pointer text-body">
                 {t('inputVideo.label')}
               </Label>
               <span onClick={(e) => e.stopPropagation()}>
@@ -1008,7 +1008,7 @@ export default function Step1Route(_: Step1RouteProps) {
               the header.  Right-aligned, muted, so it reads as a small
               reference line rather than the primary content. */}
           <div className="flex justify-end">
-            <span className="text-caption text-fg-muted">
+            <span className="text-body text-fg-muted">
               {t('inputVideo.hint')}
             </span>
           </div>
@@ -1139,9 +1139,11 @@ export default function Step1Route(_: Step1RouteProps) {
           )}>
             <div className="flex items-center gap-1.5">
               <Mic className="h-4 w-4 text-fg-secondary flex-shrink-0" />
-              <Label>{t('audioTracks.label')}</Label>
+              <Label className="text-body">{t('audioTracks.label')}</Label>
               <HelpIcon content={t('audioTracks.help')} />
-              <Badge variant="muted">
+              {/* REQ-0419 §1 — detection result bumped from the badge's
+                  default text-micro to text-body-sm; height relaxed to fit. */}
+              <Badge variant="muted" className="h-auto py-0.5 text-body-sm">
                 {audioTracks.length > 0
                   ? t('audioTracks.tracksDetected', { count: audioTracks.length })
                   : t('audioTracks.notDetected')}

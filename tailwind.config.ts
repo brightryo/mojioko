@@ -171,13 +171,14 @@ const config: Config = {
         // value-preserving: label→caption, callout→body-sm, headline→body,
         // heading→title (heading's line-height 22→24 was the only 1-step change,
         // on 2 sites).
-        // REQ-0418 — v2 primary-size bump: micro/body/title/display up; the
-        // dense tiers (caption 12, body-sm 13) held so tables / packed
-        // surfaces don't reflow.  --fs-* stays undeclared → fallback = shipped
-        // value (dev editor can still override at runtime).
-        micro:        ['var(--fs-micro, 11px)',    { lineHeight: '16px' }],
-        caption:      ['var(--fs-caption, 12px)',  { lineHeight: '16px' }],
-        'body-sm':    ['var(--fs-body-sm, 13px)',  { lineHeight: '18px' }],
+        // REQ-0419 — bake the dev-editor's tuned sizes as the shipped
+        // fallbacks (overrides REQ-0418's micro 11 / caption 12 / body-sm 13).
+        // caption + body-sm now 14 (dense tiers grow — owner-approved, verified
+        // on real machine).  --fs-* stays undeclared → fallback = shipped value
+        // (dev editor can still override at runtime).
+        micro:        ['var(--fs-micro, 12px)',    { lineHeight: '16px' }],
+        caption:      ['var(--fs-caption, 14px)',  { lineHeight: '18px' }],
+        'body-sm':    ['var(--fs-body-sm, 14px)',  { lineHeight: '20px' }],
         body:         ['var(--fs-body, 16px)',     { lineHeight: '24px' }],
         title:        ['var(--fs-title, 18px)',    { lineHeight: '26px' }],
         display:      ['var(--fs-display, 24px)',  { lineHeight: '32px' }]

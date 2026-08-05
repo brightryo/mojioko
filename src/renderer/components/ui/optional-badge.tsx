@@ -11,7 +11,7 @@ export function OptionalBadge({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        'text-caption font-medium text-fg-muted border border-line rounded px-1.5 py-0.5 flex-shrink-0',
+        'text-body-sm font-medium text-fg-muted border border-line rounded px-1.5 py-0.5 flex-shrink-0',
         className,
       )}
     >
