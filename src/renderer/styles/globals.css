@@ -104,12 +104,19 @@
      * (`:root[data-base="X"]`) live AFTER this var block — they only
      * redefine `--neutral-N`, so the semantic tokens below auto-pick
      * up the chosen scale.  See the bottom of the @layer base block. */
-    --background: var(--neutral-1);
-    --card:       var(--neutral-2);
-    --popover:    var(--neutral-3);
+    /* REQ-0417 — shadcn semantic surfaces are now ALIASES of the mojioko
+       --surface-* / --text-* tokens, so those tokens are the single source of
+       truth (the dev token editor tunes surface-1 and every shadcn primitive
+       follows).  Values are unchanged: --card was var(--neutral-2) = --surface-1,
+       --background was var(--neutral-1) = --surface-0, etc.  --popover (formerly
+       var(--neutral-3)) folds to --surface-1 per REQ-0416; it has no remaining
+       consumer so the 15→16 % shift is inert. */
+    --background: var(--surface-0);
+    --card:       var(--surface-1);
+    --popover:    var(--surface-1);
 
     /* Foreground (semantic = step 12, highest-contrast text) */
-    --foreground:         var(--neutral-12);
+    --foreground:         var(--text-primary);
     /* REQ-0416 — --card-foreground / --popover-foreground removed (unused;
        app text uses the --text-* scale). --card / --popover kept for shadcn. */
 
@@ -128,8 +135,9 @@
     --primary: 152 42% 47%;      /* was 142.1 70.6% 45.3% */
     --primary-foreground: var(--neutral-1); /* darkest neutral, near-black on light + on green */
 
-    /* Secondary mapped to base surface */
-    --secondary: var(--neutral-4);
+    /* Secondary mapped to base surface — REQ-0417 alias of --surface-2
+       (was var(--neutral-4) = --surface-2, value unchanged). */
+    --secondary: var(--surface-2);
     /* REQ-0416 — --secondary-foreground removed (unused). */
 
     /* Muted: zinc-800 bg, zinc-400 fg.  REQ-067 phase A: foreground lifted
@@ -139,12 +147,14 @@
        ColorPicker hint, font-licenses body, audio-preview error, etc.) read
        this single variable and inherit the improved readability without
        requiring per-site edits. */
-    --muted: var(--neutral-4);
-    --muted-foreground: var(--neutral-11);
+    /* REQ-0417 — alias mojioko tokens (values unchanged: neutral-4 = --surface-2,
+       neutral-11 = --text-secondary). */
+    --muted: var(--surface-2);
+    --muted-foreground: var(--text-secondary);
 
-    /* Accent: same as secondary for shadcn compat */
-    --accent: var(--neutral-4);
-    --accent-foreground: var(--neutral-12);
+    /* Accent: same as secondary for shadcn compat — REQ-0417 aliases. */
+    --accent: var(--surface-2);
+    --accent-foreground: var(--text-primary);
 
     /* Destructive: red-500 */
     --destructive: 0 72.2% 50.6%;
@@ -174,9 +184,13 @@
      * reads): L 43 % → 22 % (1.37:1 vs surface-0).  Recedes on the
      * base surface, doesn't shout.
      */
-    --border: 0 0% 22%;              /* was L 43 % — REQ-0187 Resolve line */
-    --input:  var(--neutral-1);
-    --ring:   152 42% 47%;           /* REQ-0177 — track --primary */
+    /* REQ-0417 — single source: --border aliases --border-default (both were
+       0 0% 22%), --input aliases --surface-0 (was var(--neutral-1) = --surface-0),
+       --ring aliases --primary (was the literal 152 42% 47% = --primary).  The
+       :root.light override of --input (pure white) still wins in light mode. */
+    --border: var(--border-default);
+    --input:  var(--surface-0);
+    --ring:   var(--primary);        /* REQ-0177 — track --primary */
 
     /*
      * Multi-row selection (bulk-edit) — distinct from the green focused-row
