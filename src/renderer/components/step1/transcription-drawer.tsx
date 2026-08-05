@@ -289,11 +289,18 @@ export function TranscriptionDrawer({
                 </TabsTrigger>
               </TabsList>
 
-              <div className="flex-1 min-h-0 overflow-y-auto">
+              {/* REQ-0424 — the scroll wrapper is a top-aligned flex column
+                  (justify-start): every tab's content flows from the top.  Only
+                  タブ1 opts into filling the height (flex-1) so its word-level
+                  toggle can pin to the bottom via mt-auto; タブ2/3 stay auto-height
+                  and therefore top-aligned.  (REQ-0423 used min-h-full on タブ1,
+                  which read as the whole tab area being bottom-weighted.) */}
+                <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
                 {/* ── タブ1 入力ファイル ─────────────────────────────── */}
-                {/* REQ-0423 — flex column so the word-level toggle (last child,
-                    mt-auto) is pushed to the tab bottom. */}
-                <TabsContent value="input" className="flex flex-col gap-4 min-h-full">
+                {/* REQ-0423/0424 — flex-1 fills the column so the word-level
+                    toggle (last child, mt-auto) pins to the tab bottom; the
+                    file / info / track sections above stay top-aligned. */}
+                <TabsContent value="input" className="flex flex-col gap-4 flex-1">
                   {/* Supported-format hint (right-aligned reference line). */}
                   <div className="flex justify-end">
                     <span className="text-caption text-fg-muted">{t('inputVideo.hint')}</span>

@@ -106,7 +106,9 @@ export function WhisperAdvancedControls({
     <div className="space-y-5">
       {/* ── VAD ─────────────────────────────────────────────────────── */}
       <div className="space-y-0.5">
-        <p className="text-caption font-medium uppercase tracking-wider text-fg-primary mb-2">
+        {/* REQ-0424 — 音声検出（VAD）見出しを title に（認識設定と同レベルに揃える。
+            REQ-0421 で認識設定だけ title 化し VAD を caption 据え置きにした不揃いの是正）。 */}
+        <p className="text-title font-medium uppercase tracking-wider text-fg-primary mb-2">
           {t('advanced.vad')}
         </p>
         <AdvancedParamRow
@@ -223,8 +225,8 @@ export function WhisperAdvancedControls({
       {/* ── Recognition ─────────────────────────────────────────────── */}
       <div className="space-y-0.5">
         {/* REQ-0421 — overlay reassignment: 認識設定 caption → title.
-            NB: the sibling VAD header above (line ~108) was NOT listed in the
-            REQ and stays caption; flagged in RES-0421 as a possible oversight. */}
+            REQ-0424 — the sibling VAD header (above) is now also title, so the
+            two Whisper-settings section headers match. */}
         <p className="text-title font-medium uppercase tracking-wider text-fg-primary mb-2">
           {t('advanced.recognition')}
         </p>
