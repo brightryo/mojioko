@@ -1,6 +1,6 @@
 {
   "title": "文字起こし",
-  "guidance": "Whisperモデルを選択し、入力ファイルを読み込んでから文字起こしを開始してください。",
+  "guidance": "文字起こしに使用するモデルを選択します。",
   "inputVideo": {
     "label": "入力ファイル",
     "hint": "動画: .mp4 .mkv  /  音声: .mp3 .wav .m4a .aac .flac .ogg",
@@ -187,7 +187,7 @@
   },
   "drawer": {
     "title": "文字起こし",
-    "subtitle": "Whisper 設定と音声トラックを確認して実行します。",
+    "subtitle": "文字起こしをする音声トラックを選択します。",
     "advancedSection": "Whisper設定",
     "trackSection": "音声トラック",
     "tabInput": "入力ファイル",

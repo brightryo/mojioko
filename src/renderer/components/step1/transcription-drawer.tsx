@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertCircle, AudioWaveform, FolderOpen, Lock, Loader2, Mic, Play, Settings2, Type, Upload, Video } from 'lucide-react'
 import { toast } from 'sonner'
@@ -199,6 +199,16 @@ export function TranscriptionDrawer({
     if (open) setActiveTab('input')
   }, [open])
 
+  // REQ-0425 — the three tabs share ONE scroll container.  Without this,
+  // switching from a scrolled tab left the next tab scrolled to the same
+  // offset, so its content appeared pushed down ("bottom-aligned").  Reset
+  // the shared scroll to the top on every tab change so each tab opens at
+  // its top edge.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+  }, [activeTab])
+
   // REQ-0423 — drag & drop input file.  `dragActive` drives the drop-zone
   // highlight; the drop reads Electron's `File.path` (available because the
   // renderer runs with sandbox:false) and forwards it to step1, which gates
@@ -289,18 +299,20 @@ export function TranscriptionDrawer({
                 </TabsTrigger>
               </TabsList>
 
-              {/* REQ-0424 — the scroll wrapper is a top-aligned flex column
-                  (justify-start): every tab's content flows from the top.  Only
-                  タブ1 opts into filling the height (flex-1) so its word-level
-                  toggle can pin to the bottom via mt-auto; タブ2/3 stay auto-height
-                  and therefore top-aligned.  (REQ-0423 used min-h-full on タブ1,
-                  which read as the whole tab area being bottom-weighted.) */}
-                <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+              {/* REQ-0424/0425 — plain BLOCK scroll container (not a flex
+                  column).  Block flow lays every tab's content out from the
+                  top, so タブ2 (style) / タブ3 (whisper) are always top-aligned
+                  with no flexbox align surprises.  Only タブ1 opts into
+                  min-h-full so its word-level toggle can pin to the bottom via
+                  mt-auto; that property is scoped to タブ1's element and cannot
+                  affect the other tabs.  Scroll is reset to top on tab change
+                  (scrollRef effect above). */}
+                <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
                 {/* ── タブ1 入力ファイル ─────────────────────────────── */}
-                {/* REQ-0423/0424 — flex-1 fills the column so the word-level
+                {/* REQ-0423 — flex column filling the height so the word-level
                     toggle (last child, mt-auto) pins to the tab bottom; the
                     file / info / track sections above stay top-aligned. */}
-                <TabsContent value="input" className="flex flex-col gap-4 flex-1">
+                <TabsContent value="input" className="flex flex-col gap-4 min-h-full">
                   {/* Supported-format hint (right-aligned reference line). */}
                   <div className="flex justify-end">
                     <span className="text-caption text-fg-muted">{t('inputVideo.hint')}</span>
@@ -425,35 +437,43 @@ export function TranscriptionDrawer({
                         <p className="text-body-sm text-fg-muted">{t('audioTracks.description')}</p>
                         <div className="grid grid-cols-2 gap-2">
                           {audioTracks.map((track) => (
+                            /* REQ-0425 — 2-line track button so the 「文字起こし対象」
+                               badge never squeezes the track details (stereo /
+                               48kHz / aac) into a truncated ellipsis.
+                               行1: dot + track name (left) + badge (ml-auto, right).
+                               行2: track details, full width, no truncate.
+                               Badge-less tracks use the same 2-line layout. */
                             <button
                               key={track.index}
                               type="button"
                               onClick={() => setSelectedTrack(track.index)}
                               className={cn(
-                                'flex items-center gap-2 rounded-md border px-3 py-1.5 text-left transition-colors duration-150',
+                                'flex flex-col gap-1 rounded-md border px-3 py-2 text-left transition-colors duration-150',
                                 selectedTrack === track.index
                                   ? 'border-primary'
                                   : 'border-line hover:bg-surface-2/40',
                               )}
                             >
-                              <span className="h-2 w-2 rounded-full flex-shrink-0 bg-primary" />
-                              <span
-                                className={cn(
-                                  // REQ-0421 — overlay reassignment: track label body → body-sm.
-                                  'text-body-sm font-medium flex-shrink-0',
-                                  selectedTrack === track.index ? 'text-primary' : 'text-fg-primary',
+                              <div className="flex items-center gap-2 w-full">
+                                <span className="h-2 w-2 rounded-full flex-shrink-0 bg-primary" />
+                                <span
+                                  className={cn(
+                                    // REQ-0421 — overlay reassignment: track label body → body-sm.
+                                    'text-body-sm font-medium',
+                                    selectedTrack === track.index ? 'text-primary' : 'text-fg-primary',
+                                  )}
+                                >
+                                  {t('audioTracks.trackLabel', { index: track.index })}
+                                </span>
+                                {selectedTrack === track.index && (
+                                  <Badge variant="success" className="ml-auto flex-shrink-0">
+                                    {t('audioTracks.transcriptionTarget')}
+                                  </Badge>
                                 )}
-                              >
-                                {t('audioTracks.trackLabel', { index: track.index })}
-                              </span>
-                              <span className="text-body-sm text-fg-muted truncate min-w-0">
+                              </div>
+                              <span className="text-body-sm text-fg-muted">
                                 {`${track.channels} · ${track.sampleRateHz / 1000}kHz · ${track.codec}`}
                               </span>
-                              {selectedTrack === track.index && (
-                                <Badge variant="success" className="ml-auto flex-shrink-0">
-                                  {t('audioTracks.transcriptionTarget')}
-                                </Badge>
-                              )}
                             </button>
                           ))}
                         </div>

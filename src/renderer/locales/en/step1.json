@@ -1,6 +1,6 @@
 {
   "title": "Transcribe",
-  "guidance": "Select a Whisper model, choose an input file, and start transcription.",
+  "guidance": "Select the model to use for transcription.",
   "inputVideo": {
     "label": "Input file",
     "hint": "Video: .mp4 .mkv  /  Audio: .mp3 .wav .m4a .aac .flac .ogg",
@@ -188,7 +188,7 @@
   },
   "drawer": {
     "title": "Transcription",
-    "subtitle": "Review Whisper settings and the audio track, then run.",
+    "subtitle": "Choose the audio track to transcribe.",
     "advancedSection": "Whisper settings",
     "trackSection": "Audio track",
     "tabInput": "Input file",

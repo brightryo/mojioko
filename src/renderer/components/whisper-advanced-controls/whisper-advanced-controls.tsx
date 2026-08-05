@@ -26,8 +26,12 @@ function AdvancedParamRow({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-accent/40 transition-colors duration-150">
-      <div className="flex items-center gap-1.5 shrink-0">
+    // REQ-0425 — dropped the `-mx-2` bleed (it made every row 16px wider than
+    // the container → horizontal scrollbar in the 640px drawer tab).  `min-w-0`
+    // lets the row shrink to the tab width; the dashed leader line (flex-1,
+    // min-w-[16px]) absorbs the slack so label + input still fit on one line.
+    <div className="flex items-center gap-2 rounded-md px-2 py-1.5 min-w-0 hover:bg-accent/40 transition-colors duration-150">
+      <div className="flex items-center gap-1.5 shrink-0 min-w-0">
         <span
           className={cn(
             'text-body transition-colors duration-150',

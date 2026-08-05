@@ -389,7 +389,11 @@ export function WhisperModelManager({
         className="flex items-center gap-2 w-full cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
       >
         <Sparkles className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-        <span className="text-body font-semibold text-fg-secondary uppercase tracking-wider">
+        {/* REQ-0425 — dropped `uppercase` so the mixed-case label renders as
+            authored ("Whisperモデル", not "WHISPERモデル"). Applied to all three
+            STEP1 section headers (below) so JA is unchanged for the Japanese-only
+            ones and EN stays consistent (no forced ALL-CAPS on one header only). */}
+        <span className="text-body font-semibold text-fg-secondary tracking-wider">
           {t('whisperModel.label')}
         </span>
         {/* Stop propagation so tooltip interaction doesn't toggle accordion */}

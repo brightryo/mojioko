@@ -153,7 +153,9 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
         className="flex items-center gap-2 w-full select-none cursor-pointer hover:opacity-90 transition-opacity duration-150"
       >
         <Languages className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-        <span className="text-body font-semibold text-fg-secondary uppercase tracking-wider">
+        {/* REQ-0425 — dropped `uppercase` (see whisper-model-manager) for
+            consistent, as-authored section headers across STEP1. */}
+        <span className="text-body font-semibold text-fg-secondary tracking-wider">
           {t('translationTool.label')}
         </span>
         <OptionalBadge />
