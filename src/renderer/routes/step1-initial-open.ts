@@ -16,14 +16,17 @@ import type { WhisperModelId } from '../../shared/types'
  *               no model is installed at all (the IPC `buildModelsState`
  *               auto-picks any installed model into `activeModelId`).
  *               Open Whisper to surface the download flow.
- *   - else    → at least one usable model is installed; open the input
- *               video card so the user can pick a file and proceed.
+ *   - else    → at least one usable model is installed; leave every STEP1
+ *               accordion collapsed (`null`).  REQ-0422 removed the input-
+ *               video card from STEP1 (file selection moved into the setup
+ *               drawer), so there is no must-touch section to auto-open on
+ *               the happy path — the user just presses [文字起こし開始].
  *
  * Pure helper so the rule is unit-testable without rendering the whole
  * route — exercised by `tests/unit/step1-initial-open.test.ts`.
  */
 export function pickInitialOpenSection(
   activeModelId: WhisperModelId | null
-): 'whisper' | 'inputVideo' {
-  return activeModelId === null ? 'whisper' : 'inputVideo'
+): 'whisper' | null {
+  return activeModelId === null ? 'whisper' : null
 }

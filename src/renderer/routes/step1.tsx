@@ -2,14 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { animationFieldsForNewCue } from '../../shared/cue-animation'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Video, Mic, ShieldCheck, Square, Loader2, ChevronUp, ChevronDown, AudioWaveform, Check, Circle } from 'lucide-react'
-import { AccordionCollapse } from '@/components/ui/accordion-collapse'
+import { ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { AppShell } from '@/components/app-shell/app-shell'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -18,12 +15,10 @@ import {
   DialogDescription,
   DialogFooter
 } from '@/components/ui/dialog'
-import { HelpIcon } from '@/components/help-icon'
 import { WhisperModelManager } from '@/components/whisper-model-manager/whisper-model-manager'
 import { TranslationToolManager } from '@/components/translation-tool-manager/translation-tool-manager'
 import { GpuToolManager } from '@/components/gpu-tool-manager/gpu-tool-manager'
 import { TranscriptionDrawer } from '@/components/step1/transcription-drawer'
-import { SubtitleStyleDialog } from '@/components/step1/subtitle-style-dialog'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore } from '@/stores/ui-store'
@@ -33,34 +28,13 @@ import { probeVideo, extractThumbnail } from '@/services/video'
 import { openVideoDialog } from '@/services/dialog'
 import { runTranscription } from '@/services/transcription'
 import type { TranscriptionRun } from '@/services/transcription'
-import { formatDuration } from '@/lib/time'
-import { formatBytes } from '@/lib/format'
 import type { SubtitleEntry as SubtitleEntryType, WhisperModelId } from '../../shared/types'
 import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
 import { styleFieldsFromDefaults } from '@/lib/style-defaults-to-entry'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
-import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { pickInitialOpenSection } from './step1-initial-open'
 import { pickTranscriptionTrack } from './step1-track-pick'
-import { pickAudioTrackLabel } from '@/lib/audio-track-label'
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  // REQ-071 Phase 3.5: value bumped to `body` (15) so it physically reads as
-  // the primary info on the row.  Label stays `callout` (13/semibold + muted)
-  // as the supporting category marker.  Hierarchy now is:
-  //   - size : value (15) > label (13)
-  //   - color: value (foreground) > label (muted)
-  //   - weight: label (semibold) carries category emphasis without
-  //             out-shouting the value
-  return (
-    <div className="flex items-center justify-between py-1.5">
-      <span className="text-body-sm font-semibold text-fg-secondary">{label}</span>
-      {/* REQ-0421 — overlay reassignment: InfoRow value body → body-sm. */}
-      <span className="text-body-sm text-fg-primary font-mono tabular-nums">{value}</span>
-    </div>
-  )
-}
 
 // REQ-0185 §3 — `appVersion` prop dropped alongside the removed
 // top breadcrumb.  About dialog still shows the version.
@@ -71,7 +45,6 @@ export default function Step1Route(_: Step1RouteProps) {
   const navigate = useNavigate()
 
   const video = useProjectStore((s) => s.video)
-  const isAudioOnly = useIsAudioOnly()
   const videoLoadingState = useProjectStore((s) => s.videoLoadingState)
   const setVideo = useProjectStore((s) => s.setVideo)
   const setVideoLoadingState = useProjectStore((s) => s.setVideoLoadingState)
@@ -156,7 +129,6 @@ export default function Step1Route(_: Step1RouteProps) {
   >(null)
   const [thumbnail, setThumbnail] = useState<string | null>(null)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
-  const [subtitleStyleDialogOpen, setSubtitleStyleDialogOpen] = useState(false)
   // REQ-20260615-055 — STEP1 now uses a right-sliding drawer for the
   // "confirm advanced settings + pick track + run" leg, mirroring
   // STEP2's burnin-drawer.  Pre-REQ the footer Start button kicked off
@@ -219,22 +191,6 @@ export default function Step1Route(_: Step1RouteProps) {
         initialOpenDecidedRef.current = true
         setOpenSection(pickInitialOpenSection(modelId))
       }
-    },
-    []
-  )
-
-  // REQ-0152 §2 — click a section's header to toggle it: open if currently
-  // closed (closing any other open section as a side-effect since the
-  // state is single-valued), close it if it was already the open one.
-  // This gives the "single-open, all-closed permitted" semantics the REQ
-  // asks for without any per-section local open state.
-  const handleAccordionToggle = useCallback(
-    (section: 'whisper' | 'device' | 'inputVideo') => {
-      // Mark the initial decision as taken so a later listModels
-      // callback (post-install/uninstall) can't override what the user
-      // just chose by hand.
-      initialOpenDecidedRef.current = true
-      setOpenSection((current) => (current === section ? null : section))
     },
     []
   )
@@ -748,72 +704,24 @@ export default function Step1Route(_: Step1RouteProps) {
   // seed style is locked mid-run.
   // REQ-028: also hidden in audio-only mode — there is no burn-in step
   // for audio, so the seed-style dialog has no consumer.
-  const showStyleCaret = !isTranscribing && !isAudioOnly
-  // REQ-0181 — the footer Start button's guard state.  When the button
-  // is disabled because canStart is false (and we're not mid-transcribe),
-  // the wrapper span below catches clicks and surfaces `guardReason` as
-  // a toast; the wrapper also carries the `title` attribute so
-  // hover-tooltip works even though `disabled:pointer-events-none` on
-  // the Button itself would otherwise swallow hover events.
-  const startBlocked = !isTranscribing && !canStart
+  // REQ-0422 — footer collapses to a single [文字起こし開始] button that
+  // ALWAYS opens the setup drawer (default tab = 入力ファイル).  File
+  // selection now lives inside the drawer's タブ1, so this button must open
+  // regardless of whether a video is chosen — the drawer's own bottom
+  // [文字起こし開始] is the guarded run trigger (canStart), and pressing it
+  // while disabled routes the user back to タブ1 (see transcription-drawer).
+  // The old split-button (Start + subtitle-style caret) and the standalone
+  // SubtitleStyleDialog are retired; style now lives in the drawer's タブ2.
   const footerRight = (
-    <div className="inline-flex items-stretch">
-      <span
-        // REQ-0181 Shape C — click-toast + tooltip wrapper.  Only active
-        // when the primary Start button is guard-disabled.  Button
-        // enabled path: `title` and `onClick` are undefined so the span
-        // is a no-op passthrough and the Button's own onClick fires
-        // normally.  Guard-disabled path: the Button carries
-        // `disabled:pointer-events-none` (from button.tsx cva) so mouse
-        // events fall through to this span, which fires the toast; the
-        // `title` attribute renders a native tooltip on hover.
-        title={startBlocked && guardReason ? guardReason : undefined}
-        onClick={startBlocked && guardReason ? () => toast.warning(guardReason) : undefined}
-        className="inline-flex"
-      >
-        <Button
-          variant="primary"
-          size="md"
-          disabled={!isTranscribing && !canStart}
-          onClick={isTranscribing ? handleCancelClick : () => setTranscriptionDrawerOpen(true)}
-          className={cn(showStyleCaret && 'rounded-r-none')}
-        >
-          {isTranscribing ? (
-            transcribeProgress === 0 ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                {t('action.transcribingWaiting')}
-              </>
-            ) : (
-              <>
-                <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
-                {t('action.transcribing', { percent: transcribeProgress })}
-              </>
-            )
-          ) : (
-            t('action.startTranscription')
-          )}
-        </Button>
-      </span>
-      {showStyleCaret && (
-        <Button
-          variant="primary"
-          size="md"
-          onClick={() => setSubtitleStyleDialogOpen(true)}
-          aria-label={t('subtitleStyle.openButton')}
-          title={t('subtitleStyle.openButton')}
-          // Caret half — narrow (icon-only), shares primary background
-          // with the main button, no left-side rounding, and a
-          // primary-foreground hairline divider (10 % opacity) so the
-          // boundary reads clearly without introducing a fresh accent.
-          // Both colours route through --primary / --primary-foreground
-          // so a future light theme repaints the split button atomically.
-          className="rounded-l-none border-l border-[hsl(var(--primary-foreground)/0.2)] px-2"
-        >
-          <ChevronDown className="h-4 w-4" />
-        </Button>
-      )}
-    </div>
+    <Button
+      variant="primary"
+      size="md"
+      onClick={() => setTranscriptionDrawerOpen(true)}
+    >
+      {isTranscribing
+        ? t('action.transcribing', { percent: transcribeProgress })
+        : t('action.startTranscription')}
+    </Button>
   )
 
   return (
@@ -901,281 +809,23 @@ export default function Step1Route(_: Step1RouteProps) {
           />
         </div>
 
-        {/* First-view body — only the must-touch cards remain visible
-            here: pick a video, pick which audio track to transcribe.
-            All seed-style controls + the live preview moved into the
-            Subtitle Style dialog so the route stays scroll-free at
-            1280×820 even on first launch with the Whisper accordion
-            collapsed.  The `space-y-4` siblings render top-to-bottom in
-            a single column. */}
-        {/* Input video — single encompassing card holding (a) the path
-            picker, (b) a small identification thumbnail + the video's
-            technical metadata side-by-side, and (c) the audio-track
-            selector below.  All "what to transcribe" decisions in one
-            visual unit so the first view has a single primary surface
-            plus the Whisper card above.
-
-            The thumbnail here is purely an identification frame (no
-            subtitle overlay) — the styled live preview belongs to the
-            Subtitle Style dialog. */}
-        <div className={cn(
-          'py-3 transition-opacity duration-200',
-          isTranscribing && 'opacity-50 pointer-events-none'
-        )}>
-          {/* Accordion header — clickable, toggles `openSection` under
-              REQ-0152 §2 single-open semantics: click while closed →
-              open this section (auto-collapses whisper / device); click
-              while already open → close to the all-closed state. */}
-          {/* REQ-082: Enter / Space keyboard activation removed. */}
-          {/* REQ-20260615-079: header right side now shows the audio-track
-              **inventory** for the loaded file (count, or "no audio"),
-              not the currently-selected track.  Track selection itself
-              moved into the TranscriptionDrawer per REQ-055/056, so a
-              "selected track" indicator here was stale.  Nothing
-              renders when no file is loaded — the prior "トラック未選択"
-              placeholder was just noise.  See `pickAudioTrackLabel`. */}
-          <div
-            role="button"
-            aria-expanded={openSection === 'inputVideo'}
-            tabIndex={0}
-            onClick={() => handleAccordionToggle('inputVideo')}
-            className="flex items-center justify-between cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
-          >
-            <div className="flex items-center gap-1.5">
-              <Video className="h-4 w-4 text-fg-secondary flex-shrink-0" />
-              {/* REQ-0421 — overlay reassignment: 入力ファイル title → body. */}
-              <Label className="cursor-pointer text-body">
-                {t('inputVideo.label')}
-              </Label>
-              <span onClick={(e) => e.stopPropagation()}>
-                <HelpIcon content={t('inputVideo.help')} />
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              {(() => {
-                const labelState = pickAudioTrackLabel(video ? audioTracks.length : null)
-                // REQ-0181 — three states, three markers:
-                //   'hidden'   (no file loaded)   → Circle only, no text
-                //   'no-audio' (file, 0 tracks)   → text + Circle
-                //   'count'    (file, N tracks)   → text + green Check
-                // Pre-0181 the 'hidden' branch returned null entirely, so
-                // an empty input section had no signal at all — the whole
-                // "you haven't picked a file yet" state was silent.  Now
-                // the Circle marker lands next to the "入力ファイル" title
-                // as a symmetric ○ counterpart to the ✓ that appears
-                // once a real video-with-audio has been chosen.
-                if (labelState.kind === 'hidden') {
-                  return (
-                    <Circle className="h-3.5 w-3.5 text-fg-tertiary flex-shrink-0" aria-label={t('guard.pending')} />
-                  )
-                }
-                return (
-                  <>
-                    <span className="text-body-sm text-fg-secondary">
-                      {labelState.kind === 'no-audio'
-                        ? t('audioTracks.noAudioTrack')
-                        : t('audioTracks.audioTrackCount', { count: labelState.count })}
-                    </span>
-                    {/* REQ-20260615-080 — positive-detection check.  Shown
-                        only when N ≥ 1 (the "we found usable audio" case).
-                        Identical Check element + Tailwind class triple as
-                        the Whisper accordion's active-model check so the
-                        two greens in this route's two headers track each
-                        other exactly.
-                        REQ-0181 — no-audio branch renders the same Circle
-                        so a loaded video with 0 tracks still surfaces the
-                        blocking condition. */}
-                    {labelState.kind === 'count' ? (
-                      <Check className="h-4 w-4 text-primary flex-shrink-0" aria-hidden="true" />
-                    ) : (
-                      <Circle className="h-3.5 w-3.5 text-fg-tertiary flex-shrink-0" aria-label={t('guard.pending')} />
-                    )}
-                  </>
-                )
-              })()}
-              {openSection === 'inputVideo' ? (
-                <ChevronUp className="h-4 w-4 text-fg-secondary flex-shrink-0" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-fg-secondary flex-shrink-0" />
-              )}
-            </div>
-          </div>
-
-          {/* Collapsible body — same animation pattern WhisperModelManager
-              uses, so the two cards' open / close transitions feel like
-              the same control. */}
-          <AccordionCollapse open={openSection === 'inputVideo'}>
-                <div className="space-y-4 pt-3">
-          {/* REQ-20260615-020: supported file-format hint moved here from
-              the header.  Right-aligned, muted, so it reads as a small
-              reference line rather than the primary content. */}
-          <div className="flex justify-end">
-            <span className="text-caption text-fg-muted">
-              {t('inputVideo.hint')}
-            </span>
-          </div>
-          {/* Path + Browse */}
-          {isLoading ? (
-            <div className="flex items-center gap-2.5 h-9 px-1">
-              <Loader2 className="h-4 w-4 animate-spin text-fg-secondary flex-shrink-0" />
-              <span className="text-body text-fg-secondary">{t('inputVideo.loading')}</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-9 rounded-md border border-line bg-input px-3.5 flex items-center min-w-0">
-                <span className={cn(
-                  'text-body truncate',
-                  video ? 'text-fg-primary' : 'text-fg-secondary/60'
-                )}>
-                  {video?.path ?? t('inputVideo.placeholder')}
-                </span>
-              </div>
-              {/* REQ-072 Q4: secondary's `bg-surface-inverse-0` white slab dominated the
-                  STEP 1 input row visually — same pattern bulk-edit-bar already
-                  flagged (see comment there).  Pending the full Button variant
-                  redesign (REQ-073), this single site is overridden to a tonal
-                  (bg-surface-2) treatment so Browse reads as a secondary action
-                  in the dark theme without claiming primary emphasis. */}
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={handleBrowse}
-                className="bg-surface-2 text-fg-primary hover:bg-surface-3 active:bg-surface-4"
-              >
-                <FolderOpen className="h-4 w-4 mr-1.5" />
-                {t('inputVideo.chooseVideo')}
-              </Button>
-            </div>
-          )}
-
-          {/* Thumbnail + technical metadata side-by-side.
-              REQ-028: in audio-only mode (no video stream) the left box
-              shows an AudioWaveform icon instead of the video frame, and
-              the Resolution row drops out — those fields carry no
-              meaning for pure audio inputs.  Format row also collapses
-              from "MP4 / h264 / 30fps" to "MP3 / mp3" since fps /
-              videoCodec are placeholders.
-              REQ-044 #1: the box used to be aspect-video (16:9 fixed) +
-              object-cover, which centre-cropped vertical (9:16) sources
-              to a horizontal band, making them look like horizontal
-              videos in the thumbnail.  Now the box follows the video's
-              own aspect ratio (clamped to a 240×180 envelope so neither
-              orientation dominates the card layout), and the <img> uses
-              object-contain so any sub-pixel mismatch produces letter-
-              boxing rather than crop. */}
-          <div className="grid grid-cols-[auto_1fr] gap-4 items-center">
-            <div
-              className="rounded-md border border-line bg-input overflow-hidden flex items-center justify-center flex-shrink-0"
-              style={(() => {
-                // REQ-045 #1: envelope bumped from 240×180 → 280×240 so
-                // vertical sources stretch closer to the InfoRow stack's
-                // own height while horizontal stays inside the card.
-                // Behaviour by ratio:
-                //   - 16:9 → 280×157 (width-bound; ~33 % bigger than the
-                //            previous 240×135)
-                //   - 9:16 → 135×240 (height-bound; ~78 % bigger area
-                //            than the previous 101×180)
-                //   - 1:1  → 240×240
-                // Audio-only and pre-load both fall back to 16:9 so the
-                // empty/waveform state stays at 280×157.
-                const MAX_W = 280
-                const MAX_H = 240
-                const ratio =
-                  (!isAudioOnly && video && video.widthPx > 0 && video.heightPx > 0)
-                    ? video.widthPx / video.heightPx
-                    : 16 / 9
-                const widthBound = MAX_H * ratio > MAX_W
-                return widthBound
-                  ? { width: `${MAX_W}px`, height: `${MAX_W / ratio}px` }
-                  : { width: `${MAX_H * ratio}px`, height: `${MAX_H}px` }
-              })()}
-            >
-              {isAudioOnly ? (
-                <AudioWaveform className="h-8 w-8 text-fg-secondary/60" />
-              ) : thumbnail ? (
-                <img src={thumbnail} alt="" className="w-full h-full object-contain" />
-              ) : (
-                <Video className="h-6 w-6 text-fg-secondary/40" />
-              )}
-            </div>
-            <div className="divide-y divide-border/50">
-              {!isAudioOnly && (
-                <InfoRow
-                  label={t('inputVideo.infoResolution')}
-                  value={video ? `${video.widthPx}×${video.heightPx}` : '—'}
-                />
-              )}
-              <InfoRow
-                label={t('inputVideo.infoDuration')}
-                value={video ? formatDuration(video.durationSec) : '—'}
-              />
-              <InfoRow
-                label={t('inputVideo.infoFormat')}
-                value={
-                  !video
-                    ? '—'
-                    : isAudioOnly
-                      ? `${video.container.toUpperCase()} / ${video.audioTracks[0]?.codec ?? '—'}`
-                      : `${video.container.toUpperCase()} / ${video.videoCodec} / ${video.fps}fps`
-                }
-              />
-              <InfoRow
-                label={t('inputVideo.infoFileSize')}
-                value={video ? formatBytes(video.fileSizeBytes) : '—'}
-              />
-            </div>
-          </div>
-
-          {/* REQ-20260615-055 / REQ-20260615-056 — main-screen audio
-              tracks card.  Collapsed to a single summary header:
-              `[Mic] 音声トラック   Nトラック検出 (or 検出無し)`.  The
-              description, the per-track list, and the "対象" badge
-              were retired here — the actual selection happens inside
-              the TranscriptionDrawer.  Disabled tone (opacity-50)
-              until a video is loaded; the row sits on a top divider
-              so it still reads as part of the "video you've chosen"
-              card. */}
-          <div className={cn(
-            'border-t border-line/50 pt-3 transition-opacity duration-150',
-            !video && 'opacity-50 pointer-events-none'
-          )}>
-            <div className="flex items-center gap-1.5">
-              <Mic className="h-4 w-4 text-fg-secondary flex-shrink-0" />
-              {/* REQ-0421 — overlay reassignment: 音声トラック title → body. */}
-              <Label className="text-body">{t('audioTracks.label')}</Label>
-              <HelpIcon content={t('audioTracks.help')} />
-              {/* REQ-0419 — detection result is a badge → caption (via the
-                  Badge default; no per-instance size override). */}
-              <Badge variant="muted">
-                {audioTracks.length > 0
-                  ? t('audioTracks.tracksDetected', { count: audioTracks.length })
-                  : t('audioTracks.notDetected')}
-              </Badge>
-            </div>
-          </div>
-                </div>
-          </AccordionCollapse>
-        </div>
 
       </div>
 
-      {/* Dialogs.  Both are mounted unconditionally and gated on `open` —
-          Radix unmounts the content while closed so there is no idle
-          render cost.  Subtitle Style covers seed style + live preview;
-          Advanced covers Whisper engine knobs (VAD / Recognition). */}
-      <SubtitleStyleDialog
-        open={subtitleStyleDialogOpen}
-        onOpenChange={setSubtitleStyleDialogOpen}
-        thumbnail={thumbnail}
-      />
-      {/* REQ-20260615-055 — right-sliding drawer for the run leg.
-          Hosts the Whisper advanced controls + audio-track selection
-          + Start / Cancel.  See `transcription-drawer.tsx` for the
-          lifecycle that mirrors STEP2's burnin-drawer. */}
+      {/* REQ-0422 — the 3-tab setup drawer is now the single surface for
+          input file / subtitle style / Whisper settings.  File selection
+          (browse + metadata), the word-subtitle toggle and the audio-track
+          grid live in タブ1; the former SubtitleStyleDialog content is タブ2;
+          the Whisper advanced controls are タブ3.  Style props are read by
+          the drawer directly from the stores (same as the old dialog). */}
       <TranscriptionDrawer
         open={transcriptionDrawerOpen}
         onOpenChange={setTranscriptionDrawerOpen}
         audioTracks={audioTracks}
+        video={video}
+        thumbnail={thumbnail}
+        isLoading={isLoading}
+        onBrowse={handleBrowse}
         renderState={drawerRenderState}
         progress={transcribeProgress}
         runningLabelOverride={
@@ -1188,9 +838,8 @@ export default function Step1Route(_: Step1RouteProps) {
         deviceInfo={deviceInfo}
         errorMessage={drawerErrorMessage}
         canStart={canStart}
-        // REQ-0181 — the drawer's own Start button gets the same
-        // guard treatment as the footer split-button in step1; the
-        // shared reason string keeps the copy in sync.
+        // REQ-0181 — the drawer's own Start button gets the guard reason
+        // string; REQ-0422 also routes a disabled-click back to タブ1.
         guardReason={guardReason}
         onStart={handleStartTranscription}
         onCancel={handleCancelClick}
