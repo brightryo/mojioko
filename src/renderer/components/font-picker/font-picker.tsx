@@ -438,10 +438,10 @@ export function FontPicker({ onChange }: FontPickerProps) {
       {/* Section 1 — Select default subtitle font (REQ-0281 §2)         */}
       {/* ============================================================== */}
       <section className="space-y-1.5">
-        <h3 className="text-body font-medium text-foreground">
+        <h3 className="text-body font-medium text-fg-primary">
           {t('fontPicker.title')}
         </h3>
-        <p className="text-body-sm text-muted-foreground leading-relaxed">
+        <p className="text-body-sm text-fg-secondary leading-relaxed">
           {t('fontPicker.section1Description')}
         </p>
         <div className="pt-1">
@@ -463,15 +463,15 @@ export function FontPicker({ onChange }: FontPickerProps) {
       {/* Section 2 — Font list (REQ-0281 §2 / §3 / §4)                  */}
       {/* ============================================================== */}
       <section className="space-y-1.5">
-        <h3 className="text-body font-medium text-foreground">
+        <h3 className="text-body font-medium text-fg-primary">
           {t('fontPicker.listSectionTitle')}
         </h3>
-        <p className="text-body-sm text-muted-foreground leading-relaxed">
+        <p className="text-body-sm text-fg-secondary leading-relaxed">
           {t('fontPicker.listSectionDescription')}
         </p>
 
         {/* Legend + batch DL + uninstall-all controls */}
-        <div className="flex items-center justify-between gap-x-4 gap-y-1 flex-wrap text-caption text-muted-foreground">
+        <div className="flex items-center justify-between gap-x-4 gap-y-1 flex-wrap text-caption text-fg-secondary">
           <div className="flex items-center gap-x-4 gap-y-1 flex-wrap">
             <span className="inline-flex items-center gap-1.5">
               <FontLangBadge language="en" />
@@ -484,7 +484,7 @@ export function FontPicker({ onChange }: FontPickerProps) {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {isBatchRunning && batchState && (
-              <span className="text-caption text-muted-foreground tabular-nums">
+              <span className="text-caption text-fg-secondary tabular-nums">
                 {/* REQ-0281 §4-1 — percent, not "N of M", because the
                     binary model treats the set as a single unit; users
                     just want to know how far along the whole download is. */}
@@ -549,7 +549,7 @@ export function FontPicker({ onChange }: FontPickerProps) {
         )}
 
         {/* Family list — one row per family (REQ-0281 §3) */}
-        <div className="rounded-md border border-border bg-card divide-y divide-border max-h-[300px] overflow-y-auto">
+        <div className="rounded-md border border-line bg-surface-1 divide-y divide-border max-h-[300px] overflow-y-auto">
           {families.map((family) => {
             const status = deriveFamilyStatus(family, isInstalledOnDisk, setIsCurrent ?? false)
             // A family is "active" when the currently-selected FontId
@@ -703,7 +703,7 @@ function FontFamilyRow({
           )}
           aria-hidden="true"
         />
-        <span className="text-body text-foreground truncate" style={labelStyle}>
+        <span className="text-body text-fg-primary truncate" style={labelStyle}>
           {familyLabel}
         </span>
         {/* REQ-0341 §1 — the chip markup moved into `FontFamilyBadges` so this
@@ -718,7 +718,7 @@ function FontFamilyRow({
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onUpsell() }}
-            className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-accent/40 transition-colors focus:outline-none focus-visible:outline-none"
+            className="inline-flex items-center justify-center h-7 w-7 rounded-md text-fg-secondary/60 hover:text-fg-primary hover:bg-accent/40 transition-colors focus:outline-none focus-visible:outline-none"
             aria-label={t('fontPicker.action.lockedPaidOnly')}
             title={t('fontPicker.action.lockedPaidOnly')}
           >
@@ -729,7 +729,7 @@ function FontFamilyRow({
         {(status === 'bundled' || status === 'installed') && (
           <button
             type="button"
-            className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/40 transition-colors"
+            className="inline-flex items-center justify-center h-7 w-7 rounded-md text-fg-secondary hover:text-fg-primary hover:bg-accent/40 transition-colors"
             title={t('fontPicker.action.viewLicense')}
             aria-label={t('fontPicker.action.viewLicense')}
             onClick={(e) => { e.stopPropagation(); onViewLicense() }}

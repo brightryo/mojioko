@@ -90,7 +90,7 @@ export function ManagedModelCard({
       {/* Top: name + size + recommended chip + status badge */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-headline font-semibold text-fg-primary leading-tight">{title}</p>
+          <p className="text-body font-semibold text-fg-primary leading-tight">{title}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
             <p className={cn('text-body-sm', isActive ? 'text-primary-hover' : 'text-fg-disabled')}>{sizeLabel}</p>
             {recommended && labels.recommended && (

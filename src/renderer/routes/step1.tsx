@@ -55,8 +55,8 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   //             out-shouting the value
   return (
     <div className="flex items-center justify-between py-1.5">
-      <span className="text-callout font-semibold text-muted-foreground">{label}</span>
-      <span className="text-body text-foreground font-mono tabular-nums">{value}</span>
+      <span className="text-body-sm font-semibold text-fg-secondary">{label}</span>
+      <span className="text-body text-fg-primary font-mono tabular-nums">{value}</span>
     </div>
   )
 }
@@ -819,7 +819,7 @@ export default function Step1Route(_: Step1RouteProps) {
     <AppShell
       // REQ-0185 §3 — title + description moved to the top strip
       // (see components/app-shell/breadcrumb.tsx).  The in-content
-      // "Page header" block that used to render `<h1 text-heading>`
+      // "Page header" block that used to render `<h1 text-title>`
       // + `<p text-body>` below was removed to avoid double titling.
       title={t('title')}
       description={t('guidance')}
@@ -828,7 +828,7 @@ export default function Step1Route(_: Step1RouteProps) {
     >
       {/*
         REQ-0178 Phase B-1 — dropped the 3 outer card wrappers
-        (`rounded-xl border border-border bg-card p-4`) that used to
+        (`rounded-xl border border-line bg-surface-1 p-4`) that used to
         box each of Whisper / GPU / Input-Video into a floating
         rounded panel with margins between.  The panels now flow as
         flat sections divided by hairlines (`divide-y divide-line`
@@ -941,7 +941,7 @@ export default function Step1Route(_: Step1RouteProps) {
             className="flex items-center justify-between cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
           >
             <div className="flex items-center gap-1.5">
-              <Video className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <Video className="h-4 w-4 text-fg-secondary flex-shrink-0" />
               <Label className="cursor-pointer">
                 {t('inputVideo.label')}
               </Label>
@@ -992,9 +992,9 @@ export default function Step1Route(_: Step1RouteProps) {
                 )
               })()}
               {openSection === 'inputVideo' ? (
-                <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <ChevronUp className="h-4 w-4 text-fg-secondary flex-shrink-0" />
               ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <ChevronDown className="h-4 w-4 text-fg-secondary flex-shrink-0" />
               )}
             </div>
           </div>
@@ -1015,15 +1015,15 @@ export default function Step1Route(_: Step1RouteProps) {
           {/* Path + Browse */}
           {isLoading ? (
             <div className="flex items-center gap-2.5 h-9 px-1">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
-              <span className="text-body text-muted-foreground">{t('inputVideo.loading')}</span>
+              <Loader2 className="h-4 w-4 animate-spin text-fg-secondary flex-shrink-0" />
+              <span className="text-body text-fg-secondary">{t('inputVideo.loading')}</span>
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <div className="flex-1 h-9 rounded-md border border-border bg-input px-3.5 flex items-center min-w-0">
+              <div className="flex-1 h-9 rounded-md border border-line bg-input px-3.5 flex items-center min-w-0">
                 <span className={cn(
                   'text-body truncate',
-                  video ? 'text-foreground' : 'text-muted-foreground/60'
+                  video ? 'text-fg-primary' : 'text-fg-secondary/60'
                 )}>
                   {video?.path ?? t('inputVideo.placeholder')}
                 </span>
@@ -1063,7 +1063,7 @@ export default function Step1Route(_: Step1RouteProps) {
               boxing rather than crop. */}
           <div className="grid grid-cols-[auto_1fr] gap-4 items-center">
             <div
-              className="rounded-md border border-border bg-input overflow-hidden flex items-center justify-center flex-shrink-0"
+              className="rounded-md border border-line bg-input overflow-hidden flex items-center justify-center flex-shrink-0"
               style={(() => {
                 // REQ-045 #1: envelope bumped from 240×180 → 280×240 so
                 // vertical sources stretch closer to the InfoRow stack's
@@ -1089,11 +1089,11 @@ export default function Step1Route(_: Step1RouteProps) {
               })()}
             >
               {isAudioOnly ? (
-                <AudioWaveform className="h-8 w-8 text-muted-foreground/60" />
+                <AudioWaveform className="h-8 w-8 text-fg-secondary/60" />
               ) : thumbnail ? (
                 <img src={thumbnail} alt="" className="w-full h-full object-contain" />
               ) : (
-                <Video className="h-6 w-6 text-muted-foreground/40" />
+                <Video className="h-6 w-6 text-fg-secondary/40" />
               )}
             </div>
             <div className="divide-y divide-border/50">
@@ -1134,11 +1134,11 @@ export default function Step1Route(_: Step1RouteProps) {
               so it still reads as part of the "video you've chosen"
               card. */}
           <div className={cn(
-            'border-t border-border/50 pt-3 transition-opacity duration-150',
+            'border-t border-line/50 pt-3 transition-opacity duration-150',
             !video && 'opacity-50 pointer-events-none'
           )}>
             <div className="flex items-center gap-1.5">
-              <Mic className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <Mic className="h-4 w-4 text-fg-secondary flex-shrink-0" />
               <Label>{t('audioTracks.label')}</Label>
               <HelpIcon content={t('audioTracks.help')} />
               <Badge variant="muted">

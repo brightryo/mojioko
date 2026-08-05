@@ -157,7 +157,7 @@ export function StylePresetControls({
         <DropdownMenuContent align="end" className="w-64">
           <DropdownMenuLabel>{t('preset.apply')}</DropdownMenuLabel>
           {presets.length === 0 ? (
-            <div className="px-2 py-1.5 text-xs text-muted-foreground">
+            <div className="px-2 py-1.5 text-xs text-fg-secondary">
               {t('preset.empty')}
             </div>
           ) : (
@@ -176,7 +176,7 @@ export function StylePresetControls({
                   type="button"
                   aria-label={t('preset.delete', { name: p.name })}
                   title={t('preset.delete', { name: p.name })}
-                  className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive"
+                  className="shrink-0 rounded p-0.5 text-fg-secondary hover:text-destructive"
                   onClick={(e) => {
                     // Deleting must not also apply the preset it sits on.
                     e.preventDefault()

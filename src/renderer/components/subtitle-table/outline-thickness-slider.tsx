@@ -201,7 +201,7 @@ export function OutlineThicknessSlider({
       <span
         className={cn(
           'w-10 text-caption font-mono tabular-nums text-right',
-          belowMin ? 'text-warning-soft' : 'text-muted-foreground'
+          belowMin ? 'text-warning-soft' : 'text-fg-secondary'
         )}
       >
         {draft}

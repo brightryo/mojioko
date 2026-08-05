@@ -389,7 +389,7 @@ export function WhisperModelManager({
         className="flex items-center gap-2 w-full cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
       >
         <Sparkles className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-        <span className="text-headline font-semibold text-fg-secondary uppercase tracking-wider">
+        <span className="text-body font-semibold text-fg-secondary uppercase tracking-wider">
           {t('whisperModel.label')}
         </span>
         {/* Stop propagation so tooltip interaction doesn't toggle accordion */}

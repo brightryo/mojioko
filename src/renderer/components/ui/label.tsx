@@ -13,19 +13,19 @@ const Label = React.forwardRef<
     // Phase B-1 / REQ-0179 feedback: "the inspector labels all look
     // bold and shouty."  The stack (uppercase + tracking + medium)
     // combined into visual weight that read as bold even at
-    // text-label (12 px), erasing the label ↔ value hierarchy in
+    // text-caption (12 px), erasing the label ↔ value hierarchy in
     // Resolve-style inspectors where labels are meant to sit quietly
     // behind the values they annotate.  The pre-0180 REQ-20260615-003
     // rationale for keeping the shouty label was "otherwise we lose
     // the hierarchy vs body copy" — but that hierarchy is now carried
-    // by (a) `text-muted-foreground` (72 % L via REQ-0179 s1, 8:1 vs
+    // by (a) `text-fg-secondary` (72 % L via REQ-0179 s1, 8:1 vs
     // surface-0 — visibly muted vs primary text at 14:1) and (b)
     // future value-cell classnames that lift weight to medium.
     //
-    // Kept: `text-label` (12 px), `text-muted-foreground` (the s1 tier),
+    // Kept: `text-caption` (12 px), `text-fg-secondary` (the s1 tier),
     // `leading-none` (mira alignment).
     // Dropped: `font-medium`, `uppercase`, `tracking-wider`.
-    className={cn('text-label font-normal text-muted-foreground leading-none', className)}
+    className={cn('text-caption font-normal text-fg-secondary leading-none', className)}
     {...props}
   />
 ))

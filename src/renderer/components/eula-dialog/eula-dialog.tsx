@@ -67,19 +67,19 @@ export function EulaDialog() {
       <DialogContent className="max-w-[720px] max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{t('eula.title')}</DialogTitle>
-          <DialogDescription className="text-body-sm text-muted-foreground">
+          <DialogDescription className="text-body-sm text-fg-secondary">
             {t('eula.intro')}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto rounded-md border border-border bg-muted/30 p-4">
+        <div className="flex-1 min-h-0 overflow-y-auto rounded-md border border-line bg-surface-2/30 p-4">
           {text !== null && (
             <pre className="text-caption font-mono text-fg-secondary whitespace-pre-wrap break-words">
               {text}
             </pre>
           )}
           {text === null && error === null && (
-            <p className="text-body-sm text-muted-foreground">
+            <p className="text-body-sm text-fg-secondary">
               {t('eula.loading')}
             </p>
           )}

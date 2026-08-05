@@ -54,30 +54,20 @@ export const DEV_TOKEN_GROUPS: readonly DevTokenGroupSpec[] = [
     id: 'fontSize',
     title: 'Font size — type scale',
     kind: 'size',
-    sizes: [
-      'micro',
-      'caption',
-      'label',
-      'body-sm',
-      'callout',
-      'body',
-      'headline',
-      'title',
-      'heading',
-      'display',
-    ],
+    // REQ-0416 — scale collapsed 10 → 6 (label/callout/headline/heading merged).
+    sizes: ['micro', 'caption', 'body-sm', 'body', 'title', 'display'],
   },
   {
     id: 'text',
     title: 'Text colors',
     kind: 'color',
+    // REQ-0416 — text-faint removed (merged into disabled).
     members: [
       'text-primary',
       'text-secondary',
       'text-tertiary',
       'text-muted',
       'text-disabled',
-      'text-faint',
       'text-inverse',
       'warning',
       'destructive',
@@ -117,12 +107,12 @@ export const DEV_TOKEN_GROUPS: readonly DevTokenGroupSpec[] = [
     id: 'accent',
     title: 'Accent (primary)',
     kind: 'color',
+    // REQ-0416 — primary-faint removed (merged into soft).
     members: [
       'primary',
       'primary-hover',
       'primary-active',
       'primary-soft',
-      'primary-faint',
       'primary-foreground',
     ],
     discoverPrefixes: ['primary'],

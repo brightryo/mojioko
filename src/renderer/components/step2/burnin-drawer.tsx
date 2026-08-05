@@ -502,7 +502,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-6 py-6 space-y-3">
                 <div className="flex items-center gap-2 text-destructive">
                   <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                  <p className="text-headline font-semibold">{t('error.title')}</p>
+                  <p className="text-body font-semibold">{t('error.title')}</p>
                 </div>
                 {errorMessage && (
                   <p className="text-body-sm text-fg-tertiary break-all font-mono selectable">
@@ -864,7 +864,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   // 7-row summary reads as a compact reference table.
   return (
     <div className="flex items-center justify-between py-1">
-      <span className="text-callout font-semibold text-fg-tertiary">{label}</span>
+      <span className="text-body-sm font-semibold text-fg-tertiary">{label}</span>
       <span className="text-body-sm text-fg-primary font-mono tabular-nums">{value}</span>
     </div>
   )

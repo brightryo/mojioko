@@ -1255,7 +1255,7 @@ export function VideoPreviewPanel() {
           }
         }}
         className={cn(
-          'grid items-center gap-2 px-3 py-1.5 border-b border-border/50 flex-shrink-0 min-w-0',
+          'grid items-center gap-2 px-3 py-1.5 border-b border-line/50 flex-shrink-0 min-w-0',
           // Three-column grid: title left, filename+folder center,
           // chevron right.  Center column is `min-w-0` so long file
           // names truncate within their allotted middle band without
@@ -1273,7 +1273,7 @@ export function VideoPreviewPanel() {
         {/* Column 2 — filename + folder icon, centred as a pair */}
         <div className="flex items-center justify-center gap-1.5 min-w-0">
           <span
-            className="min-w-0 truncate text-body-sm text-foreground/80"
+            className="min-w-0 truncate text-body-sm text-fg-primary/80"
             title={video.path}
           >
             {filename}
@@ -1288,8 +1288,8 @@ export function VideoPreviewPanel() {
             }}
             title={t('videoPreview.showInFolder')}
             className={cn(
-              'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
-              'hover:text-foreground focus:outline-none focus-visible:text-foreground',
+              'flex-shrink-0 rounded p-0.5 text-fg-secondary transition-colors duration-150',
+              'hover:text-fg-primary focus:outline-none focus-visible:text-fg-primary',
             )}
             aria-label={t('videoPreview.showInFolder')}
           >
@@ -1343,7 +1343,7 @@ export function VideoPreviewPanel() {
         className="flex-1 min-h-0 flex items-center justify-center p-2 bg-surface-0"
       >
         {hasError ? (
-          <span className="px-6 text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
+          <span className="px-6 text-body-sm text-fg-secondary">{t('videoPreview.error')}</span>
         ) : videoFrameW > 0 && videoFrameH > 0 ? (
           <div
             ref={videoContainerRef}
@@ -1471,14 +1471,14 @@ export function VideoPreviewPanel() {
 
       {/* Seekbar — REQ-20260614-001 §3: moved from the right column to
           DIRECTLY below the video frame. */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border/50 flex-shrink-0">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-line/50 flex-shrink-0">
         <button
           type="button"
           onClick={togglePlay}
           disabled={hasError || duration === 0}
           className={cn(
             'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
-            'bg-secondary text-foreground transition-all duration-150',
+            'bg-surface-2 text-fg-primary transition-all duration-150',
             'hover:bg-accent active:scale-95',
             'focus:outline-none focus-visible:outline-none',
             'disabled:cursor-not-allowed disabled:opacity-40'
@@ -1508,7 +1508,7 @@ export function VideoPreviewPanel() {
           }}
           className="flex-1 h-1.5 cursor-pointer disabled:cursor-default disabled:opacity-40"
         />
-        <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-muted-foreground">
+        <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-fg-secondary">
           {/* REQ-0382 §A — frame-precision timecode: M:SS.mmm (f‹frame in second›). */}
           {formatTimecode(editedCurrentTime, video.fps)}&nbsp;/&nbsp;{formatTimecode(editedTotalSec, video.fps)}
         </span>
@@ -1516,7 +1516,7 @@ export function VideoPreviewPanel() {
 
       {/* Warning / approximate-preview note — REQ-20260614-001 §3:
           relocated below the seekbar. */}
-      <p className="px-3 py-1 text-caption text-muted-foreground flex-shrink-0">
+      <p className="px-3 py-1 text-caption text-fg-secondary flex-shrink-0">
         {t('subtitleLayout.previewNote')}
       </p>
       </div>{/* REQ-0186 §1 — close media-stack collapse wrapper */}

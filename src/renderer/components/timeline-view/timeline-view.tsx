@@ -1964,7 +1964,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               X-clear-both).  X は両点のうち少なくとも片方が set の
               ときだけ表示。 */}
           <div className="flex items-center gap-2 rounded-md border border-line px-2 py-1">
-            <span className="text-label text-fg-muted select-none">
+            <span className="text-caption text-fg-muted select-none">
               {t('timeline.trim.toolbarLabel')}
             </span>
             {/* 始点 — 再押下で解除 (toggle off). 設定時は label に時刻チップ。 */}
@@ -2065,7 +2065,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       >
         {!hasAnyVisible ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-fg-muted">
-            <GanttChartSquare className="h-8 w-8 text-fg-faint" />
+            <GanttChartSquare className="h-8 w-8 text-fg-disabled" />
             {/* REQ-117 [2] — the timeline can never render deleted
                 entries by design (cuts collapsed their position, manual
                 deletes have no playable slot), so the generic "no entries

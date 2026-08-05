@@ -348,8 +348,8 @@ export function DefaultStyleControls({
       />
 
       {/* ── Layout section header ── */}
-      <div className="pt-2 mt-2 border-t border-border/60">
-        <p className="text-label font-medium uppercase tracking-wider text-foreground mb-1 px-2">
+      <div className="pt-2 mt-2 border-t border-line/60">
+        <p className="text-caption font-medium uppercase tracking-wider text-fg-primary mb-1 px-2">
           {t('step2:timeline.inspector.layoutSection')}
         </p>
 
@@ -434,14 +434,14 @@ export function DefaultStyleControls({
 
       {/* Auto line break — separate section per the pre-REQ-0295
           convention (subtitle-formatting flag, not a per-cue style). */}
-      <div className="pt-2 mt-2 border-t border-border/60">
+      <div className="pt-2 mt-2 border-t border-line/60">
         <SettingsStyleRow label={t('advanced.autoLineBreak')} help={t('advanced.autoLineBreakHelp')}>
           <div className="flex items-center gap-2">
             <Switch
               checked={autoLineBreak}
               onCheckedChange={(v) => onSetAutoLineBreak(v)}
             />
-            <span className="text-body-sm text-muted-foreground">
+            <span className="text-body-sm text-fg-secondary">
               {autoLineBreak ? t('advanced.enabled') : t('advanced.disabled')}
             </span>
           </div>

@@ -988,7 +988,7 @@ export function TimelineBlockInspector({
               'flex items-center justify-center h-7 w-7 rounded',
               'transition-colors duration-150 hover:bg-surface-2',
               entry.isDeleted && !isTrimDeleted
-                ? 'text-primary-soft hover:text-primary-faint'
+                ? 'text-primary-soft hover:text-primary-soft'
                 : 'text-fg-tertiary hover:text-fg-primary'
             )}
           >
@@ -1128,7 +1128,7 @@ export function TimelineBlockInspector({
           type="button"
           onClick={() => setSubtitleSectionOpen((v) => !v)}
           aria-expanded={subtitleSectionOpen}
-          className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+          className="flex items-center gap-1.5 text-body-sm font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
         >
           {subtitleSectionOpen ? (
             <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
@@ -1573,7 +1573,7 @@ export function TimelineBlockInspector({
             type="button"
             onClick={() => setLayoutSectionOpen((v) => !v)}
             aria-expanded={layoutSectionOpen}
-            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+            className="flex items-center gap-1.5 text-body-sm font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
           >
             {layoutSectionOpen ? (
               <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
@@ -1797,7 +1797,7 @@ export function TimelineBlockInspector({
             type="button"
             onClick={() => setAnimationSectionOpen((v) => !v)}
             aria-expanded={animationSectionOpen}
-            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+            className="flex items-center gap-1.5 text-body-sm font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
           >
             {animationSectionOpen ? (
               <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
@@ -1842,7 +1842,7 @@ export function TimelineBlockInspector({
             type="button"
             onClick={() => setBackgroundSectionOpen((v) => !v)}
             aria-expanded={backgroundSectionOpen}
-            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+            className="flex items-center gap-1.5 text-body-sm font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
           >
             {backgroundSectionOpen ? (
               <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />

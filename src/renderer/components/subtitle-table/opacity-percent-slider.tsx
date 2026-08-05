@@ -142,7 +142,7 @@ export function OpacityPercentSlider({
           range track (which has `min-w-0`) instead of the readout.  The readout
           is `text-right`, so losing width here truncates from the LEFT and
           "100%" degrades to "1" — the exact reported symptom. */}
-      <span className="w-12 shrink-0 text-caption text-muted-foreground font-mono tabular-nums text-right">
+      <span className="w-12 shrink-0 text-caption text-fg-secondary font-mono tabular-nums text-right">
         {draft}%
       </span>
     </div>

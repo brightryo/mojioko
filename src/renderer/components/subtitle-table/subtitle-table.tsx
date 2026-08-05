@@ -1272,7 +1272,7 @@ export function SubtitleTable({
             animate={{ opacity: 1 }}
             className="flex flex-col items-center justify-center gap-3 py-16"
           >
-            <FileText className="h-8 w-8 text-fg-faint" />
+            <FileText className="h-8 w-8 text-fg-disabled" />
             <p className="text-body font-medium text-fg-tertiary">{t(emptyKey)}</p>
           </motion.div>
         ) : (

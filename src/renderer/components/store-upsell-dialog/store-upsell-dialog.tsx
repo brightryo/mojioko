@@ -69,7 +69,7 @@ export function StoreUpsellDialog() {
       >
         <DialogHeader>
           <DialogTitle>{t('storeUpsell.title')}</DialogTitle>
-          <DialogDescription className="whitespace-pre-line text-body-sm text-muted-foreground">
+          <DialogDescription className="whitespace-pre-line text-body-sm text-fg-secondary">
             {t('storeUpsell.body')}
           </DialogDescription>
         </DialogHeader>

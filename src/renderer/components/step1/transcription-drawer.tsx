@@ -306,13 +306,13 @@ export function TranscriptionDrawer({
                         htmlFor="word-subtitle-experimental"
                         className={cn(
                           'text-body-sm font-medium',
-                          wordSubtitleLocked && 'text-muted-foreground/70',
+                          wordSubtitleLocked && 'text-fg-secondary/70',
                         )}
                       >
                         {t('drawer.wordSubtitle.label')}
                       </label>
                       {wordSubtitleLocked && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-line/70 bg-surface-1/60 px-1.5 py-0.5 text-caption text-muted-foreground/80">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-line/70 bg-surface-1/60 px-1.5 py-0.5 text-caption text-fg-secondary/80">
                           <Lock className="h-3 w-3" />
                           {t('drawer.wordSubtitle.lockedPaidOnly')}
                         </span>
@@ -321,7 +321,7 @@ export function TranscriptionDrawer({
                     <p
                       className={cn(
                         'text-caption text-fg-muted leading-relaxed',
-                        wordSubtitleLocked && 'text-muted-foreground/60',
+                        wordSubtitleLocked && 'text-fg-secondary/60',
                       )}
                     >
                       {t('drawer.wordSubtitle.description')}
@@ -416,7 +416,7 @@ export function TranscriptionDrawer({
                     {deviceInfo && (
                       <span
                         className={cn(
-                          'font-mono tabular-nums text-label',
+                          'font-mono tabular-nums text-caption',
                           'rounded-full border px-2 py-0.5',
                           deviceInfo.device === 'cuda'
                             ? 'border-primary/40 bg-primary/10 text-primary'
@@ -496,7 +496,7 @@ export function TranscriptionDrawer({
             <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-6 py-6 space-y-3">
               <div className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                <p className="text-headline font-semibold">
+                <p className="text-body font-semibold">
                   {t('drawer.errorTitle')}
                 </p>
               </div>

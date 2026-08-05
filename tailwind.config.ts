@@ -9,26 +9,20 @@ const config: Config = {
       colors: {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
-        card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))'
-        },
-        popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))'
-        },
+        // REQ-0416 — shadcn semantic surfaces kept for primitive compat, but
+        // their unused `-foreground` sub-keys were dropped (app code uses the
+        // `fg-*` scale; see lever-A unification).
+        card: 'hsl(var(--card))',
+        popover: 'hsl(var(--popover))',
         primary: {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',
           hover:  'hsl(var(--primary-hover))',
           active: 'hsl(var(--primary-active))',
-          soft:   'hsl(var(--primary-soft))',
-          faint:  'hsl(var(--primary-faint))'
+          soft:   'hsl(var(--primary-soft))'
+          // REQ-0416 — `faint` removed (single use migrated to `soft`).
         },
-        secondary: {
-          DEFAULT: 'hsl(var(--secondary))',
-          foreground: 'hsl(var(--secondary-foreground))'
-        },
+        secondary: 'hsl(var(--secondary))',
         muted: {
           DEFAULT: 'hsl(var(--muted))',
           foreground: 'hsl(var(--muted-foreground))'
@@ -77,13 +71,13 @@ const config: Config = {
           tertiary:  'hsl(var(--text-tertiary))',
           muted:     'hsl(var(--text-muted))',
           disabled:  'hsl(var(--text-disabled))',
-          faint:     'hsl(var(--text-faint))',
+          // REQ-0416 — `faint` removed (2 uses migrated to `disabled`).
           inverse:   'hsl(var(--text-inverse))'
         },
         line: {
           DEFAULT: 'hsl(var(--border-default))',
-          strong:  'hsl(var(--border-strong))',
-          subtle:  'hsl(var(--border-subtle))'
+          strong:  'hsl(var(--border-strong))'
+          // REQ-0416 — `subtle` removed (was unused).
         },
         row: {
           edited:  'hsl(var(--row-edited))',
@@ -171,16 +165,18 @@ const config: Config = {
         // (= the exact pre-0414 px) is what renders — a pure value-preserving
         // refactor with no visual change.  Line heights stay static (the
         // editor tunes size, not leading).
+        // REQ-0416 — scale collapsed 10 → 6.  The removed names were
+        // same-px/same-line-height duplicates whose only differentiator was a
+        // call-site weight class (which is untouched), so the merge is
+        // value-preserving: label→caption, callout→body-sm, headline→body,
+        // heading→title (heading's line-height 22→24 was the only 1-step change,
+        // on 2 sites).
         micro:        ['var(--fs-micro, 10px)',    { lineHeight: '14px' }],
-        label:        ['var(--fs-label, 12px)',    { lineHeight: '16px' }],
         caption:      ['var(--fs-caption, 12px)',  { lineHeight: '16px' }],
         'body-sm':    ['var(--fs-body-sm, 13px)',  { lineHeight: '18px' }],
-        callout:      ['var(--fs-callout, 13px)',  { lineHeight: '18px' }],
         body:         ['var(--fs-body, 15px)',     { lineHeight: '22px' }],
-        headline:     ['var(--fs-headline, 15px)', { lineHeight: '22px' }],
         title:        ['var(--fs-title, 16px)',    { lineHeight: '24px' }],
-        heading:      ['var(--fs-heading, 16px)',  { lineHeight: '22px' }],  // was 20/28
-        display:      ['var(--fs-display, 20px)',  { lineHeight: '28px' }]   // was 24/32
+        display:      ['var(--fs-display, 20px)',  { lineHeight: '28px' }]
       },
       // REQ-0142 — indeterminate progress bar used in the transcription
       // drawer while the sidecar is in its pre-Whisper prep region

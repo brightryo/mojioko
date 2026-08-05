@@ -126,7 +126,7 @@ function AnimationSlider({
         className="flex-1 min-w-0"
         style={{ accentColor: 'hsl(var(--primary))' }}
       />
-      <span className="w-10 text-caption text-muted-foreground font-mono tabular-nums text-right shrink-0">
+      <span className="w-10 text-caption text-fg-secondary font-mono tabular-nums text-right shrink-0">
         {readout}
       </span>
     </div>

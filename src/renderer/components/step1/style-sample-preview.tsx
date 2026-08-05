@@ -248,9 +248,9 @@ export function StyleSamplePreview({
     // align-self for grid items is `stretch`).  Without this the card grows
     // to ~500-600 px and the preview frame floats inside a sea of whitespace
     // that visually reads as "縦長".
-    <div className="rounded-xl border border-border bg-card p-4 space-y-2 self-start">
+    <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-2 self-start">
       <div className="flex items-center gap-1.5">
-        <Type className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        <Type className="h-4 w-4 text-fg-secondary flex-shrink-0" />
         <Label>
           {t('subtitleDefaults.previewLabel', 'プレビュー')}
         </Label>
@@ -263,7 +263,7 @@ export function StyleSamplePreview({
           // video preview: `isolate` keeps the sample cue's z-index (mirrors its
           // z-order layer) contained so it can never rise above the surrounding
           // dialog chrome.
-          className="rounded-md bg-input border border-border relative overflow-hidden isolate"
+          className="rounded-md bg-input border border-line relative overflow-hidden isolate"
           style={{
             aspectRatio,
             maxHeight: `${FRAME_MAX_HEIGHT_PX}px`,
@@ -286,7 +286,7 @@ export function StyleSamplePreview({
             // style is still legible against a plausible burn-in
             // background.  --background gives a near-black that mirrors
             // the typical "dark video" case the burn-in is designed for.
-            <div className="absolute inset-0 bg-background" />
+            <div className="absolute inset-0 bg-surface-0" />
           )}
           {containerWidth > 0 && (
             <SubtitleOverlay
@@ -298,7 +298,7 @@ export function StyleSamplePreview({
         </div>
       </div>
 
-      <p className="text-body-sm text-muted-foreground">
+      <p className="text-body-sm text-fg-secondary">
         {t(
           'subtitleDefaults.previewNote',
           '※ 近似表示です。書き出し後の動画で最終確認してください。'

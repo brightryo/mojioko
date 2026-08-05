@@ -316,7 +316,7 @@ export function SettingsDialog() {
 
           {/* ─ Default style ──────────────────────────────────────── */}
           <TabsContent value="defaultStyle" className="space-y-2">
-            <p className="text-body-sm text-muted-foreground">{t('defaultStyle.hint')}</p>
+            <p className="text-body-sm text-fg-secondary">{t('defaultStyle.hint')}</p>
             <DefaultStyleControls
               defaults={transcriptionDefaults}
               onUpdateDefaults={updateTranscriptionDefaults}
@@ -329,7 +329,7 @@ export function SettingsDialog() {
 
           {/* ─ Whisper engine ─────────────────────────────────────── */}
           <TabsContent value="whisper" className="space-y-3">
-            <p className="text-body-sm text-muted-foreground">{t('whisper.hint')}</p>
+            <p className="text-body-sm text-fg-secondary">{t('whisper.hint')}</p>
             <WhisperAdvancedControls
               transcriptionAdvanced={transcriptionAdvanced}
               onUpdate={setTranscriptionAdvanced}

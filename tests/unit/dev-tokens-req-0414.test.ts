@@ -85,20 +85,9 @@ describe('REQ-0414 registry', () => {
     }
   })
 
-  it('font-size group lists the full 10-step type scale', () => {
+  it('font-size group lists the collapsed 6-step type scale (REQ-0416)', () => {
     const fs = DEV_TOKEN_GROUPS.find((g) => g.id === 'fontSize')!
-    expect(fs.sizes).toEqual([
-      'micro',
-      'caption',
-      'label',
-      'body-sm',
-      'callout',
-      'body',
-      'headline',
-      'title',
-      'heading',
-      'display',
-    ])
+    expect(fs.sizes).toEqual(['micro', 'caption', 'body-sm', 'body', 'title', 'display'])
   })
 })
 

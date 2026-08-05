@@ -173,7 +173,7 @@ function DevTokenPanel({ onClose }: { onClose: () => void }): JSX.Element {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <div className="flex flex-col">
-          <span className="text-callout font-semibold">Dev Token Editor</span>
+          <span className="text-body-sm font-semibold">Dev Token Editor</span>
           <span className="text-caption text-fg-tertiary">Ctrl+Shift+D · live · not shipped</span>
         </div>
         <button
@@ -190,7 +190,7 @@ function DevTokenPanel({ onClose }: { onClose: () => void }): JSX.Element {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {/* Font family (read-only) */}
         <section className="mb-4">
-          <h3 className="mb-2 text-label font-medium uppercase text-fg-tertiary">Font family</h3>
+          <h3 className="mb-2 text-caption font-medium uppercase text-fg-tertiary">Font family</h3>
           <div className="flex items-center justify-between rounded-md border border-line bg-surface-0 px-3 py-2">
             <span className="text-body-sm" style={{ fontFamily: FIXED_FONT_FAMILY }}>
               {FIXED_FONT_FAMILY}
@@ -201,7 +201,7 @@ function DevTokenPanel({ onClose }: { onClose: () => void }): JSX.Element {
 
         {groups.map((g) => (
           <section key={g.id} className="mb-4">
-            <h3 className="mb-2 text-label font-medium uppercase text-fg-tertiary">{g.title}</h3>
+            <h3 className="mb-2 text-caption font-medium uppercase text-fg-tertiary">{g.title}</h3>
             <div className="flex flex-col gap-1.5">
               {g.kind === 'color'
                 ? g.members.map((name) => (

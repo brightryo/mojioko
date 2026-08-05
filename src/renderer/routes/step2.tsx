@@ -1198,12 +1198,12 @@ export default function Step2Route(_: Step2RouteProps) {
   const footerCenter = (
     /* REQ-067 phase B: zinc-500 → zinc-300 so the per-step counts
        (edited / warnings / deleted) stay readable at a glance.  The
-       inner "selected" span keeps its `text-foreground` accent so the
+       inner "selected" span keeps its `text-fg-primary` accent so the
        active-selection callout still wins visual priority. */
     <span className="text-body-sm text-fg-secondary">
       {selectedRowIds.size > 0 && (
         <>
-          <span className="text-foreground">
+          <span className="text-fg-primary">
             {t('footer.selected', { count: selectedRowIds.size })}
           </span>
           {' · '}
@@ -1348,7 +1348,7 @@ export default function Step2Route(_: Step2RouteProps) {
             selected entry); bulk / empty modes have no single cue.  `justify-
             between` right-aligns it regardless of audio-only. */}
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-callout font-semibold text-fg-secondary flex items-center gap-1.5">
+          <h2 className="text-body-sm font-semibold text-fg-secondary flex items-center gap-1.5">
             <span>{inspectorHeading}</span>
             {isBulkMode && <HelpIcon content={t('inspector.bulkHelp')} />}
           </h2>

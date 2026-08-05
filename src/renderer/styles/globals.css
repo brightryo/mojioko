@@ -110,8 +110,8 @@
 
     /* Foreground (semantic = step 12, highest-contrast text) */
     --foreground:         var(--neutral-12);
-    --card-foreground:    var(--neutral-12);
-    --popover-foreground: var(--neutral-12);
+    /* REQ-0416 — --card-foreground / --popover-foreground removed (unused;
+       app text uses the --text-* scale). --card / --popover kept for shadcn. */
 
     /* Primary action: desaturated professional green.
        REQ-0177 Phase A — the pre-0177 emerald (green-500 = #22c55e,
@@ -130,7 +130,7 @@
 
     /* Secondary mapped to base surface */
     --secondary: var(--neutral-4);
-    --secondary-foreground: var(--neutral-12);
+    /* REQ-0416 — --secondary-foreground removed (unused). */
 
     /* Muted: zinc-800 bg, zinc-400 fg.  REQ-067 phase A: foreground lifted
        from zinc-500 (#71717a, contrast 4.04:1 against the app background —
@@ -291,7 +291,7 @@
     --text-tertiary:  var(--neutral-10);
     --text-muted:     var(--neutral-9);
     --text-disabled:  var(--neutral-8);
-    --text-faint:     var(--neutral-7);
+    /* REQ-0416 — --text-faint removed (2 uses migrated to --text-disabled). */
     --text-inverse:   var(--neutral-1);
 
     /*
@@ -318,7 +318,7 @@
      */
     --border-default: 0 0% 22%;      /* REQ-0187 — was 43 % */
     --border-strong:  0 0% 32%;      /* REQ-0187 — was 54 %; input frames */
-    --border-subtle:  0 0% 15%;      /* REQ-0187 — was 18 %; near-invisible */
+    /* REQ-0416 — --border-subtle removed (was unused). */
 
     /* Action accent variants (green family) — REQ-0177: track the
        toned-down --primary above.  Same relative L ladder as before
@@ -328,7 +328,7 @@
     --primary-hover:  152 44% 38%;       /* was 142 76% 36% */
     --primary-active: 152 46% 29%;       /* was 142 72% 29% */
     --primary-soft:   152 40% 58%;       /* was 142 71% 58% */
-    --primary-faint:  152 38% 73%;       /* was 141 79% 73% */
+    /* REQ-0416 — --primary-faint removed (1 use migrated to --primary-soft). */
 
     /* Destructive variants (red family) */
     --destructive-hover: 0 72% 51%;      /* red-600  #dc2626 */

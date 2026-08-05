@@ -1189,13 +1189,13 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     >
       {/* Top: count + clear */}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-body-sm font-medium text-foreground tabular-nums">
+        <span className="text-body-sm font-medium text-fg-primary tabular-nums">
           {countLabel}
         </span>
         <button
           type="button"
           onClick={clearRowSelection}
-          className="flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors duration-150"
+          className="flex items-center justify-center h-6 w-6 rounded text-fg-secondary hover:bg-accent hover:text-accent-foreground transition-colors duration-150"
           aria-label={t('bulk.clearSelection')}
           title={t('bulk.clearSelection')}
         >
@@ -1210,7 +1210,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           with `border-y` so a hairline sits both above and below the
           icon row, visually marking it as "actions that apply across
           the selection" before the styled-property sections below. */}
-      <div className="flex items-center gap-2 border-y border-border/60 py-2">
+      <div className="flex items-center gap-2 border-y border-line/60 py-2">
         <button
           type="button"
           onClick={handleAutoLineBreakApply}
@@ -1218,8 +1218,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           aria-label={t('bulk.autoLineBreakHelp')}
           className={cn(
             'inline-flex items-center justify-center',
-            'h-7 w-7 rounded border bg-input text-foreground',
-            'border-border hover:border-line-strong transition-colors duration-150',
+            'h-7 w-7 rounded border bg-input text-fg-primary',
+            'border-line hover:border-line-strong transition-colors duration-150',
             'focus:outline-none focus-visible:outline-none',
           )}
         >
@@ -1232,8 +1232,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           aria-label={t('bulk.overflowWrapHelp')}
           className={cn(
             'inline-flex items-center justify-center',
-            'h-7 w-7 rounded border bg-input text-foreground',
-            'border-border hover:border-line-strong transition-colors duration-150',
+            'h-7 w-7 rounded border bg-input text-fg-primary',
+            'border-line hover:border-line-strong transition-colors duration-150',
             'focus:outline-none focus-visible:outline-none',
           )}
         >
@@ -1254,7 +1254,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             not labelled button"; the row decides its own chrome. */}
         <StylePresetControls
           triggerVariant="toolbar"
-          className="ml-auto border border-border bg-input text-foreground hover:border-line-strong hover:bg-input"
+          className="ml-auto border border-line bg-input text-fg-primary hover:border-line-strong hover:bg-input"
           onSaveCurrent={presetSaveSource ? handleSavePreset : null}
           onApply={handleApplyPreset}
         />
@@ -1264,8 +1264,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           背景色 の 3 セクションにグルーピングし、単一選択 Inspector の
           並びを bulk 側でも踏襲する。Font picker は補遺⑪ までは下の方に
           並んでいたが、字幕セクションの先頭に移して Inspector 側と
-          整合させた。各セクションは `border-t border-border/60 pt-2`
-          で区切り線、見出しは `text-body font-semibold text-foreground`
+          整合させた。各セクションは `border-t border-line/60 pt-2`
+          で区切り線、見出しは `text-body font-semibold text-fg-primary`
           で表示。 */}
       <div className="flex flex-col">
         {/* § 字幕 — Font, Size, Text colour, Outline colour, Outline
@@ -1276,7 +1276,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             `border-y`, which would otherwise double up with this top
             border into a 2-px line. */}
         <div className="flex flex-col gap-2 pt-2">
-          <div className="text-body font-semibold text-foreground">
+          <div className="text-body font-semibold text-fg-primary">
             {t('timeline.inspector.subtitleSection')}
           </div>
           {/* REQ-0275 §5 — two-tier family + weight picker for bulk.
@@ -1497,8 +1497,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </div>
 
         {/* § レイアウト — Horizontal, Vertical, Margin. */}
-        <div className="flex flex-col gap-2 border-t border-border/60 pt-2 mt-2">
-          <div className="text-body font-semibold text-foreground">
+        <div className="flex flex-col gap-2 border-t border-line/60 pt-2 mt-2">
+          <div className="text-body font-semibold text-fg-primary">
             {t('timeline.inspector.layoutSection')}
           </div>
           <StyleRow label={t('styleCell.layoutH')}>
@@ -1579,8 +1579,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             subtitle / layout / animation / background to match the
             inspector exactly.  Uses the SAME `AnimationControls`
             component, so the two surfaces cannot drift apart. */}
-        <div className="flex flex-col gap-2 border-t border-border/60 pt-2 mt-2">
-          <div className="text-body font-semibold text-foreground">
+        <div className="flex flex-col gap-2 border-t border-line/60 pt-2 mt-2">
+          <div className="text-body font-semibold text-fg-primary">
             {t('timeline.inspector.animationSection')}
           </div>
           <AnimationControls
@@ -1593,8 +1593,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         {/* § 背景色 — Bg ON/OFF, Bg colour, Opacity.  REQ-0096 attaches a
             HelpIcon to the section heading explaining the libass-spec rule
             that enabling BG disables the outline color. */}
-        <div className="flex flex-col gap-2 border-t border-border/60 pt-2 mt-2">
-          <div className="text-body font-semibold text-foreground flex items-center gap-1.5">
+        <div className="flex flex-col gap-2 border-t border-line/60 pt-2 mt-2">
+          <div className="text-body font-semibold text-fg-primary flex items-center gap-1.5">
             <span>{t('timeline.inspector.backgroundSection')}</span>
             <HelpIcon content={t('timeline.inspector.backgroundSectionHelp')} />
           </div>

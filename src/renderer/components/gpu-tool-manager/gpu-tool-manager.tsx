@@ -233,7 +233,7 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
         )}
       >
         <Zap className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-        <span className="text-headline font-semibold text-fg-secondary uppercase tracking-wider">
+        <span className="text-body font-semibold text-fg-secondary uppercase tracking-wider">
           {t('gpuTool.label')}
         </span>
         {/* REQ-0406 §1 — same [オプション] badge as the translation-tool section. */}
@@ -412,7 +412,7 @@ function CpuCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex items-center gap-2">
           <Cpu className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-          <p className="text-headline font-semibold text-fg-primary leading-tight">
+          <p className="text-body font-semibold text-fg-primary leading-tight">
             {t('gpuTool.cpu.name')}
           </p>
         </div>
@@ -491,7 +491,7 @@ function GpuCard({
         <div className="min-w-0 flex items-center gap-2">
           <Zap className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
           <div className="min-w-0">
-            <p className="text-headline font-semibold text-fg-primary leading-tight">
+            <p className="text-body font-semibold text-fg-primary leading-tight">
               {t('gpuTool.gpu.name')}
             </p>
             <p
