@@ -163,16 +163,24 @@ const config: Config = {
         //
         // heading  20 → 16   – screen H1 ("編集", "文字起こし")
         // display  24 → 20   – About / Splash hero
-        micro:        ['10px', { lineHeight: '14px' }],
-        label:        ['12px', { lineHeight: '16px' }],
-        caption:      ['12px', { lineHeight: '16px' }],
-        'body-sm':    ['13px', { lineHeight: '18px' }],
-        callout:      ['13px', { lineHeight: '18px' }],
-        body:         ['15px', { lineHeight: '22px' }],
-        headline:     ['15px', { lineHeight: '22px' }],
-        title:        ['16px', { lineHeight: '24px' }],
-        heading:      ['16px', { lineHeight: '22px' }],  // was 20/28
-        display:      ['20px', { lineHeight: '28px' }]   // was 24/32
+        //
+        // REQ-0414 — each step's px is now the FALLBACK of a `--fs-<name>`
+        // CSS variable so the developer live-token editor can override the
+        // whole type scale at runtime (set `--fs-*` on :root).  The vars
+        // are intentionally NOT declared in globals.css, so the fallback
+        // (= the exact pre-0414 px) is what renders — a pure value-preserving
+        // refactor with no visual change.  Line heights stay static (the
+        // editor tunes size, not leading).
+        micro:        ['var(--fs-micro, 10px)',    { lineHeight: '14px' }],
+        label:        ['var(--fs-label, 12px)',    { lineHeight: '16px' }],
+        caption:      ['var(--fs-caption, 12px)',  { lineHeight: '16px' }],
+        'body-sm':    ['var(--fs-body-sm, 13px)',  { lineHeight: '18px' }],
+        callout:      ['var(--fs-callout, 13px)',  { lineHeight: '18px' }],
+        body:         ['var(--fs-body, 15px)',     { lineHeight: '22px' }],
+        headline:     ['var(--fs-headline, 15px)', { lineHeight: '22px' }],
+        title:        ['var(--fs-title, 16px)',    { lineHeight: '24px' }],
+        heading:      ['var(--fs-heading, 16px)',  { lineHeight: '22px' }],  // was 20/28
+        display:      ['var(--fs-display, 20px)',  { lineHeight: '28px' }]   // was 24/32
       },
       // REQ-0142 — indeterminate progress bar used in the transcription
       // drawer while the sidecar is in its pre-Whisper prep region

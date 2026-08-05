@@ -16,6 +16,10 @@ import { FontLicensesDialog } from '@/components/font-licenses/font-licenses-dia
 import { EulaDialog } from '@/components/eula-dialog/eula-dialog'
 import { StoreUpsellDialog } from '@/components/store-upsell-dialog/store-upsell-dialog'
 import { ProjectOpenController } from '@/components/project-open/project-open-controller'
+// REQ-0414 — developer live-token editor.  Guarded by import.meta.env.DEV at
+// the mount site below so it is tree-shaken out of `electron-vite build`
+// (end-user) bundles and never exposed to users.
+import { DevTokenEditor } from '@/components/dev-token-editor/dev-token-editor'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
@@ -316,6 +320,11 @@ function AppInner() {
           → navigate).  Mounted at the App level so the menu event
           subscription outlives every route change. */}
       <ProjectOpenController />
+
+      {/* REQ-0414 — DEV-only live token editor (Ctrl+Shift+D).  The
+          `import.meta.env.DEV` constant folds to `false` in production, so
+          Rollup drops both this branch and the import above. */}
+      {import.meta.env.DEV && <DevTokenEditor />}
 
       <Toaster
         position="bottom-center"
