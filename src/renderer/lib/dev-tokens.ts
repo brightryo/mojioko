@@ -335,3 +335,61 @@ export function serializeTailwindFontSize(snap: TokenSnapshot): string {
   }
   return lines.join('\n')
 }
+
+/* -------------------------------------------------------------------------
+ * REQ-0420 — token overlay / click-to-reassign inspector helpers (pure)
+ * ------------------------------------------------------------------------- */
+
+/** The type-scale tokens, small → large, as they appear in `text-<token>`. */
+export const TYPE_SCALE_TOKENS = [
+  'micro',
+  'caption',
+  'body-sm',
+  'body',
+  'title',
+  'display',
+] as const
+
+export type TypeScaleToken = (typeof TYPE_SCALE_TOKENS)[number]
+
+/** Distinct overlay colour per token (border + label chip). */
+export const TOKEN_OVERLAY_COLORS: Record<TypeScaleToken, string> = {
+  micro: '#6b7280', // gray-500
+  caption: '#a855f7', // purple-500
+  'body-sm': '#3b82f6', // blue-500
+  body: '#22c55e', // green-500
+  title: '#f59e0b', // amber-500
+  display: '#ef4444', // red-500
+}
+
+/**
+ * Which type-scale token a class list carries (first / most-specific match),
+ * or null.  `body-sm` is tested before `body`; classes are exact so
+ * `text-body-sm` never matches `text-body`.
+ */
+export function detectSizeToken(classes: readonly string[]): TypeScaleToken | null {
+  for (const t of TYPE_SCALE_TOKENS) {
+    if (classes.includes(`text-${t}`)) return t
+  }
+  return null
+}
+
+/** A recorded reassignment (element identity carried separately at runtime). */
+export interface TokenReassignment {
+  /** Trimmed, collapsed text content (locator hint for finding it in code). */
+  text: string
+  /** Short DOM path (tag[.class] chain) — a second locator hint. */
+  path: string
+  from: TypeScaleToken
+  to: TypeScaleToken
+}
+
+/** Paste-back list of overlay reassignments for the human/CC to bake in code. */
+export function serializeReassignments(changes: readonly TokenReassignment[]): string {
+  if (changes.length === 0) return '// REQ-0420 — no reassignments yet'
+  const lines = ['// REQ-0420 token overlay reassignments (element → from → to)']
+  for (const c of changes) {
+    lines.push(`- text-${c.from} → text-${c.to}  "${c.text}"  [${c.path}]`)
+  }
+  return lines.join('\n')
+}

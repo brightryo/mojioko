@@ -23,6 +23,10 @@ import {
   rgbStringToHex,
   serializeGlobalsCss,
   serializeTailwindFontSize,
+  TYPE_SCALE_TOKENS,
+  TOKEN_OVERLAY_COLORS,
+  detectSizeToken,
+  serializeReassignments,
   type DevTokenGroupSpec,
   type TokenSnapshot,
 } from '../../src/renderer/lib/dev-tokens'
@@ -180,5 +184,37 @@ describe('REQ-0414 export serialisation', () => {
     expect(out).toContain("micro: ['var(--fs-micro, 11px)', { lineHeight: '14px' }],")
     // hyphenated scale name is quoted as an object key
     expect(out).toContain("'body-sm': ['var(--fs-body-sm, 13px)', { lineHeight: '18px' }],")
+  })
+})
+
+describe('REQ-0420 token overlay helpers', () => {
+  it('every type-scale token has a distinct overlay colour', () => {
+    const colors = TYPE_SCALE_TOKENS.map((t) => TOKEN_OVERLAY_COLORS[t])
+    expect(colors.every(Boolean)).toBe(true)
+    expect(new Set(colors).size).toBe(TYPE_SCALE_TOKENS.length)
+  })
+
+  it('TYPE_SCALE_TOKENS matches the fontSize group', () => {
+    const fs = DEV_TOKEN_GROUPS.find((g) => g.id === 'fontSize')!
+    expect([...TYPE_SCALE_TOKENS]).toEqual(fs.sizes)
+  })
+
+  it('detectSizeToken finds the type token and ignores colour/other classes', () => {
+    expect(detectSizeToken(['flex', 'text-title', 'font-semibold', 'text-fg-primary'])).toBe('title')
+    // body-sm is not confused with body (exact class match)
+    expect(detectSizeToken(['text-body-sm'])).toBe('body-sm')
+    expect(detectSizeToken(['text-body'])).toBe('body')
+    expect(detectSizeToken(['text-fg-primary', 'text-center'])).toBeNull()
+    expect(detectSizeToken([])).toBeNull()
+  })
+
+  it('serializeReassignments lists element / from / to, or a no-op note', () => {
+    expect(serializeReassignments([])).toContain('no reassignments')
+    const out = serializeReassignments([
+      { text: '入力ファイル', path: 'div.flex > label', from: 'body', to: 'title' },
+    ])
+    expect(out).toContain('text-body → text-title')
+    expect(out).toContain('入力ファイル')
+    expect(out).toContain('div.flex > label')
   })
 })

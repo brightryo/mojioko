@@ -37,6 +37,7 @@ import {
   resetColor,
   resetSize,
 } from '@/lib/dev-token-live'
+import { TokenOverlay } from './token-overlay'
 
 const SIZE_MIN_PX = 6
 const SIZE_MAX_PX = 48
@@ -50,6 +51,8 @@ interface ResolvedGroup {
 
 export function DevTokenEditor(): JSX.Element | null {
   const [open, setOpen] = useState(false)
+  // REQ-0420 — token overlay (independent of the panel; toggled from it).
+  const [overlayOn, setOverlayOn] = useState(false)
 
   // Ctrl+Shift+D toggles; Esc closes.  Capture phase so it beats the app's
   // global shortcut handler and the Tab/Esc suppressors.
@@ -59,19 +62,40 @@ export function DevTokenEditor(): JSX.Element | null {
         e.preventDefault()
         e.stopPropagation()
         setOpen((o) => !o)
+      } else if (e.key === 'Escape' && overlayOn) {
+        setOverlayOn(false)
       } else if (e.key === 'Escape' && open) {
         setOpen(false)
       }
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [open])
+  }, [open, overlayOn])
 
-  if (!open) return null
-  return <DevTokenPanel onClose={() => setOpen(false)} />
+  if (!open && !overlayOn) return null
+  return (
+    <>
+      {open && (
+        <DevTokenPanel
+          onClose={() => setOpen(false)}
+          overlayOn={overlayOn}
+          onToggleOverlay={() => setOverlayOn((o) => !o)}
+        />
+      )}
+      {overlayOn && <TokenOverlay onClose={() => setOverlayOn(false)} />}
+    </>
+  )
 }
 
-function DevTokenPanel({ onClose }: { onClose: () => void }): JSX.Element {
+function DevTokenPanel({
+  onClose,
+  overlayOn,
+  onToggleOverlay,
+}: {
+  onClose: () => void
+  overlayOn: boolean
+  onToggleOverlay: () => void
+}): JSX.Element {
   // Resolve group membership once per open (reconcile registry vs live :root).
   const groups = useMemo<ResolvedGroup[]>(() => {
     const rootVars = discoverRootVarNames()
@@ -166,6 +190,7 @@ function DevTokenPanel({ onClose }: { onClose: () => void }): JSX.Element {
 
   return (
     <div
+      data-dev-panel=""
       className="fixed right-0 top-0 z-[9999] flex h-full w-[340px] flex-col border-l border-line-strong bg-surface-1 text-fg-primary shadow-2xl shadow-black/50"
       role="dialog"
       aria-label="Developer token editor"
@@ -188,6 +213,25 @@ function DevTokenPanel({ onClose }: { onClose: () => void }): JSX.Element {
 
       {/* Body */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        {/* REQ-0420 — token overlay toggle */}
+        <section className="mb-4">
+          <button
+            type="button"
+            onClick={onToggleOverlay}
+            className={
+              'w-full rounded-md border px-3 py-2 text-body-sm font-medium transition-colors ' +
+              (overlayOn
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-line bg-surface-0 text-fg-secondary hover:bg-surface-2')
+            }
+          >
+            {overlayOn ? 'Hide token overlay' : 'Show token overlay'}
+          </button>
+          <p className="mt-1 text-caption text-fg-tertiary">
+            Colour-codes every element by its type token; click a box to reassign.
+          </p>
+        </section>
+
         {/* Font family (read-only) */}
         <section className="mb-4">
           <h3 className="mb-2 text-caption font-medium uppercase text-fg-tertiary">Font family</h3>
