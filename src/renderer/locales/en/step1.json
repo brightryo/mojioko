@@ -5,6 +5,7 @@
     "label": "Input file",
     "hint": "Video: .mp4 .mkv  /  Audio: .mp3 .wav .m4a .aac .flac .ogg",
     "placeholder": "Select a file…",
+    "dropHint": "Drag & drop an input file here",
     "chooseVideo": "Choose file",
     "help": "Video or audio file to transcribe. Video supports burn-in output; audio supports text/SRT export only.",
     "infoLabel": "File info",
@@ -219,6 +220,7 @@
   "toast": {
     "videoLoaded": "File loaded",
     "probeError": "Failed to read file: {{error}}",
+    "unsupportedFile": "Unsupported file type",
     "transcriptionComplete": "Transcription complete · {{count}} lines",
     "modelDownloadFailed": "Download failed: {{error}}",
     "modelDownloadFailedNetwork": "The download stopped because the network connection was lost. Check your connection and try again.",

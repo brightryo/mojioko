@@ -30,6 +30,7 @@ import { runTranscription } from '@/services/transcription'
 import type { TranscriptionRun } from '@/services/transcription'
 import type { SubtitleEntry as SubtitleEntryType, WhisperModelId } from '../../shared/types'
 import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
+import { isSupportedMediaPath } from '../../shared/constants'
 import { styleFieldsFromDefaults } from '@/lib/style-defaults-to-entry'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
@@ -227,7 +228,26 @@ export default function Step1Route(_: Step1RouteProps) {
       : (defaultInputDir ?? undefined)
     const filePath = await openVideoDialog(lastDir)
     if (!filePath) return
+    await loadVideoFromPath(filePath)
+  }
 
+  // REQ-0423 — drag & drop entry point for the drawer's タブ1 drop zone.
+  // Merges into the exact same load path as the picker; the only extra step
+  // is an extension gate (D&D can deliver anything) using the shared media
+  // list, so an unsupported drop is rejected with a toast instead of a
+  // confusing ffprobe error.
+  function handleDropFile(filePath: string) {
+    if (!isSupportedMediaPath(filePath)) {
+      toast.error(t('toast.unsupportedFile'))
+      return
+    }
+    void loadVideoFromPath(filePath)
+  }
+
+  // REQ-0423 — the "load a chosen path" leg of handleBrowse, extracted so
+  // both the file picker and drag & drop reuse the identical probe / reset /
+  // thumbnail / track-pick sequence.
+  async function loadVideoFromPath(filePath: string) {
     setVideoLoadingState('loading')
     setThumbnail(null)
     // REQ-086 — drop any previously-generated preview mix URL the moment
@@ -826,6 +846,7 @@ export default function Step1Route(_: Step1RouteProps) {
         thumbnail={thumbnail}
         isLoading={isLoading}
         onBrowse={handleBrowse}
+        onDropFile={handleDropFile}
         renderState={drawerRenderState}
         progress={transcribeProgress}
         runningLabelOverride={

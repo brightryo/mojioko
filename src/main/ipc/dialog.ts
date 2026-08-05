@@ -1,5 +1,10 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { Channels } from '../../shared/ipc-channels'
+import {
+  SUPPORTED_MEDIA_EXTENSIONS,
+  SUPPORTED_VIDEO_EXTENSIONS,
+  SUPPORTED_AUDIO_EXTENSIONS,
+} from '../../shared/constants'
 import { app } from 'electron'
 import { existsSync } from 'fs'
 import { join } from 'path'
@@ -34,10 +39,12 @@ export function registerDialogHandlers(): void {
       // ffprobe's read path expectations here so they were misleading
       // users.  Aligned to REQ-028 §2-2's confirmed-safe set: video =
       // mp4 / mkv, audio = mp3 / wav / m4a / aac / flac / ogg.
+      // REQ-0423 — extension lists sourced from shared/constants so the
+      // drag-&-drop validation in step1 and this picker filter never drift.
       filters: [
-        { name: 'Media files', extensions: ['mp4', 'mkv', 'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'] },
-        { name: 'Video',       extensions: ['mp4', 'mkv'] },
-        { name: 'Audio',       extensions: ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'] },
+        { name: 'Media files', extensions: [...SUPPORTED_MEDIA_EXTENSIONS] },
+        { name: 'Video',       extensions: [...SUPPORTED_VIDEO_EXTENSIONS] },
+        { name: 'Audio',       extensions: [...SUPPORTED_AUDIO_EXTENSIONS] },
         { name: 'All files',   extensions: ['*'] }
       ],
       properties: ['openFile']

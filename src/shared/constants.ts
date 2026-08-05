@@ -246,3 +246,27 @@ export const TRANSCRIPTION_DEFAULTS = {
  * a far larger error than this factor corrects.
  */
 export const ASS_BLUR_TO_CSS_SIGMA = 0.84
+
+/**
+ * REQ-0423 — supported input media extensions (lowercase, no leading dot).
+ * Single source shared by the main-process open-dialog filter
+ * (`main/ipc/dialog.ts`) and the renderer drag-&-drop validation
+ * (`routes/step1.tsx`).  ffprobe still has the final say on the actual
+ * decode (extension is UX only), but D&D validation and the picker filter
+ * must agree, so both read these arrays.  Aligned to REQ-028/030's
+ * confirmed-safe set: video = mp4 / mkv, audio = mp3 / wav / m4a / aac /
+ * flac / ogg.
+ */
+export const SUPPORTED_VIDEO_EXTENSIONS = ['mp4', 'mkv'] as const
+export const SUPPORTED_AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg'] as const
+export const SUPPORTED_MEDIA_EXTENSIONS = [
+  ...SUPPORTED_VIDEO_EXTENSIONS,
+  ...SUPPORTED_AUDIO_EXTENSIONS,
+] as const
+
+/** True when `filePath`'s extension is one of SUPPORTED_MEDIA_EXTENSIONS. */
+export function isSupportedMediaPath(filePath: string): boolean {
+  const m = /\.([^./\\]+)$/.exec(filePath)
+  if (!m) return false
+  return (SUPPORTED_MEDIA_EXTENSIONS as readonly string[]).includes(m[1].toLowerCase())
+}

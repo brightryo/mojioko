@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertCircle, AudioWaveform, FolderOpen, Lock, Loader2, Mic, Play, Settings2, Type, Video } from 'lucide-react'
+import { AlertCircle, AudioWaveform, FolderOpen, Lock, Loader2, Mic, Play, Settings2, Type, Upload, Video } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -81,6 +81,12 @@ export interface TranscriptionDrawerProps {
   isLoading: boolean
   /** REQ-0422 — opens the OS file picker (owned by step1's handleBrowse). */
   onBrowse: () => void
+  /**
+   * REQ-0423 — a video/audio file was dropped on タブ1's drop zone.  Receives
+   * the absolute path (Electron `File.path`); step1 validates the extension
+   * and merges into the same load path as the picker.
+   */
+  onDropFile: (filePath: string) => void
   /** State of the in-flight transcription run; idle when not running. */
   renderState: TranscriptionRenderState
   /** 0–100 percent progress while `renderState === 'running'`. */
@@ -148,6 +154,7 @@ export function TranscriptionDrawer({
   thumbnail,
   isLoading,
   onBrowse,
+  onDropFile,
   renderState,
   progress,
   runningLabelOverride,
@@ -191,6 +198,19 @@ export function TranscriptionDrawer({
   useEffect(() => {
     if (open) setActiveTab('input')
   }, [open])
+
+  // REQ-0423 — drag & drop input file.  `dragActive` drives the drop-zone
+  // highlight; the drop reads Electron's `File.path` (available because the
+  // renderer runs with sandbox:false) and forwards it to step1, which gates
+  // the extension and reuses the picker's load path.
+  const [dragActive, setDragActive] = useState(false)
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragActive(false)
+    const file = e.dataTransfer.files?.[0]
+    const path = (file as (File & { path?: string }) | undefined)?.path
+    if (path) onDropFile(path)
+  }
 
   // REQ-20260615-055 — autoselect the first available track on first open.
   const hasValidSelection = useMemo(
@@ -271,7 +291,9 @@ export function TranscriptionDrawer({
 
               <div className="flex-1 min-h-0 overflow-y-auto">
                 {/* ── タブ1 入力ファイル ─────────────────────────────── */}
-                <TabsContent value="input" className="space-y-4">
+                {/* REQ-0423 — flex column so the word-level toggle (last child,
+                    mt-auto) is pushed to the tab bottom. */}
+                <TabsContent value="input" className="flex flex-col gap-4 min-h-full">
                   {/* Supported-format hint (right-aligned reference line). */}
                   <div className="flex justify-end">
                     <span className="text-caption text-fg-muted">{t('inputVideo.hint')}</span>
@@ -302,106 +324,79 @@ export function TranscriptionDrawer({
                     </div>
                   )}
 
-                  {/* Thumbnail + technical metadata side-by-side. */}
-                  <div className="grid grid-cols-[auto_1fr] gap-4 items-center">
-                    <div
-                      className="rounded-md border border-line bg-input overflow-hidden flex items-center justify-center flex-shrink-0"
-                      style={thumbBoxStyle}
-                    >
-                      {isAudioOnly ? (
-                        <AudioWaveform className="h-8 w-8 text-fg-secondary/60" />
-                      ) : thumbnail ? (
-                        <img src={thumbnail} alt="" className="w-full h-full object-contain" />
-                      ) : (
-                        <Video className="h-6 w-6 text-fg-secondary/40" />
-                      )}
-                    </div>
-                    <div className="divide-y divide-border/50">
-                      {!isAudioOnly && (
-                        <InfoRow
-                          label={t('inputVideo.infoResolution')}
-                          value={video ? `${video.widthPx}×${video.heightPx}` : '—'}
-                        />
-                      )}
-                      <InfoRow
-                        label={t('inputVideo.infoDuration')}
-                        value={video ? formatDuration(video.durationSec) : '—'}
-                      />
-                      <InfoRow
-                        label={t('inputVideo.infoFormat')}
-                        value={
-                          !video
-                            ? '—'
-                            : isAudioOnly
-                              ? `${video.container.toUpperCase()} / ${video.audioTracks[0]?.codec ?? '—'}`
-                              : `${video.container.toUpperCase()} / ${video.videoCodec} / ${video.fps}fps`
-                        }
-                      />
-                      <InfoRow
-                        label={t('inputVideo.infoFileSize')}
-                        value={video ? formatBytes(video.fileSizeBytes) : '—'}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Word-level (experimental) toggle — REQ-0207 / REQ-0210. */}
-                  <div
-                    className={cn(
-                      'flex items-start gap-2 rounded-md border border-line/70 px-3 py-2 bg-surface-2/30',
-                      wordSubtitleLocked && 'cursor-pointer hover:bg-surface-2/60 hover:border-line',
-                    )}
-                    onClick={wordSubtitleLocked ? () => openUpsell() : undefined}
-                    role={wordSubtitleLocked ? 'button' : undefined}
-                    tabIndex={wordSubtitleLocked ? 0 : undefined}
-                    onKeyDown={
-                      wordSubtitleLocked
-                        ? (e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              openUpsell()
-                            }
-                          }
-                        : undefined
-                    }
-                    aria-label={wordSubtitleLocked ? t('drawer.wordSubtitle.lockedPaidOnly') : undefined}
-                  >
-                    <Checkbox
-                      id="word-subtitle-experimental"
-                      checked={wordSubtitleLocked ? false : wordSubtitleOn}
-                      onCheckedChange={(v) => onWordSubtitleChange(v === true)}
-                      disabled={wordSubtitleLocked}
-                      className="mt-0.5"
-                    />
-                    <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <label
-                          htmlFor="word-subtitle-experimental"
-                          className={cn(
-                            // REQ-0421 — overlay reassignment: 単語ごとに文字起こし label body-sm → title.
-                            'text-title font-medium',
-                            wordSubtitleLocked && 'text-fg-secondary/70',
-                          )}
-                        >
-                          {t('drawer.wordSubtitle.label')}
-                        </label>
-                        {wordSubtitleLocked && (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-line/70 bg-surface-1/60 px-1.5 py-0.5 text-caption text-fg-secondary/80">
-                            <Lock className="h-3 w-3" />
-                            {t('drawer.wordSubtitle.lockedPaidOnly')}
-                          </span>
+                  {/* REQ-0423 — file selected → thumbnail + metadata.  No file
+                      (and not loading) → the same area is a dashed drag-&-drop
+                      zone (click also opens the picker). */}
+                  {video ? (
+                    <div className="grid grid-cols-[auto_1fr] gap-4 items-center">
+                      <div
+                        className="rounded-md border border-line bg-input overflow-hidden flex items-center justify-center flex-shrink-0"
+                        style={thumbBoxStyle}
+                      >
+                        {isAudioOnly ? (
+                          <AudioWaveform className="h-8 w-8 text-fg-secondary/60" />
+                        ) : thumbnail ? (
+                          <img src={thumbnail} alt="" className="w-full h-full object-contain" />
+                        ) : (
+                          <Video className="h-6 w-6 text-fg-secondary/40" />
                         )}
                       </div>
-                      <p
-                        className={cn(
-                          // REQ-0421 — overlay reassignment: word-subtitle description caption → body-sm.
-                          'text-body-sm text-fg-muted leading-relaxed',
-                          wordSubtitleLocked && 'text-fg-secondary/60',
+                      <div className="divide-y divide-border/50">
+                        {!isAudioOnly && (
+                          <InfoRow
+                            label={t('inputVideo.infoResolution')}
+                            value={`${video.widthPx}×${video.heightPx}`}
+                          />
                         )}
-                      >
-                        {t('drawer.wordSubtitle.description')}
-                      </p>
+                        <InfoRow
+                          label={t('inputVideo.infoDuration')}
+                          value={formatDuration(video.durationSec)}
+                        />
+                        <InfoRow
+                          label={t('inputVideo.infoFormat')}
+                          value={
+                            isAudioOnly
+                              ? `${video.container.toUpperCase()} / ${video.audioTracks[0]?.codec ?? '—'}`
+                              : `${video.container.toUpperCase()} / ${video.videoCodec} / ${video.fps}fps`
+                          }
+                        />
+                        <InfoRow
+                          label={t('inputVideo.infoFileSize')}
+                          value={formatBytes(video.fileSizeBytes)}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  ) : !isLoading ? (
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        setDragActive(true)
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault()
+                        setDragActive(false)
+                      }}
+                      onDrop={handleDrop}
+                      onClick={onBrowse}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onBrowse()
+                        }
+                      }}
+                      className={cn(
+                        'flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-4 py-10 text-center cursor-pointer transition-colors duration-150',
+                        dragActive
+                          ? 'border-primary bg-primary/5'
+                          : 'border-line hover:border-line-strong hover:bg-surface-2/30',
+                      )}
+                    >
+                      <Upload className={cn('h-7 w-7', dragActive ? 'text-primary' : 'text-fg-tertiary')} />
+                      <p className="text-body-sm text-fg-secondary">{t('inputVideo.dropHint')}</p>
+                    </div>
+                  ) : null}
 
                   {/* Audio track grid. */}
                   <div className="space-y-3">
@@ -457,6 +452,68 @@ export function TranscriptionDrawer({
                         </div>
                       </>
                     )}
+                  </div>
+
+                  {/* REQ-0423 — word-level (experimental) toggle moved BELOW the
+                      track grid and pushed to the tab bottom (mt-auto spacer). */}
+                  <div className="mt-auto pt-2">
+                    <div
+                      className={cn(
+                        'flex items-start gap-2 rounded-md border border-line/70 px-3 py-2 bg-surface-2/30',
+                        wordSubtitleLocked && 'cursor-pointer hover:bg-surface-2/60 hover:border-line',
+                      )}
+                      onClick={wordSubtitleLocked ? () => openUpsell() : undefined}
+                      role={wordSubtitleLocked ? 'button' : undefined}
+                      tabIndex={wordSubtitleLocked ? 0 : undefined}
+                      onKeyDown={
+                        wordSubtitleLocked
+                          ? (e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                openUpsell()
+                              }
+                            }
+                          : undefined
+                      }
+                      aria-label={wordSubtitleLocked ? t('drawer.wordSubtitle.lockedPaidOnly') : undefined}
+                    >
+                      <Checkbox
+                        id="word-subtitle-experimental"
+                        checked={wordSubtitleLocked ? false : wordSubtitleOn}
+                        onCheckedChange={(v) => onWordSubtitleChange(v === true)}
+                        disabled={wordSubtitleLocked}
+                        className="mt-0.5"
+                      />
+                      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <label
+                            htmlFor="word-subtitle-experimental"
+                            className={cn(
+                              // REQ-0421 — overlay reassignment: 単語ごとに文字起こし label body-sm → title.
+                              'text-title font-medium',
+                              wordSubtitleLocked && 'text-fg-secondary/70',
+                            )}
+                          >
+                            {t('drawer.wordSubtitle.label')}
+                          </label>
+                          {wordSubtitleLocked && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-line/70 bg-surface-1/60 px-1.5 py-0.5 text-caption text-fg-secondary/80">
+                              <Lock className="h-3 w-3" />
+                              {t('drawer.wordSubtitle.lockedPaidOnly')}
+                            </span>
+                          )}
+                        </div>
+                        <p
+                          className={cn(
+                            // REQ-0421 — overlay reassignment: word-subtitle description caption → body-sm.
+                            'text-body-sm text-fg-muted leading-relaxed',
+                            wordSubtitleLocked && 'text-fg-secondary/60',
+                          )}
+                        >
+                          {t('drawer.wordSubtitle.description')}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </TabsContent>
 
