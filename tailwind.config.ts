@@ -92,7 +92,10 @@ const config: Config = {
         },
         playhead:       'hsl(var(--playhead))',
         'trim-overlay': 'hsl(var(--trim-overlay))',
-        'cursor-active': 'hsl(var(--cursor-active))'
+        'cursor-active': 'hsl(var(--cursor-active))',
+        // REQ-0413 — recessed timeline clips-lane well (was inline
+        // `bg-[hsl(0_0%_10%)]` in timeline-view.tsx).
+        'timeline-well': 'hsl(var(--timeline-well))'
       },
       borderRadius: {
         // REQ-0177 Phase A — flattened radius scale.  DaVinci Resolve

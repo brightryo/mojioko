@@ -2202,7 +2202,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 // pick up the depth without introducing another
                 // divider line.  Ruler / gutter / toolbar stay at
                 // surface-1 (L 16 %) above.
-                className="absolute left-0 right-0 touch-none bg-[hsl(0_0%_10%)]"
+                className="absolute left-0 right-0 touch-none bg-timeline-well"
                 style={{
                   top: `${RULER_HEIGHT_PX}px`,
                   bottom: '0'

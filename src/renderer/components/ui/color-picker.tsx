@@ -624,7 +624,9 @@ function PairSwatch({ pair, tooltip, onClick }: PairSwatchProps) {
         'transition-transform duration-100 hover:scale-105 focus:outline-none',
         'hover:ring-fg-muted'
       )}
-      style={{ backgroundColor: '#404040' }}
+      // REQ-0413 — neutral backdrop centralised as globals.css --swatch-preview-bg
+      // (theme-independent: stays dark to preview subtitle colours against).
+      style={{ backgroundColor: 'var(--swatch-preview-bg)' }}
     >
       {/* Subtitle-style preview text — text colour with outline-colour
           stroke, exactly how the burn-in renders.  paint-order: stroke

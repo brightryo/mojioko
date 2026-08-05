@@ -350,6 +350,38 @@
     --trim-overlay: 38 92% 50%;          /* amber-500 */
     --cursor-active: 152 42% 47%;        /* REQ-0177 — track --primary (was green-500) */
 
+    /* -------------------------------------------------------------------
+     * REQ-0413 — WYSIWYG preview-overlay chrome.  Extracted verbatim from
+     * inline literals in position-guide-overlay.tsx, subtitle-overlay.tsx,
+     * color-picker.tsx and timeline-view.tsx so every overlay colour /
+     * font-size is centrally managed.  Values are kept EXACTLY as authored
+     * (pure reference swap, no visual change).
+     *
+     * These are deliberately theme-INDEPENDENT — they render over the video
+     * preview / colour swatches, not over app chrome — so they get NO
+     * `:root.light` override and stay identical in both themes (matching the
+     * pre-0413 hardcoded behaviour; a future light theme can add overrides).
+     *
+     * The guide green is green-500 (pre-REQ-0177 emerald), intentionally kept
+     * bright as a high-visibility OBS-style measurement guide, distinct from
+     * the toned-down UI accent (--primary).  Full rgba values (incl. alpha)
+     * are stored directly so the extraction is bit-exact — an HSL triplet
+     * would round green-500 off by ~1 rgb step. */
+    --guide-line:            rgba(34, 197, 94, 0.85);  /* position-guide rulers */
+    --guide-box:             rgba(34, 197, 94, 0.85);  /* position-guide bbox border */
+    --guide-label-bg:        rgba(15, 23, 42, 0.85);   /* distance-label pill bg */
+    --guide-label-fg:        #ffffff;                  /* distance-label pill text */
+    --guide-label-font-size: 11px;                     /* distance / offset label size */
+    --guide-offset-bg:       rgba(34, 197, 94, 0.95);  /* X/Y offset badge bg */
+    --guide-offset-fg:       #062314;                  /* X/Y offset badge text */
+    --affordance-fg:         #ffffff;                  /* drag-move icon over subtitle preview */
+    --swatch-preview-bg:     #404040;                  /* ColorPicker pair-swatch backdrop */
+
+    /* Timeline "well" — the clips lane sits ~3 pp darker than surface-0 so it
+     * reads as a recessed well (Resolve convention).  HSL triplet (mapped to
+     * `bg-timeline-well` in tailwind.config.ts).  Theme-independent for now. */
+    --timeline-well: 0 0% 10%;
+
     /* shadcn radius — REQ-0177 dropped 8 px → 3 px to match the
        flat / squared-off Resolve panel feel.  The Tailwind
        `borderRadius` scale in tailwind.config.ts also drops

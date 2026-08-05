@@ -1067,7 +1067,10 @@ export function SubtitleOverlay({
               : 'opacity-0 group-hover:opacity-60')
           }
           style={{
-            color: '#ffffff',
+            // REQ-0413 — icon colour centralised (globals.css --affordance-fg).
+            // The drop shadows stay inline: they are effect values, outside
+            // this REQ's colour / font-size tokenisation scope.
+            color: 'var(--affordance-fg)',
             textShadow: '0 0 6px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.85)',
             filter: 'drop-shadow(0 0 4px rgba(0,0,0,0.85))',
           }}
