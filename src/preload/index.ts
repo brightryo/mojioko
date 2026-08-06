@@ -19,6 +19,8 @@ const electronAPI = {
   detectEncoders: (): Promise<EncoderDetectionResult> => ipcRenderer.invoke(Channels.appDetectEncoders),
   /** REQ-088 — true for MSIX/AppX (store) builds, false for NSIS. */
   isMsix: (): Promise<boolean> => ipcRenderer.invoke(Channels.appIsMsix),
+  /** REQ-0449 §4 — absolute path of the CLI executable (MOJIOKO.exe). */
+  getCliPath: (): Promise<string> => ipcRenderer.invoke(Channels.appGetCliPath),
   /**
    * REQ-0258 — read the MOJIOKO EULA text for the current UI language.
    * Rejects with `EULA_NOT_FOUND` if the extraResources bundling is

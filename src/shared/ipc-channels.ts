@@ -155,6 +155,7 @@ export const Channels = {
    * bulk-edit selector).  Pure read, no side effects.
    */
   appIsMsix: 'app:isMsix',
+  appGetCliPath: 'app:getCliPath',
 
   /** Native menu rebuild trigger */
   menuSetLanguage: 'menu:setLanguage',

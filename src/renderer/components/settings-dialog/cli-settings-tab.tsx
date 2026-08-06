@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next'
-import { Terminal } from 'lucide-react'
+import { Terminal, Copy } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { toast } from '@/lib/toast'
 
 /**
  * REQ-0447 / spec §12 — Settings ▸ CLI tab.
@@ -19,6 +21,19 @@ const COMMANDS: readonly [name: string, descKey: string][] = [
 export function CliSettingsTab() {
   const { t } = useTranslation(['settings'])
 
+  // REQ-0449 §4 — copy a short, path-embedded instruction for an agent
+  // (Claude Code). The exe path is resolved at runtime (NSIS/MSIX differ).
+  const handleCopyInstructions = async (): Promise<void> => {
+    try {
+      const cliPath = await window.electronAPI.getCliPath()
+      const text = t('cli.instruction', { path: cliPath })
+      await navigator.clipboard.writeText(text)
+      toast.success(t('cli.copyToast'))
+    } catch {
+      toast.error(t('cli.copyError'))
+    }
+  }
+
   return (
     <div className="space-y-4 pt-1">
       <div className="flex items-center gap-2">
@@ -26,6 +41,11 @@ export function CliSettingsTab() {
         <p className="text-body font-medium text-fg-primary">{t('cli.title')}</p>
       </div>
       <p className="text-body-sm text-fg-secondary leading-relaxed">{t('cli.intro')}</p>
+
+      <Button variant="secondary" size="sm" onClick={handleCopyInstructions} className="gap-1.5">
+        <Copy className="h-3.5 w-3.5" />
+        {t('cli.copyButton')}
+      </Button>
 
       <div className="space-y-1.5">
         <p className="text-caption font-medium text-fg-secondary">{t('cli.invocationLabel')}</p>

@@ -22,7 +22,11 @@
     },
     "exampleLabel": "使用例（文字起こし → 翻訳 → 焼き込み）",
     "example": "mojioko transcribe input.mp4 -o out.mojioko --lang ja\nmojioko translate out.mojioko --to en --from-original -o out.en.mojioko\nmojioko burn input.mp4 out.en.mojioko -o final.mp4 --preset shorts",
-    "seeAlso": "詳細は `mojioko -h`（コマンド別は `mojioko <command> -h`）。フォント・スタイルはこのアプリの既定字幕スタイルを継承します。"
+    "seeAlso": "詳細は `mojioko -h`（コマンド別は `mojioko <command> -h`）。フォント・スタイルはこのアプリの既定字幕スタイルを継承します。",
+    "copyButton": "Claude Code 用の指示をコピー",
+    "copyToast": "指示をクリップボードにコピーしました",
+    "copyError": "コピーに失敗しました",
+    "instruction": "MOJIOKO CLI が \"{{path}}\" にあります。まず \"{{path}}\" help --json と \"{{path}}\" status --json を実行して、使えるコマンドと現在のセットアップ状況を確認してから作業してください。動画の文字起こし・翻訳・字幕焼き込みができます。"
   },
   "translation": {
     "hint": "文字起こし結果をインスペクタで自動翻訳します（プレビューのみ・字幕には書き込みません）。翻訳ツールの入手は STEP1 の「翻訳ツール」から。",

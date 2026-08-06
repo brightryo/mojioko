@@ -19,6 +19,7 @@ declare global {
       getBuildInfo: () => Promise<BuildInfo>
       detectEncoders: () => Promise<EncoderDetectionResult>
       isMsix: () => Promise<boolean>
+      getCliPath: () => Promise<string>
       // REQ-0258 — read the MOJIOKO EULA text for the current UI language.
       readEula: (lang: 'ja' | 'en') => Promise<IpcResult<string>>
       menuSetLanguage: (lang: string) => void

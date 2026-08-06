@@ -172,6 +172,11 @@ function registerIpcHandlers(): void {
     return isPackagedAsMsix(getCurrentProcessContext())
   })
 
+  // REQ-0449 §4 — absolute path of the running executable = the CLI entry
+  // (`MOJIOKO.exe <command>`). Used by the Settings ▸ CLI "copy instructions"
+  // button. In dev this is electron.exe (expected).
+  ipcMain.handle(Channels.appGetCliPath, (): string => process.execPath)
+
   ipcMain.handle(Channels.appGetBuildInfo, async (): Promise<BuildInfo> => {
     const pythonAvailable = await checkPythonAvailable()
     return {

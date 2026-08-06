@@ -22,7 +22,11 @@
     },
     "exampleLabel": "Example (transcribe → translate → burn)",
     "example": "mojioko transcribe input.mp4 -o out.mojioko --lang ja\nmojioko translate out.mojioko --to en --from-original -o out.en.mojioko\nmojioko burn input.mp4 out.en.mojioko -o final.mp4 --preset shorts",
-    "seeAlso": "See `mojioko -h` (per-command: `mojioko <command> -h`). Fonts and style are inherited from this app's default subtitle style."
+    "seeAlso": "See `mojioko -h` (per-command: `mojioko <command> -h`). Fonts and style are inherited from this app's default subtitle style.",
+    "copyButton": "Copy instructions for Claude Code",
+    "copyToast": "Instructions copied to clipboard",
+    "copyError": "Copy failed",
+    "instruction": "The MOJIOKO CLI is at \"{{path}}\". First run \"{{path}}\" help --json and \"{{path}}\" status --json to see the available commands and current setup before starting. It can transcribe, translate, and burn subtitles into videos."
   },
   "translation": {
     "hint": "Auto-translate cues in the inspector (preview only — never written to the subtitles). Get the translation tool from STEP 1 → Translation tool.",
