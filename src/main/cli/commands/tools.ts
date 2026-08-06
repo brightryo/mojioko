@@ -10,14 +10,31 @@
  * clean NOT_IMPLEMENTED with a phased-rollout pointer.
  */
 import { existsSync } from 'node:fs'
+import { app } from 'electron'
 import { buildModelsState } from '../../ipc/transcription'
-import { buildTranslationToolsState } from '../../services/translation-tool-store'
-import { buildGpuToolState } from '../../services/gpu-tool'
-import { loadSettings } from '../../services/settings-store'
+import { buildTranslationToolsState, isToolInstalled } from '../../services/translation-tool-store'
+import { buildGpuToolState, setActiveAccelerator } from '../../services/gpu-tool'
+import { downloadModel } from '../../services/model-downloader'
+import { downloadTranslationTool } from '../../services/translation-tool-downloader'
+import { downloadGpuTool } from '../../services/gpu-tool'
+import { checkModelInstalled } from '../../services/check-model-installed'
+import { loadSettings, mutateSettings } from '../../services/settings-store'
 import { getBinPath, getModelsDir, getTranslationToolsDir } from '../../lib/paths'
 import { getTranscriberExePath } from '../../lib/paths'
-import type { ParsedArgs } from '../args'
-import { CliError, emitFailure, emitSuccess, type CliContext } from '../output'
+import type { WhisperModelId } from '../../../shared/types'
+import type { TranslationToolId } from '../../../shared/translation-tools'
+import { optString, type ParsedArgs } from '../args'
+import { CliError, emitFailure, emitLog, emitProgress, emitSuccess, type CliContext } from '../output'
+
+const WHISPER_IDS = new Set(['large-v3', 'large-v3-turbo'])
+
+/** Map a `--model 3b|7b` (or full id) to a translation tool id. */
+function toTranslationToolId(v: string | undefined): TranslationToolId | null {
+  if (!v) return null
+  if (v === '7b' || v === 'madlad400-7b') return 'madlad400-7b'
+  if (v === '3b' || v === 'madlad400-3b') return 'madlad400-3b'
+  return null
+}
 
 interface MissingItem {
   what: string
@@ -101,22 +118,136 @@ export async function runToolsCommand(ctx: CliContext, args: ParsedArgs): Promis
     return runList(ctx)
   }
 
-  if (sub === 'download' || sub === 'use') {
-    return emitFailure(
-      ctx,
-      'tools',
-      new CliError(
-        'NOT_IMPLEMENTED',
-        `\`tools ${sub}\` はまだ実装されていません（Phase 1b）。`,
-        '現時点ではアプリ（GUI）でモデル/デバイスを設定してください。状態は `mojioko tools` で確認できます。',
-        { subcommand: sub, phase: '1b' },
-      ),
-    )
-  }
+  if (sub === 'use') return runUse(ctx, args)
+  if (sub === 'download') return runDownload(ctx, args)
 
   return emitFailure(
     ctx,
     'tools',
     new CliError('USAGE', `unknown tools subcommand: "${sub}"`, 'mojioko tools -h でサブコマンド一覧を表示。'),
   )
+}
+
+/**
+ * Guard against a last-write-wins race with a running MOJIOKO app. The GUI
+ * holds the single-instance lock (see main/index.ts); if the CLI cannot acquire
+ * it, the app is running. Returns true when it is safe to write (lock held or
+ * `--force`). The lock is released on process exit.
+ */
+function acquireWriteLock(ctx: CliContext, force: boolean): boolean {
+  const got = app.requestSingleInstanceLock()
+  if (got) return true
+  if (force) {
+    emitLog(ctx, 'warning: MOJIOKO app appears to be running; writing anyway (--force).')
+    return true
+  }
+  return false
+}
+
+async function runUse(ctx: CliContext, args: ParsedArgs): Promise<number> {
+  const what = args.positionals[1]
+  const value = args.positionals[2] ?? optString(args.opts, 'model') ?? optString(args.opts, 'device')
+  const force = args.opts.force === true
+
+  if (!acquireWriteLock(ctx, force)) {
+    throw new CliError(
+      'USAGE',
+      'MOJIOKO アプリ起動中は CLI から設定を書き込めません（競合回避）。',
+      'アプリを閉じてから再実行するか、アプリ内で設定してください（--force で上書き可）。',
+    )
+  }
+
+  if (what === 'whisper') {
+    const model = optString(args.opts, 'model') || value
+    if (!model || !WHISPER_IDS.has(model)) throw new CliError('USAGE', 'tools use whisper --model large-v3|large-v3-turbo')
+    if (!checkModelInstalled(model, getModelsDir()).installed) {
+      throw new CliError('MODEL_NOT_FOUND', `Whisper モデル "${model}" が未導入です。`, `mojioko tools download whisper --model ${model}`, { model })
+    }
+    await mutateSettings((s) => {
+      s.activeModelId = model as WhisperModelId
+      s.transcriptionDefaults = { ...s.transcriptionDefaults, whisperModel: model as WhisperModelId }
+      return { save: s, value: null }
+    })
+    return emitSuccess(ctx, 'tools', { used: 'whisper', activeModelId: model })
+  }
+
+  if (what === 'translation') {
+    const toolId = toTranslationToolId(optString(args.opts, 'model') || value)
+    if (!toolId) throw new CliError('USAGE', 'tools use translation --model 3b|7b')
+    if (!isToolInstalled(toolId, getTranslationToolsDir())) {
+      throw new CliError('TOOL_NOT_DOWNLOADED', `翻訳モデル "${toolId}" が未導入です。`, `mojioko tools download translation --model ${toolId === 'madlad400-7b' ? '7b' : '3b'}`, { toolId })
+    }
+    await mutateSettings((s) => {
+      s.translationToolActiveId = toolId
+      return { save: s, value: null }
+    })
+    return emitSuccess(ctx, 'tools', { used: 'translation', activeTranslationId: toolId })
+  }
+
+  if (what === 'device') {
+    const device = (optString(args.opts, 'device') || value) as 'cpu' | 'gpu'
+    if (device !== 'cpu' && device !== 'gpu') throw new CliError('USAGE', 'tools use device cpu|gpu')
+    const state = await setActiveAccelerator(device)
+    const warnings = state.activeAccelerator !== device
+      ? [{ code: 'GPU_INIT_FAILED', message: `GPU を選択できないため ${state.activeAccelerator} になりました（GPU ツール未導入 or 非 NVIDIA）。`, detail: { requested: device, effective: state.activeAccelerator } }]
+      : []
+    return emitSuccess(ctx, 'tools', { used: 'device', activeAccelerator: state.activeAccelerator }, warnings)
+  }
+
+  throw new CliError('USAGE', `tools use <whisper|translation|device> ...`, 'mojioko tools -h を参照。')
+}
+
+async function runDownload(ctx: CliContext, args: ParsedArgs): Promise<number> {
+  const what = args.positionals[1]
+  const controller = new AbortController()
+  const onProgress = (evt: { event: string; percent?: number; file?: string }): void => {
+    if (evt.event === 'progress') emitProgress(ctx, { event: 'progress', target: what, file: evt.file, percent: evt.percent })
+  }
+
+  if (what === 'whisper') {
+    const model = (optString(args.opts, 'model') || 'large-v3-turbo') as WhisperModelId
+    if (!WHISPER_IDS.has(model)) throw new CliError('USAGE', 'tools download whisper --model large-v3|large-v3-turbo')
+    const modelsDir = getModelsDir()
+    if (checkModelInstalled(model, modelsDir).installed) {
+      return emitSuccess(ctx, 'tools', { downloaded: 'whisper', model, alreadyInstalled: true })
+    }
+    try {
+      await downloadModel(model, modelsDir, onProgress, controller.signal)
+    } catch (e) {
+      throw new CliError('OUTPUT_WRITE_FAILED', `Whisper モデルの DL に失敗: ${e instanceof Error ? e.message : String(e)}`, 'ネットワーク・空き容量を確認して再実行してください（resume 対応）。')
+    }
+    return emitSuccess(ctx, 'tools', { downloaded: 'whisper', model, alreadyInstalled: false })
+  }
+
+  if (what === 'translation') {
+    const toolId = toTranslationToolId(optString(args.opts, 'model') || '3b')
+    if (!toolId) throw new CliError('USAGE', 'tools download translation --model 3b|7b')
+    const toolsDir = getTranslationToolsDir()
+    if (isToolInstalled(toolId, toolsDir)) {
+      return emitSuccess(ctx, 'tools', { downloaded: 'translation', model: toolId, alreadyInstalled: true })
+    }
+    try {
+      await downloadTranslationTool(toolId, toolsDir, onProgress, controller.signal)
+    } catch (e) {
+      throw new CliError('OUTPUT_WRITE_FAILED', `翻訳モデルの DL に失敗: ${e instanceof Error ? e.message : String(e)}`, 'ネットワーク・空き容量を確認して再実行してください（resume 対応）。')
+    }
+    return emitSuccess(ctx, 'tools', { downloaded: 'translation', model: toolId, alreadyInstalled: false })
+  }
+
+  if (what === 'gpu') {
+    const gpu = await buildGpuToolState()
+    if (gpu.installStatus === 'installed') {
+      return emitSuccess(ctx, 'tools', { downloaded: 'gpu', alreadyInstalled: true })
+    }
+    try {
+      await downloadGpuTool((evt) => {
+        if (evt.event === 'progress') emitProgress(ctx, { event: 'progress', target: 'gpu', percent: evt.percent })
+      }, controller.signal)
+    } catch (e) {
+      throw new CliError('OUTPUT_WRITE_FAILED', `GPU ツールの DL に失敗: ${e instanceof Error ? e.message : String(e)}`, 'ネットワーク・空き容量を確認して再実行してください。')
+    }
+    return emitSuccess(ctx, 'tools', { downloaded: 'gpu', alreadyInstalled: false })
+  }
+
+  throw new CliError('USAGE', `tools download <whisper|translation|gpu> [--model <id>]`, 'mojioko tools -h を参照。')
 }

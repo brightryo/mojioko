@@ -275,6 +275,20 @@ async function logStartupEnvironment(): Promise<void> {
 // `false` immediately (before touching `whenReady`) for a plain GUI launch.
 void maybeRunCli().then((handledByCli) => {
   if (handledByCli) return
+  // REQ-0449 — single-instance lock: (1) lets the CLI's `tools use` write guard
+  // detect a running GUI (avoids last-write-wins on settings.json), and (2)
+  // focuses the existing window instead of opening a second one.
+  if (!app.requestSingleInstanceLock()) {
+    app.quit()
+    return
+  }
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }
+  })
   app.whenReady().then(() => {
     log.info(`[main] starting ${APP_DISPLAY}`)
     void logStartupEnvironment()
