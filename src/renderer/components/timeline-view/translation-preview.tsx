@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Maximize2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -64,6 +65,10 @@ export function TranslationPreview({
   const { t } = useTranslation(['step2', 'settings'])
   const [view, setView] = useState<ViewState>({ status: 'empty' })
   const [dialogOpen, setDialogOpen] = useState(false)
+  // REQ-0428 §2 — editable dialog buffer.  Prefilled from the current result on
+  // open; edits live here only (never touch settings / the cue / the 1-line
+  // result) and are discarded on close.
+  const [editText, setEditText] = useState('')
 
   // ① single-source settings (shared with the Settings 「翻訳」 tab).
   const autoEnabled = useSettingsStore((s) => s.translationAutoEnabled)
@@ -134,10 +139,16 @@ export function TranslationPreview({
       ? t('timeline.inspector.translate.labelWithMs', { ms: view.entry.totalMs })
       : t('timeline.inspector.translate.label')
 
+  // REQ-0428 §2 — open the dialog with the current result prefilled into the
+  // editable buffer.  Both the result text and the expand icon call this.
+  function openDialog() {
+    setEditText(resultText ?? '')
+    setDialogOpen(true)
+  }
+
   async function handleCopy() {
-    if (!resultText) return
     try {
-      await navigator.clipboard.writeText(resultText)
+      await navigator.clipboard.writeText(editText)
       toast.success(t('timeline.inspector.translate.copied'))
     } catch {
       toast.error(t('timeline.inspector.translate.copyFailed'))
@@ -145,8 +156,7 @@ export function TranslationPreview({
   }
 
   function handleOverwrite() {
-    if (!resultText) return
-    onOverwrite(resultText)
+    onOverwrite(editText)
     setDialogOpen(false)
     toast.success(t('timeline.inspector.translate.overwritten'))
   }
@@ -169,24 +179,14 @@ export function TranslationPreview({
               ))}
             </SelectContent>
           </Select>
-          {/* 自動翻訳 ON/OFF button — primary fill = ON. */}
-          <button
-            type="button"
-            aria-pressed={autoEnabled}
+          {/* REQ-0428 — 自動翻訳 toggle (Switch), same表現 as VAD / the Settings
+              tab's 自動翻訳; still single-source with settings-store. */}
+          <Switch
+            checked={autoEnabled}
+            onCheckedChange={setAutoEnabled}
             disabled={!hasDownloaded}
-            onClick={() => setAutoEnabled(!autoEnabled)}
-            className={cn(
-              'h-6 px-2 rounded-md text-caption font-medium border transition-colors duration-150',
-              autoEnabled
-                ? 'bg-primary text-fg-inverse border-primary'
-                : 'border-line text-fg-secondary hover:bg-surface-2',
-              !hasDownloaded && 'cursor-not-allowed',
-            )}
-          >
-            {autoEnabled
-              ? t('timeline.inspector.translate.autoOn')
-              : t('timeline.inspector.translate.autoOff')}
-          </button>
+            aria-label={t('translation.autoTranslate', { ns: 'settings' })}
+          />
         </div>
       </div>
 
@@ -213,21 +213,34 @@ export function TranslationPreview({
               {t('timeline.inspector.translate.loading')}
             </span>
           ) : view.status === 'result' ? (
-            // ② single-line result: full text on hover, dialog on click.
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => setDialogOpen(true)}
-                  className="block w-full truncate text-left text-fg-secondary hover:text-fg-primary transition-colors"
-                >
+            // ② single-line result: full text on hover, dialog on click.  The
+            // right-edge expand icon (REQ-0428) makes "click opens a dialog"
+            // obvious; both the text and the icon open the same dialog.
+            <div className="flex items-center gap-1">
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={openDialog}
+                    className="min-w-0 flex-1 truncate text-left text-fg-secondary hover:text-fg-primary transition-colors"
+                  >
+                    {view.entry.text}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[320px] whitespace-pre-wrap text-left">
                   {view.entry.text}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[320px] whitespace-pre-wrap text-left">
-                {view.entry.text}
-              </TooltipContent>
-            </Tooltip>
+                </TooltipContent>
+              </Tooltip>
+              <button
+                type="button"
+                onClick={openDialog}
+                aria-label={t('timeline.inspector.translate.expand')}
+                title={t('timeline.inspector.translate.expand')}
+                className="flex-shrink-0 text-fg-tertiary hover:text-fg-primary transition-colors"
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
           ) : view.status === 'error' && view.code === 'SIDECAR_DEPS_MISSING' ? (
             <div className="space-y-1">
               <span className="text-destructive">
@@ -245,8 +258,16 @@ export function TranslationPreview({
         </div>
       )}
 
-      {/* ② Result dialog. */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* ② Result dialog.  REQ-0428 §2 — the body is an editable textarea
+          (prefilled from the current result on open); edits are local and
+          discarded on close.  コピー / 上書き act on the edited text. */}
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open)
+          if (!open) setEditText('')
+        }}
+      >
         <DialogContent className="max-w-[520px]">
           <DialogHeader className="flex-row items-center justify-between gap-3 pr-8">
             <DialogTitle className="min-w-0 truncate">{langLabel}</DialogTitle>
@@ -260,10 +281,17 @@ export function TranslationPreview({
               </Button>
             </div>
           </DialogHeader>
-          {/* Read-only, drag-selectable full text. */}
-          <div className="selectable whitespace-pre-wrap break-words rounded-md border border-line bg-surface-0 px-3 py-2 text-body text-fg-primary leading-relaxed max-h-[50vh] overflow-y-auto">
-            {resultText}
-          </div>
+          {/* Editable full text (local buffer). */}
+          <textarea
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            aria-label={langLabel}
+            className={cn(
+              'w-full min-h-[6rem] max-h-[50vh] resize-y rounded-md border border-line bg-surface-0 px-3 py-2',
+              'text-body text-fg-primary leading-relaxed',
+              'focus:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/30',
+            )}
+          />
         </DialogContent>
       </Dialog>
     </div>

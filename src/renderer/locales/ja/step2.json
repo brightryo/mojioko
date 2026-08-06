@@ -444,8 +444,7 @@
       "translate": {
         "label": "翻訳",
         "labelWithMs": "翻訳（{{ms}}ms）",
-        "autoOn": "自動 ON",
-        "autoOff": "自動 OFF",
+        "expand": "全文を表示",
         "copy": "コピー",
         "overwrite": "上書き",
         "copied": "コピーしました",

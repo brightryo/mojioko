@@ -444,8 +444,7 @@
       "translate": {
         "label": "Translation",
         "labelWithMs": "Translation ({{ms}}ms)",
-        "autoOn": "Auto ON",
-        "autoOff": "Auto OFF",
+        "expand": "Show full text",
         "copy": "Copy",
         "overwrite": "Overwrite",
         "copied": "Copied",
