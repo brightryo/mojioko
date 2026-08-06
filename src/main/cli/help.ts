@@ -1,34 +1,175 @@
 /**
- * REQ-0447 / spec §3.6 — `mojioko help` / `-h` / `--help`.
+ * REQ-0447 §3.6 / REQ-0449 §3 — `mojioko help` / `-h` / `--help`.
  *
  * Top-level help: overview, command list, chained example, common flags,
- * exit-code summary, references.  Per-command help: options + examples.
- * `--json` returns a machine-readable structure instead of formatted text.
+ * exit-code summary, references. Per-command help: options + examples.
+ * `--json` returns a MACHINE-READABLE structure with every command, every
+ * option (type / required / default / allowed values), the exit-code table, and
+ * the stable error-code strings — so an agent can build commands with no
+ * guessing (REQ-0449 §3).
  */
 import { APP_VERSION } from '../../shared/app-info'
-import { EXIT_OK, type CliContext } from './output'
+import { CODE_TO_EXIT, EXIT_OK, type CliContext } from './output'
+
+type OptType = 'string' | 'boolean' | 'int' | 'float' | 'enum' | 'path'
+
+interface OptionSpec {
+  flag: string
+  type: OptType
+  required?: boolean
+  default?: string
+  values?: string[]
+  desc: string
+}
+
+interface PositionalSpec {
+  name: string
+  required: boolean
+  desc: string
+}
 
 interface CommandDoc {
   name: string
   summary: string
   usage: string
-  options: string[]
+  positionals: PositionalSpec[]
+  optionSpecs: OptionSpec[]
   examples: string[]
   errorCodes: string[]
 }
 
+const LANGS = ['auto', 'ja', 'en', 'zh', 'ko', 'es', 'fr', 'de', 'pt', 'ru', 'ar']
+const TARGETS = ['en', 'ja', 'es', 'fr', 'de', 'pt']
+const WEIGHTS = ['Thin', 'ExtraLight', 'Light', 'Regular', 'Medium', 'SemiBold', 'Bold', 'ExtraBold', 'Black']
+const PRESETS = ['shorts', 'vertical', 'reels', 'tiktok', 'square', '1080p', '720p']
+
+const OUT_REQ: OptionSpec = { flag: '-o, --out', type: 'path', required: true, desc: '出力ファイルパス' }
+const DEVICE: OptionSpec = { flag: '--device', type: 'enum', values: ['cpu', 'gpu'], desc: '実行デバイス（既定: 設定の activeAccelerator）' }
+const STRICT: OptionSpec = { flag: '--strict', type: 'boolean', default: 'false', desc: '--device gpu で CUDA 不可なら fallback せず失敗' }
+
+const COMMANDS: CommandDoc[] = [
+  {
+    name: 'status',
+    summary: '一括の状態＋ready/blockers（エージェントの最初の一手）',
+    usage: 'mojioko status [--json]',
+    positionals: [],
+    optionSpecs: [],
+    examples: ['mojioko status --json'],
+    errorCodes: [],
+  },
+  {
+    name: 'tools',
+    summary: 'ツール・モデル・GPU の状態照会とセットアップ（list / download / use）',
+    usage: 'mojioko tools [list|download <whisper|translation|gpu>|use <whisper|translation|device> <value>]',
+    positionals: [
+      { name: 'subcommand', required: false, desc: 'list（既定）| download | use' },
+      { name: 'target', required: false, desc: 'whisper | translation | gpu | device' },
+      { name: 'value', required: false, desc: 'use device の cpu|gpu 等' },
+    ],
+    optionSpecs: [
+      { flag: '--model', type: 'string', desc: 'whisper: large-v3|large-v3-turbo / translation: 3b|7b' },
+      { flag: '--device', type: 'enum', values: ['cpu', 'gpu'], desc: 'use device の値（位置引数でも可）' },
+      { flag: '--force', type: 'boolean', default: 'false', desc: 'アプリ起動中でも設定を上書き（use）' },
+    ],
+    examples: ['mojioko tools', 'mojioko tools download whisper --model large-v3-turbo', 'mojioko tools use device gpu'],
+    errorCodes: ['USAGE', 'MODEL_NOT_FOUND', 'TOOL_NOT_DOWNLOADED', 'OUTPUT_WRITE_FAILED'],
+  },
+  {
+    name: 'transcribe',
+    summary: '動画/音声 → 字幕（.mojioko / SRT）',
+    usage: 'mojioko transcribe <input> -o <out>',
+    positionals: [{ name: 'input', required: true, desc: '入力の動画/音声ファイル' }],
+    optionSpecs: [
+      OUT_REQ,
+      { flag: '--model', type: 'enum', values: ['large-v3', 'large-v3-turbo'], desc: '既定: 設定のアクティブモデル' },
+      { flag: '--lang', type: 'enum', values: LANGS, default: 'auto', desc: '言語（自動検出=auto）' },
+      { flag: '--track', type: 'int', default: '1', desc: '音声トラック（1-based）' },
+      { flag: '--vad', type: 'enum', values: ['on', 'off'], default: 'on', desc: 'VAD フィルタ' },
+      { flag: '--vad-threshold', type: 'float', default: '0.5', desc: 'VAD しきい値 0..1' },
+      { flag: '--beam-size', type: 'int', default: '5', desc: 'ビームサイズ' },
+      { flag: '--min-speech-ms', type: 'int', default: '250', desc: '最小発話長(ms)' },
+      { flag: '--min-silence-ms', type: 'int', default: '2000', desc: '最小無音長(ms)' },
+      { flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '既定: -o 拡張子から判定' },
+      DEVICE,
+      STRICT,
+    ],
+    examples: ['mojioko transcribe input.mp4 -o out.mojioko --lang ja'],
+    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'MODEL_NOT_FOUND', 'TRANSCRIBE_FAILED', 'OUTPUT_WRITE_FAILED', 'GPU_INIT_FAILED'],
+  },
+  {
+    name: 'translate',
+    summary: '字幕 → 字幕（既定=現在テキスト / --from-original で原文から）',
+    usage: 'mojioko translate <input> --to <lang> -o <out>',
+    positionals: [{ name: 'input', required: true, desc: '.mojioko または .srt' }],
+    optionSpecs: [
+      { flag: '--to', type: 'enum', values: TARGETS, required: true, desc: '翻訳先言語' },
+      OUT_REQ,
+      { flag: '--model', type: 'enum', values: ['3b', '7b'], desc: '既定: 設定のアクティブ翻訳モデル' },
+      { flag: '--from-original', type: 'boolean', default: 'false', desc: '文字起こし原文から訳す（.mojioko 必須）' },
+      { flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '既定: -o 拡張子から判定' },
+      DEVICE,
+      STRICT,
+    ],
+    examples: ['mojioko translate out.mojioko --to en --from-original -o out.en.mojioko'],
+    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'TOOL_NOT_DOWNLOADED', 'DEPS_MISSING', 'TRANSLATION_FAILED', 'OUTPUT_WRITE_FAILED'],
+  },
+  {
+    name: 'burn',
+    summary: '字幕焼き込み（libass）。解像度/プリセット対応。フォントはアプリ既定スタイルを継承',
+    usage: 'mojioko burn <video> <subtitle> -o <out.mp4>',
+    positionals: [
+      { name: 'video', required: true, desc: '入力動画' },
+      { name: 'subtitle', required: true, desc: '.mojioko または .srt' },
+    ],
+    optionSpecs: [
+      OUT_REQ,
+      { flag: '--preset', type: 'enum', values: PRESETS, desc: '出力プリセット（縦ショート等）' },
+      { flag: '--resolution', type: 'string', desc: 'WxH（例 1080x1920）。--preset と排他' },
+      { flag: '--margin-v', type: 'int', desc: '縦マージン(px)' },
+      { flag: '--overflow', type: 'enum', values: ['shrink', 'warn', 'error'], default: 'warn', desc: '縦はみ出し（shrink 未実装）' },
+      { flag: '--encoder', type: 'enum', values: ['auto', 'h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf'], default: 'auto', desc: '映像エンコーダ' },
+      { flag: '--audio', type: 'enum', values: ['preserve', 'simple', 'none'], default: 'simple', desc: '音声処理' },
+      { flag: '--container', type: 'enum', values: ['mp4', 'same'], default: 'mp4', desc: '出力コンテナ' },
+      { flag: '--weight', type: 'enum', values: WEIGHTS, desc: 'フォントウェイト（既定=アプリ設定）' },
+      { flag: '--font-size', type: 'int', desc: 'フォントサイズ上書き(px)' },
+      { flag: '--text-color', type: 'string', desc: '文字色 #RRGGBB' },
+      { flag: '--outline-color', type: 'string', desc: '縁色 #RRGGBB' },
+      { flag: '--outline', type: 'int', desc: '縁の太さ(px)' },
+      { flag: '--position', type: 'enum', values: ['top', 'center', 'bottom'], desc: '縦位置' },
+      DEVICE,
+    ],
+    examples: ['mojioko burn input.mp4 out.en.mojioko -o final.mp4 --preset shorts'],
+    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'SUBTITLE_OVERFLOW', 'BURN_FAILED', 'OUTPUT_WRITE_FAILED'],
+  },
+  {
+    name: 'run',
+    summary: '統合ワンショット（transcribe → translate → burn を内部連結）',
+    usage: 'mojioko run <video> [--translate <lang>] [--burn] -o <out>',
+    positionals: [{ name: 'video', required: true, desc: '入力動画' }],
+    optionSpecs: [
+      OUT_REQ,
+      { flag: '--translate', type: 'enum', values: TARGETS, desc: '指定時に翻訳を挟む' },
+      { flag: '--burn', type: 'boolean', default: 'false', desc: '焼き込みまで実行（-o は .mp4）' },
+      { flag: '--preset', type: 'enum', values: PRESETS, desc: 'burn 用（--burn 時）' },
+      DEVICE,
+      STRICT,
+    ],
+    examples: ['mojioko run input.mp4 --translate en --burn -o final.mp4 --preset shorts'],
+    errorCodes: ['(各段のエラーコードを継承)'],
+  },
+]
+
 const COMMON_FLAGS: [string, string][] = [
-  ['--json / --no-json', 'stdout に結果 JSON を出す（既定 on）'],
+  ['--json / --no-json', 'stdout に結果 JSON を出す（既定 on。help は既定テキスト）'],
   ['--quiet', 'stderr の進捗・info を抑止'],
   ['--verbose', 'stderr に debug ログを追加'],
-  ['--device cpu|gpu', '実行デバイス（既定: 設定の activeAccelerator）'],
-  ['--strict', '--device gpu で CUDA 不可のとき fallback せず失敗'],
   ['-h, --help', 'ヘルプを表示'],
   ['--version', 'バージョンを表示'],
 ]
 
 const EXIT_SUMMARY: [number, string][] = [
   [0, '成功'],
+  [1, 'その他/未実装 (UNEXPECTED / NOT_IMPLEMENTED)'],
   [2, '引数・使用法エラー (USAGE)'],
   [3, '入力ファイルなし・読取不可 (INPUT_NOT_FOUND)'],
   [4, '非対応フォーマット (UNSUPPORTED_FORMAT)'],
@@ -40,84 +181,34 @@ const EXIT_SUMMARY: [number, string][] = [
   [130, 'ユーザーキャンセル (CANCELED, SIGINT)'],
 ]
 
-const COMMANDS: CommandDoc[] = [
-  {
-    name: 'status',
-    summary: '一括の状態＋ready/blockers（エージェントの最初の一手）',
-    usage: 'mojioko status [--json]',
-    options: ['(オプション無し)'],
-    examples: ['mojioko status --json'],
-    errorCodes: [],
-  },
-  {
-    name: 'tools',
-    summary: 'ツール・モデル・GPU の状態照会とセットアップ（list / download / use）',
-    usage: 'mojioko tools [list|download|use] ...',
-    options: [
-      'list                              状態を JSON で返す（既定・CC の前提検査用）',
-      'download whisper --model <id>     Whisper モデルを DL',
-      'download translation --model 3b|7b 翻訳モデル(MADLAD)を DL',
-      'download gpu                      GPU ランタイム(CUDA)を DL',
-      'use whisper|translation --model <id>  アクティブモデルを選択',
-      'use device gpu|cpu                実行デバイスを選択',
-    ],
-    examples: ['mojioko tools', 'mojioko tools use device cpu'],
-    errorCodes: ['USAGE', 'MODEL_NOT_FOUND', 'TOOL_NOT_DOWNLOADED'],
-  },
-  {
-    name: 'transcribe',
-    summary: '動画/音声 → 字幕（.mojioko / SRT）',
-    usage: 'mojioko transcribe <input> -o <out>',
-    options: [
-      '--model large-v3|large-v3-turbo   既定: 設定のアクティブモデル',
-      '--lang auto|ja|en|...             既定: auto',
-      '--track <n>                       音声トラック(1-based)。既定: 1',
-      '--vad on|off                      既定: on',
-      '--device cpu|gpu, --strict',
-      '--format mojioko|srt              既定: -o 拡張子から判定',
-    ],
-    examples: ['mojioko transcribe input.mp4 -o out.mojioko --lang ja'],
-    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'MODEL_NOT_FOUND', 'TRANSCRIBE_FAILED'],
-  },
-  {
-    name: 'translate',
-    summary: '字幕 → 字幕（既定=現在テキスト / --from-original で原文から）',
-    usage: 'mojioko translate <input> --to <lang> -o <out>',
-    options: [
-      '--to en|ja|es|fr|de|pt            翻訳先（必須）',
-      '--model 3b|7b                     既定: 設定のアクティブ翻訳モデル',
-      '--from-original                   文字起こし原文から訳す（.mojioko 必須）',
-      '--device cpu|gpu, --strict',
-    ],
-    examples: ['mojioko translate out.mojioko --to en --from-original -o out.en.mojioko'],
-    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'TOOL_NOT_DOWNLOADED', 'DEPS_MISSING', 'TRANSLATION_FAILED'],
-  },
-  {
-    name: 'burn',
-    summary: '字幕焼き込み（libass）。解像度/プリセット/オーバーフロー対応',
-    usage: 'mojioko burn <video> <subtitle> -o <out.mp4>',
-    options: [
-      '--resolution WxH | --preset <name>  既定: ソース解像度維持',
-      '--margin-x <px>, --margin-v <px>',
-      '--overflow shrink|warn|error        既定: warn',
-      '--encoder auto|h264_nvenc|...       既定: auto',
-      '--audio preserve|simple|none        既定: simple',
-      '--weight <Thin..Black>              フォントはアプリ既定スタイルを継承',
-    ],
-    examples: ['mojioko burn input.mp4 out.en.mojioko -o final.mp4 --preset shorts'],
-    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'SUBTITLE_OVERFLOW', 'BURN_FAILED', 'OUTPUT_WRITE_FAILED'],
-  },
-  {
-    name: 'run',
-    summary: '統合ワンショット（transcribe → translate → burn を内部連結）',
-    usage: 'mojioko run <video> [--translate <lang>] [--burn] -o <out>',
-    options: ['--translate <lang>                翻訳を挟む', '--burn                            焼き込みまで実行'],
-    examples: ['mojioko run input.mp4 --translate en --burn -o final.mp4'],
-    errorCodes: ['(各段のエラーコードを継承)'],
-  },
+const ERROR_CODE_DESCRIPTIONS: Record<string, string> = {
+  USAGE: '引数・使用法エラー',
+  INPUT_NOT_FOUND: '入力ファイルが無い/読めない',
+  UNSUPPORTED_FORMAT: '非対応フォーマット',
+  TOOL_NOT_DOWNLOADED: 'ツール/翻訳/GPU が未 DL',
+  MODEL_NOT_FOUND: '指定モデルが未導入',
+  DEPS_MISSING: 'Python 依存/ffmpeg 等の欠如',
+  GPU_INIT_FAILED: 'CUDA 初期化失敗（既定は warning、--strict で致命）',
+  TRANSCRIBE_FAILED: '文字起こし実行失敗',
+  TRANSLATION_FAILED: '翻訳実行失敗',
+  BURN_FAILED: '焼き込み失敗',
+  OUTPUT_WRITE_FAILED: '出力書込失敗',
+  SUBTITLE_OVERFLOW: '縦オーバーフロー（--overflow=error）',
+  CANCELED: 'ユーザーキャンセル',
+  NOT_IMPLEMENTED: '未実装',
+  UNEXPECTED: '未分類の失敗',
+}
+
+const WARNING_CODES: [string, string][] = [
+  ['GPU_INIT_FAILED', 'CPU フォールバック時（成功レスポンス内）'],
+  ['SUBTITLE_OVERFLOW', '--overflow warn 時（成功レスポンス内）'],
+  ['FONT_UNAVAILABLE', '利用不可フォントを Noto へ置換（成功レスポンス内）'],
+  ['FONT_RESTRICTED', '同上（tier/未同梱）'],
 ]
 
 const CHAINED_EXAMPLE = [
+  '# 0) まず状態確認',
+  'mojioko status --json',
   '# 1) 文字起こし → プロジェクト',
   'mojioko transcribe input.mp4 -o out.mojioko --lang ja',
   '# 2) 英語へ翻訳（原文から）',
@@ -142,13 +233,21 @@ export function printHelp(ctx: CliContext, command?: string): number {
   const target = command ? COMMANDS.find((c) => c.name === command) : undefined
 
   if (ctx.json) {
+    const errorCodes = Object.entries(ERROR_CODE_DESCRIPTIONS).map(([code, desc]) => ({
+      code,
+      exitCode: CODE_TO_EXIT[code] ?? 1,
+      desc,
+    }))
     const data = target
       ? { command: target }
       : {
           version: APP_VERSION,
-          commands: COMMANDS.map((c) => ({ name: c.name, summary: c.summary })),
+          invocation: 'MOJIOKO.exe <command> [args]  (bundled shim: mojioko <command>)',
+          commands: COMMANDS,
           commonFlags: COMMON_FLAGS.map(([flag, desc]) => ({ flag, desc })),
-          exitCodes: Object.fromEntries(EXIT_SUMMARY.map(([n, d]) => [n, d])),
+          exitCodes: EXIT_SUMMARY.map(([code, desc]) => ({ code, desc })),
+          errorCodes,
+          warningCodes: WARNING_CODES.map(([code, desc]) => ({ code, desc })),
           examples: CHAINED_EXAMPLE,
         }
     process.stdout.write(JSON.stringify({ ok: true, command: 'help', data, warnings: [] }) + '\n')
@@ -158,11 +257,23 @@ export function printHelp(ctx: CliContext, command?: string): number {
   const out = process.stdout
   if (target) {
     out.write(`\nmojioko ${target.name} — ${target.summary}\n\n`)
-    out.write(`USAGE\n  ${target.usage}\n\nOPTIONS\n`)
-    for (const o of target.options) out.write(`  ${o}\n`)
+    out.write(`USAGE\n  ${target.usage}\n`)
+    if (target.positionals.length) {
+      out.write(`\nARGUMENTS\n`)
+      for (const p of target.positionals) out.write(`  ${pad(p.name, 14)}${p.required ? '(必須) ' : '(任意) '}${p.desc}\n`)
+    }
+    if (target.optionSpecs.length) {
+      out.write(`\nOPTIONS\n`)
+      for (const o of target.optionSpecs) {
+        const meta = [o.type, o.required ? 'required' : '', o.default ? `default ${o.default}` : '', o.values ? `{${o.values.join('|')}}` : '']
+          .filter(Boolean)
+          .join(' ')
+        out.write(`  ${pad(o.flag, 18)}${o.desc}  [${meta}]\n`)
+      }
+    }
     out.write(`\nEXAMPLES\n`)
     for (const e of target.examples) out.write(`  ${e}\n`)
-    out.write(`\nERROR CODES\n  ${target.errorCodes.join(', ')}\n`)
+    if (target.errorCodes.length) out.write(`\nERROR CODES\n  ${target.errorCodes.join(', ')}\n`)
     return EXIT_OK
   }
 
@@ -170,7 +281,7 @@ export function printHelp(ctx: CliContext, command?: string): number {
   out.write(`  実体: MOJIOKO.exe <command>  （同梱シム: mojioko <command>）\n\n`)
   out.write(`COMMANDS\n`)
   for (const c of COMMANDS) out.write(`  ${pad(c.name, 12)}${c.summary}\n`)
-  out.write(`\nEXAMPLE (transcribe → translate → burn)\n`)
+  out.write(`\nEXAMPLE (status → transcribe → translate → burn)\n`)
   for (const e of CHAINED_EXAMPLE) out.write(`  ${e}\n`)
   out.write(`\nCOMMON FLAGS\n`)
   for (const [flag, desc] of COMMON_FLAGS) out.write(`  ${pad(flag, 22)}${desc}\n`)
@@ -178,7 +289,7 @@ export function printHelp(ctx: CliContext, command?: string): number {
   for (const [n, d] of EXIT_SUMMARY) out.write(`  ${pad(String(n), 5)}${d}\n`)
   out.write(`\nSEE ALSO\n`)
   out.write(`  詳細仕様: dev-docs/specs/mojioko-cli.md\n`)
-  out.write(`  設定 > CLI タブ（アプリ内）\n`)
-  out.write(`  mojioko <command> -h  でコマンド別ヘルプ\n\n`)
+  out.write(`  mojioko <command> -h  でコマンド別ヘルプ（--json で機械可読）\n`)
+  out.write(`  mojioko status --json  で現在のセットアップ状況\n\n`)
   return EXIT_OK
 }
