@@ -3,6 +3,7 @@ import { join } from 'path'
 import { release } from 'os'
 import { APP_NAME, APP_DISPLAY, APP_VERSION } from '../shared/app-info'
 import { Channels } from '../shared/ipc-channels'
+import { maybeRunCli } from './cli'
 import { registerVideoHandlers } from './ipc/video'
 import { registerTranscriptionHandlers } from './ipc/transcription'
 import { registerBurninHandlers } from './ipc/burnin'
@@ -268,20 +269,27 @@ async function logStartupEnvironment(): Promise<void> {
   log.info('==================================================')
 }
 
-app.whenReady().then(() => {
-  log.info(`[main] starting ${APP_DISPLAY}`)
-  void logStartupEnvironment()
-  registerVideoProtocol()
-  registerFontProtocol()
-  registerPreviewMixProtocol()
-  // REQ-086: remove any preview-mix .tmp left behind by a force-quit
-  // during a prior transcription run.  See `preview-mix.ts`.
-  cleanupStalePreviewMixTmp()
-  registerIpcHandlers()
-  createWindow()
+// REQ-0447 — CLI subcommand dispatch.  If argv carries a known command
+// (`tools` / `transcribe` / …) or `-h`/`--help`/`--version`, run headless and
+// exit; otherwise fall through to the normal GUI boot.  `maybeRunCli()` returns
+// `false` immediately (before touching `whenReady`) for a plain GUI launch.
+void maybeRunCli().then((handledByCli) => {
+  if (handledByCli) return
+  app.whenReady().then(() => {
+    log.info(`[main] starting ${APP_DISPLAY}`)
+    void logStartupEnvironment()
+    registerVideoProtocol()
+    registerFontProtocol()
+    registerPreviewMixProtocol()
+    // REQ-086: remove any preview-mix .tmp left behind by a force-quit
+    // during a prior transcription run.  See `preview-mix.ts`.
+    cleanupStalePreviewMixTmp()
+    registerIpcHandlers()
+    createWindow()
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
   })
 })
 

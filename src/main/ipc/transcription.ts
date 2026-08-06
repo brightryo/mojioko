@@ -45,7 +45,9 @@ function getDiskFree(dirPath: string): { freeBytes: number; drive: string } {
   }
 }
 
-async function buildModelsState(): Promise<ModelsState> {
+// REQ-0447 — exported so the CLI (`mojioko tools`) reports Whisper model state
+// through the exact same builder the GUI's `transcription:listModels` uses.
+export async function buildModelsState(): Promise<ModelsState> {
   const modelsDir = getModelsDir()
   const settings = await loadSettings()
 
