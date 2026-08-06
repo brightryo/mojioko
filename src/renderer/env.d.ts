@@ -56,6 +56,10 @@ declare global {
       translationToolUninstall: (toolId: TranslationToolId) => Promise<IpcResult<TranslationToolsState>>
       translationToolSetActive: (toolId: TranslationToolId | null) => Promise<IpcResult<TranslationToolsState>>
       translationTranslate: (text: string, target: string) => Promise<IpcResult<TranslateResult>>
+      translationTranslateBatch: (
+        texts: string[],
+        target: string,
+      ) => Promise<IpcResult<{ texts: string[]; loadMs: number; translateMs: number }>>
       translationPreload: () => Promise<IpcResult<{ loadMs: number }>>
 
       fontList: () => Promise<IpcResult<FontsState>>

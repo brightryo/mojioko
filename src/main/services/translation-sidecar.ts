@@ -34,8 +34,16 @@ export interface TranslateSpawnConfig {
 }
 
 interface Pending {
-  resolve: (result: TranslateResult) => void
+  /** Resolve with the raw sidecar response object; each caller shapes it. */
+  resolve: (msg: Record<string, unknown>) => void
   reject: (error: Error) => void
+}
+
+/** REQ-0430 — bulk translate result: one output per input, plus timings. */
+export interface TranslateBatchResult {
+  texts: string[]
+  loadMs: number
+  translateMs: number
 }
 
 let sidecarProcess: ChildProcess | null = null
@@ -108,11 +116,7 @@ function spawnSidecar(config: TranslateSpawnConfig): ChildProcess {
     if (!waiter) return
     pending.delete(id)
     if (msg.ok) {
-      waiter.resolve({
-        text: String(msg.text ?? ''),
-        loadMs: typeof msg.loadMs === 'number' ? msg.loadMs : 0,
-        translateMs: typeof msg.translateMs === 'number' ? msg.translateMs : 0,
-      })
+      waiter.resolve(msg)
     } else {
       waiter.reject(new Error(String(msg.error ?? 'translation failed')))
     }
@@ -144,13 +148,8 @@ function spawnSidecar(config: TranslateSpawnConfig): ChildProcess {
  * the resident process as needed.  Resolves with the translated text plus the
  * load/inference timings (loadMs is 0 when the process was already warm).
  */
-export async function translateText(
-  text: string,
-  // REQ-0426 — was fixed 'en'; now any curated MADLAD target code.  The value
-  // is written verbatim to the sidecar which builds the `<2xx>` token.
-  target: TranslationTarget,
-  config: TranslateSpawnConfig,
-): Promise<TranslateResult> {
+/** Spawn / respawn the resident sidecar as needed for `config`; returns it. */
+function ensureSidecar(config: TranslateSpawnConfig): ChildProcess {
   const desiredKey = keyFor(config)
   if (!sidecarProcess || sidecarProcess.killed || liveKey !== desiredKey) {
     if (sidecarProcess) {
@@ -159,21 +158,58 @@ export async function translateText(
     teardown()
     spawnSidecar(config)
   }
-  const proc = sidecarProcess
-  if (!proc) {
+  if (!sidecarProcess) {
     throw new Error('SIDECAR_ERROR: sidecar not available after spawn')
   }
+  return sidecarProcess
+}
 
+/** Send one request and await its raw response, matched by an integer `id`. */
+function sendRequest(proc: ChildProcess, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
   const id = ++seq
-  return new Promise<TranslateResult>((resolve, reject) => {
+  return new Promise<Record<string, unknown>>((resolve, reject) => {
     pending.set(id, { resolve, reject })
-    proc.stdin!.write(JSON.stringify({ id, text, target }) + '\n', 'utf-8', (err) => {
+    proc.stdin!.write(JSON.stringify({ id, ...payload }) + '\n', 'utf-8', (err) => {
       if (err) {
         pending.delete(id)
         reject(new Error(`SIDECAR_ERROR: failed to send request: ${err.message}`))
       }
     })
   })
+}
+
+export async function translateText(
+  text: string,
+  // REQ-0426 — was fixed 'en'; now any curated MADLAD target code.  The value
+  // is written verbatim to the sidecar which builds the `<2xx>` token.
+  target: TranslationTarget,
+  config: TranslateSpawnConfig,
+): Promise<TranslateResult> {
+  const proc = ensureSidecar(config)
+  const msg = await sendRequest(proc, { text, target })
+  return {
+    text: String(msg.text ?? ''),
+    loadMs: typeof msg.loadMs === 'number' ? msg.loadMs : 0,
+    translateMs: typeof msg.translateMs === 'number' ? msg.translateMs : 0,
+  }
+}
+
+/**
+ * REQ-0430 — translate a list of sources in ONE sidecar round-trip
+ * (CTranslate2 `translate_batch`).  Output order matches the input order.
+ */
+export async function translateBatch(
+  texts: string[],
+  target: TranslationTarget,
+  config: TranslateSpawnConfig,
+): Promise<TranslateBatchResult> {
+  const proc = ensureSidecar(config)
+  const msg = await sendRequest(proc, { texts, target })
+  return {
+    texts: Array.isArray(msg.texts) ? (msg.texts as unknown[]).map((v) => String(v ?? '')) : [],
+    loadMs: typeof msg.loadMs === 'number' ? msg.loadMs : 0,
+    translateMs: typeof msg.translateMs === 'number' ? msg.translateMs : 0,
+  }
 }
 
 /** Tear down the resident process (called on app quit). */

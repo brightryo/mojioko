@@ -30,6 +30,8 @@ export const Channels = {
   // REQ-0410 — one-shot translate for the inspector auto-translate prototype.
   // Resolves via the resident MADLAD sidecar; result is non-persisted.
   translationTranslate: 'translation:translate',
+  // REQ-0430 — bulk translate: a list of sources in one sidecar call.
+  translationTranslateBatch: 'translation:translateBatch',
   // REQ-0426 — warm the resident MADLAD sidecar (load model + tokenizer) so
   // the first inspector translation after enabling 自動翻訳 is not cold.
   translationPreload: 'translation:preload',

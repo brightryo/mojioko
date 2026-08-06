@@ -5,7 +5,7 @@ import { getTranslationToolsDir, getPythonExecutable } from '../lib/paths'
 import { loadSettings } from '../services/settings-store'
 import { isToolInstalled } from '../services/translation-tool-store'
 import { getEffectiveGpuToolDir } from '../services/gpu-tool'
-import { translateText } from '../services/translation-sidecar'
+import { translateText, translateBatch, type TranslateBatchResult } from '../services/translation-sidecar'
 import { isTranslationToolId } from '../../shared/translation-tools'
 import type { IpcResult, IpcErr } from '../../shared/types'
 import {
@@ -91,6 +91,25 @@ export function registerTranslationHandlers(): void {
         return { ok: true, data: result }
       } catch (err) {
         return mapSidecarError(err, 'translate')
+      }
+    },
+  )
+
+  // REQ-0430 — bulk translate: one sidecar call translates a list of sources.
+  ipcMain.handle(
+    Channels.translationTranslateBatch,
+    async (_event, texts: string[], target?: string): Promise<IpcResult<TranslateBatchResult>> => {
+      const resolved = await resolveSpawnConfig()
+      if (!resolved.ok) return resolved
+      try {
+        const result = await translateBatch(
+          Array.isArray(texts) ? texts : [],
+          coerceTranslationTarget(target),
+          resolved.config,
+        )
+        return { ok: true, data: result }
+      } catch (err) {
+        return mapSidecarError(err, 'translateBatch')
       }
     },
   )

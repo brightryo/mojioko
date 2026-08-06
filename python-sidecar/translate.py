@@ -106,6 +106,18 @@ def _translate(text, target):
     return out, load_ms, translate_ms
 
 
+def _translate_batch(texts, target):
+    # REQ-0430 — bulk translate: encode every source with its `<2xx>` prefix and
+    # run them through CTranslate2's translate_batch in one call.
+    load_ms = _ensure_loaded()
+    t0 = time.perf_counter()
+    sources = [_sp.encode(f"<2{target}> {tx}", out_type=str) for tx in texts]
+    results = _translator.translate_batch(sources, beam_size=1) if sources else []
+    outs = [_sp.decode(r.hypotheses[0]) for r in results]
+    translate_ms = int((time.perf_counter() - t0) * 1000)
+    return outs, load_ms, translate_ms
+
+
 def main():
     if not MODEL_DIR:
         _emit({"id": None, "ok": False, "error": "MOJIOKO_TRANSLATION_MODEL_DIR not set"})
@@ -123,10 +135,15 @@ def main():
             _emit({"id": rid, "ok": True, "pong": True})
             continue
         try:
-            text = req.get("text", "") or ""
             target = req.get("target", "en") or "en"
-            out, load_ms, translate_ms = _translate(text, target)
-            _emit({"id": rid, "ok": True, "text": out, "loadMs": load_ms, "translateMs": translate_ms})
+            if isinstance(req.get("texts"), list):
+                # REQ-0430 — bulk translate: a list of sources → a list of outputs.
+                outs, load_ms, translate_ms = _translate_batch(req.get("texts") or [], target)
+                _emit({"id": rid, "ok": True, "texts": outs, "loadMs": load_ms, "translateMs": translate_ms})
+            else:
+                text = req.get("text", "") or ""
+                out, load_ms, translate_ms = _translate(text, target)
+                _emit({"id": rid, "ok": True, "text": out, "loadMs": load_ms, "translateMs": translate_ms})
         except Exception as e:  # noqa: BLE001
             _emit({"id": rid, "ok": False, "error": str(e)})
 

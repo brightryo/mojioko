@@ -290,7 +290,18 @@
     "overflowWrap": "はみ出し改行",
     "overflowWrapHelp": "はみ出し改行 — 手動の改行を保ったまま、画面からはみ出す部分だけ折り返します",
     "overflowWrapNoChange": "はみ出している字幕はありませんでした",
+    "translate": {
+      "button": "翻訳",
+      "needTool": "翻訳ツールをダウンロード／有効化すると使えます",
+      "running": "翻訳処理中…",
+      "progress": "{{done}} / {{total}} 件",
+      "cancel": "キャンセル",
+      "done": "{{count}}件を翻訳しました",
+      "failed": "翻訳に失敗しました",
+      "nothing": "翻訳できる字幕がありません"
+    },
     "history": {
+      "translate": "一括翻訳 ({{count}}件)",
       "size": "サイズを一括変更 ({{count}}件)",
       "textColor": "文字色を一括変更 ({{count}}件)",
       "outlineColor": "アウトライン色を一括変更 ({{count}}件)",

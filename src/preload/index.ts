@@ -90,6 +90,11 @@ const electronAPI = {
   // REQ-0410 — one-shot translate for the inspector auto-translate prototype.
   translationTranslate: (text: string, target: string): Promise<IpcResult<TranslateResult>> =>
     ipcRenderer.invoke(Channels.translationTranslate, text, target),
+  translationTranslateBatch: (
+    texts: string[],
+    target: string,
+  ): Promise<IpcResult<{ texts: string[]; loadMs: number; translateMs: number }>> =>
+    ipcRenderer.invoke(Channels.translationTranslateBatch, texts, target),
   translationPreload: (): Promise<IpcResult<{ loadMs: number }>> =>
     ipcRenderer.invoke(Channels.translationPreload),
 

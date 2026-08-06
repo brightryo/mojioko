@@ -290,7 +290,18 @@
     "overflowWrap": "Overflow wrap",
     "overflowWrapHelp": "Overflow wrap — keep manual breaks and only fold the parts that overflow the display width",
     "overflowWrapNoChange": "No rows were overflowing",
+    "translate": {
+      "button": "Translate",
+      "needTool": "Download / enable a translation tool to use this",
+      "running": "Translating…",
+      "progress": "{{done}} / {{total}}",
+      "cancel": "Cancel",
+      "done": "Translated {{count}} rows",
+      "failed": "Translation failed",
+      "nothing": "No translatable rows"
+    },
     "history": {
+      "translate": "Bulk translate ({{count}} rows)",
       "size": "Bulk size change ({{count}} rows)",
       "textColor": "Bulk text color change ({{count}} rows)",
       "outlineColor": "Bulk outline color change ({{count}} rows)",

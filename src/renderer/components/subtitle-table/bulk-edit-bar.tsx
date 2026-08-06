@@ -18,6 +18,7 @@ import { LINE_SPACING_DEFAULT_PERCENT } from '../../../shared/line-spacing'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { buildUndoPatch } from '../../../shared/history-patch'
 import { StyleRow } from '@/components/subtitle-table/style-row'
+import { BulkTranslate } from '@/components/subtitle-table/bulk-translate'
 // REQ-0335 §3 — style presets.
 import { StylePresetControls } from '@/components/style-preset/style-preset-controls'
 import { buildStylePreset, resolveStylePresetPatch } from '@/lib/style-preset-apply'
@@ -546,6 +547,41 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     })
     measureSync('bulk.apply', apply)
     measureSync('bulk.onApplied', () => onApplied(snapshots.size, label))
+  }
+
+  // REQ-0430 — bulk translate write-back.  Like `applyBulk` but each row gets a
+  // DIFFERENT text (its translation), applied in ONE history op so the whole
+  // bulk translate is a single Undo.  Called only after every translation has
+  // been collected (see BulkTranslate), so there is no partial state to roll
+  // back on cancel — cancel simply never reaches here.
+  function applyTranslations(textById: Map<string, string>, label: string) {
+    const all = useProjectStore.getState().entries
+    const cuts = useProjectStore.getState().cuts
+    const byId = new Map(all.map((e) => [e.id, e]))
+    const snapshots = new Map<string, SubtitleEntry>()
+    for (const id of textById.keys()) {
+      const e = byId.get(id)
+      if (!e || e.isDeleted) continue
+      if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
+      snapshots.set(id, { ...e })
+    }
+    if (snapshots.size === 0) return
+
+    const appliedById = new Map<string, Partial<SubtitleEntry>>()
+    for (const id of snapshots.keys()) {
+      appliedById.set(id, { text: textById.get(id) ?? '', isEdited: true })
+    }
+    const apply = () => useProjectStore.getState().updateEntriesBatch(appliedById)
+    const revert = () => {
+      const perRow = new Map<string, Partial<SubtitleEntry>>()
+      for (const [id, snap] of snapshots) {
+        perRow.set(id, buildUndoPatch(snap, appliedById.get(id)!, undefined))
+      }
+      useProjectStore.getState().updateEntriesBatch(perRow)
+    }
+    useHistoryStore.getState().push({ label, undo: revert, redo: apply })
+    apply()
+    onApplied(snapshots.size, label)
   }
 
   // ---------------------------------------------------------------------
@@ -1279,6 +1315,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           <div className="text-body font-semibold text-fg-primary">
             {t('timeline.inspector.subtitleSection')}
           </div>
+          {/* REQ-0430 — bulk translate: language + Translate button (gated on a
+              downloaded+enabled tool).  Translates every selected cue and
+              overwrites its text as one undoable op (see BulkTranslate). */}
+          <BulkTranslate selectedRowIds={selectedRowIds} onApply={applyTranslations} />
           {/* REQ-0275 §5 — two-tier family + weight picker for bulk.
               Uses activeFontId as the display seed when no rows are
               selected or a heterogeneous selection collapses.  Bulk

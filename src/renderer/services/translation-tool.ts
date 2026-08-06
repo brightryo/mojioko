@@ -111,6 +111,17 @@ export async function translateCue(
 }
 
 /**
+ * REQ-0430 — bulk translate a list of cue texts into `target` in one sidecar
+ * round-trip (MADLAD `translate_batch`).  Output order matches the input.
+ */
+export async function translateBatchCues(
+  texts: string[],
+  target: string,
+): Promise<IpcResult<{ texts: string[]; loadMs: number; translateMs: number }>> {
+  return window.electronAPI.translationTranslateBatch(texts, target)
+}
+
+/**
  * REQ-0426 — warm the MADLAD sidecar (load model + tokenizer) ahead of the
  * first real translation.  Fired when the user enables 自動翻訳 so the inspector
  * preview is not cold on the first cue.
