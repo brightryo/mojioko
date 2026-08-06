@@ -66,6 +66,11 @@ export interface CliWarning {
   detail?: unknown
 }
 
+/** The structured result of a command (what the MCP layer captures). */
+export type CliResult =
+  | { ok: true; command: string; data: unknown; warnings: CliWarning[] }
+  | { ok: false; command: string; code: string; message: string; remedy: string | null; detail: unknown }
+
 export interface CliContext {
   /** `--json` (default true): emit the result JSON on stdout. */
   json: boolean
@@ -78,10 +83,24 @@ export interface CliContext {
    * only `run`'s final JSON is printed (errors still throw and propagate).
    */
   silent?: boolean
+  /**
+   * REQ-0450 — MCP capture sink. When set, emitSuccess/emitFailure route the
+   * structured result here INSTEAD of stdout, so the MCP server reuses the exact
+   * CLI command logic (single source of truth) and returns structured content.
+   */
+  sink?: (result: CliResult) => void
+  /**
+   * REQ-0450 — optional progress sink (percent 0..100). The MCP async-job layer
+   * uses it to surface progress in get_job_status.
+   */
+  onProgress?: (percent: number) => void
 }
 
 /** A structured progress line on stderr (JSONL). No-op under `--quiet`. */
 export function emitProgress(ctx: CliContext, obj: unknown): void {
+  if (ctx.onProgress && obj && typeof obj === 'object' && typeof (obj as { percent?: unknown }).percent === 'number') {
+    ctx.onProgress((obj as { percent: number }).percent)
+  }
   if (ctx.quiet) return
   process.stderr.write(JSON.stringify(obj) + '\n')
 }
@@ -105,6 +124,10 @@ export function emitSuccess(
   data: unknown,
   warnings: CliWarning[] = [],
 ): number {
+  if (ctx.sink) {
+    ctx.sink({ ok: true, command, data, warnings })
+    return EXIT_OK
+  }
   if (ctx.silent) return EXIT_OK
   if (ctx.json) {
     process.stdout.write(JSON.stringify({ ok: true, command, data, warnings }) + '\n')
@@ -123,6 +146,10 @@ export function emitFailure(ctx: CliContext, command: string, err: CliError): nu
     message: err.message,
     detail: err.detail ?? null,
     remedy: err.remedy ?? null,
+  }
+  if (ctx.sink) {
+    ctx.sink({ ok: false, command, code: err.code, message: err.message, remedy: err.remedy ?? null, detail: err.detail ?? null })
+    return exitCodeFor(err.code)
   }
   if (ctx.json) {
     process.stdout.write(JSON.stringify(body) + '\n')

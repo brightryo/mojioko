@@ -17,6 +17,7 @@
     "verify:outline-ring": "node scripts/verify-outline-ring/index.mjs",
     "verify:ring-paint": "node scripts/verify-ring-paint/index.mjs",
     "verify:cli-smoke": "node scripts/cli-smoke.mjs",
+    "verify:mcp-smoke": "node scripts/mcp-smoke.mjs",
     "verify:stack-emphasis": "node scripts/verify-stack-emphasis/index.mjs",
     "verify:blur-parity": "node scripts/verify-blur-parity/index.mjs",
     "verify:anim-first-frame": "node scripts/verify-anim-first-frame/index.mjs",

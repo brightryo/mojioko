@@ -24,8 +24,9 @@ import { runTranslateCommand } from './commands/translate'
 import { runBurnCommand } from './commands/burn'
 import { runRunCommand } from './commands/run'
 import { runStatusCommand } from './commands/status'
+import { runMcpServer } from '../mcp/server'
 
-const COMMANDS = new Set(['tools', 'status', 'transcribe', 'translate', 'burn', 'run'])
+const COMMANDS = new Set(['tools', 'status', 'transcribe', 'translate', 'burn', 'run', 'mcp'])
 const HELP_TOKENS = new Set(['help', '-h', '--help'])
 
 /**
@@ -56,6 +57,9 @@ async function route(ctx: CliContext, command: string, args: ReturnType<typeof p
       return runToolsCommand(ctx, args)
     case 'status':
       return runStatusCommand(ctx)
+    case 'mcp':
+      // Resident stdio MCP server (REQ-0450). Resolves only when stdin closes.
+      return runMcpServer()
     case 'transcribe':
       return runTranscribeCommand(ctx, args)
     case 'translate':
