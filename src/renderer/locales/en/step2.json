@@ -457,6 +457,7 @@
         "label": "Translation",
         "labelWithMs": "Translation ({{ms}}ms)",
         "expand": "Show full text",
+        "edit": "Edit",
         "copy": "Copy",
         "overwrite": "Overwrite",
         "copied": "Copied",

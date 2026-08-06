@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2, Maximize2, RotateCcw } from 'lucide-react'
+import { Loader2, SquarePen, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -261,14 +261,15 @@ export function TranslationPreview({
                   {view.entry.text}
                 </TooltipContent>
               </Tooltip>
+              {/* REQ-0436 — edit icon (the dialog is editable), not expand. */}
               <button
                 type="button"
                 onClick={openDialog}
-                aria-label={t('timeline.inspector.translate.expand')}
-                title={t('timeline.inspector.translate.expand')}
+                aria-label={t('timeline.inspector.translate.edit')}
+                title={t('timeline.inspector.translate.edit')}
                 className="flex-shrink-0 text-fg-tertiary hover:text-fg-primary transition-colors"
               >
-                <Maximize2 className="h-3.5 w-3.5" />
+                <SquarePen className="h-3.5 w-3.5" />
               </button>
             </div>
           ) : view.status === 'error' && view.code === 'SIDECAR_DEPS_MISSING' ? (

@@ -457,6 +457,7 @@
         "label": "翻訳",
         "labelWithMs": "翻訳（{{ms}}ms）",
         "expand": "全文を表示",
+        "edit": "編集",
         "copy": "コピー",
         "overwrite": "上書き",
         "copied": "コピーしました",

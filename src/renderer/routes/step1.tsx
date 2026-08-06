@@ -287,17 +287,15 @@ export default function Step1Route(_: Step1RouteProps) {
     const info = result.data
     setVideo(info)
 
-    // Extract thumbnail as part of the loading sequence
-    try {
-      const thumbResult = await extractThumbnail(info.path, 1)
-      if (thumbResult.ok) setThumbnail(thumbResult.data)
-    } catch {
-      // thumbnail is optional
-    }
-
-    setVideoLoadingState('loaded')
-    toast.success(t('toast.videoLoaded'))
-
+    // REQ-0436 — pick the default audio track in the SAME synchronous tick as
+    // `setVideo`, so React batches both into one render.  Previously the pick
+    // ran only after the `await extractThumbnail` below, so the new video
+    // rendered first with the STALE selection (e.g. track 2 from the prior
+    // video / a hydrated default), which the drawer showed until the pick
+    // landed — the reported "track 2 → track 1" flicker.  Setting the default
+    // now means the drawer's autoselect effect already sees a valid selection
+    // and skips, and no intermediate track is ever shown.
+    //
     // REQ-0121 — audio-track fallback ladder.  See step1-track-pick.ts.
     //   preferred exists          → use it, no notice
     //   preferred missing, T1 ok  → use Track 1, non-blocking toast
@@ -313,6 +311,17 @@ export default function Step1Route(_: Step1RouteProps) {
         }))
       }
     }
+
+    // Extract thumbnail as part of the loading sequence
+    try {
+      const thumbResult = await extractThumbnail(info.path, 1)
+      if (thumbResult.ok) setThumbnail(thumbResult.data)
+    } catch {
+      // thumbnail is optional
+    }
+
+    setVideoLoadingState('loaded')
+    toast.success(t('toast.videoLoaded'))
   }
 
   async function handleStartTranscription() {

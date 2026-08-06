@@ -28,6 +28,7 @@ import { useProjectStore } from '@/stores/project-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { useStoreUpsellStore } from '@/stores/store-upsell-store'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
+import { pickTranscriptionTrack } from '@/routes/step1-track-pick'
 import type { AudioTrack, VideoInfo } from '../../../shared/types'
 
 /**
@@ -175,6 +176,8 @@ export function TranscriptionDrawer({
   const setTranscriptionAdvanced = useSettingsStore((s) => s.setTranscriptionAdvanced)
   const resetTranscriptionAdvanced = useSettingsStore((s) => s.resetTranscriptionAdvanced)
   const selectedTrack = useProjectStore((s) => s.selectedTrackIndex)
+  // REQ-0436 — default audio-track preference, used by the autoselect ladder.
+  const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
   const setSelectedTrack = useProjectStore((s) => s.setSelectedTrackIndex)
 
   // REQ-0422 タブ2 (文字スタイル) — same store slots the old SubtitleStyleDialog
@@ -222,15 +225,19 @@ export function TranscriptionDrawer({
     if (path) onDropFile(path)
   }
 
-  // REQ-20260615-055 — autoselect the first available track on first open.
+  // REQ-20260615-055 — autoselect a track on first open so the user never sees
+  // an empty selection.  REQ-0436 — use the SAME default-track ladder as the
+  // load path (`pickTranscriptionTrack`), not `audioTracks[0]`, so the
+  // preferred/default track is chosen consistently (no first-track detour).
   const hasValidSelection = useMemo(
     () => audioTracks.some((tr) => tr.index === selectedTrack),
     [audioTracks, selectedTrack],
   )
   useEffect(() => {
     if (!open || hasValidSelection || audioTracks.length === 0) return
-    setSelectedTrack(audioTracks[0].index)
-  }, [open, hasValidSelection, audioTracks, setSelectedTrack])
+    const picked = pickTranscriptionTrack(audioTracks, defaultAudioTrackIndex)
+    if (picked.trackIndex !== null) setSelectedTrack(picked.trackIndex)
+  }, [open, hasValidSelection, audioTracks, defaultAudioTrackIndex, setSelectedTrack])
 
   // Mirrors burnin-drawer's open-state guard — block close while
   // running so X / backdrop / Esc cannot abandon a live transcription.
