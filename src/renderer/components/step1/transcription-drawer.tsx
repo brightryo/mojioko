@@ -202,58 +202,21 @@ export function TranscriptionDrawer({
     if (open) setActiveTab('input')
   }, [open])
 
-  // REQ-0437/0438 kept the per-tab layout but reset only the TabsContent's own
-  // scrollTop — and on real hardware タブ2/3 STILL opened scrolled to the bottom.
-  //
-  // REQ-0439 — that means the element that ACTUALLY scrolls is not necessarily
-  // the TabsContent: it can be an ancestor (the Sheet body / another wrapper),
-  // and a post-mount focus / reflow / late content load scrolls it down.  Stop
-  // guessing which node scrolls: walk from the mounted TabsContent UP through its
-  // ancestors (stopping before <body>) and reset scrollTop on EVERY node that
-  // actually overflows — the true scroll container is guaranteed to be in that
-  // chain.  Do it on mount, on the next frame (after focus), and on content
-  // resize (late previews/fonts), for ~700 ms.  A dev-only diagnostic logs which
-  // node scrolled and by how much on open, so the real culprit is measured, not
-  // assumed (§1c).  Verified by scrollTop === 0, not by eye.
+  // REQ-0440 — the real cause of タブ2/3 opening bottom-weighted was the flex
+  // height chain, NOT scroll position: the RES-0439 diagnostic confirmed every
+  // overflow node already had scrollTop=0.  The fix is `overflow-hidden` on the
+  // SheetContent boundary (above), which makes the `flex-1 min-h-0` chain
+  // constrain so each TabsContent scrolls INSIDE its own box and opens at the
+  // top.  The REQ-0439 ancestor-walk + dev diagnostic are removed now the cause
+  // is known.  This tiny reset stays only as a harmless belt-and-suspenders
+  // against a Radix panel-focus scroll jump: force the freshly-mounted tab's own
+  // scrollTop to 0 on mount and the next frame.
   const resetTabScrollTop = useCallback((el: HTMLDivElement | null) => {
     if (!el) return
-
-    const walk = (fn: (node: HTMLElement, hop: number) => void) => {
-      let node: HTMLElement | null = el
-      for (let hop = 0; node && node !== document.body && hop < 12; hop++) {
-        fn(node, hop)
-        node = node.parentElement
-      }
-    }
-    const resetChain = () =>
-      walk((node) => {
-        if (node.scrollTop !== 0 && node.scrollHeight - node.clientHeight > 1) {
-          node.scrollTop = 0
-        }
-      })
-
-    if (import.meta.env.DEV) {
-      const rows: string[] = []
-      walk((node, hop) => {
-        if (node.scrollHeight - node.clientHeight > 1) {
-          rows.push(
-            `#${hop} ${node.tagName.toLowerCase()} scrollTop=${node.scrollTop} ` +
-              `scrollHeight=${node.scrollHeight} clientHeight=${node.clientHeight} :: ` +
-              String(node.className).slice(0, 60),
-          )
-        }
-      })
-      // eslint-disable-next-line no-console
-      console.log('[REQ-0439] drawer tab scroll chain on open:', rows.length ? rows : '(none overflow)')
-    }
-
-    resetChain()
-    requestAnimationFrame(resetChain)
-    // Late-settling content (font load, preview render) can re-grow the box and
-    // re-scroll it; keep resetting on resize for a short window after mount.
-    const ro = new ResizeObserver(resetChain)
-    ro.observe(el)
-    window.setTimeout(() => ro.disconnect(), 700)
+    el.scrollTop = 0
+    requestAnimationFrame(() => {
+      el.scrollTop = 0
+    })
   }, [])
 
   // REQ-0423 — drag & drop input file.  `dragActive` drives the drop-zone
@@ -316,7 +279,18 @@ export function TranscriptionDrawer({
     <Sheet open={open} onOpenChange={handleSheetOpenChange}>
       <SheetContent
         side="right"
-        className="max-w-[640px]"
+        // REQ-0440 — `overflow-hidden` on the drawer's outer flex-col is the
+        // structural fix for タブ2/3 opening bottom-weighted.  SheetContent is
+        // `flex flex-col … h-full inset-y-0` (box = viewport, clientHeight≈820),
+        // but WITHOUT overflow-hidden the definite height was not enforced on the
+        // `flex-1 min-h-0` chain below (body → Tabs → TabsContent): the tab
+        // content sized to its own 1738px content and grew the Sheet to 2158px
+        // instead of scrolling inside its box (RES-0439 diagnostic: every node
+        // already had scrollTop=0 — a layout break, not a scroll-position one).
+        // The working SettingsDialog uses the same `flex flex-col overflow-hidden`
+        // on its container; this brings the drawer to parity so each TabsContent
+        // scrolls internally and opens at the top.
+        className="max-w-[640px] overflow-hidden"
         hideClose={renderState === 'running'}
       >
         <SheetHeader className="flex-row items-baseline gap-3 pr-10">
