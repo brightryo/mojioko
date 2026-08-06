@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertCircle, AudioWaveform, FolderOpen, Lock, Loader2, Mic, Play, Settings2, Type, Upload, Video } from 'lucide-react'
 import { toast } from 'sonner'
@@ -202,15 +202,9 @@ export function TranscriptionDrawer({
     if (open) setActiveTab('input')
   }, [open])
 
-  // REQ-0425 — the three tabs share ONE scroll container.  Without this,
-  // switching from a scrolled tab left the next tab scrolled to the same
-  // offset, so its content appeared pushed down ("bottom-aligned").  Reset
-  // the shared scroll to the top on every tab change so each tab opens at
-  // its top edge.
-  const scrollRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 0
-  }, [activeTab])
+  // REQ-0437 — the per-tab scroll layout (each TabsContent is its own scroll
+  // area, and Radix unmounts inactive tabs) means switching remounts fresh at
+  // scrollTop 0; the old shared-container scroll-reset is no longer needed.
 
   // REQ-0423 — drag & drop input file.  `dragActive` drives the drop-zone
   // highlight; the drop reads Electron's `File.path` (available because the
@@ -306,20 +300,25 @@ export function TranscriptionDrawer({
                 </TabsTrigger>
               </TabsList>
 
-              {/* REQ-0424/0425 — plain BLOCK scroll container (not a flex
-                  column).  Block flow lays every tab's content out from the
-                  top, so タブ2 (style) / タブ3 (whisper) are always top-aligned
-                  with no flexbox align surprises.  Only タブ1 opts into
-                  min-h-full so its word-level toggle can pin to the bottom via
-                  mt-auto; that property is scoped to タブ1's element and cannot
-                  affect the other tabs.  Scroll is reset to top on tab change
-                  (scrollRef effect above). */}
-                <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+              {/* REQ-0437 — PER-TAB scroll (was a shared BLOCK wrapper + tab1
+                  min-h-full, which regressed to bottom-aligned タブ2/3 three
+                  times).  Now EACH tab content is its OWN `flex-1 min-h-0
+                  overflow-y-auto` scroll area, so:
+                    • タブ2/3 lay their content out from the top (normal block
+                      flow inside the scroll box) and can NEVER be bottom-weighted
+                      by another tab — the failure mode is structurally gone.
+                    • `overflow-x-hidden` prevents any horizontal scrollbar.
+                    • Only タブ1 is a `flex flex-col`, so its word-level toggle
+                      (mt-auto) pins to the bottom — scoped to タブ1's element.
+                    • Radix unmounts inactive tabs, so switching remounts fresh at
+                      scrollTop 0 (no manual scroll reset needed).
+                  The `tests/unit/transcription-drawer-tabs-layout.test.ts` guard
+                  pins this shape so a fourth regression fails CI, not the UI. */}
                 {/* ── タブ1 入力ファイル ─────────────────────────────── */}
-                {/* REQ-0423 — flex column filling the height so the word-level
-                    toggle (last child, mt-auto) pins to the tab bottom; the
-                    file / info / track sections above stay top-aligned. */}
-                <TabsContent value="input" className="flex flex-col gap-4 min-h-full">
+                <TabsContent
+                  value="input"
+                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-4"
+                >
                   {/* Supported-format hint (right-aligned reference line). */}
                   <div className="flex justify-end">
                     <span className="text-caption text-fg-muted">{t('inputVideo.hint')}</span>
@@ -553,8 +552,12 @@ export function TranscriptionDrawer({
 
                 {/* ── タブ2 文字スタイル ─────────────────────────────── */}
                 {/* Same three pieces the old SubtitleStyleDialog rendered.
-                    Stacked (not 2-col) to fit the 640px drawer. */}
-                <TabsContent value="style" className="space-y-3">
+                    Stacked (not 2-col) to fit the 640px drawer.  REQ-0437 —
+                    own scroll area, top-aligned, no h-scroll. */}
+                <TabsContent
+                  value="style"
+                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-3"
+                >
                   <StyleSamplePreview
                     defaults={styleDefaults}
                     thumbnail={thumbnail}
@@ -573,14 +576,17 @@ export function TranscriptionDrawer({
                 </TabsContent>
 
                 {/* ── タブ3 Whisper設定 ──────────────────────────────── */}
-                <TabsContent value="whisper">
+                {/* REQ-0437 — own scroll area, top-aligned, no h-scroll. */}
+                <TabsContent
+                  value="whisper"
+                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+                >
                   <WhisperAdvancedControls
                     transcriptionAdvanced={transcriptionAdvanced}
                     onUpdate={setTranscriptionAdvanced}
                     onReset={resetTranscriptionAdvanced}
                   />
                 </TabsContent>
-              </div>
             </Tabs>
           )}
 
