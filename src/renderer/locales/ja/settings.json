@@ -3,9 +3,20 @@
   "tabs": {
     "general": "一般",
     "fonts": "フォント",
-    "defaultStyle": "字幕スタイル",
-    "whisper": "Whisper設定",
+    "translation": "翻訳",
     "shortcuts": "ショートカット"
+  },
+  "translation": {
+    "hint": "文字起こし結果をインスペクタで自動翻訳します（プレビューのみ・字幕には書き込みません）。翻訳ツールの入手は STEP1 の「翻訳ツール」から。",
+    "needTool": "翻訳ツールが未ダウンロードです。STEP1 の「翻訳ツール」からダウンロードすると設定が有効になります。",
+    "autoTranslate": "自動翻訳",
+    "targetLang": "翻訳言語",
+    "lang_en": "英語",
+    "lang_ja": "日本語",
+    "lang_es": "スペイン語",
+    "lang_fr": "フランス語",
+    "lang_de": "ドイツ語",
+    "lang_pt": "ポルトガル語"
   },
   "general": {
     "language": "言語",

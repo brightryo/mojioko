@@ -6,6 +6,7 @@ import { OptionalBadge } from '@/components/ui/optional-badge'
 import { AccordionCollapse } from '@/components/ui/accordion-collapse'
 import { ManagedModelCard, ManagedModelDiskFooter } from '@/components/ui/managed-model-card'
 import { HelpIcon } from '@/components/help-icon'
+import { useTranslationToolStore } from '@/stores/translation-tool-store'
 import { formatBytes, formatBytesPerSec, formatEtaSeconds } from '@/lib/format'
 import { toast } from 'sonner'
 import {
@@ -67,6 +68,14 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // REQ-0426 — mirror the manager's local state into the shared store so the
+  // STEP 2 inspector can gate its auto-translate on the enabled-tool status
+  // without its own IPC.  Fires on refresh + every mutation (enable / disable /
+  // download-complete / uninstall) since they all flow through `setState`.
+  useEffect(() => {
+    useTranslationToolStore.getState().setState(state)
+  }, [state])
 
   function handleHeaderClick() {
     if (disabled) return

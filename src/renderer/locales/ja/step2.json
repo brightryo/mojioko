@@ -442,10 +442,12 @@
       "backgroundSectionHelp": "背景色を有効にすると、アウトライン色は無効になります。",
       "animationSection": "アニメーション",
       "translate": {
-        "label": "英訳（プレビュー）",
+        "label": "翻訳（プレビュー）",
         "loading": "翻訳中…",
         "error": "翻訳に失敗しました",
         "noActiveTool": "翻訳ツールを有効化してください",
+        "toolNotReady": "翻訳ツールをダウンロード／有効化してください",
+        "preloading": "ロード処理中…",
         "depsMissing": "翻訳サイドカーの依存が不足しています。以下を実行してください:",
         "cached": "cached",
         "warmTime": "{{ms}}ms",

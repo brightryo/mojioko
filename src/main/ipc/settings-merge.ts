@@ -117,6 +117,11 @@ export const SETTINGS_MERGE_RULES: { readonly [K in keyof AppSettings]-?: MergeR
   // REQ-0405 — same rule as activeModelId: the incoming value wins unless it is
   // undefined (a client that never sends the field keeps the persisted choice).
   translationToolActiveId: 'incoming-else-existing',
+  // REQ-0426 — 「翻訳」設定タブ: renderer-owned (Settings dialog is the only
+  // writer), so the payload is authoritative.  App.tsx sends both on every
+  // save (see the payload) — required for `incoming-wins` to round-trip.
+  translationAutoEnabled: 'incoming-wins',
+  translationTargetLang: 'incoming-wins',
   lastInputDir: 'incoming-else-existing',
   lastOutputDir: 'incoming-else-existing',
   // REQ-0157: written only by the `gpu-tool:select` IPC; the renderer's store

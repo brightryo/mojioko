@@ -753,6 +753,19 @@ export interface AppSettings {
    */
   translationToolActiveId?: TranslationToolId | null
   /**
+   * REQ-0426 — 「翻訳」設定タブ: whether the inspector auto-translates on cue
+   * selection.  Optional so settings files predating this REQ hydrate cleanly
+   * (absent ≡ false ≡ off).  Renderer-owned (`incoming-wins`).
+   */
+  translationAutoEnabled?: boolean
+  /**
+   * REQ-0426 — 「翻訳」設定タブ: the MADLAD target-language code (`<2xx>`) the
+   * inspector translates INTO when auto-translate is on.  A curated string
+   * (see `TRANSLATION_TARGET_LANGS`); optional so old settings hydrate as the
+   * default 'en'.  Renderer-owned (`incoming-wins`).
+   */
+  translationTargetLang?: string
+  /**
    * Currently selected subtitle font ID.  Drives both the CSS preview family
    * and the ASS `Style:` `Fontname` at burn-in time.  Optional because
    * existing settings files predating font selection do not contain it;

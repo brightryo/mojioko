@@ -102,6 +102,19 @@ export async function openTranslationToolsFolder(): Promise<void> {
  * persisted.  Returns the raw {@link IpcResult} so callers can branch on the
  * typed error code (NO_ACTIVE_TOOL / PYTHON_MISSING / SIDECAR_ERROR).
  */
-export async function translateCue(text: string): Promise<IpcResult<TranslateResult>> {
-  return window.electronAPI.translationTranslate(text)
+export async function translateCue(
+  text: string,
+  // REQ-0426 — target MADLAD language code from the 「翻訳」 settings tab.
+  target: string,
+): Promise<IpcResult<TranslateResult>> {
+  return window.electronAPI.translationTranslate(text, target)
+}
+
+/**
+ * REQ-0426 — warm the MADLAD sidecar (load model + tokenizer) ahead of the
+ * first real translation.  Fired when the user enables 自動翻訳 so the inspector
+ * preview is not cold on the first cue.
+ */
+export async function preloadTranslation(): Promise<IpcResult<{ loadMs: number }>> {
+  return window.electronAPI.translationPreload()
 }

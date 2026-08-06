@@ -3,9 +3,20 @@
   "tabs": {
     "general": "General",
     "fonts": "Fonts",
-    "defaultStyle": "Subtitle Style",
-    "whisper": "Whisper",
+    "translation": "Translation",
     "shortcuts": "Shortcuts"
+  },
+  "translation": {
+    "hint": "Auto-translate cues in the inspector (preview only — never written to the subtitles). Get the translation tool from STEP 1 → Translation tool.",
+    "needTool": "No translation tool downloaded. Download one from STEP 1 → Translation tool to enable these settings.",
+    "autoTranslate": "Auto-translate",
+    "targetLang": "Target language",
+    "lang_en": "English",
+    "lang_ja": "Japanese",
+    "lang_es": "Spanish",
+    "lang_fr": "French",
+    "lang_de": "German",
+    "lang_pt": "Portuguese"
   },
   "general": {
     "language": "Language",

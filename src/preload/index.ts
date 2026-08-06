@@ -88,8 +88,10 @@ const electronAPI = {
   translationToolSetActive: (toolId: TranslationToolId | null): Promise<IpcResult<TranslationToolsState>> =>
     ipcRenderer.invoke(Channels.translationToolSetActive, toolId),
   // REQ-0410 — one-shot translate for the inspector auto-translate prototype.
-  translationTranslate: (text: string): Promise<IpcResult<TranslateResult>> =>
-    ipcRenderer.invoke(Channels.translationTranslate, text),
+  translationTranslate: (text: string, target: string): Promise<IpcResult<TranslateResult>> =>
+    ipcRenderer.invoke(Channels.translationTranslate, text, target),
+  translationPreload: (): Promise<IpcResult<{ loadMs: number }>> =>
+    ipcRenderer.invoke(Channels.translationPreload),
 
   // Fonts
   fontList: (): Promise<IpcResult<FontsState>> =>

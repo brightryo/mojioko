@@ -159,10 +159,12 @@ describe('REQ-0283 — settings dialog fixed-height invariant', () => {
 })
 
 describe('REQ-0283 — tab count sanity (documents assumption of the fixed-height sizing)', () => {
-  it('renders exactly 5 tabs (general / fonts / defaultStyle / whisper / shortcuts)', () => {
-    // If a new tab is added the fixed height MAY need to bump.
-    // Bumping this test forces the contributor to think about it.
+  it('renders exactly 4 tabs (general / fonts / translation / shortcuts)', () => {
+    // REQ-0426 — the 字幕スタイル / Whisper設定 tabs were removed (moved to the
+    // STEP 1 setup drawer) and a 翻訳 tab was added: 5 → 4.
+    // If a new tab is added the fixed height MAY need to bump; bumping this
+    // test forces the contributor to think about it.
     const triggers = source.match(/<TabsTrigger\b/g) ?? []
-    expect(triggers.length).toBe(5)
+    expect(triggers.length).toBe(4)
   })
 })

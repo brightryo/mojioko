@@ -5,10 +5,42 @@
  *
  * The translation is a PROTOTYPE: shown in a throwaway inspector field, never
  * persisted and never written to `SubtitleEntry` (so CLAUDE.md §21 does not
- * apply).  English is fixed for now.
+ * apply).
+ *
+ * REQ-0426 — the target language is no longer fixed to English.  It follows the
+ * 「翻訳」 settings tab's 翻訳言語 dropdown (`settings.translationTargetLang`), and
+ * flows through the translate IPC to the MADLAD `<2xx>` token.  MADLAD-400
+ * supports 400+ codes; `TRANSLATION_TARGET_LANGS` is the curated dropdown set.
  */
 
-export type TranslationTarget = 'en'
+/**
+ * Curated MADLAD target-language codes offered by the 翻訳言語 dropdown.
+ *
+ * REQ-0426 — restricted to languages the BUNDLED fonts can actually render.
+ * The default font is Noto Sans JP (Latin + Japanese), so the list is Latin-
+ * script languages + Japanese only.  Non-Latin scripts are excluded until a
+ * font that covers them is bundled: zh (some simplified Han outside the JP
+ * Kanji set), ko (Hangul), ru (Cyrillic), ar (Arabic).  Add the language here
+ * when its font ships.
+ */
+export const TRANSLATION_TARGET_LANGS = [
+  'en', 'ja', 'es', 'fr', 'de', 'pt',
+] as const
+
+export type TranslationTarget = (typeof TRANSLATION_TARGET_LANGS)[number]
+
+/** Default target when settings predate REQ-0426 (matches the old fixed 'en'). */
+export const DEFAULT_TRANSLATION_TARGET: TranslationTarget = 'en'
+
+/** Narrow an arbitrary string (settings.json / IPC payload) to a known code. */
+export function isTranslationTarget(v: unknown): v is TranslationTarget {
+  return typeof v === 'string' && (TRANSLATION_TARGET_LANGS as readonly string[]).includes(v)
+}
+
+/** Coerce any input to a valid target, falling back to the default. */
+export function coerceTranslationTarget(v: unknown): TranslationTarget {
+  return isTranslationTarget(v) ? v : DEFAULT_TRANSLATION_TARGET
+}
 
 /** IPC result payload for a successful translation. */
 export interface TranslateResult {

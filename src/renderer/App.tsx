@@ -28,6 +28,8 @@ import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { refreshInstalledFonts, getInstalledFontIds } from '@/stores/installed-fonts-store'
 import { initDownloadActiveStore } from '@/services/download-active'
+import { useTranslationToolStore } from '@/stores/translation-tool-store'
+import { useTranslationLoadStore } from '@/stores/translation-load-store'
 import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts'
 import { toast } from 'sonner'
 import { saveCurrentProject } from '@/services/project-file'
@@ -128,6 +130,11 @@ function AppInner() {
     // an empty array if boot IPC fails, and per-DL broadcasts still
     // repopulate it on the next acquire/release.
     void initDownloadActiveStore()
+
+    // REQ-0426 — prime the shared translation-tools cache so the STEP 2
+    // inspector can gate auto-translate on the enabled-tool status from launch
+    // (the STEP 1 manager also keeps it fresh once mounted).
+    void useTranslationToolStore.getState().refresh()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // REQ-088 #4 — resolve the MSIX/NSIS tier once at app boot.  Downstream
@@ -140,6 +147,20 @@ function AppInner() {
       .then((value) => useAppEnvStore.getState().setIsMsix(value))
       .catch(() => useAppEnvStore.getState().setIsMsix(false))
   }, [])
+
+  // REQ-0426 — preload the MADLAD model when 自動翻訳 is enabled and an active
+  // (enabled) translation tool exists, so the first inspector translation is
+  // warm.  Turning 自動翻訳 OFF resets the load state (the sidecar stays
+  // resident; the next enable re-warms if needed).
+  const translationAutoEnabled = useSettingsStore((s) => s.translationAutoEnabled)
+  const translationActiveReady = useTranslationToolStore((s) => s.state?.activeId != null)
+  useEffect(() => {
+    if (translationAutoEnabled && translationActiveReady) {
+      void useTranslationLoadStore.getState().preload()
+    } else {
+      useTranslationLoadStore.getState().reset()
+    }
+  }, [translationAutoEnabled, translationActiveReady])
 
   // Mirror activeFontId into font-metrics so the no-arg legacy callers
   // (loadSubtitleFont, getLibassScale, etc.) target the currently selected
@@ -208,6 +229,10 @@ function AppInner() {
           transcriptionDefaults: s.transcriptionDefaults,
           transcriptionAdvanced: s.transcriptionAdvanced,
           autoLineBreak: s.autoLineBreak,
+          // REQ-0426 — renderer-owned (`incoming-wins`), so MUST be sent every
+          // save for the value to round-trip to settings.json.
+          translationAutoEnabled: s.translationAutoEnabled,
+          translationTargetLang: s.translationTargetLang,
           encoder: s.encoder,
           defaultAudioTrackIndex: s.defaultAudioTrackIndex,
           fadeDurationSec: s.fadeDurationSec,

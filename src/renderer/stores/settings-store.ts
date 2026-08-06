@@ -6,6 +6,7 @@ import { DEFAULT_LANGUAGE } from '../../shared/app-info'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, SHADOW_DEPTH_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
 import { DEFAULT_FONT_ID, isFontId, type FontId } from '../../shared/fonts'
 import { clampLineSpacingPercent } from '../../shared/line-spacing'
+import { DEFAULT_TRANSLATION_TARGET, coerceTranslationTarget } from '../../shared/translation'
 import { STYLE_PRESET_MAX, validatePresetName, type StylePreset } from '../../shared/style-preset'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 
@@ -18,6 +19,14 @@ interface SettingsStore {
   transcriptionDefaults: TranscriptionDefaults
   transcriptionAdvanced: TranscriptionAdvancedParams
   autoLineBreak: boolean
+  /**
+   * REQ-0426 — 「翻訳」設定タブ.  `translationAutoEnabled`: inspector auto-
+   * translates on cue selection.  `translationTargetLang`: MADLAD target code
+   * (`<2xx>`) it translates into.  Both are freely editable even when no
+   * translation tool is downloaded (the gating lives in the inspector).
+   */
+  translationAutoEnabled: boolean
+  translationTargetLang: string
   /** REQ-0311 §4 / REQ-0315 §2 — karaoke display style (see shared/karaoke-style). */
   encoder: EncoderSetting
   audioMode: AudioMode
@@ -84,6 +93,9 @@ interface SettingsStore {
   setTranscriptionAdvanced: (patch: Partial<TranscriptionAdvancedParams>) => void
   resetTranscriptionAdvanced: () => void
   setAutoLineBreak: (v: boolean) => void
+  /** REQ-0426 — 「翻訳」設定タブ setters. */
+  setTranslationAutoEnabled: (v: boolean) => void
+  setTranslationTargetLang: (v: string) => void
   setEncoder: (e: EncoderSetting) => void
   setAudioMode: (m: AudioMode) => void
   setDefaultAudioTrackIndex: (i: number) => void
@@ -121,7 +133,7 @@ interface SettingsStore {
   resetStep3Settings: () => void
 
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'stylePresets'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'translationAutoEnabled' | 'translationTargetLang' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'stylePresets'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -139,6 +151,10 @@ export const useSettingsStore = create<SettingsStore>()(
       },
       transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS },
       autoLineBreak: true,
+      // REQ-0426 — auto-translate off by default; target defaults to English
+      // (the previously-fixed target), so nothing changes until the user opts in.
+      translationAutoEnabled: false,
+      translationTargetLang: DEFAULT_TRANSLATION_TARGET,
       encoder: BURNIN_DEFAULTS.encoder,
       audioMode: BURNIN_DEFAULTS.audioMode,
       defaultAudioTrackIndex: BURNIN_DEFAULTS.defaultAudioTrackIndex,
@@ -165,6 +181,8 @@ export const useSettingsStore = create<SettingsStore>()(
       resetTranscriptionAdvanced: () =>
         set({ transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS } }),
       setAutoLineBreak: (v) => set({ autoLineBreak: v }),
+      setTranslationAutoEnabled: (v) => set({ translationAutoEnabled: v }),
+      setTranslationTargetLang: (v) => set({ translationTargetLang: v }),
       setEncoder: (e) => set({ encoder: e }),
       setAudioMode: (m) => set({ audioMode: m }),
       setDefaultAudioTrackIndex: (i) => set({ defaultAudioTrackIndex: i }),
@@ -309,6 +327,9 @@ export const useSettingsStore = create<SettingsStore>()(
           },
           transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS, ...ta },
           autoLineBreak: s.autoLineBreak ?? true,
+          // REQ-0426 — optional in AppSettings; absent ≡ off / default target.
+          translationAutoEnabled: s.translationAutoEnabled ?? false,
+          translationTargetLang: coerceTranslationTarget(s.translationTargetLang),
           // Step 3 session-only state — ALWAYS reset to defaults regardless
           // of what settings.json contains.
           audioMode: BURNIN_DEFAULTS.audioMode,
@@ -360,6 +381,10 @@ export const useSettingsStore = create<SettingsStore>()(
         transcriptionDefaults: state.transcriptionDefaults,
         transcriptionAdvanced: state.transcriptionAdvanced,
         autoLineBreak: state.autoLineBreak,
+        // REQ-0426 — dual persistence (localStorage here + settings.json via
+        // App.tsx save + `incoming-wins` merge), same as other renderer-owned settings.
+        translationAutoEnabled: state.translationAutoEnabled,
+        translationTargetLang: state.translationTargetLang,
         encoder: state.encoder,
         defaultAudioTrackIndex: state.defaultAudioTrackIndex,
         fadeDurationSec: state.fadeDurationSec,

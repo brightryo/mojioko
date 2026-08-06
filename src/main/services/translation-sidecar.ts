@@ -3,7 +3,7 @@ import { createInterface } from 'readline'
 import { existsSync } from 'fs'
 import { spawnProcess } from '../lib/child-process'
 import { getPythonExecutable, getTranslateSidecarPath } from '../lib/paths'
-import type { TranslateResult } from '../../shared/translation'
+import type { TranslateResult, TranslationTarget } from '../../shared/translation'
 import log from '../lib/logger'
 
 /**
@@ -146,7 +146,9 @@ function spawnSidecar(config: TranslateSpawnConfig): ChildProcess {
  */
 export async function translateText(
   text: string,
-  target: 'en',
+  // REQ-0426 — was fixed 'en'; now any curated MADLAD target code.  The value
+  // is written verbatim to the sidecar which builds the `<2xx>` token.
+  target: TranslationTarget,
   config: TranslateSpawnConfig,
 ): Promise<TranslateResult> {
   const desiredKey = keyFor(config)

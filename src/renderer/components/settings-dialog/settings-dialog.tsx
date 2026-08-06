@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
-import { useAppEnvStore } from '@/stores/app-env-store'
+import { useTranslationToolStore } from '@/stores/translation-tool-store'
 import {
   Dialog,
   DialogContent,
@@ -9,14 +10,14 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { FontPicker } from '@/components/font-picker/font-picker'
-import { DefaultStyleControls } from '@/components/default-style-controls/default-style-controls'
-import { WhisperAdvancedControls } from '@/components/whisper-advanced-controls/whisper-advanced-controls'
-// REQ-0298 §3 — FadeDurationSlider import removed with the General-tab
-// slider.  DefaultStyleControls (rendered in the 「字幕スタイル」 tab)
-// imports the slider itself; the setter + value are still subscribed
-// below and passed through to that component unchanged.
+import { TRANSLATION_TARGET_LANGS } from '../../../shared/translation'
+// REQ-0426 — the 「字幕スタイル」 and 「Whisper設定」 tabs were removed from this
+// dialog: both are now edited exclusively in STEP 1's setup drawer (タブ2 文字
+// スタイル / タブ3 Whisper設定), so a second copy here was duplicate surface.
+// DefaultStyleControls / WhisperAdvancedControls imports went with them.
 import { FolderPathInput } from './folder-path-input'
 import { ShortcutsSettingsTab } from './shortcuts-settings-tab'
 
@@ -37,12 +38,17 @@ export function SettingsDialog() {
   const setTheme = useSettingsStore((s) => s.setTheme)
   const baseColor = useSettingsStore((s) => s.baseColor)
   const setBaseColor = useSettingsStore((s) => s.setBaseColor)
-  const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
-  // REQ-0295 — needed by DefaultStyleControls to hide the karaoke row
-  // on free (NSIS) tier.  Falsey when the env store hasn't hydrated
-  // yet; `canUseKaraokeInTier(false)` returns false so the row stays
-  // hidden until MSIX detection settles.
-  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
+  // REQ-0426 — 「翻訳」 tab: auto-translate toggle + target language.  Both
+  // freely editable regardless of whether a translation tool is installed.
+  const translationAutoEnabled = useSettingsStore((s) => s.translationAutoEnabled)
+  const setTranslationAutoEnabled = useSettingsStore((s) => s.setTranslationAutoEnabled)
+  const translationTargetLang = useSettingsStore((s) => s.translationTargetLang)
+  const setTranslationTargetLang = useSettingsStore((s) => s.setTranslationTargetLang)
+  // REQ-0426 §4 — the translation controls are active only when ≥1 tool is
+  // DOWNLOADED; greyed (disabled) at 0 with a pointer to STEP 1's download flow.
+  const hasDownloadedTool = useTranslationToolStore(
+    (s) => s.state?.tools.some((tool) => tool.status === 'downloaded') ?? false,
+  )
   // REQ-0121 — audio track selector + input/output folder inputs.
   const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
   const setDefaultAudioTrackIndex = useSettingsStore((s) => s.setDefaultAudioTrackIndex)
@@ -54,19 +60,8 @@ export function SettingsDialog() {
   const defaultProjectDir = useSettingsStore((s) => s.defaultProjectDir)
   const setDefaultProjectDir = useSettingsStore((s) => s.setDefaultProjectDir)
 
-  // Default style — single source of truth lives on settingsStore.
-  // SubtitleStyleDialog reads & writes the same slice via REQ-016 wiring.
-  const transcriptionDefaults = useSettingsStore((s) => s.transcriptionDefaults)
-  const updateTranscriptionDefaults = useSettingsStore((s) => s.updateTranscriptionDefaults)
-  const autoLineBreak = useSettingsStore((s) => s.autoLineBreak)
-  const setAutoLineBreak = useSettingsStore((s) => s.setAutoLineBreak)
-
-  // Whisper engine — same slice that the STEP 1 「詳細設定」 dialog edits
-  // (REQ-019 #1).  Both surfaces stay in sync because both subscribe to
-  // settingsStore.transcriptionAdvanced.
-  const transcriptionAdvanced = useSettingsStore((s) => s.transcriptionAdvanced)
-  const setTranscriptionAdvanced = useSettingsStore((s) => s.setTranscriptionAdvanced)
-  const resetTranscriptionAdvanced = useSettingsStore((s) => s.resetTranscriptionAdvanced)
+  // REQ-0426 — the 字幕スタイル / Whisper設定 store subscriptions were removed
+  // with their tabs; those settings are edited in STEP 1's setup drawer now.
 
   // REQ-20260615-050 — the General-tab fade input was replaced with the
   // shared FadeDurationSlider.  No local draft / clamp logic is needed
@@ -142,8 +137,8 @@ export function SettingsDialog() {
           <TabsList className="shrink-0">
             <TabsTrigger value="general">{t('tabs.general')}</TabsTrigger>
             <TabsTrigger value="fonts">{t('tabs.fonts')}</TabsTrigger>
-            <TabsTrigger value="defaultStyle">{t('tabs.defaultStyle')}</TabsTrigger>
-            <TabsTrigger value="whisper">{t('tabs.whisper')}</TabsTrigger>
+            {/* REQ-0426 — 「翻訳」 replaces the removed 字幕スタイル / Whisper設定 tabs. */}
+            <TabsTrigger value="translation">{t('tabs.translation')}</TabsTrigger>
             <TabsTrigger value="shortcuts">{t('tabs.shortcuts')}</TabsTrigger>
           </TabsList>
 
@@ -314,27 +309,52 @@ export function SettingsDialog() {
             <FontPicker />
           </TabsContent>
 
-          {/* ─ Default style ──────────────────────────────────────── */}
-          <TabsContent value="defaultStyle" className="space-y-2">
-            <p className="text-body-sm text-fg-secondary">{t('defaultStyle.hint')}</p>
-            <DefaultStyleControls
-              defaults={transcriptionDefaults}
-              onUpdateDefaults={updateTranscriptionDefaults}
-              autoLineBreak={autoLineBreak}
-              onSetAutoLineBreak={setAutoLineBreak}
-              fadeDurationSec={fadeDurationSec}
-              isMsix={isMsix}
-            />
-          </TabsContent>
+          {/* ─ Translation (REQ-0426) ─────────────────────────────── */}
+          {/* Auto-translate toggle + target language.  Editable even with no
+              translation tool installed — the download / enable flow lives in
+              STEP 1's 翻訳ツール accordion, and the inspector greys its preview
+              until a tool is enabled. */}
+          <TabsContent value="translation" className="space-y-3">
+            <p className="text-body-sm text-fg-secondary">{t('translation.hint')}</p>
+            {/* REQ-0426 §4 — 0 downloaded tools ⇒ a note + greyed controls. */}
+            {!hasDownloadedTool && (
+              <p className="text-body-sm text-warning">{t('translation.needTool')}</p>
+            )}
+            <div className={cn('grid grid-cols-2 items-start gap-y-4 gap-x-6 pt-1', !hasDownloadedTool && 'opacity-50')}>
+              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
+                {t('translation.autoTranslate')}
+              </span>
+              <div className="flex items-center h-9">
+                <Switch
+                  checked={translationAutoEnabled}
+                  onCheckedChange={setTranslationAutoEnabled}
+                  disabled={!hasDownloadedTool}
+                  aria-label={t('translation.autoTranslate')}
+                />
+              </div>
 
-          {/* ─ Whisper engine ─────────────────────────────────────── */}
-          <TabsContent value="whisper" className="space-y-3">
-            <p className="text-body-sm text-fg-secondary">{t('whisper.hint')}</p>
-            <WhisperAdvancedControls
-              transcriptionAdvanced={transcriptionAdvanced}
-              onUpdate={setTranscriptionAdvanced}
-              onReset={resetTranscriptionAdvanced}
-            />
+              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
+                {t('translation.targetLang')}
+              </span>
+              <div className="flex items-center">
+                <Select
+                  value={translationTargetLang}
+                  onValueChange={setTranslationTargetLang}
+                  disabled={!hasDownloadedTool}
+                >
+                  <SelectTrigger className="h-9 w-full [&>span]:flex-1 [&>span]:text-center">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TRANSLATION_TARGET_LANGS.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {t(`translation.lang_${code}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </TabsContent>
 
           {/* ─ Shortcuts ──────────────────────────────────────────── */}

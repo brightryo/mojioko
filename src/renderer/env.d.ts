@@ -55,7 +55,8 @@ declare global {
       translationToolDownloadCancel: (channelId: string) => Promise<void>
       translationToolUninstall: (toolId: TranslationToolId) => Promise<IpcResult<TranslationToolsState>>
       translationToolSetActive: (toolId: TranslationToolId | null) => Promise<IpcResult<TranslationToolsState>>
-      translationTranslate: (text: string) => Promise<IpcResult<TranslateResult>>
+      translationTranslate: (text: string, target: string) => Promise<IpcResult<TranslateResult>>
+      translationPreload: () => Promise<IpcResult<{ loadMs: number }>>
 
       fontList: () => Promise<IpcResult<FontsState>>
       fontDownload: (fontId: FontId) => Promise<IpcResult<{ channelId: string }>>

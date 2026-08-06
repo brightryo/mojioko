@@ -442,10 +442,12 @@
       "backgroundSectionHelp": "Enabling the background disables the outline color.",
       "animationSection": "Animation",
       "translate": {
-        "label": "English (preview)",
+        "label": "Translation (preview)",
         "loading": "Translating…",
         "error": "Translation failed",
         "noActiveTool": "Enable a translation tool",
+        "toolNotReady": "Download / enable a translation tool",
+        "preloading": "Loading model…",
         "depsMissing": "The translation sidecar is missing a dependency. Run:",
         "cached": "cached",
         "warmTime": "{{ms}}ms",

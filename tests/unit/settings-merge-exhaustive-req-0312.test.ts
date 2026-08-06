@@ -65,6 +65,9 @@ describe('REQ-0312 §1 — the rule table pins every field s classification', ()
     transcriptionDefaults: 'incoming-wins',
     transcriptionAdvanced: 'incoming-wins',
     autoLineBreak: 'incoming-wins',
+    // REQ-0426 — 「翻訳」設定タブ.  Renderer-owned; App.tsx sends both every save.
+    translationAutoEnabled: 'incoming-wins',
+    translationTargetLang: 'incoming-wins',
     encoder: 'incoming-wins',
     defaultAudioTrackIndex: 'incoming-wins',
     fadeDurationSec: 'incoming-wins',
@@ -135,6 +138,23 @@ describe('REQ-0312 §1 — each rule kind behaves as its name claims', () => {
     delete (incoming as Partial<AppSettings>).theme
     const merged = mergeSettingsForSave(incoming, base({ theme: 'dark' }))
     expect('theme' in merged).toBe(false)
+  })
+
+  it('REQ-0426: translation settings round-trip via incoming-wins', () => {
+    // The renderer payload (Settings dialog) is authoritative for both.
+    const merged = mergeSettingsForSave(
+      base({ translationAutoEnabled: true, translationTargetLang: 'ja' }),
+      base({ translationAutoEnabled: false, translationTargetLang: 'en' }),
+    )
+    expect(merged.translationAutoEnabled).toBe(true)
+    expect(merged.translationTargetLang).toBe('ja')
+    // A `false` toggle must survive (incoming-wins takes the payload verbatim,
+    // so it is NOT collapsed to the existing `false`/`true`).
+    const off = mergeSettingsForSave(
+      base({ translationAutoEnabled: false }),
+      base({ translationAutoEnabled: true }),
+    )
+    expect(off.translationAutoEnabled).toBe(false)
   })
 
   it('incoming-else-existing: falls back only when the payload is nullish', () => {
