@@ -432,6 +432,7 @@
     },
     "inspector": {
       "textLabel": "テキスト",
+      "resetTextToTranscription": "文字起こし時点に戻す",
       "adjustTime": "時間を調整",
       "delete": "削除",
       "restore": "復元",

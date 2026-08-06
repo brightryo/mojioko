@@ -432,6 +432,7 @@
     },
     "inspector": {
       "textLabel": "Text",
+      "resetTextToTranscription": "Reset to transcription",
       "adjustTime": "Adjust time",
       "delete": "Delete",
       "restore": "Restore",
