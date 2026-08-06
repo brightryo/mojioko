@@ -100,16 +100,13 @@ export function ManagedModelCard({
             )}
           </div>
         </div>
-        {isInstalled && (
-          <span
-            className={cn(
-              // REQ-0421 — overlay reassignment: status pill (使用中 / ダウンロード済) caption → body-sm.
-              'flex-shrink-0 flex items-center gap-1 text-body-sm font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
-              isActive ? 'bg-primary text-fg-inverse' : 'bg-row-selected/15 text-info',
-            )}
-          >
+        {/* REQ-0434 — the active green 「使用中」 badge was removed (the active
+            state is already shown by the button below).  The downloaded-but-not-
+            active 「ダウンロード済」 badge stays. */}
+        {isInstalled && !isActive && (
+          <span className="flex-shrink-0 flex items-center gap-1 text-body-sm font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-row-selected/15 text-info">
             <Check className="h-2.5 w-2.5" />
-            {isActive ? labels.activeBadge : labels.installedBadge}
+            {labels.installedBadge}
           </span>
         )}
       </div>

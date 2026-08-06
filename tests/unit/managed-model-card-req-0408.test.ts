@@ -54,10 +54,11 @@ describe('ManagedModelCard — state → UI (REQ-0408)', () => {
     expect(html).not.toContain('>DL<')
   })
 
-  it('active → green tint + active badge + selected label', () => {
+  it('active → green tint + selected label, NO top active badge (REQ-0434)', () => {
     const html = markup({ state: 'active', onDeselect: () => {} })
     expect(html).toContain('border-primary') // active tint on the card
-    expect(html).toContain('ACTIVE') // top-right badge
+    // REQ-0434 — the top-right active badge was removed (the button shows state).
+    expect(html).not.toContain('ACTIVE')
     expect(html).toContain('INUSE') // active button label
     expect(html).toContain('title="DEL"') // delete still available
   })

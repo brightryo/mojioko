@@ -418,13 +418,7 @@ function CpuCard({
             {t('gpuTool.cpu.name')}
           </p>
         </div>
-        {isActive && (
-          <span className="flex-shrink-0 flex items-center gap-1 text-body-sm font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-primary text-fg-inverse">
-            {/* REQ-0421 — overlay reassignment: 使用中 pill caption → body-sm (matches ManagedModelCard) */}
-            <Check className="h-2.5 w-2.5" />
-            {t('gpuTool.cpu.activeBadge')}
-          </span>
-        )}
+        {/* REQ-0434 — active 「使用中」 badge removed (the button shows the state). */}
       </div>
 
       <p className="text-body-sm text-fg-muted leading-relaxed flex-1">
@@ -494,27 +488,29 @@ function GpuCard({
         <div className="min-w-0 flex items-center gap-2">
           <Zap className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
           <div className="min-w-0">
-            <p className="text-body font-semibold text-fg-primary leading-tight">
+            {/* REQ-0434 — tool name shortened to 「GPU」 (the CUDA / cuDNN detail
+                lives in the description) so it never wraps in the half-width
+                card; `truncate` is a safety net. */}
+            <p className="text-body font-semibold text-fg-primary leading-tight truncate">
               {t('gpuTool.gpu.name')}
             </p>
+            {/* REQ-0434 — the graphics-card name wraps (break-words) instead of
+                truncating, so long names like "NVIDIA GeForce RTX 3080 Ti" show
+                in full rather than "NVIDIA GeForce RTX 3…". */}
             <p
-              className={cn('text-body-sm mt-0.5 truncate', isActive ? 'text-primary-hover' : 'text-fg-disabled')}
+              className={cn('text-body-sm mt-0.5 break-words leading-tight', isActive ? 'text-primary-hover' : 'text-fg-disabled')}
               title={gpuName}
             >
               {gpuName}
             </p>
           </div>
         </div>
-        {isInstalled && (
-          <span
-            className={cn(
-              // REQ-0421 — overlay reassignment: 使用中 / 使用可能 pill caption → body-sm (matches ManagedModelCard).
-              'flex-shrink-0 flex items-center gap-1 text-body-sm font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
-              isActive ? 'bg-primary text-fg-inverse' : 'bg-row-selected/15 text-info',
-            )}
-          >
+        {/* REQ-0434 — active 「使用中」 badge removed; the downloaded-not-active
+            「使用可能」 badge stays. */}
+        {isInstalled && !isActive && (
+          <span className="flex-shrink-0 flex items-center gap-1 text-body-sm font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-row-selected/15 text-info">
             <Check className="h-2.5 w-2.5" />
-            {isActive ? t('gpuTool.gpu.activeBadge') : t('gpuTool.gpu.readyBadge')}
+            {t('gpuTool.gpu.readyBadge')}
           </span>
         )}
       </div>

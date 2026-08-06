@@ -485,7 +485,9 @@ export function WhisperModelManager({
                             downloading: t('model.downloading'),
                             cancel: t('model.cancelDownload'),
                             useThis: t('model.useThis'),
-                            selected: t('model.selected'),
+                            // REQ-0434 — active model button 「選択中」→「使用中」
+                            // (unify with the translation tool card).
+                            selected: t('model.active'),
                             installedBadge: t('model.installed'),
                             activeBadge: t('model.active'),
                             recommended: t('whisperModel.recommended'),
