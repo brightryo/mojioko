@@ -7,10 +7,11 @@
  * handling are layered in a follow-up (see §9 notes); this renders at the
  * source resolution.
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { startBurnin } from '../../services/ffmpeg-burnin'
 import { probeVideo } from '../../services/ffprobe'
 import { loadSettings } from '../../services/settings-store'
+import { getBinPath } from '../../lib/paths'
 import { parseProjectFile } from '../../../shared/project-file'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
 import { parseSrt } from '../../../renderer/lib/srt-parse'
@@ -20,6 +21,7 @@ import type { FontId } from '../../../shared/fonts'
 import { optString, type ParsedArgs } from '../args'
 import { CliError, emitProgress, emitSuccess, type CliContext } from '../output'
 import { detectFormat, entriesFromSegments } from '../subtitle-io'
+import { resolveTarget, contentScaleFactor, scaleEntries, scaleVideoTo } from '../scale-video'
 
 const ENCODERS = new Set(['auto', 'h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf'])
 const AUDIO_MODES = new Set(['preserve', 'simple', 'none'])
@@ -79,11 +81,32 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
   const containerFlag = optString(args.opts, 'container')
   const outputContainer: OutputContainer = containerFlag === 'same' ? 'sameAsInput' : 'mp4'
 
+  // --resolution WxH / --preset: pre-scale the canvas + scale cue pixel fields.
+  const tgt = resolveTarget(optString(args.opts, 'resolution'), optString(args.opts, 'preset'))
+  if (!tgt.ok) throw new CliError('USAGE', tgt.message, 'mojioko burn ... --preset shorts | --resolution 1080x1920')
+
+  let inputPath = videoPath
+  let renderVideo: VideoInfo = video
+  let scaledTemp: string | null = null
+  let resized = false
+  if (tgt.target) {
+    const f = contentScaleFactor(video.widthPx, video.heightPx, tgt.target.w, tgt.target.h)
+    entries = scaleEntries(entries, f)
+    try {
+      scaledTemp = await scaleVideoTo(getBinPath('ffmpeg'), videoPath, tgt.target.w, tgt.target.h)
+    } catch (e) {
+      throw new CliError('BURN_FAILED', `解像度スケーリングに失敗: ${e instanceof Error ? e.message : String(e)}`, 'ffmpeg の入力/コーデックを確認してください。')
+    }
+    inputPath = scaledTemp
+    renderVideo = { ...video, path: scaledTemp, widthPx: tgt.target.w, heightPx: tgt.target.h }
+    resized = true
+  }
+
   const request: BurninStartRequest = {
-    inputPath: videoPath,
+    inputPath,
     outputPath: out,
     entries,
-    video,
+    video: renderVideo,
     burnin: {
       horizontalPosition: BURNIN_DEFAULTS.horizontalPosition,
       verticalPosition: BURNIN_DEFAULTS.verticalPosition,
@@ -112,6 +135,14 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     )
   } catch (e) {
     throw new CliError('BURN_FAILED', e instanceof Error ? e.message : String(e), 'ffmpeg の入力/コーデック/出力先を確認してください。')
+  } finally {
+    if (scaledTemp) {
+      try {
+        rmSync(scaledTemp, { force: true })
+      } catch {
+        // best-effort temp cleanup
+      }
+    }
   }
   if (failedError) {
     throw new CliError('BURN_FAILED', failedError, 'ffmpeg の入力/コーデック/出力先を確認してください。')
@@ -119,8 +150,8 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
 
   return emitSuccess(ctx, 'burn', {
     outputPath: out,
-    resolution: { width: video.widthPx, height: video.heightPx },
-    resized: false,
+    resolution: { width: renderVideo.widthPx, height: renderVideo.heightPx },
+    resized,
     encoder: request.encoderSetting,
     audio: request.audioMode,
     sizeMB,
