@@ -95,12 +95,20 @@ def _ensure_loaded():
     return int((time.perf_counter() - t0) * 1000)
 
 
+# REQ-0438 — decode options shared by both translate paths.  Short inputs
+# ("ありがとう。" etc.) could send MADLAD into a repetition loop
+# ("Thank you, thank you, thank you."); `no_repeat_ngram_size=3` forbids
+# repeating any 3-token span (the primary fix) and a mild `repetition_penalty`
+# discourages token loops without hurting normal translation quality.  Tunable.
+_DECODE_KWARGS = dict(beam_size=1, no_repeat_ngram_size=3, repetition_penalty=1.1)
+
+
 def _translate(text, target):
     load_ms = _ensure_loaded()
     t0 = time.perf_counter()
     # MADLAD-400: the target language is a `<2xx>` token prefixed onto the source.
     source = _sp.encode(f"<2{target}> {text}", out_type=str)
-    results = _translator.translate_batch([source], beam_size=1)
+    results = _translator.translate_batch([source], **_DECODE_KWARGS)
     out = _sp.decode(results[0].hypotheses[0])
     translate_ms = int((time.perf_counter() - t0) * 1000)
     return out, load_ms, translate_ms
@@ -112,7 +120,7 @@ def _translate_batch(texts, target):
     load_ms = _ensure_loaded()
     t0 = time.perf_counter()
     sources = [_sp.encode(f"<2{target}> {tx}", out_type=str) for tx in texts]
-    results = _translator.translate_batch(sources, beam_size=1) if sources else []
+    results = _translator.translate_batch(sources, **_DECODE_KWARGS) if sources else []
     outs = [_sp.decode(r.hypotheses[0]) for r in results]
     translate_ms = int((time.perf_counter() - t0) * 1000)
     return outs, load_ms, translate_ms

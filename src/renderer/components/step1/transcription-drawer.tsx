@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertCircle, AudioWaveform, FolderOpen, Lock, Loader2, Mic, Play, Settings2, Type, Upload, Video } from 'lucide-react'
 import { toast } from 'sonner'
@@ -203,8 +203,22 @@ export function TranscriptionDrawer({
   }, [open])
 
   // REQ-0437 — the per-tab scroll layout (each TabsContent is its own scroll
-  // area, and Radix unmounts inactive tabs) means switching remounts fresh at
-  // scrollTop 0; the old shared-container scroll-reset is no longer needed.
+  // area, and Radix unmounts inactive tabs) keeps タブ2/3 top-aligned by shape.
+  //
+  // REQ-0438 — but a freshly-mounted tab can still be SCROLLED to the bottom by
+  // a post-mount side-effect (Radix moving focus into the panel, a child
+  // focusing / scrolling an element into view).  This is a scroll-POSITION jump,
+  // not a layout issue.  Force the active tab's OWN scroll box back to the top
+  // on mount AND on the next frame (after any such focus/scroll).  A callback
+  // ref attached to every TabsContent fires for whichever tab Radix mounts, so
+  // there is no shared scroll container.  Verified by scrollTop === 0, not by eye.
+  const resetTabScrollTop = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return
+    el.scrollTop = 0
+    requestAnimationFrame(() => {
+      el.scrollTop = 0
+    })
+  }, [])
 
   // REQ-0423 — drag & drop input file.  `dragActive` drives the drop-zone
   // highlight; the drop reads Electron's `File.path` (available because the
@@ -316,6 +330,7 @@ export function TranscriptionDrawer({
                   pins this shape so a fourth regression fails CI, not the UI. */}
                 {/* ── タブ1 入力ファイル ─────────────────────────────── */}
                 <TabsContent
+                  ref={resetTabScrollTop}
                   value="input"
                   className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-4"
                 >
@@ -555,6 +570,7 @@ export function TranscriptionDrawer({
                     Stacked (not 2-col) to fit the 640px drawer.  REQ-0437 —
                     own scroll area, top-aligned, no h-scroll. */}
                 <TabsContent
+                  ref={resetTabScrollTop}
                   value="style"
                   className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-3"
                 >
@@ -578,6 +594,7 @@ export function TranscriptionDrawer({
                 {/* ── タブ3 Whisper設定 ──────────────────────────────── */}
                 {/* REQ-0437 — own scroll area, top-aligned, no h-scroll. */}
                 <TabsContent
+                  ref={resetTabScrollTop}
                   value="whisper"
                   className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
                 >
