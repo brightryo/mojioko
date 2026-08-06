@@ -331,6 +331,7 @@
     "pause": "Pause",
     "error": "Failed to load file",
     "showInFolder": "Show in Folder",
+    "timecodeToggle": "Click to toggle simple / detailed (milliseconds · frame) time",
     "exportFrame": {
       "iconLabel": "Save current frame as image",
       "title": "Save current frame as image",

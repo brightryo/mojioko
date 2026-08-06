@@ -122,6 +122,9 @@ export const SETTINGS_MERGE_RULES: { readonly [K in keyof AppSettings]-?: MergeR
   // save (see the payload) — required for `incoming-wins` to round-trip.
   translationAutoEnabled: 'incoming-wins',
   translationTargetLang: 'incoming-wins',
+  // REQ-0443 §1 — preview timecode verbosity; renderer-owned, App.tsx sends it
+  // on every save so `incoming-wins` round-trips.
+  playbackTimeDetailed: 'incoming-wins',
   lastInputDir: 'incoming-else-existing',
   lastOutputDir: 'incoming-else-existing',
   // REQ-0157: written only by the `gpu-tool:select` IPC; the renderer's store

@@ -136,6 +136,10 @@ export function VideoPreviewPanel() {
   // / `isMsix` is gone: all-`\pos` is WYSIWYG with no runtime auto-stacking, so
   // the preview no longer computes stack offsets (see the overlay map below).
   const activeFontId       = useSettingsStore((s) => s.activeFontId)
+  // REQ-0443 §1 — preview timecode verbosity (simple M:SS ↔ detailed
+  // M:SS.mmm (fF)), persisted in AppSettings.  Toggled by clicking the readout.
+  const playbackTimeDetailed = useSettingsStore((s) => s.playbackTimeDetailed)
+  const setPlaybackTimeDetailed = useSettingsStore((s) => s.setPlaybackTimeDetailed)
   // REQ-20260615-050 — fade duration is now per-entry; no global slice
   // is read here.  The rAF loop below pulls `entry.fadeDurationSec`
   // from each active SubtitleEntry.
@@ -1508,10 +1512,17 @@ export function VideoPreviewPanel() {
           }}
           className="flex-1 h-1.5 cursor-pointer disabled:cursor-default disabled:opacity-40"
         />
-        <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-fg-secondary">
-          {/* REQ-0382 §A — frame-precision timecode: M:SS.mmm (f‹frame in second›). */}
-          {formatTimecode(editedCurrentTime, video.fps)}&nbsp;/&nbsp;{formatTimecode(editedTotalSec, video.fps)}
-        </span>
+        <button
+          type="button"
+          onClick={() => setPlaybackTimeDetailed(!playbackTimeDetailed)}
+          title={t('videoPreview.timecodeToggle')}
+          aria-label={t('videoPreview.timecodeToggle')}
+          className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-fg-secondary hover:text-fg-primary cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+        >
+          {/* REQ-0382 §A / REQ-0443 §1 — click toggles simple (M:SS) ↔ detailed
+              (M:SS.mmm (fF)); the choice is persisted in AppSettings. */}
+          {formatTimecode(editedCurrentTime, video.fps, playbackTimeDetailed)}&nbsp;/&nbsp;{formatTimecode(editedTotalSec, video.fps, playbackTimeDetailed)}
+        </button>
       </div>
 
       {/* Warning / approximate-preview note — REQ-20260614-001 §3:

@@ -233,6 +233,8 @@ function AppInner() {
           // save for the value to round-trip to settings.json.
           translationAutoEnabled: s.translationAutoEnabled,
           translationTargetLang: s.translationTargetLang,
+          // REQ-0443 §1 — renderer-owned (`incoming-wins`); sent every save.
+          playbackTimeDetailed: s.playbackTimeDetailed,
           encoder: s.encoder,
           defaultAudioTrackIndex: s.defaultAudioTrackIndex,
           fadeDurationSec: s.fadeDurationSec,

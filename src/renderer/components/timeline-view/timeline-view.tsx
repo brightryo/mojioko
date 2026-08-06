@@ -1842,8 +1842,9 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               value the user reads off the toolbar — stops sitting one tier
               below the body text on the rest of the screen.  w-[72px] →
               w-[84px] for the wider 15-px tabular digits ("130 px/秒" was
-              previously ~70px, now ~80px). */}
-          <span className="font-mono tabular-nums text-body text-fg-muted select-none w-[84px] text-center">
+              previously ~70px, now ~80px).
+              REQ-0443 §2 — zoom readout (「50 px/秒」) body → body-sm. */}
+          <span className="font-mono tabular-nums text-body-sm text-fg-muted select-none w-[84px] text-center">
             {t('timeline.toolbar.zoomLevel', { pps: pixelsPerSec })}
           </span>
         </div>

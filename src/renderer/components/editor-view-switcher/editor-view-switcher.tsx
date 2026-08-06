@@ -52,7 +52,8 @@ export function EditorViewSwitcher() {
           }}
           className={cn(
             // REQ-0421 (step2) — overlay reassignment: edit tab (タイムライン/一覧) body-sm → body.
-            'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body font-medium',
+            // REQ-0443 §2 — edit tab (タイムライン/一覧) body → caption.
+            'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-caption font-medium',
             'transition-colors duration-150',
             mode === key
               ? 'bg-surface-2 text-fg-primary'

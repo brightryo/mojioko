@@ -331,6 +331,7 @@
     "pause": "一時停止",
     "error": "ファイルの読み込みに失敗しました",
     "showInFolder": "フォルダで表示",
+    "timecodeToggle": "クリックで表示を簡易／詳細（ミリ秒・フレーム）に切り替え",
     "exportFrame": {
       "iconLabel": "現在のフレームを画像で保存",
       "title": "現在のフレームを画像で保存",

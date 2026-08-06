@@ -4,9 +4,14 @@
  */
 
 /**
- * Format a time (seconds) as `M:SS.mmm (fF)` — minutes, seconds, milliseconds,
- * and the 0-based frame number WITHIN that second (owner decision, REQ-0382 §A).
- * `H:MM:SS.mmm (fF)` once past an hour.
+ * Format a time (seconds) as a playhead timecode.
+ *
+ * `detailed` (default true, the historical behavior) → `M:SS.mmm (fF)`:
+ * minutes, seconds, milliseconds, and the 0-based frame number WITHIN that
+ * second (owner decision, REQ-0382 §A).  `H:MM:SS.mmm (fF)` once past an hour.
+ *
+ * `detailed === false` (REQ-0443 §1 "simple" mode) → `M:SS` / `H:MM:SS`:
+ * hours/minutes/seconds only, no milliseconds and no frame number.
  *
  * - Milliseconds are the true (rounded) fractional time, so sub-frame drift is
  *   still readable for the karaoke diagnosis this was filed for.
@@ -15,7 +20,7 @@
  * - Non-finite / negative time → 0; non-positive fps falls back to 30 so the
  *   label never shows NaN before metadata loads.
  */
-export function formatTimecode(sec: number, fps: number): string {
+export function formatTimecode(sec: number, fps: number, detailed = true): string {
   const f = Number.isFinite(fps) && fps > 0 ? fps : 30
   const x = Number.isFinite(sec) && sec >= 0 ? sec : 0
   const totalMs = Math.round(x * 1000)
@@ -24,11 +29,13 @@ export function formatTimecode(sec: number, fps: number): string {
   const h = Math.floor(whole / 3600)
   const m = Math.floor((whole % 3600) / 60)
   const s = whole % 60
-  const maxFrame = Math.max(0, Math.ceil(f) - 1)
-  const frame = Math.min(maxFrame, Math.floor((x - Math.floor(x)) * f + 1e-6))
   const hms = h > 0
     ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
     : `${m}:${String(s).padStart(2, '0')}`
+  // REQ-0443 §1 — simple mode: h/m/s only (no ms, no frame number).
+  if (!detailed) return hms
+  const maxFrame = Math.max(0, Math.ceil(f) - 1)
+  const frame = Math.min(maxFrame, Math.floor((x - Math.floor(x)) * f + 1e-6))
   return `${hms}.${String(ms).padStart(3, '0')} (f${frame})`
 }
 

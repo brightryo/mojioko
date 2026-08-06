@@ -766,6 +766,14 @@ export interface AppSettings {
    */
   translationTargetLang?: string
   /**
+   * REQ-0443 §1 — preview playhead timecode verbosity.  `false`/absent (the
+   * default) = "simple" (M:SS, no ms/frame); `true` = "detailed"
+   * (M:SS.mmm (fF)).  Toggled by clicking the timecode under the preview.
+   * Optional so settings files predating this REQ hydrate as simple.
+   * Renderer-owned (`incoming-wins`).
+   */
+  playbackTimeDetailed?: boolean
+  /**
    * Currently selected subtitle font ID.  Drives both the CSS preview family
    * and the ASS `Style:` `Fontname` at burn-in time.  Optional because
    * existing settings files predating font selection do not contain it;

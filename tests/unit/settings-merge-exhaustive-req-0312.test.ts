@@ -68,6 +68,8 @@ describe('REQ-0312 §1 — the rule table pins every field s classification', ()
     // REQ-0426 — 「翻訳」設定タブ.  Renderer-owned; App.tsx sends both every save.
     translationAutoEnabled: 'incoming-wins',
     translationTargetLang: 'incoming-wins',
+    // REQ-0443 §1 — preview timecode verbosity; renderer-owned, sent every save.
+    playbackTimeDetailed: 'incoming-wins',
     encoder: 'incoming-wins',
     defaultAudioTrackIndex: 'incoming-wins',
     fadeDurationSec: 'incoming-wins',

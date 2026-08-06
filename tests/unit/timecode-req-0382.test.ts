@@ -27,6 +27,19 @@ describe('formatTimecode (REQ-0382 §A)', () => {
     expect(formatTimecode(2.5, 0)).toBe('0:02.500 (f15)')  // fps → 30 fallback
     expect(formatTimecode(2.5, NaN)).toBe('0:02.500 (f15)')
   })
+
+  // REQ-0443 §1 — simple mode: h/m/s only (no ms, no frame).
+  it('simple mode (detailed=false) shows M:SS / H:MM:SS with no ms or frame', () => {
+    expect(formatTimecode(3.56, 30, false)).toBe('0:03')   // owner example
+    expect(formatTimecode(7.103, 30, false)).toBe('0:07')  // owner example
+    expect(formatTimecode(65.5, 30, false)).toBe('1:05')
+    expect(formatTimecode(3661.5, 30, false)).toBe('1:01:01')
+    expect(formatTimecode(0, 30, false)).toBe('0:00')
+    // fps is irrelevant in simple mode (no frame shown).
+    expect(formatTimecode(2.9, 0, false)).toBe('0:02')
+    // detailed defaults to true → unchanged from the historical signature.
+    expect(formatTimecode(2.5, 30)).toBe('0:02.500 (f15)')
+  })
 })
 
 describe('frameStepSec (REQ-0382 §B / REQ-0383)', () => {

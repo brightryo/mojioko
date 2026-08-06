@@ -27,6 +27,8 @@ interface SettingsStore {
    */
   translationAutoEnabled: boolean
   translationTargetLang: string
+  /** REQ-0443 §1 — preview timecode verbosity (false = simple M:SS, default). */
+  playbackTimeDetailed: boolean
   /** REQ-0311 §4 / REQ-0315 §2 — karaoke display style (see shared/karaoke-style). */
   encoder: EncoderSetting
   audioMode: AudioMode
@@ -96,6 +98,7 @@ interface SettingsStore {
   /** REQ-0426 — 「翻訳」設定タブ setters. */
   setTranslationAutoEnabled: (v: boolean) => void
   setTranslationTargetLang: (v: string) => void
+  setPlaybackTimeDetailed: (v: boolean) => void
   setEncoder: (e: EncoderSetting) => void
   setAudioMode: (m: AudioMode) => void
   setDefaultAudioTrackIndex: (i: number) => void
@@ -133,7 +136,7 @@ interface SettingsStore {
   resetStep3Settings: () => void
 
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'translationAutoEnabled' | 'translationTargetLang' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'stylePresets'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'translationAutoEnabled' | 'translationTargetLang' | 'playbackTimeDetailed' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'stylePresets'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -155,6 +158,8 @@ export const useSettingsStore = create<SettingsStore>()(
       // (the previously-fixed target), so nothing changes until the user opts in.
       translationAutoEnabled: false,
       translationTargetLang: DEFAULT_TRANSLATION_TARGET,
+      // REQ-0443 §1 — timecode starts simple (M:SS); click toggles to detailed.
+      playbackTimeDetailed: false,
       encoder: BURNIN_DEFAULTS.encoder,
       audioMode: BURNIN_DEFAULTS.audioMode,
       defaultAudioTrackIndex: BURNIN_DEFAULTS.defaultAudioTrackIndex,
@@ -183,6 +188,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setAutoLineBreak: (v) => set({ autoLineBreak: v }),
       setTranslationAutoEnabled: (v) => set({ translationAutoEnabled: v }),
       setTranslationTargetLang: (v) => set({ translationTargetLang: v }),
+      setPlaybackTimeDetailed: (v) => set({ playbackTimeDetailed: v }),
       setEncoder: (e) => set({ encoder: e }),
       setAudioMode: (m) => set({ audioMode: m }),
       setDefaultAudioTrackIndex: (i) => set({ defaultAudioTrackIndex: i }),
@@ -330,6 +336,8 @@ export const useSettingsStore = create<SettingsStore>()(
           // REQ-0426 — optional in AppSettings; absent ≡ off / default target.
           translationAutoEnabled: s.translationAutoEnabled ?? false,
           translationTargetLang: coerceTranslationTarget(s.translationTargetLang),
+          // REQ-0443 §1 — optional in AppSettings; absent ≡ simple.
+          playbackTimeDetailed: s.playbackTimeDetailed ?? false,
           // Step 3 session-only state — ALWAYS reset to defaults regardless
           // of what settings.json contains.
           audioMode: BURNIN_DEFAULTS.audioMode,
@@ -385,6 +393,8 @@ export const useSettingsStore = create<SettingsStore>()(
         // App.tsx save + `incoming-wins` merge), same as other renderer-owned settings.
         translationAutoEnabled: state.translationAutoEnabled,
         translationTargetLang: state.translationTargetLang,
+        // REQ-0443 §1 — dual persistence (localStorage + settings.json).
+        playbackTimeDetailed: state.playbackTimeDetailed,
         encoder: state.encoder,
         defaultAudioTrackIndex: state.defaultAudioTrackIndex,
         fadeDurationSec: state.fadeDurationSec,

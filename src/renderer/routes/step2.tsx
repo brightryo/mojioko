@@ -1393,7 +1393,9 @@ export default function Step2Route(_: Step2RouteProps) {
               type="button"
               onClick={() => setTableFilter(key)}
               className={cn(
-                'h-7 px-3 rounded-md text-body-sm font-medium transition-colors duration-150',
+                // REQ-0443 §2 — filter tab (すべて·N など) body-sm → caption
+                // (caption == body-sm == 14px today; semantic unification).
+                'h-7 px-3 rounded-md text-caption font-medium transition-colors duration-150',
                 tableFilter === key
                   ? 'bg-surface-2 text-fg-primary'
                   : 'text-fg-muted hover:text-fg-secondary'
