@@ -5,28 +5,26 @@
     "fonts": "Fonts",
     "translation": "Translation",
     "shortcuts": "Shortcuts",
-    "cli": "CLI"
+    "ai": "AI"
   },
-  "cli": {
-    "title": "Command line (CLI)",
-    "intro": "MOJIOKO can run headless from external agents/scripts such as Claude Code. It transcribes, translates, and burns subtitles fully non-interactively, returning results as JSON (stdout) and an exit code.",
-    "invocationLabel": "How to invoke",
-    "invocation": "MOJIOKO.exe <command> [args]\n(bundled shim: mojioko <command> [args])",
-    "commandsLabel": "Commands",
-    "cmd": {
-      "tools": "Inspect / set up tools, models, GPU",
-      "transcribe": "Video/audio → subtitles (.mojioko / SRT)",
-      "translate": "Subtitles → subtitles (translation)",
-      "burn": "Burn subtitles into video (resolution / presets)",
-      "run": "One-shot: transcribe → translate → burn"
-    },
-    "exampleLabel": "Example (transcribe → translate → burn)",
-    "example": "mojioko transcribe input.mp4 -o out.mojioko --lang ja\nmojioko translate out.mojioko --to en --from-original -o out.en.mojioko\nmojioko burn input.mp4 out.en.mojioko -o final.mp4 --preset shorts",
-    "seeAlso": "See `mojioko -h` (per-command: `mojioko <command> -h`). Fonts and style are inherited from this app's default subtitle style.",
-    "copyButton": "Copy instructions for Claude Code",
-    "copyToast": "Instructions copied to clipboard",
-    "copyError": "Copy failed",
-    "instruction": "The MOJIOKO CLI is at \"{{path}}\". First run \"{{path}}\" help --json and \"{{path}}\" status --json to see the available commands and current setup before starting. It can transcribe, translate, and burn subtitles into videos."
+  "ai": {
+    "title": "AI integration (MCP)",
+    "lead": "MOJIOKO connects to AI via MCP, so an assistant can drive it for you.\nJust ask Claude to transcribe, translate, or burn subtitles into a video.\nEverything runs locally on this PC.",
+    "desktopTitle": "Use with Claude Desktop",
+    "step1": "Export the MCP config (or copy it).",
+    "exportButton": "Export MCP config",
+    "copyConfigButton": "Copy config JSON",
+    "step2": "Add its contents to Claude Desktop under Settings > Extensions (or the config file).",
+    "step3": "Restart Claude Desktop.",
+    "step4": "Then just ask Claude, e.g. \"add subtitles to this video\".",
+    "exportToast": "MCP config exported",
+    "copyToast": "Copied to clipboard",
+    "actionError": "Action failed",
+    "codeTitle": "Use with Claude Code (advanced)",
+    "codeDesc": "Run this command in your terminal to register the server.",
+    "copyCodeButton": "Copy register command",
+    "clientsNote": "Supported clients: Claude Desktop and Claude Code (not claude.ai / Cowork).",
+    "cliRef": "For CLI details, run `mojioko -h`."
   },
   "translation": {
     "hint": "Auto-translate cues in the inspector (preview only — never written to the subtitles). Get the translation tool from STEP 1 → Translation tool.",

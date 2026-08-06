@@ -5,28 +5,26 @@
     "fonts": "フォント",
     "translation": "翻訳",
     "shortcuts": "ショートカット",
-    "cli": "CLI"
+    "ai": "AI連携"
   },
-  "cli": {
-    "title": "コマンドライン（CLI）",
-    "intro": "MOJIOKO は Claude Code などの外部エージェント／スクリプトからヘッドレス実行できます。文字起こし・翻訳・字幕の焼き込みを、完全非対話で実行し、結果は JSON（stdout）と終了コードで返します。",
-    "invocationLabel": "呼び出し方法",
-    "invocation": "MOJIOKO.exe <command> [args]\n（同梱シム: mojioko <command> [args]）",
-    "commandsLabel": "コマンド",
-    "cmd": {
-      "tools": "ツール／モデル／GPU の状態照会・セットアップ",
-      "transcribe": "動画/音声 → 字幕（.mojioko / SRT）",
-      "translate": "字幕 → 字幕（多言語翻訳）",
-      "burn": "字幕を動画へ焼き込み（解像度／プリセット対応）",
-      "run": "文字起こし→翻訳→焼き込みを一括実行"
-    },
-    "exampleLabel": "使用例（文字起こし → 翻訳 → 焼き込み）",
-    "example": "mojioko transcribe input.mp4 -o out.mojioko --lang ja\nmojioko translate out.mojioko --to en --from-original -o out.en.mojioko\nmojioko burn input.mp4 out.en.mojioko -o final.mp4 --preset shorts",
-    "seeAlso": "詳細は `mojioko -h`（コマンド別は `mojioko <command> -h`）。フォント・スタイルはこのアプリの既定字幕スタイルを継承します。",
-    "copyButton": "Claude Code 用の指示をコピー",
-    "copyToast": "指示をクリップボードにコピーしました",
-    "copyError": "コピーに失敗しました",
-    "instruction": "MOJIOKO CLI が \"{{path}}\" にあります。まず \"{{path}}\" help --json と \"{{path}}\" status --json を実行して、使えるコマンドと現在のセットアップ状況を確認してから作業してください。動画の文字起こし・翻訳・字幕焼き込みができます。"
+  "ai": {
+    "title": "AI連携（MCP）",
+    "lead": "MOJIOKO は MCP 接続で、AI から自動で使えます。\n文字起こし・翻訳・字幕の焼き込みを、Claude に頼むだけで実行できます。\n処理はすべてこの PC の中で完結します。",
+    "desktopTitle": "Claude Desktop で使う",
+    "step1": "MCP 設定を書き出す（またはコピー）。",
+    "exportButton": "MCP 設定を書き出す",
+    "copyConfigButton": "設定JSONをコピー",
+    "step2": "書き出した内容を Claude Desktop の 設定 > 拡張機能（または設定ファイル）に追加する。",
+    "step3": "Claude Desktop を再起動する。",
+    "step4": "あとは Claude に「この動画に字幕を付けて」と頼むだけ。",
+    "exportToast": "MCP 設定を書き出しました",
+    "copyToast": "クリップボードにコピーしました",
+    "actionError": "操作に失敗しました",
+    "codeTitle": "Claude Code で使う（上級者向け）",
+    "codeDesc": "ターミナルで次のコマンドを実行して登録します。",
+    "copyCodeButton": "登録コマンドをコピー",
+    "clientsNote": "対応クライアント：Claude Desktop・Claude Code（claude.ai / Cowork では利用できません）。",
+    "cliRef": "CLI の詳細は `mojioko -h` で確認できます。"
   },
   "translation": {
     "hint": "文字起こし結果をインスペクタで自動翻訳します（プレビューのみ・字幕には書き込みません）。翻訳ツールの入手は STEP1 の「翻訳ツール」から。",
