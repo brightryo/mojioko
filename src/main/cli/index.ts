@@ -22,6 +22,7 @@ import { runToolsCommand } from './commands/tools'
 import { runTranscribeCommand } from './commands/transcribe'
 import { runTranslateCommand } from './commands/translate'
 import { runBurnCommand } from './commands/burn'
+import { runRunCommand } from './commands/run'
 
 const COMMANDS = new Set(['tools', 'transcribe', 'translate', 'burn', 'run'])
 const HELP_TOKENS = new Set(['help', '-h', '--help'])
@@ -59,16 +60,7 @@ async function route(ctx: CliContext, command: string, args: ReturnType<typeof p
     case 'burn':
       return runBurnCommand(ctx, args)
     case 'run':
-      return emitFailure(
-        ctx,
-        command,
-        new CliError(
-          'NOT_IMPLEMENTED',
-          `Command "run" はまだ実装されていません（段階導入・spec §7.3）。`,
-          'dev-docs/specs/mojioko-cli.md の段階導入順を参照してください。',
-          { command, phase: '4' },
-        ),
-      )
+      return runRunCommand(ctx, args)
     default:
       return emitFailure(ctx, command, new CliError('USAGE', `unknown command: "${command}"`, 'mojioko -h でコマンド一覧を表示。'))
   }

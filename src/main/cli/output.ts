@@ -73,6 +73,11 @@ export interface CliContext {
   quiet: boolean
   /** `--verbose`: emit debug lines on stderr. */
   verbose: boolean
+  /**
+   * Internal: a sub-step of `run`. Suppresses the success envelope on stdout so
+   * only `run`'s final JSON is printed (errors still throw and propagate).
+   */
+  silent?: boolean
 }
 
 /** A structured progress line on stderr (JSONL). No-op under `--quiet`. */
@@ -100,6 +105,7 @@ export function emitSuccess(
   data: unknown,
   warnings: CliWarning[] = [],
 ): number {
+  if (ctx.silent) return EXIT_OK
   if (ctx.json) {
     process.stdout.write(JSON.stringify({ ok: true, command, data, warnings }) + '\n')
   } else {
