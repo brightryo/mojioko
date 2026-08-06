@@ -216,6 +216,9 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
                   sizeLabel={sizeLabel}
                   description={t(def.id === 'madlad400-3b' ? 'translationTool.desc3b' : 'translationTool.desc7b')}
                   state={cardState}
+                  // REQ-0432 — 3B is the recommended tool (lighter/faster), same
+                  // badge as Whisper's large-v3.
+                  recommended={def.id === 'madlad400-3b'}
                   isDownloading={isDownloading}
                   downloadPercent={dl?.percent ?? 0}
                   downloadDetail={dl?.detail ?? ''}
@@ -232,6 +235,7 @@ export function TranslationToolManager({ disabled, isOpen: controlledIsOpen, onO
                     selected: t('translationTool.inUse'),
                     installedBadge: t('translationTool.installedBadge'),
                     activeBadge: t('translationTool.inUse'),
+                    recommended: t('translationTool.recommended'),
                     deleteTitle: t('translationTool.delete'),
                   }}
                 />

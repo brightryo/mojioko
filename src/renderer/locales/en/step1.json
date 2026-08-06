@@ -103,8 +103,9 @@
   "translationTool": {
     "label": "Translation Tool",
     "optionalTag": "Optional",
-    "tooltip": "A local translation engine (MADLAD-400) for translating subtitles into many languages. Download and enable it when you need it. Running the translation itself arrives in a future update.",
-    "descriptionLong": "MADLAD-400 (Apache-2.0) is a local translation engine that covers 400+ languages with a single model. Download an int8 model and enable it. The translation feature itself is coming in a future update.",
+    "tooltip": "A local translation engine (MADLAD-400) for translating subtitles into many languages. Download and enable it when you need it.",
+    "descriptionLong": "MADLAD-400 is a free translation AI developed by Google. It covers many languages including Japanese↔English, and every translation runs entirely on your PC (no data is sent externally). Download and enable a model, then translate subtitles in one click or in bulk. Using a GPU makes it even faster.",
+    "recommended": "Recommended",
     "size3b": "MADLAD-400 3B",
     "size7b": "MADLAD-400 7B",
     "desc3b": "Lightweight and fast. Runs on typical machines.",
@@ -128,7 +129,7 @@
   "gpuTool": {
     "label": "Processing Device",
     "tooltip": "Choose CPU or a compatible NVIDIA GPU for transcription. GPU requires downloading CUDA/cuDNN runtimes (~1 GB) once; runs offline thereafter.",
-    "descriptionLong": "Choose whether to run transcription on CPU or GPU. Using the GPU requires downloading the CUDA / cuDNN runtimes first. After the download, select the device you want to use.",
+    "descriptionLong": "Choose whether to run transcription on CPU or GPU. Using the GPU requires downloading the CUDA / cuDNN runtimes first. After the download, select the device you want to use. A GPU speeds up not only transcription but translation too.",
     "cpu": {
       "name": "CPU",
       "description": "No download required. Works on every machine.",
@@ -176,7 +177,7 @@
     "privacyNote": "All processing runs locally on this PC"
   },
   "action": {
-    "startTranscription": "Start transcription",
+    "startTranscription": "Start transcribing",
     "transcribingWaiting": "Transcribing…",
     "transcribing": "Transcribing… {{percent}}%"
   },
