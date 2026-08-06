@@ -202,22 +202,58 @@ export function TranscriptionDrawer({
     if (open) setActiveTab('input')
   }, [open])
 
-  // REQ-0437 — the per-tab scroll layout (each TabsContent is its own scroll
-  // area, and Radix unmounts inactive tabs) keeps タブ2/3 top-aligned by shape.
+  // REQ-0437/0438 kept the per-tab layout but reset only the TabsContent's own
+  // scrollTop — and on real hardware タブ2/3 STILL opened scrolled to the bottom.
   //
-  // REQ-0438 — but a freshly-mounted tab can still be SCROLLED to the bottom by
-  // a post-mount side-effect (Radix moving focus into the panel, a child
-  // focusing / scrolling an element into view).  This is a scroll-POSITION jump,
-  // not a layout issue.  Force the active tab's OWN scroll box back to the top
-  // on mount AND on the next frame (after any such focus/scroll).  A callback
-  // ref attached to every TabsContent fires for whichever tab Radix mounts, so
-  // there is no shared scroll container.  Verified by scrollTop === 0, not by eye.
+  // REQ-0439 — that means the element that ACTUALLY scrolls is not necessarily
+  // the TabsContent: it can be an ancestor (the Sheet body / another wrapper),
+  // and a post-mount focus / reflow / late content load scrolls it down.  Stop
+  // guessing which node scrolls: walk from the mounted TabsContent UP through its
+  // ancestors (stopping before <body>) and reset scrollTop on EVERY node that
+  // actually overflows — the true scroll container is guaranteed to be in that
+  // chain.  Do it on mount, on the next frame (after focus), and on content
+  // resize (late previews/fonts), for ~700 ms.  A dev-only diagnostic logs which
+  // node scrolled and by how much on open, so the real culprit is measured, not
+  // assumed (§1c).  Verified by scrollTop === 0, not by eye.
   const resetTabScrollTop = useCallback((el: HTMLDivElement | null) => {
     if (!el) return
-    el.scrollTop = 0
-    requestAnimationFrame(() => {
-      el.scrollTop = 0
-    })
+
+    const walk = (fn: (node: HTMLElement, hop: number) => void) => {
+      let node: HTMLElement | null = el
+      for (let hop = 0; node && node !== document.body && hop < 12; hop++) {
+        fn(node, hop)
+        node = node.parentElement
+      }
+    }
+    const resetChain = () =>
+      walk((node) => {
+        if (node.scrollTop !== 0 && node.scrollHeight - node.clientHeight > 1) {
+          node.scrollTop = 0
+        }
+      })
+
+    if (import.meta.env.DEV) {
+      const rows: string[] = []
+      walk((node, hop) => {
+        if (node.scrollHeight - node.clientHeight > 1) {
+          rows.push(
+            `#${hop} ${node.tagName.toLowerCase()} scrollTop=${node.scrollTop} ` +
+              `scrollHeight=${node.scrollHeight} clientHeight=${node.clientHeight} :: ` +
+              String(node.className).slice(0, 60),
+          )
+        }
+      })
+      // eslint-disable-next-line no-console
+      console.log('[REQ-0439] drawer tab scroll chain on open:', rows.length ? rows : '(none overflow)')
+    }
+
+    resetChain()
+    requestAnimationFrame(resetChain)
+    // Late-settling content (font load, preview render) can re-grow the box and
+    // re-scroll it; keep resetting on resize for a short window after mount.
+    const ro = new ResizeObserver(resetChain)
+    ro.observe(el)
+    window.setTimeout(() => ro.disconnect(), 700)
   }, [])
 
   // REQ-0423 — drag & drop input file.  `dragActive` drives the drop-zone
