@@ -1138,33 +1138,18 @@ export function TimelineBlockInspector({
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         />
-        {/* REQ-0429 — reset ONLY the text back to the transcription-time value
-            (`entry.original.text`, the same snapshot the row Reset button uses).
-            Routes through `commitText` (history-aware) so it is undo-able and
-            leaves timing / style untouched.  Disabled when the text already
-            equals the original (nothing to reset) or the row is frozen. */}
-        <div className="flex justify-end">
-          <button
-            type="button"
-            disabled={isFrozen || entry.text === entry.original.text}
-            onClick={() => commitText(entry.original.text.replace(/\\N/g, '\n'))}
-            title={t('timeline.inspector.resetTextToTranscription')}
-            className={cn(
-              'inline-flex items-center gap-1 h-6 px-1.5 rounded text-caption text-fg-tertiary',
-              'hover:bg-surface-2 hover:text-fg-secondary transition-colors duration-150',
-              'disabled:opacity-40 disabled:pointer-events-none',
-            )}
-          >
-            <RotateCcw className="h-3 w-3" />
-            {t('timeline.inspector.resetTextToTranscription')}
-          </button>
-        </div>
-        {/* REQ-0410 / REQ-0426 / REQ-0427 — inspector translation section:
-            inline control + single-line result + result dialog (copy /
-            overwrite).  「上書き」 routes through `commitText`, the same
-            history-aware text-edit path the subtitle textarea uses, so it
-            round-trips through Undo (§21 N/A). */}
-        <TranslationPreview sourceText={entry.text} onOverwrite={commitText} />
+        {/* REQ-0410 / REQ-0426 / REQ-0427 / REQ-0435 — inspector translation
+            section: header (label · toggle · language · reset icon) + single-line
+            result + result dialog (copy / overwrite / editable).  The reset icon
+            (REQ-0435, consolidating the old REQ-0429 text button) and 「上書き」
+            both route through `commitText`, the same history-aware text-edit path
+            the subtitle textarea uses, so they round-trip through Undo (§21 N/A). */}
+        <TranslationPreview
+          sourceText={entry.text}
+          onOverwrite={commitText}
+          onResetToOriginal={() => commitText(entry.original.text.replace(/\\N/g, '\n'))}
+          resetDisabled={isFrozen || entry.text === entry.original.text}
+        />
         {!isAudioOnly && (
           <>
             {/* REQ-0337 §3 — the preset control MOVED OUT of this section

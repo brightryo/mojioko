@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Loader2, Maximize2 } from 'lucide-react'
+import { Loader2, Maximize2, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -57,10 +57,21 @@ type ViewState =
 export function TranslationPreview({
   sourceText,
   onOverwrite,
+  onResetToOriginal,
+  resetDisabled,
 }: {
   sourceText: string
   /** Write `text` into the current cue via the inspector's history-aware path. */
   onOverwrite: (text: string) => void
+  /**
+   * REQ-0435 — reset the cue text to the transcription-time original
+   * (`entry.original.text`).  Wired by the inspector to the same history-aware
+   * `commitText` path; consolidated here as the header reset icon (the old
+   * REQ-0429 text button under the textarea was removed).
+   */
+  onResetToOriginal: () => void
+  /** True when the text already equals the original, or the row is frozen. */
+  resetDisabled: boolean
 }): JSX.Element {
   const { t } = useTranslation(['step2', 'settings'])
   const [view, setView] = useState<ViewState>({ status: 'empty' })
@@ -163,30 +174,49 @@ export function TranslationPreview({
 
   return (
     <div className="space-y-1">
-      {/* ① Header — label(+ms) · language · 自動翻訳 toggle button. */}
+      {/* ① Header (REQ-0435) — label(+ms) · 自動翻訳 toggle · 翻訳言語 · reset icon.
+          The toggle + language grey out with the translation-tool gate; the
+          reset icon is a subtitle-text action, independent of that gate. */}
       <div className="flex items-center justify-between gap-2">
         <span className="min-w-0 truncate text-caption text-fg-tertiary">{headerLabel}</span>
-        <div className={cn('flex items-center gap-1.5 flex-shrink-0', !hasDownloaded && 'opacity-50')}>
-          <Select value={targetLang} onValueChange={setTargetLang} disabled={!hasDownloaded}>
-            <SelectTrigger className="h-6 w-24 text-caption">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TRANSLATION_TARGET_LANGS.map((code) => (
-                <SelectItem key={code} value={code}>
-                  {t(`translation.lang_${code}`, { ns: 'settings' })}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {/* REQ-0428 — 自動翻訳 toggle (Switch), same表現 as VAD / the Settings
-              tab's 自動翻訳; still single-source with settings-store. */}
-          <Switch
-            checked={autoEnabled}
-            onCheckedChange={setAutoEnabled}
-            disabled={!hasDownloaded}
-            aria-label={t('translation.autoTranslate', { ns: 'settings' })}
-          />
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className={cn('flex items-center gap-1.5', !hasDownloaded && 'opacity-50')}>
+            {/* REQ-0428 — 自動翻訳 toggle (Switch); single-source with settings-store. */}
+            <Switch
+              checked={autoEnabled}
+              onCheckedChange={setAutoEnabled}
+              disabled={!hasDownloaded}
+              aria-label={t('translation.autoTranslate', { ns: 'settings' })}
+            />
+            <Select value={targetLang} onValueChange={setTargetLang} disabled={!hasDownloaded}>
+              <SelectTrigger className="h-6 w-24 text-caption">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TRANSLATION_TARGET_LANGS.map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {t(`translation.lang_${code}`, { ns: 'settings' })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* REQ-0435 — reset the cue text to the transcription-time original
+              (icon-only; consolidates the old REQ-0429 text button). */}
+          <button
+            type="button"
+            disabled={resetDisabled}
+            onClick={onResetToOriginal}
+            aria-label={t('timeline.inspector.resetTextToTranscription')}
+            title={t('timeline.inspector.resetTextToTranscription')}
+            className={cn(
+              'inline-flex items-center justify-center h-6 w-6 rounded text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150',
+              'disabled:opacity-40 disabled:pointer-events-none',
+            )}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
 
