@@ -217,6 +217,63 @@ export function TranscriptionDrawer({
     requestAnimationFrame(() => {
       el.scrollTop = 0
     })
+
+    // REQ-0441 — タブ2/3 still open with the first element pushed down (~355px
+    // reported) even after REQ-0440's overflow-hidden.  Static review of every
+    // tab-content component + wrapper + globals.css found NO justify-center /
+    // spacer / min-height / margin that would explain it, so measure it on real
+    // hardware: after layout settles, log the first child's offsetTop and — for
+    // every ancestor up to the fixed SheetContent — its box metrics + computed
+    // flex alignment + scrollTop.  Whatever opens the gap (a scrolled node, a
+    // centering ancestor, or an oversized element) is in this chain and its
+    // numbers name it.  DEV-only; tree-shaken from prod (verified by bundle grep).
+    if (import.meta.env.DEV) {
+      requestAnimationFrame(() => {
+        const first = el.firstElementChild as HTMLElement | null
+        const chain: Record<string, unknown>[] = []
+        let sheetOverflowY: string | null = null
+        let node: HTMLElement | null = el
+        for (let hop = 0; node && node !== document.body && hop < 14; hop++) {
+          const cs = window.getComputedStyle(node)
+          // The SheetContent is the fixed, flex-col boundary REQ-0440 set
+          // overflow-hidden on — capture its overflowY to confirm 0440 is live.
+          if (
+            sheetOverflowY === null &&
+            cs.position === 'fixed' &&
+            cs.flexDirection === 'column'
+          ) {
+            sheetOverflowY = cs.overflowY
+          }
+          chain.push({
+            hop,
+            tag: node.tagName.toLowerCase(),
+            cls: String(node.className).slice(0, 72),
+            clientH: node.clientHeight,
+            scrollH: node.scrollHeight,
+            scrollTop: node.scrollTop,
+            offsetTop: node.offsetTop,
+            display: cs.display,
+            justify: cs.justifyContent,
+            align: cs.alignItems,
+            overflowY: cs.overflowY,
+          })
+          node = node.parentElement
+        }
+        // eslint-disable-next-line no-console
+        console.log('[REQ-0441] drawer tab top-blank diagnostic', {
+          firstChild: first
+            ? {
+                tag: first.tagName.toLowerCase(),
+                cls: String(first.className).slice(0, 72),
+                offsetTop: first.offsetTop,
+                clientH: first.clientHeight,
+              }
+            : null,
+          sheetContentOverflowY: sheetOverflowY,
+          chain,
+        })
+      })
+    }
   }, [])
 
   // REQ-0423 — drag & drop input file.  `dragActive` drives the drop-zone
@@ -582,7 +639,11 @@ export function TranscriptionDrawer({
                 <TabsContent
                   ref={resetTabScrollTop}
                   value="style"
-                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-3"
+                  // REQ-0441 — flex flex-col (matches tab1, which has never
+                  // regressed) so content is EXPLICITLY top-anchored (justify
+                  // defaults to flex-start) and immune to any inherited/computed
+                  // vertical centering.  gap-3 == the old space-y-3 spacing.
+                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-3"
                 >
                   <StyleSamplePreview
                     defaults={styleDefaults}
@@ -606,7 +667,10 @@ export function TranscriptionDrawer({
                 <TabsContent
                   ref={resetTabScrollTop}
                   value="whisper"
-                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+                  // REQ-0441 — flex flex-col (matches tab1) so the single
+                  // WhisperAdvancedControls block is EXPLICITLY top-anchored,
+                  // immune to any inherited/computed vertical centering.
+                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col"
                 >
                   <WhisperAdvancedControls
                     transcriptionAdvanced={transcriptionAdvanced}
