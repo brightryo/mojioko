@@ -8,6 +8,9 @@ import {
   detectMissingPythonModule,
   isDepsMissingError,
   buildDepsMissingMessage,
+  DEFAULT_TRANSLATION_TARGET,
+  coerceTranslationTarget,
+  TRANSLATION_TARGET_LANGS,
 } from '../../src/shared/translation'
 
 /**
@@ -20,6 +23,28 @@ describe('buildMadladSource', () => {
   it('prefixes the <2en> language token onto the source', () => {
     expect(buildMadladSource('こんにちは')).toBe('<2en> こんにちは')
     expect(buildMadladSource('hola', 'en')).toBe('<2en> hola')
+  })
+})
+
+// REQ-0431 — the default 翻訳言語 (translationTargetLang) is English.  The
+// settings-store initial value AND the hydrate-of-unset fallback both resolve
+// through these, so an absent/invalid saved value lands on English for
+// new/unset users (saved values are respected, not overridden).
+describe('REQ-0431 — default target language is English', () => {
+  it('DEFAULT_TRANSLATION_TARGET is en', () => {
+    expect(DEFAULT_TRANSLATION_TARGET).toBe('en')
+  })
+  it('an unset / invalid value coerces to en (new-user default)', () => {
+    expect(coerceTranslationTarget(undefined)).toBe('en')
+    expect(coerceTranslationTarget('')).toBe('en')
+    expect(coerceTranslationTarget('klingon')).toBe('en')
+  })
+  it('a valid saved value is respected (not forced to en)', () => {
+    expect(coerceTranslationTarget('ja')).toBe('ja')
+    expect(coerceTranslationTarget('pt')).toBe('pt')
+  })
+  it('en is an offered target', () => {
+    expect(TRANSLATION_TARGET_LANGS).toContain('en')
   })
 })
 
