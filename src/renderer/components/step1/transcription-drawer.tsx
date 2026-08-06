@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertCircle, AudioWaveform, FolderOpen, Lock, Loader2, Mic, Play, Settings2, Type, Upload, Video } from 'lucide-react'
+import {
+  AlertCircle,
+  AudioWaveform,
+  FolderOpen,
+  Lock,
+  Loader2,
+  Mic,
+  Play,
+  Settings2,
+  Type,
+  Upload,
+  Video
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -16,7 +28,7 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
+  SheetDescription
 } from '@/components/ui/sheet'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
@@ -168,7 +180,7 @@ export function TranscriptionDrawer({
   onStart,
   onCancel,
   wordSubtitleOn,
-  onWordSubtitleChange,
+  onWordSubtitleChange
 }: TranscriptionDrawerProps) {
   const { t } = useTranslation(['step1', 'step3', 'common'])
 
@@ -202,78 +214,20 @@ export function TranscriptionDrawer({
     if (open) setActiveTab('input')
   }, [open])
 
-  // REQ-0440 — the real cause of タブ2/3 opening bottom-weighted was the flex
-  // height chain, NOT scroll position: the RES-0439 diagnostic confirmed every
-  // overflow node already had scrollTop=0.  The fix is `overflow-hidden` on the
-  // SheetContent boundary (above), which makes the `flex-1 min-h-0` chain
-  // constrain so each TabsContent scrolls INSIDE its own box and opens at the
-  // top.  The REQ-0439 ancestor-walk + dev diagnostic are removed now the cause
-  // is known.  This tiny reset stays only as a harmless belt-and-suspenders
-  // against a Radix panel-focus scroll jump: force the freshly-mounted tab's own
-  // scrollTop to 0 on mount and the next frame.
+  // REQ-0442 — the real cause of タブ2/3 "bottom-aligned" was that the タブ
+  // <TabsContent> carried `display:flex`, which overrode the UA
+  // `[hidden]{display:none}` Radix uses to hide inactive tabs, so all three
+  // stacked (see the JSX below; `display:flex` is now off the TabsContent).
+  // With `[hidden]` working again, only the active tab renders.  The REQ-0441
+  // diagnostic that measured this is removed now the cause is known.  This tiny
+  // reset stays only as a harmless belt-and-suspenders against a Radix
+  // panel-focus scroll jump: force the freshly-shown tab's scrollTop to 0.
   const resetTabScrollTop = useCallback((el: HTMLDivElement | null) => {
     if (!el) return
     el.scrollTop = 0
     requestAnimationFrame(() => {
       el.scrollTop = 0
     })
-
-    // REQ-0441 — タブ2/3 still open with the first element pushed down (~355px
-    // reported) even after REQ-0440's overflow-hidden.  Static review of every
-    // tab-content component + wrapper + globals.css found NO justify-center /
-    // spacer / min-height / margin that would explain it, so measure it on real
-    // hardware: after layout settles, log the first child's offsetTop and — for
-    // every ancestor up to the fixed SheetContent — its box metrics + computed
-    // flex alignment + scrollTop.  Whatever opens the gap (a scrolled node, a
-    // centering ancestor, or an oversized element) is in this chain and its
-    // numbers name it.  DEV-only; tree-shaken from prod (verified by bundle grep).
-    if (import.meta.env.DEV) {
-      requestAnimationFrame(() => {
-        const first = el.firstElementChild as HTMLElement | null
-        const chain: Record<string, unknown>[] = []
-        let sheetOverflowY: string | null = null
-        let node: HTMLElement | null = el
-        for (let hop = 0; node && node !== document.body && hop < 14; hop++) {
-          const cs = window.getComputedStyle(node)
-          // The SheetContent is the fixed, flex-col boundary REQ-0440 set
-          // overflow-hidden on — capture its overflowY to confirm 0440 is live.
-          if (
-            sheetOverflowY === null &&
-            cs.position === 'fixed' &&
-            cs.flexDirection === 'column'
-          ) {
-            sheetOverflowY = cs.overflowY
-          }
-          chain.push({
-            hop,
-            tag: node.tagName.toLowerCase(),
-            cls: String(node.className).slice(0, 72),
-            clientH: node.clientHeight,
-            scrollH: node.scrollHeight,
-            scrollTop: node.scrollTop,
-            offsetTop: node.offsetTop,
-            display: cs.display,
-            justify: cs.justifyContent,
-            align: cs.alignItems,
-            overflowY: cs.overflowY,
-          })
-          node = node.parentElement
-        }
-        // eslint-disable-next-line no-console
-        console.log('[REQ-0441] drawer tab top-blank diagnostic', {
-          firstChild: first
-            ? {
-                tag: first.tagName.toLowerCase(),
-                cls: String(first.className).slice(0, 72),
-                offsetTop: first.offsetTop,
-                clientH: first.clientHeight,
-              }
-            : null,
-          sheetContentOverflowY: sheetOverflowY,
-          chain,
-        })
-      })
-    }
   }, [])
 
   // REQ-0423 — drag & drop input file.  `dragActive` drives the drop-zone
@@ -295,7 +249,7 @@ export function TranscriptionDrawer({
   // preferred/default track is chosen consistently (no first-track detour).
   const hasValidSelection = useMemo(
     () => audioTracks.some((tr) => tr.index === selectedTrack),
-    [audioTracks, selectedTrack],
+    [audioTracks, selectedTrack]
   )
   useEffect(() => {
     if (!open || hasValidSelection || audioTracks.length === 0) return
@@ -323,7 +277,7 @@ export function TranscriptionDrawer({
     const MAX_W = 280
     const MAX_H = 240
     const ratio =
-      (!isAudioOnly && video && video.widthPx > 0 && video.heightPx > 0)
+      !isAudioOnly && video && video.widthPx > 0 && video.heightPx > 0
         ? video.widthPx / video.heightPx
         : 16 / 9
     const widthBound = MAX_H * ratio > MAX_W
@@ -352,9 +306,7 @@ export function TranscriptionDrawer({
       >
         <SheetHeader className="flex-row items-baseline gap-3 pr-10">
           <SheetTitle>{t('drawer.title')}</SheetTitle>
-          <SheetDescription className="flex-1">
-            {t('drawer.subtitle')}
-          </SheetDescription>
+          <SheetDescription className="flex-1">{t('drawer.subtitle')}</SheetDescription>
         </SheetHeader>
 
         {/* REQ-0422 — idle = 3-tab setup; running / error take over the whole
@@ -381,26 +333,27 @@ export function TranscriptionDrawer({
                 </TabsTrigger>
               </TabsList>
 
-              {/* REQ-0437 — PER-TAB scroll (was a shared BLOCK wrapper + tab1
-                  min-h-full, which regressed to bottom-aligned タブ2/3 three
-                  times).  Now EACH tab content is its OWN `flex-1 min-h-0
-                  overflow-y-auto` scroll area, so:
-                    • タブ2/3 lay their content out from the top (normal block
-                      flow inside the scroll box) and can NEVER be bottom-weighted
-                      by another tab — the failure mode is structurally gone.
-                    • `overflow-x-hidden` prevents any horizontal scrollbar.
-                    • Only タブ1 is a `flex flex-col`, so its word-level toggle
-                      (mt-auto) pins to the bottom — scoped to タブ1's element.
-                    • Radix unmounts inactive tabs, so switching remounts fresh at
-                      scrollTop 0 (no manual scroll reset needed).
-                  The `tests/unit/transcription-drawer-tabs-layout.test.ts` guard
-                  pins this shape so a fourth regression fails CI, not the UI. */}
-                {/* ── タブ1 入力ファイル ─────────────────────────────── */}
-                <TabsContent
-                  ref={resetTabScrollTop}
-                  value="input"
-                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-4"
-                >
+              {/* REQ-0437 — PER-TAB scroll: each タブ's <TabsContent> is its own
+                  `flex-1 min-h-0 overflow-y-auto overflow-x-hidden` scroll box.
+                  REQ-0442 — the <TabsContent> itself MUST NOT carry `display:flex`
+                  (`flex flex-col`): an author `.flex{display:flex}` overrides the
+                  UA `[hidden]{display:none}` Radix uses to hide inactive tabs, so
+                  every tab rendered at once, stacked (firstChild.offsetTop=539) —
+                  the real cause behind six rounds of "bottom-aligned" reports.
+                  Any flex-col layout a tab needs (タブ1's word toggle pinned to the
+                  bottom via mt-auto) lives in an INNER wrapper div, never on the
+                  TabsContent.  `flex-1`/`min-h-0`/`overflow-*` don't set `display`,
+                  so they stay on the TabsContent.  The layout guard test pins this. */}
+              {/* ── タブ1 入力ファイル ─────────────────────────────── */}
+              <TabsContent
+                ref={resetTabScrollTop}
+                value="input"
+                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+              >
+                {/* REQ-0442 — inner flex-col wrapper: min-h-full fills the scroll
+                      box so the word toggle's mt-auto pins it to the bottom; taller
+                      content grows the wrapper and the TabsContent scrolls. */}
+                <div className="flex flex-col gap-4 min-h-full">
                   {/* Supported-format hint (right-aligned reference line). */}
                   <div className="flex justify-end">
                     <span className="text-caption text-fg-muted">{t('inputVideo.hint')}</span>
@@ -415,7 +368,12 @@ export function TranscriptionDrawer({
                   ) : (
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-9 rounded-md border border-line bg-input px-3.5 flex items-center min-w-0">
-                        <span className={cn('text-body truncate', video ? 'text-fg-primary' : 'text-fg-secondary/60')}>
+                        <span
+                          className={cn(
+                            'text-body truncate',
+                            video ? 'text-fg-primary' : 'text-fg-secondary/60'
+                          )}
+                        >
                           {video?.path ?? t('inputVideo.placeholder')}
                         </span>
                       </div>
@@ -497,10 +455,12 @@ export function TranscriptionDrawer({
                         'flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-4 py-10 text-center cursor-pointer transition-colors duration-150',
                         dragActive
                           ? 'border-primary bg-primary/5'
-                          : 'border-line hover:border-line-strong hover:bg-surface-2/30',
+                          : 'border-line hover:border-line-strong hover:bg-surface-2/30'
                       )}
                     >
-                      <Upload className={cn('h-7 w-7', dragActive ? 'text-primary' : 'text-fg-tertiary')} />
+                      <Upload
+                        className={cn('h-7 w-7', dragActive ? 'text-primary' : 'text-fg-tertiary')}
+                      />
                       <p className="text-body-sm text-fg-secondary">{t('inputVideo.dropHint')}</p>
                     </div>
                   ) : null}
@@ -539,7 +499,7 @@ export function TranscriptionDrawer({
                                 'flex flex-col gap-1 rounded-md border px-3 py-2 text-left transition-colors duration-150',
                                 selectedTrack === track.index
                                   ? 'border-primary'
-                                  : 'border-line hover:bg-surface-2/40',
+                                  : 'border-line hover:bg-surface-2/40'
                               )}
                             >
                               <div className="flex items-center gap-2 w-full">
@@ -548,7 +508,9 @@ export function TranscriptionDrawer({
                                   className={cn(
                                     // REQ-0421 — overlay reassignment: track label body → body-sm.
                                     'text-body-sm font-medium',
-                                    selectedTrack === track.index ? 'text-primary' : 'text-fg-primary',
+                                    selectedTrack === track.index
+                                      ? 'text-primary'
+                                      : 'text-fg-primary'
                                   )}
                                 >
                                   {t('audioTracks.trackLabel', { index: track.index })}
@@ -575,7 +537,8 @@ export function TranscriptionDrawer({
                     <div
                       className={cn(
                         'flex items-start gap-2 rounded-md border border-line/70 px-3 py-2 bg-surface-2/30',
-                        wordSubtitleLocked && 'cursor-pointer hover:bg-surface-2/60 hover:border-line',
+                        wordSubtitleLocked &&
+                          'cursor-pointer hover:bg-surface-2/60 hover:border-line'
                       )}
                       onClick={wordSubtitleLocked ? () => openUpsell() : undefined}
                       role={wordSubtitleLocked ? 'button' : undefined}
@@ -590,7 +553,9 @@ export function TranscriptionDrawer({
                             }
                           : undefined
                       }
-                      aria-label={wordSubtitleLocked ? t('drawer.wordSubtitle.lockedPaidOnly') : undefined}
+                      aria-label={
+                        wordSubtitleLocked ? t('drawer.wordSubtitle.lockedPaidOnly') : undefined
+                      }
                     >
                       <Checkbox
                         id="word-subtitle-experimental"
@@ -606,7 +571,7 @@ export function TranscriptionDrawer({
                             className={cn(
                               // REQ-0421 — overlay reassignment: 単語ごとに文字起こし label body-sm → title.
                               'text-title font-medium',
-                              wordSubtitleLocked && 'text-fg-secondary/70',
+                              wordSubtitleLocked && 'text-fg-secondary/70'
                             )}
                           >
                             {t('drawer.wordSubtitle.label')}
@@ -622,7 +587,7 @@ export function TranscriptionDrawer({
                           className={cn(
                             // REQ-0421 — overlay reassignment: word-subtitle description caption → body-sm.
                             'text-body-sm text-fg-muted leading-relaxed',
-                            wordSubtitleLocked && 'text-fg-secondary/60',
+                            wordSubtitleLocked && 'text-fg-secondary/60'
                           )}
                         >
                           {t('drawer.wordSubtitle.description')}
@@ -630,54 +595,54 @@ export function TranscriptionDrawer({
                       </div>
                     </div>
                   </div>
-                </TabsContent>
+                </div>
+              </TabsContent>
 
-                {/* ── タブ2 文字スタイル ─────────────────────────────── */}
-                {/* Same three pieces the old SubtitleStyleDialog rendered.
+              {/* ── タブ2 文字スタイル ─────────────────────────────── */}
+              {/* Same three pieces the old SubtitleStyleDialog rendered.
                     Stacked (not 2-col) to fit the 640px drawer.  REQ-0437 —
                     own scroll area, top-aligned, no h-scroll. */}
-                <TabsContent
-                  ref={resetTabScrollTop}
-                  value="style"
-                  // REQ-0441 — flex flex-col (matches tab1, which has never
-                  // regressed) so content is EXPLICITLY top-anchored (justify
-                  // defaults to flex-start) and immune to any inherited/computed
-                  // vertical centering.  gap-3 == the old space-y-3 spacing.
-                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-3"
-                >
-                  <StyleSamplePreview
-                    defaults={styleDefaults}
-                    thumbnail={thumbnail}
-                    video={video}
-                    autoLineBreak={autoLineBreak}
-                  />
-                  <FontPicker />
-                  <DefaultStyleControls
-                    defaults={styleDefaults}
-                    onUpdateDefaults={setStyleDefaults}
-                    autoLineBreak={autoLineBreak}
-                    onSetAutoLineBreak={setAutoLineBreak}
-                    fadeDurationSec={fadeDurationSec}
-                    isMsix={isMsix}
-                  />
-                </TabsContent>
+              <TabsContent
+                ref={resetTabScrollTop}
+                value="style"
+                // REQ-0442 — NO `display:flex` on the TabsContent (it overrides
+                // Radix's [hidden] and stacks tabs).  Block flow + space-y-3
+                // top-aligns the three style sections inside the scroll box.
+                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-3"
+              >
+                <StyleSamplePreview
+                  defaults={styleDefaults}
+                  thumbnail={thumbnail}
+                  video={video}
+                  autoLineBreak={autoLineBreak}
+                />
+                <FontPicker />
+                <DefaultStyleControls
+                  defaults={styleDefaults}
+                  onUpdateDefaults={setStyleDefaults}
+                  autoLineBreak={autoLineBreak}
+                  onSetAutoLineBreak={setAutoLineBreak}
+                  fadeDurationSec={fadeDurationSec}
+                  isMsix={isMsix}
+                />
+              </TabsContent>
 
-                {/* ── タブ3 Whisper設定 ──────────────────────────────── */}
-                {/* REQ-0437 — own scroll area, top-aligned, no h-scroll. */}
-                <TabsContent
-                  ref={resetTabScrollTop}
-                  value="whisper"
-                  // REQ-0441 — flex flex-col (matches tab1) so the single
-                  // WhisperAdvancedControls block is EXPLICITLY top-anchored,
-                  // immune to any inherited/computed vertical centering.
-                  className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col"
-                >
-                  <WhisperAdvancedControls
-                    transcriptionAdvanced={transcriptionAdvanced}
-                    onUpdate={setTranscriptionAdvanced}
-                    onReset={resetTranscriptionAdvanced}
-                  />
-                </TabsContent>
+              {/* ── タブ3 Whisper設定 ──────────────────────────────── */}
+              {/* REQ-0437 — own scroll area, top-aligned, no h-scroll. */}
+              <TabsContent
+                ref={resetTabScrollTop}
+                value="whisper"
+                // REQ-0442 — NO `display:flex` on the TabsContent (it overrides
+                // Radix's [hidden] and stacks tabs).  Block flow top-aligns the
+                // WhisperAdvancedControls block inside the scroll box.
+                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+              >
+                <WhisperAdvancedControls
+                  transcriptionAdvanced={transcriptionAdvanced}
+                  onUpdate={setTranscriptionAdvanced}
+                  onReset={resetTranscriptionAdvanced}
+                />
+              </TabsContent>
             </Tabs>
           )}
 
@@ -698,7 +663,7 @@ export function TranscriptionDrawer({
                             ? 'border-primary/40 bg-primary/10 text-primary'
                             : deviceInfo.fellBack
                               ? 'border-warning/40 bg-warning/10 text-warning'
-                              : 'border-line bg-surface-2 text-fg-tertiary',
+                              : 'border-line bg-surface-2 text-fg-tertiary'
                         )}
                         title={`compute_type=${deviceInfo.computeType}${deviceInfo.fellBack ? ' (CUDA fell back to CPU)' : ''}`}
                       >
@@ -712,7 +677,7 @@ export function TranscriptionDrawer({
                   </div>
                 )}
                 <div className="space-y-3">
-                  {(preparingPhase || runningLabelOverride) ? (
+                  {preparingPhase || runningLabelOverride ? (
                     <div className="h-2 rounded-full bg-surface-2 overflow-hidden">
                       <div className="h-full w-1/3 bg-primary rounded-full animate-progress-indeterminate" />
                     </div>
@@ -743,9 +708,7 @@ export function TranscriptionDrawer({
             <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-6 py-6 space-y-3">
               <div className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                <p className="text-body font-semibold">
-                  {t('drawer.errorTitle')}
-                </p>
+                <p className="text-body font-semibold">{t('drawer.errorTitle')}</p>
               </div>
               {errorMessage && (
                 <p className="text-body-sm text-fg-tertiary break-all font-mono selectable">
@@ -761,7 +724,7 @@ export function TranscriptionDrawer({
         <div
           className={cn(
             'mt-auto flex items-center gap-2 px-4 py-3 border-t border-line',
-            renderState === 'running' ? 'justify-end' : 'justify-between',
+            renderState === 'running' ? 'justify-end' : 'justify-between'
           )}
         >
           {renderState === 'running' ? (
@@ -770,11 +733,7 @@ export function TranscriptionDrawer({
             </Button>
           ) : (
             <>
-              <Button
-                variant="ghost"
-                size="md"
-                onClick={() => onOpenChange(false)}
-              >
+              <Button variant="ghost" size="md" onClick={() => onOpenChange(false)}>
                 {t('drawer.close')}
               </Button>
               {/*
@@ -789,12 +748,7 @@ export function TranscriptionDrawer({
                 onClick={startBlocked ? handleBlockedStart : undefined}
                 className="inline-flex"
               >
-                <Button
-                  variant="primary"
-                  size="md"
-                  onClick={onStart}
-                  disabled={!canStart}
-                >
+                <Button variant="primary" size="md" onClick={onStart} disabled={!canStart}>
                   <Play className="h-4 w-4 mr-1.5" />
                   {t('drawer.startRun')}
                 </Button>

@@ -36,26 +36,56 @@ const WHISPER_CODE = stripComments(
   ),
 )
 
-describe('REQ-0437 — transcription drawer tab layout guard', () => {
+/**
+ * The className string on each `<TabsContent>` opening tag (the scroll box
+ * itself, NOT any inner wrapper).  Built from the COMMENT-STRIPPED source so
+ * the `<TabsContent>` mentions inside explanatory comments don't count.  The
+ * lazy match stops at the first `className="…"` after each `<TabsContent`,
+ * which is the TabsContent's own.
+ */
+const TAB_CLASSNAMES = [...DRAWER_CODE.matchAll(/<TabsContent\b[\s\S]*?className="([^"]*)"/g)].map(
+  (m) => m[1],
+)
+
+describe('REQ-0437 / REQ-0442 — transcription drawer tab layout guard', () => {
   it('renders exactly three setup tabs', () => {
-    const tabs = DRAWER.match(/<TabsContent\b/g) ?? []
+    const tabs = DRAWER_CODE.match(/<TabsContent\b/g) ?? []
     expect(tabs.length).toBe(3)
+    expect(TAB_CLASSNAMES.length).toBe(3)
   })
 
   it('every tab is its own vertical scroll box (per-tab scroll)', () => {
-    // One `flex-1 min-h-0 overflow-y-auto` per tab so each fills + scrolls on
-    // its own; a shared wrapper is what let one tab bottom-weight another.
-    const perTab = DRAWER.match(/flex-1 min-h-0 overflow-y-auto/g) ?? []
-    expect(perTab.length).toBeGreaterThanOrEqual(3)
+    // Each TabsContent fills + scrolls on its own; a shared wrapper is what let
+    // one tab bottom-weight another (RES-0437).
+    for (const cls of TAB_CLASSNAMES) {
+      expect(cls).toContain('flex-1')
+      expect(cls).toContain('min-h-0')
+      expect(cls).toContain('overflow-y-auto')
+    }
   })
 
   it('every tab clips horizontal overflow (no h-scrollbar)', () => {
-    const clipX = DRAWER.match(/overflow-x-hidden/g) ?? []
-    expect(clipX.length).toBeGreaterThanOrEqual(3)
+    for (const cls of TAB_CLASSNAMES) expect(cls).toContain('overflow-x-hidden')
   })
 
-  it('does NOT use min-h-full (the fragile percentage trick that regressed)', () => {
-    expect(DRAWER_CODE).not.toContain('min-h-full')
+  it('no TabsContent sets display:flex — it overrides Radix [hidden] and stacks the tabs (REQ-0442)', () => {
+    // The root cause of six "bottom-aligned" rounds: an author `.flex`/`.inline-flex`
+    // (display:flex) on the TabsContent beats the UA `[hidden]{display:none}` Radix
+    // uses to hide inactive tabs, so all three render stacked.  flex-col layout a tab
+    // needs (タブ1's mt-auto word toggle) must live in an INNER wrapper div instead.
+    for (const cls of TAB_CLASSNAMES) {
+      const tokens = cls.split(/\s+/)
+      expect(tokens).not.toContain('flex')
+      expect(tokens).not.toContain('inline-flex')
+      expect(tokens).not.toContain('flex-col')
+    }
+  })
+
+  it('no TabsContent uses min-h-full on the scroll box (fragile trick; inner wrappers may)', () => {
+    // RES-0437 banned min-h-full on the scroll box.  REQ-0442's tab1 inner wrapper
+    // legitimately uses min-h-full for mt-auto bottom-pinning — that is NOT a
+    // TabsContent className, so this scoped check still forbids the fragile location.
+    for (const cls of TAB_CLASSNAMES) expect(cls).not.toContain('min-h-full')
   })
 
   it('does NOT reintroduce a shared scroll container with a scroll-reset ref', () => {

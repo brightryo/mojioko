@@ -243,12 +243,11 @@ export function StyleSamplePreview({
   }, [sampleText, autoLineBreak, font, videoWidthPx, videoHeightPx, defaults])
 
   return (
-    // REQ-0441 — `self-start` removed.  It existed for an old dialog GRID
-    // layout (align-self:stretch would have made the card grow to the tall form
-    // column's height).  This component is now used only inside the drawer's
-    // tab2, which is a `flex flex-col` scroll box (REQ-0441): there `self-start`
-    // resolves on the CROSS axis and would shrink the card off full width.  The
-    // card already sizes to its content height, so no self-alignment is needed.
+    // REQ-0441 — `self-start` removed.  It existed for an old dialog GRID layout
+    // (align-self:stretch would have made the card grow to the tall form column's
+    // height).  This component is now used only inside the drawer's tab2, which is
+    // a block-flow scroll box (REQ-0442), so align-self is inert either way and
+    // the vestigial class is dropped.  The card sizes to its content height.
     <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-2">
       <div className="flex items-center gap-1.5">
         <Type className="h-4 w-4 text-fg-secondary flex-shrink-0" />
