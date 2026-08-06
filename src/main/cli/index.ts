@@ -23,8 +23,9 @@ import { runTranscribeCommand } from './commands/transcribe'
 import { runTranslateCommand } from './commands/translate'
 import { runBurnCommand } from './commands/burn'
 import { runRunCommand } from './commands/run'
+import { runStatusCommand } from './commands/status'
 
-const COMMANDS = new Set(['tools', 'transcribe', 'translate', 'burn', 'run'])
+const COMMANDS = new Set(['tools', 'status', 'transcribe', 'translate', 'burn', 'run'])
 const HELP_TOKENS = new Set(['help', '-h', '--help'])
 
 /**
@@ -53,6 +54,8 @@ async function route(ctx: CliContext, command: string, args: ReturnType<typeof p
   switch (command) {
     case 'tools':
       return runToolsCommand(ctx, args)
+    case 'status':
+      return runStatusCommand(ctx)
     case 'transcribe':
       return runTranscribeCommand(ctx, args)
     case 'translate':

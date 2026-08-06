@@ -42,6 +42,14 @@ const EXIT_SUMMARY: [number, string][] = [
 
 const COMMANDS: CommandDoc[] = [
   {
+    name: 'status',
+    summary: '一括の状態＋ready/blockers（エージェントの最初の一手）',
+    usage: 'mojioko status [--json]',
+    options: ['(オプション無し)'],
+    examples: ['mojioko status --json'],
+    errorCodes: [],
+  },
+  {
     name: 'tools',
     summary: 'ツール・モデル・GPU の状態照会とセットアップ（list / download / use）',
     usage: 'mojioko tools [list|download|use] ...',
@@ -122,6 +130,11 @@ const CHAINED_EXAMPLE = [
 
 function pad(s: string, n: number): string {
   return s.length >= n ? s : s + ' '.repeat(n - s.length)
+}
+
+/** The command list ({name, summary}) — shared with `mojioko status`. */
+export function commandSummaries(): { name: string; summary: string }[] {
+  return COMMANDS.map((c) => ({ name: c.name, summary: c.summary }))
 }
 
 /** Print help. `command` targets per-command help; undefined = top-level. */
