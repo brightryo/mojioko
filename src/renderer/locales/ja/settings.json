@@ -4,7 +4,25 @@
     "general": "一般",
     "fonts": "フォント",
     "translation": "翻訳",
-    "shortcuts": "ショートカット"
+    "shortcuts": "ショートカット",
+    "cli": "CLI"
+  },
+  "cli": {
+    "title": "コマンドライン（CLI）",
+    "intro": "MOJIOKO は Claude Code などの外部エージェント／スクリプトからヘッドレス実行できます。文字起こし・翻訳・字幕の焼き込みを、完全非対話で実行し、結果は JSON（stdout）と終了コードで返します。",
+    "invocationLabel": "呼び出し方法",
+    "invocation": "MOJIOKO.exe <command> [args]\n（同梱シム: mojioko <command> [args]）",
+    "commandsLabel": "コマンド",
+    "cmd": {
+      "tools": "ツール／モデル／GPU の状態照会・セットアップ",
+      "transcribe": "動画/音声 → 字幕（.mojioko / SRT）",
+      "translate": "字幕 → 字幕（多言語翻訳）",
+      "burn": "字幕を動画へ焼き込み（解像度／プリセット対応）",
+      "run": "文字起こし→翻訳→焼き込みを一括実行"
+    },
+    "exampleLabel": "使用例（文字起こし → 翻訳 → 焼き込み）",
+    "example": "mojioko transcribe input.mp4 -o out.mojioko --lang ja\nmojioko translate out.mojioko --to en --from-original -o out.en.mojioko\nmojioko burn input.mp4 out.en.mojioko -o final.mp4 --preset shorts",
+    "seeAlso": "詳細は `mojioko -h`（コマンド別は `mojioko <command> -h`）。フォント・スタイルはこのアプリの既定字幕スタイルを継承します。"
   },
   "translation": {
     "hint": "文字起こし結果をインスペクタで自動翻訳します（プレビューのみ・字幕には書き込みません）。翻訳ツールの入手は STEP1 の「翻訳ツール」から。",

@@ -20,6 +20,7 @@ import { TRANSLATION_TARGET_LANGS } from '../../../shared/translation'
 // DefaultStyleControls / WhisperAdvancedControls imports went with them.
 import { FolderPathInput } from './folder-path-input'
 import { ShortcutsSettingsTab } from './shortcuts-settings-tab'
+import { CliSettingsTab } from './cli-settings-tab'
 
 // REQ-20260615-050 — fade range constants now live in shared/constants
 // (`FADE_DURATION_SEC_{MIN,MAX,STEP}`), driven by the FadeDurationSlider.
@@ -140,6 +141,8 @@ export function SettingsDialog() {
             {/* REQ-0426 — 「翻訳」 replaces the removed 字幕スタイル / Whisper設定 tabs. */}
             <TabsTrigger value="translation">{t('tabs.translation')}</TabsTrigger>
             <TabsTrigger value="shortcuts">{t('tabs.shortcuts')}</TabsTrigger>
+            {/* REQ-0447 — CLI tab, right of ショートカット (spec §12). */}
+            <TabsTrigger value="cli">{t('tabs.cli')}</TabsTrigger>
           </TabsList>
 
           {/* REQ-0283 — SINGLE scroll region wrapping every TabsContent.
@@ -369,6 +372,11 @@ export function SettingsDialog() {
               tab, like every other, just describes its content. */}
           <TabsContent value="shortcuts" className="space-y-3">
             <ShortcutsSettingsTab />
+          </TabsContent>
+
+          {/* ─ CLI (REQ-0447 §12) ─────────────────────────────────── */}
+          <TabsContent value="cli" className="space-y-3">
+            <CliSettingsTab />
           </TabsContent>
           </div>
         </Tabs>
