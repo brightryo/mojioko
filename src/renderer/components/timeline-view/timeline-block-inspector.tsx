@@ -1161,10 +1161,12 @@ export function TimelineBlockInspector({
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         />
-        {/* REQ-0410 — prototype auto-translate preview.  Fires on cue
-            selection, shows the English translation + timing, and is
-            never persisted (throwaway field; §21 N/A). */}
-        <TranslationPreview sourceText={entry.text} />
+        {/* REQ-0410 / REQ-0426 / REQ-0427 — inspector translation section:
+            inline control + single-line result + result dialog (copy /
+            overwrite).  「上書き」 routes through `commitText`, the same
+            history-aware text-edit path the subtitle textarea uses, so it
+            round-trips through Undo (§21 N/A). */}
+        <TranslationPreview sourceText={entry.text} onOverwrite={commitText} />
         {!isAudioOnly && (
           <>
             {/* REQ-0337 §3 — the preset control MOVED OUT of this section
