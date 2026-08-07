@@ -175,6 +175,49 @@ const COMMANDS: CommandDoc[] = [
     examples: ['mojioko export_frame input.mp4 out.mojioko -o frame.png --time 1.5'],
     errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'BURN_FAILED'],
   },
+  {
+    name: 'probe',
+    summary: '動画/音声のメタ情報（尺・解像度・fps・音声トラック）',
+    usage: 'mojioko probe <video>',
+    positionals: [{ name: 'video', required: true, desc: '動画/音声ファイル' }],
+    optionSpecs: [],
+    examples: ['mojioko probe input.mp4'],
+    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE'],
+  },
+  {
+    name: 'read_subtitle',
+    summary: '字幕の cue 一覧（index/開始/終了/テキスト）を返す',
+    usage: 'mojioko read_subtitle <subtitle>',
+    positionals: [{ name: 'subtitle', required: true, desc: '.mojioko または .srt' }],
+    optionSpecs: [{ flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '既定: 拡張子' }],
+    examples: ['mojioko read_subtitle out.mojioko'],
+    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE'],
+  },
+  {
+    name: 'edit_subtitle',
+    summary: 'cue 単位でテキストを差し替える（.mojioko はスタイル保持）',
+    usage: 'mojioko edit_subtitle <in> -o <out> --index N --text "..."',
+    positionals: [{ name: 'subtitle', required: true, desc: '.mojioko または .srt' }],
+    optionSpecs: [
+      OUT_REQ,
+      { flag: '--index', type: 'int', required: true, desc: '対象 cue 番号（0始まり・read_subtitle 参照）' },
+      { flag: '--text', type: 'string', required: true, desc: '新しいテキスト' },
+    ],
+    examples: ['mojioko edit_subtitle out.mojioko -o out.mojioko --index 3 --text "正しいテキスト"'],
+    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'OUTPUT_WRITE_FAILED'],
+  },
+  {
+    name: 'convert',
+    summary: '字幕フォーマット変換（.mojioko ↔ .srt・再文字起こしなし）',
+    usage: 'mojioko convert <in> -o <out> [--video <path>]',
+    positionals: [{ name: 'subtitle', required: true, desc: '.mojioko または .srt' }],
+    optionSpecs: [
+      OUT_REQ,
+      { flag: '--video', type: 'path', desc: 'SRT→.mojioko 時に参照する動画（任意）' },
+    ],
+    examples: ['mojioko convert out.mojioko -o out.srt'],
+    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'OUTPUT_WRITE_FAILED'],
+  },
 ]
 
 const COMMON_FLAGS: [string, string][] = [

@@ -26,12 +26,20 @@ import { runBurnCommand } from './commands/burn'
 import { runRunCommand } from './commands/run'
 import { runStatusCommand } from './commands/status'
 import { runExportFrameCommand } from './commands/export-frame'
+import { runProbeCommand } from './commands/probe'
+import { runReadSubtitleCommand } from './commands/read-subtitle'
+import { runEditSubtitleCommand } from './commands/edit-subtitle'
+import { runConvertCommand } from './commands/convert'
 import { runMcpServer } from '../mcp/server'
 import { installStdoutGuard } from '../mcp/stdout-guard'
 
-// REQ-0457 A4 — `export_frame` (hyphen alias `export-frame`) renders one
-// verification still. Underscore matches the MCP tool name.
-const COMMANDS = new Set(['tools', 'status', 'transcribe', 'translate', 'burn', 'run', 'mcp', 'export_frame', 'export-frame'])
+// REQ-0457 — underscore names match the MCP tools; hyphen aliases are accepted
+// for CLI ergonomics.
+const COMMANDS = new Set([
+  'tools', 'status', 'transcribe', 'translate', 'burn', 'run', 'mcp',
+  'export_frame', 'export-frame', 'probe', 'read_subtitle', 'read-subtitle',
+  'edit_subtitle', 'edit-subtitle', 'convert',
+])
 const HELP_TOKENS = new Set(['help', '-h', '--help'])
 
 /**
@@ -86,6 +94,16 @@ async function route(ctx: CliContext, command: string, args: ReturnType<typeof p
     case 'export_frame':
     case 'export-frame':
       return runExportFrameCommand(ctx, args)
+    case 'probe':
+      return runProbeCommand(ctx, args)
+    case 'read_subtitle':
+    case 'read-subtitle':
+      return runReadSubtitleCommand(ctx, args)
+    case 'edit_subtitle':
+    case 'edit-subtitle':
+      return runEditSubtitleCommand(ctx, args)
+    case 'convert':
+      return runConvertCommand(ctx, args)
     default:
       return emitFailure(ctx, command, new CliError('USAGE', `unknown command: "${command}"`, 'mojioko -h でコマンド一覧を表示。'))
   }

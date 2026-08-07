@@ -19,6 +19,10 @@ import { runTranslateCommand } from '../cli/commands/translate'
 import { runBurnCommand } from '../cli/commands/burn'
 import { runRunCommand } from '../cli/commands/run'
 import { runExportFrameCommand } from '../cli/commands/export-frame'
+import { runProbeCommand } from '../cli/commands/probe'
+import { runReadSubtitleCommand } from '../cli/commands/read-subtitle'
+import { runEditSubtitleCommand } from '../cli/commands/edit-subtitle'
+import { runConvertCommand } from '../cli/commands/convert'
 import { runToolsCommand } from '../cli/commands/tools'
 import { createJob, finishJob, getJob, jobSnapshot, updateJobStage, setJobCancel, listJobs, cancelJob } from './jobs'
 
@@ -176,6 +180,63 @@ export const TOOLS: ToolSpec[] = [
       fn: runExportFrameCommand,
       args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time) }),
     }),
+  },
+  {
+    name: 'probe',
+    description: '動画/音声のメタ情報（尺・解像度・fps・音声トラック）を返す（同梱 ffprobe）。',
+    inputSchema: {
+      type: 'object',
+      required: ['input'],
+      properties: { input: { type: 'string', description: '動画/音声ファイルの絶対パス' } },
+      additionalProperties: false,
+    },
+    async: false,
+    build: (i) => ({ fn: runProbeCommand, args: toArgs([str(i.input)], {}) }),
+  },
+  {
+    name: 'read_subtitle',
+    description: '字幕(.mojioko/SRT)の cue 一覧（index/開始/終了/テキスト）を返す。誤認識の確認・提示に。',
+    inputSchema: {
+      type: 'object',
+      required: ['input'],
+      properties: { input: { type: 'string', description: '.mojioko または .srt の絶対パス' } },
+      additionalProperties: false,
+    },
+    async: false,
+    build: (i) => ({ fn: runReadSubtitleCommand, args: toArgs([str(i.input)], {}) }),
+  },
+  {
+    name: 'edit_subtitle',
+    description: 'cue 単位でテキストを差し替える（誤認識の修正ループを閉じる）。.mojioko はスタイル保持。',
+    inputSchema: {
+      type: 'object',
+      required: ['input', 'out', 'index', 'text'],
+      properties: {
+        input: { type: 'string', description: '入力字幕（.mojioko/.srt）' },
+        out: { type: 'string', description: '出力パス' },
+        index: { type: 'integer', description: '対象 cue 番号（read_subtitle の index・0始まり）' },
+        text: { type: 'string', description: '新しいテキスト' },
+      },
+      additionalProperties: false,
+    },
+    async: false,
+    build: (i) => ({ fn: runEditSubtitleCommand, args: toArgs([str(i.input)], { out: str(i.out), index: numStr(i.index), text: typeof i.text === 'string' ? i.text : undefined }) }),
+  },
+  {
+    name: 'convert',
+    description: '字幕フォーマット変換（.mojioko ↔ .srt・再文字起こしなし）。',
+    inputSchema: {
+      type: 'object',
+      required: ['input', 'out'],
+      properties: {
+        input: { type: 'string', description: '入力字幕（.mojioko/.srt）' },
+        out: { type: 'string', description: '出力パス（拡張子で形式判定）' },
+        video: { type: 'string', description: 'SRT→.mojioko 時に参照する動画（任意）' },
+      },
+      additionalProperties: false,
+    },
+    async: false,
+    build: (i) => ({ fn: runConvertCommand, args: toArgs([str(i.input)], { out: str(i.out), video: str(i.video) }) }),
   },
   {
     name: 'tools_download',

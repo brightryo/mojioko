@@ -150,6 +150,12 @@ try {
       if (pd?.status === 'done' || pd?.status === 'failed') { efDone = pd; break }
     }
     check('export_frame job done + PNG exists', efDone?.status === 'done' && existsSync(framePng), `status=${efDone?.status}`)
+
+    // 4d) REQ-0457 Phase C — sync tools: probe + read_subtitle.
+    const pr = parseContent(await rpc('tools/call', { name: 'probe', arguments: { input: clip } }))
+    check('probe returns dims', pr?.data?.width > 0 && pr?.data?.height > 0, `${pr?.data?.width}x${pr?.data?.height}`)
+    const rd = parseContent(await rpc('tools/call', { name: 'read_subtitle', arguments: { input: out } }))
+    check('read_subtitle returns cue array', Array.isArray(rd?.data?.cues))
   } else {
     log('NOTE: status.ready=false — skipping transcribe job.')
     for (const b of stData?.data?.blockers || []) log(`  - ${b.what}: ${b.command}`)

@@ -110,6 +110,19 @@ try {
     check('export_frame exits 0', ef.code === 0, `code=${ef.code}/${ef.json?.code || ''}`)
     check('export_frame produced a PNG (real pixels)', existsSync(efPng) && probeWH(efPng) === '640,360', probeWH(efPng))
     check('export_frame reports cueVisible + sizeBytes', ef.json?.data?.cueVisible === true && ef.json?.data?.sizeBytes > 0)
+
+    // REQ-0457 Phase C — probe / read_subtitle / edit_subtitle / convert.
+    const pr = cli(['probe', efClip], 30000)
+    check('probe returns dims + fps + audio', pr.code === 0 && pr.json?.data?.width === 640 && pr.json?.data?.height === 360 && typeof pr.json?.data?.fps === 'number', `${pr.json?.data?.width}x${pr.json?.data?.height}`)
+    const rd = cli(['read_subtitle', efSrt], 30000)
+    check('read_subtitle returns cues', rd.code === 0 && rd.json?.data?.cueCount === 1 && !!rd.json?.data?.cues?.[0]?.text)
+    const edited = join(work, 'edited.srt')
+    const ed = cli(['edit_subtitle', efSrt, '-o', edited, '--index', '0', '--text', 'corrected cue'], 30000)
+    const rd2 = cli(['read_subtitle', edited], 30000)
+    check('edit_subtitle replaces cue text', ed.code === 0 && rd2.json?.data?.cues?.[0]?.text === 'corrected cue', rd2.json?.data?.cues?.[0]?.text)
+    const cvMoj = join(work, 'conv.mojioko')
+    const cv = cli(['convert', edited, '-o', cvMoj, '--video', efClip], 30000)
+    check('convert srt→.mojioko round-trips the cue', cv.code === 0 && existsSync(cvMoj) && cli(['read_subtitle', cvMoj], 30000).json?.data?.cues?.[0]?.text === 'corrected cue')
   } else {
     log('NOTE: status.ready=false — skipping transcribe/burn loop. Blockers:')
     for (const b of st.json?.data?.blockers || []) log(`  - ${b.what}: ${b.command}`)
