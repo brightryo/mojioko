@@ -7,8 +7,15 @@
 export interface McpLaunchSpec {
   /** The executable to spawn (`process.execPath` — MOJIOKO.exe / electron.exe). */
   command: string
-  /** Args: packaged = `["mcp"]`; dev = `[<appDir>, "mcp"]`. */
+  /**
+   * REQ-0455 — args launch the clean-stdout PROXY:
+   * `[<out/main/mcp-proxy.js>, ...childArgs]`, where childArgs is `["mcp"]`
+   * (packaged) or `[<appDir>, "mcp"]` (dev). The proxy runs as pure Node
+   * (via `env.ELECTRON_RUN_AS_NODE`) and re-spawns the real Electron MCP server.
+   */
   args: string[]
+  /** Env the client must set — includes `ELECTRON_RUN_AS_NODE=1` for the proxy. */
+  env: Record<string, string>
   /** false in dev (electron.exe + app-dir arg), true in a packaged build. */
   isPackaged: boolean
 }

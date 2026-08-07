@@ -79,8 +79,6 @@ async function measure(page, animType) {
   } catch {
     const diag = await page.evaluate(() => {
       const r = (el) => el ? `${Math.round(el.getBoundingClientRect().width)}x${Math.round(el.getBoundingClientRect().height)}` : 'null'
-      const root = document.getElementById('root')
-      const panel = root?.firstElementChild
       const flex1 = document.querySelector('[class*="bg-surface-0"]')
       return {
         videoCount: document.querySelectorAll('video').length,

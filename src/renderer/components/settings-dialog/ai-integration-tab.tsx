@@ -15,11 +15,20 @@ import type { McpLaunchSpec } from '../../../shared/mcp'
  * dev/packaged-correct launch spec (REQ-0452), and dev exports show a warning.
  */
 function desktopConfig(spec: McpLaunchSpec): string {
-  return JSON.stringify({ mcpServers: { mojioko: { command: spec.command, args: spec.args } } }, null, 2)
+  // REQ-0455 — include env (ELECTRON_RUN_AS_NODE=1 for the clean-stdout proxy).
+  return JSON.stringify(
+    { mcpServers: { mojioko: { command: spec.command, args: spec.args, env: spec.env } } },
+    null,
+    2,
+  )
 }
 function claudeCodeCommand(spec: McpLaunchSpec): string {
   const argsStr = spec.args.map((a) => `"${a}"`).join(' ')
-  return `claude mcp add mojioko -- "${spec.command}" ${argsStr}`.trim()
+  // REQ-0455 — pass env vars via `--env KEY=VALUE` before the `--` separator.
+  const envStr = Object.entries(spec.env)
+    .map(([k, v]) => `--env ${k}=${v}`)
+    .join(' ')
+  return `claude mcp add mojioko ${envStr} -- "${spec.command}" ${argsStr}`.replace(/\s+/g, ' ').trim()
 }
 
 export function AiIntegrationTab() {

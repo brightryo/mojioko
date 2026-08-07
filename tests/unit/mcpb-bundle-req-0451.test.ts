@@ -76,7 +76,11 @@ interface Manifest {
   name: string
   version: string
   author: { name: string }
-  server: { type: string; entry_point: string; mcp_config: { command: string; args: string[] } }
+  server: {
+    type: string
+    entry_point: string
+    mcp_config: { command: string; args: string[]; env: Record<string, string> }
+  }
   tools: { name: string }[]
 }
 
@@ -88,32 +92,41 @@ describe('REQ-0451/0452 — .mcpb bundle', () => {
     { name: 'status', description: 's' },
     { name: 'transcribe', description: 't' },
   ]
+  // REQ-0455 — the proxy is launched via ELECTRON_RUN_AS_NODE; a real spec's
+  // args target out/main/mcp-proxy.js, but the manifest builder is agnostic and
+  // just bakes what it's given, so these tests use representative proxy args.
+  const PROXY = 'C:\\Users\\me\\AppData\\Local\\Programs\\mojioko\\resources\\app.asar\\out\\main\\mcp-proxy.js'
+  const DEV_PROXY = 'D:\\dev\\mojioko\\out\\main\\mcp-proxy.js'
+  const ENV = { ELECTRON_RUN_AS_NODE: '1' }
 
-  it('packaged: command = MOJIOKO.exe, args = ["mcp"]', () => {
-    const m = buildMcpbManifest(EXE, ['mcp'], TOOLS) as Manifest
+  it('packaged: command = MOJIOKO.exe, args = [proxy, "mcp"], env carries RUN_AS_NODE', () => {
+    const m = buildMcpbManifest(EXE, [PROXY, 'mcp'], ENV, TOOLS) as Manifest
     expect(m.manifest_version).toBe('0.3')
     expect(m.name).toBe('mojioko')
     expect(m.author.name).toBe('brightryo')
     expect(m.server.type).toBe('binary')
     expect(m.server.entry_point).toBe('MOJIOKO.exe')
     expect(m.server.mcp_config.command).toBe(EXE)
-    expect(m.server.mcp_config.args).toEqual(['mcp'])
+    expect(m.server.mcp_config.args).toEqual([PROXY, 'mcp'])
+    expect(m.server.mcp_config.env).toEqual({ ELECTRON_RUN_AS_NODE: '1' })
     expect(m.tools.map((t) => t.name)).toEqual(['status', 'transcribe'])
   })
 
-  // REQ-0452 §3 — dev bundle must carry the app-dir arg or it won't launch.
-  it('dev: command = electron.exe, args = [<appDir>, "mcp"]', () => {
-    const m = buildMcpbManifest(ELECTRON, [APPDIR, 'mcp'], TOOLS) as Manifest
+  // REQ-0452 §3 / REQ-0455 — dev bundle must carry the app-dir arg (after the
+  // proxy path) or the re-spawned child won't launch.
+  it('dev: command = electron.exe, args = [proxy, <appDir>, "mcp"]', () => {
+    const m = buildMcpbManifest(ELECTRON, [DEV_PROXY, APPDIR, 'mcp'], ENV, TOOLS) as Manifest
     expect(m.server.entry_point).toBe('electron.exe')
     expect(m.server.mcp_config.command).toBe(ELECTRON)
-    expect(m.server.mcp_config.args).toEqual([APPDIR, 'mcp'])
+    expect(m.server.mcp_config.args).toEqual([DEV_PROXY, APPDIR, 'mcp'])
+    expect(m.server.mcp_config.env).toEqual({ ELECTRON_RUN_AS_NODE: '1' })
   })
 
   it('writes a valid ZIP containing manifest.json (CRC verified, parses back)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcpb-test-'))
     const path = join(dir, 'mojioko.mcpb')
     try {
-      writeMcpbBundle(path, EXE, ['mcp'], TOOLS)
+      writeMcpbBundle(path, EXE, [PROXY, 'mcp'], ENV, TOOLS)
       const entries = unzip(readFileSync(path))
       expect(entries.length).toBe(1)
       expect(entries[0].name).toBe('manifest.json')
@@ -121,9 +134,10 @@ describe('REQ-0451/0452 — .mcpb bundle', () => {
       const manifest = JSON.parse(entries[0].data.toString('utf8'))
       expect(manifest.manifest_version).toBe('0.3')
       expect(manifest.server.mcp_config.command).toBe(EXE)
+      expect(manifest.server.mcp_config.env).toEqual({ ELECTRON_RUN_AS_NODE: '1' })
 
       // Optionally leave a sample for external-tool interop checks.
-      if (process.env.MCPB_SAMPLE_OUT) writeMcpbBundle(process.env.MCPB_SAMPLE_OUT, EXE, ['mcp'], TOOLS)
+      if (process.env.MCPB_SAMPLE_OUT) writeMcpbBundle(process.env.MCPB_SAMPLE_OUT, EXE, [PROXY, 'mcp'], ENV, TOOLS)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

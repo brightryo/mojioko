@@ -1,3 +1,6 @@
+// REQ-0455 — MUST be the FIRST import: installs the stdout guard before any
+// other main-process module can write a stray byte to stdout in `mojioko mcp`.
+import './mcp/early-guard'
 import { app, BrowserWindow, ipcMain, Menu } from 'electron'
 import { join } from 'path'
 import { release } from 'os'
@@ -195,7 +198,7 @@ function registerIpcHandlers(): void {
     if (typeof targetPath !== 'string' || !targetPath) throw new Error('invalid target path')
     const spec = getMcpLaunchSpec()
     const commandExists = existsSync(spec.command)
-    writeMcpbBundle(targetPath, spec.command, spec.args, [...toolList(), GET_JOB_STATUS_TOOL])
+    writeMcpbBundle(targetPath, spec.command, spec.args, spec.env, [...toolList(), GET_JOB_STATUS_TOOL])
     return { path: targetPath, isPackaged: spec.isPackaged, commandExists }
   })
 

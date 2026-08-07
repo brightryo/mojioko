@@ -24,6 +24,7 @@ import log from 'electron-log/main'
 import { APP_VERSION } from '../../shared/app-info'
 import { toolList, callTool, GET_JOB_STATUS_TOOL } from './tools'
 import { mcpLog } from './mcp-log'
+import { installStdoutGuard, writeJsonRpc } from './stdout-guard'
 
 const PROTOCOL_VERSION = '2024-11-05'
 
@@ -56,6 +57,7 @@ function purifyStdout(): void {
 }
 
 export async function runMcpServer(): Promise<number> {
+  installStdoutGuard() // idempotent — normally installed earlier (cli dispatch)
   purifyStdout()
   mcpLog(
     `START pid=${process.pid} isPackaged=${app.isPackaged} execPath=${process.execPath} ` +
@@ -67,9 +69,9 @@ export async function runMcpServer(): Promise<number> {
   process.on('unhandledRejection', (e) => mcpLog(`unhandledRejection: ${e instanceof Error ? e.message : String(e)}`))
   process.on('exit', (code) => mcpLog(`process exit code=${code}`))
 
-  const send = (msg: object): void => {
-    process.stdout.write(JSON.stringify(msg) + '\n')
-  }
+  // REQ-0455 — the ONLY sanctioned stdout writer (JSON + single \n, via the
+  // real stdout under the guard). Every other write goes to stderr.
+  const send = (msg: object): void => writeJsonRpc(msg)
   const reply = (id: JsonRpcMessage['id'], result: unknown): void => send({ jsonrpc: '2.0', id, result })
   const replyError = (id: JsonRpcMessage['id'], code: number, message: string): void =>
     send({ jsonrpc: '2.0', id, error: { code, message } })

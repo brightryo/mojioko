@@ -116,10 +116,17 @@ function zipStore(entries: ZipEntry[]): Buffer {
  * Build the `.mcpb` manifest.json object (schema v0.3).
  *
  * REQ-0452 — `command`/`args` are supplied by the caller so dev vs packaged is
- * correct: packaged = `MOJIOKO.exe` + `["mcp"]`; dev = `electron.exe` +
- * `[<appDir>, "mcp"]` (the app-dir arg is required or the dev launch is wrong).
+ * correct. REQ-0455 — the launch now goes through the clean-stdout proxy, so
+ * `args` targets `out/main/mcp-proxy.js` and `env` carries
+ * `ELECTRON_RUN_AS_NODE=1` (both provided by `getMcpLaunchSpec`). `env` is
+ * baked into `mcp_config.env` so the client sets it when spawning.
  */
-export function buildMcpbManifest(command: string, args: string[], tools: McpbToolInfo[]): Record<string, unknown> {
+export function buildMcpbManifest(
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+  tools: McpbToolInfo[],
+): Record<string, unknown> {
   return {
     manifest_version: '0.3',
     name: 'mojioko',
@@ -134,7 +141,7 @@ export function buildMcpbManifest(command: string, args: string[], tools: McpbTo
       mcp_config: {
         command,
         args,
-        env: {},
+        env,
       },
     },
     tools: tools.map((t) => ({ name: t.name, description: t.description })),
@@ -143,8 +150,14 @@ export function buildMcpbManifest(command: string, args: string[], tools: McpbTo
 }
 
 /** Write a `.mcpb` bundle (ZIP with manifest.json) to `targetPath`. */
-export function writeMcpbBundle(targetPath: string, command: string, args: string[], tools: McpbToolInfo[]): void {
-  const manifest = Buffer.from(JSON.stringify(buildMcpbManifest(command, args, tools), null, 2), 'utf8')
+export function writeMcpbBundle(
+  targetPath: string,
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+  tools: McpbToolInfo[],
+): void {
+  const manifest = Buffer.from(JSON.stringify(buildMcpbManifest(command, args, env, tools), null, 2), 'utf8')
   const zip = zipStore([{ name: 'manifest.json', data: manifest }])
   writeFileSync(targetPath, zip)
 }

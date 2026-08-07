@@ -18,12 +18,15 @@ import { createInterface } from 'node:readline'
 const ROOT = process.cwd()
 const ELECTRON = join(ROOT, 'node_modules', 'electron', 'dist', 'electron.exe')
 const FFMPEG = join(ROOT, 'resources', 'bin', 'ffmpeg', 'ffmpeg.exe')
+// REQ-0455 — launch through the pure-Node clean-stdout proxy (out/main/mcp-proxy.js),
+// exactly as Claude does via the launch spec: electron + ELECTRON_RUN_AS_NODE=1.
+const PROXY = join(ROOT, 'out', 'main', 'mcp-proxy.js')
 
 let failures = 0
 const log = (m) => process.stdout.write(m + '\n')
 const check = (name, cond, extra = '') => { log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? '  ' + extra : ''}`); if (!cond) failures++ }
 
-if (!existsSync(ELECTRON) || !existsSync(FFMPEG)) { log('SKIP: build first (electron/ffmpeg missing).'); process.exit(0) }
+if (!existsSync(ELECTRON) || !existsSync(FFMPEG) || !existsSync(PROXY)) { log('SKIP: build first (electron/ffmpeg/proxy missing).'); process.exit(0) }
 
 const work = mkdtempSync(join(tmpdir(), 'mojioko-mcp-smoke-'))
 const clip = join(work, 'clip.mp4')
@@ -41,7 +44,14 @@ const holder = spawn(ELECTRON, [holderPath], { cwd: ROOT, env: { ...process.env,
 let holderGotLock = false
 holder.stderr.on('data', (d) => { if (String(d).includes('LOCK=true')) holderGotLock = true })
 
-const child = spawn(ELECTRON, ['.', 'mcp'], { cwd: ROOT, env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1' } })
+const child = spawn(ELECTRON, [PROXY, '.', 'mcp'], {
+  cwd: ROOT,
+  env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ELECTRON_DISABLE_SECURITY_WARNINGS: '1' },
+})
+// REQ-0455 — capture RAW stdout as Buffers (decode ONCE at the end so a
+// multi-byte UTF-8 char split across chunks isn't mangled) to assert framing.
+const rawChunks = []
+child.stdout.on('data', (d) => rawChunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)))
 const rl = createInterface({ input: child.stdout, terminal: false })
 const pending = new Map()
 let nextId = 1
@@ -112,6 +122,20 @@ try {
     log('NOTE: status.ready=false — skipping transcribe job.')
     for (const b of stData?.data?.blockers || []) log(`  - ${b.what}: ${b.command}`)
   }
+
+  // 5) REQ-0455 — strict stdout framing: split on '\n'; every complete segment
+  // must be NON-EMPTY valid JSON. Drop the final segment unconditionally — it is
+  // either '' (from the trailing '\n') or a partial line still being written at
+  // sample time. A REAL blank line (mid-stream '\n\n') leaves an empty segment
+  // BEFORE the last and is still caught.
+  await sleep(300)
+  const rawStdout = Buffer.concat(rawChunks).toString('utf8')
+  const segments = rawStdout.split('\n')
+  segments.pop()
+  const empties = segments.filter((s) => s === '').length
+  const nonJson = segments.filter((s) => { try { JSON.parse(s); return false } catch { return true } }).length
+  check('stdout has NO empty segments (blank lines)', empties === 0, `empties=${empties} of ${segments.length}`)
+  check('every stdout segment is valid JSON', nonJson === 0, `nonJson=${nonJson} of ${segments.length}`)
 } catch (e) {
   check(`no exception (${e.message})`, false)
 } finally {

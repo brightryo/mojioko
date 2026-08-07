@@ -26,6 +26,7 @@ import { runBurnCommand } from './commands/burn'
 import { runRunCommand } from './commands/run'
 import { runStatusCommand } from './commands/status'
 import { runMcpServer } from '../mcp/server'
+import { installStdoutGuard } from '../mcp/stdout-guard'
 
 const COMMANDS = new Set(['tools', 'status', 'transcribe', 'translate', 'burn', 'run', 'mcp'])
 const HELP_TOKENS = new Set(['help', '-h', '--help'])
@@ -97,6 +98,11 @@ export async function maybeRunCli(): Promise<boolean> {
   const tokens = userCliArgs()
   // No user args ⇒ a normal GUI launch: let the caller boot the window.
   if (tokens.length === 0) return false
+
+  // REQ-0455 — for `mojioko mcp`, guard stdout BEFORE anything (startup /
+  // whenReady / libraries) can write a stray byte to it; only sanctioned
+  // JSON-RPC lines reach real stdout, everything else is diverted to stderr.
+  if (tokens[0] === 'mcp') installStdoutGuard()
 
   // Any user args ⇒ a CLI invocation (an unknown command becomes USAGE below,
   // never a silent GUI window). Headless: no GPU stack, no window. Must precede

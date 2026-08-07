@@ -23,7 +23,6 @@ const esbuild = require('esbuild')
 const { chromium } = require('playwright')
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
-const REPO = path.resolve(HERE, '..', '..')
 const OUT = path.join(HERE, '.dump.cjs')
 const DIR = path.join(tmpdir(), `mojioko-framestep-${process.pid}`)
 mkdirSync(DIR, { recursive: true })
