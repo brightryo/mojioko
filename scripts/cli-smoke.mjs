@@ -132,6 +132,10 @@ try {
     check('D13 refuses to overwrite (OUTPUT_EXISTS / exit 8)', d13a.code === 8 && d13a.json?.code === 'OUTPUT_EXISTS', `${d13a.code}/${d13a.json?.code}`)
     const d13b = cli(['export_frame', efClip, efSrt, '-o', efPng, '--time', '1.0', '--overwrite'], 30000)
     check('D13 --overwrite proceeds', d13b.code === 0)
+
+    // REQ-0457 Phase E — burn --dry-run reports overflow without encoding (no -o).
+    const dry = cli(['burn', efClip, efSrt, '--dry-run'], 30000)
+    check('burn --dry-run returns overflow judgement, no encode', dry.code === 0 && dry.json?.data?.dryRun === true && !!dry.json?.data?.overflow)
   } else {
     log('NOTE: status.ready=false — skipping transcribe/burn loop. Blockers:')
     for (const b of st.json?.data?.blockers || []) log(`  - ${b.what}: ${b.command}`)

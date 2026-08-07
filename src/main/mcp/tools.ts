@@ -133,6 +133,7 @@ export const TOOLS: ToolSpec[] = [
         position: { type: 'string', enum: ['top', 'center', 'bottom'], description: '縦位置' },
         style: { type: 'string', description: 'GUI 保存のスタイルプリセット名（全 cue に適用。REQ-0457 D12）' },
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false で拒否）' },
+        dry_run: { type: 'boolean', description: '焼かずに overflow 判定のみ返す（REQ-0457 E）' },
         device: DEVICE_PROP,
       },
       additionalProperties: false,
@@ -140,7 +141,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runBurnCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), audio: str(i.audio), weight: str(i.weight), 'margin-v': numStr(i.margin_v), position: str(i.position), style: str(i.style), overwrite: boolTrue(i.overwrite), device: str(i.device) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), audio: str(i.audio), weight: str(i.weight), 'margin-v': numStr(i.margin_v), position: str(i.position), style: str(i.style), overwrite: boolTrue(i.overwrite), 'dry-run': boolTrue(i.dry_run), device: str(i.device) }),
     }),
   },
   {

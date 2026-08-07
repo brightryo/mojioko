@@ -140,6 +140,7 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--position', type: 'enum', values: ['top', 'center', 'bottom'], desc: '縦位置' },
       { flag: '--style', type: 'string', desc: 'GUI 保存のスタイルプリセット名を全 cue に適用（status で一覧）' },
       { flag: '--overwrite', type: 'boolean', default: 'false', desc: '既存出力を上書き（既定は拒否）' },
+      { flag: '--dry-run', type: 'boolean', default: 'false', desc: '焼かずに overflow(shrink/warn/error)判定のみ返す' },
       DEVICE,
     ],
     examples: ['mojioko burn input.mp4 out.en.mojioko -o final.mp4 --preset shorts --style "My Bold"'],

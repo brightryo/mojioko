@@ -51,9 +51,11 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
   }
   if (!existsSync(videoPath)) throw new CliError('INPUT_NOT_FOUND', `動画が見つかりません: ${videoPath}`, '動画パスを確認してください。')
   if (!existsSync(subPath)) throw new CliError('INPUT_NOT_FOUND', `字幕が見つかりません: ${subPath}`, '字幕パスを確認してください。')
-  const out = optString(args.opts, 'out')
-  if (!out) throw new CliError('USAGE', '出力パス（-o <out.mp4>）が必要です。')
-  assertWritable(out, args.opts) // REQ-0457 D13
+  // REQ-0457 Phase E — dry-run writes no file, so -o is optional there.
+  const dryRun = args.opts['dry-run'] === true
+  const out = optString(args.opts, 'out') ?? ''
+  if (!out && !dryRun) throw new CliError('USAGE', '出力パス（-o <out.mp4>）が必要です。')
+  if (out && !dryRun) assertWritable(out, args.opts) // REQ-0457 D13
 
   const subFmt = detectFormat(subPath, optString(args.opts, 'format'))
   if (!subFmt) throw new CliError('UNSUPPORTED_FORMAT', `字幕フォーマット不明: ${subPath}`, '.mojioko / .srt を指定してください。')
@@ -133,13 +135,17 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
   if (tgt.target) {
     const f = contentScaleFactor(video.widthPx, video.heightPx, tgt.target.w, tgt.target.h)
     entries = scaleEntries(entries, f)
-    try {
-      scaledTemp = await scaleVideoTo(getBinPath('ffmpeg'), videoPath, tgt.target.w, tgt.target.h)
-    } catch (e) {
-      throw new CliError('BURN_FAILED', `解像度スケーリングに失敗: ${e instanceof Error ? e.message : String(e)}`, 'ffmpeg の入力/コーデックを確認してください。')
+    // Dry-run needs the target dims for the layout math but must NOT spend an
+    // encode pre-scaling the video.
+    if (!dryRun) {
+      try {
+        scaledTemp = await scaleVideoTo(getBinPath('ffmpeg'), videoPath, tgt.target.w, tgt.target.h)
+      } catch (e) {
+        throw new CliError('BURN_FAILED', `解像度スケーリングに失敗: ${e instanceof Error ? e.message : String(e)}`, 'ffmpeg の入力/コーデックを確認してください。')
+      }
+      inputPath = scaledTemp
     }
-    inputPath = scaledTemp
-    renderVideo = { ...video, path: scaledTemp, widthPx: tgt.target.w, heightPx: tgt.target.h }
+    renderVideo = { ...video, path: scaledTemp ?? videoPath, widthPx: tgt.target.w, heightPx: tgt.target.h }
     resized = true
   }
 
@@ -163,6 +169,21 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
       '--overflow shrink で自動縮小するか、--margin-y を小さく／フォントサイズを下げてください。',
       { overflowCueCount: layout.overflow.overflowCueCount, marginY },
     )
+  }
+
+  // REQ-0457 Phase E — dry-run: report the overflow judgement without encoding.
+  if (dryRun) {
+    if (scaledTemp) { try { rmSync(scaledTemp, { force: true }) } catch { /* none in dry-run */ } }
+    return emitSuccess(ctx, 'burn', {
+      dryRun: true,
+      wouldEncode: false,
+      resolution: { width: renderVideo.widthPx, height: renderVideo.heightPx },
+      resized,
+      overflow: layout.overflow,
+      cueCount: entries.filter((e) => !e.isDeleted).length,
+      subtitleStyle: resolveDefaultSubtitleStyle(settings),
+      stylePreset: appliedStylePreset,
+    })
   }
 
   const request: BurninStartRequest = {
