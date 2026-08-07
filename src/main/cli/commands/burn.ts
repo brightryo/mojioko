@@ -167,6 +167,8 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
   }
 
   const controller = new AbortController()
+  // REQ-0457 B6 — an MCP cancel_job aborts ffmpeg through ctx.signal.
+  if (ctx.signal) ctx.signal.addEventListener('abort', () => controller.abort(), { once: true })
   let failedError: string | null = null
   let sizeMB = 0
   try {

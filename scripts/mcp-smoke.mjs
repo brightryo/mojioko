@@ -123,6 +123,19 @@ try {
     }
     check('job reached done', done?.status === 'done', `status=${done?.status} err=${done?.result?.code || ''}`)
     check('job result has outputPath + artifact exists', !!done?.result?.data?.outputPath && existsSync(out), done?.result?.data?.outputPath || '')
+    // REQ-0457 B5 — snapshot carries stage / stageProgress / overallProgress.
+    check('get_job_status exposes stage + overallProgress', typeof done?.stage === 'string' && typeof done?.overallProgress === 'number' && done?.overallProgress === 100, `stage=${done?.stage} overall=${done?.overallProgress}`)
+
+    // 4c) REQ-0457 B6 — list_jobs + cancel_job.
+    const list = parseContent(await rpc('tools/call', { name: 'list_jobs', arguments: {} }))
+    check('list_jobs returns the transcribe job', Array.isArray(list?.jobs) && list.jobs.some((j) => j.job_id === startData.job_id))
+    // Start a fresh transcribe and cancel it mid-flight.
+    const c = parseContent(await rpc('tools/call', { name: 'transcribe', arguments: { input: clip, out: join(work, 'cancel.mojioko') } }))
+    await sleep(300)
+    const cancel = parseContent(await rpc('tools/call', { name: 'cancel_job', arguments: { job_id: c.job_id } }))
+    check('cancel_job accepts a running job', cancel?.ok === true, JSON.stringify(cancel))
+    const after = parseContent(await rpc('tools/call', { name: 'get_job_status', arguments: { job_id: c.job_id } }))
+    check('canceled job reports status=canceled', after?.status === 'canceled', `status=${after?.status}`)
 
     // 4b) REQ-0457 A4 — export_frame via MCP (async job) → PNG artifact.
     const framePng = join(work, 'frame.png')

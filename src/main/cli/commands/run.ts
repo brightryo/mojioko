@@ -41,27 +41,43 @@ export async function runRunCommand(ctx: CliContext, args: ParsedArgs): Promise<
   // the transcribe signals (detectedLanguage/hasWordTimestamps) into its own JSON.
   let transcribeResult: CliResult | null = null
   let burnResult: CliResult | null = null
-  const captured = (assign: (r: CliResult) => void): CliContext =>
-    ({ ...ctx, silent: true, quiet: true, sink: assign })
+
+  // REQ-0457 B5 — band each stage's local 0–99 progress into a MONOTONIC overall
+  // so an agent never sees it jump backwards (transcribe 0→99 then burn 0→99).
+  const stagePlan = ['transcribe', ...(translateTo ? ['translate'] : []), ...(doBurn ? ['burn'] : [])]
+  const span = 100 / stagePlan.length
+  const stageCtx = (stage: string, assign: (r: CliResult) => void): CliContext => {
+    const base = stagePlan.indexOf(stage) * span
+    return {
+      ...ctx,
+      silent: true,
+      quiet: true,
+      sink: assign,
+      // The sub-command reports a plain 0–99 percent; report it to OUR parent
+      // (the MCP job) as a stage-aware, banded overall.
+      onProgress: (p) => ctx.onStageProgress?.(stage, Math.round(p), Math.min(99, Math.round(base + (p / 100) * span))),
+      onStageProgress: undefined,
+    }
+  }
 
   try {
     // 1) transcribe → temp .mojioko
     const t1 = join(workDir, 'transcribe.mojioko')
-    await runTranscribeCommand(captured((r) => { transcribeResult = r }), { positionals: [video], opts: { ...args.opts, out: t1, format: 'mojioko' } })
+    await runTranscribeCommand(stageCtx('transcribe', (r) => { transcribeResult = r }), { positionals: [video], opts: { ...args.opts, out: t1, format: 'mojioko' } })
     stages.push('transcribe')
     let subtitle = t1
 
     // 2) translate (optional) → temp .mojioko
     if (translateTo) {
       const t2 = join(workDir, 'translate.mojioko')
-      await runTranslateCommand(captured(() => {}), { positionals: [t1], opts: { ...args.opts, to: translateTo, out: t2, format: 'mojioko' } })
+      await runTranslateCommand(stageCtx('translate', () => {}), { positionals: [t1], opts: { ...args.opts, to: translateTo, out: t2, format: 'mojioko' } })
       stages.push('translate')
       subtitle = t2
     }
 
     // 3) burn (optional) → out.mp4, else copy the subtitle to out
     if (doBurn) {
-      await runBurnCommand(captured((r) => { burnResult = r }), { positionals: [video, subtitle], opts: { ...args.opts, out } })
+      await runBurnCommand(stageCtx('burn', (r) => { burnResult = r }), { positionals: [video, subtitle], opts: { ...args.opts, out } })
       stages.push('burn')
     } else {
       copyFileSync(subtitle, out)

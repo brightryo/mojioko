@@ -22,7 +22,7 @@ import type { Readable } from 'node:stream'
 import { app } from 'electron'
 import log from 'electron-log/main'
 import { APP_VERSION } from '../../shared/app-info'
-import { toolList, callTool, GET_JOB_STATUS_TOOL } from './tools'
+import { toolList, callTool, JOB_TOOLS } from './tools'
 import { mcpLog } from './mcp-log'
 import { installStdoutGuard, writeJsonRpc } from './stdout-guard'
 
@@ -97,7 +97,7 @@ export async function runMcpServer(): Promise<number> {
         reply(id, {})
         return
       case 'tools/list':
-        reply(id, { tools: [...toolList(), GET_JOB_STATUS_TOOL] })
+        reply(id, { tools: [...toolList(), ...JOB_TOOLS] })
         return
       case 'tools/call': {
         const name = params?.name

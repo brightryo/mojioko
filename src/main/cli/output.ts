@@ -94,6 +94,19 @@ export interface CliContext {
    * uses it to surface progress in get_job_status.
    */
   onProgress?: (percent: number) => void
+  /**
+   * REQ-0457 B5 — stage-aware progress: (stage, stageProgress, overallProgress),
+   * all 0..100.  `run` reports each sub-step banded into a monotonic overall so
+   * an agent never sees progress go backwards.  Single-stage commands use
+   * `onProgress`; the job layer maps it to {stage: tool, stageProgress: p,
+   * overall: p}.
+   */
+  onStageProgress?: (stage: string, stageProgress: number, overallProgress: number) => void
+  /**
+   * REQ-0457 B6 — optional cancellation signal.  A long command should abort
+   * ffmpeg / the sidecar when this fires.  The MCP `cancel_job` tool triggers it.
+   */
+  signal?: AbortSignal
 }
 
 /** A structured progress line on stderr (JSONL). No-op under `--quiet`. */

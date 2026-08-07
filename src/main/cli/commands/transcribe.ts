@@ -7,7 +7,7 @@
  * actual device is reported from the sidecar's `deviceInfo` event.
  */
 import { existsSync } from 'node:fs'
-import { transcribe } from '../../services/transcription-sidecar'
+import { transcribe, cancelTranscription } from '../../services/transcription-sidecar'
 import { probeVideo } from '../../services/ffprobe'
 import { checkModelInstalled } from '../../services/check-model-installed'
 import { loadSettings } from '../../services/settings-store'
@@ -104,6 +104,9 @@ export async function runTranscribeCommand(ctx: CliContext, args: ParsedArgs): P
   let deviceUsed: 'cpu' | 'gpu' = settings.activeAccelerator === 'gpu' ? 'gpu' : 'cpu'
   let fellBack = false
   let detectedLanguage: string | null = null
+
+  // REQ-0457 B6 — an MCP cancel_job stops the sidecar mid-transcribe.
+  if (ctx.signal) ctx.signal.addEventListener('abort', () => { void cancelTranscription() }, { once: true })
 
   try {
     await transcribe(request, (ev) => {

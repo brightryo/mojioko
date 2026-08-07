@@ -20,7 +20,7 @@ import { runBurnCommand } from '../cli/commands/burn'
 import { runRunCommand } from '../cli/commands/run'
 import { runExportFrameCommand } from '../cli/commands/export-frame'
 import { runToolsCommand } from '../cli/commands/tools'
-import { createJob, finishJob, getJob, jobSnapshot, setJobProgress } from './jobs'
+import { createJob, finishJob, getJob, jobSnapshot, updateJobStage, setJobCancel, listJobs, cancelJob } from './jobs'
 
 type CommandFn = (ctx: CliContext, args: ParsedArgs) => Promise<number>
 
@@ -211,9 +211,24 @@ export const TOOLS: ToolSpec[] = [
 ]
 
 /** Run a CLI command with a capturing sink; returns its structured result. */
-async function runCaptured(fn: CommandFn, args: ParsedArgs, onProgress?: (percent: number) => void): Promise<CliResult> {
+async function runCaptured(
+  fn: CommandFn,
+  args: ParsedArgs,
+  opts: {
+    defaultStage: string
+    onStage?: (stage: string, stageProgress: number, overallProgress: number) => void
+    signal?: AbortSignal
+  },
+): Promise<CliResult> {
   let captured: CliResult | null = null
-  const ctx: CliContext = { json: true, quiet: true, verbose: false, sink: (r) => { captured = r }, onProgress }
+  const ctx: CliContext = {
+    json: true, quiet: true, verbose: false,
+    sink: (r) => { captured = r },
+    // Single-stage commands report a plain percent; band it as its own stage.
+    onProgress: opts.onStage ? (p) => opts.onStage!(opts.defaultStage, p, p) : undefined,
+    onStageProgress: opts.onStage,
+    signal: opts.signal,
+  }
   try {
     await fn(ctx, args)
   } catch (e) {
@@ -236,6 +251,16 @@ export async function callTool(name: string, input: Record<string, unknown>): Pr
     if (!job) return { structured: { ok: false, code: 'USAGE', message: `unknown job_id: ${id}` }, isError: true }
     return { structured: jobSnapshot(job), isError: job.status === 'failed' }
   }
+  // REQ-0457 B6 — enumerate jobs so an agent that lost a job_id can recover.
+  if (name === 'list_jobs') {
+    return { structured: { ok: true, jobs: listJobs().map(jobSnapshot) }, isError: false }
+  }
+  // REQ-0457 B6 — cancel a running job (aborts ffmpeg / sidecar).
+  if (name === 'cancel_job') {
+    const id = str(input.job_id) ?? ''
+    const ok = cancelJob(id)
+    return { structured: { ok, job_id: id, message: ok ? 'canceled' : 'not running / unknown job_id' }, isError: !ok }
+  }
 
   const spec = TOOLS.find((t) => t.name === name)
   if (!spec) return { structured: { ok: false, code: 'USAGE', message: `unknown tool: ${name}` }, isError: true }
@@ -244,18 +269,24 @@ export async function callTool(name: string, input: Record<string, unknown>): Pr
 
   if (spec.async) {
     const job = createJob(name)
-    void runCaptured(fn, args, (p) => setJobProgress(job.id, p)).then((r) => finishJob(job.id, r))
+    const controller = new AbortController()
+    setJobCancel(job.id, () => controller.abort())
+    void runCaptured(fn, args, {
+      defaultStage: name,
+      onStage: (stage, sp, op) => updateJobStage(job.id, stage, sp, op),
+      signal: controller.signal,
+    }).then((r) => finishJob(job.id, r))
     return { structured: { ...jobSnapshot(job), hint: 'get_job_status で完了を確認してください。' }, isError: false }
   }
 
-  const result = await runCaptured(fn, args)
+  const result = await runCaptured(fn, args, { defaultStage: name })
   return { structured: result, isError: !result.ok }
 }
 
 /** The `get_job_status` tool definition (added to the advertised list). */
 export const GET_JOB_STATUS_TOOL = {
   name: 'get_job_status',
-  description: '非同期ジョブ（transcribe/translate/burn/run/tools_download）の状態と結果を取得。',
+  description: '非同期ジョブの状態と結果を取得。{ stage, stageProgress, overallProgress(単調増加), status, result }。',
   inputSchema: {
     type: 'object',
     required: ['job_id'],
@@ -263,3 +294,25 @@ export const GET_JOB_STATUS_TOOL = {
     additionalProperties: false,
   },
 }
+
+/** REQ-0457 B6 — enumerate all jobs (recover a lost job_id). */
+export const LIST_JOBS_TOOL = {
+  name: 'list_jobs',
+  description: '全ジョブ一覧（新しい順）。job_id を失っても状態を引ける。',
+  inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+}
+
+/** REQ-0457 B6 — cancel a running job (aborts ffmpeg / sidecar). */
+export const CANCEL_JOB_TOOL = {
+  name: 'cancel_job',
+  description: '実行中の非同期ジョブを中止する。',
+  inputSchema: {
+    type: 'object',
+    required: ['job_id'],
+    properties: { job_id: { type: 'string', description: '中止する job_id' } },
+    additionalProperties: false,
+  },
+}
+
+/** All job-management tool defs advertised alongside the command tools. */
+export const JOB_TOOLS = [GET_JOB_STATUS_TOOL, LIST_JOBS_TOOL, CANCEL_JOB_TOOL]

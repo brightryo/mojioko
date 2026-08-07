@@ -9,7 +9,7 @@ import { Channels } from '../shared/ipc-channels'
 import { existsSync } from 'fs'
 import { maybeRunCli, isCliInvocation } from './cli'
 import { writeMcpbBundle } from './mcp/mcpb'
-import { toolList, GET_JOB_STATUS_TOOL } from './mcp/tools'
+import { toolList, JOB_TOOLS } from './mcp/tools'
 import { getMcpLaunchSpec } from './mcp/launch'
 import type { McpExportResult, McpLaunchSpec } from '../shared/mcp'
 import { registerVideoHandlers } from './ipc/video'
@@ -198,7 +198,7 @@ function registerIpcHandlers(): void {
     if (typeof targetPath !== 'string' || !targetPath) throw new Error('invalid target path')
     const spec = getMcpLaunchSpec()
     const commandExists = existsSync(spec.command)
-    writeMcpbBundle(targetPath, spec.command, spec.args, spec.env, [...toolList(), GET_JOB_STATUS_TOOL])
+    writeMcpbBundle(targetPath, spec.command, spec.args, spec.env, [...toolList(), ...JOB_TOOLS])
     return { path: targetPath, isPackaged: spec.isPackaged, commandExists }
   })
 
