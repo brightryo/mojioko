@@ -123,6 +123,15 @@ try {
     const cvMoj = join(work, 'conv.mojioko')
     const cv = cli(['convert', edited, '-o', cvMoj, '--video', efClip], 30000)
     check('convert srt→.mojioko round-trips the cue', cv.code === 0 && existsSync(cvMoj) && cli(['read_subtitle', cvMoj], 30000).json?.data?.cues?.[0]?.text === 'corrected cue')
+
+    // REQ-0457 Phase D — D11 run --subtitle skips transcribe; D13 overwrite guard.
+    const d11 = join(work, 'd11.mp4')
+    const r11 = cli(['run', efClip, '--subtitle', efSrt, '--burn', '-o', d11], 120000)
+    check('run --subtitle skips transcribe (stages=subtitle,burn)', r11.code === 0 && JSON.stringify(r11.json?.data?.stages) === JSON.stringify(['subtitle', 'burn']) && existsSync(d11), JSON.stringify(r11.json?.data?.stages))
+    const d13a = cli(['export_frame', efClip, efSrt, '-o', efPng, '--time', '1.0'], 30000)
+    check('D13 refuses to overwrite (OUTPUT_EXISTS / exit 8)', d13a.code === 8 && d13a.json?.code === 'OUTPUT_EXISTS', `${d13a.code}/${d13a.json?.code}`)
+    const d13b = cli(['export_frame', efClip, efSrt, '-o', efPng, '--time', '1.0', '--overwrite'], 30000)
+    check('D13 --overwrite proceeds', d13b.code === 0)
   } else {
     log('NOTE: status.ready=false — skipping transcribe/burn loop. Blockers:')
     for (const b of st.json?.data?.blockers || []) log(`  - ${b.what}: ${b.command}`)

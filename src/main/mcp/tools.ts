@@ -77,6 +77,7 @@ export const TOOLS: ToolSpec[] = [
         lang: { type: 'string', enum: LANGS, description: '言語（既定 auto）' },
         track: { type: 'integer', description: '音声トラック(1-based, 既定1)' },
         vad: { type: 'string', enum: ['on', 'off'], description: 'VAD（既定 on）' },
+        overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
         device: DEVICE_PROP,
         format: FORMAT_PROP,
       },
@@ -85,7 +86,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runTranscribeCommand,
-      args: toArgs([str(i.input)], { out: str(i.out), model: str(i.model), lang: str(i.lang), track: numStr(i.track), vad: str(i.vad), device: str(i.device), format: str(i.format) }),
+      args: toArgs([str(i.input)], { out: str(i.out), model: str(i.model), lang: str(i.lang), track: numStr(i.track), vad: str(i.vad), overwrite: boolTrue(i.overwrite), device: str(i.device), format: str(i.format) }),
     }),
   },
   {
@@ -100,6 +101,7 @@ export const TOOLS: ToolSpec[] = [
         to: { type: 'string', enum: TARGETS, description: '翻訳先言語' },
         model: { type: 'string', enum: ['3b', '7b'], description: '既定: 設定のアクティブ翻訳モデル' },
         from_original: { type: 'boolean', description: '文字起こし原文から訳す（.mojioko 必須）' },
+        overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
         device: DEVICE_PROP,
         format: FORMAT_PROP,
       },
@@ -108,7 +110,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runTranslateCommand,
-      args: toArgs([str(i.input)], { out: str(i.out), to: str(i.to), model: str(i.model), 'from-original': boolTrue(i.from_original), device: str(i.device), format: str(i.format) }),
+      args: toArgs([str(i.input)], { out: str(i.out), to: str(i.to), model: str(i.model), 'from-original': boolTrue(i.from_original), overwrite: boolTrue(i.overwrite), device: str(i.device), format: str(i.format) }),
     }),
   },
   {
@@ -129,6 +131,8 @@ export const TOOLS: ToolSpec[] = [
         weight: { type: 'string', description: 'フォントウェイト（既定: 設定）' },
         margin_v: { type: 'integer', description: '縦マージン(px)' },
         position: { type: 'string', enum: ['top', 'center', 'bottom'], description: '縦位置' },
+        style: { type: 'string', description: 'GUI 保存のスタイルプリセット名（全 cue に適用。REQ-0457 D12）' },
+        overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false で拒否）' },
         device: DEVICE_PROP,
       },
       additionalProperties: false,
@@ -136,7 +140,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runBurnCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), audio: str(i.audio), weight: str(i.weight), 'margin-v': numStr(i.margin_v), position: str(i.position), device: str(i.device) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), audio: str(i.audio), weight: str(i.weight), 'margin-v': numStr(i.margin_v), position: str(i.position), style: str(i.style), overwrite: boolTrue(i.overwrite), device: str(i.device) }),
     }),
   },
   {
@@ -148,9 +152,12 @@ export const TOOLS: ToolSpec[] = [
       properties: {
         video: { type: 'string', description: '入力動画の絶対パス' },
         out: { type: 'string', description: '出力パス（--burn 時は .mp4）' },
+        subtitle: { type: 'string', description: '既存字幕を渡すと文字起こしをスキップ（REQ-0457 D11）' },
         translate: { type: 'string', enum: TARGETS, description: '指定時に翻訳を挟む' },
         burn: { type: 'boolean', description: '焼き込みまで実行' },
         preset: { type: 'string', enum: PRESETS, description: 'burn 用プリセット' },
+        style: { type: 'string', description: 'スタイルプリセット名（burn 時・REQ-0457 D12）' },
+        overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
         device: DEVICE_PROP,
       },
       additionalProperties: false,
@@ -158,7 +165,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runRunCommand,
-      args: toArgs([str(i.video)], { out: str(i.out), translate: str(i.translate), burn: boolTrue(i.burn), preset: str(i.preset), device: str(i.device) }),
+      args: toArgs([str(i.video)], { out: str(i.out), subtitle: str(i.subtitle), translate: str(i.translate), burn: boolTrue(i.burn), preset: str(i.preset), style: str(i.style), overwrite: boolTrue(i.overwrite), device: str(i.device) }),
     }),
   },
   {
@@ -172,13 +179,14 @@ export const TOOLS: ToolSpec[] = [
         subtitle: { type: 'string', description: '.mojioko または .srt の絶対パス' },
         out: { type: 'string', description: '出力画像パス（.png または .jpg）' },
         time: { type: 'number', description: '抽出する時刻（秒）' },
+        overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
       },
       additionalProperties: false,
     },
     async: true,
     build: (i) => ({
       fn: runExportFrameCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time), overwrite: boolTrue(i.overwrite) }),
     }),
   },
   {
@@ -216,11 +224,12 @@ export const TOOLS: ToolSpec[] = [
         out: { type: 'string', description: '出力パス' },
         index: { type: 'integer', description: '対象 cue 番号（read_subtitle の index・0始まり）' },
         text: { type: 'string', description: '新しいテキスト' },
+        overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false。入力と同一パスは常に可）' },
       },
       additionalProperties: false,
     },
     async: false,
-    build: (i) => ({ fn: runEditSubtitleCommand, args: toArgs([str(i.input)], { out: str(i.out), index: numStr(i.index), text: typeof i.text === 'string' ? i.text : undefined }) }),
+    build: (i) => ({ fn: runEditSubtitleCommand, args: toArgs([str(i.input)], { out: str(i.out), index: numStr(i.index), text: typeof i.text === 'string' ? i.text : undefined, overwrite: boolTrue(i.overwrite) }) }),
   },
   {
     name: 'convert',
@@ -232,11 +241,12 @@ export const TOOLS: ToolSpec[] = [
         input: { type: 'string', description: '入力字幕（.mojioko/.srt）' },
         out: { type: 'string', description: '出力パス（拡張子で形式判定）' },
         video: { type: 'string', description: 'SRT→.mojioko 時に参照する動画（任意）' },
+        overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
       },
       additionalProperties: false,
     },
     async: false,
-    build: (i) => ({ fn: runConvertCommand, args: toArgs([str(i.input)], { out: str(i.out), video: str(i.video) }) }),
+    build: (i) => ({ fn: runConvertCommand, args: toArgs([str(i.input)], { out: str(i.out), video: str(i.video), overwrite: boolTrue(i.overwrite) }) }),
   },
   {
     name: 'tools_download',

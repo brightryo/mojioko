@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { optString, type ParsedArgs } from '../args'
 import { CliError, emitSuccess, type CliContext, type CliResult } from '../output'
+import { assertWritable } from '../overwrite'
 import { loadSettings } from '../../services/settings-store'
 import { resolveDefaultSubtitleStyle } from '../subtitle-style'
 import { runTranscribeCommand } from './transcribe'
@@ -28,9 +29,15 @@ export async function runRunCommand(ctx: CliContext, args: ParsedArgs): Promise<
   if (!existsSync(video)) throw new CliError('INPUT_NOT_FOUND', `動画が見つかりません: ${video}`, '動画パスを確認してください。')
   const out = optString(args.opts, 'out')
   if (!out) throw new CliError('USAGE', '出力パス（-o <out>）が必要です。')
+  assertWritable(out, args.opts) // REQ-0457 D13
 
   const translateTo = optString(args.opts, 'translate')
   const doBurn = args.opts.burn === true
+  // REQ-0457 D11 — a pre-existing subtitle skips the transcribe stage.
+  const existingSubtitle = optString(args.opts, 'subtitle')
+  if (existingSubtitle && !existsSync(existingSubtitle)) {
+    throw new CliError('INPUT_NOT_FOUND', `字幕が見つかりません: ${existingSubtitle}`, '字幕パスを確認してください。')
+  }
 
   const workDir = mkdtempSync(join(tmpdir(), 'mojioko-run-'))
   const stages: string[] = []
@@ -44,8 +51,13 @@ export async function runRunCommand(ctx: CliContext, args: ParsedArgs): Promise<
 
   // REQ-0457 B5 — band each stage's local 0–99 progress into a MONOTONIC overall
   // so an agent never sees it jump backwards (transcribe 0→99 then burn 0→99).
-  const stagePlan = ['transcribe', ...(translateTo ? ['translate'] : []), ...(doBurn ? ['burn'] : [])]
-  const span = 100 / stagePlan.length
+  // D11 — no `transcribe` stage when an existing subtitle is supplied.
+  const stagePlan = [
+    ...(existingSubtitle ? [] : ['transcribe']),
+    ...(translateTo ? ['translate'] : []),
+    ...(doBurn ? ['burn'] : []),
+  ]
+  const span = 100 / Math.max(1, stagePlan.length)
   const stageCtx = (stage: string, assign: (r: CliResult) => void): CliContext => {
     const base = stagePlan.indexOf(stage) * span
     return {
@@ -61,16 +73,22 @@ export async function runRunCommand(ctx: CliContext, args: ParsedArgs): Promise<
   }
 
   try {
-    // 1) transcribe → temp .mojioko
-    const t1 = join(workDir, 'transcribe.mojioko')
-    await runTranscribeCommand(stageCtx('transcribe', (r) => { transcribeResult = r }), { positionals: [video], opts: { ...args.opts, out: t1, format: 'mojioko' } })
-    stages.push('transcribe')
-    let subtitle = t1
+    // 1) transcribe → temp .mojioko  (skipped when an existing subtitle is given, D11)
+    let subtitle: string
+    if (existingSubtitle) {
+      subtitle = existingSubtitle
+      stages.push('subtitle')
+    } else {
+      const t1 = join(workDir, 'transcribe.mojioko')
+      await runTranscribeCommand(stageCtx('transcribe', (r) => { transcribeResult = r }), { positionals: [video], opts: { ...args.opts, out: t1, format: 'mojioko' } })
+      stages.push('transcribe')
+      subtitle = t1
+    }
 
     // 2) translate (optional) → temp .mojioko
     if (translateTo) {
       const t2 = join(workDir, 'translate.mojioko')
-      await runTranslateCommand(stageCtx('translate', () => {}), { positionals: [t1], opts: { ...args.opts, to: translateTo, out: t2, format: 'mojioko' } })
+      await runTranslateCommand(stageCtx('translate', () => {}), { positionals: [subtitle], opts: { ...args.opts, to: translateTo, out: t2, format: 'mojioko' } })
       stages.push('translate')
       subtitle = t2
     }

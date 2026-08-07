@@ -26,6 +26,8 @@ import { optString, type ParsedArgs } from '../args'
 import { CliError, emitProgress, emitSuccess, type CliContext } from '../output'
 import { detectFormat, entriesFromSegments } from '../subtitle-io'
 import { resolveDefaultSubtitleStyle } from '../subtitle-style'
+import { findStylePreset, applyStylePreset } from '../style-preset-cli'
+import { assertWritable } from '../overwrite'
 import { resolveTarget, contentScaleFactor, scaleEntries, scaleVideoTo } from '../scale-video'
 
 const OVERFLOW_MODES = new Set<OverflowMode>(['warn', 'shrink', 'error'])
@@ -51,6 +53,7 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
   if (!existsSync(subPath)) throw new CliError('INPUT_NOT_FOUND', `字幕が見つかりません: ${subPath}`, '字幕パスを確認してください。')
   const out = optString(args.opts, 'out')
   if (!out) throw new CliError('USAGE', '出力パス（-o <out.mp4>）が必要です。')
+  assertWritable(out, args.opts) // REQ-0457 D13
 
   const subFmt = detectFormat(subPath, optString(args.opts, 'format'))
   if (!subFmt) throw new CliError('UNSUPPORTED_FORMAT', `字幕フォーマット不明: ${subPath}`, '.mojioko / .srt を指定してください。')
@@ -83,6 +86,21 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
       fontId,
       settings.fadeDurationSec ?? 0,
     )
+  }
+
+  // REQ-0457 D12 — apply a user-saved style preset to every cue ("author in the
+  // GUI, mass-produce from the CLI").  Uses SOURCE video dims (entries are in
+  // source-pixel space; resolution scaling happens after).
+  const stylePresetName = optString(args.opts, 'style')
+  let appliedStylePreset: string | null = null
+  if (stylePresetName) {
+    const preset = findStylePreset(settings.stylePresets ?? [], stylePresetName)
+    if (!preset) {
+      const names = (settings.stylePresets ?? []).map((p) => p.name).join(', ') || '(なし)'
+      throw new CliError('USAGE', `スタイルプリセット "${stylePresetName}" が見つかりません。`, `利用可能: ${names}（GUI で保存）。`)
+    }
+    entries = applyStylePreset(entries, preset, { videoWidthPx: video.widthPx, videoHeightPx: video.heightPx })
+    appliedStylePreset = preset.name
   }
 
   const encoderFlag = optString(args.opts, 'encoder')
@@ -208,5 +226,7 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     // For `.mojioko` input, per-cue styles from the file are preserved; this is
     // the app default style (what SRT-seeded cues and un-overridden fields use).
     subtitleStyle: resolveDefaultSubtitleStyle(settings),
+    // REQ-0457 D12 — the style preset applied to all cues, if any.
+    stylePreset: appliedStylePreset,
   })
 }

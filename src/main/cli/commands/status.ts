@@ -82,6 +82,8 @@ export async function runStatusCommand(ctx: CliContext): Promise<number> {
       // animation / shadow / rotation / alpha / line-spacing / offset), so an
       // agent can confirm every burn condition before spending a burn.
       subtitleStyle: resolveDefaultSubtitleStyle(settings),
+      // REQ-0457 D12 — names of GUI-saved style presets usable via `burn --style`.
+      stylePresets: (settings.stylePresets ?? []).map((p) => p.name),
     },
   })
 }

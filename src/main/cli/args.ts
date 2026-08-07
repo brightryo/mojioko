@@ -53,6 +53,8 @@ const VALUE_OPTS: ReadonlySet<string> = new Set([
   'weight',
   'position',
   'translate',
+  'style',
+  'subtitle',
 ])
 
 export interface ParsedArgs {

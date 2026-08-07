@@ -21,6 +21,7 @@ import type { TranslationToolId } from '../../../shared/translation-tools'
 import type { TranslationTarget } from '../../../shared/translation'
 import { optString, type ParsedArgs } from '../args'
 import { CliError, emitSuccess, type CliContext } from '../output'
+import { assertWritable } from '../overwrite'
 import { detectFormat, entriesToSrt } from '../subtitle-io'
 
 function cuesToSrt(cues: { startSec: number; endSec: number; text: string }[]): string {
@@ -37,6 +38,7 @@ export async function runTranslateCommand(ctx: CliContext, args: ParsedArgs): Pr
 
   const out = optString(args.opts, 'out')
   if (!out) throw new CliError('USAGE', '出力パス（-o <out>）が必要です。')
+  assertWritable(out, args.opts) // REQ-0457 D13
 
   const to = optString(args.opts, 'to')
   if (!to || !isTranslationTarget(to)) {

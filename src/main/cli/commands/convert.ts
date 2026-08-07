@@ -16,6 +16,7 @@ import type { FontId } from '../../../shared/fonts'
 import type { VideoInfo } from '../../../shared/types'
 import { optString, type ParsedArgs } from '../args'
 import { CliError, emitSuccess, type CliContext } from '../output'
+import { assertWritable } from '../overwrite'
 import { detectFormat, entriesFromSegments, writeMojiokoFile } from '../subtitle-io'
 import { readCues, type ReadCue } from './read-subtitle'
 
@@ -38,6 +39,7 @@ export async function runConvertCommand(ctx: CliContext, args: ParsedArgs): Prom
   if (!existsSync(input)) throw new CliError('INPUT_NOT_FOUND', `入力が見つかりません: ${input}`, 'パスを確認してください。')
   const out = optString(args.opts, 'out')
   if (!out) throw new CliError('USAGE', '出力パス（-o <out>）が必要です。')
+  assertWritable(out, args.opts) // REQ-0457 D13
 
   const outFmt = detectFormat(out, optString(args.opts, 'to'))
   if (!outFmt) throw new CliError('UNSUPPORTED_FORMAT', `出力フォーマット不明: ${out}`, '.mojioko / .srt、または --to mojioko|srt。')

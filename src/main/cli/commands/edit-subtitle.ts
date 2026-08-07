@@ -13,6 +13,7 @@ import { parseSrt } from '../../../renderer/lib/srt-parse'
 import { formatSrtTime } from '../../../shared/srt-time'
 import { optString, type ParsedArgs } from '../args'
 import { CliError, emitSuccess, type CliContext } from '../output'
+import { assertWritable } from '../overwrite'
 import { detectFormat } from '../subtitle-io'
 
 export async function runEditSubtitleCommand(ctx: CliContext, args: ParsedArgs): Promise<number> {
@@ -20,6 +21,8 @@ export async function runEditSubtitleCommand(ctx: CliContext, args: ParsedArgs):
   if (!input) throw new CliError('USAGE', '入力字幕が必要です。', 'mojioko edit_subtitle <in> -o <out> --index N --text "..."')
   if (!existsSync(input)) throw new CliError('INPUT_NOT_FOUND', `入力が見つかりません: ${input}`, 'パスを確認してください。')
   const out = optString(args.opts, 'out') ?? input
+  // REQ-0457 D13 — only guard a DIFFERENT output path (in-place edit is the norm).
+  if (out !== input) assertWritable(out, args.opts)
 
   const indexStr = optString(args.opts, 'index')
   const index = Number.parseInt(indexStr ?? '', 10)

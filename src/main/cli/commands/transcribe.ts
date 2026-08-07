@@ -19,6 +19,7 @@ import { APP_VERSION } from '../../../shared/app-info'
 import type { TranscriptionStartRequest } from '../../../shared/ipc-contracts'
 import type { VideoInfo, WhisperModelId } from '../../../shared/types'
 import { optBool, optString, type ParsedArgs } from '../args'
+import { assertWritable } from '../overwrite'
 import {
   CliError,
   emitProgress,
@@ -40,6 +41,7 @@ export async function runTranscribeCommand(ctx: CliContext, args: ParsedArgs): P
   if (!out) {
     throw new CliError('USAGE', '出力パス（-o <out>）が必要です。', 'mojioko transcribe <input> -o out.mojioko')
   }
+  assertWritable(out, args.opts) // REQ-0457 D13
   const format = detectFormat(out, optString(args.opts, 'format'))
   if (!format) {
     throw new CliError(
