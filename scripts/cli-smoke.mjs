@@ -94,6 +94,14 @@ try {
   const notInstalled = cli(['tools', 'use', 'whisper', '--model', 'large-v3'], 40000)
   check('uninstalled model → MODEL_NOT_FOUND / exit 5 + remedy', notInstalled.code === 5 && notInstalled.json?.code === 'MODEL_NOT_FOUND' && !!notInstalled.json?.remedy, notInstalled.json?.remedy || '')
 
+  // REQ-0459 §1/§5 — the .mojioko file-association change must NOT swallow CLI:
+  // an unknown token, and a .mojioko path that does NOT exist, both stay CLI
+  // (exit 2 / USAGE) rather than silently opening a GUI window.
+  const unknownTok = cli(['frobnicate'], 40000)
+  check('unknown token → USAGE / exit 2 (CLI preserved)', unknownTok.code === 2 && unknownTok.json?.code === 'USAGE', `${unknownTok.code}/${unknownTok.json?.code}`)
+  const ghostProj = cli([join(work, 'does-not-exist.mojioko')], 40000)
+  check('non-existent .mojioko → USAGE (not a GUI open)', ghostProj.code === 2 && ghostProj.json?.code === 'USAGE', `${ghostProj.code}/${ghostProj.json?.code}`)
+
   // 4) agent loop — only if the box is ready (avoids a multi-GB download here).
   if (st.json?.data?.ready) {
     const sizes = ['640x360', '1280x720']

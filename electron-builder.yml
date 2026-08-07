@@ -76,6 +76,18 @@ extraResources:
     filter:
       - "icon.ico"
 
+# REQ-0459 §2 — associate `.mojioko` with the app so a double-click opens the
+# project.  NSIS registers this at install time and REMOVES it on uninstall
+# (electron-builder wires both). The dispatcher (cli/index.ts) treats a lone
+# existing `.mojioko` path as a GUI launch, not a CLI command. The extension
+# icon reuses the app icon (build/icon.ico) per the REQ.
+fileAssociations:
+  - ext: mojioko
+    name: MOJIOKO Project
+    description: MOJIOKO subtitle project
+    icon: build/icon.ico
+    role: Editor
+
 win:
   target:
     - target: nsis

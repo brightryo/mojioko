@@ -37,8 +37,9 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
 import { usePreviewMixStore } from '@/stores/preview-mix-store'
-import { pickAndParseProjectFile } from '@/services/project-file'
+import { pickAndParseProjectFile, parseProjectFileAtPath } from '@/services/project-file'
 import { openVideoDialog, fileExists } from '@/services/dialog'
+import { Channels } from '../../../shared/ipc-channels'
 import { probeVideo } from '@/services/video'
 import { listFonts } from '@/services/font'
 import { DEFAULT_FONT_ID, type FontInfo } from '../../../shared/fonts'
@@ -52,7 +53,8 @@ import {
 
 type FlowState =
   | { kind: 'idle' }
-  | { kind: 'discard-confirm' }
+  // REQ-0459 — `path` set ⇒ a double-click open is waiting on discard-confirm.
+  | { kind: 'discard-confirm'; path?: string }
   | { kind: 'loading'; message: string }
   | { kind: 'source-missing'; project: ProjectFile }
   | {
@@ -90,18 +92,24 @@ export function ProjectOpenController() {
   const [state, setState] = useState<FlowState>({ kind: 'idle' })
 
   useEffect(() => {
-    const unsub = window.electronAPI?.subscribeToChannel('menu:openProject', () => {
+    const unsubMenu = window.electronAPI?.subscribeToChannel('menu:openProject', () => {
       void beginFlow()
     })
+    // REQ-0459 §3/§4 — a double-click / file-association (startup or
+    // second-instance) hands us a `.mojioko` path to open directly.
+    const unsubPath = window.electronAPI?.subscribeToChannel(Channels.projectOpenPath, (payload) => {
+      if (typeof payload === 'string' && payload) void beginFlow(payload)
+    })
     return () => {
-      unsub?.()
+      unsubMenu?.()
+      unsubPath?.()
     }
     // Handlers are captured by ref-like closure over setState/navigate;
     // remounting the effect on locale change is unnecessary.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function beginFlow() {
+  async function beginFlow(path?: string) {
     // Ignore re-entry while a flow is in progress — clicking the menu
     // repeatedly should not stack dialogs.
     if (state.kind !== 'idle') return
@@ -111,16 +119,19 @@ export function ProjectOpenController() {
 
     if (hasProject) {
       // Waiting for the discard-confirm decision.  The dialog buttons
-      // drive the next step via `handleDiscardConfirm(...)`.
-      setState({ kind: 'discard-confirm' })
+      // drive the next step via `handleDiscardConfirm(...)`.  A double-click
+      // path (REQ-0459) is carried through so "Discard & open" opens IT, not
+      // a fresh file picker.
+      setState({ kind: 'discard-confirm', path })
       return
     }
-    void pickAndContinue()
+    void pickAndContinue(path)
   }
 
-  async function pickAndContinue() {
+  async function pickAndContinue(path?: string) {
     setState({ kind: 'loading', message: '' })
-    const picked = await pickAndParseProjectFile()
+    // REQ-0459 — a supplied path skips the OS picker (double-click open).
+    const picked = path ? await parseProjectFileAtPath(path) : await pickAndParseProjectFile()
     if (!picked.ok) {
       setState({ kind: 'idle' })
       if (picked.reason === 'cancelled') return
@@ -262,11 +273,13 @@ export function ProjectOpenController() {
   // ─── Dialog handlers ──────────────────────────────────────────────
 
   function handleDiscardConfirm(ok: boolean) {
+    // REQ-0459 — remember the pending double-click path before we drop the state.
+    const pendingPath = state.kind === 'discard-confirm' ? state.path : undefined
     if (!ok) {
       setState({ kind: 'idle' })
       return
     }
-    void pickAndContinue()
+    void pickAndContinue(pendingPath)
   }
 
   async function handleReSelectSource(project: ProjectFile) {

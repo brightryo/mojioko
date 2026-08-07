@@ -15,7 +15,9 @@
  */
 import { app } from 'electron'
 import { resolve } from 'node:path'
+import { existsSync } from 'node:fs'
 import { APP_VERSION } from '../../shared/app-info'
+import { CLI_COMMANDS, HELP_TOKENS, classifyProjectOpen } from './launch-classify'
 import { parseArgs } from './args'
 import { CliError, emitFailure, type CliContext } from './output'
 import { printHelp } from './help'
@@ -33,14 +35,14 @@ import { runConvertCommand } from './commands/convert'
 import { runMcpServer } from '../mcp/server'
 import { installStdoutGuard } from '../mcp/stdout-guard'
 
-// REQ-0457 — underscore names match the MCP tools; hyphen aliases are accepted
-// for CLI ergonomics.
-const COMMANDS = new Set([
-  'tools', 'status', 'transcribe', 'translate', 'burn', 'run', 'mcp',
-  'export_frame', 'export-frame', 'probe', 'read_subtitle', 'read-subtitle',
-  'edit_subtitle', 'edit-subtitle', 'convert',
-])
-const HELP_TOKENS = new Set(['help', '-h', '--help'])
+// REQ-0459 — command set / help tokens / project-open classification moved to
+// `launch-classify.ts` (electron-free) so the dispatch decision is unit-testable.
+const COMMANDS = CLI_COMMANDS
+
+/** REQ-0459 §1 — the `.mojioko` to open (file-association launch), or null (CLI). */
+function extractProjectFile(tokens: string[]): string | null {
+  return classifyProjectOpen(tokens, existsSync)
+}
 
 /**
  * Extract the user-supplied CLI args, stripping the launcher prefix.
@@ -110,18 +112,42 @@ async function route(ctx: CliContext, command: string, args: ReturnType<typeof p
 }
 
 /**
- * REQ-0454 §1 — synchronous check: is this a CLI/MCP invocation (any user args)?
- * The caller uses this to route BEFORE any single-instance-lock / window logic,
- * so `mojioko mcp` (and every CLI command) never contends with the GUI's lock.
+ * REQ-0454 §1 / REQ-0459 §1 — synchronous check: is this a CLI/MCP invocation?
+ * The caller routes BEFORE any single-instance-lock / window logic, so
+ * `mojioko mcp` (and every CLI command) never contends with the GUI's lock.
+ *
+ * REQ-0459: a lone existing `.mojioko` path (a double-click / file association)
+ * is NOT a CLI invocation — it is a GUI launch that opens that project.
  */
 export function isCliInvocation(): boolean {
-  return userCliArgs().length > 0
+  const tokens = userCliArgs()
+  if (tokens.length === 0) return false
+  if (extractProjectFile(tokens) !== null) return false
+  return true
+}
+
+/** REQ-0459 §1/§4 — the `.mojioko` path this launch should open, or null. */
+export function projectFileToOpen(): string | null {
+  return extractProjectFile(userCliArgs())
+}
+
+/**
+ * REQ-0459 §3 — the `.mojioko` path from a SECOND-instance launch's argv (the
+ * `second-instance` event hands us the new process's full argv).  Reuses the
+ * same launcher-prefix stripping as `userCliArgs`.
+ */
+export function projectFileFromSecondInstance(argv: string[]): string | null {
+  let rest = argv.slice(1)
+  if (!app.isPackaged && rest.length > 0 && isAppDirArg(rest[0], app.getAppPath())) rest = rest.slice(1)
+  return extractProjectFile(rest)
 }
 
 export async function maybeRunCli(): Promise<boolean> {
   const tokens = userCliArgs()
   // No user args ⇒ a normal GUI launch: let the caller boot the window.
   if (tokens.length === 0) return false
+  // REQ-0459 — a `.mojioko` double-click is a GUI launch, never a CLI run.
+  if (extractProjectFile(tokens) !== null) return false
 
   // REQ-0455 — for `mojioko mcp`, guard stdout BEFORE anything (startup /
   // whenReady / libraries) can write a stray byte to it; only sanctioned

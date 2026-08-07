@@ -117,7 +117,15 @@ export async function pickAndParseProjectFile(): Promise<LoadFileResult> {
   const settings = useSettingsStore.getState()
   const targetPath = await openProjectDialog(settings.defaultProjectDir ?? undefined)
   if (!targetPath) return { ok: false, reason: 'cancelled' }
+  return parseProjectFileAtPath(targetPath)
+}
 
+/**
+ * REQ-0459 §4 — parse a `.mojioko` at a KNOWN path (no file picker), for the
+ * double-click / file-association open flow.  Same validation contract as
+ * `pickAndParseProjectFile`; the caller runs identity + font checks.
+ */
+export async function parseProjectFileAtPath(targetPath: string): Promise<LoadFileResult> {
   let raw: string
   try {
     raw = await readTextFile(targetPath)

@@ -106,6 +106,12 @@ export const Channels = {
    */
   dialogOpenProject: 'dialog:openProject',
   /**
+   * REQ-0459 — main → renderer: open the `.mojioko` at this path (a double-click
+   * / file-association launch, or a second-instance launch handed to the
+   * existing window). The renderer runs the same open flow the menu uses.
+   */
+  projectOpenPath: 'project:openPath',
+  /**
    * REQ-0223 — SRT open dialog for the "import SRT" flow in step2.
    * Same shape as `dialogOpenProject`; filter narrowed to `.srt`.
    */

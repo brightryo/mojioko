@@ -7,7 +7,7 @@ import { release } from 'os'
 import { APP_NAME, APP_DISPLAY, APP_VERSION } from '../shared/app-info'
 import { Channels } from '../shared/ipc-channels'
 import { existsSync } from 'fs'
-import { maybeRunCli, isCliInvocation } from './cli'
+import { maybeRunCli, isCliInvocation, projectFileToOpen, projectFileFromSecondInstance } from './cli'
 import { writeMcpbBundle } from './mcp/mcpb'
 import { toolList, JOB_TOOLS } from './mcp/tools'
 import { getMcpLaunchSpec } from './mcp/launch'
@@ -332,11 +332,20 @@ if (isCliInvocation()) {
   if (!app.requestSingleInstanceLock()) {
     app.quit()
   } else {
-    app.on('second-instance', () => {
+    // REQ-0459 §1/§4 — a `.mojioko` double-click launched us: open it once the
+    // window's renderer is ready (a startup-only send; see createWindow below).
+    const startupProjectPath = projectFileToOpen()
+
+    app.on('second-instance', (_event, argv) => {
       const win = BrowserWindow.getAllWindows()[0]
       if (win) {
         if (win.isMinimized()) win.restore()
         win.focus()
+        // REQ-0459 §3 — a second launch double-clicked a `.mojioko`: hand the
+        // path to the EXISTING window (no new process). The renderer confirms
+        // discarding an unsaved project before replacing it.
+        const secondPath = projectFileFromSecondInstance(argv)
+        if (secondPath) win.webContents.send(Channels.projectOpenPath, secondPath)
       }
     })
     app.on('window-all-closed', () => {
@@ -352,7 +361,16 @@ if (isCliInvocation()) {
       // during a prior transcription run.  See `preview-mix.ts`.
       cleanupStalePreviewMixTmp()
       registerIpcHandlers()
-      createWindow()
+      const win = createWindow()
+
+      // REQ-0459 §4 — deliver the double-clicked project path to the renderer
+      // after it finishes loading, so ProjectOpenController can run the same
+      // open flow the menu uses (identity check, font warnings, etc.).
+      if (startupProjectPath) {
+        win.webContents.once('did-finish-load', () => {
+          win.webContents.send(Channels.projectOpenPath, startupProjectPath)
+        })
+      }
 
       app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow()

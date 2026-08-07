@@ -65,6 +65,15 @@ extraResources:
     filter:
       - "icon.ico"
 
+# REQ-0459 §2 — `.mojioko` file-type association for the Store MSIX (kept in
+# sync with electron-builder.yml / electron-builder-appx.yml).
+fileAssociations:
+  - ext: mojioko
+    name: MOJIOKO Project
+    description: MOJIOKO subtitle project
+    icon: build/icon.ico
+    role: Editor
+
 win:
   target:
     - target: appx
