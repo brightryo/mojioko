@@ -21,6 +21,9 @@ const electronAPI = {
   isMsix: (): Promise<boolean> => ipcRenderer.invoke(Channels.appIsMsix),
   /** REQ-0449 §4 — absolute path of the CLI executable (MOJIOKO.exe). */
   getCliPath: (): Promise<string> => ipcRenderer.invoke(Channels.appGetCliPath),
+  /** REQ-0451 §1 — write a .mcpb bundle to `targetPath`; resolves the path. */
+  exportMcpBundle: (targetPath: string): Promise<string> =>
+    ipcRenderer.invoke(Channels.appExportMcpBundle, targetPath),
   /**
    * REQ-0258 — read the MOJIOKO EULA text for the current UI language.
    * Rejects with `EULA_NOT_FOUND` if the extraResources bundling is

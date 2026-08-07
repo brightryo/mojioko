@@ -4,6 +4,8 @@ import { release } from 'os'
 import { APP_NAME, APP_DISPLAY, APP_VERSION } from '../shared/app-info'
 import { Channels } from '../shared/ipc-channels'
 import { maybeRunCli } from './cli'
+import { writeMcpbBundle } from './mcp/mcpb'
+import { toolList, GET_JOB_STATUS_TOOL } from './mcp/tools'
 import { registerVideoHandlers } from './ipc/video'
 import { registerTranscriptionHandlers } from './ipc/transcription'
 import { registerBurninHandlers } from './ipc/burnin'
@@ -176,6 +178,15 @@ function registerIpcHandlers(): void {
   // (`MOJIOKO.exe <command>`). Used by the Settings ▸ CLI "copy instructions"
   // button. In dev this is electron.exe (expected).
   ipcMain.handle(Channels.appGetCliPath, (): string => process.execPath)
+
+  // REQ-0451 §1 — write a .mcpb bundle (drag into Claude Desktop ▸ Extensions).
+  // The MCP server is this exe (`MOJIOKO.exe mcp`); its absolute path is baked
+  // into the manifest at export time.
+  ipcMain.handle(Channels.appExportMcpBundle, (_event, targetPath: unknown): string => {
+    if (typeof targetPath !== 'string' || !targetPath) throw new Error('invalid target path')
+    writeMcpbBundle(targetPath, process.execPath, [...toolList(), GET_JOB_STATUS_TOOL])
+    return targetPath
+  })
 
   ipcMain.handle(Channels.appGetBuildInfo, async (): Promise<BuildInfo> => {
     const pythonAvailable = await checkPythonAvailable()
