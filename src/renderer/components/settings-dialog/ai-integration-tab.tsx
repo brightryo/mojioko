@@ -105,6 +105,7 @@ export function AiIntegrationTab() {
           {step(2, t('ai.step2'))}
           {step(3, t('ai.step3'))}
           {step(4, t('ai.step4'))}
+          {step(5, t('ai.step5'))}
         </ol>
       </div>
 

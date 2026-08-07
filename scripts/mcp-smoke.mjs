@@ -10,7 +10,7 @@
  * Usage: node scripts/mcp-smoke.mjs   (run `npm run build` first)
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, existsSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -28,6 +28,18 @@ if (!existsSync(ELECTRON) || !existsSync(FFMPEG)) { log('SKIP: build first (elec
 const work = mkdtempSync(join(tmpdir(), 'mojioko-mcp-smoke-'))
 const clip = join(work, 'clip.mp4')
 spawnSync(FFMPEG, ['-y', '-f', 'lavfi', '-i', 'testsrc=size=1280x720:rate=30:duration=2', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', '-c:v', 'h264_mf', '-c:a', 'aac', '-shortest', clip], { encoding: 'utf-8' })
+
+// REQ-0454 §1/§4 — hold a competing single-instance lock (simulating a running
+// GUI). The MCP server must still serve (it runs in the CLI branch, before/
+// without the lock). The whole handshake below then runs with the lock held.
+const holderPath = join(work, 'lock-holder.cjs')
+writeFileSync(
+  holderPath,
+  "const {app}=require('electron');const got=app.requestSingleInstanceLock();process.stderr.write('LOCK='+got+'\\n');app.whenReady().then(()=>{});setTimeout(()=>app.exit(0),120000);",
+)
+const holder = spawn(ELECTRON, [holderPath], { cwd: ROOT, env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1' } })
+let holderGotLock = false
+holder.stderr.on('data', (d) => { if (String(d).includes('LOCK=true')) holderGotLock = true })
 
 const child = spawn(ELECTRON, ['.', 'mcp'], { cwd: ROOT, env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1' } })
 const rl = createInterface({ input: child.stdout, terminal: false })
@@ -55,9 +67,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const parseContent = (res) => { try { return JSON.parse(res.result.content[0].text) } catch { return null } }
 
 try {
-  // 1) handshake
+  // 0) confirm a competing single-instance lock is held (REQ-0454 §1/§4), so
+  // the handshake below meaningfully proves the MCP server serves regardless.
+  await sleep(3000)
+  check('competing single-instance lock is held (GUI-running scenario)', holderGotLock)
+
+  // 1) handshake — runs WHILE the lock is held.
   const init = await rpc('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'smoke', version: '1' } })
-  check('initialize → serverInfo mojioko', init.result?.serverInfo?.name === 'mojioko', JSON.stringify(init.result?.serverInfo))
+  check('initialize → serverInfo mojioko (with GUI-lock held)', init.result?.serverInfo?.name === 'mojioko', JSON.stringify(init.result?.serverInfo))
   notify('notifications/initialized', {})
 
   // 2) tools/list — typed
@@ -98,6 +115,7 @@ try {
 } catch (e) {
   check(`no exception (${e.message})`, false)
 } finally {
+  try { holder.kill() } catch { /* already gone */ }
   child.stdin.end() // closes stdin → server exits (proves clean shutdown)
   await sleep(500)
   try { child.kill() } catch { /* already gone */ }

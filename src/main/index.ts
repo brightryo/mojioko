@@ -4,7 +4,7 @@ import { release } from 'os'
 import { APP_NAME, APP_DISPLAY, APP_VERSION } from '../shared/app-info'
 import { Channels } from '../shared/ipc-channels'
 import { existsSync } from 'fs'
-import { maybeRunCli } from './cli'
+import { maybeRunCli, isCliInvocation } from './cli'
 import { writeMcpbBundle } from './mcp/mcpb'
 import { toolList, GET_JOB_STATUS_TOOL } from './mcp/tools'
 import { getMcpLaunchSpec } from './mcp/launch'
@@ -161,7 +161,9 @@ async function checkPythonAvailable(): Promise<boolean> {
     try {
       await execFileAsync(bin, [...args, '--version'], { timeout: 3000 })
       return true
-    } catch { /* try next */ }
+    } catch {
+      /* try next */
+    }
   }
   return false
 }
@@ -224,10 +226,12 @@ function registerIpcHandlers(): void {
       const text = await fsp.readFile(filePath, 'utf-8')
       return { ok: true as const, data: text }
     } catch (err) {
-      log.warn(`[app] readEula failed for lang=${resolved} at ${filePath}: ${(err as Error).message}`)
+      log.warn(
+        `[app] readEula failed for lang=${resolved} at ${filePath}: ${(err as Error).message}`
+      )
       return {
         ok: false as const,
-        error: { code: 'EULA_NOT_FOUND', message: (err as Error).message },
+        error: { code: 'EULA_NOT_FOUND', message: (err as Error).message }
       }
     }
   })
@@ -269,13 +273,15 @@ async function logStartupEnvironment(): Promise<void> {
   log.info(`[startup] packaged: ${app.isPackaged}`)
 
   try {
-    const gpu = await app.getGPUInfo('basic') as Record<string, unknown>
+    const gpu = (await app.getGPUInfo('basic')) as Record<string, unknown>
     // 'basic' returns { auxAttributes, gpuDevice[], machineModelVersion, ... }.
     // gpuDevice is the interesting bit; everything else is noise in a log line.
     const devices = (gpu.gpuDevice as Array<Record<string, unknown>> | undefined) ?? []
     const primary = devices.find((d) => d.active) ?? devices[0]
     if (primary) {
-      log.info(`[startup] gpu:      vendorId=${primary.vendorId} deviceId=${primary.deviceId} active=${primary.active ?? false}`)
+      log.info(
+        `[startup] gpu:      vendorId=${primary.vendorId} deviceId=${primary.deviceId} active=${primary.active ?? false}`
+      )
     } else {
       log.info('[startup] gpu:      (no devices reported)')
     }
@@ -286,7 +292,9 @@ async function logStartupEnvironment(): Promise<void> {
   try {
     const available = await detectAvailableEncoders()
     const best = await getBestEncoder()
-    log.info(`[startup] ffmpeg encoders available: ${available.join(', ') || '(none)'} — best: ${best}`)
+    log.info(
+      `[startup] ffmpeg encoders available: ${available.join(', ') || '(none)'} — best: ${best}`
+    )
   } catch (err) {
     log.warn(`[startup] encoder detection failed: ${String(err)}`)
   }
@@ -294,47 +302,47 @@ async function logStartupEnvironment(): Promise<void> {
   log.info('==================================================')
 }
 
-// REQ-0447 — CLI subcommand dispatch.  If argv carries a known command
-// (`tools` / `transcribe` / …) or `-h`/`--help`/`--version`, run headless and
-// exit; otherwise fall through to the normal GUI boot.  `maybeRunCli()` returns
-// `false` immediately (before touching `whenReady`) for a plain GUI launch.
-void maybeRunCli().then((handledByCli) => {
-  if (handledByCli) return
-  // REQ-0449 — single-instance lock: (1) lets the CLI's `tools use` write guard
-  // detect a running GUI (avoids last-write-wins on settings.json), and (2)
-  // focuses the existing window instead of opening a second one.
+// REQ-0447 / REQ-0454 §1 — CLI/MCP dispatch is decided SYNCHRONOUSLY and BEFORE
+// any single-instance-lock or window logic. `mojioko mcp` (and every CLI
+// command) therefore runs regardless of a running GUI holding the lock — the
+// MCP server must serve even while the app is open (Claude Desktop launches it
+// independently). The lock + window-all-closed only exist in the GUI branch.
+if (isCliInvocation()) {
+  void maybeRunCli()
+} else {
+  // REQ-0449 — single-instance lock (GUI only): focus the existing window on a
+  // second launch, and let the CLI's `tools use` write guard detect a running GUI.
   if (!app.requestSingleInstanceLock()) {
     app.quit()
-    return
-  }
-  app.on('second-instance', () => {
-    const win = BrowserWindow.getAllWindows()[0]
-    if (win) {
-      if (win.isMinimized()) win.restore()
-      win.focus()
-    }
-  })
-  app.whenReady().then(() => {
-    log.info(`[main] starting ${APP_DISPLAY}`)
-    void logStartupEnvironment()
-    registerVideoProtocol()
-    registerFontProtocol()
-    registerPreviewMixProtocol()
-    // REQ-086: remove any preview-mix .tmp left behind by a force-quit
-    // during a prior transcription run.  See `preview-mix.ts`.
-    cleanupStalePreviewMixTmp()
-    registerIpcHandlers()
-    createWindow()
-
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  } else {
+    app.on('second-instance', () => {
+      const win = BrowserWindow.getAllWindows()[0]
+      if (win) {
+        if (win.isMinimized()) win.restore()
+        win.focus()
+      }
     })
-  })
-})
+    app.on('window-all-closed', () => {
+      if (process.platform !== 'darwin') app.quit()
+    })
+    app.whenReady().then(() => {
+      log.info(`[main] starting ${APP_DISPLAY}`)
+      void logStartupEnvironment()
+      registerVideoProtocol()
+      registerFontProtocol()
+      registerPreviewMixProtocol()
+      // REQ-086: remove any preview-mix .tmp left behind by a force-quit
+      // during a prior transcription run.  See `preview-mix.ts`.
+      cleanupStalePreviewMixTmp()
+      registerIpcHandlers()
+      createWindow()
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
+      app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      })
+    })
+  }
+}
 
 app.on('before-quit', () => {
   log.info('[main] before-quit: terminating sidecar')

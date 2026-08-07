@@ -84,6 +84,15 @@ async function route(ctx: CliContext, command: string, args: ReturnType<typeof p
   }
 }
 
+/**
+ * REQ-0454 §1 — synchronous check: is this a CLI/MCP invocation (any user args)?
+ * The caller uses this to route BEFORE any single-instance-lock / window logic,
+ * so `mojioko mcp` (and every CLI command) never contends with the GUI's lock.
+ */
+export function isCliInvocation(): boolean {
+  return userCliArgs().length > 0
+}
+
 export async function maybeRunCli(): Promise<boolean> {
   const tokens = userCliArgs()
   // No user args ⇒ a normal GUI launch: let the caller boot the window.
