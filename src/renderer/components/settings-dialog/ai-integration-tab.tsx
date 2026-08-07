@@ -55,6 +55,8 @@ export function AiIntegrationTab() {
         toast.success(t('ai.exportToast'))
       }
       void shellShowInFolder(result.path)
+      // REQ-0458 §3 — refresh so the bundle-status block reflects this export.
+      void window.electronAPI.getMcpLaunchSpec().then(setSpec).catch(() => {})
     } catch {
       toast.error(t('ai.actionError'))
     }
@@ -117,6 +119,31 @@ export function AiIntegrationTab() {
           {step(5, t('ai.step5'))}
         </ol>
       </div>
+
+      {/* REQ-0458 §3 — last-exported bundle info + staleness prompt */}
+      {spec && (
+        <div className="rounded-md border border-line p-3 space-y-1.5">
+          <p className="text-caption font-medium text-fg-secondary">{t('ai.bundleStatusTitle')}</p>
+          {spec.lastExport ? (
+            <p className="text-caption text-fg-muted">
+              {t('ai.lastExport', {
+                version: spec.lastExport.appVersion,
+                rev: spec.lastExport.launchSpecRevision,
+                date: new Date(spec.lastExport.exportedAtMs).toLocaleString(),
+              })}
+            </p>
+          ) : (
+            <p className="text-caption text-fg-muted">{t('ai.neverExported')}</p>
+          )}
+          {spec.lastExport && spec.lastExport.launchSpecRevision !== spec.launchSpecRevision && (
+            <div className="flex items-start gap-1.5 text-caption text-warning">
+              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+              <span>{t('ai.reexportNeeded', { rev: spec.launchSpecRevision })}</span>
+            </div>
+          )}
+          <p className="text-caption text-fg-muted leading-relaxed">{t('ai.reinstallNote')}</p>
+        </div>
+      )}
 
       {/* Advanced — manual config / Claude Code (collapsible) */}
       <div className="rounded-md border border-line">

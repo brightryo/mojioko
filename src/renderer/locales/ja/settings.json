@@ -29,7 +29,12 @@
     "codeDesc": "Claude Code はターミナルで次のコマンドを実行して登録します。",
     "copyCodeButton": "登録コマンドをコピー",
     "clientsNote": "対応クライアント：Claude Desktop・Claude Code（claude.ai / Cowork では利用できません）。",
-    "cliRef": "CLI の詳細は `mojioko -h` で確認できます。"
+    "cliRef": "CLI の詳細は `mojioko -h` で確認できます。",
+    "bundleStatusTitle": "書き出したバンドル",
+    "lastExport": "最後の書き出し：v{{version}}（起動仕様 rev {{rev}}）— {{date}}",
+    "neverExported": "まだバンドルを書き出していません。",
+    "reexportNeeded": "起動方法が変わりました（現在 rev {{rev}}）。バンドルを再書き出しし、Claude Desktop で入れ直してください。",
+    "reinstallNote": "再インストールが必要なのは、起動方法（command / args / env）またはアプリのインストール先が変わったときだけです。ツールの追加・変更・不具合修正はアプリ更新だけで反映されます。"
   },
   "translation": {
     "hint": "文字起こし結果をインスペクタで自動翻訳します（プレビューのみ・字幕には書き込みません）。翻訳ツールの入手は STEP1 の「翻訳ツール」から。",

@@ -23,6 +23,7 @@ import { registerGpuToolHandlers } from './ipc/gpu-tool'
 import { registerTranslationToolHandlers } from './ipc/translation-tool'
 import { registerTranslationHandlers } from './ipc/translation'
 import { registerDownloadHandlers } from './ipc/download'
+import { loadSettings, mutateSettings } from './services/settings-store'
 import { terminateSidecar } from './services/transcription-sidecar'
 import { terminateTranslationSidecar } from './services/translation-sidecar'
 import { execFileAsync } from './lib/child-process'
@@ -189,17 +190,30 @@ function registerIpcHandlers(): void {
 
   // REQ-0452 — the launch spec (command/args) correct for dev vs packaged.
   // Single source for the .mcpb export AND the renderer's config/command strings.
-  ipcMain.handle(Channels.appGetMcpLaunchSpec, (): McpLaunchSpec => getMcpLaunchSpec())
+  // REQ-0458 §3 — also attach the last-exported bundle record so the AI連携 tab
+  // can compare its launch-spec revision against the current one.
+  ipcMain.handle(Channels.appGetMcpLaunchSpec, async (): Promise<McpLaunchSpec> => {
+    const settings = await loadSettings()
+    return { ...getMcpLaunchSpec(), lastExport: settings.lastMcpExport ?? null }
+  })
 
   // REQ-0451 §1 / REQ-0452 — write a .mcpb bundle (drag into Claude Desktop ▸
   // Extensions). command/args are dev/packaged-correct; the manifest command is
   // existence-checked as a safety net.
-  ipcMain.handle(Channels.appExportMcpBundle, (_event, targetPath: unknown): McpExportResult => {
+  ipcMain.handle(Channels.appExportMcpBundle, async (_event, targetPath: unknown): Promise<McpExportResult> => {
     if (typeof targetPath !== 'string' || !targetPath) throw new Error('invalid target path')
     const spec = getMcpLaunchSpec()
     const commandExists = existsSync(spec.command)
     writeMcpbBundle(targetPath, spec.command, spec.args, spec.env, [...toolList(), ...JOB_TOOLS])
-    return { path: targetPath, isPackaged: spec.isPackaged, commandExists }
+    // REQ-0458 §3 — remember what we exported so the tab can flag staleness.
+    const record = {
+      appVersion: spec.appVersion,
+      launchSpecRevision: spec.launchSpecRevision,
+      exportedAtMs: Date.now(),
+      path: targetPath,
+    }
+    await mutateSettings((s) => { s.lastMcpExport = record; return { save: s, value: null } })
+    return { path: targetPath, isPackaged: spec.isPackaged, commandExists, appVersion: spec.appVersion, launchSpecRevision: spec.launchSpecRevision }
   })
 
   ipcMain.handle(Channels.appGetBuildInfo, async (): Promise<BuildInfo> => {

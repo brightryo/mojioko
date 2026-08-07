@@ -68,6 +68,20 @@ try {
   const style = st.json?.data?.settings?.subtitleStyle
   check('status subtitleStyle has karaoke/emphasis/animation/shadow', !!style?.karaoke && !!style?.emphasis && !!style?.animation && !!style?.shadow, style ? Object.keys(style).join(',') : 'missing')
 
+  // REQ-0458 §2/§5 — a bundle launched with an OLD launch-spec revision is
+  // detected as stale (agent can advise a re-export). Current rev → not stale.
+  check('current launch → not stale', st.json?.data?.mcpBundle?.stale === false, JSON.stringify(st.json?.data?.mcpBundle))
+  const staleR = spawnSync(ELECTRON, ['.', 'status', '--json'], {
+    cwd: ROOT, timeout: 60000, encoding: 'utf-8',
+    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1', MOJIOKO_LAUNCH_SPEC_REV: '999' },
+  })
+  const staleLine = (staleR.stdout || '').trim().split('\n').filter((l) => l.startsWith('{')).pop()
+  let staleJson = null
+  try { staleJson = staleLine ? JSON.parse(staleLine) : null } catch { staleJson = null }
+  check('stale bundle (old launch-spec rev) → status flags stale + STALE_MCP_BUNDLE warning',
+    staleJson?.data?.mcpBundle?.stale === true && (staleJson?.warnings || []).some((w) => w.code === 'STALE_MCP_BUNDLE'),
+    JSON.stringify(staleJson?.data?.mcpBundle))
+
   // 2) help --json — full coverage present.
   const help = cli(['help', '--json'], 60000)
   check('help --json exits 0', help.code === 0)

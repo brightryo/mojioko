@@ -844,6 +844,14 @@ export interface AppSettings {
    * payload shape and the exhaustive field classification.
    */
   stylePresets?: StylePreset[]
+
+  /**
+   * REQ-0458 §3 — metadata about the most recently exported `.mcpb` MCP bundle
+   * (app version + launch-spec revision + when).  The AI連携 tab compares its
+   * `launchSpecRevision` against the current one to tell the user whether a
+   * re-export is needed.  `undefined` until the first export.
+   */
+  lastMcpExport?: import('./mcp').McpExportRecord
 }
 
 // ---------------------------------------------------------------------------

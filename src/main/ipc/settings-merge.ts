@@ -130,6 +130,9 @@ export const SETTINGS_MERGE_RULES: { readonly [K in keyof AppSettings]-?: MergeR
   // REQ-0157: written only by the `gpu-tool:select` IPC; the renderer's store
   // does not track it at all.
   activeAccelerator: 'incoming-else-existing',
+  // REQ-0458 §3: written only by the `app:exportMcpBundle` IPC (mutateSettings);
+  // the renderer never sends it, so this always resolves to `existing`.
+  lastMcpExport: 'incoming-else-existing',
 
   // --- main-owned, where `null`/absent must stay distinguishable -----------
   // REQ-0158 / REQ-0194: `null` means "user cleared it with the × button".

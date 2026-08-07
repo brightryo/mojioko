@@ -23,6 +23,7 @@ import { app } from 'electron'
 import log from 'electron-log/main'
 import { APP_VERSION } from '../../shared/app-info'
 import { toolList, callTool, JOB_TOOLS } from './tools'
+import { getLaunchStaleness } from './launch'
 import { mcpLog } from './mcp-log'
 import { installStdoutGuard, writeJsonRpc } from './stdout-guard'
 
@@ -63,6 +64,21 @@ export async function runMcpServer(): Promise<number> {
     `START pid=${process.pid} isPackaged=${app.isPackaged} execPath=${process.execPath} ` +
       `cwd=${process.cwd()} argv=${JSON.stringify(process.argv.slice(1))}`,
   )
+
+  // REQ-0458 §2 — detect a STALE bundle: the running server compares the
+  // launch-spec revision the bundle baked into env against the current code's
+  // revision.  A mismatch means Claude launched us via an OLD bundle whose
+  // command/args/env shape no longer matches this app — log a warning + remedy
+  // (also surfaced by the `status` tool) so the agent can guide a re-install.
+  const staleness = getLaunchStaleness()
+  if (staleness.stale) {
+    mcpLog(
+      `STALE BUNDLE: launched with launchSpecRevision=${staleness.launchedRevision} but this app expects ` +
+        `${staleness.expectedRevision}. remedy: ${staleness.remedy}`,
+    )
+  } else {
+    mcpLog(`launch spec OK (revision=${staleness.expectedRevision}, launchedRevision=${staleness.launchedRevision})`)
+  }
 
   // Never let an uncaught error kill the server without a trace.
   process.on('uncaughtException', (e) => mcpLog(`uncaughtException: ${e instanceof Error ? e.stack ?? e.message : String(e)}`))

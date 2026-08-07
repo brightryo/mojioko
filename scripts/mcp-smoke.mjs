@@ -106,6 +106,8 @@ try {
   check('status → ready boolean + blockers[]', typeof stData?.data?.ready === 'boolean' && Array.isArray(stData?.data?.blockers), `ready=${stData?.data?.ready}`)
   // REQ-0457 A1 — status returns the full resolved subtitle style.
   check('status → full subtitleStyle (karaoke/emphasis/animation)', !!stData?.data?.settings?.subtitleStyle?.karaoke && !!stData?.data?.settings?.subtitleStyle?.animation)
+  // REQ-0458 §2 — status reports the MCP launch-spec revision + stale verdict.
+  check('status → mcpBundle{launchSpecRevision, stale}', typeof stData?.data?.mcpBundle?.launchSpecRevision === 'number' && typeof stData?.data?.mcpBundle?.stale === 'boolean', JSON.stringify(stData?.data?.mcpBundle))
 
   // 4) transcribe as async job (only if ready)
   if (stData?.data?.ready) {

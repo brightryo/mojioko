@@ -81,6 +81,7 @@ describe('REQ-0312 §1 — the rule table pins every field s classification', ()
     lastInputDir: 'incoming-else-existing',
     lastOutputDir: 'incoming-else-existing',
     activeAccelerator: 'incoming-else-existing',
+    lastMcpExport: 'incoming-else-existing',
     defaultInputDir: 'presence-wins',
     defaultOutputDir: 'presence-wins',
     defaultProjectDir: 'presence-wins',

@@ -16,7 +16,8 @@ import { getBinPath, getModelsDir, getTranscriberExePath } from '../../lib/paths
 import { APP_VERSION } from '../../../shared/app-info'
 import { commandSummaries } from '../help'
 import { resolveDefaultSubtitleStyle } from '../subtitle-style'
-import { emitSuccess, type CliContext } from '../output'
+import { getLaunchStaleness } from '../../mcp/launch'
+import { emitSuccess, type CliContext, type CliWarning } from '../output'
 
 interface Blocker {
   what: string
@@ -55,11 +56,31 @@ export async function runStatusCommand(ctx: CliContext): Promise<number> {
     })
   }
 
+  // REQ-0458 §2 — when this server was launched via an MCP bundle, report
+  // whether that bundle is stale (its launch-spec revision differs from the
+  // current app's), so the agent can advise a re-export/re-install.
+  const staleness = getLaunchStaleness()
+  const warnings: CliWarning[] = []
+  if (staleness.stale) {
+    warnings.push({
+      code: 'STALE_MCP_BUNDLE',
+      message: '古い MCP バンドルで起動されています（起動仕様が更新されています）。',
+      detail: { launchedRevision: staleness.launchedRevision, expectedRevision: staleness.expectedRevision, remedy: staleness.remedy },
+    })
+  }
+
   return emitSuccess(ctx, 'status', {
     version: APP_VERSION,
     ready,
     blockers,
     advisories,
+    // REQ-0458 §2 — MCP launch-spec revision + stale-bundle verdict.
+    mcpBundle: {
+      launchSpecRevision: staleness.expectedRevision,
+      launchedRevision: staleness.launchedRevision,
+      stale: staleness.stale,
+      remedy: staleness.remedy,
+    },
     commands: commandSummaries(),
     tools: {
       whisper: {
@@ -85,5 +106,5 @@ export async function runStatusCommand(ctx: CliContext): Promise<number> {
       // REQ-0457 D12 — names of GUI-saved style presets usable via `burn --style`.
       stylePresets: (settings.stylePresets ?? []).map((p) => p.name),
     },
-  })
+  }, warnings)
 }

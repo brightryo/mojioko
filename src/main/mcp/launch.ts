@@ -19,7 +19,14 @@
  */
 import { app } from 'electron'
 import { join } from 'node:path'
-import type { McpLaunchSpec } from '../../shared/mcp'
+import { APP_VERSION } from '../../shared/app-info'
+import {
+  LAUNCH_SPEC_REVISION,
+  LAUNCH_SPEC_REV_ENV,
+  evaluateLaunchStaleness,
+  type LaunchStaleness,
+  type McpLaunchSpec,
+} from '../../shared/mcp'
 
 export function getMcpLaunchSpec(): McpLaunchSpec {
   const isPackaged = app.isPackaged
@@ -29,7 +36,21 @@ export function getMcpLaunchSpec(): McpLaunchSpec {
   return {
     command: process.execPath,
     args: [proxyPath, ...childArgs],
-    env: { ELECTRON_RUN_AS_NODE: '1' },
+    // REQ-0458 §1/§2 — bake the launch-spec revision into env so the running
+    // server can compare it against the current `LAUNCH_SPEC_REVISION`. The
+    // proxy forwards this to the child (it only strips ELECTRON_RUN_AS_NODE).
+    env: { ELECTRON_RUN_AS_NODE: '1', [LAUNCH_SPEC_REV_ENV]: String(LAUNCH_SPEC_REVISION) },
     isPackaged,
+    launchSpecRevision: LAUNCH_SPEC_REVISION,
+    appVersion: APP_VERSION,
   }
+}
+
+/**
+ * REQ-0458 §2 — is THIS running server stale relative to the current launch
+ * spec?  Reads the revision the bundle baked into env; `undefined` (a direct
+ * `mojioko mcp`) is treated as "not a bundle → not stale".
+ */
+export function getLaunchStaleness(): LaunchStaleness {
+  return evaluateLaunchStaleness(process.env[LAUNCH_SPEC_REV_ENV])
 }

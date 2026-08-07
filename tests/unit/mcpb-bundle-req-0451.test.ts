@@ -3,6 +3,8 @@ import { readFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeMcpbBundle, buildMcpbManifest } from '../../src/main/mcp/mcpb'
+import { APP_VERSION } from '../../src/shared/app-info'
+import { LAUNCH_SPEC_REVISION, mcpManifestVersion } from '../../src/shared/mcp'
 
 /**
  * REQ-0451 — verify the hand-rolled `.mcpb` (ZIP) is well-formed and the
@@ -110,6 +112,11 @@ describe('REQ-0451/0452 — .mcpb bundle', () => {
     expect(m.server.mcp_config.args).toEqual([PROXY, 'mcp'])
     expect(m.server.mcp_config.env).toEqual({ ELECTRON_RUN_AS_NODE: '1' })
     expect(m.tools.map((t) => t.name)).toEqual(['status', 'transcribe'])
+    // REQ-0458 §1 — version encodes app + launch-spec revision; structured field mirrors it.
+    const raw = m as unknown as { version: string; mojioko: { appVersion: string; launchSpecRevision: number } }
+    expect(raw.version).toBe(mcpManifestVersion(APP_VERSION))
+    expect(raw.version).toBe(`${APP_VERSION}+lsr.${LAUNCH_SPEC_REVISION}`)
+    expect(raw.mojioko).toEqual({ appVersion: APP_VERSION, launchSpecRevision: LAUNCH_SPEC_REVISION })
   })
 
   // REQ-0452 §3 / REQ-0455 — dev bundle must carry the app-dir arg (after the

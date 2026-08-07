@@ -29,7 +29,12 @@
     "codeDesc": "For Claude Code, run this command in your terminal to register.",
     "copyCodeButton": "Copy register command",
     "clientsNote": "Supported clients: Claude Desktop and Claude Code (not claude.ai / Cowork).",
-    "cliRef": "For CLI details, run `mojioko -h`."
+    "cliRef": "For CLI details, run `mojioko -h`.",
+    "bundleStatusTitle": "Exported bundle",
+    "lastExport": "Last export: v{{version}} (launch spec rev {{rev}}) — {{date}}",
+    "neverExported": "No bundle has been exported yet.",
+    "reexportNeeded": "The launch method changed (now rev {{rev}}). Re-export the bundle and re-install it in Claude Desktop.",
+    "reinstallNote": "Re-install needed only when the launch method (command / args / env) or the app's install location changes. Tool additions, changes and fixes apply with an app update alone."
   },
   "translation": {
     "hint": "Auto-translate cues in the inspector (preview only — never written to the subtitles). Get the translation tool from STEP 1 → Translation tool.",
