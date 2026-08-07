@@ -423,7 +423,17 @@ def transcribe(msg: dict) -> None:
             try:
                 segments_iter, info = model.transcribe(tmp_wav, **transcribe_kwargs)
                 total_duration = info.duration if info.duration else 0.0
-                send({"event": "started", "totalDurationSec": total_duration})
+                # REQ-0457 A3 — surface the language faster-whisper actually
+                # detected (info.language) so an agent can tell whether the
+                # karaoke/translate preconditions match, instead of only the
+                # requested value.  Absent on pre-REQ-0457 bundled exes; the
+                # main side falls back to the requested language then.
+                detected_language = getattr(info, "language", None)
+                send({
+                    "event": "started",
+                    "totalDurationSec": total_duration,
+                    "language": detected_language,
+                })
 
                 for i, seg in enumerate(segments_iter):
                     print(f"[debug] segment {i}: start={seg.start:.3f}, end={seg.end:.3f}, text={seg.text.strip()!r}", file=sys.stderr)

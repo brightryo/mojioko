@@ -15,6 +15,7 @@ import { loadSettings } from '../../services/settings-store'
 import { getBinPath, getModelsDir, getTranscriberExePath } from '../../lib/paths'
 import { APP_VERSION } from '../../../shared/app-info'
 import { commandSummaries } from '../help'
+import { resolveDefaultSubtitleStyle } from '../subtitle-style'
 import { emitSuccess, type CliContext } from '../output'
 
 interface Blocker {
@@ -54,7 +55,6 @@ export async function runStatusCommand(ctx: CliContext): Promise<number> {
     })
   }
 
-  const d = settings.transcriptionDefaults
   return emitSuccess(ctx, 'status', {
     version: APP_VERSION,
     ready,
@@ -78,13 +78,10 @@ export async function runStatusCommand(ctx: CliContext): Promise<number> {
     settings: {
       activeModelId: whisper.activeModelId,
       device: settings.activeAccelerator ?? 'cpu',
-      subtitleStyle: {
-        fontId: settings.activeFontId ?? 'noto-sans-jp-semibold',
-        fontSizePx: d.fontSizePx,
-        textColorHex: d.textColorHex,
-        outlineThicknessPx: d.outlineThicknessPx,
-        autoLineBreak: settings.autoLineBreak ?? true,
-      },
+      // REQ-0457 A1 — the FULL resolved subtitle style (karaoke / emphasis /
+      // animation / shadow / rotation / alpha / line-spacing / offset), so an
+      // agent can confirm every burn condition before spending a burn.
+      subtitleStyle: resolveDefaultSubtitleStyle(settings),
     },
   })
 }

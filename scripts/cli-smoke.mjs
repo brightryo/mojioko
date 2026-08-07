@@ -13,7 +13,7 @@
  * cleared without a multi-GB download.
  */
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, existsSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -64,6 +64,9 @@ try {
   check('status exits 0', st.code === 0)
   check('status not timed out (no hang/window)', !st.timedOut)
   check('status has ready + blockers[]', st.json?.data && typeof st.json.data.ready === 'boolean' && Array.isArray(st.json.data.blockers))
+  // REQ-0457 A1 — status returns the FULL resolved subtitle style.
+  const style = st.json?.data?.settings?.subtitleStyle
+  check('status subtitleStyle has karaoke/emphasis/animation/shadow', !!style?.karaoke && !!style?.emphasis && !!style?.animation && !!style?.shadow, style ? Object.keys(style).join(',') : 'missing')
 
   // 2) help --json — full coverage present.
   const help = cli(['help', '--json'], 60000)
@@ -88,7 +91,25 @@ try {
       check(`run --burn #${i} exits 0`, run.code === 0, `code=${run.code}`)
       check(`run --burn #${i} stages transcribe+burn`, JSON.stringify(run.json?.data?.stages) === JSON.stringify(['transcribe', 'burn']))
       check(`run --burn #${i} produced a video`, existsSync(out) && probeWH(out).includes(','), probeWH(out))
+      // REQ-0457 A2 — run transcribes burn details + subtitleStyle into its JSON.
+      if (i === 0) {
+        check('run result has burn details (resolution/encoder/overflow) + subtitleStyle',
+          !!run.json?.data?.resolution && !!run.json?.data?.encoder && !!run.json?.data?.overflow && !!run.json?.data?.subtitleStyle,
+          `res=${JSON.stringify(run.json?.data?.resolution)}`)
+        check('run result has A3 signals (hasWordTimestamps present)', run.json?.data && 'hasWordTimestamps' in run.json.data)
+      }
     }
+
+    // REQ-0457 A4 — export_frame renders a real still (agent visual check).
+    const efClip = join(work, 'ef.mp4')
+    makeClip(efClip, '640x360')
+    const efSrt = join(work, 'ef.srt')
+    writeFileSync(efSrt, '1\n00:00:00,000 --> 00:00:02,000\nexport_frame regression cue\n', 'utf-8')
+    const efPng = join(work, 'ef.png')
+    const ef = cli(['export_frame', efClip, efSrt, '-o', efPng, '--time', '1.0'], 60000)
+    check('export_frame exits 0', ef.code === 0, `code=${ef.code}/${ef.json?.code || ''}`)
+    check('export_frame produced a PNG (real pixels)', existsSync(efPng) && probeWH(efPng) === '640,360', probeWH(efPng))
+    check('export_frame reports cueVisible + sizeBytes', ef.json?.data?.cueVisible === true && ef.json?.data?.sizeBytes > 0)
   } else {
     log('NOTE: status.ready=false — skipping transcribe/burn loop. Blockers:')
     for (const b of st.json?.data?.blockers || []) log(`  - ${b.what}: ${b.command}`)

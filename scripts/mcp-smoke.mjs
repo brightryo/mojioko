@@ -97,10 +97,15 @@ try {
   const tr = tools.find((t) => t.name === 'transcribe')
   check('transcribe schema requires input+out', Array.isArray(tr?.inputSchema?.required) && tr.inputSchema.required.includes('input') && tr.inputSchema.required.includes('out'))
 
+  // 2b) tools/list includes export_frame (REQ-0457 A4).
+  check('tools/list includes export_frame', names.includes('export_frame'))
+
   // 3) status
   const st = await rpc('tools/call', { name: 'status', arguments: {} })
   const stData = parseContent(st)
   check('status → ready boolean + blockers[]', typeof stData?.data?.ready === 'boolean' && Array.isArray(stData?.data?.blockers), `ready=${stData?.data?.ready}`)
+  // REQ-0457 A1 — status returns the full resolved subtitle style.
+  check('status → full subtitleStyle (karaoke/emphasis/animation)', !!stData?.data?.settings?.subtitleStyle?.karaoke && !!stData?.data?.settings?.subtitleStyle?.animation)
 
   // 4) transcribe as async job (only if ready)
   if (stData?.data?.ready) {
@@ -118,6 +123,20 @@ try {
     }
     check('job reached done', done?.status === 'done', `status=${done?.status} err=${done?.result?.code || ''}`)
     check('job result has outputPath + artifact exists', !!done?.result?.data?.outputPath && existsSync(out), done?.result?.data?.outputPath || '')
+
+    // 4b) REQ-0457 A4 — export_frame via MCP (async job) → PNG artifact.
+    const framePng = join(work, 'frame.png')
+    const ef = await rpc('tools/call', { name: 'export_frame', arguments: { video: clip, subtitle: out, out: framePng, time: 1.0 } })
+    const efStart = parseContent(ef)
+    check('export_frame returns a job_id (async)', typeof efStart?.job_id === 'string' && efStart?.status === 'running')
+    let efDone = null
+    for (let i = 0; i < 30; i++) {
+      await sleep(1000)
+      const poll = await rpc('tools/call', { name: 'get_job_status', arguments: { job_id: efStart.job_id } })
+      const pd = parseContent(poll)
+      if (pd?.status === 'done' || pd?.status === 'failed') { efDone = pd; break }
+    }
+    check('export_frame job done + PNG exists', efDone?.status === 'done' && existsSync(framePng), `status=${efDone?.status}`)
   } else {
     log('NOTE: status.ready=false — skipping transcribe job.')
     for (const b of stData?.data?.blockers || []) log(`  - ${b.what}: ${b.command}`)

@@ -25,10 +25,13 @@ import { runTranslateCommand } from './commands/translate'
 import { runBurnCommand } from './commands/burn'
 import { runRunCommand } from './commands/run'
 import { runStatusCommand } from './commands/status'
+import { runExportFrameCommand } from './commands/export-frame'
 import { runMcpServer } from '../mcp/server'
 import { installStdoutGuard } from '../mcp/stdout-guard'
 
-const COMMANDS = new Set(['tools', 'status', 'transcribe', 'translate', 'burn', 'run', 'mcp'])
+// REQ-0457 A4 — `export_frame` (hyphen alias `export-frame`) renders one
+// verification still. Underscore matches the MCP tool name.
+const COMMANDS = new Set(['tools', 'status', 'transcribe', 'translate', 'burn', 'run', 'mcp', 'export_frame', 'export-frame'])
 const HELP_TOKENS = new Set(['help', '-h', '--help'])
 
 /**
@@ -80,6 +83,9 @@ async function route(ctx: CliContext, command: string, args: ReturnType<typeof p
       return runBurnCommand(ctx, args)
     case 'run':
       return runRunCommand(ctx, args)
+    case 'export_frame':
+    case 'export-frame':
+      return runExportFrameCommand(ctx, args)
     default:
       return emitFailure(ctx, command, new CliError('USAGE', `unknown command: "${command}"`, 'mojioko -h でコマンド一覧を表示。'))
   }

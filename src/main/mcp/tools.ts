@@ -18,6 +18,7 @@ import { runTranscribeCommand } from '../cli/commands/transcribe'
 import { runTranslateCommand } from '../cli/commands/translate'
 import { runBurnCommand } from '../cli/commands/burn'
 import { runRunCommand } from '../cli/commands/run'
+import { runExportFrameCommand } from '../cli/commands/export-frame'
 import { runToolsCommand } from '../cli/commands/tools'
 import { createJob, finishJob, getJob, jobSnapshot, setJobProgress } from './jobs'
 
@@ -154,6 +155,26 @@ export const TOOLS: ToolSpec[] = [
     build: (i) => ({
       fn: runRunCommand,
       args: toArgs([str(i.video)], { out: str(i.out), translate: str(i.translate), burn: boolTrue(i.burn), preset: str(i.preset), device: str(i.device) }),
+    }),
+  },
+  {
+    name: 'export_frame',
+    description: '動画＋字幕の1フレームを指定時刻で PNG/JPG 出力（焼き上がりを画像で検証）。job_id を返す（get_job_status で outputPath 確認）。',
+    inputSchema: {
+      type: 'object',
+      required: ['video', 'subtitle', 'out', 'time'],
+      properties: {
+        video: { type: 'string', description: '入力動画の絶対パス' },
+        subtitle: { type: 'string', description: '.mojioko または .srt の絶対パス' },
+        out: { type: 'string', description: '出力画像パス（.png または .jpg）' },
+        time: { type: 'number', description: '抽出する時刻（秒）' },
+      },
+      additionalProperties: false,
+    },
+    async: true,
+    build: (i) => ({
+      fn: runExportFrameCommand,
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time) }),
     }),
   },
   {

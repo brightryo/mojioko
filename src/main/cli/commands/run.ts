@@ -10,10 +10,17 @@ import { existsSync, copyFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { optString, type ParsedArgs } from '../args'
-import { CliError, emitSuccess, type CliContext } from '../output'
+import { CliError, emitSuccess, type CliContext, type CliResult } from '../output'
+import { loadSettings } from '../../services/settings-store'
+import { resolveDefaultSubtitleStyle } from '../subtitle-style'
 import { runTranscribeCommand } from './transcribe'
 import { runTranslateCommand } from './translate'
 import { runBurnCommand } from './burn'
+
+/** Extract the success `data` object from a captured stage result. */
+function dataOf(r: CliResult | null): Record<string, unknown> | null {
+  return r && r.ok ? (r.data as Record<string, unknown>) : null
+}
 
 export async function runRunCommand(ctx: CliContext, args: ParsedArgs): Promise<number> {
   const video = args.positionals[0]
@@ -25,34 +32,63 @@ export async function runRunCommand(ctx: CliContext, args: ParsedArgs): Promise<
   const translateTo = optString(args.opts, 'translate')
   const doBurn = args.opts.burn === true
 
-  const silent: CliContext = { ...ctx, silent: true, quiet: true }
   const workDir = mkdtempSync(join(tmpdir(), 'mojioko-run-'))
   const stages: string[] = []
+
+  // REQ-0457 A2 — capture each stage's structured result (the sink routes the
+  // stage's emitSuccess to us instead of stdout) so `run` can transcribe the
+  // burn details (resolution/encoder/audio/overflow/sizeMB/subtitleStyle) and
+  // the transcribe signals (detectedLanguage/hasWordTimestamps) into its own JSON.
+  let transcribeResult: CliResult | null = null
+  let burnResult: CliResult | null = null
+  const captured = (assign: (r: CliResult) => void): CliContext =>
+    ({ ...ctx, silent: true, quiet: true, sink: assign })
 
   try {
     // 1) transcribe → temp .mojioko
     const t1 = join(workDir, 'transcribe.mojioko')
-    await runTranscribeCommand(silent, { positionals: [video], opts: { ...args.opts, out: t1, format: 'mojioko' } })
+    await runTranscribeCommand(captured((r) => { transcribeResult = r }), { positionals: [video], opts: { ...args.opts, out: t1, format: 'mojioko' } })
     stages.push('transcribe')
     let subtitle = t1
 
     // 2) translate (optional) → temp .mojioko
     if (translateTo) {
       const t2 = join(workDir, 'translate.mojioko')
-      await runTranslateCommand(silent, { positionals: [t1], opts: { ...args.opts, to: translateTo, out: t2, format: 'mojioko' } })
+      await runTranslateCommand(captured(() => {}), { positionals: [t1], opts: { ...args.opts, to: translateTo, out: t2, format: 'mojioko' } })
       stages.push('translate')
       subtitle = t2
     }
 
     // 3) burn (optional) → out.mp4, else copy the subtitle to out
     if (doBurn) {
-      await runBurnCommand(silent, { positionals: [video, subtitle], opts: { ...args.opts, out } })
+      await runBurnCommand(captured((r) => { burnResult = r }), { positionals: [video, subtitle], opts: { ...args.opts, out } })
       stages.push('burn')
     } else {
       copyFileSync(subtitle, out)
     }
 
-    return emitSuccess(ctx, 'run', { outputPath: out, stages, burned: doBurn, translatedTo: translateTo ?? null })
+    const tData = dataOf(transcribeResult)
+    const bData = dataOf(burnResult)
+    const subtitleStyle = bData?.subtitleStyle ?? resolveDefaultSubtitleStyle(await loadSettings())
+
+    return emitSuccess(ctx, 'run', {
+      outputPath: out,
+      stages,
+      burned: doBurn,
+      translatedTo: translateTo ?? null,
+      detectedLanguage: tData?.detectedLanguage ?? null,
+      hasWordTimestamps: tData?.hasWordTimestamps ?? null,
+      subtitleStyle,
+      ...(bData
+        ? {
+            resolution: bData.resolution,
+            encoder: bData.encoder,
+            audio: bData.audio,
+            overflow: bData.overflow,
+            sizeMB: bData.sizeMB,
+          }
+        : {}),
+    })
   } finally {
     // Clean up intermediates (keep only `-o`).
     try {

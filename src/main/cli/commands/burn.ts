@@ -25,6 +25,7 @@ import type { FontId } from '../../../shared/fonts'
 import { optString, type ParsedArgs } from '../args'
 import { CliError, emitProgress, emitSuccess, type CliContext } from '../output'
 import { detectFormat, entriesFromSegments } from '../subtitle-io'
+import { resolveDefaultSubtitleStyle } from '../subtitle-style'
 import { resolveTarget, contentScaleFactor, scaleEntries, scaleVideoTo } from '../scale-video'
 
 const OVERFLOW_MODES = new Set<OverflowMode>(['warn', 'shrink', 'error'])
@@ -201,5 +202,9 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     audio: request.audioMode,
     sizeMB,
     overflow: layout.overflow,
+    // REQ-0457 A2 — the resolved subtitle style applied (paired with `status`).
+    // For `.mojioko` input, per-cue styles from the file are preserved; this is
+    // the app default style (what SRT-seeded cues and un-overridden fields use).
+    subtitleStyle: resolveDefaultSubtitleStyle(settings),
   })
 }

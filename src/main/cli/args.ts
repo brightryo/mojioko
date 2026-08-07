@@ -38,6 +38,8 @@ const VALUE_OPTS: ReadonlySet<string> = new Set([
   'margin-y',
   'margin-v',
   'overflow',
+  'time',
+  'at',
   'encoder',
   'audio',
   'container',

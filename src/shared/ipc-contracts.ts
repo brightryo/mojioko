@@ -184,7 +184,9 @@ export interface BuildInfo {
 export type { WordSpan } from './types'
 
 export type TranscriptionEvent =
-  | { event: 'started'; totalDurationSec: number }
+  // REQ-0457 A3 — `language` is faster-whisper's detected language (optional;
+  // absent on pre-REQ-0457 sidecars / bundled exes).
+  | { event: 'started'; totalDurationSec: number; language?: string | null }
   /**
    * REQ-0285 — segment gained an optional `words` array.  Always
    * populated (possibly empty) when the sidecar is Post-REQ-0285;

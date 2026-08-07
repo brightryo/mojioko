@@ -103,10 +103,15 @@ export async function runTranscribeCommand(ctx: CliContext, args: ParsedArgs): P
   const segments: SegmentLike[] = []
   let deviceUsed: 'cpu' | 'gpu' = settings.activeAccelerator === 'gpu' ? 'gpu' : 'cpu'
   let fellBack = false
+  let detectedLanguage: string | null = null
 
   try {
     await transcribe(request, (ev) => {
       switch (ev.event) {
+        case 'started':
+          // REQ-0457 A3 — the language faster-whisper detected (if reported).
+          if (typeof ev.language === 'string' && ev.language) detectedLanguage = ev.language
+          break
         case 'segment':
           segments.push(ev.segment)
           break
@@ -180,6 +185,12 @@ export async function runTranscribeCommand(ctx: CliContext, args: ParsedArgs): P
     warnings.push({ code: 'GPU_INIT_FAILED', message: 'CUDA 利用不可のため CPU にフォールバックしました。', detail: { fellBackTo: 'cpu' } })
   }
 
+  // REQ-0457 A3 — did any cue get per-word timestamps? (the karaoke precondition)
+  const hasWordTimestamps = entries.some((e) => Array.isArray(e.words) && e.words.length > 0)
+  // Detected language: prefer the sidecar's detection; else, when a specific
+  // language was forced (not `auto`), that IS the language; else unknown.
+  const resolvedDetected = detectedLanguage ?? (advanced.language && advanced.language !== 'auto' ? advanced.language : null)
+
   return emitSuccess(
     ctx,
     'transcribe',
@@ -189,6 +200,9 @@ export async function runTranscribeCommand(ctx: CliContext, args: ParsedArgs): P
       cueCount: entries.length,
       durationSec: video.durationSec,
       requestedLanguage: advanced.language,
+      // REQ-0457 A3 — actual result signals (not just the requested echo).
+      detectedLanguage: resolvedDetected,
+      hasWordTimestamps,
       device: deviceUsed,
       model,
     },

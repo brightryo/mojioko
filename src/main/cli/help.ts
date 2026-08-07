@@ -126,7 +126,9 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--preset', type: 'enum', values: PRESETS, desc: '出力プリセット（縦ショート等）' },
       { flag: '--resolution', type: 'string', desc: 'WxH（例 1080x1920）。--preset と排他' },
       { flag: '--margin-v', type: 'int', desc: '縦マージン(px)' },
-      { flag: '--overflow', type: 'enum', values: ['shrink', 'warn', 'error'], default: 'warn', desc: '縦はみ出し（shrink 未実装）' },
+      { flag: '--margin-x', type: 'int', default: '10', desc: '横マージン(px)。改行幅＋ASS MarginL/R' },
+      { flag: '--margin-y', type: 'int', default: '10', desc: '縦オーバーフロー判定の上下安全域(px)' },
+      { flag: '--overflow', type: 'enum', values: ['shrink', 'warn', 'error'], default: 'warn', desc: '縦はみ出し（warn=計上 / shrink=自動縮小 / error=失敗）' },
       { flag: '--encoder', type: 'enum', values: ['auto', 'h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf'], default: 'auto', desc: '映像エンコーダ' },
       { flag: '--audio', type: 'enum', values: ['preserve', 'simple', 'none'], default: 'simple', desc: '音声処理' },
       { flag: '--container', type: 'enum', values: ['mp4', 'same'], default: 'mp4', desc: '出力コンテナ' },
@@ -156,6 +158,22 @@ const COMMANDS: CommandDoc[] = [
     ],
     examples: ['mojioko run input.mp4 --translate en --burn -o final.mp4 --preset shorts'],
     errorCodes: ['(各段のエラーコードを継承)'],
+  },
+  {
+    name: 'export_frame',
+    summary: '動画＋字幕の1フレームを指定時刻で PNG/JPG 出力（焼き上がりを画像で検証）',
+    usage: 'mojioko export_frame <video> <subtitle> -o <out.png> --time <sec>',
+    positionals: [
+      { name: 'video', required: true, desc: '入力動画' },
+      { name: 'subtitle', required: true, desc: '.mojioko または .srt' },
+    ],
+    optionSpecs: [
+      OUT_REQ,
+      { flag: '--time', type: 'float', required: true, desc: '抽出する時刻（秒）' },
+      { flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '字幕フォーマット（既定: 拡張子）' },
+    ],
+    examples: ['mojioko export_frame input.mp4 out.mojioko -o frame.png --time 1.5'],
+    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'BURN_FAILED'],
   },
 ]
 
