@@ -98,6 +98,14 @@ export interface BurninStartRequest {
    * the preview swept.  Optional + explicit re-construction = silent drop.
    */
   karaokeStyle?: KaraokeStyle
+  /**
+   * REQ-0456 — horizontal margin (ASS px) for BOTH the Style MarginL/MarginR
+   * and the self-positioned anchor edge.  Optional; omitted ⇒ the ASS writer's
+   * `ASS_MARGIN_LR_PX` default (byte-identical to every pre-REQ-0456 caller).
+   * The headless `mojioko burn --margin-x` threads a value here so the wrap
+   * budget and the libass render margin stay consistent.
+   */
+  marginLrPx?: number
 }
 
 /**

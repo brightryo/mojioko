@@ -14,6 +14,7 @@ const NONE: EntryWarnings = {
   emptyText: false,
   invalidSize: false,
   overflow: false,
+  verticalOverflow: false,
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +133,8 @@ describe('REQ-121: hasAnyError / hasAnyWarning aliases', () => {
     expect(hasAnyWarning({ ...NONE, emptyText: true })).toBe(true)
     expect(hasAnyWarning({ ...NONE, overlap: true })).toBe(true)
     expect(hasAnyWarning({ ...NONE, overflow: true })).toBe(true)
+    // REQ-0456 — vertical overflow is a warning (row still ships).
+    expect(hasAnyWarning({ ...NONE, verticalOverflow: true })).toBe(true)
     expect(hasAnyWarning({ ...NONE, timeInvalid: true })).toBe(false)
     expect(hasAnyWarning({ ...NONE, overDuration: true })).toBe(false)
     expect(hasAnyWarning({ ...NONE, invalidSize: true })).toBe(false)

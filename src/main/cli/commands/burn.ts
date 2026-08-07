@@ -15,6 +15,10 @@ import { getBinPath } from '../../lib/paths'
 import { parseProjectFile } from '../../../shared/project-file'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
 import { parseSrt } from '../../../renderer/lib/srt-parse'
+import { ASS_MARGIN_LR_PX } from '../../../shared/constants'
+import { canUseKeywordEmphasisInTier } from '../../../shared/emphasis'
+import { isPackagedAsMsix, getCurrentProcessContext } from '../../lib/msix'
+import { layoutForBurn, type OverflowMode } from '../../services/headless-layout'
 import type { BurninStartRequest, EncoderSetting, AudioMode, OutputContainer } from '../../../shared/ipc-contracts'
 import type { SubtitleEntry, VideoInfo } from '../../../shared/types'
 import type { FontId } from '../../../shared/fonts'
@@ -22,6 +26,16 @@ import { optString, type ParsedArgs } from '../args'
 import { CliError, emitProgress, emitSuccess, type CliContext } from '../output'
 import { detectFormat, entriesFromSegments } from '../subtitle-io'
 import { resolveTarget, contentScaleFactor, scaleEntries, scaleVideoTo } from '../scale-video'
+
+const OVERFLOW_MODES = new Set<OverflowMode>(['warn', 'shrink', 'error'])
+
+/** Read an integer CLI option (first non-empty of `keys`), or undefined. */
+function optInt(opts: ParsedArgs['opts'], ...keys: string[]): number | undefined {
+  const s = optString(opts, ...keys)
+  if (s === undefined || s === '') return undefined
+  const n = Number.parseInt(s, 10)
+  return Number.isFinite(n) ? n : undefined
+}
 
 const ENCODERS = new Set(['auto', 'h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf'])
 const AUDIO_MODES = new Set(['preserve', 'simple', 'none'])
@@ -81,6 +95,14 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
   const containerFlag = optString(args.opts, 'container')
   const outputContainer: OutputContainer = containerFlag === 'same' ? 'sameAsInput' : 'mp4'
 
+  // REQ-0456 — headless auto line-break margin + vertical overflow guard flags.
+  const marginX = optInt(args.opts, 'margin-x') ?? ASS_MARGIN_LR_PX
+  const marginY = optInt(args.opts, 'margin-y', 'margin-v') ?? ASS_MARGIN_LR_PX
+  const overflowFlag = (optString(args.opts, 'overflow') || 'warn') as OverflowMode
+  if (!OVERFLOW_MODES.has(overflowFlag)) {
+    throw new CliError('USAGE', `unknown --overflow: ${overflowFlag}`, 'warn|shrink|error')
+  }
+
   // --resolution WxH / --preset: pre-scale the canvas + scale cue pixel fields.
   const tgt = resolveTarget(optString(args.opts, 'resolution'), optString(args.opts, 'preset'))
   if (!tgt.ok) throw new CliError('USAGE', tgt.message, 'mojioko burn ... --preset shorts | --resolution 1080x1920')
@@ -102,6 +124,28 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     resized = true
   }
 
+  // REQ-0456 §1/§2 — apply auto line-break at the OUTPUT resolution (so text
+  // never runs off the frame, matching the GUI) then the vertical overflow
+  // guard.  Emphasis tier + margins mirror what the ASS writer will render.
+  const isMsix = isPackagedAsMsix(getCurrentProcessContext())
+  const layout = layoutForBurn({
+    entries,
+    video: renderVideo,
+    marginX,
+    marginY,
+    overflowMode: overflowFlag,
+    emphasisTierAllowed: canUseKeywordEmphasisInTier(isMsix),
+  })
+  entries = layout.entries
+  if (overflowFlag === 'error' && layout.overflow.overflowCueCount > 0) {
+    throw new CliError(
+      'SUBTITLE_OVERFLOW',
+      `縦にはみ出す字幕が ${layout.overflow.overflowCueCount} 件あります（--overflow error）。`,
+      '--overflow shrink で自動縮小するか、--margin-y を小さく／フォントサイズを下げてください。',
+      { overflowCueCount: layout.overflow.overflowCueCount, marginY },
+    )
+  }
+
   const request: BurninStartRequest = {
     inputPath,
     outputPath: out,
@@ -118,6 +162,7 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     outputContainer,
     fontId,
     cuts,
+    marginLrPx: marginX,
   }
 
   const controller = new AbortController()
@@ -155,6 +200,6 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     encoder: request.encoderSetting,
     audio: request.audioMode,
     sizeMB,
-    overflow: { mode: 'warn', overflowCueCount: 0 },
+    overflow: layout.overflow,
   })
 }

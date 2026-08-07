@@ -310,6 +310,16 @@ export function generateAss(
    * REQ-0344) are unaffected.
    */
   forceSelfPositionAll: boolean = true,
+  /**
+   * REQ-0456 — horizontal margin in ASS px used for BOTH the Style MarginL /
+   * MarginR columns AND the self-positioned anchor edge.  Defaults to
+   * `ASS_MARGIN_LR_PX`, so every existing caller (and the baseline byte-identity
+   * tests) is unchanged; `mojioko burn --margin-x` threads a different value so
+   * the headless wrap budget and the libass render margin stay consistent.
+   * Sits after `forceSelfPositionAll` (both defaulted) so `generateAss.length`
+   * stays 7 and the REQ-0340 / REQ-0344 arity pins are unaffected.
+   */
+  marginLrPx: number = ASS_MARGIN_LR_PX,
 ): string {
   // `burnin` / `subtitleBackground` are vestigial (see JSDoc above).  Reference
   // them once so `noUnusedParameters` stays quiet without disabling lint.
@@ -340,8 +350,8 @@ export function generateAss(
   const styles = [
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BorderStyle, Outline, Alignment, MarginL, MarginR, MarginV',
-    `Style: Default,${assFontName},100,&H00FFFFFF,&H00000000,1,3,${DEFAULT_ALIGNMENT},${ASS_MARGIN_LR_PX},${ASS_MARGIN_LR_PX},${DEFAULT_MARGIN_V}`,
-    `Style: WithBox,${assFontName},100,&H00FFFFFF,&H00000000,3,3,${DEFAULT_ALIGNMENT},${ASS_MARGIN_LR_PX},${ASS_MARGIN_LR_PX},${DEFAULT_MARGIN_V}`,
+    `Style: Default,${assFontName},100,&H00FFFFFF,&H00000000,1,3,${DEFAULT_ALIGNMENT},${marginLrPx},${marginLrPx},${DEFAULT_MARGIN_V}`,
+    `Style: WithBox,${assFontName},100,&H00FFFFFF,&H00000000,3,3,${DEFAULT_ALIGNMENT},${marginLrPx},${marginLrPx},${DEFAULT_MARGIN_V}`,
     ''
   ].join('\n')
 
@@ -874,7 +884,7 @@ export function generateAss(
   // REQ-0332 §3 — decide, ACROSS cues, which ones position themselves.
   // REQ-0389 — `forceSelfPositionAll` (shadow, off in production) makes EVERY
   // unpinned cue self-position, which is the all-`\pos` runtime Phase 1b adopts.
-  const selfPositioned = resolveSelfPositionedCues(renders, video, isMsix, forceSelfPositionAll)
+  const selfPositioned = resolveSelfPositionedCues(renders, video, isMsix, forceSelfPositionAll, marginLrPx)
 
   const events = [
     '[Events]',
@@ -967,6 +977,9 @@ function resolveSelfPositionedCues(
   // self-positioning set (all-`\pos`), and its anchors are resolved through
   // `computeCuePlacement` rather than `cueLineAnchors`.  Off in production.
   forceSelfPositionAll: boolean,
+  // REQ-0456 — horizontal margin for the anchor edge (matches the Style
+  // MarginL/MarginR); defaults to ASS_MARGIN_LR_PX at the call site.
+  marginLrPx: number,
 ): Map<string, { x: number; y: number }[]> {
   const out = new Map<string, { x: number; y: number }[]>()
 
@@ -1054,7 +1067,7 @@ function resolveSelfPositionedCues(
       centerOffsetPx: offset,
       playResX: video.widthPx,
       playResY: video.heightPx,
-      marginLrPx: ASS_MARGIN_LR_PX,
+      marginLrPx,
       posX: e.posX,
       posY: e.posY,
     }

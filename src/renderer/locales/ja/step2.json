@@ -51,6 +51,7 @@
   },
   "badge": {
     "overflow": "はみ出し",
+    "verticalOverflow": "縦はみ出し",
     "overlap": "時間重複",
     "overDuration": "時間超過",
     "exceedsDuration": "時間超過",

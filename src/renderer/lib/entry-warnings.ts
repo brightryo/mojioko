@@ -22,6 +22,12 @@ export interface EntryWarnings {
   invalidSize: boolean
   /** Text width exceeds the available video width (libass-equivalent). */
   overflow: boolean
+  /**
+   * REQ-0456 — the cue's stacked line height exceeds the video height (the
+   * vertical analogue of `overflow`).  Sourced from a precomputed vertical map
+   * in Step 2, matching the headless `--overflow` guard.
+   */
+  verticalOverflow: boolean
 }
 
 /**
@@ -36,12 +42,17 @@ export interface EntryWarnings {
  *                           checks then never fire.
  * @param isOverflow         Result from the overflow calculator
  *                           (`overflowMap.has(entry.id)` in Step 2).
+ * @param isVerticalOverflow REQ-0456 — the cue's stacked height exceeds the
+ *                           video height (`verticalOverflowMap.has(entry.id)`).
+ *                           Defaults to `false` for callers that do not measure
+ *                           it (e.g. the burn-in drawer summary).
  */
 export function computeEntryWarnings(
   entry: SubtitleEntry,
   prevActiveEndSec: number | null,
   videoDurationSec: number,
-  isOverflow: boolean
+  isOverflow: boolean,
+  isVerticalOverflow = false
 ): EntryWarnings {
   const timeInvalid =
     entry.endSec <= entry.startSec ||
@@ -67,7 +78,8 @@ export function computeEntryWarnings(
     overlap,
     emptyText,
     invalidSize,
-    overflow: isOverflow
+    overflow: isOverflow,
+    verticalOverflow: isVerticalOverflow
   }
 }
 
@@ -91,7 +103,7 @@ export function isError(w: EntryWarnings): boolean {
 }
 
 export function isWarning(w: EntryWarnings): boolean {
-  return w.emptyText || w.overlap || w.overflow
+  return w.emptyText || w.overlap || w.overflow || w.verticalOverflow
 }
 
 /**

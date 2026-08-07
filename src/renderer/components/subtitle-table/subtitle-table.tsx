@@ -67,7 +67,8 @@ const NO_WARNINGS: EntryWarnings = {
   overlap: false,
   emptyText: false,
   invalidSize: false,
-  overflow: false
+  overflow: false,
+  verticalOverflow: false
 }
 
 function getRowState(entry: SubtitleEntry, isOverflow: boolean): RowState {
@@ -837,6 +838,11 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
         )}
         {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overflow && (
           <Badge variant="warning">{t('badge.overflow')}</Badge>
+        )}
+        {/* REQ-0456 — vertical overflow: the cue's line stack is taller than the
+            frame (the headless `--overflow` guard flags the same condition). */}
+        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.verticalOverflow && (
+          <Badge variant="warning">{t('badge.verticalOverflow')}</Badge>
         )}
         {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.emptyText && (
           <Badge variant="warning">{t('badge.emptyText')}</Badge>

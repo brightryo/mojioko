@@ -97,7 +97,7 @@ export async function startBurnin(
   onEvent: BurninEventCallback,
   signal: AbortSignal
 ): Promise<void> {
-  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, subtitleBackground, outputContainer, fontId, cuts, karaokeStyle } = request
+  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, subtitleBackground, outputContainer, fontId, cuts, karaokeStyle, marginLrPx } = request
 
   // REQ-074 1d: when cuts is non-empty the ffmpeg run is rebuilt around
   // filter_complex trim+concat (audio + video).  When empty / absent we
@@ -177,7 +177,22 @@ export async function startBurnin(
   // emit path.  Free builds get the plain path even when a project file
   // carries `karaokeEnabled=true` (defence-in-depth vs. tier bypass).
   const isMsix = isPackagedAsMsix(getCurrentProcessContext())
-  const assContent = generateAss(entriesForAss, video, burnin, subtitleBackground, fontMeta.assFontName, isMsix, karaokeStyle ?? KARAOKE_STYLE_DEFAULT)
+  // REQ-0456 — pass `marginLrPx` (from `--margin-x`) through so the Style
+  // MarginL/MarginR match the headless wrap budget.  `forceSelfPositionAll`
+  // stays the production default (true); it must be supplied explicitly to
+  // reach the trailing `marginLrPx` argument.  When `marginLrPx` is undefined
+  // the writer applies its `ASS_MARGIN_LR_PX` default (byte-identical).
+  const assContent = generateAss(
+    entriesForAss,
+    video,
+    burnin,
+    subtitleBackground,
+    fontMeta.assFontName,
+    isMsix,
+    karaokeStyle ?? KARAOKE_STYLE_DEFAULT,
+    true,
+    marginLrPx,
+  )
   const assPath = join(tmpdir(), `mojioko-${randomUUID()}.ass`)
   await fs.writeFile(assPath, assContent, 'utf-8')
 

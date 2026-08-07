@@ -35,6 +35,7 @@ const VALUE_OPTS: ReadonlySet<string> = new Set([
   'resolution',
   'preset',
   'margin-x',
+  'margin-y',
   'margin-v',
   'overflow',
   'encoder',

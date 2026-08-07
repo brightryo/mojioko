@@ -24,7 +24,11 @@ import { cn } from '@/lib/utils'
 import { saveFileDialog, writeTextFile, openSrtDialog, readTextFile } from '@/services/dialog'
 import { parseSrt } from '@/lib/srt-parse'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
-import { resolveEmphasisRanges, clampEmphasisScalePercent } from '../../shared/emphasis'
+import { resolveEmphasisRanges, clampEmphasisScalePercent, cueMaxRenderedFontAssPx } from '../../shared/emphasis'
+// REQ-0456 — vertical overflow badge: the cue's stacked line height (same model
+// the ASS writer + headless guard use) vs the video height.
+import { estimateCueHeightAssPx } from '../../shared/line-spacing'
+import { ASS_MARGIN_LR_PX } from '@/lib/tokens'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { computeEntryWarnings, hasAnyError, hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
@@ -439,6 +443,24 @@ export default function Step2Route(_: Step2RouteProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, videoWidthPx, subtitleFont, isAudioOnly, fontCacheVersion])
 
+  // REQ-0456 — vertical overflow map: a cue whose stacked line height exceeds
+  // the frame (video height minus a symmetric safe margin).  Uses the same
+  // `estimateCueHeightAssPx` the ASS writer / headless `--overflow` guard use;
+  // `cueMaxRenderedFontAssPx(e, true)` makes it emphasis-aware (only inflates a
+  // cue that actually has keyword emphasis on).
+  const videoHeightPx = video?.heightPx ?? 1080
+  const verticalOverflowMap = useMemo(() => {
+    const set = new Set<string>()
+    if (isAudioOnly) return set
+    const budget = videoHeightPx - 2 * ASS_MARGIN_LR_PX
+    if (budget <= 0) return set
+    for (const e of entries) {
+      if (e.isDeleted) continue
+      if (estimateCueHeightAssPx(e, cueMaxRenderedFontAssPx(e, true)) > budget) set.add(e.id)
+    }
+    return set
+  }, [entries, videoHeightPx, isAudioOnly])
+
   const videoDurationSec = isAudioOnly ? Infinity : (video?.durationSec ?? Infinity)
 
   /**
@@ -452,11 +474,11 @@ export default function Step2Route(_: Step2RouteProps) {
     for (const e of entries) {
       if (e.isDeleted) continue
       const isOverflow = overflowMap.has(e.id)
-      map.set(e.id, computeEntryWarnings(e, prevEnd, videoDurationSec, isOverflow))
+      map.set(e.id, computeEntryWarnings(e, prevEnd, videoDurationSec, isOverflow, verticalOverflowMap.has(e.id)))
       prevEnd = e.endSec
     }
     return map
-  }), [entries, overflowMap, videoDurationSec])
+  }), [entries, overflowMap, verticalOverflowMap, videoDurationSec])
 
   // Currently-visible entries under the active filter — drives Ctrl+A's
   // target list and the bulk-selection pruning effect below.

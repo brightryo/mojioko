@@ -40,9 +40,13 @@ export interface SegmentLike {
 /**
  * Build cues from Whisper segments, seeded with the app's default subtitle
  * style (`TranscriptionDefaults`) exactly like STEP1's transcription pipeline
- * (`step1.tsx`).  Font family is inherited from the default style (spec §11);
- * auto line-break is intentionally NOT applied here — `burn` recomputes `\N`
- * against the OUTPUT resolution (spec §3.2 / §3.4).
+ * (`step1.tsx`).  Font family is inherited from the default style (spec §11).
+ *
+ * REQ-0456 — auto line-break is NOT applied inside this constructor; the
+ * `transcribe` command wraps the result at the SOURCE width right after (via
+ * `autoLineBreakTranscribedEntries`, mirroring the GUI), and `burn` re-wraps at
+ * the OUTPUT resolution.  Kept out of here so this pure builder stays free of
+ * the opentype/font-metrics dependency.
  */
 export function entriesFromSegments(
   segments: SegmentLike[],

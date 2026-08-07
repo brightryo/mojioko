@@ -51,6 +51,7 @@
   },
   "badge": {
     "overflow": "Overflow",
+    "verticalOverflow": "Too tall",
     "overlap": "Overlap",
     "overDuration": "Over duration",
     "exceedsDuration": "Over duration",

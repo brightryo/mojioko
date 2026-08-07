@@ -12,8 +12,9 @@ import { probeVideo } from '../../services/ffprobe'
 import { checkModelInstalled } from '../../services/check-model-installed'
 import { loadSettings } from '../../services/settings-store'
 import { getBinPath, getModelsDir } from '../../lib/paths'
-import { TRANSCRIPTION_DEFAULTS } from '../../../shared/constants'
+import { TRANSCRIPTION_DEFAULTS, ASS_MARGIN_LR_PX } from '../../../shared/constants'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
+import { autoLineBreakTranscribedEntries } from '../../services/headless-layout'
 import { APP_VERSION } from '../../../shared/app-info'
 import type { TranscriptionStartRequest } from '../../../shared/ipc-contracts'
 import type { VideoInfo, WhisperModelId } from '../../../shared/types'
@@ -137,7 +138,21 @@ export async function runTranscribeCommand(ctx: CliContext, args: ParsedArgs): P
   }
 
   const fontId = settings.activeFontId ?? 'noto-sans-jp-semibold'
-  const entries = entriesFromSegments(segments, settings.transcriptionDefaults, video, fontId, settings.fadeDurationSec ?? 0)
+  const rawEntries = entriesFromSegments(segments, settings.transcriptionDefaults, video, fontId, settings.fadeDurationSec ?? 0)
+
+  // REQ-0456 §1 — auto line-break at the SOURCE video width, exactly as the GUI
+  // does on transcription (`step1.tsx`), so the written `.mojioko` carries the
+  // same `\N` the preview would show.  `--auto-break false|off|0|no` opts out.
+  const autoBreakOff = ['false', 'off', '0', 'no'].includes((optString(args.opts, 'auto-break') || '').toLowerCase())
+  const entries = autoBreakOff
+    ? rawEntries
+    : autoLineBreakTranscribedEntries(rawEntries, {
+        videoWidthPx: video.widthPx,
+        videoHeightPx: video.heightPx,
+        marginLrPx: ASS_MARGIN_LR_PX,
+        marginYPx: ASS_MARGIN_LR_PX,
+        emphasisTierAllowed: false,
+      })
 
   try {
     if (format === 'mojioko') {
