@@ -156,6 +156,7 @@ export const Channels = {
    */
   appIsMsix: 'app:isMsix',
   appGetCliPath: 'app:getCliPath',
+  appGetMcpLaunchSpec: 'app:getMcpLaunchSpec',
   appExportMcpBundle: 'app:exportMcpBundle',
 
   /** Native menu rebuild trigger */

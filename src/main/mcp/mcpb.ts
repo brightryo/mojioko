@@ -112,8 +112,14 @@ function zipStore(entries: ZipEntry[]): Buffer {
   return Buffer.concat([...local, cdBuf, eocd])
 }
 
-/** Build the `.mcpb` manifest.json object (schema v0.3). */
-export function buildMcpbManifest(exePath: string, tools: McpbToolInfo[]): Record<string, unknown> {
+/**
+ * Build the `.mcpb` manifest.json object (schema v0.3).
+ *
+ * REQ-0452 — `command`/`args` are supplied by the caller so dev vs packaged is
+ * correct: packaged = `MOJIOKO.exe` + `["mcp"]`; dev = `electron.exe` +
+ * `[<appDir>, "mcp"]` (the app-dir arg is required or the dev launch is wrong).
+ */
+export function buildMcpbManifest(command: string, args: string[], tools: McpbToolInfo[]): Record<string, unknown> {
   return {
     manifest_version: '0.3',
     name: 'mojioko',
@@ -124,10 +130,10 @@ export function buildMcpbManifest(exePath: string, tools: McpbToolInfo[]): Recor
     author: { name: 'brightryo' },
     server: {
       type: 'binary',
-      entry_point: basename(exePath),
+      entry_point: basename(command),
       mcp_config: {
-        command: exePath,
-        args: ['mcp'],
+        command,
+        args,
         env: {},
       },
     },
@@ -137,8 +143,8 @@ export function buildMcpbManifest(exePath: string, tools: McpbToolInfo[]): Recor
 }
 
 /** Write a `.mcpb` bundle (ZIP with manifest.json) to `targetPath`. */
-export function writeMcpbBundle(targetPath: string, exePath: string, tools: McpbToolInfo[]): void {
-  const manifest = Buffer.from(JSON.stringify(buildMcpbManifest(exePath, tools), null, 2), 'utf8')
+export function writeMcpbBundle(targetPath: string, command: string, args: string[], tools: McpbToolInfo[]): void {
+  const manifest = Buffer.from(JSON.stringify(buildMcpbManifest(command, args, tools), null, 2), 'utf8')
   const zip = zipStore([{ name: 'manifest.json', data: manifest }])
   writeFileSync(targetPath, zip)
 }

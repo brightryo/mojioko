@@ -5,6 +5,7 @@ import type { FontsState, FontId } from '../shared/fonts'
 import type { GpuToolState } from '../shared/gpu-tool'
 import type { TranslationToolId, TranslationToolsState } from '../shared/translation-tools'
 import type { TranslateResult } from '../shared/translation'
+import type { McpLaunchSpec, McpExportResult } from '../shared/mcp'
 import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult, ActiveDownloadInfo } from '../shared/ipc-contracts'
 
 type OkResult<T> = { ok: true; data: T }
@@ -21,8 +22,10 @@ const electronAPI = {
   isMsix: (): Promise<boolean> => ipcRenderer.invoke(Channels.appIsMsix),
   /** REQ-0449 §4 — absolute path of the CLI executable (MOJIOKO.exe). */
   getCliPath: (): Promise<string> => ipcRenderer.invoke(Channels.appGetCliPath),
-  /** REQ-0451 §1 — write a .mcpb bundle to `targetPath`; resolves the path. */
-  exportMcpBundle: (targetPath: string): Promise<string> =>
+  /** REQ-0452 — the dev/packaged-correct MCP launch spec (command/args). */
+  getMcpLaunchSpec: (): Promise<McpLaunchSpec> => ipcRenderer.invoke(Channels.appGetMcpLaunchSpec),
+  /** REQ-0451/0452 — write a .mcpb bundle to `targetPath`; resolves an export result. */
+  exportMcpBundle: (targetPath: string): Promise<McpExportResult> =>
     ipcRenderer.invoke(Channels.appExportMcpBundle, targetPath),
   /**
    * REQ-0258 — read the MOJIOKO EULA text for the current UI language.

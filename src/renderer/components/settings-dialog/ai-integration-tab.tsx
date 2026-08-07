@@ -1,39 +1,51 @@
-import { useState, type ReactNode } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Sparkles, Copy, Download, ChevronDown, ChevronRight } from 'lucide-react'
+import { Sparkles, Copy, Download, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/lib/toast'
 import { saveFileDialog, shellShowInFolder } from '@/services/dialog'
+import type { McpLaunchSpec } from '../../../shared/mcp'
 
 /**
- * REQ-0450 §5 / REQ-0451 §2 — Settings ▸ AI連携 tab.
+ * REQ-0450 §5 / REQ-0451 §2 / REQ-0452 — Settings ▸ AI連携 tab.
  *
- * One-screen "connect MOJIOKO to Claude" flow via MCP, drag-and-drop first:
- * Export .mcpb → drag into Claude Desktop ▸ Extensions → restart → ask Claude.
- * The manual config JSON (claude_desktop_config.json) and the Claude Code
- * `claude mcp add` command are demoted to a collapsible "advanced" section.
- * The exe path is resolved at runtime (NSIS/MSIX differ). i18n ja/en.
+ * Drag-and-drop MCP setup: Export .mcpb → drop into Claude Desktop ▸ Extensions
+ * → restart → ask Claude. Manual config JSON + `claude mcp add` are in a
+ * collapsible "advanced" section. All launch strings come from the SAME
+ * dev/packaged-correct launch spec (REQ-0452), and dev exports show a warning.
  */
-function desktopConfig(cliPath: string): string {
-  return JSON.stringify({ mcpServers: { mojioko: { command: cliPath, args: ['mcp'] } } }, null, 2)
+function desktopConfig(spec: McpLaunchSpec): string {
+  return JSON.stringify({ mcpServers: { mojioko: { command: spec.command, args: spec.args } } }, null, 2)
 }
-function claudeCodeCommand(cliPath: string): string {
-  return `claude mcp add mojioko -- "${cliPath}" mcp`
+function claudeCodeCommand(spec: McpLaunchSpec): string {
+  const argsStr = spec.args.map((a) => `"${a}"`).join(' ')
+  return `claude mcp add mojioko -- "${spec.command}" ${argsStr}`.trim()
 }
 
 export function AiIntegrationTab() {
   const { t } = useTranslation(['settings'])
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [spec, setSpec] = useState<McpLaunchSpec | null>(null)
 
-  const cliPath = (): Promise<string> => window.electronAPI.getCliPath()
+  useEffect(() => {
+    void window.electronAPI.getMcpLaunchSpec().then(setSpec).catch(() => setSpec(null))
+  }, [])
+
+  const isDev = spec != null && !spec.isPackaged
 
   const handleExport = async (): Promise<void> => {
     try {
       const savePath = await saveFileDialog('mojioko.mcpb', undefined, [{ name: 'MCP Bundle', extensions: ['mcpb'] }])
       if (!savePath) return
-      const written = await window.electronAPI.exportMcpBundle(savePath)
-      toast.success(t('ai.exportToast'))
-      void shellShowInFolder(written)
+      const result = await window.electronAPI.exportMcpBundle(savePath)
+      if (!result.commandExists) {
+        toast.warning(t('ai.commandMissing'))
+      } else if (!result.isPackaged) {
+        toast.warning(t('ai.devExportToast'))
+      } else {
+        toast.success(t('ai.exportToast'))
+      }
+      void shellShowInFolder(result.path)
     } catch {
       toast.error(t('ai.actionError'))
     }
@@ -77,10 +89,18 @@ export function AiIntegrationTab() {
           {step(
             1,
             t('ai.step1'),
-            <Button variant="secondary" size="sm" onClick={handleExport} className="gap-1.5">
-              <Download className="h-3.5 w-3.5" />
-              {t('ai.exportButton')}
-            </Button>,
+            <div className="space-y-2">
+              <Button variant="secondary" size="sm" onClick={handleExport} className="gap-1.5">
+                <Download className="h-3.5 w-3.5" />
+                {t('ai.exportButton')}
+              </Button>
+              {isDev && (
+                <div className="flex items-start gap-1.5 text-caption text-warning">
+                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                  <span>{t('ai.devNote')}</span>
+                </div>
+              )}
+            </div>,
           )}
           {step(2, t('ai.step2'))}
           {step(3, t('ai.step3'))}
@@ -102,14 +122,14 @@ export function AiIntegrationTab() {
           <div className="px-3 pb-3 space-y-3">
             <div className="space-y-1.5">
               <p className="text-caption text-fg-muted leading-relaxed">{t('ai.configDesc')}</p>
-              <Button variant="ghost" size="sm" onClick={() => cliPath().then((p) => copy(desktopConfig(p)))} className="gap-1.5">
+              <Button variant="ghost" size="sm" disabled={!spec} onClick={() => spec && copy(desktopConfig(spec))} className="gap-1.5">
                 <Copy className="h-3.5 w-3.5" />
                 {t('ai.copyConfigButton')}
               </Button>
             </div>
             <div className="space-y-1.5">
               <p className="text-caption text-fg-muted leading-relaxed">{t('ai.codeDesc')}</p>
-              <Button variant="ghost" size="sm" onClick={() => cliPath().then((p) => copy(claudeCodeCommand(p)))} className="gap-1.5">
+              <Button variant="ghost" size="sm" disabled={!spec} onClick={() => spec && copy(claudeCodeCommand(spec))} className="gap-1.5">
                 <Copy className="h-3.5 w-3.5" />
                 {t('ai.copyCodeButton')}
               </Button>

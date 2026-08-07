@@ -3,9 +3,12 @@ import { join } from 'path'
 import { release } from 'os'
 import { APP_NAME, APP_DISPLAY, APP_VERSION } from '../shared/app-info'
 import { Channels } from '../shared/ipc-channels'
+import { existsSync } from 'fs'
 import { maybeRunCli } from './cli'
 import { writeMcpbBundle } from './mcp/mcpb'
 import { toolList, GET_JOB_STATUS_TOOL } from './mcp/tools'
+import { getMcpLaunchSpec } from './mcp/launch'
+import type { McpExportResult, McpLaunchSpec } from '../shared/mcp'
 import { registerVideoHandlers } from './ipc/video'
 import { registerTranscriptionHandlers } from './ipc/transcription'
 import { registerBurninHandlers } from './ipc/burnin'
@@ -179,13 +182,19 @@ function registerIpcHandlers(): void {
   // button. In dev this is electron.exe (expected).
   ipcMain.handle(Channels.appGetCliPath, (): string => process.execPath)
 
-  // REQ-0451 §1 — write a .mcpb bundle (drag into Claude Desktop ▸ Extensions).
-  // The MCP server is this exe (`MOJIOKO.exe mcp`); its absolute path is baked
-  // into the manifest at export time.
-  ipcMain.handle(Channels.appExportMcpBundle, (_event, targetPath: unknown): string => {
+  // REQ-0452 — the launch spec (command/args) correct for dev vs packaged.
+  // Single source for the .mcpb export AND the renderer's config/command strings.
+  ipcMain.handle(Channels.appGetMcpLaunchSpec, (): McpLaunchSpec => getMcpLaunchSpec())
+
+  // REQ-0451 §1 / REQ-0452 — write a .mcpb bundle (drag into Claude Desktop ▸
+  // Extensions). command/args are dev/packaged-correct; the manifest command is
+  // existence-checked as a safety net.
+  ipcMain.handle(Channels.appExportMcpBundle, (_event, targetPath: unknown): McpExportResult => {
     if (typeof targetPath !== 'string' || !targetPath) throw new Error('invalid target path')
-    writeMcpbBundle(targetPath, process.execPath, [...toolList(), GET_JOB_STATUS_TOOL])
-    return targetPath
+    const spec = getMcpLaunchSpec()
+    const commandExists = existsSync(spec.command)
+    writeMcpbBundle(targetPath, spec.command, spec.args, [...toolList(), GET_JOB_STATUS_TOOL])
+    return { path: targetPath, isPackaged: spec.isPackaged, commandExists }
   })
 
   ipcMain.handle(Channels.appGetBuildInfo, async (): Promise<BuildInfo> => {

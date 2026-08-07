@@ -14,6 +14,7 @@
  * through untouched.
  */
 import { app } from 'electron'
+import { resolve } from 'node:path'
 import { APP_VERSION } from '../../shared/app-info'
 import { parseArgs } from './args'
 import { CliError, emitFailure, type CliContext } from './output'
@@ -40,13 +41,23 @@ const HELP_TOKENS = new Set(['help', '-h', '--help'])
  * script token (`.`, a `*.js`/`*.cjs` path, or the resolved app path). Any
  * remaining tokens are the user's CLI args. Empty ⇒ a plain GUI launch.
  */
+/** True when `arg` is the app-dir/entry token that the launcher prepends in dev. */
+function isAppDirArg(arg: string, appPath: string): boolean {
+  if (arg === '.' || arg.endsWith('.js') || arg.endsWith('.cjs')) return true
+  // REQ-0452 — path-normalized compare (not exact string): the dev .mcpb bundle
+  // passes `app.getAppPath()`, but slash style / case can differ across
+  // launchers; resolve() normalizes so the token is still recognized + dropped.
+  try {
+    return resolve(arg).toLowerCase() === resolve(appPath).toLowerCase()
+  } catch {
+    return false
+  }
+}
+
 function userCliArgs(): string[] {
   let rest = process.argv.slice(1)
-  if (!app.isPackaged && rest.length > 0) {
-    const first = rest[0]
-    if (first === '.' || first.endsWith('.js') || first.endsWith('.cjs') || first === app.getAppPath()) {
-      rest = rest.slice(1)
-    }
+  if (!app.isPackaged && rest.length > 0 && isAppDirArg(rest[0], app.getAppPath())) {
+    rest = rest.slice(1)
   }
   return rest
 }

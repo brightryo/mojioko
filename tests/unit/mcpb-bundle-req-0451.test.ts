@@ -71,25 +71,28 @@ function unzip(zip: Buffer): Extracted[] {
   return out
 }
 
-describe('REQ-0451 — .mcpb bundle', () => {
+interface Manifest {
+  manifest_version: string
+  name: string
+  version: string
+  author: { name: string }
+  server: { type: string; entry_point: string; mcp_config: { command: string; args: string[] } }
+  tools: { name: string }[]
+}
+
+describe('REQ-0451/0452 — .mcpb bundle', () => {
   const EXE = 'C:\\Users\\me\\AppData\\Local\\Programs\\mojioko\\MOJIOKO.exe'
+  const ELECTRON = 'D:\\dev\\mojioko\\node_modules\\electron\\dist\\electron.exe'
+  const APPDIR = 'D:\\dev\\mojioko'
   const TOOLS = [
     { name: 'status', description: 's' },
     { name: 'transcribe', description: 't' },
   ]
 
-  it('manifest is MCPB v0.3 with the exe baked into mcp_config.command', () => {
-    const m = buildMcpbManifest(EXE, TOOLS) as {
-      manifest_version: string
-      name: string
-      version: string
-      author: { name: string }
-      server: { type: string; entry_point: string; mcp_config: { command: string; args: string[] } }
-      tools: { name: string }[]
-    }
+  it('packaged: command = MOJIOKO.exe, args = ["mcp"]', () => {
+    const m = buildMcpbManifest(EXE, ['mcp'], TOOLS) as Manifest
     expect(m.manifest_version).toBe('0.3')
     expect(m.name).toBe('mojioko')
-    expect(typeof m.version).toBe('string')
     expect(m.author.name).toBe('brightryo')
     expect(m.server.type).toBe('binary')
     expect(m.server.entry_point).toBe('MOJIOKO.exe')
@@ -98,11 +101,19 @@ describe('REQ-0451 — .mcpb bundle', () => {
     expect(m.tools.map((t) => t.name)).toEqual(['status', 'transcribe'])
   })
 
+  // REQ-0452 §3 — dev bundle must carry the app-dir arg or it won't launch.
+  it('dev: command = electron.exe, args = [<appDir>, "mcp"]', () => {
+    const m = buildMcpbManifest(ELECTRON, [APPDIR, 'mcp'], TOOLS) as Manifest
+    expect(m.server.entry_point).toBe('electron.exe')
+    expect(m.server.mcp_config.command).toBe(ELECTRON)
+    expect(m.server.mcp_config.args).toEqual([APPDIR, 'mcp'])
+  })
+
   it('writes a valid ZIP containing manifest.json (CRC verified, parses back)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'mcpb-test-'))
     const path = join(dir, 'mojioko.mcpb')
     try {
-      writeMcpbBundle(path, EXE, TOOLS)
+      writeMcpbBundle(path, EXE, ['mcp'], TOOLS)
       const entries = unzip(readFileSync(path))
       expect(entries.length).toBe(1)
       expect(entries[0].name).toBe('manifest.json')
@@ -112,7 +123,7 @@ describe('REQ-0451 — .mcpb bundle', () => {
       expect(manifest.server.mcp_config.command).toBe(EXE)
 
       // Optionally leave a sample for external-tool interop checks.
-      if (process.env.MCPB_SAMPLE_OUT) writeMcpbBundle(process.env.MCPB_SAMPLE_OUT, EXE, TOOLS)
+      if (process.env.MCPB_SAMPLE_OUT) writeMcpbBundle(process.env.MCPB_SAMPLE_OUT, EXE, ['mcp'], TOOLS)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
