@@ -77,6 +77,9 @@ const TRACK_GUTTER_LEFT_PX   = 56   // left gutter for track labels (T0, T1, …
 const ZOOM_STEP_PX           = 10
 /** Width of each resize handle (left/right edge of a block) in CSS pixels. */
 const RESIZE_HANDLE_PX       = 6
+// REQ-0465 §2 — render blocks/gridlines this many px beyond each edge of the
+// visible window so a scroll never briefly reveals an un-rendered block.
+const TIMELINE_VIRTUAL_BUFFER_PX = 600
 /**
  * Minimum block width (px) at which the top "timecode row" is rendered.
  * Below this the row is hidden entirely — showing only one end of the
@@ -1594,6 +1597,54 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   // `pixelsPerSec` and `cuts` so the subscription rebuilds with fresh
   // closure values when zoom or cuts change.
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // REQ-0465 §2 — horizontal virtualization.  The timeline is one wide,
+  // horizontally-scrolling strip; at 10k cues almost all blocks sit far off
+  // screen.  Track the visible X window (scrollLeft + clientWidth) so only the
+  // blocks (and gridlines) intersecting it are rendered.  rAF-throttled so a
+  // scroll drag updates at most once per frame.
+  const [tlViewport, setTlViewport] = useState<{ left: number; width: number }>({ left: 0, width: 0 })
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    let raf = 0
+    const update = (): void => {
+      raf = 0
+      const left = el.scrollLeft
+      const width = el.clientWidth
+      setTlViewport((prev) => (prev.left === left && prev.width === width ? prev : { left, width }))
+    }
+    const schedule = (): void => { if (!raf) raf = requestAnimationFrame(update) }
+    update() // seed before first paint of the block list
+    el.addEventListener('scroll', schedule, { passive: true })
+    const ro = new ResizeObserver(schedule)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', schedule)
+      ro.disconnect()
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [])
+
+  // REQ-0465 §2 — the placements whose X-extent intersects the visible window
+  // (+ buffer).  Width 0 (pre-measurement) renders everything so the first paint
+  // is never short.  The dragged clip is always kept — during a move drag
+  // `layerDragVisual.entryId` is the dragged entry, and it floats under the
+  // cursor, so it must never blink out even if its committed leftPx scrolls off.
+  const visiblePlacements = useMemo(() => {
+    if (tlViewport.width === 0) return layout.placements
+    const minX = tlViewport.left - TIMELINE_VIRTUAL_BUFFER_PX
+    const maxX = tlViewport.left + tlViewport.width + TIMELINE_VIRTUAL_BUFFER_PX
+    const floatingId = layerDragVisual?.entryId
+    return layout.placements.filter(({ entry }) => {
+      if (entry.id === floatingId) return true
+      const pos = editedBlockPositions.get(entry.id)
+      const l = pos?.leftPx ?? entry.startSec * pixelsPerSec
+      const w = pos?.widthPx ?? (entry.endSec - entry.startSec) * pixelsPerSec
+      return l < maxX && l + w > minX
+    })
+  }, [layout.placements, editedBlockPositions, tlViewport, pixelsPerSec, layerDragVisual])
+
   useEffect(() => {
     function maybeScrollPlayheadIntoView(playhead: number): void {
       const el = scrollRef.current
@@ -2253,12 +2304,20 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 {(() => {
                   const stepSec = chooseRulerStepSec(pixelsPerSec)
                   const lines = []
+                  // REQ-0465 §2 — same horizontal virtualization as the blocks:
+                  // only emit gridline divs within the visible window (+buffer).
+                  // The loop is cheap; skipping the DOM nodes is the win at 10k+.
+                  const virt = tlViewport.width > 0
+                  const minX = tlViewport.left - TIMELINE_VIRTUAL_BUFFER_PX
+                  const maxX = tlViewport.left + tlViewport.width + TIMELINE_VIRTUAL_BUFFER_PX
                   for (let s = stepSec; s < editedTotalSec; s += stepSec) {
+                    const x = s * pixelsPerSec
+                    if (virt && (x < minX || x > maxX)) continue
                     lines.push(
                       <div
                         key={s}
                         className="absolute top-0 bottom-0 w-px bg-surface-2/50 pointer-events-none"
-                        style={{ left: `${s * pixelsPerSec}px` }}
+                        style={{ left: `${x}px` }}
                       />
                     )
                   }
@@ -2310,7 +2369,10 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                       Each Block is now absolutely positioned with its own
                       explicit left/top/width so only the visible block
                       rectangle catches pointer events. */}
-                  {layout.placements.map(({ entry, trackIndex }) => {
+                  {/* REQ-0465 §2 — only the blocks intersecting the visible
+                      window are rendered (see `visiblePlacements`); off-screen
+                      blocks are omitted from the DOM entirely. */}
+                  {visiblePlacements.map(({ entry, trackIndex }) => {
                     // REQ-074 1c: read pre-computed Edited-axis position
                     // (origToEdited * pps).  Empty cuts → identical to the
                     // legacy `entry.startSec * pixelsPerSec` calculation.
