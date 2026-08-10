@@ -754,3 +754,59 @@ describe('buildMoveCommit — REQ-0403 single-undo for 2D move', () => {
     expect(buildMoveCommit(before, final, 1)).not.toBeNull() // 1 != 0 → change
   })
 })
+
+/**
+ * REQ-0462 — a 'move' drag must follow the cursor 1:1 and apply snap only on
+ * release.  `computeDragPatch` therefore returns BOTH the snapped time
+ * (`startSec`/`endSec`, applied on pointerup) AND the raw cursor time
+ * (`rawStartSec`/`rawEndSec`, written live so the clip sticks to the pointer).
+ * The snapped output is unchanged (the 46 tests above still pin it); these pin
+ * the new raw fields and the "guide shows, block follows raw" split.
+ */
+describe('computeDragPatch — REQ-0462 raw (1:1-follow) vs snapped (on-release)', () => {
+  it('snap ON near a grid line: startSec snaps to grid, rawStartSec follows the cursor', () => {
+    // snapshot start=5, drag +1.1 s → raw start 6.1, inside the 0.24 s window of
+    // grid line 6 (step 2 at pps 50), so the SNAPPED time pulls to 6 while the
+    // RAW time stays at the cursor (6.1).
+    const patch = computeDragPatch(baseInput({
+      snapshot: { startSec: 5, endSec: 10 },
+      kind: 'move',
+      dxPx: 1.1 * PPS,
+      liveEntries: [],
+    }))
+    expect(patch.startSec).toBe(6)          // snapped — applied on release
+    expect(patch.endSec).toBe(11)
+    expect(patch.rawStartSec).toBeCloseTo(6.1, 6)  // raw — written live, follows cursor
+    expect(patch.rawEndSec).toBeCloseTo(11.1, 6)
+    expect(patch.guideKind).toBe('grid')    // guide still shows where it will land
+    expect(patch.rawStartSec).not.toBe(patch.startSec) // the two genuinely differ
+  })
+
+  it('snap OFF: raw equals snapped (nothing to adsorb to)', () => {
+    const patch = computeDragPatch(baseInput({
+      snapshot: { startSec: 5, endSec: 10 },
+      kind: 'move',
+      dxPx: 1.1 * PPS,
+      snapEnabled: false,
+      liveEntries: [],
+    }))
+    expect(patch.rawStartSec).toBe(patch.startSec)
+    expect(patch.rawEndSec).toBe(patch.endSec)
+    expect(patch.startSec).toBeCloseTo(6.1, 6)
+    expect(patch.guideKind).toBeNull()
+  })
+
+  it('raw times are clamped/cs-rounded the same as the snapped times', () => {
+    // Drag far past the tail: both raw and snapped end clamp to the video floor.
+    const patch = computeDragPatch(baseInput({
+      snapshot: { startSec: 55, endSec: 60 },
+      kind: 'move',
+      dxPx: 100 * PPS,       // way past the end
+      snapEnabled: false,
+      liveEntries: [],
+    }))
+    expect(patch.rawEndSec).toBeLessThanOrEqual(DUR)
+    expect(patch.rawStartSec).toBeGreaterThanOrEqual(0)
+    expect(patch.rawEndSec).toBe(patch.endSec)
+  })
+})

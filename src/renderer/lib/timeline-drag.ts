@@ -217,10 +217,19 @@ export interface DragPatchInputs {
 }
 
 export interface DragPatchOutput {
-  /** Final Original-axis start time to write into the entry. */
+  /** Final (SNAPPED, when `snapEnabled`) Original-axis start time. */
   startSec: number
-  /** Final Original-axis end time to write into the entry. */
+  /** Final (SNAPPED, when `snapEnabled`) Original-axis end time. */
   endSec: number
+  /**
+   * REQ-0462 — the RAW (pre-snap, clamped, cs-rounded) Original-axis times, i.e.
+   * the cursor position with NO snap/adsorption applied.  A `move` drag writes
+   * THESE live so the clip follows the pointer 1:1, and applies `startSec` /
+   * `endSec` (snapped) only on release.  With `snapEnabled === false` these equal
+   * `startSec` / `endSec`.  Resize kinds ignore them (they keep snapping live).
+   */
+  rawStartSec: number
+  rawEndSec: number
   /**
    * REQ-0201 — Edited-axis time of the snap target that won, or null.
    * The caller multiplies this by `pixelsPerSec` directly to place the
@@ -371,9 +380,19 @@ export function computeDragPatch(input: DragPatchInputs): DragPatchOutput {
   if (finalEnd > origMaxEnd) finalEnd = origMaxEnd
   if (finalStart < 0) finalStart = 0
 
+  // REQ-0462 — the raw (pre-snap) Original-axis times, run through the SAME
+  // conversion / rounding / clamp as the final values so the live 1:1-follow
+  // write and the on-release snapped write differ by the snap step alone.
+  let rawStart = roundToCs(editedToOrig(rawStartEdited, cuts))
+  let rawEnd = roundToCs(editedToOrig(rawEndEdited, cuts))
+  if (rawEnd > origMaxEnd) rawEnd = origMaxEnd
+  if (rawStart < 0) rawStart = 0
+
   return {
     startSec: finalStart,
     endSec: finalEnd,
+    rawStartSec: rawStart,
+    rawEndSec: rawEnd,
     guideTimeSec,
     guideKind,
     isNoop,

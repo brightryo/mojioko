@@ -852,6 +852,15 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
      * cursor instead), so this carries the pending value.
      */
     pendingLayer?: number
+    /**
+     * REQ-0462 — the SNAPPED time a 'move' drag will commit on release.  During
+     * the drag the store holds the RAW (1:1 cursor-following) time; these carry
+     * the snapped values from the last pointermove so `onUp` can apply them right
+     * before it builds the single move-commit.  `undefined` until the drag leaves
+     * the dead-zone (so a click commits nothing).
+     */
+    pendingStartSec?: number
+    pendingEndSec?: number
   }
 
   const activeDragRef = useRef<ActiveDrag | null>(null)
@@ -1048,15 +1057,24 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       // Build the minimal patch — different kinds touch different
       // fields to keep history pushes meaningful (a resize-end
       // shouldn't claim it touched startSec).
-      let patch: Partial<SubtitleEntry>
       if (d.kind === 'resize-start') {
-        patch = { startSec: result.startSec, isEdited: true }
+        // Resize is time-only and snaps live, unchanged (REQ-0462 §1).
+        useProjectStore.getState().updateEntry(d.entryId, { startSec: result.startSec, isEdited: true })
       } else if (d.kind === 'resize-end') {
-        patch = { endSec: result.endSec, isEdited: true }
+        useProjectStore.getState().updateEntry(d.entryId, { endSec: result.endSec, isEdited: true })
       } else {
-        patch = { startSec: result.startSec, endSec: result.endSec, isEdited: true }
+        // REQ-0462 — a 'move' drag follows the cursor 1:1: write the RAW
+        // (pre-snap) time live so the clip sticks to the pointer, and REMEMBER
+        // the snapped time (result.startSec/endSec) to apply on release.  The
+        // snap guide (setSnapGuidePx above) still shows where it will land.
+        d.pendingStartSec = result.startSec
+        d.pendingEndSec = result.endSec
+        useProjectStore.getState().updateEntry(d.entryId, {
+          startSec: result.rawStartSec,
+          endSec: result.rawEndSec,
+          isEdited: true,
+        })
       }
-      useProjectStore.getState().updateEntry(d.entryId, patch)
     }
 
     function onMove(e: PointerEvent) {
@@ -1067,6 +1085,22 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
     function onUp() {
       const d = activeDragRef.current
       if (!d) return
+      // REQ-0462 — the move drag wrote the RAW (1:1-follow) time live; now that
+      // the gesture is over, apply the SNAPPED time so snap/adsorption lands on
+      // release.  Done BEFORE reading `cur` so the single move-commit below
+      // captures the snapped time AND the pending layer together — the two axes
+      // commit and revert as one, even if the pointer was cancelled mid-drag.
+      if (
+        d.kind === 'move' &&
+        d.pendingStartSec !== undefined &&
+        d.pendingEndSec !== undefined
+      ) {
+        useProjectStore.getState().updateEntry(d.entryId, {
+          startSec: d.pendingStartSec,
+          endSec: d.pendingEndSec,
+          isEdited: true,
+        })
+      }
       // Read the final entry state from the store; if nothing changed,
       // skip the history push and the commitTimeEdit re-sort.
       const cur = useProjectStore
@@ -1138,9 +1172,14 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
 
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+    // REQ-0462 §2 — finalize the SAME way on an abnormal end (pointercancel /
+    // capture loss), so a move that wrote its raw time live is never left as a
+    // half-commit (unsnapped time applied, layer dropped, no undo entry).
+    window.addEventListener('pointercancel', onUp)
     return () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
     }
   }, [])
 
