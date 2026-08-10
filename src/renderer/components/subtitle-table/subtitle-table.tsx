@@ -42,9 +42,6 @@ import { getFontMeta, isFontId } from '../../../shared/fonts'
  */
 const TABLE_GRID_COLS = 'grid-cols-[34px_34px_184px_1fr]'
 
-/** Fallback video width when no video is loaded (drives the preview scale). */
-const FALLBACK_VIDEO_WIDTH_PX = 1920
-
 /** Fallback when warningsMap is missing an entry (deleted rows; race with stale memo). */
 const NO_WARNINGS: EntryWarnings = {
   timeInvalid: false,
@@ -241,12 +238,8 @@ interface SubtitleRowProps {
   onCheckboxClick: (id: string, shiftKey: boolean) => void
   clipStatus: ClipStatus
   cuts: CutList
-  /** Native video width (or fallback) — denominator for the preview scale. */
-  videoWidthPx: number
   /** Measured text-column width, shared by every row (see table JSDoc). */
   textColWidthPx: number
-  /** True while the list is being fling-scrolled — row previews go lightweight. */
-  isScrolling: boolean
 }
 
 function SubtitleRow({
@@ -263,9 +256,7 @@ function SubtitleRow({
   onCheckboxClick,
   clipStatus,
   cuts,
-  videoWidthPx,
   textColWidthPx,
-  isScrolling,
 }: SubtitleRowProps) {
   const isOverflow = overflowStartIndex !== -1
   const { t } = useTranslation(['step2'])
@@ -507,12 +498,7 @@ function SubtitleRow({
             {entry.text.replace(/\\N/g, '\n')}
           </span>
         ) : (
-          <RowStylePreview
-            entry={entry}
-            videoWidthPx={videoWidthPx}
-            containerWidthPx={textColWidthPx}
-            lightweight={isScrolling}
-          />
+          <RowStylePreview entry={entry} containerWidthPx={textColWidthPx} />
         )}
 
         {/* Hover action cluster — duplicate / delete (or restore).  Absolutely
@@ -558,14 +544,6 @@ function SubtitleRow({
 const AUTO_SCROLL_DEBOUNCE_MS = 3000
 
 /**
- * REQ-0471 §3 — how long after the last scroll event the row previews stay in
- * the lightweight (CSS-only) mode before settling back to the full canvas
- * overlay.  Short enough that a stopped list snaps to full fidelity almost
- * immediately; long enough that a continuous fling never thrashes canvases.
- */
-const SCROLL_SETTLE_MS = 140
-
-/**
  * REQ-0345 §3-2 / REQ-0471 §2 — seed height for a row not yet measured.
  *
  * Lowered from 52 to 34 with the denser REQ-0471 row (tighter padding, single
@@ -594,9 +572,6 @@ export function SubtitleTable({
 }) {
   const { t } = useTranslation(['step2'])
   const cuts = useProjectStore((s) => s.cuts)
-  // REQ-0471 §0.4 — native video width feeds the preview's `scale`
-  // (containerWidth / videoWidth); fallback 1920 before a video loads.
-  const videoWidthPx = useProjectStore((s) => s.video?.widthPx) ?? FALLBACK_VIDEO_WIDTH_PX
   const tableFilter = useUiStore((s) => s.tableFilter)
   const selectedEntryId = useUiStore((s) => s.selectedEntryId)
   const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
@@ -629,14 +604,6 @@ export function SubtitleTable({
     return () => obs.disconnect()
   }, [])
 
-  // REQ-0471 §3 — lightweight-preview toggle during active scrolling.  Flipped
-  // ON on the first scroll event of a gesture and OFF SCROLL_SETTLE_MS after
-  // the last, so the canvas ring's dep-array-less layout-effect never runs
-  // during a fling.  Row height is identical in both modes, so the swap causes
-  // no remeasure jump.
-  const [isScrolling, setIsScrolling] = useState(false)
-  const scrollSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   useEffect(() => {
     let prevFocused = useUiStore.getState().focusedRowId
     const runAutoScroll = (focusedRowId: string | null) => {
@@ -664,13 +631,6 @@ export function SubtitleTable({
     // Skip scroll events that originate from our own scrollToIndex() calls.
     if (isAutoScrollingRef.current) return
     lastUserScrollAt.current = Date.now()
-    // REQ-0471 §3 — engage lightweight previews for the duration of the gesture.
-    if (!isScrolling) setIsScrolling(true)
-    if (scrollSettleTimerRef.current !== null) clearTimeout(scrollSettleTimerRef.current)
-    scrollSettleTimerRef.current = setTimeout(() => {
-      setIsScrolling(false)
-      scrollSettleTimerRef.current = null
-    }, SCROLL_SETTLE_MS)
   }
 
   useEffect(() => {
@@ -856,9 +816,7 @@ export function SubtitleTable({
                       onCheckboxClick={handleRowCheckboxClick}
                       clipStatus={effectiveEntryState(entry, cuts).status}
                       cuts={cuts}
-                      videoWidthPx={videoWidthPx}
                       textColWidthPx={textColWidthPx}
-                      isScrolling={isScrolling}
                     />
                   </div>
                 </div>
