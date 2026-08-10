@@ -184,6 +184,27 @@ try {
     check('burn --text-color red → USAGE / exit 2', badColor.code === 2 && badColor.json?.code === 'USAGE', `${badColor.code}/${badColor.json?.code}`)
   }
 
+  // REQ-0467 §2 — headless .mcpb export.  Same launch spec + manifest the GUI
+  // button writes; result carries path/appVersion/launchSpecRevision/proxyExists.
+  {
+    const mcpb = join(work, 'mojioko.mcpb')
+    const ex = cli(['export-mcpb', '-o', mcpb], 30000)
+    const d = ex.json?.data
+    check('export-mcpb exits 0 + writes a .mcpb file',
+      ex.code === 0 && existsSync(mcpb) && d?.path === mcpb, `code=${ex.code}`)
+    check('export-mcpb result has appVersion/launchSpecRevision/proxyExists',
+      typeof d?.appVersion === 'string' && typeof d?.launchSpecRevision === 'number' && typeof d?.proxyExists === 'boolean',
+      `rev=${d?.launchSpecRevision} proxyExists=${d?.proxyExists}`)
+    // The bundle is a ZIP with manifest.json at its root (PK.. signature).
+    const isZip = existsSync(mcpb) && readFileSync(mcpb).subarray(0, 2).toString('latin1') === 'PK'
+    check('export-mcpb output is a ZIP (.mcpb envelope)', isZip)
+    // Overwrite guard (REQ-0457 D13): a second write without --overwrite refuses.
+    const ex2 = cli(['export-mcpb', '-o', mcpb], 20000)
+    check('export-mcpb refuses to overwrite (OUTPUT_EXISTS / exit 8)', ex2.code === 8 && ex2.json?.code === 'OUTPUT_EXISTS', `${ex2.code}/${ex2.json?.code}`)
+    const ex3 = cli(['export-mcpb', '-o', mcpb, '--overwrite'], 20000)
+    check('export-mcpb --overwrite proceeds', ex3.code === 0)
+  }
+
   // 4) agent loop — only if the box is ready (avoids a multi-GB download here).
   if (st.json?.data?.ready) {
     const sizes = ['640x360', '1280x720']

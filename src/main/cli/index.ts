@@ -32,6 +32,7 @@ import { runProbeCommand } from './commands/probe'
 import { runReadSubtitleCommand } from './commands/read-subtitle'
 import { runEditSubtitleCommand } from './commands/edit-subtitle'
 import { runConvertCommand } from './commands/convert'
+import { runExportMcpbCommand } from './commands/export-mcpb'
 import { runMcpServer } from '../mcp/server'
 import { installStdoutGuard } from '../mcp/stdout-guard'
 
@@ -106,6 +107,9 @@ async function route(ctx: CliContext, command: string, args: ReturnType<typeof p
       return runEditSubtitleCommand(ctx, args)
     case 'convert':
       return runConvertCommand(ctx, args)
+    case 'export-mcpb':
+    case 'export_mcpb':
+      return runExportMcpbCommand(ctx, args)
     default:
       return emitFailure(ctx, command, new CliError('USAGE', `unknown command: "${command}"`, 'mojioko -h でコマンド一覧を表示。'))
   }

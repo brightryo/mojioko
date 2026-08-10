@@ -236,6 +236,18 @@ const COMMANDS: CommandDoc[] = [
     examples: ['mojioko convert out.mojioko -o out.srt'],
     errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'OUTPUT_WRITE_FAILED'],
   },
+  {
+    name: 'export-mcpb',
+    summary: 'Claude Desktop 用 .mcpb を書き出す（GUI「MCP 拡張を書き出す」と同一・自動化用。REQ-0467）',
+    usage: 'mojioko export-mcpb -o <path.mcpb>',
+    positionals: [],
+    optionSpecs: [
+      OUT_REQ,
+      { flag: '--overwrite', type: 'boolean', default: 'false', desc: '既存出力を上書き（既定は拒否）' },
+    ],
+    examples: ['mojioko export-mcpb -o mojioko.mcpb'],
+    errorCodes: ['USAGE', 'OUTPUT_EXISTS', 'OUTPUT_WRITE_FAILED'],
+  },
 ]
 
 const COMMON_FLAGS: [string, string][] = [
