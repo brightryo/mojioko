@@ -677,6 +677,39 @@ export type EncoderSetting = 'auto' | H264Encoder
 export type AudioMode = 'simple' | 'preserve'
 
 /**
+ * REQ-0460 — explicit encode-quality override for the CLI/MCP burn path.
+ *
+ * The GUI and CLI/MCP share `buildEncoderArgs`, whose per-encoder default is
+ * CONSTANT-QUALITY (`-cq 20` for nvenc, `-quality 70` for h264_mf, etc.) —
+ * content-adaptive and NOT a bitrate target.  This override lets a headless
+ * caller pin a value without changing that default philosophy.  All fields
+ * optional and mutually resolved by precedence: `bitrateKbps` > `crf` >
+ * `quality` > per-encoder default.  Omitting the whole object reproduces the
+ * pre-REQ-0460 args byte-for-byte.
+ */
+export interface EncodeQuality {
+  /**
+   * Constant-quality value on the CRF-like 0..51 scale (lower = better).
+   * Maps to the active encoder's quality slot: nvenc `-cq`, qsv
+   * `-global_quality`, amf `-qp_i`/`-qp_p`.  For h264_mf (0..100, higher =
+   * better) it is translated to `-quality` (documented approximation).
+   */
+  crf?: number
+  /**
+   * VBR target bitrate in kbps.  When set it takes precedence over `crf` /
+   * `quality` and switches the encoder to a bitrate target
+   * (`-b:v`/`-maxrate`/`-bufsize`) on every encoder.
+   */
+  bitrateKbps?: number
+  /**
+   * Generic quality on a 1..100 scale (higher = better).  Maps directly to
+   * h264_mf `-quality`; for the CQ-style encoders it is translated to a CQ
+   * value (documented approximation).  Lower precedence than `crf`.
+   */
+  quality?: number
+}
+
+/**
  * Step 3 output container choice.
  * - `'mp4'`        : force `.mp4` regardless of input.  ffmpeg invoked with
  *                    `-f mp4` and `-movflags +faststart` for SNS/Web streaming.

@@ -3,15 +3,16 @@
  *
  * Reuses `startBurnin` (ffmpeg + libass `subtitles=`, never drawtext). `.mojioko`
  * input keeps per-cue style; SRT input is seeded with the app default subtitle
- * style (font inherited, spec §11). Resolution scaling / `--preset` / overflow
- * handling are layered in a follow-up (see §9 notes); this renders at the
- * source resolution.
+ * style (font inherited, spec §11). Resolution scaling (`--resolution`/`--preset`,
+ * REQ-0447) and the vertical overflow guard (`--overflow`, REQ-0456) are applied
+ * here. REQ-0460 folded the resolution scale into the single burn encode (via
+ * `request.scaleTo`) — no more lossy `h264_mf` pre-pass — and added the
+ * `--crf`/`--bitrate`/`--quality` overrides and `--position`.
  */
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { startBurnin } from '../../services/ffmpeg-burnin'
 import { probeVideo } from '../../services/ffprobe'
 import { loadSettings } from '../../services/settings-store'
-import { getBinPath } from '../../lib/paths'
 import { parseProjectFile } from '../../../shared/project-file'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
 import { parseSrt } from '../../../renderer/lib/srt-parse'
@@ -20,7 +21,7 @@ import { canUseKeywordEmphasisInTier } from '../../../shared/emphasis'
 import { isPackagedAsMsix, getCurrentProcessContext } from '../../lib/msix'
 import { layoutForBurn, type OverflowMode } from '../../services/headless-layout'
 import type { BurninStartRequest, EncoderSetting, AudioMode, OutputContainer } from '../../../shared/ipc-contracts'
-import type { SubtitleEntry, VideoInfo } from '../../../shared/types'
+import type { EncodeQuality, H264Encoder, SubtitleEntry, VideoInfo } from '../../../shared/types'
 import type { FontId } from '../../../shared/fonts'
 import { optString, type ParsedArgs } from '../args'
 import { CliError, emitProgress, emitSuccess, type CliContext } from '../output'
@@ -28,7 +29,10 @@ import { detectFormat, entriesFromSegments } from '../subtitle-io'
 import { resolveDefaultSubtitleStyle } from '../subtitle-style'
 import { findStylePreset, applyStylePreset } from '../style-preset-cli'
 import { assertWritable } from '../overwrite'
-import { resolveTarget, contentScaleFactor, scaleEntries, scaleVideoTo } from '../scale-video'
+import { resolveTarget, contentScaleFactor, scaleEntries } from '../scale-video'
+import { parseBitrateKbps } from '../../../shared/encode-quality'
+
+const VERTICAL_POSITIONS = new Set<'top' | 'center' | 'bottom'>(['top', 'center', 'bottom'])
 
 const OVERFLOW_MODES = new Set<OverflowMode>(['warn', 'shrink', 'error'])
 
@@ -116,6 +120,35 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
   const containerFlag = optString(args.opts, 'container')
   const outputContainer: OutputContainer = containerFlag === 'same' ? 'sameAsInput' : 'mp4'
 
+  // REQ-0460 — explicit encode-quality overrides.  These are OVERRIDES only;
+  // with none supplied the encoder's constant-quality default is used (identical
+  // to the GUI).  `--bitrate` (VBR target) takes precedence over `--crf` /
+  // `--quality` inside `buildEncoderArgs`.
+  const crf = optInt(args.opts, 'crf')
+  const bitrateKbps = parseBitrateKbps(optString(args.opts, 'bitrate'))
+  const qualityVal = optInt(args.opts, 'quality')
+  const quality: EncodeQuality | undefined =
+    crf !== undefined || bitrateKbps !== undefined || qualityVal !== undefined
+      ? {
+          ...(crf !== undefined ? { crf } : {}),
+          ...(bitrateKbps !== undefined ? { bitrateKbps } : {}),
+          ...(qualityVal !== undefined ? { quality: qualityVal } : {}),
+        }
+      : undefined
+
+  // REQ-0460 — `--position top|center|bottom` was advertised (help + MCP schema)
+  // but silently dropped: the burn always used the app-default vertical position
+  // and the returned subtitleStyle reflected settings, not the argument.  Read
+  // and validate it here; it is applied to every cue below (before layout, so
+  // the overflow guard anchors from the requested edge).
+  const positionFlag = optString(args.opts, 'position')
+  if (positionFlag && !VERTICAL_POSITIONS.has(positionFlag as 'top' | 'center' | 'bottom')) {
+    throw new CliError('USAGE', `unknown --position: ${positionFlag}`, 'top|center|bottom')
+  }
+  const verticalPositionOverride = positionFlag
+    ? (positionFlag as 'top' | 'center' | 'bottom')
+    : undefined
+
   // REQ-0456 — headless auto line-break margin + vertical overflow guard flags.
   const marginX = optInt(args.opts, 'margin-x') ?? ASS_MARGIN_LR_PX
   const marginY = optInt(args.opts, 'margin-y', 'margin-v') ?? ASS_MARGIN_LR_PX
@@ -128,25 +161,34 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
   const tgt = resolveTarget(optString(args.opts, 'resolution'), optString(args.opts, 'preset'))
   if (!tgt.ok) throw new CliError('USAGE', tgt.message, 'mojioko burn ... --preset shorts | --resolution 1080x1920')
 
-  let inputPath = videoPath
+  // REQ-0460 — resolution scaling is now folded into the SINGLE burn encode via
+  // `request.scaleTo` (see startBurnin), replacing the previous separate
+  // `scaleVideoTo` pre-pass.  That old pass re-encoded the source with a bare
+  // `h264_mf` (no rate control) BEFORE the burn, collapsing the bitrate to ~2/3
+  // even when the target resolution equalled the source.  Now the pixel-space
+  // cue fields are still scaled by the content factor, but the video itself is
+  // scaled+padded inside the same cq-quality ffmpeg run as the subtitles.
   let renderVideo: VideoInfo = video
-  let scaledTemp: string | null = null
+  let scaleTo: { w: number; h: number } | undefined
   let resized = false
   if (tgt.target) {
     const f = contentScaleFactor(video.widthPx, video.heightPx, tgt.target.w, tgt.target.h)
     entries = scaleEntries(entries, f)
-    // Dry-run needs the target dims for the layout math but must NOT spend an
-    // encode pre-scaling the video.
-    if (!dryRun) {
-      try {
-        scaledTemp = await scaleVideoTo(getBinPath('ffmpeg'), videoPath, tgt.target.w, tgt.target.h)
-      } catch (e) {
-        throw new CliError('BURN_FAILED', `解像度スケーリングに失敗: ${e instanceof Error ? e.message : String(e)}`, 'ffmpeg の入力/コーデックを確認してください。')
-      }
-      inputPath = scaledTemp
-    }
-    renderVideo = { ...video, path: scaledTemp ?? videoPath, widthPx: tgt.target.w, heightPx: tgt.target.h }
+    scaleTo = { w: tgt.target.w, h: tgt.target.h }
+    renderVideo = { ...video, widthPx: tgt.target.w, heightPx: tgt.target.h }
     resized = true
+  }
+
+  // REQ-0460 — apply the vertical-position override to every cue BEFORE layout so
+  // the overflow guard anchors from the requested edge.  For `.mojioko` input
+  // this deliberately overrides the per-cue positions (an explicit flag wins).
+  if (verticalPositionOverride) {
+    entries = entries.map((e) => ({
+      ...e,
+      verticalPosition: verticalPositionOverride,
+      // Clear any absolute Y so alignment-based placement (the anchor) governs.
+      posY: undefined,
+    }))
   }
 
   // REQ-0456 §1/§2 — apply auto line-break at the OUTPUT resolution (so text
@@ -171,9 +213,17 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     )
   }
 
+  // REQ-0457 A2 / REQ-0460 — the resolved subtitle style applied.  Patch the
+  // reported vertical position with the `--position` override so the returned
+  // value reflects what is actually burned (previously it always echoed the
+  // settings default, e.g. "center", regardless of the argument).
+  const subtitleStyle = resolveDefaultSubtitleStyle(settings)
+  if (verticalPositionOverride) {
+    subtitleStyle.position = { ...subtitleStyle.position, vertical: verticalPositionOverride }
+  }
+
   // REQ-0457 Phase E — dry-run: report the overflow judgement without encoding.
   if (dryRun) {
-    if (scaledTemp) { try { rmSync(scaledTemp, { force: true }) } catch { /* none in dry-run */ } }
     return emitSuccess(ctx, 'burn', {
       dryRun: true,
       wouldEncode: false,
@@ -181,19 +231,24 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
       resized,
       overflow: layout.overflow,
       cueCount: entries.filter((e) => !e.isDeleted).length,
-      subtitleStyle: resolveDefaultSubtitleStyle(settings),
+      subtitleStyle,
       stylePreset: appliedStylePreset,
+      // REQ-0460 — echo the quality override that WOULD be applied (if any).
+      quality: quality ?? null,
     })
   }
 
   const request: BurninStartRequest = {
-    inputPath,
+    // REQ-0460 — single-pass scaling: the ORIGINAL source is the input; the
+    // scale+pad happens inside startBurnin's filter graph (no lossy pre-encode).
+    inputPath: videoPath,
     outputPath: out,
     entries,
     video: renderVideo,
     burnin: {
       horizontalPosition: BURNIN_DEFAULTS.horizontalPosition,
-      verticalPosition: BURNIN_DEFAULTS.verticalPosition,
+      // REQ-0460 — reflect the --position override on the project default too.
+      verticalPosition: verticalPositionOverride ?? BURNIN_DEFAULTS.verticalPosition,
       verticalMarginPx: BURNIN_DEFAULTS.verticalMarginPx,
     },
     encoderSetting: (encoderFlag as EncoderSetting) || settings.encoder || 'auto',
@@ -203,6 +258,8 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     fontId,
     cuts,
     marginLrPx: marginX,
+    ...(scaleTo ? { scaleTo } : {}),
+    ...(quality ? { quality } : {}),
   }
 
   const controller = new AbortController()
@@ -210,26 +267,25 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
   if (ctx.signal) ctx.signal.addEventListener('abort', () => controller.abort(), { once: true })
   let failedError: string | null = null
   let sizeMB = 0
+  // REQ-0460 — capture the measured bitrate + concrete encoder so the result
+  // lets an agent verify quality (previously only sizeMB was returned).
+  let videoBitrateKbps: number | null = null
+  let resolvedEncoder: H264Encoder | null = null
   try {
     await startBurnin(
       request,
       (ev) => {
         if (ev.event === 'progress') emitProgress(ctx, { event: 'progress', percent: ev.percent })
-        else if (ev.event === 'completed') sizeMB = ev.sizeMB
-        else if (ev.event === 'failed') failedError = ev.error
+        else if (ev.event === 'completed') {
+          sizeMB = ev.sizeMB
+          videoBitrateKbps = ev.videoBitrateKbps ?? null
+          resolvedEncoder = ev.resolvedEncoder ?? null
+        } else if (ev.event === 'failed') failedError = ev.error
       },
       controller.signal,
     )
   } catch (e) {
     throw new CliError('BURN_FAILED', e instanceof Error ? e.message : String(e), 'ffmpeg の入力/コーデック/出力先を確認してください。')
-  } finally {
-    if (scaledTemp) {
-      try {
-        rmSync(scaledTemp, { force: true })
-      } catch {
-        // best-effort temp cleanup
-      }
-    }
   }
   if (failedError) {
     throw new CliError('BURN_FAILED', failedError, 'ffmpeg の入力/コーデック/出力先を確認してください。')
@@ -239,14 +295,20 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     outputPath: out,
     resolution: { width: renderVideo.widthPx, height: renderVideo.heightPx },
     resized,
+    // `encoder` = the requested setting (e.g. 'auto'); `resolvedEncoder` = what
+    // ffmpeg actually used (REQ-0460).
     encoder: request.encoderSetting,
+    resolvedEncoder,
     audio: request.audioMode,
     sizeMB,
+    // REQ-0460 — measured output video bitrate (kbps) + the quality override used.
+    videoBitrateKbps,
+    quality: quality ?? null,
     overflow: layout.overflow,
     // REQ-0457 A2 — the resolved subtitle style applied (paired with `status`).
     // For `.mojioko` input, per-cue styles from the file are preserved; this is
     // the app default style (what SRT-seeded cues and un-overridden fields use).
-    subtitleStyle: resolveDefaultSubtitleStyle(settings),
+    subtitleStyle,
     // REQ-0457 D12 — the style preset applied to all cues, if any.
     stylePreset: appliedStylePreset,
   })

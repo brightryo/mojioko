@@ -117,9 +117,14 @@ export async function runRunCommand(ctx: CliContext, args: ParsedArgs): Promise<
         ? {
             resolution: bData.resolution,
             encoder: bData.encoder,
+            // REQ-0460 — surface the concrete encoder + measured bitrate + the
+            // quality override so `run --burn` is as verifiable as `burn`.
+            resolvedEncoder: bData.resolvedEncoder ?? null,
             audio: bData.audio,
             overflow: bData.overflow,
             sizeMB: bData.sizeMB,
+            videoBitrateKbps: bData.videoBitrateKbps ?? null,
+            quality: bData.quality ?? null,
           }
         : {}),
     })

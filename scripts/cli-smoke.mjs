@@ -48,6 +48,16 @@ function probeWH(path) {
   return (r.stdout || '').trim()
 }
 
+/** REQ-0460 — video-stream bitrate in kbps (falls back to container total). */
+function probeBitrate(path) {
+  const v = spawnSync(FFPROBE, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=bit_rate', '-of', 'csv=p=0', path], { encoding: 'utf-8' })
+  const vn = parseInt((v.stdout || '').trim(), 10)
+  if (Number.isFinite(vn) && vn > 0) return Math.round(vn / 1000)
+  const f = spawnSync(FFPROBE, ['-v', 'error', '-show_entries', 'format=bit_rate', '-of', 'csv=p=0', path], { encoding: 'utf-8' })
+  const fn = parseInt((f.stdout || '').trim(), 10)
+  return Number.isFinite(fn) && fn > 0 ? Math.round(fn / 1000) : 0
+}
+
 function makeClip(path, size) {
   spawnSync(FFMPEG, ['-y', '-f', 'lavfi', '-i', `testsrc=size=${size}:rate=30:duration=2`, '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', '-c:v', 'h264_mf', '-c:a', 'aac', '-shortest', path], { encoding: 'utf-8' })
 }
@@ -101,6 +111,42 @@ try {
   check('unknown token → USAGE / exit 2 (CLI preserved)', unknownTok.code === 2 && unknownTok.json?.code === 'USAGE', `${unknownTok.code}/${unknownTok.json?.code}`)
   const ghostProj = cli([join(work, 'does-not-exist.mojioko')], 40000)
   check('non-existent .mojioko → USAGE (not a GUI open)', ghostProj.code === 2 && ghostProj.json?.code === 'USAGE', `${ghostProj.code}/${ghostProj.json?.code}`)
+
+  // REQ-0460 — quality regression: the resolution-scaling path must NOT collapse
+  // the bitrate.  Before the fix, `--resolution` ran a separate no-rate-control
+  // `h264_mf` pre-encode that dropped the output to ~2/3 even when the target
+  // matched the source.  Now scaling is folded into the single cq-quality burn,
+  // so a native burn and an equal-size `--resolution` burn should land within a
+  // small margin.  Needs no Whisper model (burn takes an SRT directly).
+  {
+    const brClip = join(work, 'br.mp4')
+    makeClip(brClip, '540x960')
+    const brSrt = join(work, 'br.srt')
+    writeFileSync(brSrt, '1\n00:00:00,000 --> 00:00:02,000\nbitrate regression cue\n', 'utf-8')
+    const nativeOut = join(work, 'br-native.mp4')
+    const scaledOut = join(work, 'br-scaled.mp4')
+    const bNative = cli(['burn', brClip, brSrt, '-o', nativeOut], 120000)
+    const bScaled = cli(['burn', brClip, brSrt, '-o', scaledOut, '--resolution', '540x960'], 120000)
+    check('burn native exits 0 + produced a video', bNative.code === 0 && existsSync(nativeOut), `code=${bNative.code}`)
+    check('burn --resolution exits 0 + produced a video', bScaled.code === 0 && existsSync(scaledOut), `code=${bScaled.code}`)
+    // REQ-0460 (d) — result exposes the measured bitrate + the concrete encoder.
+    check('burn result reports videoBitrateKbps (number) + resolvedEncoder',
+      typeof bNative.json?.data?.videoBitrateKbps === 'number' && bNative.json.data.videoBitrateKbps > 0 && !!bNative.json?.data?.resolvedEncoder,
+      `br=${bNative.json?.data?.videoBitrateKbps} enc=${bNative.json?.data?.resolvedEncoder}`)
+    const brN = probeBitrate(nativeOut)
+    const brS = probeBitrate(scaledOut)
+    check('scaled-to-source burn bitrate does NOT collapse vs native (>=70%)', brS >= brN * 0.7, `native=${brN}kbps scaled=${brS}kbps`)
+    // REQ-0460 (b) — an explicit --bitrate override is honored end-to-end.  A
+    // LOW cap is the content-robust probe: `testsrc` is near-static so a high
+    // target would just VBR-undershoot (nothing to encode), but a tight cap must
+    // actually constrain the encoder below the cq baseline.  (The exact
+    // -b:v/-maxrate/-bufsize arg mapping is unit-tested in encode-quality-req-0460.)
+    const brCapOut = join(work, 'br-cap.mp4')
+    const bCap = cli(['burn', brClip, brSrt, '-o', brCapOut, '--bitrate', '150k'], 120000)
+    check('burn --bitrate 150k exits 0 + video', bCap.code === 0 && existsSync(brCapOut), `code=${bCap.code}`)
+    const brCap = probeBitrate(brCapOut)
+    check('--bitrate 150k constrains below the cq baseline', brCap < brN, `capped=${brCap}kbps baseline=${brN}kbps`)
+  }
 
   // 4) agent loop — only if the box is ready (avoids a multi-GB download here).
   if (st.json?.data?.ready) {

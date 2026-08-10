@@ -1,20 +1,22 @@
 /**
  * REQ-0447 / spec §3.4 — output resolution scaling for `mojioko burn`.
  *
- * `--resolution WxH` / `--preset <name>` re-canvases the output. We pre-scale
- * the source into the target canvas (fit + pad, aspect preserved) with a
- * separate ffmpeg pass — isolated from the shared burn service — then burn onto
- * the scaled video at PlayRes = target. Cue pixel fields are scaled by the
- * content scale factor so the subtitle keeps its apparent size.
+ * `--resolution WxH` / `--preset <name>` re-canvases the output. These pure
+ * helpers resolve the target dims and scale the cue pixel fields by the content
+ * scale factor so the subtitle keeps its apparent size.
+ *
+ * REQ-0460 — the ACTUAL video scaling is no longer a separate pre-encode. It was
+ * a standalone `h264_mf` pass with no rate control (`scaleVideoTo`, removed)
+ * that collapsed the output bitrate before the burn even ran. It is now folded
+ * into the single burn encode via `BurninStartRequest.scaleTo` (see
+ * `services/ffmpeg-burnin.ts`), so the source is scaled+padded and the ASS
+ * burned at PlayRes = target in ONE cq-quality pass.
  *
  * NOTE (spec §9): for aspect-changing presets (e.g. 16:9 → 9:16 "shorts") the
  * padded canvas means bottom-anchored placement lands relative to the FULL
  * canvas, not the video content band — WYSIWYG placement fidelity there needs
  * visual confirmation and may be refined. The output resolution itself is exact.
  */
-import { spawn } from 'node:child_process'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import type { SubtitleEntry } from '../../shared/types'
 
 export interface TargetResolution {
@@ -69,27 +71,4 @@ export function scaleEntries(entries: SubtitleEntry[], f: number): SubtitleEntry
     ...(typeof e.posY === 'number' ? { posY: Math.round(e.posY * f) } : {}),
     ...(typeof e.shadowDepth === 'number' ? { shadowDepth: Math.round(e.shadowDepth * f) } : {}),
   }))
-}
-
-/**
- * Pre-scale `input` into a `w×h` canvas (fit + centered pad, aspect preserved),
- * writing a temp MP4 and resolving its path. Uses `h264_mf` (always available
- * on Windows; the bundled LGPL ffmpeg lacks libx264).
- */
-export function scaleVideoTo(ffmpegPath: string, input: string, w: number, h: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const out = join(tmpdir(), `mojioko-scale-${process.pid}-${Date.now()}.mp4`)
-    const vf = `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1`
-    const args = ['-y', '-i', input, '-vf', vf, '-c:v', 'h264_mf', '-c:a', 'aac', out]
-    const proc = spawn(ffmpegPath, args, { windowsHide: true })
-    let stderr = ''
-    proc.stderr.on('data', (d) => {
-      stderr += d.toString()
-    })
-    proc.on('error', reject)
-    proc.on('close', (code) => {
-      if (code === 0) resolve(out)
-      else reject(new Error(`ffmpeg scale failed (exit ${code}): ${stderr.slice(-300)}`))
-    })
-  })
 }

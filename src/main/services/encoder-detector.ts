@@ -5,6 +5,11 @@ import log from '../lib/logger'
 
 export type { H264Encoder }
 
+// REQ-0460 — the per-encoder quality argument mapping is pure and lives in
+// `shared/encode-quality.ts` (no electron deps) so it is unit-testable.
+// Re-exported here so `buildEncoderArgs` keeps its historical import path.
+export { buildEncoderArgs } from '../../shared/encode-quality'
+
 const PRIORITY_ORDER: H264Encoder[] = ['h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf']
 
 let cachedAvailable: H264Encoder[] | null = null
@@ -46,18 +51,4 @@ export async function getBestEncoder(preferred: EncoderSetting = 'auto'): Promis
   }
 
   return 'h264_mf'
-}
-
-/** ffmpeg arg arrays for each encoder. */
-export function buildEncoderArgs(encoder: H264Encoder): string[] {
-  switch (encoder) {
-    case 'h264_nvenc':
-      return ['-c:v', 'h264_nvenc', '-preset', 'p5', '-tune', 'hq', '-rc', 'vbr', '-cq', '20']
-    case 'h264_amf':
-      return ['-c:v', 'h264_amf', '-quality', 'quality', '-rc', 'cqp', '-qp_i', '20', '-qp_p', '22']
-    case 'h264_qsv':
-      return ['-c:v', 'h264_qsv', '-preset', 'slower', '-global_quality', '20']
-    case 'h264_mf':
-      return ['-c:v', 'h264_mf', '-rate_control', 'quality', '-quality', '70']
-  }
 }

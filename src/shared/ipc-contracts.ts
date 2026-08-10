@@ -1,4 +1,4 @@
-import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams, WordSpan } from './types'
+import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, EncodeQuality, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams, WordSpan } from './types'
 import type { FontId } from './fonts'
 import type { KaraokeStyle } from './karaoke-style'
 import type { Cut } from './cuts'
@@ -106,6 +106,26 @@ export interface BurninStartRequest {
    * budget and the libass render margin stay consistent.
    */
   marginLrPx?: number
+  /**
+   * REQ-0460 — output resolution scaling folded into the SINGLE burn encode.
+   *
+   * When set, `startBurnin` prepends a `scale=…:force_original_aspect_ratio=
+   * decrease,pad=…,setsar=1` filter in front of the `subtitles=` filter so the
+   * source is fit+padded into `w×h` and the ASS burned at PlayRes = `w×h` in ONE
+   * cq-quality pass.  This replaces the old CLI two-pass approach (a separate
+   * `h264_mf` pre-scale with no rate control that collapsed the bitrate before
+   * the burn even ran — the REQ-0460 defect).  Optional; absent ⇒ the source is
+   * encoded at its native resolution exactly as the GUI does.  `video.widthPx/
+   * heightPx` must already equal `w×h` (the caller sets them to the target) so
+   * the ASS PlayRes and the scaled frame agree.
+   */
+  scaleTo?: { w: number; h: number }
+  /**
+   * REQ-0460 — explicit encode-quality override (`--crf` / `--bitrate` /
+   * `--quality`).  Forwarded verbatim to `buildEncoderArgs`.  Optional; omitted
+   * ⇒ the encoder's constant-quality default (matches the GUI).
+   */
+  quality?: EncodeQuality
 }
 
 /**
@@ -246,7 +266,16 @@ export type TranscriptionEvent =
 
 export type BurninEvent =
   | { event: 'progress'; percent: number; currentTimeMs: number }
-  | { event: 'completed'; outputPath: string; sizeMB: number }
+  /**
+   * REQ-0460 — `completed` gained the measured output video bitrate and the
+   * CONCRETE encoder that ffmpeg actually used (e.g. `h264_nvenc`), so a
+   * headless caller can verify quality instead of guessing from `sizeMB`.  Both
+   * are OPTIONAL and additive: the GUI ignores them and any pre-REQ-0460 caller
+   * keeps working.  `videoBitrateKbps` is ffprobe's stream bitrate, falling back
+   * to a size/duration estimate; `resolvedEncoder` is the output of
+   * `getBestEncoder` (never the requested `'auto'`).
+   */
+  | { event: 'completed'; outputPath: string; sizeMB: number; videoBitrateKbps?: number; resolvedEncoder?: H264Encoder }
   | { event: 'failed'; error: string }
 
 /**

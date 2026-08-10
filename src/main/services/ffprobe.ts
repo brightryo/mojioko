@@ -109,6 +109,45 @@ function parseFps(rational: string | undefined): number {
   return Math.round((num / den) * 100) / 100
 }
 
+/**
+ * REQ-0460 — measure an ENCODED output's bitrate so the CLI/MCP burn result can
+ * report the quality actually achieved (not just `sizeMB`).  Returns the video
+ * stream's bitrate and the container total, both in kbps, or `null` when
+ * ffprobe cannot report a value (some MP4 muxes omit per-stream `bit_rate`).
+ * Best-effort: never throws — a probe failure yields `{ null, null }` and the
+ * caller falls back to a size/duration estimate.
+ */
+export async function probeMediaBitrate(
+  filePath: string,
+): Promise<{ videoBitrateKbps: number | null; totalBitrateKbps: number | null }> {
+  const ffprobe = getBinPath('ffprobe')
+  const args = [
+    '-v', 'quiet',
+    '-print_format', 'json',
+    '-show_entries', 'stream=codec_type,bit_rate:format=bit_rate,duration',
+    filePath,
+  ]
+  try {
+    const { stdout } = await execFileAsync(ffprobe, args, { timeout: FFPROBE_TIMEOUT_MS })
+    const data = JSON.parse(String(stdout)) as {
+      streams?: { codec_type?: string; bit_rate?: string }[]
+      format?: { bit_rate?: string }
+    }
+    const toKbps = (raw: string | undefined): number | null => {
+      if (!raw) return null
+      const n = Number(raw)
+      return Number.isFinite(n) && n > 0 ? Math.round(n / 1000) : null
+    }
+    const vStream = (data.streams ?? []).find((s) => s.codec_type === 'video')
+    return {
+      videoBitrateKbps: toKbps(vStream?.bit_rate),
+      totalBitrateKbps: toKbps(data.format?.bit_rate),
+    }
+  } catch {
+    return { videoBitrateKbps: null, totalBitrateKbps: null }
+  }
+}
+
 export async function extractThumbnail(filePath: string, atSec: number): Promise<string> {
   const ffmpeg = getBinPath('ffmpeg')
   const args = [

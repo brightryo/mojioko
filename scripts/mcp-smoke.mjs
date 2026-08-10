@@ -163,6 +163,28 @@ try {
     for (const b of stData?.data?.blockers || []) log(`  - ${b.what}: ${b.command}`)
   }
 
+  // 4e) REQ-0460 — burn via MCP (async job): the result must surface the measured
+  // bitrate + concrete encoder, and the resolution-scaling path must produce a
+  // real, non-collapsed video.  Needs no Whisper model (burn takes an SRT).
+  {
+    const brSrt = join(work, 'br.srt')
+    writeFileSync(brSrt, '1\n00:00:00,000 --> 00:00:02,000\nmcp bitrate regression cue\n', 'utf-8')
+    const brOut = join(work, 'br-mcp.mp4')
+    const b = parseContent(await rpc('tools/call', { name: 'burn', arguments: { video: clip, subtitle: brSrt, out: brOut, resolution: '640x360' } }))
+    check('burn returns a job_id (async)', typeof b?.job_id === 'string' && b?.status === 'running', JSON.stringify({ job_id: b?.job_id, status: b?.status }))
+    let brDone = null
+    for (let i = 0; i < 60; i++) {
+      await sleep(1000)
+      const pd = parseContent(await rpc('tools/call', { name: 'get_job_status', arguments: { job_id: b.job_id } }))
+      if (pd?.status === 'done' || pd?.status === 'failed') { brDone = pd; break }
+    }
+    check('burn job done + artifact exists', brDone?.status === 'done' && existsSync(brOut), `status=${brDone?.status} err=${brDone?.result?.code || ''}`)
+    const d = brDone?.result?.data
+    check('burn result exposes videoBitrateKbps (>0) + resolvedEncoder (REQ-0460 d)',
+      typeof d?.videoBitrateKbps === 'number' && d.videoBitrateKbps > 0 && !!d?.resolvedEncoder,
+      `br=${d?.videoBitrateKbps} enc=${d?.resolvedEncoder}`)
+  }
+
   // 5) REQ-0455 — strict stdout framing: split on '\n'; every complete segment
   // must be NON-EMPTY valid JSON. Drop the final segment unconditionally — it is
   // either '' (from the trailing '\n') or a partial line still being written at

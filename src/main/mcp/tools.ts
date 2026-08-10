@@ -127,6 +127,9 @@ export const TOOLS: ToolSpec[] = [
         resolution: { type: 'string', description: 'WxH（例 1080x1920）。preset と排他' },
         overflow: { type: 'string', enum: ['shrink', 'warn', 'error'], description: '縦はみ出し（既定 warn）' },
         encoder: { type: 'string', enum: ['auto', 'h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf'], description: '既定 auto' },
+        crf: { type: 'integer', description: '画質(定質) 0..51 低いほど高画質。既定=エンコーダ既定(≈GUI)（REQ-0460）' },
+        bitrate: { type: 'string', description: 'VBR目標ビットレート（例 "16M" / "16000k"）。crf/quality より優先（REQ-0460）' },
+        quality: { type: 'integer', description: '画質 1..100 高いほど高画質（crf の代替・REQ-0460）' },
         audio: { type: 'string', enum: ['preserve', 'simple', 'none'], description: '既定 simple' },
         weight: { type: 'string', description: 'フォントウェイト（既定: 設定）' },
         margin_v: { type: 'integer', description: '縦マージン(px)' },
@@ -141,7 +144,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runBurnCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), audio: str(i.audio), weight: str(i.weight), 'margin-v': numStr(i.margin_v), position: str(i.position), style: str(i.style), overwrite: boolTrue(i.overwrite), 'dry-run': boolTrue(i.dry_run), device: str(i.device) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), audio: str(i.audio), weight: str(i.weight), 'margin-v': numStr(i.margin_v), position: str(i.position), style: str(i.style), overwrite: boolTrue(i.overwrite), 'dry-run': boolTrue(i.dry_run), device: str(i.device) }),
     }),
   },
   {
@@ -157,6 +160,9 @@ export const TOOLS: ToolSpec[] = [
         translate: { type: 'string', enum: TARGETS, description: '指定時に翻訳を挟む' },
         burn: { type: 'boolean', description: '焼き込みまで実行' },
         preset: { type: 'string', enum: PRESETS, description: 'burn 用プリセット' },
+        crf: { type: 'integer', description: '画質(定質) 0..51（burn 時・REQ-0460）' },
+        bitrate: { type: 'string', description: 'VBR目標ビットレート 例 "16M"（burn 時・REQ-0460）' },
+        quality: { type: 'integer', description: '画質 1..100（burn 時・REQ-0460）' },
         style: { type: 'string', description: 'スタイルプリセット名（burn 時・REQ-0457 D12）' },
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
         device: DEVICE_PROP,
@@ -166,7 +172,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runRunCommand,
-      args: toArgs([str(i.video)], { out: str(i.out), subtitle: str(i.subtitle), translate: str(i.translate), burn: boolTrue(i.burn), preset: str(i.preset), style: str(i.style), overwrite: boolTrue(i.overwrite), device: str(i.device) }),
+      args: toArgs([str(i.video)], { out: str(i.out), subtitle: str(i.subtitle), translate: str(i.translate), burn: boolTrue(i.burn), preset: str(i.preset), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), style: str(i.style), overwrite: boolTrue(i.overwrite), device: str(i.device) }),
     }),
   },
   {

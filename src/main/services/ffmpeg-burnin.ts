@@ -8,6 +8,7 @@ import { getBinPath, getFontResolveDir } from '../lib/paths'
 import { generateAss } from './ass-generator'
 import { isPackagedAsMsix, getCurrentProcessContext } from '../lib/msix'
 import { getBestEncoder, buildEncoderArgs } from './encoder-detector'
+import { probeMediaBitrate } from './ffprobe'
 import { buildTrimConcatFilter } from './ffmpeg-trim-filter'
 import { buildAmixAudioFilter } from './preview-mix-filter'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
@@ -97,7 +98,7 @@ export async function startBurnin(
   onEvent: BurninEventCallback,
   signal: AbortSignal
 ): Promise<void> {
-  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, subtitleBackground, outputContainer, fontId, cuts, karaokeStyle, marginLrPx } = request
+  const { inputPath, outputPath, entries, video, burnin, encoderSetting, audioMode, subtitleBackground, outputContainer, fontId, cuts, karaokeStyle, marginLrPx, scaleTo, quality } = request
 
   // REQ-074 1d: when cuts is non-empty the ffmpeg run is rebuilt around
   // filter_complex trim+concat (audio + video).  When empty / absent we
@@ -200,9 +201,22 @@ export async function startBurnin(
   const subtitlesFilter = `subtitles='${escapeAssPath(assPath)}':fontsdir='${escapeAssPath(fontsDir)}'`
   log.info(`[ffmpeg-burnin] default font: ${fontMeta.displayName} (${resolvedFontId}); fontsdir=${fontsDir}`)
 
+  // REQ-0460 — resolution scaling is folded into this SINGLE encode: when
+  // `scaleTo` is set the source is fit+padded into the target canvas and the
+  // ASS burned at PlayRes = target, all in one cq-quality pass.  This replaces
+  // the old CLI two-pass (a separate `h264_mf` pre-scale with no rate control
+  // that collapsed the bitrate before the burn — the REQ-0460 defect).  When
+  // absent the chain is exactly `subtitles=…`, byte-identical to every prior
+  // caller (the GUI never sets `scaleTo`).
+  const scalePrefix = scaleTo
+    ? `scale=${scaleTo.w}:${scaleTo.h}:force_original_aspect_ratio=decrease,` +
+      `pad=${scaleTo.w}:${scaleTo.h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,`
+    : ''
+  const videoFilterChain = `${scalePrefix}${subtitlesFilter}`
+
   const encoder = await getBestEncoder(encoderSetting ?? 'auto')
-  const encoderArgs = buildEncoderArgs(encoder)
-  log.info(`[ffmpeg-burnin] encoder: ${encoder} (setting: ${encoderSetting ?? 'auto'}), audioMode: ${audioMode ?? 'simple'}, outputContainer: ${outputContainer}`)
+  const encoderArgs = buildEncoderArgs(encoder, quality)
+  log.info(`[ffmpeg-burnin] encoder: ${encoder} (setting: ${encoderSetting ?? 'auto'}), audioMode: ${audioMode ?? 'simple'}, outputContainer: ${outputContainer}, scaleTo: ${scaleTo ? `${scaleTo.w}x${scaleTo.h}` : 'none'}, quality: ${quality ? JSON.stringify(quality) : 'default'}`)
 
   // Container override.  When the user selects "MP4 で書き出し" we add an
   // explicit `-f mp4` (defensive — the filename extension already implies it)
@@ -227,7 +241,7 @@ export async function startBurnin(
       cutsList,
       audioModeForFilter,
       N,
-      subtitlesFilter
+      videoFilterChain
     )
     args = [
       '-y',
@@ -247,7 +261,7 @@ export async function startBurnin(
     args = [
       '-y',
       '-i', inputPath,
-      '-vf', subtitlesFilter,
+      '-vf', videoFilterChain,
       ...encoderArgs,
       '-c:a', 'copy',
       ...containerArgs,
@@ -260,7 +274,7 @@ export async function startBurnin(
       args = [
         '-y',
         '-i', inputPath,
-        '-vf', subtitlesFilter,
+        '-vf', videoFilterChain,
         ...encoderArgs,
         '-an',
         ...containerArgs,
@@ -274,7 +288,7 @@ export async function startBurnin(
       // N >= 1 (single-track uses `amix=inputs=1` as a no-op pass-
       // through, matching the historical behaviour).
       const amix = buildAmixAudioFilter(N)
-      const filterComplex = `[0:v]${subtitlesFilter}[vout];${amix.filterComplex}`
+      const filterComplex = `[0:v]${videoFilterChain}[vout];${amix.filterComplex}`
       args = [
         '-y',
         '-i', inputPath,
@@ -379,13 +393,25 @@ export async function startBurnin(
 
       if (succeeded) {
         let sizeMB = 0
+        let sizeBytes = 0
         try {
           const stat = await fs.stat(outputPath)
+          sizeBytes = stat.size
           sizeMB = Math.round((stat.size / 1_000_000) * 10) / 10
         } catch {
           // ignore stat failure
         }
-        onEvent({ event: 'completed', outputPath, sizeMB })
+        // REQ-0460 — measure the achieved video bitrate so the CLI/MCP result
+        // can surface it (a headless caller cannot see the quality otherwise).
+        // Prefer ffprobe's per-stream bitrate; fall back to the container total,
+        // then to a size/duration estimate so the field is always a number.
+        const { videoBitrateKbps: vbr, totalBitrateKbps: tbr } = await probeMediaBitrate(outputPath)
+        let videoBitrateKbps = vbr ?? tbr ?? undefined
+        if (videoBitrateKbps === undefined && sizeBytes > 0 && effectiveDurationSec > 0) {
+          videoBitrateKbps = Math.round((sizeBytes * 8) / effectiveDurationSec / 1000)
+        }
+        log.info(`[ffmpeg-burnin] completed: ${sizeMB}MB, videoBitrate≈${videoBitrateKbps ?? '?'}kbps, encoder=${encoder}`)
+        onEvent({ event: 'completed', outputPath, sizeMB, videoBitrateKbps, resolvedEncoder: encoder })
         resolve()
       } else if (wasAborted) {
         // User-initiated cancel.  Emit a 'failed' event with a stable marker
