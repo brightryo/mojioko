@@ -92,6 +92,10 @@
     "headingText": "Text colour",
     "headingOutline": "Outline colour"
   },
+  "fontLang": {
+    "japaneseAria": "Japanese font",
+    "latinAria": "Latin font"
+  },
   "fontLicenses": {
     "title": "Font licenses",
     "intro": "All subtitle fonts shipped or distributed by MOJIOKO are licensed under the SIL Open Font License v1.1.  Full license text accompanies each downloaded font.",

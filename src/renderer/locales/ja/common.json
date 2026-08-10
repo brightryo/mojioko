@@ -92,6 +92,10 @@
     "headingText": "フォントカラー選択",
     "headingOutline": "アウトラインカラー選択"
   },
+  "fontLang": {
+    "japaneseAria": "日本語フォント",
+    "latinAria": "ラテン文字フォント"
+  },
   "fontLicenses": {
     "title": "フォントライセンス",
     "intro": "MOJIOKO に同梱または配信される字幕フォントは、すべて SIL Open Font License v1.1 のもとで提供されています。ダウンロードしたフォントには OFL 全文が同梱されます。",

@@ -45,14 +45,8 @@ export function getBinPath(...segments: string[]): string {
   return join(getResourcesPath(), 'bin', 'ffmpeg', name)
 }
 
-/**
- * Legacy single-font directory — kept for callers that still pass the
- * default Noto subdir to libass.  New code should resolve a font's
- * directory via `getFontResolveDir(meta)` instead.
- */
-export function getFontsDir(): string {
-  return join(getResourcesPath(), 'fonts', 'Noto_Sans_JP', 'static')
-}
+// REQ-0466 §2 — `getFontsDir` (legacy single-Noto-subdir helper) removed: it had
+// no callers.  A font's directory is resolved via `getFontResolveDir(meta)`.
 
 /** Root of the bundled fonts tree, shipped via electron-builder extraResources. */
 export function getFontsBundledRoot(): string {

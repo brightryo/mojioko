@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { FontLanguage } from '../../../shared/fonts'
 
@@ -52,6 +53,8 @@ export function FontLangBadge({
   language: FontLanguage
   className?: string
 }) {
+  // REQ-0466 §2 — the aria-label was hardcoded English; route it through i18n.
+  const { t } = useTranslation('common')
   return (
     <span
       data-font-badge={`lang-${language}`}
@@ -62,7 +65,7 @@ export function FontLangBadge({
         PALETTE[language],
         className,
       )}
-      aria-label={language === 'ja' ? 'Japanese font' : 'Latin font'}
+      aria-label={language === 'ja' ? t('fontLang.japaneseAria') : t('fontLang.latinAria')}
     >
       {language}
     </span>

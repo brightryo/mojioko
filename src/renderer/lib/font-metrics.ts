@@ -246,43 +246,6 @@ export function getLibassScale(): number {
   return getLibassScaleFor(activeFontId)
 }
 
-// ---------------------------------------------------------------------------
-// Measurement helpers (unchanged signatures — callers already pass the Font)
-// ---------------------------------------------------------------------------
-
-/**
- * Raw advance width in pixels for one character (no GPOS kerning, no libassScale).
- * Kept for call sites that need the unscaled opentype.js value.
- */
-export function glyphAdvancePx(font: Font, char: string, fontSizePx: number): number {
-  const g = font.charToGlyph(char)
-  return ((g.advanceWidth ?? 0) / font.unitsPerEm) * fontSizePx
-}
-
-/**
- * Kerning-aware, libass-compatible line width in pixels for a single line.
- *
- * The libassScale is looked up against the active font when called as
- * `measureLineWidth(font, text, size)` with the active font — but because
- * the function takes a Font argument that may belong to any font, we look
- * the scale up via the cache by identity-matching the cached entries.
- * In practice the active path covers >99 % of calls and the per-font
- * variant matches by reverse lookup; a stale Font (font ID evicted while
- * still referenced) gracefully falls back to FALLBACK_LIBASS_SCALE.
- */
-export function measureLineWidth(font: Font, text: string, fontSizePx: number): number {
-  let libassScale = FALLBACK_LIBASS_SCALE
-  for (const entry of fontCache.values()) {
-    if (entry.font === font) { libassScale = entry.libassScale; break }
-  }
-  const scale = (fontSizePx / font.unitsPerEm) * libassScale
-  const glyphs = font.stringToGlyphs(text)
-  let totalUnits = 0
-  for (let i = 0; i < glyphs.length; i++) {
-    totalUnits += glyphs[i].advanceWidth ?? 0
-    if (i + 1 < glyphs.length) {
-      totalUnits += font.getKerningValue(glyphs[i], glyphs[i + 1])
-    }
-  }
-  return totalUnits * scale
-}
+// REQ-0466 §2 — `glyphAdvancePx` / `measureLineWidth` removed (no callers).
+// Line-width measurement now lives inline in `overflow-calculator.ts`'s glyph
+// loop and in `shared/line-break-core.ts` (+ `font-metrics-node.ts` headless).
