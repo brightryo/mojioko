@@ -100,6 +100,15 @@ try {
   // 2b) tools/list includes export_frame (REQ-0457 A4).
   check('tools/list includes export_frame', names.includes('export_frame'))
 
+  // 2c) REQ-0461 — burn + export_frame expose the per-cue style overrides in
+  // their typed schema (previously only `weight`/`margin_v` were on burn, and
+  // export_frame had none — so an agent could not drive them).
+  const STYLE_PROPS = ['weight', 'font_size', 'text_color', 'outline_color', 'outline', 'margin_v']
+  const burnProps = tools.find((t) => t.name === 'burn')?.inputSchema?.properties || {}
+  const efProps = tools.find((t) => t.name === 'export_frame')?.inputSchema?.properties || {}
+  check('burn schema exposes all style overrides (REQ-0461)', STYLE_PROPS.every((p) => p in burnProps), STYLE_PROPS.filter((p) => !(p in burnProps)).join(',') || 'ok')
+  check('export_frame schema exposes all style overrides (REQ-0461)', STYLE_PROPS.every((p) => p in efProps), STYLE_PROPS.filter((p) => !(p in efProps)).join(',') || 'ok')
+
   // 3) status
   const st = await rpc('tools/call', { name: 'status', arguments: {} })
   const stData = parseContent(st)
@@ -183,6 +192,21 @@ try {
     check('burn result exposes videoBitrateKbps (>0) + resolvedEncoder (REQ-0460 d)',
       typeof d?.videoBitrateKbps === 'number' && d.videoBitrateKbps > 0 && !!d?.resolvedEncoder,
       `br=${d?.videoBitrateKbps} enc=${d?.resolvedEncoder}`)
+
+    // REQ-0461 — the style overrides actually reach the render via MCP.  A
+    // dry_run burn (no encode) returns the resolved subtitleStyle; assert it
+    // reflects the passed flags rather than echoing the settings default.
+    const dry = parseContent(await rpc('tools/call', { name: 'burn', arguments: { video: clip, subtitle: brSrt, dry_run: true, font_size: 72, text_color: '#FFEE00', outline_color: '#112233', outline: 5, weight: 'Bold', margin_v: 120 } }))
+    let dryDone = null
+    for (let i = 0; i < 30; i++) {
+      await sleep(500)
+      const pd = parseContent(await rpc('tools/call', { name: 'get_job_status', arguments: { job_id: dry.job_id } }))
+      if (pd?.status === 'done' || pd?.status === 'failed') { dryDone = pd; break }
+    }
+    const ss = dryDone?.result?.data?.subtitleStyle
+    check('burn dry_run subtitleStyle reflects style overrides (REQ-0461)',
+      dryDone?.status === 'done' && ss?.fontSizePx === 72 && ss?.textColorHex === '#FFEE00' && ss?.outlineColorHex === '#112233' && ss?.outlineThicknessPx === 5 && ss?.position?.verticalMarginPx === 120 && /bold/i.test(ss?.fontId || ''),
+      JSON.stringify(ss))
   }
 
   // 5) REQ-0455 — strict stdout framing: split on '\n'; every complete segment

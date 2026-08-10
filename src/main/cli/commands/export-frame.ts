@@ -27,6 +27,7 @@ import { optString, type ParsedArgs } from '../args'
 import { CliError, emitSuccess, type CliContext } from '../output'
 import { assertWritable } from '../overwrite'
 import { detectFormat, entriesFromSegments } from '../subtitle-io'
+import { applyStyleOverrides, parseStyleOverrides } from '../style-overrides'
 
 export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): Promise<number> {
   const videoPath = args.positionals[0]
@@ -79,6 +80,12 @@ export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): 
       settings.fadeDurationSec ?? 0,
     )
   }
+
+  // REQ-0461 — honour the same per-cue style flags `burn` does, so a preview
+  // frame is a faithful still of what the burn will render (this is the command
+  // the REQ names for verifying each flag in real pixels).  Applied BEFORE the
+  // auto line-break so a `--font-size` change re-wraps like the burn does.
+  entries = applyStyleOverrides(entries, parseStyleOverrides(args.opts, fontId))
 
   // Match a default burn: wrap at the video width so the still is not clipped.
   const isMsix = isPackagedAsMsix(getCurrentProcessContext())

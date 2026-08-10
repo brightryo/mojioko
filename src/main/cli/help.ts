@@ -10,6 +10,7 @@
  */
 import { APP_VERSION } from '../../shared/app-info'
 import { CODE_TO_EXIT, EXIT_OK, type CliContext } from './output'
+import { CLI_WEIGHT_LABELS } from './style-overrides'
 
 type OptType = 'string' | 'boolean' | 'int' | 'float' | 'enum' | 'path'
 
@@ -40,7 +41,7 @@ interface CommandDoc {
 
 const LANGS = ['auto', 'ja', 'en', 'zh', 'ko', 'es', 'fr', 'de', 'pt', 'ru', 'ar']
 const TARGETS = ['en', 'ja', 'es', 'fr', 'de', 'pt']
-const WEIGHTS = ['Thin', 'ExtraLight', 'Light', 'Regular', 'Medium', 'SemiBold', 'Bold', 'ExtraBold', 'Black']
+const WEIGHTS = [...CLI_WEIGHT_LABELS] // REQ-0461 — single source of truth (shared with burn's `--weight`).
 const PRESETS = ['shorts', 'vertical', 'reels', 'tiktok', 'square', '1080p', '720p']
 
 const OUT_REQ: OptionSpec = { flag: '-o, --out', type: 'path', required: true, desc: '出力ファイルパス' }
@@ -125,9 +126,9 @@ const COMMANDS: CommandDoc[] = [
       OUT_REQ,
       { flag: '--preset', type: 'enum', values: PRESETS, desc: '出力プリセット（縦ショート等）' },
       { flag: '--resolution', type: 'string', desc: 'WxH（例 1080x1920）。--preset と排他' },
-      { flag: '--margin-v', type: 'int', desc: '縦マージン(px)' },
+      { flag: '--margin-v', type: 'int', desc: '縦マージン(px)。ASS verticalMarginPx に反映＝実描画の下/上端オフセット' },
       { flag: '--margin-x', type: 'int', default: '10', desc: '横マージン(px)。改行幅＋ASS MarginL/R' },
-      { flag: '--margin-y', type: 'int', default: '10', desc: '縦オーバーフロー判定の上下安全域(px)' },
+      { flag: '--margin-y', type: 'int', default: '10', desc: '縦オーバーフロー判定の上下安全域(px)。既定は --margin-v' },
       { flag: '--overflow', type: 'enum', values: ['shrink', 'warn', 'error'], default: 'warn', desc: '縦はみ出し（warn=計上 / shrink=自動縮小 / error=失敗）' },
       { flag: '--encoder', type: 'enum', values: ['auto', 'h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf'], default: 'auto', desc: '映像エンコーダ' },
       { flag: '--crf', type: 'int', desc: '画質(定質) 0..51 低いほど高画質。既定=エンコーダ既定(≈GUI)' },
@@ -180,8 +181,16 @@ const COMMANDS: CommandDoc[] = [
       OUT_REQ,
       { flag: '--time', type: 'float', required: true, desc: '抽出する時刻（秒）' },
       { flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '字幕フォーマット（既定: 拡張子）' },
+      // REQ-0461 — same per-cue style overrides as `burn`, so a preview frame is
+      // a faithful still of the burn (change a flag → verify in real pixels).
+      { flag: '--weight', type: 'enum', values: WEIGHTS, desc: 'フォントウェイト（既定=アプリ設定）' },
+      { flag: '--font-size', type: 'int', desc: 'フォントサイズ上書き(px)' },
+      { flag: '--text-color', type: 'string', desc: '文字色 #RRGGBB' },
+      { flag: '--outline-color', type: 'string', desc: '縁色 #RRGGBB' },
+      { flag: '--outline', type: 'int', desc: '縁の太さ(px)' },
+      { flag: '--margin-v', type: 'int', desc: '縦マージン(px)。ASS verticalMarginPx に反映' },
     ],
-    examples: ['mojioko export_frame input.mp4 out.mojioko -o frame.png --time 1.5'],
+    examples: ['mojioko export_frame input.mp4 out.mojioko -o frame.png --time 1.5 --text-color #FFEE00 --weight Bold'],
     errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'BURN_FAILED'],
   },
   {

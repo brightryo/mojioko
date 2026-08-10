@@ -17,6 +17,7 @@ import { runStatusCommand } from '../cli/commands/status'
 import { runTranscribeCommand } from '../cli/commands/transcribe'
 import { runTranslateCommand } from '../cli/commands/translate'
 import { runBurnCommand } from '../cli/commands/burn'
+import { CLI_WEIGHT_LABELS } from '../cli/style-overrides'
 import { runRunCommand } from '../cli/commands/run'
 import { runExportFrameCommand } from '../cli/commands/export-frame'
 import { runProbeCommand } from '../cli/commands/probe'
@@ -31,6 +32,8 @@ type CommandFn = (ctx: CliContext, args: ParsedArgs) => Promise<number>
 const LANGS = ['auto', 'ja', 'en', 'zh', 'ko', 'es', 'fr', 'de', 'pt', 'ru', 'ar']
 const TARGETS = ['en', 'ja', 'es', 'fr', 'de', 'pt']
 const PRESETS = ['shorts', 'vertical', 'reels', 'tiktok', 'square', '1080p', '720p']
+// REQ-0461 — single source of truth for the `--weight` enum (shared with the CLI).
+const WEIGHTS = [...CLI_WEIGHT_LABELS]
 
 /** Build ParsedArgs, dropping undefined/empty option values. */
 function toArgs(positionals: (string | undefined)[], opts: Record<string, string | boolean | undefined>): ParsedArgs {
@@ -131,8 +134,12 @@ export const TOOLS: ToolSpec[] = [
         bitrate: { type: 'string', description: 'VBR目標ビットレート（例 "16M" / "16000k"）。crf/quality より優先（REQ-0460）' },
         quality: { type: 'integer', description: '画質 1..100 高いほど高画質（crf の代替・REQ-0460）' },
         audio: { type: 'string', enum: ['preserve', 'simple', 'none'], description: '既定 simple' },
-        weight: { type: 'string', description: 'フォントウェイト（既定: 設定）' },
-        margin_v: { type: 'integer', description: '縦マージン(px)' },
+        weight: { type: 'string', enum: WEIGHTS, description: 'フォントウェイト（既定: 設定）（REQ-0461）' },
+        font_size: { type: 'integer', description: 'フォントサイズ上書き(px)（REQ-0461）' },
+        text_color: { type: 'string', description: '文字色 #RRGGBB（REQ-0461）' },
+        outline_color: { type: 'string', description: '縁色 #RRGGBB（REQ-0461）' },
+        outline: { type: 'integer', description: '縁の太さ(px)（REQ-0461）' },
+        margin_v: { type: 'integer', description: '縦マージン(px)。ASS verticalMarginPx に反映（REQ-0461）' },
         position: { type: 'string', enum: ['top', 'center', 'bottom'], description: '縦位置' },
         style: { type: 'string', description: 'GUI 保存のスタイルプリセット名（全 cue に適用。REQ-0457 D12）' },
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false で拒否）' },
@@ -144,7 +151,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runBurnCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), audio: str(i.audio), weight: str(i.weight), 'margin-v': numStr(i.margin_v), position: str(i.position), style: str(i.style), overwrite: boolTrue(i.overwrite), 'dry-run': boolTrue(i.dry_run), device: str(i.device) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), audio: str(i.audio), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), position: str(i.position), style: str(i.style), overwrite: boolTrue(i.overwrite), 'dry-run': boolTrue(i.dry_run), device: str(i.device) }),
     }),
   },
   {
@@ -186,6 +193,13 @@ export const TOOLS: ToolSpec[] = [
         subtitle: { type: 'string', description: '.mojioko または .srt の絶対パス' },
         out: { type: 'string', description: '出力画像パス（.png または .jpg）' },
         time: { type: 'number', description: '抽出する時刻（秒）' },
+        // REQ-0461 — same per-cue style overrides as `burn` (faithful preview still).
+        weight: { type: 'string', enum: WEIGHTS, description: 'フォントウェイト（既定: 設定）（REQ-0461）' },
+        font_size: { type: 'integer', description: 'フォントサイズ上書き(px)（REQ-0461）' },
+        text_color: { type: 'string', description: '文字色 #RRGGBB（REQ-0461）' },
+        outline_color: { type: 'string', description: '縁色 #RRGGBB（REQ-0461）' },
+        outline: { type: 'integer', description: '縁の太さ(px)（REQ-0461）' },
+        margin_v: { type: 'integer', description: '縦マージン(px)。ASS verticalMarginPx に反映（REQ-0461）' },
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
       },
       additionalProperties: false,
@@ -193,7 +207,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runExportFrameCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time), overwrite: boolTrue(i.overwrite) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), overwrite: boolTrue(i.overwrite) }),
     }),
   },
   {

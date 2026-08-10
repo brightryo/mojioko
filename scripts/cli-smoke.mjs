@@ -13,7 +13,7 @@
  * cleared without a multi-GB download.
  */
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -146,6 +146,42 @@ try {
     check('burn --bitrate 150k exits 0 + video', bCap.code === 0 && existsSync(brCapOut), `code=${bCap.code}`)
     const brCap = probeBitrate(brCapOut)
     check('--bitrate 150k constrains below the cq baseline', brCap < brN, `capped=${brCap}kbps baseline=${brN}kbps`)
+  }
+
+  // REQ-0461 — the per-cue style flags must ACTUALLY change the render.  Before
+  // the fix, --weight/--font-size/--text-color/--outline-color/--outline were
+  // advertised but never read (no-ops), and --margin-v only fed the overflow
+  // budget, never the ASS verticalMarginPx.  Two gates, both without a Whisper
+  // model (burn/export_frame take an SRT): (1) burn --dry-run returns the ACTUAL
+  // applied style (not the settings default); (2) export_frame with an override
+  // changes real pixels vs the default frame.
+  {
+    const clip = join(work, 'style.mp4')
+    makeClip(clip, '640x360')
+    const srt = join(work, 'style.srt')
+    writeFileSync(srt, '1\n00:00:00,000 --> 00:00:02,000\nSTYLE\n', 'utf-8')
+
+    // (1) dry-run echoes the resolved style actually used (no encode).
+    const dry = cli(['burn', clip, srt, '--dry-run', '--font-size', '72', '--text-color', '#FFEE00', '--outline-color', '#112233', '--outline', '5', '--weight', 'Bold', '--margin-v', '120'], 30000)
+    const s = dry.json?.data?.subtitleStyle
+    check('burn --dry-run subtitleStyle reflects overrides (font-size/colors/outline/margin)',
+      dry.code === 0 && s?.fontSizePx === 72 && s?.textColorHex === '#FFEE00' && s?.outlineColorHex === '#112233' && s?.outlineThicknessPx === 5 && s?.position?.verticalMarginPx === 120,
+      JSON.stringify(s))
+    check('burn --dry-run reflects --weight (fontId is a Bold face)', /bold/i.test(s?.fontId || ''), s?.fontId || 'missing')
+
+    // (2) real-pixel gate: a text-color/size override changes the exported PNG.
+    // If the flags were still no-ops, the two frames would be byte-identical.
+    const pDefault = join(work, 'style-default.png')
+    const pOverride = join(work, 'style-override.png')
+    const efA = cli(['export_frame', clip, srt, '-o', pDefault, '--time', '1.0'], 60000)
+    const efB = cli(['export_frame', clip, srt, '-o', pOverride, '--time', '1.0', '--text-color', '#FF0000', '--font-size', '110', '--outline', '0'], 60000)
+    check('export_frame default + style-override both exit 0', efA.code === 0 && efB.code === 0, `${efA.code}/${efB.code}`)
+    const framesDiffer = existsSync(pDefault) && existsSync(pOverride) && !readFileSync(pDefault).equals(readFileSync(pOverride))
+    check('export_frame style override changes real pixels (frame != default)', framesDiffer)
+
+    // (3) invalid override is a clean USAGE error (exit 2), not a silent ignore.
+    const badColor = cli(['burn', clip, srt, '--dry-run', '--text-color', 'red'], 20000)
+    check('burn --text-color red → USAGE / exit 2', badColor.code === 2 && badColor.json?.code === 'USAGE', `${badColor.code}/${badColor.json?.code}`)
   }
 
   // 4) agent loop — only if the box is ready (avoids a multi-GB download here).

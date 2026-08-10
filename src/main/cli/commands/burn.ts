@@ -26,8 +26,9 @@ import type { FontId } from '../../../shared/fonts'
 import { optString, type ParsedArgs } from '../args'
 import { CliError, emitProgress, emitSuccess, type CliContext } from '../output'
 import { detectFormat, entriesFromSegments } from '../subtitle-io'
-import { resolveDefaultSubtitleStyle } from '../subtitle-style'
+import { resolveDefaultSubtitleStyle, summarizeSubtitleStyle } from '../subtitle-style'
 import { findStylePreset, applyStylePreset } from '../style-preset-cli'
+import { applyStyleOverrides, parseStyleOverrides } from '../style-overrides'
 import { assertWritable } from '../overwrite'
 import { resolveTarget, contentScaleFactor, scaleEntries } from '../scale-video'
 import { parseBitrateKbps } from '../../../shared/encode-quality'
@@ -109,6 +110,18 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     appliedStylePreset = preset.name
   }
 
+  // REQ-0461 — per-cue style overrides.  These were advertised (help + MCP) but
+  // never read: `--weight` / `--font-size` / `--text-color` / `--outline-color`
+  // / `--outline` did nothing, and `--margin-v` only fed the vertical-overflow
+  // budget, never the ASS `verticalMarginPx`.  Parse + validate (shared with
+  // `export_frame` so a preview frame renders the same overrides), then apply to
+  // every cue in SOURCE-pixel space (BEFORE resolution scaling) so the pixel
+  // fields scale with the target exactly like a `.mojioko` cue's own values.
+  // Explicit flags win over a `--style` preset (applied above).
+  const styleOverrides = parseStyleOverrides(args.opts, fontId)
+  const marginVFlag = styleOverrides.verticalMarginPx
+  entries = applyStyleOverrides(entries, styleOverrides)
+
   const encoderFlag = optString(args.opts, 'encoder')
   if (encoderFlag && !ENCODERS.has(encoderFlag)) {
     throw new CliError('USAGE', `unknown --encoder: ${encoderFlag}`, `auto|h264_nvenc|h264_amf|h264_qsv|h264_mf`)
@@ -150,8 +163,12 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     : undefined
 
   // REQ-0456 — headless auto line-break margin + vertical overflow guard flags.
+  // REQ-0461 — `--margin-y` is the vertical-overflow SAFETY budget (headroom for
+  // detection), NOT the render offset; that is `--margin-v` (applied per-cue
+  // above).  `--margin-v` still falls through as the budget when `--margin-y` is
+  // absent, so a larger bottom margin correctly shrinks the available height.
   const marginX = optInt(args.opts, 'margin-x') ?? ASS_MARGIN_LR_PX
-  const marginY = optInt(args.opts, 'margin-y', 'margin-v') ?? ASS_MARGIN_LR_PX
+  const marginY = optInt(args.opts, 'margin-y') ?? marginVFlag ?? ASS_MARGIN_LR_PX
   const overflowFlag = (optString(args.opts, 'overflow') || 'warn') as OverflowMode
   if (!OVERFLOW_MODES.has(overflowFlag)) {
     throw new CliError('USAGE', `unknown --overflow: ${overflowFlag}`, 'warn|shrink|error')
@@ -213,14 +230,23 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     )
   }
 
-  // REQ-0457 A2 / REQ-0460 — the resolved subtitle style applied.  Patch the
-  // reported vertical position with the `--position` override so the returned
-  // value reflects what is actually burned (previously it always echoed the
-  // settings default, e.g. "center", regardless of the argument).
-  const subtitleStyle = resolveDefaultSubtitleStyle(settings)
-  if (verticalPositionOverride) {
-    subtitleStyle.position = { ...subtitleStyle.position, vertical: verticalPositionOverride }
-  }
+  // REQ-0457 A2 / REQ-0460 / REQ-0461 — the resolved subtitle style applied.
+  // Summarise a REPRESENTATIVE final cue (post-override, post-scale, post-layout)
+  // rather than echoing the settings default: the returned `subtitleStyle` is
+  // then the value actually burned — font size (at the OUTPUT resolution), text /
+  // outline colour, outline width, weight (fontId), vertical position + margin
+  // all reflect the `--font-size` / `--text-color` / `--outline-color` /
+  // `--outline` / `--weight` / `--position` / `--margin-v` flags.  `.mojioko`
+  // input keeps its per-cue styles; this reports the first cue's (uniform once
+  // any override is applied).  Falls back to the synthetic default only when the
+  // project has no visible cue.
+  const repEntry = entries.find((e) => !e.isDeleted)
+  const subtitleStyle = repEntry
+    ? summarizeSubtitleStyle(repEntry, settings.autoLineBreak ?? true)
+    : resolveDefaultSubtitleStyle(settings)
+  // Report the font ACTUALLY used: a per-cue override (incl. `--weight`) wins,
+  // else the project-default fontId (which `summarizeSubtitleStyle` cannot see).
+  if (repEntry) subtitleStyle.fontId = repEntry.fontId ?? fontId
 
   // REQ-0457 Phase E — dry-run: report the overflow judgement without encoding.
   if (dryRun) {
