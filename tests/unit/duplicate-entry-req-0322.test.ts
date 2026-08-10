@@ -24,7 +24,7 @@ function makeRichEntry(): SubtitleEntry {
     outlineColorHex: '#000000',
     outlineThicknessPx: 3,
     fadeDurationSec: 0.2,
-    fontId: 'noto-sans-jp' as const,
+    fontId: 'noto-sans-jp-bold' as const,
     horizontalPosition: 'center' as const,
     verticalPosition: 'bottom' as const,
     verticalMarginPx: 40,
@@ -233,7 +233,7 @@ describe('REQ-0322 §2 — duplicateRow carries every SubtitleEntry field', () =
       .filter(([, rule]) => rule === 'copy' || rule === 'deep-copy')
       .map(([k]) => k)
     for (const k of carried) {
-      expect((dup.original as Record<string, unknown>)[k]).toEqual(
+      expect((dup.original as unknown as Record<string, unknown>)[k]).toEqual(
         (dup as unknown as Record<string, unknown>)[k],
       )
     }

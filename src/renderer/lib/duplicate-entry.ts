@@ -166,6 +166,52 @@ function cloneValue<T>(value: T): T {
 }
 
 /**
+ * The `SubtitleEntry` fields whose values are objects/arrays and therefore must
+ * be structurally cloned to avoid two rows (or a row and a snapshot) sharing
+ * object identity.  Derived from the single classification above, so a field
+ * reclassified to / from `deep-copy` moves this set automatically.
+ */
+export const DEEP_COPY_FIELDS: ReadonlySet<keyof SubtitleEntry> = new Set(
+  (Object.entries(SUBTITLE_ENTRY_DUPLICATION) as [keyof SubtitleEntry, DuplicationRule][])
+    .filter(([, rule]) => rule === 'deep-copy')
+    .map(([key]) => key),
+)
+
+/**
+ * REQ-0464 — a history-safe snapshot of an entry for the Undo path.
+ *
+ * `applyBulk` / `applyStyleEdit` used `{ ...entry }`, a SHALLOW copy: the
+ * nested `deep-copy` fields (`subtitleBackground`, `words`, the emphasis
+ * arrays) were shared by reference with the live entry, so a later in-place
+ * mutation of one of those objects would silently rewrite the Undo target and
+ * Undo would restore the *mutated* value.  This returns a copy with exactly the
+ * nested fields cloned, so the snapshot is decoupled from the live store.
+ *
+ * `patch` (optional) narrows the clone to the nested fields the edit will
+ * actually touch — Undo only restores the patch's keys, so cloning `words` for
+ * a font-size edit would be wasted work on a select-all over thousands of rows.
+ * Omit it to clone every nested field (a full independent snapshot).
+ */
+export function deepSnapshotEntry(
+  entry: SubtitleEntry,
+  patch?: Partial<SubtitleEntry>,
+): SubtitleEntry {
+  const out: SubtitleEntry = { ...entry }
+  const keys = patch
+    ? (Object.keys(patch) as (keyof SubtitleEntry)[]).filter((k) => DEEP_COPY_FIELDS.has(k))
+    : [...DEEP_COPY_FIELDS]
+  for (const key of keys) {
+    // Only clone fields the row actually carries; an absent optional field stays
+    // absent (writing `undefined` would defeat `buildUndoPatch`'s "restore unset").
+    if (key in entry && entry[key] !== undefined) {
+      const rec = out as unknown as Record<string, unknown>
+      rec[key as string] = cloneValue((entry as unknown as Record<string, unknown>)[key as string])
+    }
+  }
+  return out
+}
+
+/**
  * Build the `SubtitleEntryOriginal`-shaped payload shared by the
  * duplicate's live fields and its `original` snapshot.
  *

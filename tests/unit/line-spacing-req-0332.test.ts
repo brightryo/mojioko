@@ -42,7 +42,7 @@ function entry(p: Partial<SubtitleEntry>): SubtitleEntry {
     text: 'AAA\\NBBB',
     fontSizePx: 100,
     textColorHex: '#FFFFFF', outlineColorHex: '#000000', outlineThicknessPx: 3,
-    fadeDurationSec: 0, fontId: 'noto-sans-jp',
+    fadeDurationSec: 0, fontId: 'noto-sans-jp-bold',
     horizontalPosition: 'center', verticalPosition: 'bottom', verticalMarginPx: 40,
     subtitleBackground: { enabled: false, color: 'black', opacityPercent: 60 },
     isDeleted: false, isEdited: false, animationType: 'none',

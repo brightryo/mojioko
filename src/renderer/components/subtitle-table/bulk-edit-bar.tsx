@@ -17,6 +17,8 @@ import { LineSpacingSlider } from '@/components/subtitle-table/line-spacing-slid
 import { LINE_SPACING_DEFAULT_PERCENT } from '../../../shared/line-spacing'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { buildUndoPatch } from '../../../shared/history-patch'
+import { deepSnapshotEntry } from '@/lib/duplicate-entry'
+import { buildColorPairPreSnapshots, pickFirstSelectedToggles } from '@/lib/bulk-edit-undo'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 import { BulkTranslate } from '@/components/subtitle-table/bulk-translate'
 // REQ-0335 §3 — style presets.
@@ -375,6 +377,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // while empty so users won't see these).
   const initialLayout = pickFirstSelectedLayout(selectedRowIds)
   const initialSegments = pickUniformLayoutSegments(selectedRowIds)
+  // REQ-0464 — seed the toggle Switches (karaoke / 発話タイミング / casing) from the
+  // first selected row so they render controlled, reflecting the selection's
+  // actual state rather than always showing OFF.
+  const initialToggles = pickFirstSelectedToggles(selectedRowIds, useProjectStore.getState().entries)
   // REQ-20260615-059 C — `null` represents the "selection has mixed
   // values for this field" state.  The BulkSegmentGroup renders no
   // segment highlighted in that case; on click the chosen value is
@@ -386,6 +392,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   const [bgEnabledDraft, setBgEnabledDraft]     = useState<boolean>(initialLayout?.bgEnabled ?? false)
   const [bgColorDraft, setBgColorDraft]         = useState<'black' | 'white'>(initialLayout?.bgColor ?? 'black')
   const [bgOpacityDraft, setBgOpacityDraft]     = useState<string>(String(initialLayout?.bgOpacityPercent ?? 50))
+  // REQ-0464 — controlled state for the three toggle Switches.
+  const [karaokeEnabledDraft, setKaraokeEnabledDraft] = useState<boolean>(initialToggles?.karaokeEnabled ?? false)
+  const [karaokeWordTimingsDraft, setKaraokeWordTimingsDraft] = useState<boolean>(initialToggles?.karaokeUseWordTimings ?? false)
+  const [casingDraft, setCasingDraft] = useState<boolean>(initialToggles?.casingUppercase ?? false)
 
   // Re-seed every draft when the selection itself changes.  Reads
   // `entries` via getState() so the effect only fires on selection
@@ -436,6 +446,14 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       setBgColorDraft(layout.bgColor)
       setBgOpacityDraft(String(layout.bgOpacityPercent))
     }
+    // REQ-0464 — re-seed the toggle Switches from the first selected row on
+    // every selection change (same convention as the layout drafts above).
+    const toggles = pickFirstSelectedToggles(selectedRowIds, useProjectStore.getState().entries)
+    if (toggles) {
+      setKaraokeEnabledDraft(toggles.karaokeEnabled)
+      setKaraokeWordTimingsDraft(toggles.karaokeUseWordTimings)
+      setCasingDraft(toggles.casingUppercase)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: activeFontId re-seed happens on selection change only, not on unrelated activeFont mutations.
   }, [selectedRowIds])
 
@@ -478,7 +496,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         if (!e) continue
         if (e.isDeleted) continue
         if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
-        snapshots.set(id, { ...e })
+        // REQ-0464 — deep-copy the nested fields the patch touches so the Undo
+        // snapshot is decoupled from later in-place mutations of the live entry
+        // (a shallow `{ ...e }` shared `subtitleBackground` etc. by reference).
+        snapshots.set(id, deepSnapshotEntry(e, patch))
       }
     })
     if (snapshots.size === 0) return
@@ -725,9 +746,19 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // updates squashed into one undo / redo step matches the user's mental
   // model of "I picked a pair".
   function handleColorPairCommit(textHex: string, outlineHex: string) {
+    // REQ-0464 — consume BOTH colour "before" maps (populated if the user
+    // dragged the saturation picker before clicking a pair) and clear them, so
+    // Undo rewinds each row to its pre-drag text+outline colour instead of the
+    // preview value the store already holds.  Matches the single-colour paths.
+    const textBefore = bulkTextColorBeforeRef.current
+    const outlineBefore = bulkOutlineColorBeforeRef.current
+    bulkTextColorBeforeRef.current = null
+    bulkOutlineColorBeforeRef.current = null
+    const preSnapshots = buildColorPairPreSnapshots(selectedRowIds, textBefore, outlineBefore)
     applyBulk(
       { textColorHex: textHex, outlineColorHex: outlineHex },
-      t('bulk.history.colorPair', { count: selectedRowIds.size })
+      t('bulk.history.colorPair', { count: selectedRowIds.size }),
+      preSnapshots
     )
     setColorDraftText(textHex)
     setColorDraftOutline(outlineHex)
@@ -834,6 +865,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // toggle-on behaviour.  REQ-0278 dropped the glow bulk-toggle here
   // (see SPECIFICATION.md §11).
   function handleCasingBulk(on: boolean) {
+    setCasingDraft(on) // REQ-0464 — keep the controlled Switch in sync.
     applyBulk(
       { casing: on ? 'uppercase' : 'none' },
       t('bulk.history.casing', { count: selectedRowIds.size }),
@@ -890,6 +922,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // default.  Free tier: the row is hidden entirely (tier gate above),
   // so this handler is unreachable on NSIS builds.
   function handleKaraokeBulkToggle(on: boolean) {
+    setKaraokeEnabledDraft(on) // REQ-0464 — keep the controlled Switch in sync.
     applyBulk(
       on
         ? {
@@ -909,6 +942,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // flag.  The tooltip says so rather than a badge (no duplicate ON/OFF
   // surface).
   function handleKaraokeWordTimingsBulkToggle(on: boolean) {
+    setKaraokeWordTimingsDraft(on) // REQ-0464 — keep the controlled Switch in sync.
     applyBulk(
       { karaokeUseWordTimings: on },
       t('bulk.history.karaoke', { count: selectedRowIds.size }),
@@ -1456,7 +1490,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               {/* `min-w-0` so the 「タイミング」 label truncates rather than
                   pushing the second Switch out of the shared control column. */}
               <div className="flex min-w-0 items-center gap-2">
-                <Switch onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
+                <Switch checked={karaokeEnabledDraft} onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
                 <ColorPicker
                   value={karaokeHighlightDraft}
                   onChange={handleKaraokeHighlightBulkPreview}
@@ -1473,6 +1507,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                         {t('styleCell.karaokeWordTimingsShort')}
                       </span>
                       <Switch
+                        checked={karaokeWordTimingsDraft}
                         onCheckedChange={handleKaraokeWordTimingsBulkToggle}
                         aria-label={t('styleCell.karaokeWordTimings')}
                       />
@@ -1519,7 +1554,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               (they read each row's own spans when measuring). */}
           {/* REQ-0299 §3 — casing state text ("ALL CAPS") removed. */}
           <StyleRow label={t('styleCell.casing')}>
-            <Switch onCheckedChange={handleCasingBulk} aria-label={t('styleCell.casing')} />
+            <Switch checked={casingDraft} onCheckedChange={handleCasingBulk} aria-label={t('styleCell.casing')} />
           </StyleRow>
           <StyleRow label={t('styleCell.rotation')}>
             <NumberStepperInput

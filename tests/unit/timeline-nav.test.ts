@@ -6,6 +6,7 @@ import {
 } from '../../src/renderer/lib/timeline-nav'
 import type { SubtitleEntry } from '../../src/shared/types'
 import type { CutList } from '../../src/shared/cuts'
+import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
 
 /**
  * REQ-0132 §1.3 — pure logic for the timeline arrow-key shortcuts.
@@ -13,8 +14,7 @@ import type { CutList } from '../../src/shared/cuts'
  */
 
 function makeEntry(id: string, startSec: number, endSec: number, isDeleted = false): SubtitleEntry {
-  return {
-    id,
+  const base = {
     startSec,
     endSec,
     text: '',
@@ -23,21 +23,16 @@ function makeEntry(id: string, startSec: number, endSec: number, isDeleted = fal
     outlineColorHex: '#000000',
     outlineThicknessPx: 2,
     fadeDurationSec: 0,
-    subtitleBackground: { enabled: false, colorHex: '#000000', opacity: 0 },
+    fontId: undefined,
+    ...makeEntryLayoutDefaults(),
+  }
+  return {
+    id,
+    ...base,
     isDeleted,
     isEdited: false,
-    original: {
-      startSec,
-      endSec,
-      text: '',
-      fontSizePx: 40,
-      textColorHex: '#FFFFFF',
-      outlineColorHex: '#000000',
-      outlineThicknessPx: 2,
-      fadeDurationSec: 0,
-      subtitleBackground: { enabled: false, colorHex: '#000000', opacity: 0 },
-    },
-  } as SubtitleEntry
+    original: { ...base },
+  }
 }
 
 const NO_CUTS: CutList = []

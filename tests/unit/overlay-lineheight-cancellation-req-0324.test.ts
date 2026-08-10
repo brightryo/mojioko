@@ -252,7 +252,7 @@ describe('REQ-0324 §4-2 — libassScale cancels between font-size and line-heig
         // padding (2 × outline).  All in CSS px.
         const naturalLine = lineBox(src, entry.fontSizePx, 0.6906, scale, LINE_SPACING_DEFAULT_PERCENT)
         const expected = 2 * perLine + naturalLine + 2 * entry.outlineThicknessPx * scale
-        expect(estimateOverlayHeightPx(entry as never, 'noto-sans-jp', 1920, 1920 * scale))
+        expect(estimateOverlayHeightPx(entry as never, 'noto-sans-jp-bold', 1920, 1920 * scale, false))
           .toBeCloseTo(expected, 9)
       }
     }

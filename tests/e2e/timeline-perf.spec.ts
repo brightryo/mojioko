@@ -151,7 +151,7 @@ test('timeline render volume — zoom slider drag vs playhead tick', async () =>
     }) as HTMLInputElement | null
     if (!slider) return {
       totalMs: 0,
-      counters: {},
+      counters: {} as Record<string, number>,
       note: 'no zoom-slider element found',
       rangeInputCount: allRangeInputs.length,
       attrs: allRangeInputs.map((el) => ({ min: el.min, max: el.max, ariaLabel: el.getAttribute('aria-label') })),
@@ -164,8 +164,11 @@ test('timeline render volume — zoom slider drag vs playhead tick', async () =>
     // (captured before React touches it) bypasses React's tracker
     // and forces it to fire onChange.  Standard "react-testing-library
     // fireEvent.input"-style trick.
+    // NOTE: this file aliases the Playwright Page as `window` (line ~26), which
+    // shadows the DOM global for TypeScript.  Inside `evaluate` the callback runs
+    // in the browser, so use `globalThis` to reach the real DOM HTMLInputElement.
     const nativeSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype,
+      globalThis.HTMLInputElement.prototype,
       'value',
     )?.set
     const start = performance.now()

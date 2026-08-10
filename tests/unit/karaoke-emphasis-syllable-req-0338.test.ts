@@ -60,7 +60,7 @@ function makeEntry(patch: Partial<SubtitleEntry>): SubtitleEntry {
     id: 'e1', startSec: 0, endSec: 4, text: 'x',
     fontSizePx: 80, textColorHex: '#FFFFFF', outlineColorHex: '#000000',
     outlineThicknessPx: 2, fadeDurationSec: 0,
-    horizontalPosition: 'center', verticalPosition: 'middle', verticalMarginPx: 40,
+    horizontalPosition: 'center', verticalPosition: 'center', verticalMarginPx: 40,
     subtitleBackground: { enabled: false, color: 'black', opacityPercent: 50 },
     isDeleted: false, isEdited: false,
     karaokeEnabled: true, karaokeHighlightColor: '#FF0000',
@@ -69,7 +69,7 @@ function makeEntry(patch: Partial<SubtitleEntry>): SubtitleEntry {
       startSec: 0, endSec: 4, text: 'x',
       fontSizePx: 80, textColorHex: '#FFFFFF', outlineColorHex: '#000000',
       outlineThicknessPx: 2, fadeDurationSec: 0,
-      horizontalPosition: 'center', verticalPosition: 'middle', verticalMarginPx: 40,
+      horizontalPosition: 'center', verticalPosition: 'center', verticalMarginPx: 40,
       subtitleBackground: { enabled: false, color: 'black', opacityPercent: 50 },
     },
   }

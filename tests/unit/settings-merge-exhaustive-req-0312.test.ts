@@ -187,7 +187,7 @@ describe('REQ-0312 §1 — each rule kind behaves as its name claims', () => {
 
   it('session-only: stripped even when the payload carries a value', () => {
     const merged = mergeSettingsForSave(
-      base({ audioMode: 'mix', subtitleBackground: { enabled: true, color: 'black', opacityPercent: 50 } }),
+      base({ audioMode: 'simple', subtitleBackground: { enabled: true, color: 'black', opacityPercent: 50 } }),
       base(),
     )
     expect(merged.audioMode).toBeUndefined()

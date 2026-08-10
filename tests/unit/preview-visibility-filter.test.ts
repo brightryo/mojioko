@@ -40,7 +40,6 @@ function makeEntry(overrides: Partial<SubtitleEntry> & { id: string }): Subtitle
     ...overrides,
   }
   return {
-    id: overrides.id,
     ...base,
     isDeleted: overrides.isDeleted ?? false,
     isEdited: overrides.isEdited ?? false,

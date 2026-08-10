@@ -102,7 +102,7 @@ describe('REQ-0451/0452 — .mcpb bundle', () => {
   const ENV = { ELECTRON_RUN_AS_NODE: '1' }
 
   it('packaged: command = MOJIOKO.exe, args = [proxy, "mcp"], env carries RUN_AS_NODE', () => {
-    const m = buildMcpbManifest(EXE, [PROXY, 'mcp'], ENV, TOOLS) as Manifest
+    const m = buildMcpbManifest(EXE, [PROXY, 'mcp'], ENV, TOOLS) as unknown as Manifest
     expect(m.manifest_version).toBe('0.3')
     expect(m.name).toBe('mojioko')
     expect(m.author.name).toBe('brightryo')
@@ -122,7 +122,7 @@ describe('REQ-0451/0452 — .mcpb bundle', () => {
   // REQ-0452 §3 / REQ-0455 — dev bundle must carry the app-dir arg (after the
   // proxy path) or the re-spawned child won't launch.
   it('dev: command = electron.exe, args = [proxy, <appDir>, "mcp"]', () => {
-    const m = buildMcpbManifest(ELECTRON, [DEV_PROXY, APPDIR, 'mcp'], ENV, TOOLS) as Manifest
+    const m = buildMcpbManifest(ELECTRON, [DEV_PROXY, APPDIR, 'mcp'], ENV, TOOLS) as unknown as Manifest
     expect(m.server.entry_point).toBe('electron.exe')
     expect(m.server.mcp_config.command).toBe(ELECTRON)
     expect(m.server.mcp_config.args).toEqual([DEV_PROXY, APPDIR, 'mcp'])

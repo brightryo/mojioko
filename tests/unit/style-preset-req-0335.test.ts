@@ -47,7 +47,7 @@ function makeRichEntry(): SubtitleEntry {
     outlineColorHex: '#101020',
     outlineThicknessPx: 5,
     fadeDurationSec: 0.2,
-    fontId: 'noto-sans-jp' as const,
+    fontId: 'noto-sans-jp-bold' as const,
     horizontalPosition: 'right' as const,
     verticalPosition: 'top' as const,
     verticalMarginPx: 77,
