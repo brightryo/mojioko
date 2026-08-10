@@ -7,6 +7,7 @@ import { getBinPath, getFontResolveDir } from '../lib/paths'
 import { generateAss } from './ass-generator'
 import { isPackagedAsMsix, getCurrentProcessContext } from '../lib/msix'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
+import { ASS_MARGIN_LR_PX } from '../../shared/constants'
 import type { ExportFrameRequest, ExportFrameResult } from '../../shared/ipc-contracts'
 import type { SubtitleEntry } from '../../shared/types'
 import { FfmpegError } from '../../shared/errors'
@@ -74,7 +75,9 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
     entries = [],
     subtitleBackground,
     fontId,
-    karaokeStyle
+    karaokeStyle,
+    scaleTo,
+    marginLrPx,
   } = req
 
   const ffmpeg = getBinPath('ffmpeg')
@@ -152,6 +155,11 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
         // still was written with whatever `generateAss` defaulted to while the
         // burn-in used the requested value.  Both now come from the caller.
         karaokeStyle,
+        // REQ-0468 — `forceSelfPositionAll` (production default) + `marginLrPx`
+        // from `--margin-x`, matching what `ffmpeg-burnin` passes so the still's
+        // ASS MarginL/R and self-positioning are identical to the burn.
+        true,
+        marginLrPx ?? ASS_MARGIN_LR_PX,
       )
       assPath = join(tmpdir(), `mojioko-frame-${randomUUID()}.ass`)
       await fs.writeFile(assPath, assContent, 'utf-8')
@@ -183,7 +191,15 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
         rawFramePath,
       ])
 
-      const vf = frameExportSubtitleFilter(timeSec, subtitlesFilter)
+      // REQ-0468 — when a target resolution is requested, scale+pad the source
+      // frame into it BEFORE the subtitles filter, exactly as `ffmpeg-burnin`'s
+      // `scalePrefix` does, so a `--resolution` / `--preset` still matches the
+      // burn (the ASS is already generated at PlayRes = the target `video` dims).
+      const scalePrefix = scaleTo
+        ? `scale=${scaleTo.w}:${scaleTo.h}:force_original_aspect_ratio=decrease,` +
+          `pad=${scaleTo.w}:${scaleTo.h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,`
+        : ''
+      const vf = frameExportSubtitleFilter(timeSec, `${scalePrefix}${subtitlesFilter}`)
       await runFfmpeg([
         '-y',
         '-i', rawFramePath,

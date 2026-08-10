@@ -152,6 +152,19 @@ export interface ExportFrameRequest {
   subtitleBackground?: SubtitleBackground
   fontId?: FontId
   /**
+   * REQ-0468 — resolution scaling, mirroring `BurninStartRequest.scaleTo`.  When
+   * set, the extracted source frame is scale+padded into this target canvas and
+   * the ASS is burned at PlayRes = target (so `video` here carries the TARGET
+   * dims).  Absent → the source frame is used as-is.  This is what makes a
+   * `--resolution` / `--preset` export_frame preview match the burn.
+   */
+  scaleTo?: { w: number; h: number }
+  /**
+   * REQ-0468 — ASS MarginL/R (from `--margin-x`), passed to the ass-generator so
+   * the still's horizontal margin matches the burn.  Defaults to `ASS_MARGIN_LR_PX`.
+   */
+  marginLrPx?: number
+  /**
    * REQ-0344 §2-2 — fallback karaoke style for cues that carry no
    * `entry.karaokeStyle` of their own.
    *

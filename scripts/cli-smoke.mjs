@@ -62,6 +62,31 @@ function makeClip(path, size) {
   spawnSync(FFMPEG, ['-y', '-f', 'lavfi', '-i', `testsrc=size=${size}:rate=30:duration=2`, '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', '-c:v', 'h264_mf', '-c:a', 'aac', '-shortest', path], { encoding: 'utf-8' })
 }
 
+// REQ-0468 — a SOLID-colour clip so a white caption is trivially isolatable
+// (flat background compresses near-losslessly, so the burn frame and the
+// export_frame still differ only in h264 noise + caption anti-aliasing).
+function makeSolidClip(path, size, color = 'navy') {
+  spawnSync(FFMPEG, ['-y', '-f', 'lavfi', '-i', `color=c=${color}:s=${size}:rate=30:duration=2`, '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', '-c:v', 'h264_mf', '-c:a', 'aac', '-shortest', path], { encoding: 'utf-8' })
+}
+
+// REQ-0468 — the vertical centre (px) of the white caption ink in a PNG, found
+// by dumping raw rgb24 and averaging the rows of near-white pixels.  Used to
+// assert the caption lands at the SAME Y in an export_frame still and a frame
+// pulled from the burn — the "preview == burn" placement gate.
+function whiteCaptionCenterY(png) {
+  const wh = spawnSync(FFPROBE, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', png], { encoding: 'utf-8' }).stdout.trim().split(',')
+  const w = +wh[0], h = +wh[1]
+  const r = spawnSync(FFMPEG, ['-v', 'error', '-i', png, '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 })
+  const buf = r.stdout
+  if (!buf || buf.length < w * h * 3) return { centerY: NaN, count: 0 }
+  let sumY = 0, n = 0
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 3
+    if (buf[i] > 190 && buf[i + 1] > 190 && buf[i + 2] > 190) { sumY += y; n++ }
+  }
+  return { centerY: n > 0 ? Math.round(sumY / n) : NaN, count: n }
+}
+
 if (!existsSync(ELECTRON) || !existsSync(FFMPEG)) {
   log('SKIP: electron or bundled ffmpeg not found (run `npm run build` first).')
   process.exit(0)
@@ -182,6 +207,34 @@ try {
     // (3) invalid override is a clean USAGE error (exit 2), not a silent ignore.
     const badColor = cli(['burn', clip, srt, '--dry-run', '--text-color', 'red'], 20000)
     check('burn --text-color red → USAGE / exit 2', badColor.code === 2 && badColor.json?.code === 'USAGE', `${badColor.code}/${badColor.json?.code}`)
+  }
+
+  // REQ-0468 — PREVIEW == BURN placement gate.  With the SAME placement flags
+  // (--position bottom --margin-v <v>), the caption must land at the SAME Y in an
+  // export_frame still and in a frame pulled from the burn output.  Both now run
+  // the shared `resolvePlacementAndLayout`, so this fails the moment a placement
+  // arg is added to one command but not the other.  Solid-colour clip so the
+  // white caption isolates cleanly (flat bg → burn re-encode is near-lossless).
+  {
+    const clip = join(work, 'parity.mp4')
+    makeSolidClip(clip, '1280x720', 'navy')
+    const srt = join(work, 'parity.srt')
+    writeFileSync(srt, '1\n00:00:00,000 --> 00:00:02,000\nPARITY\n', 'utf-8')
+    const T = '1.0'
+    const efPng = join(work, 'parity-ef.png')
+    const burnMp4 = join(work, 'parity-burn.mp4')
+    const bfPng = join(work, 'parity-burn-frame.png')
+    const posArgs = ['--position', 'bottom', '--margin-v', '200']
+    const ef = cli(['export_frame', clip, srt, '-o', efPng, '--time', T, ...posArgs], 60000)
+    const bn = cli(['burn', clip, srt, '-o', burnMp4, ...posArgs], 120000)
+    check('preview==burn: export_frame + burn both exit 0', ef.code === 0 && bn.code === 0, `${ef.code}/${bn.code}`)
+    spawnSync(FFMPEG, ['-y', '-ss', T, '-i', burnMp4, '-frames:v', '1', bfPng], { encoding: 'utf-8' })
+    const yEf = whiteCaptionCenterY(efPng)
+    const yBf = whiteCaptionCenterY(bfPng)
+    check('preview==burn: caption is present in both frames', yEf.count > 500 && yBf.count > 500, `efPx=${yEf.count} bfPx=${yBf.count}`)
+    check('preview==burn: caption Y matches within 8px (placement identical)',
+      Number.isFinite(yEf.centerY) && Number.isFinite(yBf.centerY) && Math.abs(yEf.centerY - yBf.centerY) <= 8,
+      `ef.centerY=${yEf.centerY} burn.centerY=${yBf.centerY} Δ=${Math.abs(yEf.centerY - yBf.centerY)}`)
   }
 
   // REQ-0467 §2 — headless .mcpb export.  Same launch spec + manifest the GUI

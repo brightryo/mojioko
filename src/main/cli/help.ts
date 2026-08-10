@@ -189,9 +189,18 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--outline-color', type: 'string', desc: '縁色 #RRGGBB' },
       { flag: '--outline', type: 'int', desc: '縁の太さ(px)' },
       { flag: '--margin-v', type: 'int', desc: '縦マージン(px)。ASS verticalMarginPx に反映' },
+      // REQ-0468 — same placement/layout args as `burn`, resolved by the shared
+      // pipeline, so a still previews the burn (position/margins/overflow/解像度).
+      { flag: '--position', type: 'enum', values: ['top', 'center', 'bottom'], desc: '縦位置（burn と同一）' },
+      { flag: '--margin-x', type: 'int', default: '10', desc: '横マージン(px)。改行幅＋ASS MarginL/R' },
+      { flag: '--margin-y', type: 'int', desc: '縦オーバーフロー判定の上下安全域(px)。既定は --margin-v' },
+      { flag: '--overflow', type: 'enum', values: ['shrink', 'warn', 'error'], default: 'warn', desc: '縦はみ出し（warn=計上 / shrink=自動縮小 / error=失敗）' },
+      { flag: '--preset', type: 'enum', values: PRESETS, desc: '出力プリセット（縦ショート等）。burn と同一' },
+      { flag: '--resolution', type: 'string', desc: 'WxH（例 1080x1920）。--preset と排他' },
+      { flag: '--style', type: 'string', desc: 'GUI 保存のスタイルプリセット名を全 cue に適用（status で一覧）' },
     ],
-    examples: ['mojioko export_frame input.mp4 out.mojioko -o frame.png --time 1.5 --text-color #FFEE00 --weight Bold'],
-    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'BURN_FAILED'],
+    examples: ['mojioko export_frame input.mp4 out.mojioko -o frame.png --time 1.5 --position bottom --margin-v 200 --preset shorts'],
+    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'SUBTITLE_OVERFLOW', 'BURN_FAILED'],
   },
   {
     name: 'probe',

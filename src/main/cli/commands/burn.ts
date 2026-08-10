@@ -16,34 +16,19 @@ import { loadSettings } from '../../services/settings-store'
 import { parseProjectFile } from '../../../shared/project-file'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
 import { parseSrt } from '../../../renderer/lib/srt-parse'
-import { ASS_MARGIN_LR_PX } from '../../../shared/constants'
-import { canUseKeywordEmphasisInTier } from '../../../shared/emphasis'
-import { isPackagedAsMsix, getCurrentProcessContext } from '../../lib/msix'
-import { layoutForBurn, type OverflowMode } from '../../services/headless-layout'
 import type { BurninStartRequest, EncoderSetting, AudioMode, OutputContainer } from '../../../shared/ipc-contracts'
 import type { EncodeQuality, H264Encoder, SubtitleEntry, VideoInfo } from '../../../shared/types'
 import type { FontId } from '../../../shared/fonts'
 import { optString, type ParsedArgs } from '../args'
 import { CliError, emitProgress, emitSuccess, type CliContext } from '../output'
 import { detectFormat, entriesFromSegments } from '../subtitle-io'
-import { resolveDefaultSubtitleStyle, summarizeSubtitleStyle } from '../subtitle-style'
-import { findStylePreset, applyStylePreset } from '../style-preset-cli'
-import { applyStyleOverrides, parseStyleOverrides } from '../style-overrides'
 import { assertWritable } from '../overwrite'
-import { resolveTarget, contentScaleFactor, scaleEntries } from '../scale-video'
 import { parseBitrateKbps } from '../../../shared/encode-quality'
-
-const VERTICAL_POSITIONS = new Set<'top' | 'center' | 'bottom'>(['top', 'center', 'bottom'])
-
-const OVERFLOW_MODES = new Set<OverflowMode>(['warn', 'shrink', 'error'])
-
-/** Read an integer CLI option (first non-empty of `keys`), or undefined. */
-function optInt(opts: ParsedArgs['opts'], ...keys: string[]): number | undefined {
-  const s = optString(opts, ...keys)
-  if (s === undefined || s === '') return undefined
-  const n = Number.parseInt(s, 10)
-  return Number.isFinite(n) ? n : undefined
-}
+// REQ-0468 — the placement/layout pipeline (style preset + overrides + position +
+// margins + overflow + resolution scaling + auto line-break) is now a shared
+// resolver used by BOTH burn and export_frame, so a still previews the burn and
+// neither drifts.  `optInt` is re-exported from there.
+import { resolvePlacementAndLayout, optInt } from '../placement'
 
 const ENCODERS = new Set(['auto', 'h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf'])
 const AUDIO_MODES = new Set(['preserve', 'simple', 'none'])
@@ -95,33 +80,6 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     )
   }
 
-  // REQ-0457 D12 — apply a user-saved style preset to every cue ("author in the
-  // GUI, mass-produce from the CLI").  Uses SOURCE video dims (entries are in
-  // source-pixel space; resolution scaling happens after).
-  const stylePresetName = optString(args.opts, 'style')
-  let appliedStylePreset: string | null = null
-  if (stylePresetName) {
-    const preset = findStylePreset(settings.stylePresets ?? [], stylePresetName)
-    if (!preset) {
-      const names = (settings.stylePresets ?? []).map((p) => p.name).join(', ') || '(なし)'
-      throw new CliError('USAGE', `スタイルプリセット "${stylePresetName}" が見つかりません。`, `利用可能: ${names}（GUI で保存）。`)
-    }
-    entries = applyStylePreset(entries, preset, { videoWidthPx: video.widthPx, videoHeightPx: video.heightPx })
-    appliedStylePreset = preset.name
-  }
-
-  // REQ-0461 — per-cue style overrides.  These were advertised (help + MCP) but
-  // never read: `--weight` / `--font-size` / `--text-color` / `--outline-color`
-  // / `--outline` did nothing, and `--margin-v` only fed the vertical-overflow
-  // budget, never the ASS `verticalMarginPx`.  Parse + validate (shared with
-  // `export_frame` so a preview frame renders the same overrides), then apply to
-  // every cue in SOURCE-pixel space (BEFORE resolution scaling) so the pixel
-  // fields scale with the target exactly like a `.mojioko` cue's own values.
-  // Explicit flags win over a `--style` preset (applied above).
-  const styleOverrides = parseStyleOverrides(args.opts, fontId)
-  const marginVFlag = styleOverrides.verticalMarginPx
-  entries = applyStyleOverrides(entries, styleOverrides)
-
   const encoderFlag = optString(args.opts, 'encoder')
   if (encoderFlag && !ENCODERS.has(encoderFlag)) {
     throw new CliError('USAGE', `unknown --encoder: ${encoderFlag}`, `auto|h264_nvenc|h264_amf|h264_qsv|h264_mf`)
@@ -149,104 +107,23 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
         }
       : undefined
 
-  // REQ-0460 — `--position top|center|bottom` was advertised (help + MCP schema)
-  // but silently dropped: the burn always used the app-default vertical position
-  // and the returned subtitleStyle reflected settings, not the argument.  Read
-  // and validate it here; it is applied to every cue below (before layout, so
-  // the overflow guard anchors from the requested edge).
-  const positionFlag = optString(args.opts, 'position')
-  if (positionFlag && !VERTICAL_POSITIONS.has(positionFlag as 'top' | 'center' | 'bottom')) {
-    throw new CliError('USAGE', `unknown --position: ${positionFlag}`, 'top|center|bottom')
-  }
-  const verticalPositionOverride = positionFlag
-    ? (positionFlag as 'top' | 'center' | 'bottom')
-    : undefined
+  // REQ-0468 — the whole placement/layout pipeline (style preset + per-cue style
+  // overrides + `--position` + margins + `--overflow` + `--resolution`/`--preset`
+  // scaling + auto line-break) is resolved by the shared helper `export_frame`
+  // also calls, so a still previews exactly what this burn renders.  Only the
+  // encode-side flags (encoder/audio/container/quality, above) are burn-specific.
+  const placement = resolvePlacementAndLayout(args.opts, video, settings, fontId, entries)
+  entries = placement.entries
+  const { renderVideo, scaleTo, resized, marginX, marginY, overflow, appliedStylePreset, verticalPositionOverride, subtitleStyle } = placement
 
-  // REQ-0456 — headless auto line-break margin + vertical overflow guard flags.
-  // REQ-0461 — `--margin-y` is the vertical-overflow SAFETY budget (headroom for
-  // detection), NOT the render offset; that is `--margin-v` (applied per-cue
-  // above).  `--margin-v` still falls through as the budget when `--margin-y` is
-  // absent, so a larger bottom margin correctly shrinks the available height.
-  const marginX = optInt(args.opts, 'margin-x') ?? ASS_MARGIN_LR_PX
-  const marginY = optInt(args.opts, 'margin-y') ?? marginVFlag ?? ASS_MARGIN_LR_PX
-  const overflowFlag = (optString(args.opts, 'overflow') || 'warn') as OverflowMode
-  if (!OVERFLOW_MODES.has(overflowFlag)) {
-    throw new CliError('USAGE', `unknown --overflow: ${overflowFlag}`, 'warn|shrink|error')
-  }
-
-  // --resolution WxH / --preset: pre-scale the canvas + scale cue pixel fields.
-  const tgt = resolveTarget(optString(args.opts, 'resolution'), optString(args.opts, 'preset'))
-  if (!tgt.ok) throw new CliError('USAGE', tgt.message, 'mojioko burn ... --preset shorts | --resolution 1080x1920')
-
-  // REQ-0460 — resolution scaling is now folded into the SINGLE burn encode via
-  // `request.scaleTo` (see startBurnin), replacing the previous separate
-  // `scaleVideoTo` pre-pass.  That old pass re-encoded the source with a bare
-  // `h264_mf` (no rate control) BEFORE the burn, collapsing the bitrate to ~2/3
-  // even when the target resolution equalled the source.  Now the pixel-space
-  // cue fields are still scaled by the content factor, but the video itself is
-  // scaled+padded inside the same cq-quality ffmpeg run as the subtitles.
-  let renderVideo: VideoInfo = video
-  let scaleTo: { w: number; h: number } | undefined
-  let resized = false
-  if (tgt.target) {
-    const f = contentScaleFactor(video.widthPx, video.heightPx, tgt.target.w, tgt.target.h)
-    entries = scaleEntries(entries, f)
-    scaleTo = { w: tgt.target.w, h: tgt.target.h }
-    renderVideo = { ...video, widthPx: tgt.target.w, heightPx: tgt.target.h }
-    resized = true
-  }
-
-  // REQ-0460 — apply the vertical-position override to every cue BEFORE layout so
-  // the overflow guard anchors from the requested edge.  For `.mojioko` input
-  // this deliberately overrides the per-cue positions (an explicit flag wins).
-  if (verticalPositionOverride) {
-    entries = entries.map((e) => ({
-      ...e,
-      verticalPosition: verticalPositionOverride,
-      // Clear any absolute Y so alignment-based placement (the anchor) governs.
-      posY: undefined,
-    }))
-  }
-
-  // REQ-0456 §1/§2 — apply auto line-break at the OUTPUT resolution (so text
-  // never runs off the frame, matching the GUI) then the vertical overflow
-  // guard.  Emphasis tier + margins mirror what the ASS writer will render.
-  const isMsix = isPackagedAsMsix(getCurrentProcessContext())
-  const layout = layoutForBurn({
-    entries,
-    video: renderVideo,
-    marginX,
-    marginY,
-    overflowMode: overflowFlag,
-    emphasisTierAllowed: canUseKeywordEmphasisInTier(isMsix),
-  })
-  entries = layout.entries
-  if (overflowFlag === 'error' && layout.overflow.overflowCueCount > 0) {
+  if (placement.overflowMode === 'error' && overflow.overflowCueCount > 0) {
     throw new CliError(
       'SUBTITLE_OVERFLOW',
-      `縦にはみ出す字幕が ${layout.overflow.overflowCueCount} 件あります（--overflow error）。`,
+      `縦にはみ出す字幕が ${overflow.overflowCueCount} 件あります（--overflow error）。`,
       '--overflow shrink で自動縮小するか、--margin-y を小さく／フォントサイズを下げてください。',
-      { overflowCueCount: layout.overflow.overflowCueCount, marginY },
+      { overflowCueCount: overflow.overflowCueCount, marginY },
     )
   }
-
-  // REQ-0457 A2 / REQ-0460 / REQ-0461 — the resolved subtitle style applied.
-  // Summarise a REPRESENTATIVE final cue (post-override, post-scale, post-layout)
-  // rather than echoing the settings default: the returned `subtitleStyle` is
-  // then the value actually burned — font size (at the OUTPUT resolution), text /
-  // outline colour, outline width, weight (fontId), vertical position + margin
-  // all reflect the `--font-size` / `--text-color` / `--outline-color` /
-  // `--outline` / `--weight` / `--position` / `--margin-v` flags.  `.mojioko`
-  // input keeps its per-cue styles; this reports the first cue's (uniform once
-  // any override is applied).  Falls back to the synthetic default only when the
-  // project has no visible cue.
-  const repEntry = entries.find((e) => !e.isDeleted)
-  const subtitleStyle = repEntry
-    ? summarizeSubtitleStyle(repEntry, settings.autoLineBreak ?? true)
-    : resolveDefaultSubtitleStyle(settings)
-  // Report the font ACTUALLY used: a per-cue override (incl. `--weight`) wins,
-  // else the project-default fontId (which `summarizeSubtitleStyle` cannot see).
-  if (repEntry) subtitleStyle.fontId = repEntry.fontId ?? fontId
 
   // REQ-0457 Phase E — dry-run: report the overflow judgement without encoding.
   if (dryRun) {
@@ -255,7 +132,7 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
       wouldEncode: false,
       resolution: { width: renderVideo.widthPx, height: renderVideo.heightPx },
       resized,
-      overflow: layout.overflow,
+      overflow,
       cueCount: entries.filter((e) => !e.isDeleted).length,
       subtitleStyle,
       stylePreset: appliedStylePreset,
@@ -330,7 +207,7 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     // REQ-0460 — measured output video bitrate (kbps) + the quality override used.
     videoBitrateKbps,
     quality: quality ?? null,
-    overflow: layout.overflow,
+    overflow,
     // REQ-0457 A2 — the resolved subtitle style applied (paired with `status`).
     // For `.mojioko` input, per-cue styles from the file are preserved; this is
     // the app default style (what SRT-seeded cues and un-overridden fields use).

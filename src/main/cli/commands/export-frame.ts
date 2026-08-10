@@ -4,9 +4,13 @@
  * Renders ONE frame (video + burned subtitle at `timeSec`) so an agent can
  * VISUALLY verify the burn without spending minutes encoding a whole video.
  * Reuses the burn-in ass-generator + REQ-0375/0381 two-pass frame exporter, so
- * karaoke phase / animation are pixel-accurate at the playhead.  Entries are
- * auto line-broken at the video width first (REQ-0456) so the still matches
- * what a default burn would render.
+ * karaoke phase / animation are pixel-accurate at the playhead.
+ *
+ * REQ-0468 — export_frame now runs the SAME placement/layout resolver as `burn`
+ * (`resolvePlacementAndLayout`): `--position`, `--margin-x`/`--margin-y`,
+ * `--overflow`, `--resolution`/`--preset`, `--style`, and the REQ-0461 per-cue
+ * style overrides all resolve identically, so a still is a faithful preview of
+ * what the burn will render (pinned by the preview==burn pixel gate in cli-smoke).
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { exportFrame } from '../../services/frame-exporter'
@@ -16,10 +20,6 @@ import { parseProjectFile } from '../../../shared/project-file'
 import { parseSrt } from '../../../renderer/lib/srt-parse'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
 import { KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
-import { ASS_MARGIN_LR_PX } from '../../../shared/constants'
-import { canUseKeywordEmphasisInTier } from '../../../shared/emphasis'
-import { isPackagedAsMsix, getCurrentProcessContext } from '../../lib/msix'
-import { autoLineBreakEntries } from '../../services/headless-layout'
 import type { ExportFrameRequest } from '../../../shared/ipc-contracts'
 import type { SubtitleEntry, VideoInfo } from '../../../shared/types'
 import type { FontId } from '../../../shared/fonts'
@@ -27,7 +27,7 @@ import { optString, type ParsedArgs } from '../args'
 import { CliError, emitSuccess, type CliContext } from '../output'
 import { assertWritable } from '../overwrite'
 import { detectFormat, entriesFromSegments } from '../subtitle-io'
-import { applyStyleOverrides, parseStyleOverrides } from '../style-overrides'
+import { resolvePlacementAndLayout } from '../placement'
 
 export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): Promise<number> {
   const videoPath = args.positionals[0]
@@ -81,21 +81,23 @@ export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): 
     )
   }
 
-  // REQ-0461 — honour the same per-cue style flags `burn` does, so a preview
-  // frame is a faithful still of what the burn will render (this is the command
-  // the REQ names for verifying each flag in real pixels).  Applied BEFORE the
-  // auto line-break so a `--font-size` change re-wraps like the burn does.
-  entries = applyStyleOverrides(entries, parseStyleOverrides(args.opts, fontId))
+  // REQ-0468 — the SAME placement/layout resolution `burn` runs: style preset,
+  // per-cue style overrides (REQ-0461), `--position`, `--margin-x`/`--margin-y`,
+  // `--overflow`, and `--resolution`/`--preset` scaling + auto line-break.  This
+  // is what makes the still a faithful preview of the burn.
+  const placement = resolvePlacementAndLayout(args.opts, video, settings, fontId, entries)
+  entries = placement.entries
+  const { renderVideo, scaleTo, resized, overflow, marginX, appliedStylePreset, subtitleStyle } = placement
 
-  // Match a default burn: wrap at the video width so the still is not clipped.
-  const isMsix = isPackagedAsMsix(getCurrentProcessContext())
-  entries = autoLineBreakEntries(entries, {
-    videoWidthPx: video.widthPx,
-    videoHeightPx: video.heightPx,
-    marginLrPx: ASS_MARGIN_LR_PX,
-    marginYPx: ASS_MARGIN_LR_PX,
-    emphasisTierAllowed: canUseKeywordEmphasisInTier(isMsix),
-  })
+  // Parity with `burn`: `--overflow error` rejects instead of rendering.
+  if (placement.overflowMode === 'error' && overflow.overflowCueCount > 0) {
+    throw new CliError(
+      'SUBTITLE_OVERFLOW',
+      `縦にはみ出す字幕が ${overflow.overflowCueCount} 件あります（--overflow error）。`,
+      '--overflow shrink で自動縮小するか、--margin-y を小さく／フォントサイズを下げてください。',
+      { overflowCueCount: overflow.overflowCueCount },
+    )
+  }
 
   const cueVisible = entries.some((e) => !e.isDeleted && e.startSec <= timeSec && timeSec < e.endSec && e.text.trim() !== '')
 
@@ -103,13 +105,17 @@ export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): 
     inputPath: videoPath,
     outputPath: out,
     timeSec,
-    video,
+    // REQ-0468 — render canvas = the post-scaling target (PlayRes for the ASS),
+    // with `scaleTo` telling the exporter to scale+pad the source frame into it.
+    video: renderVideo,
     format,
     includeSubtitles: true,
     entries,
     subtitleBackground: BURNIN_DEFAULTS.subtitleBackground,
     fontId,
     karaokeStyle: KARAOKE_STYLE_DEFAULT,
+    ...(scaleTo ? { scaleTo } : {}),
+    marginLrPx: marginX,
   }
 
   let result
@@ -124,7 +130,13 @@ export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): 
     sizeBytes: result.sizeBytes,
     timeSec,
     format,
-    resolution: { width: video.widthPx, height: video.heightPx },
+    // REQ-0468 — the OUTPUT resolution (post `--resolution`/`--preset`), like burn.
+    resolution: { width: renderVideo.widthPx, height: renderVideo.heightPx },
+    resized,
     cueVisible,
+    // REQ-0468 — same fields `burn` reports so a still is verifiable the same way.
+    overflow,
+    subtitleStyle,
+    stylePreset: appliedStylePreset,
   })
 }

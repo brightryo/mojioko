@@ -200,6 +200,14 @@ export const TOOLS: ToolSpec[] = [
         outline_color: { type: 'string', description: '縁色 #RRGGBB（REQ-0461）' },
         outline: { type: 'integer', description: '縁の太さ(px)（REQ-0461）' },
         margin_v: { type: 'integer', description: '縦マージン(px)。ASS verticalMarginPx に反映（REQ-0461）' },
+        // REQ-0468 — same placement/layout args as `burn` (faithful preview still).
+        position: { type: 'string', enum: ['top', 'center', 'bottom'], description: '縦位置（burn と同一。REQ-0468）' },
+        margin_x: { type: 'integer', description: '横マージン(px)。改行幅＋ASS MarginL/R（REQ-0468）' },
+        margin_y: { type: 'integer', description: '縦オーバーフロー判定の上下安全域(px)（REQ-0468）' },
+        overflow: { type: 'string', enum: ['shrink', 'warn', 'error'], description: '縦はみ出し（既定 warn。REQ-0468）' },
+        preset: { type: 'string', enum: PRESETS, description: '出力プリセット（縦ショート等）。burn と同一（REQ-0468）' },
+        resolution: { type: 'string', description: 'WxH（例 1080x1920）。preset と排他（REQ-0468）' },
+        style: { type: 'string', description: 'GUI 保存のスタイルプリセット名（全 cue に適用。REQ-0468）' },
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
       },
       additionalProperties: false,
@@ -207,7 +215,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runExportFrameCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), overwrite: boolTrue(i.overwrite) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), position: str(i.position), 'margin-x': numStr(i.margin_x), 'margin-y': numStr(i.margin_y), overflow: str(i.overflow), preset: str(i.preset), resolution: str(i.resolution), style: str(i.style), overwrite: boolTrue(i.overwrite) }),
     }),
   },
   {
