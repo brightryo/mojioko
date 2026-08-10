@@ -78,15 +78,8 @@ export function findActiveEntryIds(
   return ids
 }
 
-/**
- * REQ-0332 Step 3 — `computeFixedStackOffsets` MOVED to
- * `src/shared/stack-offsets.ts`.
- *
- * The ASS writer now needs the same collision arithmetic: once ANY cue in a
- * simultaneously-visible group is split into per-line `\pos` events the whole
- * group has to be positioned by us rather than by libass, and "positioned by
- * us" has to mean the very thing the preview already draws.  Re-exported here
- * so every existing renderer import keeps working and there is still exactly
- * ONE implementation.
- */
-export { computeFixedStackOffsets } from '../../shared/stack-offsets'
+// REQ-0332 Step 3 — `computeFixedStackOffsets` lives in
+// `src/shared/stack-offsets.ts`.  Its renderer re-export was removed in REQ-0466
+// §1: the preview stopped auto-stacking in REQ-0391, so no renderer code imports
+// it any more (the burn path — `ass-generator.ts` — imports it directly, and is
+// its only live caller, the ground truth of the verify:overlap-parity gate).

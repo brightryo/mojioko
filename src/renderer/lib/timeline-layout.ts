@@ -68,34 +68,6 @@ export function timelineMaxRow(entries: readonly SubtitleEntry[]): number {
 }
 
 /**
- * Per-entry time overrides used by the greedy track allocator (REQ-20260613-002).
- *
- * Background: dragging a clip in the timeline mutates `entry.startSec` /
- * `entry.endSec` on every pointermove tick.  If the greedy sort relies on
- * the live values, the sort order between the dragged clip and another
- * clip at the same time can flip the moment one diverges — greedy then
- * reassigns the lower track to whichever now sorts earlier, and the
- * rendered blocks visually swap rows even though React's `key={id}`
- * reconciliation kept each Block bound to its own entry.  The user
- * perceives this as "the wrong clip moved."
- *
- * By supplying `greedyTimes` for the dragged entry (= its snapshot
- * startSec / endSec at drag-start), the sort key and the interval-fit
- * check both see the PRE-DRAG values, so the dragged clip stays in its
- * starting greedy slot and keeps its trackIndex stable through the
- * entire drag.  The block's *visual* leftPx / widthPx still derive from
- * the live entry values in the caller, so the block follows the cursor
- * laterally — only the vertical row stays pinned.
- *
- * Empty or omitted → identity behaviour (= legacy single-arg call sites
- * are byte-identical).
- */
-export interface TimelineLayoutOverrides {
-  /** id → times to use for greedy sort + interval check */
-  greedyTimes?: ReadonlyMap<string, { startSec: number; endSec: number }>
-}
-
-/**
  * Lay entries out into timeline rows where **row = the stored z-order layer**
  * (REQ-0394 introduced row=z-order; REQ-0396 made the row the stored `layer`
  * itself; REQ-0402 made the rows CONTIGUOUS).
@@ -113,15 +85,14 @@ export interface TimelineLayoutOverrides {
  * Inputs are not mutated; `placements` preserves input entry order so the caller
  * renders each Block by its own id without re-sorting.  Deleted rows are passed
  * through (the caller filters).  Rows depend only on `layer`, not time, so
- * `minBlockSec` (REQ-088 #2) and `overrides.greedyTimes` (REQ-20260613-002 drag
- * pinning) no longer affect row assignment and are kept only for call-site
- * signature compatibility.
+ * `minBlockSec` (REQ-088 #2) no longer affects row assignment and is kept only
+ * for call-site signature compatibility.  (REQ-0466 §1 removed the vestigial
+ * `greedyTimes` drag-pin override, which the layer-based rows had made a no-op.)
  */
 export function layoutEntries(
   entries: readonly SubtitleEntry[],
   fallbackDurationSec: number,
   minBlockSec: number = 0,
-  overrides?: TimelineLayoutOverrides,
 ): TimelineLayout {
   if (entries.length === 0) {
     return { placements: [], trackCount: 0, trackLayers: [], totalSec: Math.max(1, fallbackDurationSec) }
@@ -133,11 +104,10 @@ export function layoutEntries(
   // into to raise its z-order.  Legacy layers above the cap clamp onto the top.
   //
   // Because rows depend only on `layer` (not on time), a horizontal drag never
-  // changes a cue's row — so the old `greedyTimes` drag row-pinning is no longer
-  // needed.  `minBlockSec` / `overrides` are retained only for call-site
-  // signature compatibility.
+  // changes a cue's row — so the old `greedyTimes` drag row-pinning was removed
+  // (REQ-0466 §1).  `minBlockSec` is retained only for call-site signature
+  // compatibility.
   void minBlockSec
-  void overrides
   const maxRow = timelineMaxRow(entries)
   const rowCount = maxRow + 1
   // Top → bottom: [maxRow, maxRow−1, …, 1, 0].

@@ -151,17 +151,4 @@ describe('layoutEntries — legacy params are inert for rows (REQ-0396/0402)', (
     expect(withMin.trackCount).toBe(2) // layer-0 row + spare
     expect(without.trackCount).toBe(2)
   })
-
-  it('greedyTimes override does not change rows (rows depend only on layer)', () => {
-    const base = layoutEntries([entry('a', 10, 15), entry('b', 10, 15)], 20)
-    const withOverride = layoutEntries(
-      [entry('a', 10, 15), entry('b', 9.9, 14.9)],
-      20,
-      0,
-      { greedyTimes: new Map([['b', { startSec: 10, endSec: 15 }]]) },
-    )
-    expect(base.trackCount).toBe(2)
-    expect(withOverride.trackCount).toBe(2)
-    expect(withOverride.placements.map((p) => p.trackIndex)).toEqual([1, 1]) // both on layer-0 row
-  })
 })

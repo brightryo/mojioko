@@ -1031,6 +1031,11 @@ function resolveSelfPositionedCues(
   // (`forceSelfPositionAll === false`, verify:pos-parity) — and stays available
   // for the Phase 4 migration — never for live positioning.  An empty map makes
   // every `offsets.get(id) ?? 0` below resolve to 0.
+  //
+  // REQ-0466 §1 — this is the SOLE remaining caller of `computeFixedStackOffsets`
+  // and it is the ground-truth reference the verify:overlap-parity gate diffs the
+  // production all-`\pos` render against.  It is therefore deliberately NOT
+  // removed: deleting it would leave that gate without its stacked baseline.
   const offsets = forceSelfPositionAll
     ? new Map<string, number>()
     : (() => {

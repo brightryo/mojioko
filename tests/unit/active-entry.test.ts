@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   findActiveEntryId,
   findActiveEntryIds,
-  computeFixedStackOffsets,
 } from '../../src/renderer/lib/active-entry'
+// REQ-0466 §1 — computeFixedStackOffsets is imported from its home module
+// directly (the renderer re-export in active-entry was removed).
+import { computeFixedStackOffsets } from '../../src/shared/stack-offsets'
 import type { SubtitleEntry } from '../../src/shared/types'
 import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
 

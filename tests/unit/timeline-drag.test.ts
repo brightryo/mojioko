@@ -1,14 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   computeDragPatch,
-  decideDragAxis,
-  computeLayerDrag,
   computeLayerDragVisual,
   buildMoveCommit,
-  AXIS_LOCK_THRESHOLD_PX,
   type DragPatchInputs,
 } from '../../src/renderer/lib/timeline-drag'
-import { MIN_LAYER, MAX_LAYER } from '../../src/shared/cue-placement'
 import type { SubtitleEntry } from '../../src/shared/types'
 import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
 import { origToEdited, type CutList } from '../../src/shared/cuts'
@@ -582,66 +578,10 @@ describe('computeDragPatch — REQ-0201 Edited-axis translation with cuts', () =
   })
 })
 
-/**
- * REQ-0399 — vertical drag = layer (z-order) change.  These pin the two pure
- * helpers the pointermove wiring in timeline-view.tsx consumes: the axis
- * decision (horizontal time vs vertical layer) and the layer-from-dy mapping.
- */
-describe('decideDragAxis — REQ-0399', () => {
-  it('returns null inside the dead-zone (a click / jitter commits no axis)', () => {
-    expect(decideDragAxis(0, 0)).toBeNull()
-    expect(decideDragAxis(AXIS_LOCK_THRESHOLD_PX - 1, AXIS_LOCK_THRESHOLD_PX - 1)).toBeNull()
-    expect(decideDragAxis(-3, 3)).toBeNull() // both below the 4 px threshold
-  })
-
-  it('locks to time when horizontal travel dominates', () => {
-    expect(decideDragAxis(20, 2)).toBe('time')
-    expect(decideDragAxis(-20, 5)).toBe('time')
-    // A vertical component below threshold with horizontal past it → time.
-    expect(decideDragAxis(10, 0)).toBe('time')
-  })
-
-  it('locks to layer when vertical travel dominates', () => {
-    expect(decideDragAxis(2, 20)).toBe('layer')
-    expect(decideDragAxis(5, -20)).toBe('layer')
-    expect(decideDragAxis(0, 10)).toBe('layer')
-  })
-
-  it('a perfect diagonal tie falls to time (legacy axis)', () => {
-    expect(decideDragAxis(20, 20)).toBe('time')
-    expect(decideDragAxis(-20, 20)).toBe('time')
-  })
-})
-
-describe('computeLayerDrag — REQ-0399', () => {
-  const H = 88 // TRACK_HEIGHT_PX
-
-  it('moving up one row (dy = -H) raises the layer by one (front)', () => {
-    expect(computeLayerDrag(0, -H, H)).toBe(1)
-    expect(computeLayerDrag(3, -H, H)).toBe(4)
-  })
-
-  it('moving down one row (dy = +H) lowers the layer by one (back)', () => {
-    expect(computeLayerDrag(5, H, H)).toBe(4)
-    expect(computeLayerDrag(2, 2 * H, H)).toBe(0)
-  })
-
-  it('rounds to the nearest row (half-row snaps)', () => {
-    expect(computeLayerDrag(0, -H * 0.4, H)).toBe(0) // <½ row up → no change
-    expect(computeLayerDrag(0, -H * 0.6, H)).toBe(1) // >½ row up → +1
-    expect(computeLayerDrag(5, H * 0.6, H)).toBe(4)  // >½ row down → -1
-  })
-
-  it('clamps to [MIN_LAYER, MAX_LAYER]', () => {
-    expect(computeLayerDrag(0, 5 * H, H)).toBe(MIN_LAYER)   // can't go below 0
-    expect(computeLayerDrag(MAX_LAYER, -5 * H, H)).toBe(MAX_LAYER) // can't exceed 50
-    expect(computeLayerDrag(48, -10 * H, H)).toBe(MAX_LAYER)
-  })
-
-  it('no vertical travel keeps the layer', () => {
-    expect(computeLayerDrag(7, 0, H)).toBe(7)
-  })
-})
+// REQ-0466 §1 — the `decideDragAxis` / `computeLayerDrag` (REQ-0399 axis-lock)
+// suites were removed with the functions; the 2D drag (REQ-0403) and 1:1 cursor
+// follow (REQ-0462) never used them.  `computeLayerDragVisual` (below) is the
+// live vertical-drag helper.
 
 /**
  * REQ-0402 — cursor-following vertical drag.  `computeLayerDragVisual` returns

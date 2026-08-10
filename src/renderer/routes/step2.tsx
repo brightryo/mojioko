@@ -263,9 +263,11 @@ export default function Step2Route(_: Step2RouteProps) {
    *
    * `cancellable` is honest rather than decorative: it goes false once the
    * import reaches the commit, because from that point the work is a single
-   * synchronous React render that nothing can interrupt.  See the RES — the
-   * dominant cost at 10,000 cues is `computeFixedStackOffsets`, an O(N²) pass
-   * in the video preview panel, measured at ~4.3 s of a ~4.5 s commit.
+   * synchronous React render that nothing can interrupt.  (Historically the
+   * dominant 10k-cue cost was `computeFixedStackOffsets`, an O(N²) pass; the
+   * preview stopped calling it in REQ-0391 and REQ-0465 §1 made it O(N×C), so
+   * the commit render is now the timeline/list render, addressed by REQ-0465
+   * §2/§3 virtualization + memoisation.)
    */
   const [srtImportProgress, setSrtImportProgress] = useState<{
     done: number

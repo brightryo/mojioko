@@ -7,7 +7,7 @@ import {
 } from './timeline-snap'
 import { chooseRulerStepSec } from './timeline-layout'
 import { roundToCs } from './entry-edits'
-import { MIN_LAYER, MAX_LAYER, resolveLayer } from '../../shared/cue-placement'
+import { MIN_LAYER, resolveLayer } from '../../shared/cue-placement'
 import {
   origToEdited,
   editedToOrig,
@@ -24,55 +24,16 @@ export type DragKind = 'resize-start' | 'resize-end' | 'move'
 export const MOVE_DRAG_NOOP_THRESHOLD_PX = 3
 
 /**
- * REQ-0399 — a body 'move' drag can travel two ways: horizontally to change
- * TIME (the legacy behaviour) or vertically to change the cue's z-order LAYER
- * (carry it to another track, like a standard NLE).  `decideDragAxis` picks the
- * axis from the drag vector and the caller LOCKS it for the rest of the gesture
- * so a diagonal drag resolves to exactly one axis and never edits both.
- */
-export type DragAxis = 'time' | 'layer'
-
-/**
- * The dead-zone (px) a body 'move' drag must leave before an axis is chosen.
- * Below it the gesture is still ambiguous (a click, or jitter) and no axis is
- * committed.  Kept a touch above `MOVE_DRAG_NOOP_THRESHOLD_PX` so the dominant
- * direction is unambiguous by the time we lock.
+ * The dead-zone (px) a body 'move' drag must leave before the clip begins
+ * following the cursor.  Below it the gesture is still ambiguous (a click, or
+ * jitter).  Kept a touch above `MOVE_DRAG_NOOP_THRESHOLD_PX`.
+ *
+ * (REQ-0466 §1 removed `DragAxis` / `decideDragAxis` / `computeLayerDrag` — the
+ * REQ-0399 axis-lock model, dead since REQ-0403's 2D drag and REQ-0462's 1:1
+ * cursor follow.  The name is kept to avoid churn; there is no axis lock now,
+ * this is simply the move-start threshold.)
  */
 export const AXIS_LOCK_THRESHOLD_PX = 4
-
-/**
- * Decide the drag axis from the pointer displacement, or `null` while still in
- * the dead-zone.  The dominant magnitude wins; ties fall to `time` (the legacy
- * axis) so a purely horizontal drag is never misread as a layer move.
- */
-export function decideDragAxis(
-  dxPx: number,
-  dyPx: number,
-  thresholdPx: number = AXIS_LOCK_THRESHOLD_PX,
-): DragAxis | null {
-  if (Math.abs(dxPx) < thresholdPx && Math.abs(dyPx) < thresholdPx) return null
-  return Math.abs(dyPx) > Math.abs(dxPx) ? 'layer' : 'time'
-}
-
-/**
- * The layer a vertical drag resolves to: one layer step per track-row of
- * vertical travel, added to the source layer and clamped to
- * `[MIN_LAYER, MAX_LAYER]`.  Up (negative `dyPx`) moves toward the FRONT
- * (higher layer) to match the bottom-anchored timeline where layer 0 sits at
- * the bottom (REQ-0397 §3).  `trackHeightPx` is `TRACK_HEIGHT_PX`.
- *
- * Retained from REQ-0399; the REQ-0402 cursor-following drag uses
- * `computeLayerDragVisual` instead (it needs the follow position and the
- * on-screen row too, and it clamps to the RENDERED rows).
- */
-export function computeLayerDrag(
-  baseLayer: number,
-  dyPx: number,
-  trackHeightPx: number,
-): number {
-  const delta = Math.round(-dyPx / trackHeightPx) // up (dy<0) → +layer (front)
-  return Math.max(MIN_LAYER, Math.min(MAX_LAYER, baseLayer + delta))
-}
 
 export interface LayerDragVisual {
   /**
