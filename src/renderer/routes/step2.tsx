@@ -547,40 +547,37 @@ export default function Step2Route(_: Step2RouteProps) {
     for (const e of entries) map.set(e.id, effectiveEntryState(e, cuts))
     return map
   }, [entries, cuts])
-  const allCount      = entries.length
-  const readyCount    = entries.filter((e) => {
-    const s = effectiveStates.get(e.id)
-    return s !== undefined && !s.effectivelyDeleted
-  }).length
-  const deletedCount  = entries.filter((e) => {
-    const s = effectiveStates.get(e.id)
-    return s !== undefined && s.effectivelyDeleted
-  }).length
-  const editedCount   = entries.filter((e) => {
-    const s = effectiveStates.get(e.id)
-    return s !== undefined && s.wasEdited
-  }).length
-  // REQ-121 — split the legacy single "warnings" count into errors and
-  // warnings.  The "Issues" tab (was: Warnings) shows the union; the
-  // continue-to-Step-3 button gates only on errors.  Both counts
-  // ignore `effectivelyDeleted` rows because:
-  //   - the source `warningsMap` already skips manually-deleted rows
-  //     (= `entry.isDeleted` is filtered out at construction time)
-  //   - trim-deleted rows (`status === 'trimDeleted'`) never reach the
-  //     SRT / burnin pipeline either, so flagging them as "blocking
-  //     export" would be misleading
-  const errorCount    = entries.filter((e) => {
-    const s = effectiveStates.get(e.id)
-    if (s === undefined || s.effectivelyDeleted) return false
-    const w = warningsMap.get(e.id)
-    return w !== undefined && hasAnyError(w)
-  }).length
-  const warningCount  = entries.filter((e) => {
-    const s = effectiveStates.get(e.id)
-    if (s === undefined || s.effectivelyDeleted) return false
-    const w = warningsMap.get(e.id)
-    return w !== undefined && (hasAnyError(w) || hasAnyWarning(w))
-  }).length
+  const allCount = entries.length
+  // REQ-0465 §3 — the five tab counts used to be five separate
+  // `entries.filter().length` walks that re-ran on EVERY render (5 × O(N),
+  // and the timeline recomputes the same shapes too).  Fold them into ONE
+  // memoised pass over `entries`, recomputed only when the inputs change.
+  // The per-count predicates are unchanged, so the badges read identically.
+  //   - errors/warnings (REQ-121): the "問題あり" tab shows the union; the
+  //     continue-to-Step-3 button gates only on errors.  Both ignore
+  //     `effectivelyDeleted` rows (warningsMap already skips manual deletes;
+  //     trim-deleted rows never reach the SRT / burn pipeline).
+  const { readyCount, deletedCount, editedCount, errorCount, warningCount } = useMemo(() => {
+    let ready = 0, deleted = 0, edited = 0, error = 0, warning = 0
+    for (const e of entries) {
+      const s = effectiveStates.get(e.id)
+      if (s === undefined) continue
+      // Each predicate is a verbatim transcription of the five original
+      // filters — note 編集済み counts wasEdited rows REGARDLESS of deletion,
+      // while error/warning (like the originals) skip effectivelyDeleted rows.
+      if (s.effectivelyDeleted) deleted++
+      else ready++
+      if (s.wasEdited) edited++
+      if (!s.effectivelyDeleted) {
+        const w = warningsMap.get(e.id)
+        if (w !== undefined) {
+          if (hasAnyError(w)) error++
+          if (hasAnyError(w) || hasAnyWarning(w)) warning++
+        }
+      }
+    }
+    return { readyCount: ready, deletedCount: deleted, editedCount: edited, errorCount: error, warningCount: warning }
+  }, [entries, effectiveStates, warningsMap])
 
   // REQ-103 tab order + REQ-121 rename: すべて・出力対象・削除・編集済み・
   // 問題あり.  The two destination tabs come first (left-to-right "where
