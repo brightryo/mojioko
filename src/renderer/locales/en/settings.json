@@ -21,6 +21,7 @@
     "devExportToast": "Exported (dev build — works only in this PC's dev environment)",
     "devNote": "This bundle was exported from a development build; it only works in this PC's dev environment.",
     "commandMissing": "Warning: the executable was not found; the bundle may not launch.",
+    "proxyMissing": "Warning: the MCP proxy file was not found in this build; the bundle will not launch. Reinstall the app and export again.",
     "copyToast": "Copied to clipboard",
     "actionError": "Action failed",
     "advancedTitle": "Advanced (manual setup)",

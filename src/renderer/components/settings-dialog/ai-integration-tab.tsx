@@ -49,6 +49,10 @@ export function AiIntegrationTab() {
       const result = await window.electronAPI.exportMcpBundle(savePath)
       if (!result.commandExists) {
         toast.warning(t('ai.commandMissing'))
+      } else if (result.isPackaged && !result.proxyExists) {
+        // REQ-0463 — packaged build whose asarUnpack regressed: the proxy the
+        // launch runs never shipped, so the bundle would silently do nothing.
+        toast.warning(t('ai.proxyMissing'))
       } else if (!result.isPackaged) {
         toast.warning(t('ai.devExportToast'))
       } else {

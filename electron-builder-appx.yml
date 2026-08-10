@@ -20,6 +20,14 @@ files:
   - out/**/*
   - "!out/**/*.map"
 
+# REQ-0463 — unpack the MCP clean-stdout proxy + its shared chunk so it can be
+# run as a plain Node entry point (ELECTRON_RUN_AS_NODE) from app.asar.unpacked.
+# Kept in sync with electron-builder.yml (NSIS) and -appx-store.yml; see the
+# fuller rationale there.  Pinned by tests/unit/mcp-proxy-unpack-req-0463.test.ts.
+asarUnpack:
+  - "out/main/mcp-proxy.js"
+  - "out/main/chunks/**"
+
 extraResources:
   - from: resources/bin/ffmpeg
     to: bin/ffmpeg

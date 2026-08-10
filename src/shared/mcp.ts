@@ -14,10 +14,17 @@
  * (manifest version + an env var), and the running server compares the value it
  * was launched with against this constant to detect a stale bundle (§2).
  *
- * History: revision 1 = the REQ-0455 clean-stdout proxy launch
- * (`execPath [<mcp-proxy.js>, ...childArgs]`, env `ELECTRON_RUN_AS_NODE=1`).
+ * History:
+ *   1 = the REQ-0455 clean-stdout proxy launch
+ *       (`execPath [<mcp-proxy.js>, ...childArgs]`, env `ELECTRON_RUN_AS_NODE=1`).
+ *   2 = REQ-0463 — the packaged proxy path moved from inside `app.asar` to
+ *       `app.asar.unpacked` (a script in the archive cannot be run as a plain
+ *       Node entry point).  `args[0]` differs for every packaged bundle, so a
+ *       bundle exported by a rev-1 build launches from a path that no longer
+ *       ships → it must be re-exported.  Bumping this makes the running server
+ *       flag such a bundle stale (§2) and surface the re-export remedy.
  */
-export const LAUNCH_SPEC_REVISION = 1
+export const LAUNCH_SPEC_REVISION = 2
 
 /** Env var carrying the launch-spec revision the bundle was written with (§2). */
 export const LAUNCH_SPEC_REV_ENV = 'MOJIOKO_LAUNCH_SPEC_REV'
@@ -75,6 +82,14 @@ export interface McpExportResult {
   isPackaged: boolean
   /** Whether `command` resolves to an existing file (safety check, REQ-0452 §3). */
   commandExists: boolean
+  /**
+   * REQ-0463 — whether the proxy script the launch actually runs (`args[0]`,
+   * the `asarUnpack`ed `mcp-proxy.js`) exists on disk.  A packaged build whose
+   * `asarUnpack` config regressed would export a bundle whose proxy path points
+   * at a file that never shipped; this flags that at export time rather than as
+   * a silent "MCP does nothing" in the client.
+   */
+  proxyExists: boolean
   /** REQ-0458 — the app version + launch-spec revision baked into the bundle. */
   appVersion: string
   launchSpecRevision: number

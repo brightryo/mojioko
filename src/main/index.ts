@@ -204,6 +204,9 @@ function registerIpcHandlers(): void {
     if (typeof targetPath !== 'string' || !targetPath) throw new Error('invalid target path')
     const spec = getMcpLaunchSpec()
     const commandExists = existsSync(spec.command)
+    // REQ-0463 — the proxy script (args[0], asarUnpack'ed) is what actually runs;
+    // verify it exists so a regressed unpack config is caught at export time.
+    const proxyExists = typeof spec.args[0] === 'string' && existsSync(spec.args[0])
     writeMcpbBundle(targetPath, spec.command, spec.args, spec.env, [...toolList(), ...JOB_TOOLS])
     // REQ-0458 §3 — remember what we exported so the tab can flag staleness.
     const record = {
@@ -213,7 +216,7 @@ function registerIpcHandlers(): void {
       path: targetPath,
     }
     await mutateSettings((s) => { s.lastMcpExport = record; return { save: s, value: null } })
-    return { path: targetPath, isPackaged: spec.isPackaged, commandExists, appVersion: spec.appVersion, launchSpecRevision: spec.launchSpecRevision }
+    return { path: targetPath, isPackaged: spec.isPackaged, commandExists, proxyExists, appVersion: spec.appVersion, launchSpecRevision: spec.launchSpecRevision }
   })
 
   ipcMain.handle(Channels.appGetBuildInfo, async (): Promise<BuildInfo> => {

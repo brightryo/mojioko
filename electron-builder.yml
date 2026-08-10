@@ -12,6 +12,19 @@ files:
   - out/**/*
   - "!out/**/*.map"
 
+# REQ-0463 — the MCP clean-stdout proxy (out/main/mcp-proxy.js) is launched via
+# ELECTRON_RUN_AS_NODE=1 as a PLAIN Node entry point.  A script inside app.asar
+# cannot be executed that way (the archive is not a real directory the runtime
+# can hand to Node), so unpack the proxy AND the shared chunk it require()s
+# (out/main/chunks/, currently the pure-Node mcp-log logger).  Unpacked files
+# land at app.asar.unpacked/<same path>; getMcpLaunchSpec() (via
+# resolveMcpProxyPath) points the packaged launch there.  MUST stay in sync with
+# electron-builder-appx.yml / -appx-store.yml and MCP_PROXY_REL_PATH (pinned by
+# tests/unit/mcp-proxy-unpack-req-0463.test.ts).
+asarUnpack:
+  - "out/main/mcp-proxy.js"
+  - "out/main/chunks/**"
+
 extraResources:
   # ffmpeg/ffprobe are shipped as the LGPL **shared** build, so the surrounding
   # av*.dll / sw*.dll runtime libraries must travel with the .exe — otherwise

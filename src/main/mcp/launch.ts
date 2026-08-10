@@ -9,17 +9,23 @@
  * Electron MCP server and strips its leading `\r\n`. So the launch spec now
  * targets `out/main/mcp-proxy.js`:
  *
- *   packaged: execPath  [<app.asar>/out/main/mcp-proxy.js, "mcp"]
+ *   packaged: execPath  [<app.asar.unpacked>/out/main/mcp-proxy.js, "mcp"]
  *   dev:      execPath  [<repo>/out/main/mcp-proxy.js, <appDir>, "mcp"]
  *   env:      { ELECTRON_RUN_AS_NODE: "1" }
  *
  * The proxy's `process.argv.slice(2)` = the childArgs (`["mcp"]` packaged /
  * `[<appDir>, "mcp"]` dev), which it hands to the real Electron MCP child
  * (with ELECTRON_RUN_AS_NODE removed).
+ *
+ * REQ-0463: the packaged proxy path resolves to `app.asar.unpacked` (via
+ * `resolveMcpProxyPath`), because a script inside `app.asar` cannot be run as a
+ * plain Node entry point — the packaging configs `asarUnpack` it.  Note the
+ * packaged CHILD still loads from `app.asar` (`["mcp"]` → Electron auto-loads
+ * the archived main): only the proxy, which runs as pure Node, must be unpacked.
  */
 import { app } from 'electron'
-import { join } from 'node:path'
 import { APP_VERSION } from '../../shared/app-info'
+import { resolveMcpProxyPath } from './proxy-path'
 import {
   LAUNCH_SPEC_REVISION,
   LAUNCH_SPEC_REV_ENV,
@@ -31,7 +37,7 @@ import {
 export function getMcpLaunchSpec(): McpLaunchSpec {
   const isPackaged = app.isPackaged
   const appDir = app.getAppPath()
-  const proxyPath = join(appDir, 'out', 'main', 'mcp-proxy.js')
+  const proxyPath = resolveMcpProxyPath(appDir, isPackaged)
   const childArgs = isPackaged ? ['mcp'] : [appDir, 'mcp']
   return {
     command: process.execPath,
