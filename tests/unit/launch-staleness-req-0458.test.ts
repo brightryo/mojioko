@@ -8,8 +8,14 @@ import {
 
 /**
  * REQ-0458 §2 — the stale-bundle verdict from the launch-spec-revision env value.
+ *
+ * REQ-0469 — this is also the guarantee that removing the non-schema top-level
+ * `mojioko` manifest key did NOT break stale detection: the verdict is derived
+ * ENTIRELY from the `MOJIOKO_LAUNCH_SPEC_REV` env value (the argument here) — the
+ * removed manifest key was never read at runtime.  The revision also still rides
+ * in the schema-legal `version` field (`mcpManifestVersion`, last case below).
  */
-describe('REQ-0458 — evaluateLaunchStaleness', () => {
+describe('REQ-0458 / REQ-0469 — evaluateLaunchStaleness (env-driven)', () => {
   it('current revision ⇒ not stale, no remedy', () => {
     const r = evaluateLaunchStaleness(String(LAUNCH_SPEC_REVISION))
     expect(r.stale).toBe(false)

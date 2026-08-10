@@ -21,7 +21,7 @@
 import { writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { APP_VERSION } from '../../shared/app-info'
-import { LAUNCH_SPEC_REVISION, mcpManifestVersion } from '../../shared/mcp'
+import { mcpManifestVersion } from '../../shared/mcp'
 
 /** Minimal capability descriptor for the manifest `tools` array. */
 export interface McpbToolInfo {
@@ -137,10 +137,15 @@ export function buildMcpbManifest(
     description:
       'ローカル動画字幕ツール MOJIOKO を AI から操作します（文字起こし・翻訳・字幕焼き込み）。処理はすべてこの PC 内で完結します。',
     author: { name: 'brightryo' },
-    // REQ-0458 §1 — machine-readable app version + launch-spec revision (the
-    // `env.MOJIOKO_LAUNCH_SPEC_REV` is the authoritative signal the server reads;
-    // this mirrors it for humans/tools inspecting the manifest).
-    mojioko: { appVersion: APP_VERSION, launchSpecRevision: LAUNCH_SPEC_REVISION },
+    // REQ-0469 — the REQ-0458 top-level `mojioko` key (appVersion /
+    // launchSpecRevision) was REMOVED: it is NOT in the MCPB v0.3 manifest schema,
+    // and Claude Desktop rejects the whole bundle with "Invalid manifest:
+    // Unrecognized key(s) in object: 'mojioko'".  The launch-spec revision still
+    // rides in TWO schema-legal places — the `version` field (`<app>+lsr.<rev>`,
+    // above) and `server.mcp_config.env.MOJIOKO_LAUNCH_SPEC_REV` (below) — and the
+    // running server reads ONLY the env var (`evaluateLaunchStaleness`), so stale
+    // detection is unaffected.  A schema-validation gate now blocks any re-add
+    // (tests/unit/mcpb-schema-validate-req-0469.test.ts).
     server: {
       type: 'binary',
       entry_point: basename(command),

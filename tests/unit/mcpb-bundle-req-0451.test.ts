@@ -112,11 +112,15 @@ describe('REQ-0451/0452 — .mcpb bundle', () => {
     expect(m.server.mcp_config.args).toEqual([PROXY, 'mcp'])
     expect(m.server.mcp_config.env).toEqual({ ELECTRON_RUN_AS_NODE: '1' })
     expect(m.tools.map((t) => t.name)).toEqual(['status', 'transcribe'])
-    // REQ-0458 §1 — version encodes app + launch-spec revision; structured field mirrors it.
-    const raw = m as unknown as { version: string; mojioko: { appVersion: string; launchSpecRevision: number } }
+    // REQ-0458 §1 / REQ-0469 — the launch-spec revision rides ONLY in the
+    // schema-legal `version` field (`<app>+lsr.<rev>`).  The non-schema top-level
+    // `mojioko` key was REMOVED (Claude Desktop rejected the whole bundle with
+    // "Unrecognized key(s) in object: 'mojioko'"); the env var carries the value
+    // the server actually reads.
+    const raw = m as unknown as { version: string; mojioko?: unknown }
     expect(raw.version).toBe(mcpManifestVersion(APP_VERSION))
     expect(raw.version).toBe(`${APP_VERSION}+lsr.${LAUNCH_SPEC_REVISION}`)
-    expect(raw.mojioko).toEqual({ appVersion: APP_VERSION, launchSpecRevision: LAUNCH_SPEC_REVISION })
+    expect(raw.mojioko, 'the non-schema `mojioko` key must not be present').toBeUndefined()
   })
 
   // REQ-0452 §3 / REQ-0455 — dev bundle must carry the app-dir arg (after the
