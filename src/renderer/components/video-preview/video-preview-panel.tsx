@@ -564,22 +564,13 @@ export function VideoPreviewPanel() {
             // Paused case: honour the current playhead position too
             // so a scrub reveals the correct karaoke state instantly.
             const shouldHighlight = t >= wordStart
-            // REQ-0474 §1 (Option A, owner-confirmed) — keyword emphasis COLOUR
-            // WINS over karaoke on the emphasised word: it stays the emphasis
-            // colour at ALL times (spoken or not), so emphasis is always visible
-            // (list / paused preview / playback / burn-in all agree).  Only
-            // non-emphasised words sweep.  Supersedes REQ-0306 §3's "base until
-            // spoken" — see the ass-generator's matching `\c`+`\2c` emit.
+            // REQ-0306 §3 (Option A) — an emphasised word (carries
+            // `data-karaoke-emph-color`) lights up in the emphasis colour when
+            // spoken instead of the karaoke highlight; unspoken it stays base
+            // like everyone else.  Mirrors the ass-generator `\c<emph>` overlay
+            // on the emphasised word's `\k` block.
             const emphColor = span.getAttribute('data-karaoke-emph-color')
-            if (emphColor) {
-              // Clear any sweep gradient a previous frame set, then paint solid.
-              if (span.style.backgroundImage && span.style.backgroundImage !== 'none') {
-                span.style.backgroundImage = 'none'
-              }
-              if (span.style.color !== emphColor) span.style.color = emphColor
-              continue
-            }
-            const spokenColor = highlightColor
+            const spokenColor = emphColor ?? highlightColor
             // REQ-0311 §4 — experimental sweep (`\kf`).  Instead of flipping
             // the colour, paint a hard-stop gradient whose stop advances with
             // the word's own speech duration — the same duration the emitter

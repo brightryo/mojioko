@@ -177,11 +177,8 @@ describe('REQ-0338 §1 — the switch path still lights a whole word at one inst
     const body = dialogueBodies(generateAss([entry], video, burnin, undefined, undefined, true, 'switch'))[0]
     // "c" | "har" | "lie" — the first two runs must carry `\k0` so all three
     // become spoken together; the word's whole duration rides on the last.
-    // REQ-0474 §1 (Option A) — the emphasised run carries `\c<emph>\2c<emph>`
-    // (emphasis colour whether spoken or not); the restore run carries
-    // `\c<highlight>\2c<base>`.
     expect(body).toContain('{\\k0} c')
-    expect(body).toMatch(/\{\\k0\\fs\d+\\c&H[0-9A-F]{8}&\\2c&H[0-9A-F]{8}&\}har/)
-    expect(body).toMatch(/\{\\k200\\fs\d+\\c&H[0-9A-F]{8}&\\2c&H[0-9A-F]{8}&\}lie/)
+    expect(body).toMatch(/\{\\k0\\fs\d+\\c&H[0-9A-F]{8}&\}har/)
+    expect(body).toMatch(/\{\\k200\\fs\d+\\c&H[0-9A-F]{8}&\}lie/)
   })
 })
