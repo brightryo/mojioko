@@ -55,19 +55,23 @@ const BADGE_AREA_PX = 120
 const BOTTOM_TIER_GAP_PX = 12
 /** Checkbox column width (px) — mirrors TABLE_GRID_COLS col 1. */
 const CHECKBOX_COL_PX = 34
-/** Slack subtracted for the content column's own horizontal padding. */
-const CONTENT_PAD_PX = 16
 /**
- * REQ-0476 §3 — upper bound on the text-preview column.  On a wide window the
- * preview does NOT fill the whole remaining width; it caps here and the freed
- * width becomes trailing row padding.  Paired with the shrink FLOOR
- * (`MIN_PREVIEW_FONT_CSS_PX` in row-style-preview): at 460px a single `\N`-line
- * of ~28 full-width chars still renders at the 16px ceiling, ~28–51 chars shrink
- * 16→9px, and beyond ~51 it gets an ellipsis (about double those counts for
- * half-width/Latin).  Narrower would shrink common cues harder; wider would
- * leave long lines too small — 460 balances the two.
+ * REQ-0476 §3 / REQ-0477 §1 — upper bound on the text-preview column, widened
+ * from 460 to 545 (owner "赤枠" target).  Paired with the shrink FLOOR
+ * (`MIN_PREVIEW_FONT_CSS_PX` in row-style-preview): at 545px a single `\N`-line
+ * of ~33 full-width chars renders at the 16px ceiling (was ~28 at 460), ~33–60
+ * chars shrink 16→8px, beyond ~60 an ellipsis (≈2× for half-width/Latin).  The
+ * column is RIGHT-aligned (REQ-0477): on a wide window it caps here and the free
+ * space opens as a GAP after the badges; the right edge always keeps
+ * `TEXT_RIGHT_MARGIN_PX`.
  */
-const MAX_TEXT_COL_PX = 460
+const MAX_TEXT_COL_PX = 545
+/**
+ * REQ-0477 §1 — fixed margin kept between the text column's right edge and the
+ * row's right edge, so the preview reads as right-aligned rather than butted
+ * against the edge.  Tune with `MAX_TEXT_COL_PX`.
+ */
+const TEXT_RIGHT_MARGIN_PX = 50
 
 /** Fallback when warningsMap is missing an entry (deleted rows; race with stale memo). */
 const NO_WARNINGS: EntryWarnings = {
@@ -429,9 +433,9 @@ function SubtitleRow({
 
       {/* Content — two tiers (REQ-0473 §1).  Tight vertical padding to keep the
           density loss from the second tier minimal (§3). */}
-      <div className="flex flex-col min-w-0 py-0.5 pr-2">
+      <div className="flex flex-col min-w-0 py-0.5">
         {/* ── Top tier: # + full time (left) | font (centre) | actions (right) ── */}
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 pr-2">
           <div className="flex items-center gap-1.5 min-w-0 flex-shrink-0">
             <span className="text-micro text-fg-muted font-mono tabular-nums">{displayIndex}</span>
             <button
@@ -496,8 +500,9 @@ function SubtitleRow({
           </div>
         </div>
 
-        {/* ── Bottom tier: state badges (left, wide) | text preview (right) ── */}
-        <div className="flex items-start gap-3 min-w-0 mt-0.5">
+        {/* ── Bottom tier: state badges (left) | … gap … | text preview (right,
+            REQ-0477 §1) ── */}
+        <div className="flex items-start min-w-0 mt-0.5">
           {/* State — compact icon-only indicators (REQ-0474 §2).  Fixed-width
               so the preview lines up across rows; icons pack the common cases
               onto one line where the old text badges wrapped to three. */}
@@ -537,13 +542,13 @@ function SubtitleRow({
             )}
           </div>
 
-          {/* Text preview — click to select + edit (unless frozen).  Narrower
-              than the REQ-0471 full-width column (owner spec §1). */}
+          {/* Text preview — click to select + edit (unless frozen).
+              REQ-0477 §1 — RIGHT-aligned: `ml-auto` pushes it to the right, and
+              `marginRight` keeps a fixed margin from the row's right edge.  The
+              fixed width matches the `containerWidthPx` the shrink-to-fit maths
+              uses (REQ-0476). */}
           <div
-            // REQ-0476 §3 — FIXED width (capped) rather than flex-1, so the
-            // width matches the `containerWidthPx` the shrink-to-fit maths uses
-            // and the freed space on wide windows becomes trailing row padding.
-            style={{ width: `${textColWidthPx}px` }}
+            style={{ width: `${textColWidthPx}px`, marginLeft: 'auto', marginRight: `${TEXT_RIGHT_MARGIN_PX}px` }}
             className={cn(
               'flex items-center flex-shrink-0 min-w-0 min-h-[22px] px-1 rounded transition-colors duration-150',
               !isFrozen && 'cursor-text',
@@ -646,9 +651,16 @@ export function SubtitleTable({
     const el = scrollContainerRef.current
     if (!el) return
     const recompute = () => {
+      // REQ-0477 §1 — reserve the right margin and a min badge→text gap; cap at
+      // MAX_TEXT_COL_PX.  On a narrow panel the column fills the remaining space
+      // (right edge lands at the margin); on a wide panel it caps and the extra
+      // opens as a gap after the badges (the text stays right-aligned).
       const avail =
-        el.clientWidth - CHECKBOX_COL_PX - BADGE_AREA_PX - BOTTOM_TIER_GAP_PX - CONTENT_PAD_PX
-      // REQ-0476 §3 — cap the column; freed width on wide windows is trailing pad.
+        el.clientWidth -
+        CHECKBOX_COL_PX -
+        BADGE_AREA_PX -
+        BOTTOM_TIER_GAP_PX -
+        TEXT_RIGHT_MARGIN_PX
       setTextColWidthPx(Math.max(80, Math.min(MAX_TEXT_COL_PX, avail)))
     }
     const obs = new ResizeObserver(recompute)
