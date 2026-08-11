@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FileText, Clock, ArrowRight, Copy, Trash2, RotateCcw } from 'lucide-react'
+import {
+  FileText, Clock, ArrowRight, Copy, Trash2, RotateCcw,
+  Pencil, Scissors, CircleAlert, Layers, Hourglass, Ban, Ruler, MoveVertical, WrapText,
+  type LucideIcon,
+} from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '@/lib/utils'
@@ -8,7 +12,6 @@ import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
-import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { RowStylePreview } from '@/components/subtitle-table/row-style-preview'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
@@ -41,11 +44,13 @@ import { getFontMeta, isFontId } from '../../../shared/fonts'
 const TABLE_GRID_COLS = 'grid-cols-[34px_1fr]'
 
 /**
- * REQ-0473 §1 — fixed width of the bottom-tier state-badge area (left of the
- * text preview).  Generous so multiple badges sit without shoving the preview;
- * the preview takes the remaining width.
+ * REQ-0473 §1 / REQ-0474 §2 — fixed width of the bottom-tier state area (left
+ * of the text preview).  Narrowed from 150 to 120 once the badges became
+ * ICON-ONLY (REQ-0474 §2): ~16px per icon packs the common 1-3 states on one
+ * row and even the worst case (all states) into two, while the preview stays
+ * aligned across rows (fixed width) and gains the freed space.
  */
-const BADGE_AREA_PX = 150
+const BADGE_AREA_PX = 120
 /** Horizontal gap (px) between the badge area and the text preview. */
 const BOTTOM_TIER_GAP_PX = 12
 /** Checkbox column width (px) — mirrors TABLE_GRID_COLS col 1. */
@@ -69,6 +74,39 @@ function getRowState(entry: SubtitleEntry, isOverflow: boolean): RowState {
   if (isOverflow) return 'overflow'
   if (entry.isEdited) return 'edited'
   return 'normal'
+}
+
+/**
+ * REQ-0474 §2 — a compact state indicator: a distinct-SHAPE lucide icon plus a
+ * native `title` tooltip carrying the full label.  Meaning is carried by the
+ * icon shape (+ tooltip), never by colour alone — colour only grades severity
+ * (danger / warning / neutral).  Icon-only packs the state area far tighter
+ * than the old text badges, which wrapped raggedly at a fixed 150px.
+ */
+function StatusIcon({
+  Icon,
+  label,
+  severity,
+}: {
+  Icon: LucideIcon
+  label: string
+  severity: 'danger' | 'warning' | 'neutral'
+}) {
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      role="img"
+      className={cn(
+        'flex h-4 w-4 items-center justify-center',
+        severity === 'danger' && 'text-destructive',
+        severity === 'warning' && 'text-warning-soft',
+        severity === 'neutral' && 'text-fg-secondary'
+      )}
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </span>
+  )
 }
 
 interface CellEditorProps {
@@ -449,41 +487,42 @@ function SubtitleRow({
 
         {/* ── Bottom tier: state badges (left, wide) | text preview (right) ── */}
         <div className="flex items-start gap-3 min-w-0 mt-0.5">
-          {/* Badges — fixed-width area so the preview lines up across rows and
-              the state side is generous (owner spec §1). */}
+          {/* State — compact icon-only indicators (REQ-0474 §2).  Fixed-width
+              so the preview lines up across rows; icons pack the common cases
+              onto one line where the old text badges wrapped to three. */}
           <div
             className="flex flex-wrap items-center gap-1 flex-shrink-0 self-center"
             style={{ width: `${BADGE_AREA_PX}px` }}
           >
             {clipStatus === 'manuallyDeleted' && (
-              <Badge variant="danger">{t('state.deleted')}</Badge>
+              <StatusIcon Icon={Trash2} label={t('state.deleted')} severity="danger" />
             )}
             {clipStatus === 'trimDeleted' && (
-              <Badge variant="danger">{t('state.trimDeleted')}</Badge>
+              <StatusIcon Icon={Scissors} label={t('state.trimDeleted')} severity="danger" />
             )}
             {(entry.isEdited || clipStatus === 'edited') && (
-              <Badge variant="default">{t('state.edited')}</Badge>
+              <StatusIcon Icon={Pencil} label={t('state.edited')} severity="neutral" />
             )}
             {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.timeInvalid && (
-              <Badge variant="danger">{t('badge.timeInvalid')}</Badge>
+              <StatusIcon Icon={CircleAlert} label={t('badge.timeInvalid')} severity="danger" />
             )}
             {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overlap && (
-              <Badge variant="warning">{t('badge.overlap')}</Badge>
+              <StatusIcon Icon={Layers} label={t('badge.overlap')} severity="warning" />
             )}
             {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overDuration && (
-              <Badge variant="danger">{t('badge.overDuration')}</Badge>
+              <StatusIcon Icon={Hourglass} label={t('badge.overDuration')} severity="danger" />
             )}
             {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overflow && (
-              <Badge variant="warning">{t('badge.overflow')}</Badge>
+              <StatusIcon Icon={WrapText} label={t('badge.overflow')} severity="warning" />
             )}
             {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.verticalOverflow && (
-              <Badge variant="warning">{t('badge.verticalOverflow')}</Badge>
+              <StatusIcon Icon={MoveVertical} label={t('badge.verticalOverflow')} severity="warning" />
             )}
             {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.emptyText && (
-              <Badge variant="warning">{t('badge.emptyText')}</Badge>
+              <StatusIcon Icon={Ban} label={t('badge.emptyText')} severity="warning" />
             )}
             {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.invalidSize && (
-              <Badge variant="danger">{t('badge.invalidSize')}</Badge>
+              <StatusIcon Icon={Ruler} label={t('badge.invalidSize')} severity="danger" />
             )}
           </div>
 
