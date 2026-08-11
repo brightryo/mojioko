@@ -229,6 +229,9 @@ export function RowStylePreview({ entry, containerWidthPx }: RowStylePreviewProp
           entry={displayEntry}
           videoWidthPx={overlayVideoWidthPx}
           containerWidthPx={containerWidthPx}
+          // REQ-0478 §1 — left-anchored fit-content block: horizontal alignment
+          // acts only within the cue's own lines, block stays at the area's left.
+          fitBlockLeft
         />
       )}
     </div>

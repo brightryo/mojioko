@@ -157,6 +157,18 @@ export interface SubtitleOverlayProps {
    */
   initialOpacity?: number
   initialAnimTransform?: string
+  /**
+   * REQ-0478 §1 — LIST-preview layout only.  When true (and the cue is not
+   * pinned) the outer positioned span is NOT stretched `left:margin/right:margin`
+   * to fill the container; instead it is anchored flush-left (`left:0`, no
+   * `right`) so it shrink-wraps to the text's own width.  `text-align` then
+   * aligns the cue's LINES relative to each other (a centred multi-line cue's
+   * lines centre against its own longest line) rather than centring the whole
+   * block in the container.  The video preview / burn-in leave this false so the
+   * caption still anchors against the real video frame.  Never affects the ASS
+   * output or the canvas ring (which measures the live DOM either way).
+   */
+  fitBlockLeft?: boolean
 }
 
 /**
@@ -254,6 +266,7 @@ export function SubtitleOverlay({
   outerSpanRef,
   initialOpacity,
   initialAnimTransform,
+  fitBlockLeft,
 }: SubtitleOverlayProps) {
   bumpRenderCount('SubtitleOverlay')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
@@ -418,7 +431,13 @@ export function SubtitleOverlay({
       vStyle = { top: `${marginVPx + stackOffset - leadingCorrectionPx}px` }
       transform = undefined
     }
-    hStyle = { left: `${marginHPx}px`, right: `${marginHPx}px`, textAlign }
+    // REQ-0478 §1 — LIST preview: anchor flush-left and shrink-wrap (no `right`)
+    // so `text-align` aligns the cue's own lines against each other and the
+    // whole block sits at the container's left edge, constant across rows.  The
+    // video preview / burn-in keep the stretched `left/right` frame anchoring.
+    hStyle = fitBlockLeft
+      ? { left: '0px', textAlign }
+      : { left: `${marginHPx}px`, right: `${marginHPx}px`, textAlign }
   }
 
   // CSS background approximation for the subtitle preview — entry's own

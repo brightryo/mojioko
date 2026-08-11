@@ -50,28 +50,32 @@ const TABLE_GRID_COLS = 'grid-cols-[34px_1fr]'
  * row and even the worst case (all states) into two, while the preview stays
  * aligned across rows (fixed width) and gains the freed space.
  */
+/**
+ * REQ-0474 §2 / REQ-0478 §2 — fixed width of the bottom-tier state area.  Moved
+ * to the RIGHT of the row (roughly under the top-tier duplicate/delete buttons)
+ * in REQ-0478.  ICON-ONLY (REQ-0474 §2): ~16px per icon packs the common 1-3
+ * states on one row.  ALWAYS reserved (even when a row has no badges) so the
+ * text area's right edge is constant across rows.  Owner "黄枠" measured ~100px;
+ * kept at 120 as a starting point — tune here if the difference reads.
+ */
 const BADGE_AREA_PX = 120
-/** Horizontal gap (px) between the badge area and the text preview. */
+/** Horizontal gap (px) between the text area and the (now right-hand) badges. */
 const BOTTOM_TIER_GAP_PX = 12
 /** Checkbox column width (px) — mirrors TABLE_GRID_COLS col 1. */
 const CHECKBOX_COL_PX = 34
 /**
- * REQ-0476 §3 / REQ-0477 §1 — upper bound on the text-preview column, widened
- * from 460 to 545 (owner "赤枠" target).  Paired with the shrink FLOOR
- * (`MIN_PREVIEW_FONT_CSS_PX` in row-style-preview): at 545px a single `\N`-line
- * of ~33 full-width chars renders at the 16px ceiling (was ~28 at 460), ~33–60
- * chars shrink 16→8px, beyond ~60 an ellipsis (≈2× for half-width/Latin).  The
- * column is RIGHT-aligned (REQ-0477): on a wide window it caps here and the free
- * space opens as a GAP after the badges; the right edge always keeps
- * `TEXT_RIGHT_MARGIN_PX`.
+ * Content column's right padding (px) — the `pr-2` on the content div.  The
+ * top-tier actions AND the bottom-tier badges both sit this far from the row's
+ * right edge, so the badges land under the actions (REQ-0478 §2).
  */
-const MAX_TEXT_COL_PX = 545
+const CONTENT_PR_PX = 8
 /**
- * REQ-0477 §1 — fixed margin kept between the text column's right edge and the
- * row's right edge, so the preview reads as right-aligned rather than butted
- * against the edge.  Tune with `MAX_TEXT_COL_PX`.
+ * REQ-0478 §1 — OPTIONAL upper bound on the text area width.  Default `null` =
+ * NO cap: the text area is the whole remaining bottom-tier width (checkbox →
+ * badges).  Set a number to re-introduce a cap.  (Superseded REQ-0477's 545px
+ * right-aligned cap; the block is now left-anchored and fills the row.)
  */
-const TEXT_RIGHT_MARGIN_PX = 50
+const TEXT_COL_MAX_PX: number | null = null
 
 /** Fallback when warningsMap is missing an entry (deleted rows; race with stale memo). */
 const NO_WARNINGS: EntryWarnings = {
@@ -433,9 +437,9 @@ function SubtitleRow({
 
       {/* Content — two tiers (REQ-0473 §1).  Tight vertical padding to keep the
           density loss from the second tier minimal (§3). */}
-      <div className="flex flex-col min-w-0 py-0.5">
+      <div className="flex flex-col min-w-0 py-0.5 pr-2">
         {/* ── Top tier: # + full time (left) | font (centre) | actions (right) ── */}
-        <div className="flex items-center gap-2 min-w-0 pr-2">
+        <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0 flex-shrink-0">
             <span className="text-micro text-fg-muted font-mono tabular-nums">{displayIndex}</span>
             <button
@@ -500,14 +504,57 @@ function SubtitleRow({
           </div>
         </div>
 
-        {/* ── Bottom tier: state badges (left) | … gap … | text preview (right,
-            REQ-0477 §1) ── */}
-        <div className="flex items-start min-w-0 mt-0.5">
-          {/* State — compact icon-only indicators (REQ-0474 §2).  Fixed-width
-              so the preview lines up across rows; icons pack the common cases
-              onto one line where the old text badges wrapped to three. */}
+        {/* ── Bottom tier: text preview (left, full width) | … gap … | state
+            badges (right, REQ-0478) ── */}
+        <div className="flex items-start min-w-0 mt-0.5 gap-3">
+          {/* Text preview — LEFT-anchored, fills the remaining width (REQ-0478
+              §1).  Fixed width = `textColWidthPx` so it matches the
+              `containerWidthPx` the shrink-to-fit maths uses (REQ-0476); no
+              horizontal padding so the fit-content block's left edge is constant
+              across rows.  Click to select + edit (unless frozen). */}
           <div
-            className="flex flex-wrap items-center gap-1 flex-shrink-0 self-center"
+            style={{ width: `${textColWidthPx}px` }}
+            className={cn(
+              'flex items-center flex-shrink-0 min-w-0 min-h-[22px] rounded transition-colors duration-150',
+              !isFrozen && 'cursor-text',
+              !editingText && isUserSelected && 'bg-surface-2/10',
+              !editingText && !isFrozen && 'group-hover:bg-surface-2/20',
+              editingText && 'bg-surface-2/20 ring-1 ring-inset ring-primary/40'
+            )}
+            onClick={(e) => {
+              e.stopPropagation()
+              onSelect(entry.id)
+              useUiStore.getState().setVideoSeekRequest(entry.startSec)
+              if (!isFrozen && !editingText) setEditingText(true)
+            }}
+          >
+            {editingText ? (
+              <CellEditor
+                value={entry.text.replace(/\\N/g, '\n')}
+                onCommit={handleTextCommit}
+                onCancel={handleTextCancel}
+                onPreview={(text) => updateEntryPreview(entry.id, { text: text.replace(/\n/g, '\\N') })}
+                multiline
+              />
+            ) : isFrozen ? (
+              <span className="w-full text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-fg-muted select-text">
+                {entry.text.replace(/\\N/g, '\n')}
+              </span>
+            ) : isAudioOnly ? (
+              <span className="w-full text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 text-fg-primary select-text">
+                {entry.text.replace(/\\N/g, '\n')}
+              </span>
+            ) : (
+              <RowStylePreview entry={entry} containerWidthPx={textColWidthPx} />
+            )}
+          </div>
+
+          {/* State — compact icon-only indicators (REQ-0474 §2), moved to the
+              RIGHT (REQ-0478 §2, under the top-tier actions).  Fixed width,
+              ALWAYS reserved so the text area's right edge is constant even on
+              rows with no badges. */}
+          <div
+            className="flex flex-wrap items-center justify-end gap-1 flex-shrink-0 self-center"
             style={{ width: `${BADGE_AREA_PX}px` }}
           >
             {clipStatus === 'manuallyDeleted' && (
@@ -539,48 +586,6 @@ function SubtitleRow({
             )}
             {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.invalidSize && (
               <StatusIcon Icon={Ruler} label={t('badge.invalidSize')} severity="danger" />
-            )}
-          </div>
-
-          {/* Text preview — click to select + edit (unless frozen).
-              REQ-0477 §1 — RIGHT-aligned: `ml-auto` pushes it to the right, and
-              `marginRight` keeps a fixed margin from the row's right edge.  The
-              fixed width matches the `containerWidthPx` the shrink-to-fit maths
-              uses (REQ-0476). */}
-          <div
-            style={{ width: `${textColWidthPx}px`, marginLeft: 'auto', marginRight: `${TEXT_RIGHT_MARGIN_PX}px` }}
-            className={cn(
-              'flex items-center flex-shrink-0 min-w-0 min-h-[22px] px-1 rounded transition-colors duration-150',
-              !isFrozen && 'cursor-text',
-              !editingText && isUserSelected && 'bg-surface-2/10',
-              !editingText && !isFrozen && 'group-hover:bg-surface-2/20',
-              editingText && 'bg-surface-2/20 ring-1 ring-inset ring-primary/40'
-            )}
-            onClick={(e) => {
-              e.stopPropagation()
-              onSelect(entry.id)
-              useUiStore.getState().setVideoSeekRequest(entry.startSec)
-              if (!isFrozen && !editingText) setEditingText(true)
-            }}
-          >
-            {editingText ? (
-              <CellEditor
-                value={entry.text.replace(/\\N/g, '\n')}
-                onCommit={handleTextCommit}
-                onCancel={handleTextCancel}
-                onPreview={(text) => updateEntryPreview(entry.id, { text: text.replace(/\n/g, '\\N') })}
-                multiline
-              />
-            ) : isFrozen ? (
-              <span className="w-full text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-fg-muted select-text">
-                {entry.text.replace(/\\N/g, '\n')}
-              </span>
-            ) : isAudioOnly ? (
-              <span className="w-full text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 text-fg-primary select-text">
-                {entry.text.replace(/\\N/g, '\n')}
-              </span>
-            ) : (
-              <RowStylePreview entry={entry} containerWidthPx={textColWidthPx} />
             )}
           </div>
         </div>
@@ -651,17 +656,18 @@ export function SubtitleTable({
     const el = scrollContainerRef.current
     if (!el) return
     const recompute = () => {
-      // REQ-0477 §1 — reserve the right margin and a min badge→text gap; cap at
-      // MAX_TEXT_COL_PX.  On a narrow panel the column fills the remaining space
-      // (right edge lands at the margin); on a wide panel it caps and the extra
-      // opens as a gap after the badges (the text stays right-aligned).
+      // REQ-0478 §1 — the text area is the FULL remaining bottom-tier width:
+      // viewport − checkbox − content-right-pad − gap − badges (badges now on
+      // the right).  Left-anchored, no right margin (the badge area IS the right
+      // region).  Optional TEXT_COL_MAX_PX cap; default null = no cap.
       const avail =
         el.clientWidth -
         CHECKBOX_COL_PX -
-        BADGE_AREA_PX -
+        CONTENT_PR_PX -
         BOTTOM_TIER_GAP_PX -
-        TEXT_RIGHT_MARGIN_PX
-      setTextColWidthPx(Math.max(80, Math.min(MAX_TEXT_COL_PX, avail)))
+        BADGE_AREA_PX
+      const capped = TEXT_COL_MAX_PX === null ? avail : Math.min(TEXT_COL_MAX_PX, avail)
+      setTextColWidthPx(Math.max(80, capped))
     }
     const obs = new ResizeObserver(recompute)
     obs.observe(el)
