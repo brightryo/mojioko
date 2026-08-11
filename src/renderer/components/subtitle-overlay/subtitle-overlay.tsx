@@ -1005,7 +1005,11 @@ export function SubtitleOverlay({
                 data-karaoke-word-dur-sec={sweepActive ? sweepTimings[i]?.durationSec : undefined}
                 data-karaoke-emph-color={run.emphasized ? emphasisColorResolved : undefined}
                 style={{
-                  color: karaokeBaseColorResolved,
+                  // REQ-0474 §1 (Option A) — an emphasised karaoke run paints
+                  // its emphasis colour on the FIRST frame too (the rAF driver
+                  // keeps it there every frame).  A non-emphasised run starts at
+                  // the base colour and the driver sweeps it.
+                  color: run.emphasized ? emphasisColorResolved : karaokeBaseColorResolved,
                   fontSize: run.emphasized ? `${emphasisEm}em` : undefined,
                 }}
               >

@@ -564,10 +564,13 @@ describe('REQ-0307 generateAss integration', () => {
     // folded in, so no metric-changing override sits inside a syllable (libass
     // stops colouring the syllable there).  `\k0` on the leading runs keeps the
     // word lighting at one instant, and the durations still sum to the word's.
+    // REQ-0474 §1 (Option A) — the emphasised run sets BOTH `\c` (spoken) AND
+    // `\2c` (unspoken) to the emphasis colour so it stays emphasis-coloured at
+    // all times; the restore sets `\c<highlight>\2c<base>`.
     // Word 0: plain "hel", then emphasised "lo", then style restored.
-    expect(body).toMatch(/\{\\k0\}hel\{\\k50\\fs150\\c&H0000D4FF&\}lo\{\\fs100\\c&H0000FFFF&\}/)
+    expect(body).toMatch(/\{\\k0\}hel\{\\k50\\fs150\\c&H0000D4FF&\\2c&H0000D4FF&\}lo\{\\fs100\\c&H0000FFFF&\\2c&H[0-9A-F]{8}&\}/)
     // Word 1: the (unemphasised) leading space, then "wo", then "rld".
-    expect(body).toMatch(/\{\\k0\} \{\\k0\\fs150\\c&H0000D4FF&\}wo\{\\k150\\fs100\\c&H0000FFFF&\}rld/)
+    expect(body).toMatch(/\{\\k0\} \{\\k0\\fs150\\c&H0000D4FF&\\2c&H0000D4FF&\}wo\{\\k150\\fs100\\c&H0000FFFF&\\2c&H[0-9A-F]{8}&\}rld/)
     // Concatenating the visible text still reproduces the cue.
     expect(body.replace(/\{[^}]*\}/g, '')).toBe('hello world')
     assertNoBareOverrides(body)

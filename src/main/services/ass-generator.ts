@@ -718,18 +718,22 @@ export function generateAss(
         // `buildKaraokeAssText` still maps `\N` to the right unit
         // boundary.
         //
-        // REQ-0306 §3 (Option A, owner-confirmed) — emphasised karaoke words
-        // grow AND, when spoken, light up in the emphasis colour instead of
-        // the karaoke highlight.  The overlay folds `\fs<big>\c<emph>` into
-        // the word's `\k` block (Primary/spoken colour → emphasis colour) and
-        // restores `\fs<base>\c<highlight>` after so the next word sweeps to
-        // the normal highlight.  `\2c` (unspoken) stays base for everyone, so
-        // the emphasised word looks like the others until it is spoken.
+        // REQ-0474 §1 (Option A, owner-confirmed) — keyword emphasis COLOUR
+        // WINS over karaoke on the emphasised word: it stays the emphasis colour
+        // whether spoken or NOT.  The overlay folds `\fs<big>\c<emph>\2c<emph>`
+        // into the word's `\k` block — BOTH the Primary (spoken) AND Secondary
+        // (`\2c`, unspoken) colours become the emphasis colour, so the word is
+        // emphasis-coloured at all times — then restores `\fs<base>\c<highlight>
+        // \2c<base>` after so the next word sweeps base→highlight normally.
+        // Supersedes REQ-0306 §3's "base until spoken" (which left emphasis
+        // invisible in the list / paused preview); see the video-preview rAF
+        // loop's matching always-emphasis branch.
+        const emphAss = hexToAss(emphasisColorHex)
         const emphasisOverlay = emphasisKaraokeRanges.size > 0
           ? {
               ranges: emphasisKaraokeRanges,
-              openTag: `\\fs${emphasisScaledFs}\\c${hexToAss(emphasisColorHex)}`,
-              closeTag: `\\fs${e.fontSizePx}\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}`,
+              openTag: `\\fs${emphasisScaledFs}\\c${emphAss}\\2c${emphAss}`,
+              closeTag: `\\fs${e.fontSizePx}\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}\\2c${hexToAss(e.textColorHex)}`,
             }
           : undefined
         // REQ-0322 §3 — per-cue first, the request-level value as default.
