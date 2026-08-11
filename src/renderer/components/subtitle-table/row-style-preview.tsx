@@ -51,8 +51,10 @@ import type { SubtitleEntry } from '../../../shared/types'
  * 100`) so an emphasised word does not blow the row height on 4K cues — only
  * its colour distinguishes it, which is enough to "read/select".  Karaoke is
  * forced off (time-varying, needs a playhead); entrance/exit animation renders
- * settled (no rAF driver here).  Layout is overridden to a vertically-centred
- * single block so a bottom-anchored 4K caption does not fall out of the row.
+ * settled (no rAF driver here).  Rotation is dropped (REQ-0473 §2: a rotated
+ * cue hides its edge glyphs in a short row).  Layout is overridden to a
+ * vertically-centred single block so a bottom-anchored 4K caption does not fall
+ * out of the row.
  */
 
 /** The constant on-screen glyph height (CSS px) for every row preview. */
@@ -78,6 +80,7 @@ type PreviewOverride = Pick<
   | 'posY'
   | 'karaokeEnabled'
   | 'emphasisScalePercent'
+  | 'rotation'
 >
 
 interface RowStylePreviewProps {
@@ -101,6 +104,9 @@ export function RowStylePreview({ entry, containerWidthPx }: RowStylePreviewProp
       karaokeEnabled: false,
       // Keep emphasis COLOUR (enabled + spans + colour) but drop the size bump.
       emphasisScalePercent: 100,
+      // REQ-0473 §2 — drop rotation: a rotated cue hides its edge glyphs in a
+      // short row, same rationale as dropping the size/emphasis-scale (§7.1).
+      rotation: 0,
     }
     return { ...entry, ...override }
   }, [entry])

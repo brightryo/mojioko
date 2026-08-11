@@ -24,23 +24,34 @@ import { effectiveEntryState, type ClipStatus, type CutList } from '../../../sha
 import { getFontMeta, isFontId } from '../../../shared/fonts'
 
 /**
- * REQ-0471 §1 — list row layout (4 columns).
+ * REQ-0473 §1 — two-tier list row.
  *
- * The pre-REQ-0471 row was a 7-column control surface (inline size stepper,
- * text/outline colour swatches, outline-width popover, a 3-row time stack).
- * Owner decision (b) retired every inline STYLE control from the row — they are
- * reachable from both the Inspector and the Bulk bar (sole-path audit in
- * `dev-docs/specs/subtitle-list-ui.md` §1.2), so the row is now a
- * SELECT / READ / EDIT-TEXT surface, not a style editor.  Columns:
+ * The REQ-0471 single-line 4-column row squeezed the time into a 184px meta
+ * column, so on a real (narrow) window the timecode truncated to "00:…→00:…".
+ * The row is now `[checkbox | content]`, with `content` a two-tier stack that
+ * gives the top tier the FULL row width:
  *
- *   1. bulk-edit checkbox  (34px) — REQUIRED, left edge
- *   2. row index (#)       (34px)
- *   3. meta                (184px) — time "start → end · dur", state badges,
- *                                    and a font-override chip (only when set)
- *   4. text preview        (1fr)  — style-faithful `SubtitleOverlay` (case A),
- *                                    click to edit; hover reveals row actions
+ *   ┌ top tier (small):  #  time "start → end · dur" (full) │ font name │ [dup][del]
+ *   └ bottom tier:        [state badges]                     │ text preview
+ *
+ * The checkbox column spans both tiers (grid row, vertically centred).  The
+ * text preview area is deliberately narrower than before — the freed width
+ * goes to the badge/state area on the left (owner spec §1).
  */
-const TABLE_GRID_COLS = 'grid-cols-[34px_34px_184px_1fr]'
+const TABLE_GRID_COLS = 'grid-cols-[34px_1fr]'
+
+/**
+ * REQ-0473 §1 — fixed width of the bottom-tier state-badge area (left of the
+ * text preview).  Generous so multiple badges sit without shoving the preview;
+ * the preview takes the remaining width.
+ */
+const BADGE_AREA_PX = 150
+/** Horizontal gap (px) between the badge area and the text preview. */
+const BOTTOM_TIER_GAP_PX = 12
+/** Checkbox column width (px) — mirrors TABLE_GRID_COLS col 1. */
+const CHECKBOX_COL_PX = 34
+/** Slack subtracted for the content column's own horizontal padding. */
+const CONTENT_PAD_PX = 16
 
 /** Fallback when warningsMap is missing an entry (deleted rows; race with stale memo). */
 const NO_WARNINGS: EntryWarnings = {
@@ -58,11 +69,6 @@ function getRowState(entry: SubtitleEntry, isOverflow: boolean): RowState {
   if (isOverflow) return 'overflow'
   if (entry.isEdited) return 'edited'
   return 'normal'
-}
-
-/** "00:00:02.50" → "00:02.50" — drop a zero hours field for the compact row. */
-function compactTimecode(full: string): string {
-  return full.startsWith('00:') ? full.slice(3) : full
 }
 
 interface CellEditorProps {
@@ -310,16 +316,16 @@ function SubtitleRow({
     })
   }
 
-  // Font-name override chip — only shown when the row carries an explicit
-  // per-row fontId (most rows inherit the project default, so the row stays
-  // uncluttered).  Editing the font still lives in the Inspector / Bulk bar.
-  const hasFontOverride = isFontId(entry.fontId) && entry.fontId !== activeFontId
-  const rowFontDisplayName = hasFontOverride
-    ? getFontMeta(entry.fontId as NonNullable<SubtitleEntry['fontId']>).displayName
-    : null
+  // REQ-0473 §1 — font name is shown for EVERY row in the top tier (centre),
+  // resolving the per-row override or the inherited project default.  Editing
+  // the font still lives in the Inspector / Bulk bar.
+  const resolvedFontId = isFontId(entry.fontId) ? entry.fontId : activeFontId
+  const rowFontDisplayName = getFontMeta(resolvedFontId).displayName
 
-  const startTc = compactTimecode(formatEditedTimecode(entry.startSec, cuts))
-  const endTc = compactTimecode(formatEditedTimecode(entry.endSec, cuts))
+  // REQ-0473 §1 — FULL timecodes (no compaction / truncation): the top tier
+  // has the whole row width, so "00:00:00.00 → 00:00:07.36" fits.
+  const startTc = formatEditedTimecode(entry.startSec, cuts)
+  const endTc = formatEditedTimecode(entry.endSec, cuts)
   const durSec = editedDurationOfEntry(entry, cuts)
 
   const rowBg = cn(
@@ -337,18 +343,7 @@ function SubtitleRow({
     !isSelected && rowState === 'overflow' && 'bg-destructive/[0.04]'
   )
 
-  const anyBadge =
-    clipStatus === 'manuallyDeleted' ||
-    clipStatus === 'trimDeleted' ||
-    entry.isEdited ||
-    clipStatus === 'edited' ||
-    warnings.timeInvalid ||
-    warnings.overlap ||
-    warnings.overDuration ||
-    warnings.overflow ||
-    warnings.verticalOverflow ||
-    warnings.emptyText ||
-    warnings.invalidSize
+  const timeExceeds = isStartExceedsDuration || isEndExceedsDuration
 
   return (
     <div
@@ -365,9 +360,8 @@ function SubtitleRow({
       role="row"
       aria-selected={isUserSelected}
     >
-      {/* Selection checkbox — 34px column, centred.  min tap area kept via the
-          full-height flex container (REQ-0471 §2: density must not shrink the
-          checkbox hit region). */}
+      {/* Selection checkbox — 34px column spanning BOTH tiers (grid row,
+          vertically centred).  Full tap area via the full-height flex box. */}
       <div
         className="flex items-center justify-center"
         onClick={(e) => e.stopPropagation()}
@@ -384,41 +378,83 @@ function SubtitleRow({
         />
       </div>
 
-      {/* # */}
-      <div className="flex items-center justify-center py-1 text-body-sm text-fg-muted font-mono tabular-nums">
-        {displayIndex}
-      </div>
+      {/* Content — two tiers (REQ-0473 §1).  Tight vertical padding to keep the
+          density loss from the second tier minimal (§3). */}
+      <div className="flex flex-col min-w-0 py-0.5 pr-2">
+        {/* ── Top tier: # + full time (left) | font (centre) | actions (right) ── */}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0 flex-shrink-0">
+            <span className="text-micro text-fg-muted font-mono tabular-nums">{displayIndex}</span>
+            <button
+              type="button"
+              data-testid="adjust-time"
+              onClick={(e) => { e.stopPropagation(); onAdjustTime(entry.id) }}
+              disabled={isFrozen}
+              title={timeExceeds ? t('warning.exceedsDuration') : t('action.adjustTime')}
+              className={cn(
+                'flex items-center gap-1 rounded px-1 -ml-1 text-micro font-mono tabular-nums whitespace-nowrap',
+                'text-fg-secondary hover:bg-surface-2 hover:text-fg-primary transition-colors duration-100',
+                'disabled:opacity-40 disabled:pointer-events-none',
+                timeExceeds && 'text-warning-soft'
+              )}
+            >
+              <Clock className="h-3 w-3 flex-shrink-0 text-fg-muted" />
+              <span>{startTc}</span>
+              <ArrowRight className="h-2.5 w-2.5 flex-shrink-0 text-fg-muted" />
+              <span>{endTc}</span>
+              <span className="text-fg-muted">· {durSec.toFixed(2)}s</span>
+            </button>
+          </div>
 
-      {/* Meta — time "start → end · dur" (click = TimeEditorDialog), badges,
-          and a font-override chip.  REQ-0471 §1 (c): inline time inputs are
-          gone; the whole time line opens the shared modal editor. */}
-      <div className="flex flex-col justify-center gap-0.5 py-1 px-1 min-w-0">
-        <button
-          type="button"
-          data-testid="adjust-time"
-          onClick={(e) => { e.stopPropagation(); onAdjustTime(entry.id) }}
-          disabled={isFrozen}
-          title={
-            isStartExceedsDuration || isEndExceedsDuration
-              ? t('warning.exceedsDuration')
-              : t('action.adjustTime')
-          }
-          className={cn(
-            'flex items-center gap-1 rounded px-1 -mx-1 text-micro font-mono tabular-nums',
-            'text-fg-secondary hover:bg-surface-2 hover:text-fg-primary transition-colors duration-100',
-            'disabled:opacity-40 disabled:pointer-events-none min-w-0',
-            (isStartExceedsDuration || isEndExceedsDuration) && 'text-warning-soft'
-          )}
-        >
-          <Clock className="h-3 w-3 flex-shrink-0 text-fg-muted" />
-          <span className="truncate">{startTc}</span>
-          <ArrowRight className="h-2.5 w-2.5 flex-shrink-0 text-fg-muted" />
-          <span className="truncate">{endTc}</span>
-          <span className="text-fg-muted flex-shrink-0">· {durSec.toFixed(2)}s</span>
-        </button>
+          {/* Centre: font name (always shown, truncates when long). */}
+          <span
+            title={rowFontDisplayName}
+            className="flex-1 min-w-0 text-center truncate text-micro text-fg-muted"
+          >
+            {isAudioOnly ? '' : rowFontDisplayName}
+          </span>
 
-        {anyBadge && (
-          <div className="flex flex-wrap items-center gap-1">
+          {/* Right: duplicate / delete — ALWAYS visible (REQ-0473 §1: no hover
+              dependency, better discoverability). */}
+          <div className="flex items-center gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            {!isFrozen && (
+              <button
+                type="button"
+                title={t('action.duplicateRow')}
+                aria-label={t('action.duplicateRow')}
+                onClick={(e) => { e.stopPropagation(); handleDuplicate() }}
+                className="flex h-5 w-5 items-center justify-center rounded text-fg-muted hover:bg-surface-2 hover:text-fg-secondary transition-colors"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {!isTrimDeleted && (
+              <button
+                type="button"
+                title={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
+                aria-label={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
+                onClick={(e) => { e.stopPropagation(); handleDeleteToggle() }}
+                className={cn(
+                  'flex h-5 w-5 items-center justify-center rounded transition-colors',
+                  entry.isDeleted
+                    ? 'text-fg-muted hover:bg-surface-2 hover:text-fg-secondary'
+                    : 'text-fg-muted hover:bg-destructive/15 hover:text-destructive'
+                )}
+              >
+                {entry.isDeleted ? <RotateCcw className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Bottom tier: state badges (left, wide) | text preview (right) ── */}
+        <div className="flex items-start gap-3 min-w-0 mt-0.5">
+          {/* Badges — fixed-width area so the preview lines up across rows and
+              the state side is generous (owner spec §1). */}
+          <div
+            className="flex flex-wrap items-center gap-1 flex-shrink-0 self-center"
+            style={{ width: `${BADGE_AREA_PX}px` }}
+          >
             {clipStatus === 'manuallyDeleted' && (
               <Badge variant="danger">{t('state.deleted')}</Badge>
             )}
@@ -450,91 +486,45 @@ function SubtitleRow({
               <Badge variant="danger">{t('badge.invalidSize')}</Badge>
             )}
           </div>
-        )}
 
-        {rowFontDisplayName && (
-          <span
-            title={rowFontDisplayName}
-            className="text-micro text-fg-muted truncate leading-none"
-          >
-            {rowFontDisplayName}
-          </span>
-        )}
-      </div>
-
-      {/* Text — style-faithful preview (case A) that is click-to-edit.
-          REQ-0471 §1: clicking selects + seeks + enters edit (unless frozen).
-          Hover reveals the row action cluster (duplicate / delete) which does
-          not occupy layout otherwise. */}
-      <div
-        className={cn(
-          'relative flex items-center py-1 px-2 min-w-0 min-h-[22px] rounded transition-colors duration-150',
-          !isFrozen && 'cursor-text',
-          !editingText && isUserSelected && 'bg-surface-2/10',
-          !editingText && !isFrozen && 'group-hover:bg-surface-2/20',
-          editingText && 'bg-surface-2/20 ring-1 ring-inset ring-primary/40'
-        )}
-        onClick={(e) => {
-          e.stopPropagation()
-          onSelect(entry.id)
-          useUiStore.getState().setVideoSeekRequest(entry.startSec)
-          if (!isFrozen && !editingText) setEditingText(true)
-        }}
-      >
-        {editingText ? (
-          <CellEditor
-            value={entry.text.replace(/\\N/g, '\n')}
-            onCommit={handleTextCommit}
-            onCancel={handleTextCancel}
-            onPreview={(text) => updateEntryPreview(entry.id, { text: text.replace(/\n/g, '\\N') })}
-            multiline
-          />
-        ) : isFrozen ? (
-          <span className="w-full text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-fg-muted select-text">
-            {entry.text.replace(/\\N/g, '\n')}
-          </span>
-        ) : isAudioOnly ? (
-          <span className="w-full text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 text-fg-primary select-text">
-            {entry.text.replace(/\\N/g, '\n')}
-          </span>
-        ) : (
-          <RowStylePreview entry={entry} containerWidthPx={textColWidthPx} />
-        )}
-
-        {/* Hover action cluster — duplicate / delete (or restore).  Absolutely
-            positioned so it never occupies row width (REQ-0471 §1 "常時occupy
-            しない"); pointer-events only on the buttons themselves. */}
-        {!editingText && (
-          <div className="pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
-            {!isFrozen && (
-              <button
-                type="button"
-                title={t('action.duplicateRow')}
-                aria-label={t('action.duplicateRow')}
-                onClick={(e) => { e.stopPropagation(); handleDuplicate() }}
-                className="pointer-events-auto flex h-6 w-6 items-center justify-center rounded bg-surface-1/90 text-fg-muted hover:bg-surface-2 hover:text-fg-secondary transition-colors"
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </button>
+          {/* Text preview — click to select + edit (unless frozen).  Narrower
+              than the REQ-0471 full-width column (owner spec §1). */}
+          <div
+            className={cn(
+              'flex items-center flex-1 min-w-0 min-h-[22px] px-1 rounded transition-colors duration-150',
+              !isFrozen && 'cursor-text',
+              !editingText && isUserSelected && 'bg-surface-2/10',
+              !editingText && !isFrozen && 'group-hover:bg-surface-2/20',
+              editingText && 'bg-surface-2/20 ring-1 ring-inset ring-primary/40'
             )}
-            {!isTrimDeleted && (
-              <button
-                type="button"
-                title={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
-                aria-label={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
-                onClick={(e) => { e.stopPropagation(); handleDeleteToggle() }}
-                className={cn(
-                  'pointer-events-auto flex h-6 w-6 items-center justify-center rounded bg-surface-1/90 transition-colors',
-                  entry.isDeleted
-                    ? 'text-fg-muted hover:bg-surface-2 hover:text-fg-secondary'
-                    : 'text-fg-muted hover:bg-destructive/15 hover:text-destructive'
-                )}
-              >
-                {entry.isDeleted ? <RotateCcw className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
-              </button>
+            onClick={(e) => {
+              e.stopPropagation()
+              onSelect(entry.id)
+              useUiStore.getState().setVideoSeekRequest(entry.startSec)
+              if (!isFrozen && !editingText) setEditingText(true)
+            }}
+          >
+            {editingText ? (
+              <CellEditor
+                value={entry.text.replace(/\\N/g, '\n')}
+                onCommit={handleTextCommit}
+                onCancel={handleTextCancel}
+                onPreview={(text) => updateEntryPreview(entry.id, { text: text.replace(/\n/g, '\\N') })}
+                multiline
+              />
+            ) : isFrozen ? (
+              <span className="w-full text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-fg-muted select-text">
+                {entry.text.replace(/\\N/g, '\n')}
+              </span>
+            ) : isAudioOnly ? (
+              <span className="w-full text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 text-fg-primary select-text">
+                {entry.text.replace(/\\N/g, '\n')}
+              </span>
+            ) : (
+              <RowStylePreview entry={entry} containerWidthPx={textColWidthPx} />
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   )
@@ -544,15 +534,15 @@ function SubtitleRow({
 const AUTO_SCROLL_DEBOUNCE_MS = 3000
 
 /**
- * REQ-0345 §3-2 / REQ-0471 §2 — seed height for a row not yet measured.
+ * REQ-0345 §3-2 / REQ-0473 §3 — seed height for a row not yet measured.
  *
- * Lowered from 52 to 34 with the denser REQ-0471 row (tighter padding, single
- * compact meta line).  Only a starting guess: every mounted row is measured
- * for real via `measureElement`, and the virtualizer corrects total height and
+ * Raised to ~48 for the two-tier row (top meta tier ~18px + bottom preview tier
+ * ~26px + padding).  Only a starting guess: every mounted row is measured for
+ * real via `measureElement`, and the virtualizer corrects total height and
  * offsets from those measurements.  Deliberately NOT derived from `overflowMap`
  * (that measures burn-in frame overflow, a different question).
  */
-const ROW_ESTIMATED_HEIGHT_PX = 34
+const ROW_ESTIMATED_HEIGHT_PX = 48
 
 /** How long a newly-inserted row animates in (REQ-0345 §3-3). */
 const ROW_ENTER_ANIM_MS = 150
@@ -593,14 +583,22 @@ export function SubtitleTable({
   // identical across rows.  Measured once via ResizeObserver on the header's
   // text cell (same grid column as the body rows), so N rows do NOT each spin
   // up their own observer.
-  const textColHeaderRef = useRef<HTMLDivElement>(null)
+  // REQ-0473 §1 — the text-preview area is the bottom-tier remainder after the
+  // checkbox column and the fixed-width badge area.  Derived from the scroll
+  // viewport width (one ResizeObserver, shared by every row) rather than a
+  // per-row measurement.
   const [textColWidthPx, setTextColWidthPx] = useState(0)
   useEffect(() => {
-    const el = textColHeaderRef.current
+    const el = scrollContainerRef.current
     if (!el) return
-    const obs = new ResizeObserver(() => setTextColWidthPx(el.clientWidth))
+    const recompute = () => {
+      const avail =
+        el.clientWidth - CHECKBOX_COL_PX - BADGE_AREA_PX - BOTTOM_TIER_GAP_PX - CONTENT_PAD_PX
+      setTextColWidthPx(Math.max(80, avail))
+    }
+    const obs = new ResizeObserver(recompute)
     obs.observe(el)
-    setTextColWidthPx(el.clientWidth)
+    recompute()
     return () => obs.disconnect()
   }, [])
 
@@ -743,6 +741,8 @@ export function SubtitleTable({
 
   return (
     <div className="flex flex-col h-full">
+      {/* REQ-0473 §1 — two-column header: select-all checkbox + a single label
+          band (the per-column labels no longer map onto the two-tier row). */}
       <div className={headerCols}>
         <div
           className="flex items-center justify-center py-1.5"
@@ -759,11 +759,11 @@ export function SubtitleTable({
             aria-label={t('table.selectAllAria')}
           />
         </div>
-        <div className="py-1.5 px-1 text-caption font-normal text-fg-secondary text-center">{t('table.colIndex')}</div>
-        <div className="py-1.5 px-1 text-caption font-normal text-fg-secondary">{t('table.colTime')}</div>
-        {/* Ref target: this cell shares the body rows' text column width, so a
-            single ResizeObserver here feeds every row's preview scale. */}
-        <div ref={textColHeaderRef} className="py-1.5 px-2 text-caption font-normal text-fg-secondary">{t('table.colText')}</div>
+        <div className="flex items-center gap-3 py-1.5 pr-2 text-caption font-normal text-fg-secondary">
+          <span>{t('table.colTime')}</span>
+          <span className="flex-1" />
+          <span>{t('table.colText')}</span>
+        </div>
       </div>
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" onScroll={handleScroll}>
         {filtered.length === 0 ? (
