@@ -57,6 +57,17 @@ const BOTTOM_TIER_GAP_PX = 12
 const CHECKBOX_COL_PX = 34
 /** Slack subtracted for the content column's own horizontal padding. */
 const CONTENT_PAD_PX = 16
+/**
+ * REQ-0476 §3 — upper bound on the text-preview column.  On a wide window the
+ * preview does NOT fill the whole remaining width; it caps here and the freed
+ * width becomes trailing row padding.  Paired with the shrink FLOOR
+ * (`MIN_PREVIEW_FONT_CSS_PX` in row-style-preview): at 460px a single `\N`-line
+ * of ~28 full-width chars still renders at the 16px ceiling, ~28–51 chars shrink
+ * 16→9px, and beyond ~51 it gets an ellipsis (about double those counts for
+ * half-width/Latin).  Narrower would shrink common cues harder; wider would
+ * leave long lines too small — 460 balances the two.
+ */
+const MAX_TEXT_COL_PX = 460
 
 /** Fallback when warningsMap is missing an entry (deleted rows; race with stale memo). */
 const NO_WARNINGS: EntryWarnings = {
@@ -529,8 +540,12 @@ function SubtitleRow({
           {/* Text preview — click to select + edit (unless frozen).  Narrower
               than the REQ-0471 full-width column (owner spec §1). */}
           <div
+            // REQ-0476 §3 — FIXED width (capped) rather than flex-1, so the
+            // width matches the `containerWidthPx` the shrink-to-fit maths uses
+            // and the freed space on wide windows becomes trailing row padding.
+            style={{ width: `${textColWidthPx}px` }}
             className={cn(
-              'flex items-center flex-1 min-w-0 min-h-[22px] px-1 rounded transition-colors duration-150',
+              'flex items-center flex-shrink-0 min-w-0 min-h-[22px] px-1 rounded transition-colors duration-150',
               !isFrozen && 'cursor-text',
               !editingText && isUserSelected && 'bg-surface-2/10',
               !editingText && !isFrozen && 'group-hover:bg-surface-2/20',
@@ -633,7 +648,8 @@ export function SubtitleTable({
     const recompute = () => {
       const avail =
         el.clientWidth - CHECKBOX_COL_PX - BADGE_AREA_PX - BOTTOM_TIER_GAP_PX - CONTENT_PAD_PX
-      setTextColWidthPx(Math.max(80, avail))
+      // REQ-0476 §3 — cap the column; freed width on wide windows is trailing pad.
+      setTextColWidthPx(Math.max(80, Math.min(MAX_TEXT_COL_PX, avail)))
     }
     const obs = new ResizeObserver(recompute)
     obs.observe(el)
