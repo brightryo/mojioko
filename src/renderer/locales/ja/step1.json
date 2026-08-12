@@ -272,6 +272,7 @@
   "fontPicker": {
     "title": "デフォルト字幕フォントの選択",
     "section1Description": "字幕のデフォルトフォントを選択します。",
+    "downloadInSettingsNote": "追加フォントの一覧・ダウンロードは「設定」＞「フォント」で行えます。",
     "listSectionTitle": "フォント一覧",
     "listSectionDescription": "Noto Sans JP は9ウェイトすべて同梱で、無料版でもお使いいただけます。下の追加12書体は有料版（買い切り）でご利用いただけます。",
     "description": "フォントをクリックして既定フォントを選択します。フォントの追加およびダウンロードは有料版のみの機能です。",

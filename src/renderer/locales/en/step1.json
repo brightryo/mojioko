@@ -273,6 +273,7 @@
   "fontPicker": {
     "title": "Select default subtitle font",
     "section1Description": "Select the default subtitle font.",
+    "downloadInSettingsNote": "Browse and download additional fonts in Settings ▸ Fonts.",
     "listSectionTitle": "Font list",
     "listSectionDescription": "All nine Noto Sans JP weights ship with every edition, free included. The 12 additional fonts below come with the paid edition (one-time purchase).",
     "description": "Click a font to set it as the default. Adding and downloading fonts is a paid-version feature.",

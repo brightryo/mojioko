@@ -49,6 +49,21 @@ interface FontPickerProps {
    *  installed / uninstalled, so parents can re-render preview surfaces
    *  tied to the active font. */
   onChange?: () => void
+  /**
+   * REQ-0485 — whether to render section 2 (the "Font list": paid-tier
+   * description, EN/JA legend, family list with lock/license icons, and the
+   * batch download / uninstall-all controls).
+   *
+   * `true` (default) — Settings ▸ Fonts, the canonical place to browse fonts,
+   * read the paid-tier pitch, and download the additional set.
+   *
+   * `false` — STEP1 setup drawer's 文字スタイル tab (REQ-0485 §2): the list is
+   * dropped there to declutter the run-time flow, replaced by a one-line note
+   * pointing to Settings ▸ Fonts.  Section 1 (the default-font dropdown, which
+   * ALREADY shows padlocks + the Store upsell + coverage badges for paid
+   * families) stays, so paid-font discovery / purchase routing is not lost.
+   */
+  showFontList?: boolean
 }
 
 /**
@@ -83,7 +98,7 @@ interface FontPickerProps {
  *     Noto weights are never touched by uninstall — they live in the
  *     installer payload.
  */
-export function FontPicker({ onChange }: FontPickerProps) {
+export function FontPicker({ onChange, showFontList = true }: FontPickerProps) {
   const { t } = useTranslation('step1')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   const setActiveFontInStore = useSettingsStore((s) => s.setActiveFontId)
@@ -459,9 +474,21 @@ export function FontPicker({ onChange }: FontPickerProps) {
         </div>
       </section>
 
+      {/* REQ-0485 — in the STEP1 drawer (showFontList=false) the font list is
+          replaced by a one-line pointer to Settings ▸ Fonts, where the list,
+          the paid-tier pitch and the download live.  Section 1's dropdown above
+          still surfaces padlocks + the Store upsell for paid families. */}
+      {!showFontList && (
+        <p className="text-body-sm text-fg-secondary leading-relaxed">
+          {t('fontPicker.downloadInSettingsNote')}
+        </p>
+      )}
+
       {/* ============================================================== */}
       {/* Section 2 — Font list (REQ-0281 §2 / §3 / §4)                  */}
+      {/* REQ-0485 — Settings ▸ Fonts only (hidden in the STEP1 drawer).  */}
       {/* ============================================================== */}
+      {showFontList && (
       <section className="space-y-1.5">
         <h3 className="text-title font-medium text-fg-primary">
           {t('fontPicker.listSectionTitle')}
@@ -593,6 +620,7 @@ export function FontPicker({ onChange }: FontPickerProps) {
           </p>
         )}
       </section>
+      )}
 
       {/* REQ-0281 §4-5 — confirmation dialog for "Uninstall all
           additional fonts" when any project row references a

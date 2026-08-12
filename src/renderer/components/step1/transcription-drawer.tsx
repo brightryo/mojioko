@@ -606,25 +606,40 @@ export function TranscriptionDrawer({
                 ref={resetTabScrollTop}
                 value="style"
                 // REQ-0442 — NO `display:flex` on the TabsContent (it overrides
-                // Radix's [hidden] and stacks tabs).  Block flow + space-y-3
-                // top-aligns the three style sections inside the scroll box.
-                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-3"
+                // Radix's [hidden] and stacks tabs).  Block flow top-aligns the
+                // style sections inside the scroll box.  REQ-0485 — spacing moved
+                // to the inner content wrapper so the sticky preview's own
+                // opaque `pb-3` provides the gap without a double margin.
+                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
               >
-                <StyleSamplePreview
-                  defaults={styleDefaults}
-                  thumbnail={thumbnail}
-                  video={video}
-                  autoLineBreak={autoLineBreak}
-                />
-                <FontPicker />
-                <DefaultStyleControls
-                  defaults={styleDefaults}
-                  onUpdateDefaults={setStyleDefaults}
-                  autoLineBreak={autoLineBreak}
-                  onSetAutoLineBreak={setAutoLineBreak}
-                  fadeDurationSec={fadeDurationSec}
-                  isMsix={isMsix}
-                />
+                {/* REQ-0485 §3 — pin the preview to the top of the scroll box so
+                    it never scrolls out of view while the user adjusts the style
+                    controls below.  `bg-surface-1` matches the drawer body
+                    (SheetContent) so scrolled controls are hidden behind it; the
+                    whole card (label + frame + 「※ 近似表示です」 note) is stuck
+                    together — it reads as one unit and splitting it looked odd.
+                    `pb-3` is the opaque gap to the first control below. */}
+                <div className="sticky top-0 z-10 bg-surface-1 pb-3">
+                  <StyleSamplePreview
+                    defaults={styleDefaults}
+                    thumbnail={thumbnail}
+                    video={video}
+                    autoLineBreak={autoLineBreak}
+                  />
+                </div>
+                <div className="space-y-3">
+                  {/* REQ-0485 §2 — font list dropped here (lives in Settings ▸
+                      Fonts); the default-font dropdown + a pointer note stay. */}
+                  <FontPicker showFontList={false} />
+                  <DefaultStyleControls
+                    defaults={styleDefaults}
+                    onUpdateDefaults={setStyleDefaults}
+                    autoLineBreak={autoLineBreak}
+                    onSetAutoLineBreak={setAutoLineBreak}
+                    fadeDurationSec={fadeDurationSec}
+                    isMsix={isMsix}
+                  />
+                </div>
               </TabsContent>
 
               {/* ── タブ3 Whisper設定 ──────────────────────────────── */}
