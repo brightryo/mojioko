@@ -17,7 +17,7 @@ import { app } from 'electron'
 import { resolve } from 'node:path'
 import { existsSync } from 'node:fs'
 import { APP_VERSION } from '../../shared/app-info'
-import { CLI_COMMANDS, HELP_TOKENS, classifyProjectOpen } from './launch-classify'
+import { CLI_COMMANDS, HELP_TOKENS, classifyProjectOpen, secondInstanceProjectFile } from './launch-classify'
 import { parseArgs } from './args'
 import { CliError, emitFailure, type CliContext } from './output'
 import { printHelp } from './help'
@@ -136,14 +136,18 @@ export function projectFileToOpen(): string | null {
 }
 
 /**
- * REQ-0459 §3 — the `.mojioko` path from a SECOND-instance launch's argv (the
- * `second-instance` event hands us the new process's full argv).  Reuses the
- * same launcher-prefix stripping as `userCliArgs`.
+ * REQ-0459 §3 / REQ-0484 — the `.mojioko` path from a SECOND-instance launch's
+ * argv (the `second-instance` event hands us the new process's full argv).
+ *
+ * REQ-0484: the delivered argv is NOT clean — Electron prepends Chromium switches
+ * (observed: `--allow-file-access-from-files`) and, in dev, the entry-script
+ * token, before the double-clicked path.  The old head-only `extractProjectFile`
+ * therefore saw a leading `-`switch and returned null, so a warm-start
+ * double-click silently no-opped (the window only got focus).  Scan past the
+ * launcher noise instead (a second-instance only ever fires for a GUI launch).
  */
 export function projectFileFromSecondInstance(argv: string[]): string | null {
-  let rest = argv.slice(1)
-  if (!app.isPackaged && rest.length > 0 && isAppDirArg(rest[0], app.getAppPath())) rest = rest.slice(1)
-  return extractProjectFile(rest)
+  return secondInstanceProjectFile(argv.slice(1), existsSync)
 }
 
 export async function maybeRunCli(): Promise<boolean> {

@@ -340,14 +340,17 @@ if (isCliInvocation()) {
     const startupProjectPath = projectFileToOpen()
 
     app.on('second-instance', (_event, argv) => {
+      // REQ-0459 §3 — a second launch double-clicked a `.mojioko`: hand the
+      // path to the EXISTING window (no new process). The renderer confirms
+      // discarding an unsaved project before replacing it.  REQ-0484 — the
+      // delivered argv carries leading Chromium switches, so extraction scans
+      // past them; log the outcome (a null on a real double-click is the C3 bug).
+      const secondPath = projectFileFromSecondInstance(argv)
+      log.info(`[main] second-instance: open project = ${secondPath ?? '(none)'}`)
       const win = BrowserWindow.getAllWindows()[0]
       if (win) {
         if (win.isMinimized()) win.restore()
         win.focus()
-        // REQ-0459 §3 — a second launch double-clicked a `.mojioko`: hand the
-        // path to the EXISTING window (no new process). The renderer confirms
-        // discarding an unsaved project before replacing it.
-        const secondPath = projectFileFromSecondInstance(argv)
         if (secondPath) win.webContents.send(Channels.projectOpenPath, secondPath)
       }
     })

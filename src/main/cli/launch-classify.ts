@@ -36,3 +36,27 @@ export function classifyProjectOpen(tokens: readonly string[], exists: (p: strin
   if (head.toLowerCase().endsWith(PROJECT_EXT) && exists(head)) return head
   return null
 }
+
+/**
+ * REQ-0484 — the `.mojioko` to open from a SECOND-instance relaunch's argv.
+ *
+ * Unlike a cold launch, the argv Electron hands to the `second-instance` event
+ * is NOT clean: Electron prepends its own Chromium switches (observed on Windows:
+ * `--allow-file-access-from-files`) and, in dev, the entry-script token, BEFORE
+ * the double-clicked path.  `classifyProjectOpen` only inspects tokens[0], so it
+ * misses the path and the open silently no-ops — the window just gets focus.
+ *
+ * A `second-instance` event only fires for a GUI launch (a CLI invocation is
+ * dispatched headless BEFORE the single-instance lock and never forwards argv),
+ * so the only positional payload here is the double-clicked file.  Scan past the
+ * leading switches / script token and return the first EXISTING `.mojioko`.
+ *
+ * @param exists  injected existence check (real `fs.existsSync` in production).
+ */
+export function secondInstanceProjectFile(tokens: readonly string[], exists: (p: string) => boolean): string | null {
+  for (const tok of tokens) {
+    if (tok.startsWith('-')) continue // an Electron/Chromium switch, not the file
+    if (tok.toLowerCase().endsWith(PROJECT_EXT) && exists(tok)) return tok
+  }
+  return null
+}
