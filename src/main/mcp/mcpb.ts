@@ -136,7 +136,10 @@ export function buildMcpbManifest(
     version: mcpManifestVersion(APP_VERSION),
     description:
       'ローカル動画字幕ツール MOJIOKO を AI から操作します（文字起こし・翻訳・字幕焼き込み）。処理はすべてこの PC 内で完結します。',
-    author: { name: 'brightryo' },
+    // REQ-0483 — display-only author name.  Correct casing is `BrightRyo`
+    // (Claude Desktop shows "作成者 <name>").  This is NOT the MSIX package
+    // identifier `brightryo.MOJIOKO` (store-registered, must stay lowercase).
+    author: { name: 'BrightRyo' },
     // REQ-0469 — the REQ-0458 top-level `mojioko` key (appVersion /
     // launchSpecRevision) was REMOVED: it is NOT in the MCPB v0.3 manifest schema,
     // and Claude Desktop rejects the whole bundle with "Invalid manifest:

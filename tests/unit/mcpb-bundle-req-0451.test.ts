@@ -105,7 +105,9 @@ describe('REQ-0451/0452 — .mcpb bundle', () => {
     const m = buildMcpbManifest(EXE, [PROXY, 'mcp'], ENV, TOOLS) as unknown as Manifest
     expect(m.manifest_version).toBe('0.3')
     expect(m.name).toBe('mojioko')
-    expect(m.author.name).toBe('brightryo')
+    // REQ-0483 — display author name corrected to `BrightRyo` (NOT the MSIX
+    // package identifier `brightryo.MOJIOKO`, which stays lowercase).
+    expect(m.author.name).toBe('BrightRyo')
     expect(m.server.type).toBe('binary')
     expect(m.server.entry_point).toBe('MOJIOKO.exe')
     expect(m.server.mcp_config.command).toBe(EXE)
