@@ -142,6 +142,21 @@ def main():
         if req.get("cmd") == "ping":
             _emit({"id": rid, "ok": True, "pong": True})
             continue
+        if req.get("cmd") == "selftest":
+            # REQ-0494 — model-free proof that the translation runtime is present
+            # in THIS bundle: import the two deps that were missing in the
+            # pre-REQ-0494 packaged build (ctranslate2 comes from faster-whisper;
+            # sentencepiece is the net-new collect).  The packaged smoke gate
+            # (scripts/verify-translate-packaged.mjs) asserts this reply so a
+            # regression cannot slip past without a model installed.
+            try:
+                import ctranslate2  # noqa: PLC0415
+                import sentencepiece  # noqa: PLC0415,F401
+                _emit({"id": rid, "ok": True, "selftest": True,
+                       "ct2": getattr(ctranslate2, "__version__", "?"), "spm": True})
+            except Exception as e:  # noqa: BLE001
+                _emit({"id": rid, "ok": False, "error": f"selftest import failed: {e}"})
+            continue
         try:
             target = req.get("target", "en") or "en"
             if isinstance(req.get("texts"), list):

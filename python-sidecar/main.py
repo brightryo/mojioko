@@ -537,4 +537,16 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    # REQ-0494 — subcommand dispatch so ONE PyInstaller bundle serves both
+    # engines.  No argument (or the historical no-arg spawn) runs the
+    # faster-whisper transcription loop unchanged; `translate` hands off to the
+    # resident MADLAD sidecar in translate.py.  Both share this bundle's
+    # `_internal` (ctranslate2, the CUDA preload via gpu_dll, and the net-new
+    # sentencepiece), so translation ships at ~sentencepiece cost instead of a
+    # second full Python runtime.  The import is lazy so transcription startup
+    # is untouched.  See RES-0493 / REQ-0494.
+    if len(sys.argv) > 1 and sys.argv[1] == "translate":
+        import translate  # noqa: PLC0415
+        translate.main()
+    else:
+        main()

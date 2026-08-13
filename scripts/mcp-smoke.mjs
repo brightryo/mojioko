@@ -93,6 +93,12 @@ try {
   const names = tools.map((t) => t.name)
   const expected = ['status', 'transcribe', 'translate', 'burn', 'run', 'tools_download', 'tools_use', 'get_job_status']
   check('tools/list has all tools', expected.every((n) => names.includes(n)), names.join(','))
+  // REQ-0494 — this smoke runs in DEV (electron .) so it only asserts the MCP
+  // tool SURFACE (registration + schema).  Actually EXECUTING translation
+  // against the packaged runtime — the layer where the PYTHON_MISSING bug lived
+  // (RES-0493) — is covered by `npm run verify:translate-packaged`, which
+  // spawns the standalone bundled sidecar exe (no .venv) and runs a real
+  // translate.  Kept separate so a dev .venv can never mask a packaged break.
   check('tools have typed inputSchema', tools.every((t) => t.inputSchema && t.inputSchema.type === 'object'))
   const tr = tools.find((t) => t.name === 'transcribe')
   check('transcribe schema requires input+out', Array.isArray(tr?.inputSchema?.required) && tr.inputSchema.required.includes('input') && tr.inputSchema.required.includes('out'))

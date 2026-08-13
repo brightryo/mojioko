@@ -1,8 +1,10 @@
+import { app } from 'electron'
 import { ChildProcess } from 'child_process'
 import { createInterface } from 'readline'
 import { existsSync } from 'fs'
 import { spawnProcess } from '../lib/child-process'
-import { getPythonExecutable, getTranslateSidecarPath } from '../lib/paths'
+import { getPythonExecutable, getTranslateSidecarPath, getTranscriberExePath } from '../lib/paths'
+import { pickTranslateSpawn } from './translate-spawn'
 import type { TranslateResult, TranslationTarget } from '../../shared/translation'
 import log from '../lib/logger'
 
@@ -73,14 +75,27 @@ function teardown(reason?: Error): void {
   }
 }
 
+/**
+ * Resolve the live spawn target from the real app/paths state.  The pure
+ * decision lives in {@link pickTranslateSpawn} (electron-free, unit-tested);
+ * this just feeds it the real electron/paths values.
+ */
+function resolveTranslateSpawn(): ReturnType<typeof pickTranslateSpawn> {
+  return pickTranslateSpawn({
+    isPackaged: app.isPackaged,
+    bundledExe: getTranscriberExePath(),
+    pythonExe: getPythonExecutable(),
+    translateScript: getTranslateSidecarPath(),
+  })
+}
+
 function spawnSidecar(config: TranslateSpawnConfig): ChildProcess {
-  const python = getPythonExecutable()
-  if (!python) {
-    throw new Error('PYTHON_MISSING')
-  }
-  const script = getTranslateSidecarPath()
-  if (!existsSync(script)) {
-    throw new Error(`SIDECAR_ERROR: translate.py not found at ${script}`)
+  // REQ-0494 — packaged builds spawn the bundled PyInstaller exe with the
+  // `translate` subcommand; dev spawns `.venv` python + translate.py.  Throws
+  // PYTHON_MISSING only when neither is available.
+  const target = resolveTranslateSpawn()
+  if (target.mode === 'venv' && !existsSync(target.args[0])) {
+    throw new Error(`SIDECAR_ERROR: translate.py not found at ${target.args[0]}`)
   }
 
   const env: NodeJS.ProcessEnv = {
@@ -94,8 +109,8 @@ function spawnSidecar(config: TranslateSpawnConfig): ChildProcess {
     env.MOJIOKO_GPU_TOOL_DIR = config.gpuDir
   }
 
-  log.info(`[translate-sidecar] spawning: ${python} ${script} (device=${config.device})`)
-  const proc = spawnProcess(python, [script], { env })
+  log.info(`[translate-sidecar] spawning: ${target.exe} ${target.args.join(' ')} (mode=${target.mode}, device=${config.device})`)
+  const proc = spawnProcess(target.exe, target.args, { env })
   sidecarProcess = proc
   liveKey = keyFor(config)
 

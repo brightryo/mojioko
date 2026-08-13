@@ -1,9 +1,11 @@
 {
   "_comment": "REQ-0334 §1 — SHA-256 (LF-normalised) of the Python sources the tracked PyInstaller binary in resources/bin/transcriber/ was built from. Rewrite with `npm run sidecar:stamp` immediately after every rebuild. Checked by `npm run verify:sidecar`, which runs as part of `npm run build:win`.",
-  "stampedAt": "2026-08-11",
+  "stampedAt": "2026-08-13",
   "sources": {
-    "python-sidecar/main.py": "27d46f21095cf6878e45b4b5d37da32fabb33e3e11f5c571a1a849b0ba9ff437",
+    "python-sidecar/main.py": "5e592f0b2c733795cdfe4bd62e30a7cdedb1d80599852e7f7f09cb1a915e3879",
     "python-sidecar/word_split.py": "97f4a2b5b9f85819ee695e4498fec3f6e53de287149757fddbda66db1d776255",
-    "mojioko-transcriber.spec": "5035a5ac35f673608e89c85f3fdff637064aeccb15649db22a3c1379b93af13c"
+    "python-sidecar/translate.py": "7bee0d9f9b6096464769f1ae7bb680a82c1b6aa04870f98ffec19bc5b1a263a4",
+    "python-sidecar/gpu_dll.py": "3bf062cdcf11696df92aa4adad38a8b8810032cd5f20cf06c09127f845b3f37b",
+    "mojioko-transcriber.spec": "2de662daaae84de0f4dff1add6bee48c131ab88aa157b83df528357353141a54"
   }
 }

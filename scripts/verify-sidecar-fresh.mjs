@@ -65,6 +65,12 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
  *
  * - `main.py`      — `Analysis([...])` entry point in the spec.
  * - `word_split.py` — declared as `hiddenimports`, so it IS bundled.
+ * - `translate.py` — REQ-0494: the MADLAD translation sidecar, reached via
+ *   main.py's `translate` subcommand and declared as a `hiddenimport`, so it IS
+ *   bundled.  Editing it without a rebuild ships old TRANSLATION code — the same
+ *   class of stale-binary bug (REQ-0287) this gate exists for, now that
+ *   translation runs from the bundled exe rather than the .venv (REQ-0494).
+ * - `gpu_dll.py` — shared CUDA preload, also a `hiddenimport`, also bundled.
  * - the spec itself — changes `hiddenimports` / `collect_all` / onedir-ness.
  *
  * Deliberately EXCLUDED, to keep false positives at zero:
@@ -77,6 +83,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const SOURCE_FILES = [
   'python-sidecar/main.py',
   'python-sidecar/word_split.py',
+  'python-sidecar/translate.py',
+  'python-sidecar/gpu_dll.py',
   'mojioko-transcriber.spec',
 ]
 

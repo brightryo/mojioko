@@ -356,10 +356,22 @@ export function getTranscriberExePath(): string | null {
 }
 
 /**
- * Returns the path to the Python executable to use for the transcription sidecar.
+ * Returns the path to a raw **Python interpreter** for running the sidecar
+ * scripts directly.  This is the DEV path only.
  *
- * Dev:  .venv in the project root (created by `py -3.11 -m venv .venv`)
- * Prod: bundled Python runtime under resources/python/ (TODO: populate in electron-builder.yml)
+ * Dev:  .venv in the project root (created by `py -3.11 -m venv .venv`).
+ * Packaged: MOJIOKO does NOT bundle a standalone Python interpreter.  The
+ *   sidecars ship as a PyInstaller bundle instead — resolve them via
+ *   {@link getTranscriberExePath} (transcription: no-arg; translation:
+ *   `translate` subcommand — REQ-0494).  This function therefore returns null
+ *   in packaged builds (there is no `resources/python/`), and callers MUST
+ *   prefer the bundled exe first (see `transcription-sidecar.resolveSidecarSpawn`
+ *   / `translation-sidecar.pickTranslateSpawn`).
+ *
+ * ⚠️ Any new feature that spawns Python MUST go through the bundled-exe path,
+ * not this interpreter — a packaged build has no interpreter here, so relying
+ * on it alone breaks in production (that was the REQ-0493 `PYTHON_MISSING`
+ * translation bug).  The `pickTranslateSpawn` unit test pins this invariant.
  *
  * Returns null if the resolved executable does not exist on disk.
  */
@@ -371,8 +383,10 @@ export function getPythonExecutable(): string | null {
     return existsSync(exe) ? exe : null
   }
 
-  // TODO: bundle Python under resources/python/ via electron-builder extraResources.
-  // Until then the packaged build falls back to the system Python (will break if absent).
+  // Packaged builds ship a PyInstaller bundle, not a standalone interpreter, so
+  // this path is expected NOT to exist; getTranscriberExePath() is the packaged
+  // entry point for both transcription and translation.  Kept as a defensive
+  // lookup in case a future build opts to bundle `resources/python/`.
   const exe = process.platform === 'win32'
     ? join(process.resourcesPath, 'python', 'python.exe')
     : join(process.resourcesPath, 'python', 'bin', 'python')

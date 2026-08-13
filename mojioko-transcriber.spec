@@ -12,10 +12,22 @@ binaries = []
 # REQ-0412 — gpu_dll.py sits next to main.py and is imported at module top
 # for the CUDA/cuDNN DLL preload.  Declared explicitly so the packaged build
 # always bundles it (same belt-and-braces reasoning as word_split above).
-hiddenimports = ['word_split', 'gpu_dll']
+# REQ-0494 — translate.py is the MADLAD translation sidecar, reached via
+# main.py's `translate` subcommand (lazy import inside a runtime branch).
+# Declared explicitly so PyInstaller bundles it even though the import is not
+# statically reachable from the top of main.py.  ctranslate2 is already
+# collected below (faster-whisper dep); the only net-new runtime dep is
+# sentencepiece (see collect_all('sentencepiece') below), so both engines
+# share this single bundle's _internal.
+hiddenimports = ['word_split', 'gpu_dll', 'translate']
 tmp_ret = collect_all('faster_whisper')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('ctranslate2')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+# REQ-0494 — sentencepiece: the SentencePiece tokenizer (spiece.model) the
+# MADLAD translation path needs.  faster-whisper uses HF `tokenizers`, not
+# sentencepiece, so this is not pulled in transitively — collect it explicitly.
+tmp_ret = collect_all('sentencepiece')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('huggingface_hub')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
