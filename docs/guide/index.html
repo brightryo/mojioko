@@ -152,6 +152,61 @@
         </div>
       </details>
 
+      <!-- REQ-0491: editing-workflow walkthrough.  Placed after the feature-
+           highlight cluster (free/paid, fonts, word-chunk) and before the OBS /
+           SmartScreen troubleshooting FAQs.  Reuses `.qa` / `.qa-body`,
+           `.guide-list`, and `.screenshot-image`; images reference the
+           feature-demo assets under ../images/ (tracked with this change). -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">解説</span>
+          <span class="q-text">文字起こしのあと — 字幕を仕上げるまでの流れ</span>
+        </summary>
+        <div class="qa-body">
+          <p>文字起こしが終わったら、STEP 2 で字幕を仕上げます。大きな流れは <strong>①内容を直す → ②見た目を整える → ③位置を決める → ④（必要なら）翻訳する → ⑤書き出す</strong> です。各段階でできることを紹介します。</p>
+
+          <h4>① 内容を直す（一覧ビュー／タイムラインビュー）</h4>
+          <p><strong>一覧ビュー</strong>では、各字幕のテキストや開始・終了時間を直接編集できます。字幕が数千件あっても軽快に扱えます。<strong>MOJIOKO のタイムラインビュー</strong>に切り替えると、字幕ブロックをドラッグ／伸縮させてタイミングを目で見ながら調整でき、トラック上をクリックすると再生位置がそこへ移動します。（このページの後半で触れる DaVinci Resolve のタイムラインとは別物です。）</p>
+
+          <h4>② 見た目を整える</h4>
+          <p><strong>カラオケ表示</strong> — 発話に合わせて文字の色が変わります。字幕ごとに「切り替え」（語の頭で一気に変わる）と「スイープ」（語の中を左から塗り進む）を選べ、発話済み・未発話それぞれの色を指定できます。文字起こしで作った字幕は実際の発話タイミングに追従し、SRT を読み込んだ字幕や手入力した字幕は表示時間を均等に割って着色します。</p>
+          <img src="../images/out-karaoke.gif" alt="カラオケ表示のデモ。発話に合わせて字幕の文字色が左から変わっていく様子。" class="screenshot-image" loading="lazy" />
+
+          <p><strong>キーワード強調</strong> — 字幕の中の指定した文字だけ、色とサイズを変えられます。ひとつの語だけを目立たせられます。</p>
+          <img src="../images/out-emphasis.png" alt="キーワード強調のデモ。字幕の一部の語だけが拡大され、別の色で表示されている。" class="screenshot-image" loading="lazy" />
+
+          <p><strong>登場・退場アニメーション</strong> — フェード／スケール／ポップ／ブラーから選べ、長さと強さを調整できます。</p>
+          <img src="../images/out-animation.gif" alt="字幕の登場アニメーションのデモ。" class="screenshot-image" loading="lazy" />
+
+          <p><strong>色・アウトライン・影・透過率・行間・回転・大文字化（ALL CAPS）</strong> — 文字色とアウトライン色、影、文字とアウトラインの透過率（別々に指定でき、文字だけ透明にすると輪郭だけの中抜き文字になります）、行間、回転、英字の大文字化など、見た目の細部を整えられます。</p>
+
+          <p><strong>スタイルプリセット</strong> — 作り込んだ見た目を保存して、ほかの字幕に 1 クリックで適用できます。</p>
+
+          <h4>③ 位置を決める</h4>
+          <p>字幕の配置（上下・左右）を選べます。縦型ショート動画向けに、字幕を画面の外側まで大きくオフセットさせることもできます。</p>
+          <img src="../images/out-vertical.png" alt="縦型ショート動画に字幕を配置したデモ。" class="screenshot-image" loading="lazy" />
+
+          <h4>④ 翻訳する（任意）</h4>
+          <p>字幕を別の言語に翻訳できます。翻訳エンジンは初回に一度だけダウンロードして使います。<strong>動画や音声を外部にアップロードすることはありません。</strong></p>
+
+          <h4>⑤ 書き出す</h4>
+          <p>仕上げた字幕は、動画に焼き込んで書き出すほか、SRT やテキストとして書き出すこともできます。</p>
+        </div>
+      </details>
+
+      <!-- REQ-0491: AI integration (advanced) — overview only per owner decision. -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">解説</span>
+          <span class="q-text">【上級者向け】AI から MOJIOKO を操作する（AI 連携）</span>
+        </summary>
+        <div class="qa-body">
+          <p>MOJIOKO は MCP（Model Context Protocol）に対応しており、Claude などの AI アシスタントから、文字起こし・翻訳・字幕の焼き込みを頼めます。</p>
+          <p>設定 → AI 連携 から接続用のバンドル（<code>.mcpb</code>）を書き出し、Claude Desktop に読み込ませると連携できます。同じ操作をコマンドライン（<code>mojioko</code>）から実行することもできます。</p>
+          <p>この機能は上級者向けです。ここでは概要のみを紹介しています。</p>
+        </div>
+      </details>
+
       <!-- 1: OBS settings (revised title and opening, badge: important) -->
       <details class="qa">
         <summary>

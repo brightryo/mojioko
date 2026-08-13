@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.3.6] - unreleased
+## [1.4.0] - unreleased
 
 **Every feature in this release works in both editions.**  The only
 difference between them is the font package: the paid (Microsoft Store)
@@ -17,11 +17,31 @@ edition adds 12 subtitle fonts, while the free (GitHub) edition includes
 Noto Sans JP in all nine weights (Thin through Black).  Weight selection
 is no longer a paid-tier feature.
 
-This release is mostly about subtitle *styling* — the things that make a
-caption look like yours rather than like a default.
+This release adds bigger capabilities — local translation, AI integration,
+a reworked Step 1, and a cleaner subtitle list — on top of a large pass of
+subtitle *styling* controls (the things that make a caption look like yours
+rather than like a default).
 
 ### Added
 
+- **Translate your subtitles into another language, on your PC.**  A local
+  translation engine — downloaded once, the first time you use it — turns
+  your subtitles into another language.  Your video and audio are never
+  uploaded.
+- **AI integration.**  MOJIOKO can be driven by an AI assistant such as
+  Claude through MCP: export a connection bundle (`.mcpb`) from
+  Settings → AI integration and load it into Claude Desktop.  The same
+  transcription / translation / burn-in operations are also available from
+  the command line (`mojioko`).
+- **Reworked Step 1.**  Step 1 is now a focused preparation screen; the
+  input file, text style, and Whisper settings are gathered into a
+  three-tab drawer that opens when you start transcription.
+- **Cleaner subtitle list.**  The Step 2 list rows were redesigned into a
+  two-tier layout with a shrink-to-fit, no-wrap preview so long lines stay
+  readable.
+- **Open a `.mojioko` project by double-clicking it.**  Double-clicking a
+  project file opens it in MOJIOKO; if the app is already running, the
+  existing window is reused (and asks before discarding unsaved changes).
 - **Karaoke highlighting.**  Words change colour as they are spoken.
   Choose per subtitle between **Switch** (each word flips when it
   starts) and **Sweep** (the colour fills across each word).  Spoken
@@ -93,6 +113,8 @@ caption look like yours rather than like a default.
   Regular).  All shipped fonts now use `MOJIOKO`-namespaced family
   names internally so libass cannot pick up a system font by
   mistake; the previewed weight and the burned-in weight now match.
+- The font and weight menus now open wide enough to show each option on a
+  single line, and the mouse wheel scrolls the list.
 
 ---
 
