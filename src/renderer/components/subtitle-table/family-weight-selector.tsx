@@ -158,7 +158,14 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels, sh
   )
 
   const familyDropdown = (
-    <Popover open={familyOpen} onOpenChange={setFamilyOpen}>
+    // REQ-0487 §2 — `modal` so the popover's own react-remove-scroll lock sits
+    // on top of the settings-dialog / setup-drawer lock.  Without it the list
+    // portals OUTSIDE the dialog's RemoveScroll subtree, so wheel events over
+    // the open list are preventDefault-ed and the list will not scroll (arrow
+    // keys and scrollbar-drag still worked, which is exactly the reported
+    // asymmetry).  Radix `Select` scrolls inside these same dialogs for the
+    // same reason: it is modal.
+    <Popover open={familyOpen} onOpenChange={setFamilyOpen} modal>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -196,7 +203,28 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels, sh
       <PopoverContent
         align="start"
         collisionPadding={8}
-        className="w-[240px] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+        // REQ-0487 §1 — width follows CONTENT (`w-max`) with a floor and a
+        // ceiling, rather than the old fixed `w-[240px]`.
+        //   • `min-w-[240px]`  keeps a short list (e.g. Noto-only on a fresh
+        //      machine) from looking cramped.
+        //   • `w-max`          grows to the widest single-line row so the name
+        //      and the EN / JA / rare-kanji chips sit on ONE line.  The chips
+        //      are wider in English ("Rare kanji unsupported" vs 稀な漢字非対応),
+        //      so `w-max` sizes to whichever locale is active — no locale-tuned
+        //      constant to drift.
+        //   • `max-w-[...]`     caps at the viewport (min window is 1280 wide,
+        //      so the cap never bites in practice); the name then truncates
+        //      gracefully instead of overflowing if a face is ever wider.
+        // The popover portals to <body> and Radix keeps it on-screen via
+        // `collisionPadding`, so the narrower setup drawer needs no separate
+        // width — the panel floats above the drawer, it is not clipped by it.
+        // `scrollbar-gutter:stable` reserves the vertical scrollbar's width up
+        // front so `w-max` includes it: without it the scrollbar would shave
+        // the content box and re-introduce a 1-px horizontal scrollbar (the
+        // very bar REQ-0487 removes).  `overflow-x-hidden` is belt-and-braces
+        // against the CSS rule that `overflow-y:auto` makes `overflow-x`
+        // compute to `auto`.
+        className="w-max min-w-[240px] max-w-[calc(100vw-16px)] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
       >
         <div className="flex flex-col">
           {familiesUi.map((fam) => {
@@ -207,42 +235,33 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels, sh
                 type="button"
                 onClick={() => pickFamily(fam)}
                 className={cn(
-                  'flex flex-col gap-1 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
+                  // REQ-0487 §1 — one row = one line: [dot] [name] [chips].
+                  // Pre-0487 this was `flex-col` with the chips on a second
+                  // line (REQ-0344), a workaround for the fixed 240 px width
+                  // that squeezed the name to 0.  Now the panel widens to fit
+                  // both, so the chips return beside the name — which is what
+                  // the owner asked for and reads like every other font menu.
+                  'flex items-center gap-2 px-2 py-1.5 rounded text-body-sm transition-colors text-left',
                   'hover:bg-accent/40',
                   isCurrent ? 'text-fg-primary' : 'text-fg-secondary',
                 )}
               >
-                <span className="flex items-center gap-2 w-full min-w-0">
-                  <span
-                    className={cn('h-2 w-2 rounded-full shrink-0', isCurrent ? 'bg-primary' : 'bg-surface-4')}
-                    aria-hidden="true"
-                  />
-                  <span
-                    className="flex-1 min-w-0 truncate"
-                    style={{ fontFamily: `'${fam.cssFontFamily}'`, fontWeight: fam.defaultFontId ? getFontMeta(fam.defaultFontId).weight : 400 }}
-                  >
-                    {fam.displayLabel}
-                  </span>
+                <span
+                  className={cn('h-2 w-2 rounded-full shrink-0', isCurrent ? 'bg-primary' : 'bg-surface-4')}
+                  aria-hidden="true"
+                />
+                <span
+                  className="flex-1 min-w-0 truncate"
+                  style={{ fontFamily: `'${fam.cssFontFamily}'`, fontWeight: fam.defaultFontId ? getFontMeta(fam.defaultFontId).weight : 400 }}
+                >
+                  {fam.displayLabel}
                 </span>
-                {/* REQ-0344 §1 — where the chips DO render they sit BELOW
-                    the name, never beside it.  Sharing one line made them
-                    competitors for 200 px, and since the chips are `shrink-0`
-                    while the name is `truncate`, the name always lost:
-                    measured in the real faces at the startup window size,
-                    "Hachi Maru Pop" and "Potta One" — the two families
-                    carrying all three chips — were reduced to clientWidth 0.
-                    Not shortened: GONE, leaving a row that warned about a font
-                    it did not name.
-
-                    REQ-0348 §1-4: the second line exists only FOR the chips,
-                    so it disappears with them.  Without badges the row is a
-                    single line again and the name has the full width, which is
-                    both what the owner asked for and strictly safer than the
-                    layout that caused the truncation. */}
                 {showCoverageBadges && (
-                  <span className="pl-4">
-                    <FontFamilyBadges languages={fam.languages} lacksRareKanji={fam.lacksRareKanji} />
-                  </span>
+                  <FontFamilyBadges
+                    languages={fam.languages}
+                    lacksRareKanji={fam.lacksRareKanji}
+                    className="shrink-0"
+                  />
                 )}
               </button>
             )
@@ -304,7 +323,9 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels, sh
   // switching families.
   const hasMultipleWeights = !!currentFamily && currentFamily.hasMultipleWeights
   const weightDropdown = hasMultipleWeights ? (
-    <Popover open={weightOpen} onOpenChange={setWeightOpen}>
+    // REQ-0487 §2 — same `modal` fix as the family popover so a long weight
+    // list (Noto ships many) scrolls on the wheel inside the dialog / drawer.
+    <Popover open={weightOpen} onOpenChange={setWeightOpen} modal>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -319,7 +340,10 @@ export function FamilyWeightSelector({ value, onChange, disabled, showLabels, sh
       <PopoverContent
         align="start"
         collisionPadding={8}
-        className="w-[240px] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+        // REQ-0487 §1 — mirror the family popover's sizing so both dropdowns
+        // behave identically (content-driven within a floor/ceiling, no
+        // spurious horizontal scrollbar).
+        className="w-max min-w-[240px] max-w-[calc(100vw-16px)] p-1 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
       >
         <div className="flex flex-col">
           {selectableWeightsForFamily(currentFamily!, isInstalled, isMsix)

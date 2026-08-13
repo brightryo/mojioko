@@ -1,4 +1,4 @@
-import './i18n'
+import i18n from './i18n'
 import './styles/globals.css'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
@@ -57,7 +57,11 @@ async function maybeSeedFromUrl(): Promise<void> {
       ui: useUiStore,
       history: useHistoryStore,
       installedFonts: useInstalledFontsStore,
-      appEnv: useAppEnvStore
+      appEnv: useAppEnvStore,
+      // REQ-0487 — expose the i18n instance so a gate can measure the font
+      // popover in BOTH locales (the rare-kanji chip label is far longer in
+      // English, so a JA-measured width can regress in EN).
+      i18n
     }
   })
 }
