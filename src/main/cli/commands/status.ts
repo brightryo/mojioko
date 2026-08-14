@@ -14,6 +14,7 @@ import { buildGpuToolState } from '../../services/gpu-tool'
 import { loadSettings } from '../../services/settings-store'
 import { getBinPath, getModelsDir, getTranscriberExePath } from '../../lib/paths'
 import { resolveTranslationRuntime } from '../translation-runtime'
+import { resolveTier } from '../../lib/tier'
 import { APP_VERSION } from '../../../shared/app-info'
 import { commandSummaries } from '../help'
 import { resolveDefaultSubtitleStyle } from '../subtitle-style'
@@ -70,11 +71,28 @@ export async function runStatusCommand(ctx: CliContext): Promise<number> {
     })
   }
 
+  // REQ-0507 §2-4 — tier, with the reason it was decided.  Until now the only
+  // way to tell a free build from a paid one was to read the font list and
+  // infer, which is a workaround, not an answer.
+  const tier = resolveTier()
+
   return emitSuccess(ctx, 'status', {
     version: APP_VERSION,
     ready,
     blockers,
     advisories,
+    tier: {
+      tier: tier.tier,
+      isPaid: tier.isPaid,
+      source: tier.source,
+      /**
+       * REQ-0507 §1 — stated plainly because it is currently surprising:
+       * paid-only enforcement lives in the RENDERER, so the CLI/MCP render
+       * path does not apply it (RES-0507 §1). This field reports which tier
+       * the process believes it is, NOT that the tier is enforced.
+       */
+      fontEnforcement: 'renderer-only',
+    },
     // REQ-0458 §2 — MCP launch-spec revision + stale-bundle verdict.
     mcpBundle: {
       launchSpecRevision: staleness.expectedRevision,
