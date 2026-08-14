@@ -370,6 +370,42 @@ describe('REQ-0508 §1-1 — every enumerated render site applies the policy', (
 })
 
 /**
+ * §2-5 — the word-subtitle gate is on the path, not beside it.
+ *
+ * REQ-0508 changes nothing about what that gate DOES (word timestamps have been
+ * unconditional for every tier since REQ-0285). It fixes the same structural
+ * shape the font gate had: the check lived at `ipc/transcription.ts` only, so
+ * the CLI — which calls `transcribe()` directly — bypassed it by construction.
+ * Nothing leaked because the CLI has no `--word-subtitle` flag; the point is
+ * that adding one would have leaked by default.
+ */
+export function findUngatedPayloadBuilds(files: { path: string; text: string }[]): string[] {
+  return files
+    .map((f) => ({ path: f.path.replace(/\\/g, '/'), code: stripComments(f.text) }))
+    .filter((f) => f.path !== 'src/main/services/transcribe-payload.ts') // the definition
+    .filter((f) => /buildTranscribePayload\s*\(/.test(f.code))
+    .filter((f) => !/applyTranscriptionTierGate\s*\(/.test(f.code))
+    .map((f) => f.path)
+}
+
+describe('REQ-0508 §2-5 — buildTranscribePayload is always tier-gated', () => {
+  const sources = collectSources(join(__dirname, '..', '..', 'src'))
+
+  it('every payload build applies the transcription tier gate', () => {
+    expect(findUngatedPayloadBuilds(sources)).toEqual([])
+  })
+
+  it('NEGATIVE CONTROL — removing the gate from the sidecar is detected', () => {
+    const real = sources.find((f) => f.path.replace(/\\/g, '/') === 'src/main/services/transcription-sidecar.ts')
+    expect(real, 'sidecar source not found').toBeDefined()
+    const gutted = real!.text.replace(/applyTranscriptionTierGate\(request, resolveTier\(\)\.isPaid\)/, 'request')
+    expect(gutted).not.toBe(real!.text)
+    const patched = sources.map((f) => (f === real ? { path: f.path, text: gutted } : f))
+    expect(findUngatedPayloadBuilds(patched)).toEqual(['src/main/services/transcription-sidecar.ts'])
+  })
+})
+
+/**
  * §1-4 — no advertised warning code without an emitter.
  *
  * `FONT_RESTRICTED` was advertised by `help.ts` for three months with no code
