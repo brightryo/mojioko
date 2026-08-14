@@ -10,7 +10,7 @@
  * Long-running tools (transcribe/translate/burn/run/tools_download) return a
  * `job_id` immediately (async, §2); the client polls `get_job_status`.
  */
-import type { CliContext, CliResult } from '../cli/output'
+import type { CliContext, CliResult, CliWarning } from '../cli/output'
 import { CliError } from '../cli/output'
 import type { ParsedArgs } from '../cli/args'
 import { runStatusCommand } from '../cli/commands/status'
@@ -56,7 +56,15 @@ interface ToolSpec {
   build: (input: Record<string, unknown>) => { fn: CommandFn; args: ParsedArgs }
 }
 
-const DEVICE_PROP = { type: 'string', enum: ['cpu', 'gpu'], description: '実行デバイス（既定: 設定）' }
+/**
+ * REQ-0499 §2-7 — `transcribe` / `run` do not SELECT the device (the sidecar
+ * takes it from the app setting); the value only feeds the `--strict`
+ * assertion.  `translate` does select it.  Two props so the schema stops
+ * implying a capability that does not exist.  `burn` carries neither: it is an
+ * ffmpeg operation and `--device` was a pure no-op there (RES-0498 §1.2).
+ */
+const DEVICE_ASSERT_PROP = { type: 'string', enum: ['cpu', 'gpu'], description: '期待デバイスの表明（選択はしない。strict と併用）' }
+const DEVICE_SELECT_PROP = { type: 'string', enum: ['cpu', 'gpu'], description: '実行デバイスを選択（既定: CUDA があれば gpu）' }
 const FORMAT_PROP = { type: 'string', enum: ['mojioko', 'srt'], description: '出力フォーマット（既定: 拡張子）' }
 
 export const TOOLS: ToolSpec[] = [
@@ -81,7 +89,7 @@ export const TOOLS: ToolSpec[] = [
         track: { type: 'integer', description: '音声トラック(1-based, 既定1)' },
         vad: { type: 'string', enum: ['on', 'off'], description: 'VAD（既定 on）' },
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
-        device: DEVICE_PROP,
+        device: DEVICE_ASSERT_PROP,
         format: FORMAT_PROP,
       },
       additionalProperties: false,
@@ -105,7 +113,7 @@ export const TOOLS: ToolSpec[] = [
         model: { type: 'string', enum: ['3b', '7b'], description: '既定: 設定のアクティブ翻訳モデル' },
         from_original: { type: 'boolean', description: '文字起こし原文から訳す（.mojioko 必須）' },
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
-        device: DEVICE_PROP,
+        device: DEVICE_SELECT_PROP,
         format: FORMAT_PROP,
       },
       additionalProperties: false,
@@ -139,19 +147,24 @@ export const TOOLS: ToolSpec[] = [
         text_color: { type: 'string', description: '文字色 #RRGGBB（REQ-0461）' },
         outline_color: { type: 'string', description: '縁色 #RRGGBB（REQ-0461）' },
         outline: { type: 'integer', description: '縁の太さ(px)（REQ-0461）' },
-        margin_v: { type: 'integer', description: '縦マージン(px)。ASS verticalMarginPx に反映（REQ-0461）' },
+        margin_v: { type: 'integer', description: '縦マージン(px)。ASS verticalMarginPx に反映＝実描画の下/上端オフセット（REQ-0461）' },
+        // REQ-0499 §2-6 — these two were reachable from the CLI and declared on
+        // `export_frame`, but MISSING here, so an agent could preview a frame
+        // with `margin_x` and then be unable to burn with the same value.  That
+        // broke REQ-0468's "a still previews the burn" guarantee at the MCP layer.
+        margin_x: { type: 'integer', description: '横マージン(px)。改行幅＋ASS MarginL/R（既定10・REQ-0499）' },
+        margin_y: { type: 'integer', description: '縦オーバーフロー判定の上下安全域(px)。既定は margin_v（REQ-0499）' },
         position: { type: 'string', enum: ['top', 'center', 'bottom'], description: '縦位置' },
         style: { type: 'string', description: 'GUI 保存のスタイルプリセット名（全 cue に適用。REQ-0457 D12）' },
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false で拒否）' },
         dry_run: { type: 'boolean', description: '焼かずに overflow 判定のみ返す（REQ-0457 E）' },
-        device: DEVICE_PROP,
       },
       additionalProperties: false,
     },
     async: true,
     build: (i) => ({
       fn: runBurnCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), audio: str(i.audio), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), position: str(i.position), style: str(i.style), overwrite: boolTrue(i.overwrite), 'dry-run': boolTrue(i.dry_run), device: str(i.device) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), audio: str(i.audio), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), 'margin-x': numStr(i.margin_x), 'margin-y': numStr(i.margin_y), position: str(i.position), style: str(i.style), overwrite: boolTrue(i.overwrite), 'dry-run': boolTrue(i.dry_run) }),
     }),
   },
   {
@@ -172,7 +185,7 @@ export const TOOLS: ToolSpec[] = [
         quality: { type: 'integer', description: '画質 1..100（burn 時・REQ-0460）' },
         style: { type: 'string', description: 'スタイルプリセット名（burn 時・REQ-0457 D12）' },
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
-        device: DEVICE_PROP,
+        device: DEVICE_ASSERT_PROP,
       },
       additionalProperties: false,
     },
@@ -310,6 +323,27 @@ export const TOOLS: ToolSpec[] = [
   },
 ]
 
+/**
+ * REQ-0499 §1-3 — keys the caller sent that this tool's `inputSchema` does not
+ * declare.
+ *
+ * The advertised schemas all say `additionalProperties: false`, but nothing was
+ * enforcing it: `server.ts` hands `params.arguments` straight through and
+ * `build()` cherry-picks the keys it knows, so an undeclared `margin_x` was
+ * silently dropped and the call still reported success.
+ *
+ * We WARN rather than reject.  A hard rejection would make MOJIOKO fail on any
+ * client that decorates `tools/call` with extra bookkeeping keys, and the MCP
+ * spec does not forbid a client from doing so; a warning gives the agent the
+ * same information without risking a hard incompatibility we cannot test
+ * against every client. Making this fatal is a one-line change if a client is
+ * ever confirmed clean.
+ */
+function unknownInputKeys(spec: ToolSpec, input: Record<string, unknown>): string[] {
+  const props = (spec.inputSchema as { properties?: Record<string, unknown> }).properties ?? {}
+  return Object.keys(input).filter((k) => !(k in props))
+}
+
 /** Run a CLI command with a capturing sink; returns its structured result. */
 async function runCaptured(
   fn: CommandFn,
@@ -318,6 +352,7 @@ async function runCaptured(
     defaultStage: string
     onStage?: (stage: string, stageProgress: number, overallProgress: number) => void
     signal?: AbortSignal
+    warnings?: CliWarning[]
   },
 ): Promise<CliResult> {
   let captured: CliResult | null = null
@@ -328,6 +363,7 @@ async function runCaptured(
     onProgress: opts.onStage ? (p) => opts.onStage!(opts.defaultStage, p, p) : undefined,
     onStageProgress: opts.onStage,
     signal: opts.signal,
+    warnings: opts.warnings,
   }
   try {
     await fn(ctx, args)
@@ -365,6 +401,16 @@ export async function callTool(name: string, input: Record<string, unknown>): Pr
   const spec = TOOLS.find((t) => t.name === name)
   if (!spec) return { structured: { ok: false, code: 'USAGE', message: `unknown tool: ${name}` }, isError: true }
 
+  // REQ-0499 §1-3 — surface undeclared arguments instead of dropping them.
+  const unknown = unknownInputKeys(spec, input ?? {})
+  const warnings: CliWarning[] = unknown.length
+    ? [{
+        code: 'UNKNOWN_OPTION',
+        message: `未知の引数を無視しました: ${unknown.join(', ')}`,
+        detail: { unknownArguments: unknown, remedy: `tools/list の ${name}.inputSchema を参照してください。` },
+      }]
+    : []
+
   const { fn, args } = spec.build(input ?? {})
 
   if (spec.async) {
@@ -375,11 +421,17 @@ export async function callTool(name: string, input: Record<string, unknown>): Pr
       defaultStage: name,
       onStage: (stage, sp, op) => updateJobStage(job.id, stage, sp, op),
       signal: controller.signal,
+      warnings,
     }).then((r) => finishJob(job.id, r))
-    return { structured: { ...jobSnapshot(job), hint: 'get_job_status で完了を確認してください。' }, isError: false }
+    // Async: the job's final `result.warnings` carries these too, but repeat
+    // them on the IMMEDIATE reply — an agent that never polls still sees them.
+    return {
+      structured: { ...jobSnapshot(job), ...(warnings.length ? { warnings } : {}), hint: 'get_job_status で完了を確認してください。' },
+      isError: false,
+    }
   }
 
-  const result = await runCaptured(fn, args, { defaultStage: name })
+  const result = await runCaptured(fn, args, { defaultStage: name, warnings })
   return { structured: result, isError: !result.ok }
 }
 

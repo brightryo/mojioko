@@ -108,6 +108,17 @@ export interface CliContext {
    * ffmpeg / the sidecar when this fires.  The MCP `cancel_job` tool triggers it.
    */
   signal?: AbortSignal
+  /**
+   * REQ-0499 §1 — warnings raised by the DISPATCHER, before the command runs
+   * (currently: unknown options).  `emitSuccess` prepends them to whatever the
+   * command itself reports, so a caller sees "your `--karaoke` did nothing"
+   * without every command having to thread the list through.
+   *
+   * Deliberately context-level rather than a `route()` return value: the MCP
+   * layer captures `CliResult`, so anything not in the envelope is invisible to
+   * an agent.
+   */
+  warnings?: CliWarning[]
 }
 
 /** A structured progress line on stderr (JSONL). No-op under `--quiet`. */
@@ -138,13 +149,16 @@ export function emitSuccess(
   data: unknown,
   warnings: CliWarning[] = [],
 ): number {
+  // REQ-0499 §1 — dispatcher warnings (unknown options) ride along with the
+  // command's own, so they reach both stdout and the MCP `CliResult`.
+  const all = ctx.warnings?.length ? [...ctx.warnings, ...warnings] : warnings
   if (ctx.sink) {
-    ctx.sink({ ok: true, command, data, warnings })
+    ctx.sink({ ok: true, command, data, warnings: all })
     return EXIT_OK
   }
   if (ctx.silent) return EXIT_OK
   if (ctx.json) {
-    process.stdout.write(JSON.stringify({ ok: true, command, data, warnings }) + '\n')
+    process.stdout.write(JSON.stringify({ ok: true, command, data, warnings: all }) + '\n')
   } else {
     process.stdout.write(`OK ${command}\n`)
   }

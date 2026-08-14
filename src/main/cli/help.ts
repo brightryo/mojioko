@@ -45,7 +45,15 @@ const WEIGHTS = [...CLI_WEIGHT_LABELS] // REQ-0461 — single source of truth (s
 const PRESETS = ['shorts', 'vertical', 'reels', 'tiktok', 'square', '1080p', '720p']
 
 const OUT_REQ: OptionSpec = { flag: '-o, --out', type: 'path', required: true, desc: '出力ファイルパス' }
-const DEVICE: OptionSpec = { flag: '--device', type: 'enum', values: ['cpu', 'gpu'], desc: '実行デバイス（既定: 設定の activeAccelerator）' }
+/**
+ * REQ-0499 §2-7 — `transcribe` / `run` do NOT select the device with this flag:
+ * the sidecar picks it from the app setting, and the flag only feeds the
+ * `--strict` assertion.  The wording used to read as a selector, which is why
+ * RES-0498 classified it a partial no-op.  `translate` DOES select (see
+ * `DEVICE_SELECT`), so the two are deliberately worded differently.
+ */
+const DEVICE_ASSERT: OptionSpec = { flag: '--device', type: 'enum', values: ['cpu', 'gpu'], desc: '期待デバイスの表明（選択はしない。実デバイスは設定の activeAccelerator。--strict と併用）' }
+const DEVICE_SELECT: OptionSpec = { flag: '--device', type: 'enum', values: ['cpu', 'gpu'], desc: '実行デバイスを選択（既定: CUDA があれば gpu）' }
 const STRICT: OptionSpec = { flag: '--strict', type: 'boolean', default: 'false', desc: '--device gpu で CUDA 不可なら fallback せず失敗' }
 
 const COMMANDS: CommandDoc[] = [
@@ -91,7 +99,7 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--min-speech-ms', type: 'int', default: '250', desc: '最小発話長(ms)' },
       { flag: '--min-silence-ms', type: 'int', default: '2000', desc: '最小無音長(ms)' },
       { flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '既定: -o 拡張子から判定' },
-      DEVICE,
+      DEVICE_ASSERT,
       STRICT,
     ],
     examples: ['mojioko transcribe input.mp4 -o out.mojioko --lang ja'],
@@ -108,7 +116,7 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--model', type: 'enum', values: ['3b', '7b'], desc: '既定: 設定のアクティブ翻訳モデル' },
       { flag: '--from-original', type: 'boolean', default: 'false', desc: '文字起こし原文から訳す（.mojioko 必須）' },
       { flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '既定: -o 拡張子から判定' },
-      DEVICE,
+      DEVICE_SELECT,
       STRICT,
     ],
     examples: ['mojioko translate out.mojioko --to en --from-original -o out.en.mojioko'],
@@ -145,7 +153,6 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--style', type: 'string', desc: 'GUI 保存のスタイルプリセット名を全 cue に適用（status で一覧）' },
       { flag: '--overwrite', type: 'boolean', default: 'false', desc: '既存出力を上書き（既定は拒否）' },
       { flag: '--dry-run', type: 'boolean', default: 'false', desc: '焼かずに overflow(shrink/warn/error)判定のみ返す' },
-      DEVICE,
     ],
     examples: ['mojioko burn input.mp4 out.en.mojioko -o final.mp4 --preset shorts --style "My Bold"'],
     errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'SUBTITLE_OVERFLOW', 'BURN_FAILED', 'OUTPUT_WRITE_FAILED'],
@@ -163,7 +170,7 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--preset', type: 'enum', values: PRESETS, desc: 'burn 用（--burn 時）' },
       { flag: '--style', type: 'string', desc: 'スタイルプリセット名（--burn 時）' },
       { flag: '--overwrite', type: 'boolean', default: 'false', desc: '既存出力を上書き' },
-      DEVICE,
+      DEVICE_ASSERT,
       STRICT,
     ],
     examples: ['mojioko run input.mp4 --translate en --burn -o final.mp4 --preset shorts'],
@@ -263,6 +270,8 @@ const COMMON_FLAGS: [string, string][] = [
   ['--json / --no-json', 'stdout に結果 JSON を出す（既定 on。help は既定テキスト）'],
   ['--quiet', 'stderr の進捗・info を抑止'],
   ['--verbose', 'stderr に debug ログを追加'],
+  // REQ-0499 §1 — unknown options warn by default; this makes them fatal.
+  ['--strict-args', '未知のオプションを警告ではなく USAGE エラー(exit 2)にする'],
   ['-h, --help', 'ヘルプを表示'],
   ['--version', 'バージョンを表示'],
 ]
@@ -327,6 +336,46 @@ function pad(s: string, n: number): string {
 /** The command list ({name, summary}) — shared with `mojioko status`. */
 export function commandSummaries(): { name: string; summary: string }[] {
   return COMMANDS.map((c) => ({ name: c.name, summary: c.summary }))
+}
+
+/**
+ * The long-option keys in an `OptionSpec.flag` string.
+ *
+ * `flag` is display text (`'-o, --out'`, `'--margin-v'`), so the machine-usable
+ * key set has to be parsed back out of it.  Short aliases (`-o`) are dropped:
+ * the parser rewrites `-o` to `out` before anything sees it (`args.ts`).
+ */
+function optionKeysOf(flag: string): string[] {
+  return flag
+    .split(',')
+    .map((token) => token.trim())
+    .filter((token) => token.startsWith('--'))
+    .map((token) => token.slice(2))
+}
+
+/**
+ * Every long-option key `command` advertises in help.
+ *
+ * REQ-0499 §1 — the unknown-option detector (`known-opts.ts`) and the
+ * option-wiring gate both read the flag list from here, so help stays the
+ * single declaration of what a command accepts.  Unknown command ⇒ `[]`.
+ */
+export function advertisedOptionKeys(command: string): string[] {
+  const doc = COMMANDS.find((c) => c.name === command)
+  if (!doc) return []
+  return doc.optionSpecs.flatMap((o) => optionKeysOf(o.flag))
+}
+
+/** Every command name in help (canonical spellings). */
+export function helpCommandNames(): string[] {
+  return COMMANDS.map((c) => c.name)
+}
+
+/** REQ-0499 §3 — the full advertised option set, for the wiring gate. */
+export function allAdvertisedOptions(): { command: string; key: string }[] {
+  return COMMANDS.flatMap((c) =>
+    c.optionSpecs.flatMap((o) => optionKeysOf(o.flag).map((key) => ({ command: c.name, key }))),
+  )
 }
 
 /** Print help. `command` targets per-command help; undefined = top-level. */

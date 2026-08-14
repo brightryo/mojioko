@@ -20,7 +20,7 @@ import { parseSrt } from '../../../renderer/lib/srt-parse'
 import type { TranslationToolId } from '../../../shared/translation-tools'
 import type { TranslationTarget } from '../../../shared/translation'
 import { optString, type ParsedArgs } from '../args'
-import { CliError, emitSuccess, type CliContext } from '../output'
+import { CliError, emitSuccess, type CliContext, type CliWarning } from '../output'
 import { assertWritable } from '../overwrite'
 import { detectFormat, entriesToSrt } from '../subtitle-io'
 
@@ -74,8 +74,45 @@ export async function runTranslateCommand(ctx: CliContext, args: ParsedArgs): Pr
   if (!isToolInstalled(toolId, toolsDir)) {
     throw new CliError('TOOL_NOT_DOWNLOADED', `翻訳モデル "${toolId}" が導入されていません。`, `mojioko tools download translation --model ${toolId === 'madlad400-7b' ? '7b' : '3b'}`, { toolId })
   }
+  // REQ-0499 §2-2 — `--device` / `--strict` used to be pure no-ops here: the
+  // device was unconditionally `gpuDir ? 'cuda' : 'cpu'`, and the result then
+  // ECHOED that, so `--device cpu` returned `device: "gpu"`.  The sidecar takes
+  // the device from `config.device` (→ `MOJIOKO_TRANSLATION_DEVICE`), so honouring
+  // the flag is a real selection, not just an honest report.
+  const requestedDevice = optString(args.opts, 'device')
+  if (requestedDevice && requestedDevice !== 'cpu' && requestedDevice !== 'gpu') {
+    throw new CliError('USAGE', `unknown --device: ${requestedDevice}`, 'cpu|gpu')
+  }
+  const strict = args.opts.strict === true
   const gpuDir = await getEffectiveGpuToolDir()
-  const config = { modelDir: join(toolsDir, toolId), device: (gpuDir ? 'cuda' : 'cpu') as 'cpu' | 'cuda', gpuDir }
+  const warnings: CliWarning[] = []
+
+  let useGpu = Boolean(gpuDir)
+  if (requestedDevice === 'cpu') {
+    useGpu = false
+  } else if (requestedDevice === 'gpu' && !gpuDir) {
+    // Mirrors `transcribe`: a missing CUDA runtime is a warning by default and
+    // fatal under `--strict` (which previously could never fire here at all).
+    if (strict) {
+      throw new CliError(
+        'GPU_INIT_FAILED',
+        'GPU が要求されましたが CUDA ツールが導入されていません（--strict）。',
+        'mojioko tools download gpu を実行するか、--device cpu で実行してください。',
+      )
+    }
+    warnings.push({
+      code: 'GPU_INIT_FAILED',
+      message: 'GPU が要求されましたが CUDA ツールが無いため CPU で実行しました。',
+      detail: { requestedDevice: 'gpu', usedDevice: 'cpu' },
+    })
+    useGpu = false
+  }
+
+  const config = {
+    modelDir: join(toolsDir, toolId),
+    device: (useGpu ? 'cuda' : 'cpu') as 'cpu' | 'cuda',
+    gpuDir: useGpu ? gpuDir : null,
+  }
 
   // Read input → source texts (+ keep the structure for output).
   const raw = readFileSync(input, 'utf-8')
@@ -126,13 +163,21 @@ export async function runTranslateCommand(ctx: CliContext, args: ParsedArgs): Pr
     throw new CliError('OUTPUT_WRITE_FAILED', `出力を書き込めません: ${out}`, '出力先の権限・空き容量・パスを確認してください。', { error: e instanceof Error ? e.message : String(e) })
   }
 
-  return emitSuccess(ctx, 'translate', {
-    outputPath: out,
-    format: outFmt,
-    count: sources.length,
-    to: target,
-    source: fromOriginal ? 'original' : 'current-text',
-    model: toolId,
-    device: gpuDir ? 'gpu' : 'cpu',
-  })
+  return emitSuccess(
+    ctx,
+    'translate',
+    {
+      outputPath: out,
+      format: outFmt,
+      count: sources.length,
+      to: target,
+      source: fromOriginal ? 'original' : 'current-text',
+      model: toolId,
+      // The device ACTUALLY used (REQ-0499 §2-2), plus what was asked for, so a
+      // caller can tell a satisfied request from a silent fallback.
+      device: useGpu ? 'gpu' : 'cpu',
+      requestedDevice: requestedDevice || null,
+    },
+    warnings,
+  )
 }

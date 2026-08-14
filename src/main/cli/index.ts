@@ -19,8 +19,9 @@ import { existsSync } from 'node:fs'
 import { APP_VERSION } from '../../shared/app-info'
 import { CLI_COMMANDS, HELP_TOKENS, classifyProjectOpen, secondInstanceProjectFile } from './launch-classify'
 import { parseArgs } from './args'
-import { CliError, emitFailure, type CliContext } from './output'
+import { CliError, emitDebug, emitFailure, type CliContext } from './output'
 import { printHelp } from './help'
+import { canonicalCommandName, detectUnknownOptions, formatUnknownOptions } from './known-opts'
 import { runToolsCommand } from './commands/tools'
 import { runTranscribeCommand } from './commands/transcribe'
 import { runTranslateCommand } from './commands/translate'
@@ -77,7 +78,49 @@ function userCliArgs(): string[] {
   return rest
 }
 
+/**
+ * REQ-0499 §1 — apply the unknown-option policy for this invocation.
+ *
+ * Default is a WARNING in the success envelope, not a failure: a script that
+ * has been passing a stray flag keeps working, and the agent still learns the
+ * flag did nothing.  `--strict-args` turns the same finding into `USAGE` (exit
+ * 2) for callers that want the strict contract today.  Flipping the default is
+ * an owner decision — the two behaviours share this one function so the switch
+ * is a one-line change.
+ *
+ * `mcp` is exempt: it takes no options of its own and its arguments are
+ * validated per-tool inside the server (`mcp/tools.ts`).
+ */
+function applyUnknownOptionPolicy(
+  ctx: CliContext,
+  command: string,
+  opts: Readonly<Record<string, string | boolean>>,
+): void {
+  if (command === 'mcp') return
+  const unknown = detectUnknownOptions(command, opts)
+  if (unknown.length === 0) return
+
+  const listed = formatUnknownOptions(unknown)
+  const remedy = `mojioko ${command} -h で使用可能なオプションを確認してください。`
+  if (opts['strict-args'] === true) {
+    throw new CliError('USAGE', `未知のオプション: ${listed}`, remedy, {
+      unknownOptions: unknown,
+    })
+  }
+  ctx.warnings = [
+    ...(ctx.warnings ?? []),
+    {
+      code: 'UNKNOWN_OPTION',
+      message: `未知のオプションを無視しました: ${listed}`,
+      detail: { unknownOptions: unknown, remedy },
+    },
+  ]
+  // Also on stderr, so a human running without --json sees it too.
+  process.stderr.write(`WARN [UNKNOWN_OPTION] 未知のオプションを無視しました: ${listed}\n  → ${remedy}\n`)
+}
+
 async function route(ctx: CliContext, command: string, args: ReturnType<typeof parseArgs>): Promise<number> {
+  emitDebug(ctx, `[debug] command=${command} opts=${JSON.stringify(args.opts)} positionals=${JSON.stringify(args.positionals)}`)
   switch (command) {
     case 'tools':
       return runToolsCommand(ctx, args)
@@ -195,11 +238,17 @@ export async function maybeRunCli(): Promise<boolean> {
   try {
     if (isHelpCommand) {
       // `mojioko help [cmd]` / `mojioko -h`
-      code = printHelp(helpCtx, parsed.positionals[0])
+      code = printHelp(helpCtx, canonicalCommandName(parsed.positionals[0] ?? ''))
     } else if (parsed.opts.help === true) {
-      // `mojioko <cmd> -h`
-      code = printHelp(helpCtx, head)
+      // `mojioko <cmd> -h` — canonicalized so the `export-frame` / `read-subtitle`
+      // / `edit-subtitle` / `export_mcpb` aliases get their OWN help instead of
+      // silently falling through to the top-level page (REQ-0498 §1.2 B9).
+      code = printHelp(helpCtx, canonicalCommandName(head))
     } else {
+      // REQ-0499 §1 — reject/flag options this command does not accept, BEFORE
+      // running it.  Unknown options used to return `ok:true` with no warning,
+      // so a hallucinated flag looked like it worked.
+      applyUnknownOptionPolicy(ctx, head, parsed.opts)
       code = await route(ctx, head, parsed)
     }
   } catch (e) {

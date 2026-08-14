@@ -29,6 +29,28 @@ import {
 } from '../output'
 import { detectFormat, entriesFromSegments, writeMojiokoFile, writeSrtFile, type SegmentLike } from '../subtitle-io'
 
+/**
+ * REQ-0499 §2-1 — numeric option readers for the VAD tuning flags.
+ *
+ * Local rather than shared: `optInt` already lives in `placement.ts` for the
+ * layout flags, and these three are the only float/positive-int options in the
+ * CLI.  A malformed value returns `undefined` so the caller falls back to the
+ * settings value rather than silently sending `NaN` to the sidecar.
+ */
+function optFloat(opts: ParsedArgs['opts'], key: string): number | undefined {
+  const s = optString(opts, key)
+  if (s === undefined || s === '') return undefined
+  const n = Number.parseFloat(s)
+  return Number.isFinite(n) ? n : undefined
+}
+
+function optPositiveInt(opts: ParsedArgs['opts'], key: string): number | undefined {
+  const s = optString(opts, key)
+  if (s === undefined || s === '') return undefined
+  const n = Number.parseInt(s, 10)
+  return Number.isFinite(n) && n >= 0 ? n : undefined
+}
+
 export async function runTranscribeCommand(ctx: CliContext, args: ParsedArgs): Promise<number> {
   const input = args.positionals[0]
   if (!input) {
@@ -80,6 +102,21 @@ export async function runTranscribeCommand(ctx: CliContext, args: ParsedArgs): P
   if (vad !== undefined) advanced.vadFilter = vad
   const beam = optString(args.opts, 'beam-size')
   if (beam) advanced.beamSize = Number.parseInt(beam, 10)
+  // REQ-0499 §2-1 — these three were advertised in help AND wired all the way
+  // down to the sidecar payload (`transcribe-payload.ts`), but the argv read was
+  // missing, so they always took the settings value.  Same "advertised but
+  // unread" family as REQ-0461's style flags.
+  const vadThreshold = optFloat(args.opts, 'vad-threshold')
+  if (vadThreshold !== undefined) {
+    if (vadThreshold < 0 || vadThreshold > 1) {
+      throw new CliError('USAGE', `--vad-threshold は 0..1 の数値: ${vadThreshold}`, '例: --vad-threshold 0.5')
+    }
+    advanced.vadThreshold = vadThreshold
+  }
+  const minSpeechMs = optPositiveInt(args.opts, 'min-speech-ms')
+  if (minSpeechMs !== undefined) advanced.minSpeechDurationMs = minSpeechMs
+  const minSilenceMs = optPositiveInt(args.opts, 'min-silence-ms')
+  if (minSilenceMs !== undefined) advanced.minSilenceDurationMs = minSilenceMs
 
   const request: TranscriptionStartRequest = {
     videoPath: input,

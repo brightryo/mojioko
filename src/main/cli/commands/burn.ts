@@ -20,7 +20,7 @@ import type { BurninStartRequest, EncoderSetting, AudioMode, OutputContainer } f
 import type { EncodeQuality, H264Encoder, SubtitleEntry, VideoInfo } from '../../../shared/types'
 import type { FontId } from '../../../shared/fonts'
 import { optString, type ParsedArgs } from '../args'
-import { CliError, emitProgress, emitSuccess, type CliContext } from '../output'
+import { CliError, emitDebug, emitProgress, emitSuccess, type CliContext } from '../output'
 import { detectFormat, entriesFromSegments } from '../subtitle-io'
 import { assertWritable } from '../overwrite'
 import { parseBitrateKbps } from '../../../shared/encode-quality'
@@ -115,6 +115,14 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
   const placement = resolvePlacementAndLayout(args.opts, video, settings, fontId, entries)
   entries = placement.entries
   const { renderVideo, scaleTo, resized, marginX, marginY, overflow, appliedStylePreset, verticalPositionOverride, subtitleStyle } = placement
+  // REQ-0499 §2-5 — `--verbose` had no call site anywhere in src, so it could
+  // never print anything.  The resolved placement is the single most useful
+  // thing to see when a burn does not look like the caller expected.
+  emitDebug(
+    ctx,
+    `[debug] placement: render=${renderVideo.widthPx}x${renderVideo.heightPx} resized=${resized} marginX=${marginX} marginY=${marginY} ` +
+      `overflow=${placement.overflowMode}/${overflow.overflowCueCount} preset=${appliedStylePreset ?? 'none'} cues=${entries.filter((e) => !e.isDeleted).length}`,
+  )
 
   if (placement.overflowMode === 'error' && overflow.overflowCueCount > 0) {
     throw new CliError(

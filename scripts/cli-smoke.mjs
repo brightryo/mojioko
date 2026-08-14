@@ -207,7 +207,34 @@ try {
     // (3) invalid override is a clean USAGE error (exit 2), not a silent ignore.
     const badColor = cli(['burn', clip, srt, '--dry-run', '--text-color', 'red'], 20000)
     check('burn --text-color red → USAGE / exit 2', badColor.code === 2 && badColor.json?.code === 'USAGE', `${badColor.code}/${badColor.json?.code}`)
+
+    // REQ-0499 §1 / §3-4 — UNKNOWN OPTION gate.
+    // Before this, `--karaoke on` (a flag that does not exist) returned ok:true
+    // with zero warnings, so a hallucinated flag looked like it worked. Default
+    // is now a warning; `--strict-args` makes it exit 2.
+    const warned = cli(['burn', clip, srt, '--dry-run', '--karaoke', 'on'], 20000)
+    const warnCodes = (warned.json?.warnings ?? []).map((x) => x.code)
+    check(
+      'unknown option warns but still succeeds (default)',
+      warned.code === 0 && warnCodes.includes('UNKNOWN_OPTION'),
+      `code=${warned.code} warnings=${JSON.stringify(warnCodes)}`,
+    )
+    const strictArgs = cli(['burn', clip, srt, '--dry-run', '--karaoke', 'on', '--strict-args'], 20000)
+    check(
+      'unknown option + --strict-args → USAGE / exit 2',
+      strictArgs.code === 2 && strictArgs.json?.code === 'USAGE',
+      `${strictArgs.code}/${strictArgs.json?.code}`,
+    )
+    // A REAL flag must not be mistaken for unknown — the hidden-alias allowlist
+    // (`--at`, `--overwrite`, `burn --format`, …) is what makes this pass.
+    const hiddenOk = cli(['burn', clip, srt, '--dry-run', '--format', 'srt', '--strict-args'], 20000)
+    check(
+      'hidden-but-real option (burn --format) survives --strict-args',
+      hiddenOk.code === 0,
+      `${hiddenOk.code}/${hiddenOk.json?.code ?? ''}`,
+    )
   }
+
 
   // REQ-0468 — PREVIEW == BURN placement gate.  With the SAME placement flags
   // (--position bottom --margin-v <v>), the caption must land at the SAME Y in an
