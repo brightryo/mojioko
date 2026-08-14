@@ -67,6 +67,25 @@ const DEVICE_ASSERT_PROP = { type: 'string', enum: ['cpu', 'gpu'], description: 
 const DEVICE_SELECT_PROP = { type: 'string', enum: ['cpu', 'gpu'], description: '実行デバイスを選択（既定: CUDA があれば gpu）' }
 const FORMAT_PROP = { type: 'string', enum: ['mojioko', 'srt'], description: '出力フォーマット（既定: 拡張子）' }
 
+/**
+ * REQ-0500 §2 — karaoke overrides.  Cues seeded from the app defaults inherit
+ * `karaokeEnabled`, so before this an agent on a karaoke-ON machine could not
+ * produce a plain subtitle at all; `karaokeStyle` had no headless route at all.
+ */
+const KARAOKE_PROPS = {
+  karaoke: { type: 'string', enum: ['on', 'off'], description: 'カラオケ表示の ON/OFF（既定: 設定）（REQ-0500）' },
+  karaoke_color: { type: 'string', description: '発話済み色 #RRGGBB（REQ-0500）' },
+  karaoke_style: { type: 'string', enum: ['sweep', 'switch'], description: 'カラオケ表示方式（既定 sweep）（REQ-0500）' },
+} as const
+
+/** REQ-0500 §2 — the CLI option mapping for `KARAOKE_PROPS`. */
+const karaokeArgs = (i: Record<string, unknown>): Record<string, string | undefined> => ({
+  karaoke: str(i.karaoke),
+  'karaoke-color': str(i.karaoke_color),
+  'karaoke-style': str(i.karaoke_style),
+})
+
+
 export const TOOLS: ToolSpec[] = [
   {
     name: 'status',
@@ -154,6 +173,7 @@ export const TOOLS: ToolSpec[] = [
         // broke REQ-0468's "a still previews the burn" guarantee at the MCP layer.
         margin_x: { type: 'integer', description: '横マージン(px)。改行幅＋ASS MarginL/R（既定10・REQ-0499）' },
         margin_y: { type: 'integer', description: '縦オーバーフロー判定の上下安全域(px)。既定は margin_v（REQ-0499）' },
+        ...KARAOKE_PROPS,
         position: { type: 'string', enum: ['top', 'center', 'bottom'], description: '縦位置' },
         style: { type: 'string', description: 'GUI 保存のスタイルプリセット名（全 cue に適用。REQ-0457 D12）' },
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false で拒否）' },
@@ -164,7 +184,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runBurnCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), audio: str(i.audio), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), 'margin-x': numStr(i.margin_x), 'margin-y': numStr(i.margin_y), position: str(i.position), style: str(i.style), overwrite: boolTrue(i.overwrite), 'dry-run': boolTrue(i.dry_run) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), audio: str(i.audio), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), 'margin-x': numStr(i.margin_x), 'margin-y': numStr(i.margin_y), position: str(i.position), ...karaokeArgs(i), style: str(i.style), overwrite: boolTrue(i.overwrite), 'dry-run': boolTrue(i.dry_run) }),
     }),
   },
   {
@@ -184,6 +204,7 @@ export const TOOLS: ToolSpec[] = [
         bitrate: { type: 'string', description: 'VBR目標ビットレート 例 "16M"（burn 時・REQ-0460）' },
         quality: { type: 'integer', description: '画質 1..100（burn 時・REQ-0460）' },
         style: { type: 'string', description: 'スタイルプリセット名（burn 時・REQ-0457 D12）' },
+        ...KARAOKE_PROPS,
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
         device: DEVICE_ASSERT_PROP,
       },
@@ -192,7 +213,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runRunCommand,
-      args: toArgs([str(i.video)], { out: str(i.out), subtitle: str(i.subtitle), translate: str(i.translate), burn: boolTrue(i.burn), preset: str(i.preset), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), style: str(i.style), overwrite: boolTrue(i.overwrite), device: str(i.device) }),
+      args: toArgs([str(i.video)], { out: str(i.out), subtitle: str(i.subtitle), translate: str(i.translate), burn: boolTrue(i.burn), preset: str(i.preset), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), style: str(i.style), ...karaokeArgs(i), overwrite: boolTrue(i.overwrite), device: str(i.device) }),
     }),
   },
   {
@@ -214,6 +235,7 @@ export const TOOLS: ToolSpec[] = [
         outline: { type: 'integer', description: '縁の太さ(px)（REQ-0461）' },
         margin_v: { type: 'integer', description: '縦マージン(px)。ASS verticalMarginPx に反映（REQ-0461）' },
         // REQ-0468 — same placement/layout args as `burn` (faithful preview still).
+        ...KARAOKE_PROPS,
         position: { type: 'string', enum: ['top', 'center', 'bottom'], description: '縦位置（burn と同一。REQ-0468）' },
         margin_x: { type: 'integer', description: '横マージン(px)。改行幅＋ASS MarginL/R（REQ-0468）' },
         margin_y: { type: 'integer', description: '縦オーバーフロー判定の上下安全域(px)（REQ-0468）' },
@@ -228,7 +250,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runExportFrameCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), position: str(i.position), 'margin-x': numStr(i.margin_x), 'margin-y': numStr(i.margin_y), overflow: str(i.overflow), preset: str(i.preset), resolution: str(i.resolution), style: str(i.style), overwrite: boolTrue(i.overwrite) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), position: str(i.position), ...karaokeArgs(i), 'margin-x': numStr(i.margin_x), 'margin-y': numStr(i.margin_y), overflow: str(i.overflow), preset: str(i.preset), resolution: str(i.resolution), style: str(i.style), overwrite: boolTrue(i.overwrite) }),
     }),
   },
   {
@@ -245,15 +267,18 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'read_subtitle',
-    description: '字幕(.mojioko/SRT)の cue 一覧（index/開始/終了/テキスト）を返す。誤認識の確認・提示に。',
+    description: '字幕(.mojioko/SRT)の cue 一覧（index/開始/終了/テキスト）を返す。誤認識の確認・提示に。with_style=true で cue ごとの解決済みスタイル＋id/cueNumber も返す（REQ-0500）。',
     inputSchema: {
       type: 'object',
       required: ['input'],
-      properties: { input: { type: 'string', description: '.mojioko または .srt の絶対パス' } },
+      properties: {
+        input: { type: 'string', description: '.mojioko または .srt の絶対パス' },
+        with_style: { type: 'boolean', description: 'cue ごとの解決済みスタイルと id/cueNumber も返す（.mojioko のみ）。styleVaries=true なら cue ごとに異なる＝一括上書きは既存の作り込みを潰す（REQ-0500）' },
+      },
       additionalProperties: false,
     },
     async: false,
-    build: (i) => ({ fn: runReadSubtitleCommand, args: toArgs([str(i.input)], {}) }),
+    build: (i) => ({ fn: runReadSubtitleCommand, args: toArgs([str(i.input)], { 'with-style': boolTrue(i.with_style) }) }),
   },
   {
     name: 'edit_subtitle',

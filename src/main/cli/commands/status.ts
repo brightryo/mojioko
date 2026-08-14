@@ -13,6 +13,7 @@ import { buildTranslationToolsState } from '../../services/translation-tool-stor
 import { buildGpuToolState } from '../../services/gpu-tool'
 import { loadSettings } from '../../services/settings-store'
 import { getBinPath, getModelsDir, getTranscriberExePath } from '../../lib/paths'
+import { resolveTranslationRuntime } from '../translation-runtime'
 import { APP_VERSION } from '../../../shared/app-info'
 import { commandSummaries } from '../help'
 import { resolveDefaultSubtitleStyle } from '../subtitle-style'
@@ -91,6 +92,12 @@ export async function runStatusCommand(ctx: CliContext): Promise<number> {
       translation: {
         activeId: translation.activeId,
         installed: translation.tools.filter((t) => t.status !== 'not-downloaded').map((t) => t.id),
+        // REQ-0500 §3-2 — a model being INSTALLED says nothing about whether the
+        // translator can actually run.  REQ-0493 shipped a build where the model
+        // was present and every translate failed with PYTHON_MISSING, and
+        // `status` looked completely healthy throughout.  Report how the runtime
+        // resolves, in the same vocabulary as `transcriber` below.
+        runtime: resolveTranslationRuntime(),
       },
       gpu: { installStatus: gpu.installStatus, detection: gpu.detection.category, nvidiaName: gpu.detection.nvidiaName },
       ffmpeg: { available: ffmpegAvailable },

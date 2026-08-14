@@ -87,6 +87,32 @@ function whiteCaptionCenterY(png) {
   return { centerY: n > 0 ? Math.round(sumY / n) : NaN, count: n }
 }
 
+/**
+ * REQ-0500 §2 — count pixels matching an RGB triple (with tolerance for h264 /
+ * anti-aliasing noise).  Used for the karaoke gate: `--karaoke off` must drive
+ * the highlight-colour count to exactly zero.
+ */
+function countColor(png, [r, g, b], tol = 24) {
+  const out = spawnSync(FFMPEG, ['-v', 'error', '-i', png, '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], {
+    encoding: 'buffer',
+    maxBuffer: 512 * 1024 * 1024,
+  })
+  const buf = out.stdout
+  if (!buf || buf.length === 0) return -1
+  let n = 0
+  for (let i = 0; i + 2 < buf.length; i += 3) {
+    if (Math.abs(buf[i] - r) <= tol && Math.abs(buf[i + 1] - g) <= tol && Math.abs(buf[i + 2] - b) <= tol) n++
+  }
+  return n
+}
+
+/** Make a solid-colour clip under `work` and return its path. */
+function makeClipFor(name, size) {
+  const p = join(work, name)
+  makeSolidClip(p, size)
+  return p
+}
+
 if (!existsSync(ELECTRON) || !existsSync(FFMPEG)) {
   log('SKIP: electron or bundled ffmpeg not found (run `npm run build` first).')
   process.exit(0)
@@ -209,17 +235,23 @@ try {
     check('burn --text-color red → USAGE / exit 2', badColor.code === 2 && badColor.json?.code === 'USAGE', `${badColor.code}/${badColor.json?.code}`)
 
     // REQ-0499 §1 / §3-4 — UNKNOWN OPTION gate.
-    // Before this, `--karaoke on` (a flag that does not exist) returned ok:true
-    // with zero warnings, so a hallucinated flag looked like it worked. Default
-    // is now a warning; `--strict-args` makes it exit 2.
-    const warned = cli(['burn', clip, srt, '--dry-run', '--karaoke', 'on'], 20000)
+    // Before this, a flag that does not exist returned ok:true with zero
+    // warnings, so a hallucinated flag looked like it worked. Default is now a
+    // warning; `--strict-args` makes it exit 2.
+    //
+    // `--shadow` is used as the specimen because it is a REAL GUI capability
+    // with no CLI flag (second-wave work), so it is exactly the kind of thing an
+    // agent guesses. NOTE: `--karaoke` was the original specimen here and had to
+    // be swapped when REQ-0500 made it real — if a later REQ adds `--shadow`,
+    // this check will start failing and must be re-pointed at another unknown.
+    const warned = cli(['burn', clip, srt, '--dry-run', '--shadow', '40'], 20000)
     const warnCodes = (warned.json?.warnings ?? []).map((x) => x.code)
     check(
       'unknown option warns but still succeeds (default)',
       warned.code === 0 && warnCodes.includes('UNKNOWN_OPTION'),
       `code=${warned.code} warnings=${JSON.stringify(warnCodes)}`,
     )
-    const strictArgs = cli(['burn', clip, srt, '--dry-run', '--karaoke', 'on', '--strict-args'], 20000)
+    const strictArgs = cli(['burn', clip, srt, '--dry-run', '--shadow', '40', '--strict-args'], 20000)
     check(
       'unknown option + --strict-args → USAGE / exit 2',
       strictArgs.code === 2 && strictArgs.json?.code === 'USAGE',
@@ -233,6 +265,81 @@ try {
       hiddenOk.code === 0,
       `${hiddenOk.code}/${hiddenOk.json?.code ?? ''}`,
     )
+
+    // REQ-0500 §2 / §3-4 — KARAOKE ESCAPE gate, in REAL PIXELS.
+    // Cues inherit `karaokeEnabled` from the app settings, so before this a
+    // headless caller on a karaoke-ON machine could not produce a plain
+    // subtitle at all. Assert the highlight colour vanishes with `--karaoke off`.
+    //
+    // Self-controlling: the `on` case must find highlight pixels. If it finds
+    // none the environment has karaoke off / the colour changed, and a green
+    // `off` case would prove nothing — so `on` failing is what keeps this gate
+    // from silently degrading into a tautology.
+    const kOn = join(work, 'karaoke-on.png')
+    const kOff = join(work, 'karaoke-off.png')
+    const kHue = join(work, 'karaoke-hue.png')
+    const HL = [0xb4, 0xff, 0x39] // settings highlight (#B4FF39)
+    const MAGENTA = [0xff, 0x00, 0xff]
+    cli(['export_frame', clip, srt, '-o', kOn, '--time', '1.0', '--karaoke', 'on'], 60000)
+    cli(['export_frame', clip, srt, '-o', kOff, '--time', '1.0', '--karaoke', 'off'], 60000)
+    cli(['export_frame', clip, srt, '-o', kHue, '--time', '1.0', '--karaoke', 'on', '--karaoke-color', '#FF00FF'], 60000)
+    const onHl = countColor(kOn, HL)
+    const offHl = countColor(kOff, HL)
+    check('karaoke ON renders highlight pixels (control for the gate below)', onHl > 200, `px=${onHl}`)
+    check('--karaoke off removes EVERY highlight pixel', offHl === 0, `px=${offHl} (was ${onHl})`)
+    check('--karaoke-color repaints the highlight', countColor(kHue, MAGENTA) > 200 && countColor(kHue, HL) === 0,
+      `magenta=${countColor(kHue, MAGENTA)} oldHighlight=${countColor(kHue, HL)}`)
+  }
+
+  // REQ-0500 §3-1 — `run --burn --dry-run` must not claim a burn that never
+  // happened. It used to return `burned:true` + an outputPath for a missing file.
+  {
+    const clip = makeClipFor('dryrun.mp4', '640x360')
+    const srt = join(work, 'dryrun.srt')
+    writeFileSync(srt, '1\n00:00:00,300 --> 00:00:01,500\ndry run cue\n', 'utf-8')
+    const out = join(work, 'dryrun-out.mp4')
+    const r = cli(['run', clip, '-o', out, '--subtitle', srt, '--burn', '--dry-run'], 60000)
+    check('run --burn --dry-run exits 0', r.code === 0, `code=${r.code}/${r.json?.code ?? ''}`)
+    check('run --dry-run reports dryRun:true and burned:false', r.json?.data?.dryRun === true && r.json?.data?.burned === false,
+      `dryRun=${r.json?.data?.dryRun} burned=${r.json?.data?.burned}`)
+    check('run --dry-run wrote NO file (the claim matches the disk)', !existsSync(out))
+  }
+
+  // REQ-0500 §1 — `read_subtitle --with-style` must expose per-cue style, and
+  // `styleVaries` must distinguish a uniform project from a hand-tuned one.
+  {
+    const clip = makeClipFor('style-read.mp4', '640x360')
+    const srt = join(work, 'style-read.srt')
+    writeFileSync(srt, '1\n00:00:00,300 --> 00:00:01,000\nfirst\n\n2\n00:00:01,200 --> 00:00:02,000\nsecond\n', 'utf-8')
+    const moj = join(work, 'style-read.mojioko')
+    cli(['convert', srt, '-o', moj, '--video', clip], 40000)
+
+    const plain = cli(['read_subtitle', moj], 30000)
+    check('read_subtitle default shape is unchanged (no style key)', plain.code === 0 && plain.json?.data?.cues?.[0]?.style === undefined)
+
+    const styled = cli(['read_subtitle', moj, '--with-style'], 30000)
+    const c0 = styled.json?.data?.cues?.[0]
+    check('read_subtitle --with-style returns per-cue style', styled.code === 0 && !!c0?.style?.karaoke && !!c0?.style?.animation && !!c0?.style?.background,
+      c0?.style ? Object.keys(c0.style).join(',') : 'missing')
+    // REQ-0500 §1-3 — `index` is recomputed per read, so a stable handle matters.
+    // `cueNumber` only exists because `entriesFromSegments` now assigns it; if
+    // that regresses, the field silently becomes undefined and this catches it.
+    const c1 = styled.json?.data?.cues?.[1]
+    check('read_subtitle --with-style returns stable ids (id + cueNumber)',
+      typeof c0?.id === 'string' && c0.id.length > 0 && c0?.cueNumber === 1 && c1?.cueNumber === 2,
+      `id=${c0?.id} cueNumbers=${c0?.cueNumber},${c1?.cueNumber}`)
+    check('uniform project reports styleVaries:false', styled.json?.data?.styleVaries === false, String(styled.json?.data?.styleVaries))
+
+    // Diverge ONE cue, exactly as a GUI hand-edit would, and require detection.
+    const proj = JSON.parse(readFileSync(moj, 'utf-8'))
+    proj.editing.subtitles[1].textColorHex = '#FF0000'
+    const moj2 = join(work, 'style-read-varied.mojioko')
+    writeFileSync(moj2, JSON.stringify(proj), 'utf-8')
+    const varied = cli(['read_subtitle', moj2, '--with-style'], 30000)
+    const colors = (varied.json?.data?.cues ?? []).map((c) => c.style?.textColorHex)
+    check('one hand-edited cue → styleVaries:true and only THAT cue differs',
+      varied.json?.data?.styleVaries === true && colors[0] === '#FFFFFF' && colors[1] === '#FF0000',
+      `varies=${varied.json?.data?.styleVaries} colors=${JSON.stringify(colors)}`)
   }
 
 

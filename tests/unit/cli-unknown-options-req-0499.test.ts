@@ -29,13 +29,29 @@ describe('REQ-0499 §1 — unknown option detection', () => {
   })
 
   it('flags the flags RES-0498 showed passing silently', () => {
+    // `karaoke` is deliberately ABSENT from this list: REQ-0500 made it real.
+    // The rest are still GUI-only capabilities with no CLI flag (second wave),
+    // which is exactly what an agent guesses at.
     const unknown = detectUnknownOptions('burn', {
-      karaoke: 'on', shadow: '40', rotation: '45', layer: '3',
+      shadow: '40', rotation: '45', layer: '3',
       'line-spacing': '50', 'emphasis-color': '#FF0000',
     })
     expect(unknown.map((u) => u.key).sort()).toEqual([
-      'emphasis-color', 'karaoke', 'layer', 'line-spacing', 'rotation', 'shadow',
+      'emphasis-color', 'layer', 'line-spacing', 'rotation', 'shadow',
     ])
+  })
+
+  it('accepts the karaoke flags REQ-0500 added, on all three commands', () => {
+    for (const command of ['burn', 'export_frame', 'run']) {
+      expect(
+        detectUnknownOptions(command, { karaoke: 'off', 'karaoke-color': '#FF00FF', 'karaoke-style': 'switch' }),
+        command,
+      ).toEqual([])
+    }
+  })
+
+  it('accepts read_subtitle --with-style (REQ-0500)', () => {
+    expect(detectUnknownOptions('read_subtitle', { 'with-style': true })).toEqual([])
   })
 
   it('accepts global flags on any command', () => {

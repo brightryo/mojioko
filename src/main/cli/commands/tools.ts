@@ -21,6 +21,7 @@ import { checkModelInstalled } from '../../services/check-model-installed'
 import { loadSettings, mutateSettings } from '../../services/settings-store'
 import { getBinPath, getModelsDir, getTranslationToolsDir } from '../../lib/paths'
 import { getTranscriberExePath } from '../../lib/paths'
+import { resolveTranslationRuntime } from '../translation-runtime'
 import type { WhisperModelId } from '../../../shared/types'
 import type { TranslationToolId } from '../../../shared/translation-tools'
 import { optString, type ParsedArgs } from '../args'
@@ -102,7 +103,10 @@ async function runList(ctx: CliContext): Promise<number> {
     ffmpeg: { available: ffmpegAvailable },
     pythonSidecar: {
       transcriber: transcriberExe ? 'bundled-exe' : 'venv-required',
-      translator: 'venv-required',
+      // REQ-0500 §3-2 — was hard-coded `'venv-required'`, which became WRONG at
+      // REQ-0494 (translation now ships inside the same PyInstaller bundle).
+      // A constant cannot track a resolution rule, so ask the real resolver.
+      translator: resolveTranslationRuntime().mode,
     },
     fonts: { bundledFamily: 'Noto Sans JP', weights: 9, note: 'CLI はアプリ既定スタイルのフォントを継承（§11）' },
     missing,

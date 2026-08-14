@@ -12,7 +12,7 @@ import { parseProjectFile, serializeProjectFile } from '../../../shared/project-
 import { parseSrt } from '../../../renderer/lib/srt-parse'
 import { formatSrtTime } from '../../../shared/srt-time'
 import { optString, type ParsedArgs } from '../args'
-import { CliError, emitSuccess, type CliContext } from '../output'
+import { CliError, emitSuccess, type CliContext, type CliWarning } from '../output'
 import { assertWritable } from '../overwrite'
 import { detectFormat } from '../subtitle-io'
 
@@ -36,6 +36,14 @@ export async function runEditSubtitleCommand(ctx: CliContext, args: ParsedArgs):
 
   const raw = readFileSync(input, 'utf-8')
 
+  // REQ-0500 §3-3 — replacing the text DISCARDS the cue's per-word timings, so
+  // karaoke silently degrades from real speech timing to an even split.  The
+  // behaviour is deliberate (stale timings swept against new text look worse),
+  // but it used to happen with no signal at all — and `read_subtitle` advertises
+  // `hasWords: true` right before, so an agent fixing one typo had every reason
+  // to think nothing else changed.  Warn instead of surprising the caller.
+  const warnings: CliWarning[] = []
+
   try {
     if (inFmt === 'mojioko') {
       const parsed = parseProjectFile(raw)
@@ -48,6 +56,19 @@ export async function runEditSubtitleCommand(ctx: CliContext, args: ParsedArgs):
       const entry = project.editing.subtitles[pos]
       // Drop stale word timings so karaoke re-derives (equal split) instead of
       // sweeping the OLD word timings against the NEW text.
+      const hadWords = Array.isArray(entry.words) && entry.words.length > 0
+      if (hadWords) {
+        warnings.push({
+          code: 'WORD_TIMINGS_DISCARDED',
+          message: 'テキスト差し替えにより、この cue の単語タイミングを破棄しました（カラオケは均等割りになります）。',
+          detail: {
+            index,
+            wordCount: entry.words?.length ?? 0,
+            reason: '古い単語タイミングを新しいテキストに当てると発話とズレるため。',
+            remedy: '実発話タイミングが必要な場合は、この cue を再度文字起こししてください。',
+          },
+        })
+      }
       project.editing.subtitles[pos] = { ...entry, text: newText, words: undefined, isEdited: true }
 
       if (outFmt === 'mojioko') {
@@ -71,7 +92,21 @@ export async function runEditSubtitleCommand(ctx: CliContext, args: ParsedArgs):
     throw new CliError('OUTPUT_WRITE_FAILED', `出力を書き込めません: ${out}`, '出力先の権限・パスを確認してください。', { error: e instanceof Error ? e.message : String(e) })
   }
 
-  return emitSuccess(ctx, 'edit_subtitle', { inputPath: input, outputPath: out, format: outFmt, editedIndex: index, newText })
+  return emitSuccess(
+    ctx,
+    'edit_subtitle',
+    {
+      inputPath: input,
+      outputPath: out,
+      format: outFmt,
+      editedIndex: index,
+      newText,
+      // Explicit rather than inferable from `warnings[]` alone, so a caller can
+      // branch on it without string-matching a warning code.
+      wordTimingsDiscarded: warnings.some((w) => w.code === 'WORD_TIMINGS_DISCARDED'),
+    },
+    warnings,
+  )
 }
 
 function cuesToSrt(cues: { startSec: number; endSec: number; text: string }[]): string {

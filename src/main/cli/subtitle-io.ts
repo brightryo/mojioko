@@ -7,6 +7,7 @@
 import { writeFileSync } from 'node:fs'
 import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
 import { animationFieldsForNewCue } from '../../shared/cue-animation'
+import { assignCueNumbers } from '../../shared/cue-number'
 import { styleFieldsFromDefaults } from '../../renderer/lib/style-defaults-to-entry'
 import { buildProjectFile, serializeProjectFile } from '../../shared/project-file'
 import { formatSrtTime } from '../../shared/srt-time'
@@ -59,7 +60,7 @@ export function entriesFromSegments(
     videoWidthPx: video.widthPx,
     videoHeightPx: video.heightPx,
   })
-  return segments.map((seg, i) => {
+  const entries = segments.map((seg, i) => {
     const base = {
       startSec: seg.startSec,
       endSec: seg.endSec,
@@ -79,6 +80,13 @@ export function entriesFromSegments(
       original: { ...base, subtitleBackground: { ...base.subtitleBackground } },
     } as SubtitleEntry
   })
+  // REQ-0500 §1-3 — assign the stable display number (字幕ID).  The GUI gets
+  // this for free because every creation path funnels through the store's
+  // `setEntries`; the CLI does not go through the store, so headless-produced
+  // projects carried no `cueNumber` at all and `read_subtitle --with-style`
+  // would have reported an always-undefined field.  Reuses the shared helper
+  // rather than numbering here (the GUI back-fills on load with the same one).
+  return assignCueNumbers(entries)
 }
 
 export interface WriteMojikoArgs {

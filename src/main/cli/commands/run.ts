@@ -105,10 +105,17 @@ export async function runRunCommand(ctx: CliContext, args: ParsedArgs): Promise<
     const bData = dataOf(burnResult)
     const subtitleStyle = bData?.subtitleStyle ?? resolveDefaultSubtitleStyle(await loadSettings())
 
+    // REQ-0500 §3-1 — `--dry-run` is forwarded to the burn stage, which then
+    // writes nothing.  `run` still reported `burned: true` and an `outputPath`
+    // for a file that does not exist, so a caller checking the result believed
+    // the burn had happened.  Report the dry run and stop claiming a burn.
+    const dryRun = args.opts['dry-run'] === true
+
     return emitSuccess(ctx, 'run', {
       outputPath: out,
       stages,
-      burned: doBurn,
+      dryRun,
+      burned: doBurn && !dryRun,
       translatedTo: translateTo ?? null,
       detectedLanguage: tData?.detectedLanguage ?? null,
       hasWordTimestamps: tData?.hasWordTimestamps ?? null,

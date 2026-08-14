@@ -35,6 +35,15 @@ export interface SubtitleStyleSummary {
   karaoke: { enabled: boolean; style: string; highlightColor: string }
   emphasis: { enabled: boolean; color: string; scalePercent: number }
   animation: { type: string; inEnabled: boolean; outEnabled: boolean; durationSec: number; startScalePercent: number; blurPx: number }
+  /**
+   * REQ-0500 §1-2 — background box and z-order, the two remaining axes a GUI
+   * user can set that this summary did not expose.  Added here rather than in a
+   * second per-cue projection: `read_subtitle --with-style` reuses this exact
+   * function, and a parallel summariser is precisely the drift this codebase
+   * keeps paying for (`style-defaults-to-entry.ts` documents four instances).
+   */
+  background: { enabled: boolean; color: string; opacityPercent: number }
+  layer: number
 }
 
 /** Summarise one cue's resolved style (neutral fallbacks match the ASS writer). */
@@ -78,6 +87,13 @@ export function summarizeSubtitleStyle(entry: SubtitleEntry, autoLineBreak: bool
       startScalePercent: Math.round(anim.startScale * 100),
       blurPx: anim.blurMaxPx,
     },
+    background: {
+      enabled: entry.subtitleBackground?.enabled === true,
+      color: entry.subtitleBackground?.color ?? 'black',
+      opacityPercent: entry.subtitleBackground?.opacityPercent ?? 50,
+    },
+    // `undefined` ≡ 0 (`resolveLayer`); higher = nearer the front.
+    layer: entry.layer ?? 0,
   }
 }
 

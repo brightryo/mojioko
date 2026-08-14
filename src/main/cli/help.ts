@@ -149,6 +149,12 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--text-color', type: 'string', desc: '文字色 #RRGGBB' },
       { flag: '--outline-color', type: 'string', desc: '縁色 #RRGGBB' },
       { flag: '--outline', type: 'int', desc: '縁の太さ(px)' },
+      // REQ-0500 §2 — karaoke was previously inescapable from a headless run:
+      // cues inherit `karaokeEnabled` from the app settings and no flag could
+      // turn it off. `--karaoke-style` had no headless route at all.
+      { flag: '--karaoke', type: 'enum', values: ['on', 'off'], desc: 'カラオケ表示の ON/OFF（既定=アプリ設定）' },
+      { flag: '--karaoke-color', type: 'string', desc: '発話済み色 #RRGGBB' },
+      { flag: '--karaoke-style', type: 'enum', values: ['sweep', 'switch'], desc: 'カラオケ表示方式（既定 sweep）' },
       { flag: '--position', type: 'enum', values: ['top', 'center', 'bottom'], desc: '縦位置' },
       { flag: '--style', type: 'string', desc: 'GUI 保存のスタイルプリセット名を全 cue に適用（status で一覧）' },
       { flag: '--overwrite', type: 'boolean', default: 'false', desc: '既存出力を上書き（既定は拒否）' },
@@ -169,6 +175,12 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--burn', type: 'boolean', default: 'false', desc: '焼き込みまで実行（-o は .mp4）' },
       { flag: '--preset', type: 'enum', values: PRESETS, desc: 'burn 用（--burn 時）' },
       { flag: '--style', type: 'string', desc: 'スタイルプリセット名（--burn 時）' },
+      // REQ-0500 §2 — karaoke was previously inescapable from a headless run:
+      // cues inherit `karaokeEnabled` from the app settings and no flag could
+      // turn it off. `--karaoke-style` had no headless route at all.
+      { flag: '--karaoke', type: 'enum', values: ['on', 'off'], desc: 'カラオケ表示の ON/OFF（既定=アプリ設定）' },
+      { flag: '--karaoke-color', type: 'string', desc: '発話済み色 #RRGGBB' },
+      { flag: '--karaoke-style', type: 'enum', values: ['sweep', 'switch'], desc: 'カラオケ表示方式（既定 sweep）' },
       { flag: '--overwrite', type: 'boolean', default: 'false', desc: '既存出力を上書き' },
       DEVICE_ASSERT,
       STRICT,
@@ -198,6 +210,12 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--margin-v', type: 'int', desc: '縦マージン(px)。ASS verticalMarginPx に反映' },
       // REQ-0468 — same placement/layout args as `burn`, resolved by the shared
       // pipeline, so a still previews the burn (position/margins/overflow/解像度).
+      // REQ-0500 §2 — karaoke was previously inescapable from a headless run:
+      // cues inherit `karaokeEnabled` from the app settings and no flag could
+      // turn it off. `--karaoke-style` had no headless route at all.
+      { flag: '--karaoke', type: 'enum', values: ['on', 'off'], desc: 'カラオケ表示の ON/OFF（既定=アプリ設定）' },
+      { flag: '--karaoke-color', type: 'string', desc: '発話済み色 #RRGGBB' },
+      { flag: '--karaoke-style', type: 'enum', values: ['sweep', 'switch'], desc: 'カラオケ表示方式（既定 sweep）' },
       { flag: '--position', type: 'enum', values: ['top', 'center', 'bottom'], desc: '縦位置（burn と同一）' },
       { flag: '--margin-x', type: 'int', default: '10', desc: '横マージン(px)。改行幅＋ASS MarginL/R' },
       { flag: '--margin-y', type: 'int', desc: '縦オーバーフロー判定の上下安全域(px)。既定は --margin-v' },
@@ -220,11 +238,15 @@ const COMMANDS: CommandDoc[] = [
   },
   {
     name: 'read_subtitle',
-    summary: '字幕の cue 一覧（index/開始/終了/テキスト）を返す',
-    usage: 'mojioko read_subtitle <subtitle>',
+    summary: '字幕の cue 一覧（index/開始/終了/テキスト・--with-style でスタイルも）を返す',
+    usage: 'mojioko read_subtitle <subtitle> [--with-style]',
     positionals: [{ name: 'subtitle', required: true, desc: '.mojioko または .srt' }],
-    optionSpecs: [{ flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '既定: 拡張子' }],
-    examples: ['mojioko read_subtitle out.mojioko'],
+    optionSpecs: [
+      { flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '既定: 拡張子' },
+      // REQ-0500 §1 — off by default: the 4-field shape is the existing contract.
+      { flag: '--with-style', type: 'boolean', default: 'false', desc: 'cue ごとの解決済みスタイルと id/cueNumber も返す（.mojioko のみ）' },
+    ],
+    examples: ['mojioko read_subtitle out.mojioko', 'mojioko read_subtitle out.mojioko --with-style'],
     errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE'],
   },
   {

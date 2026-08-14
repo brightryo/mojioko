@@ -16,6 +16,7 @@ import {
   type FontId,
 } from '../../shared/fonts'
 import type { SubtitleEntry } from '../../shared/types'
+import type { KaraokeStyle } from '../../shared/karaoke-style'
 import { optString, type ParsedArgs } from './args'
 import { CliError } from './output'
 
@@ -88,6 +89,18 @@ export interface StyleOverrides {
   fontId?: FontId
   /** The ASS vertical margin (`--margin-v`) — the real bottom/top offset. */
   verticalMarginPx?: number
+  /**
+   * REQ-0500 §2 — karaoke, the one effect a headless caller could not escape.
+   *
+   * Cues seeded from `TranscriptionDefaults` inherit `karaokeEnabled` from the
+   * app settings, so on a machine with karaoke ON *every* CLI/MCP burn came out
+   * with a sweep and there was no flag to turn it off (RES-0498 confirmed this
+   * in real pixels). The only workaround was a saved preset with karaoke off —
+   * which cannot be authored headlessly. That made it a defect, not a gap.
+   */
+  karaokeEnabled?: boolean
+  karaokeHighlightColor?: string
+  karaokeStyle?: KaraokeStyle
 }
 
 /** Read an integer CLI option (first non-empty of `keys`), or undefined. */
@@ -149,19 +162,58 @@ export function parseStyleOverrides(
     ov.verticalMarginPx = marginV
   }
 
+  // REQ-0500 §2 — karaoke.  `--karaoke off` must be expressible, so this reads
+  // an explicit on|off rather than being a bare boolean flag.
+  const karaoke = optString(opts, 'karaoke')
+  if (karaoke !== undefined && karaoke !== '') {
+    const v = karaoke.trim().toLowerCase()
+    if (v !== 'on' && v !== 'off') {
+      throw new CliError('USAGE', `--karaoke は on|off: ${karaoke}`, '例: --karaoke off')
+    }
+    ov.karaokeEnabled = v === 'on'
+  }
+
+  const karaokeColor = optString(opts, 'karaoke-color')
+  if (karaokeColor !== undefined && karaokeColor !== '') {
+    if (!isHexColor(karaokeColor)) throw new CliError('USAGE', `--karaoke-color は #RRGGBB 形式: ${karaokeColor}`, '例: --karaoke-color #FFFF00')
+    ov.karaokeHighlightColor = karaokeColor.trim()
+  }
+
+  // The per-cue `karaokeStyle` was previously unreachable from ANY headless
+  // path: it is absent from `TranscriptionDefaults`, so seeded cues leave it
+  // undefined and every renderer falls back to `KARAOKE_STYLE_DEFAULT`.  Setting
+  // it explicitly here does not disturb that fallback (REQ-0500 §2-5) — an
+  // omitted flag still leaves the field undefined.
+  const karaokeStyleFlag = optString(opts, 'karaoke-style')
+  if (karaokeStyleFlag !== undefined && karaokeStyleFlag !== '') {
+    const v = karaokeStyleFlag.trim().toLowerCase()
+    if (v !== 'sweep' && v !== 'switch') {
+      throw new CliError('USAGE', `--karaoke-style は sweep|switch: ${karaokeStyleFlag}`, '例: --karaoke-style switch')
+    }
+    ov.karaokeStyle = v
+  }
+
   return ov
 }
 
 /** True when no override was supplied (so the caller can skip the map entirely). */
 export function isEmptyStyleOverrides(ov: StyleOverrides): boolean {
-  return (
-    ov.fontSizePx === undefined &&
-    ov.textColorHex === undefined &&
-    ov.outlineColorHex === undefined &&
-    ov.outlineThicknessPx === undefined &&
-    ov.fontId === undefined &&
-    ov.verticalMarginPx === undefined
-  )
+  // Written as "every declared field is undefined" rather than a hand-listed
+  // chain: the previous form silently ignored any field added to the interface
+  // without a matching clause here — the same optional-field-plus-manual-list
+  // trap catalogued in `style-defaults-to-entry.ts`.
+  const probe: Required<{ [K in keyof StyleOverrides]: true }> = {
+    fontSizePx: true,
+    textColorHex: true,
+    outlineColorHex: true,
+    outlineThicknessPx: true,
+    fontId: true,
+    verticalMarginPx: true,
+    karaokeEnabled: true,
+    karaokeHighlightColor: true,
+    karaokeStyle: true,
+  }
+  return Object.keys(probe).every((k) => ov[k as keyof StyleOverrides] === undefined)
 }
 
 /**
@@ -188,6 +240,9 @@ export function applyStyleOverrides(
           ...(ov.outlineThicknessPx !== undefined ? { outlineThicknessPx: ov.outlineThicknessPx } : {}),
           ...(ov.fontId !== undefined ? { fontId: ov.fontId } : {}),
           ...(ov.verticalMarginPx !== undefined ? { verticalMarginPx: ov.verticalMarginPx } : {}),
+          ...(ov.karaokeEnabled !== undefined ? { karaokeEnabled: ov.karaokeEnabled } : {}),
+          ...(ov.karaokeHighlightColor !== undefined ? { karaokeHighlightColor: ov.karaokeHighlightColor } : {}),
+          ...(ov.karaokeStyle !== undefined ? { karaokeStyle: ov.karaokeStyle } : {}),
         },
   )
 }

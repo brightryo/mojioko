@@ -54,6 +54,11 @@ const VALUE_OPTS: ReadonlySet<string> = new Set([
   'outline-color',
   'outline',
   'weight',
+  // REQ-0500 §2 — `--karaoke on|off` takes a value (a bare boolean could not
+  // express "off", which is the whole point of the flag).
+  'karaoke',
+  'karaoke-color',
+  'karaoke-style',
   'position',
   'translate',
   'style',
