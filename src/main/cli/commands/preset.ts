@@ -41,7 +41,7 @@ import {
 import { buildStylePreset } from '../../../renderer/lib/style-preset-apply'
 import type { FontId } from '../../../shared/fonts'
 import { optString, type ParsedArgs } from '../args'
-import { CliError, emitLog, emitSuccess, type CliContext, type CliWarning } from '../output'
+import { CliError, emitSuccess, type CliContext, type CliWarning } from '../output'
 import { detectFormat } from '../subtitle-io'
 import { applyStyleOverrides, parseStyleOverrides } from '../style-overrides'
 import { findStylePreset } from '../style-preset-cli'
@@ -70,28 +70,28 @@ function summarize(p: StylePreset): Record<string, unknown> {
 }
 
 /**
- * Guard against a last-write-wins race with a running MOJIOKO app.
+ * Refuse to write while the MOJIOKO app is running.
  *
- * Identical to `tools use` (REQ-0449): the GUI holds the single-instance lock,
- * so failing to acquire it means the app is up. This matters MORE for presets
- * than for the model settings, because `stylePresets` is `'incoming-wins'` —
- * the GUI's next settings save replaces the whole array.
+ * The GUI holds the single-instance lock, so failing to acquire it means the
+ * app is up.
+ *
+ * ## Why there is no `--force` escape (REQ-0505 §2)
+ *
+ * `tools use` has one, and this command shipped with a copy of it. But the two
+ * are not analogous: `stylePresets` is `'incoming-wins'` and documented as
+ * renderer-owned, so the GUI's very next settings save replaces the WHOLE array
+ * with its in-memory copy. A forced write therefore reports success and then
+ * disappears — which is exactly the "succeeds but does not take effect" class
+ * REQ-0499 onwards has been removing. Shipping a flag whose entire purpose is
+ * to produce that outcome would undo the point of the last six REQs, so the
+ * flag is gone rather than merely discouraged.
  */
-function acquireWriteLock(ctx: CliContext, force: boolean): boolean {
-  if (app.requestSingleInstanceLock()) return true
-  if (force) {
-    emitLog(ctx, 'warning: MOJIOKO app appears to be running; writing anyway (--force).')
-    return true
-  }
-  return false
-}
-
-function requireLock(ctx: CliContext, args: ParsedArgs, action: string): void {
-  if (acquireWriteLock(ctx, args.opts.force === true)) return
+function requireLock(action: string): void {
+  if (app.requestSingleInstanceLock()) return
   throw new CliError(
     'USAGE',
     `MOJIOKO アプリ起動中は CLI からプリセットを${action}できません（競合回避）。`,
-    'アプリを閉じてから再実行してください。アプリ側の保存で CLI の変更が消えるため、--force は非推奨です。',
+    'MOJIOKO を終了してから再実行してください。アプリ起動中の書き込みはアプリ側の保存で失われるため、強制する手段は用意していません。',
   )
 }
 
@@ -223,7 +223,7 @@ async function runSave(ctx: CliContext, args: ParsedArgs): Promise<number> {
   }
   assertNameOk(name, existing, prior?.id)
 
-  requireLock(ctx, args, '保存')
+  requireLock('保存')
 
   // Reuse of the id on overwrite is deliberate: anything already referring to
   // this preset keeps referring to the same thing.
@@ -269,7 +269,7 @@ async function runDelete(ctx: CliContext, args: ParsedArgs): Promise<number> {
     throw new CliError('USAGE', `プリセット "${name}" が見つかりません。`, `利用可能: ${existing.map((p) => p.name).join(', ') || '(なし)'}`)
   }
 
-  requireLock(ctx, args, '削除')
+  requireLock('削除')
 
   const remaining = await mutateSettings((s) => {
     const list = (s.stylePresets ?? []).filter((p) => p.id !== preset.id)

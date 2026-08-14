@@ -60,7 +60,25 @@ const TOOL_TO_COMMAND: Readonly<Record<string, string>> = {
   preset_delete: 'preset',
 }
 
-/** Tools whose arguments are a deliberate subset of the CLI command's. */
+/**
+ * Tools whose arguments are a deliberate subset of the CLI command's.
+ *
+ * ★ KNOWN GAP (REQ-0505 §2-3, reported not fixed). Listing a tool here skips
+ * the CLI→MCP direction ENTIRELY for its command, so an option advertised on
+ * `tools` or `preset` can be missing from every one of its MCP facades and this
+ * suite stays green. Measured: adding a CLI-only `--probe-hole` to `preset`
+ * passes, while the same on `burn` is caught.
+ *
+ * That is how `preset --force` (help-only, never in the MCP schemas) went
+ * undetected until it was removed by hand.
+ *
+ * The skip exists because a verb-split facade legitimately takes fewer
+ * arguments than the umbrella command — `preset_delete` should not have to
+ * declare `--from`. Closing it properly means declaring, per facade, WHICH
+ * subset it owns, so the union can be checked against the command. That is a
+ * real design change rather than a one-line fix, so it is recorded here instead
+ * of being silently tolerated.
+ */
 const SUBSET_TOOLS = new Set(['tools_download', 'tools_use', 'preset_list', 'preset_show', 'preset_save', 'preset_delete'])
 
 /**

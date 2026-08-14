@@ -32,17 +32,69 @@ const work = mkdtempSync(join(tmpdir(), 'mojioko-mcp-smoke-'))
 const clip = join(work, 'clip.mp4')
 spawnSync(FFMPEG, ['-y', '-f', 'lavfi', '-i', 'testsrc=size=1280x720:rate=30:duration=2', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', '-c:v', 'h264_mf', '-c:a', 'aac', '-shortest', clip], { encoding: 'utf-8' })
 
-// REQ-0454 §1/§4 — hold a competing single-instance lock (simulating a running
-// GUI). The MCP server must still serve (it runs in the CLI branch, before/
-// without the lock). The whole handshake below then runs with the lock held.
+// REQ-0454 §1/§4 — hold a COMPETING single-instance lock (the GUI-running
+// scenario). The MCP server must still serve, because it runs in the CLI branch
+// before/without the lock. The whole handshake below then runs with it held.
+//
+// ★ REQ-0505 §1 — this used to be `electron <holder script>`, which does NOT
+// compete. Electron keys the single-instance lock by userData path, and a bare
+// script runs as name "Electron" → %APPDATA%/Roaming/Electron, while the app
+// runs as "mojioko" → %APPDATA%/Roaming/MOJIOKO. Measured: with the old holder
+// `LOCK=true` AND a lock-taking CLI command still succeeded, i.e. the two were
+// never contending and this assertion proved nothing about the GUI scenario.
+//
+// The holder now aligns BOTH the app name and the userData path before asking
+// for the lock. Verified by measurement (RES-0505 §1.2): plain holder →
+// `tools use` succeeds; aligned holder → `tools use` is refused.
+//
+// Alignment alone is still an inference, so `assertLockIsCompeting()` below
+// proves it behaviourally on every run: if a future edit breaks the alignment,
+// that check fails instead of the suite quietly going hollow again.
 const holderPath = join(work, 'lock-holder.cjs')
 writeFileSync(
   holderPath,
-  "const {app}=require('electron');const got=app.requestSingleInstanceLock();process.stderr.write('LOCK='+got+'\\n');app.whenReady().then(()=>{});setTimeout(()=>app.exit(0),120000);",
+  "const {app}=require('electron');" +
+    "app.setName('mojioko');" +
+    "app.setPath('userData', process.env.MOJIOKO_USER_DATA);" +
+    "const got=app.requestSingleInstanceLock();" +
+    "process.stderr.write('LOCK='+got+' UD='+app.getPath('userData')+'\\n');" +
+    "app.whenReady().then(()=>{});setTimeout(()=>app.exit(0),120000);",
 )
-const holder = spawn(ELECTRON, [holderPath], { cwd: ROOT, env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1' } })
+// The real app's userData, resolved the same way the app resolves it.
+const APP_USER_DATA = join(process.env.APPDATA || join(process.env.USERPROFILE || '', 'AppData', 'Roaming'), 'MOJIOKO')
+const holder = spawn(ELECTRON, [holderPath], {
+  cwd: ROOT,
+  env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1', MOJIOKO_USER_DATA: APP_USER_DATA },
+})
 let holderGotLock = false
 holder.stderr.on('data', (d) => { if (String(d).includes('LOCK=true')) holderGotLock = true })
+
+/**
+ * REQ-0505 §1-3 — prove the held lock actually contends with the app's.
+ *
+ * Runs a CLI command whose FIRST action is the write-lock check (`tools use`)
+ * and requires it to be refused. Uses the device value already in settings, so
+ * that if the guard were broken and the write went through, it would be a
+ * no-op rather than a change to the user's configuration.
+ */
+function assertLockIsCompeting() {
+  const st = spawnSync(ELECTRON, ['.', 'status', '--json'], { cwd: ROOT, timeout: 60000, encoding: 'utf-8', env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1' } })
+  const stLine = (st.stdout || '').trim().split('\n').filter((l) => l.startsWith('{')).pop()
+  const current = stLine ? JSON.parse(stLine).data?.settings?.device : undefined
+  if (current !== 'cpu' && current !== 'gpu') {
+    check('lock-competition probe could read the current device', false, `device=${current}`)
+    return
+  }
+  const r = spawnSync(ELECTRON, ['.', 'tools', 'use', 'device', current, '--json'], { cwd: ROOT, timeout: 60000, encoding: 'utf-8', env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1' } })
+  const line = (r.stdout || '').trim().split('\n').filter((l) => l.startsWith('{')).pop()
+  let json = null
+  try { json = line ? JSON.parse(line) : null } catch { json = null }
+  check(
+    'the held lock genuinely COMPETES with the app (a settings write is refused)',
+    json?.ok === false && json?.code === 'USAGE',
+    `ok=${json?.ok} code=${json?.code} — if this passes trivially the holder is not contending`,
+  )
+}
 
 const child = spawn(ELECTRON, [PROXY, '.', 'mcp'], {
   cwd: ROOT,
@@ -81,6 +133,8 @@ try {
   // the handshake below meaningfully proves the MCP server serves regardless.
   await sleep(3000)
   check('competing single-instance lock is held (GUI-running scenario)', holderGotLock)
+  // ...and that it is a COMPETING one, not a lock in some other namespace.
+  assertLockIsCompeting()
 
   // 1) handshake — runs WHILE the lock is held.
   const init = await rpc('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'smoke', version: '1' } })

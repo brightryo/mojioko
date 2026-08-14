@@ -339,7 +339,6 @@ const COMMANDS: CommandDoc[] = [
       ...BASE_STYLE_SPECS,
       ...STYLE_FLAG_SPECS,
       OVERWRITE,
-      { flag: '--force', type: 'boolean', default: 'false', desc: 'アプリ起動中でも書き込む（非推奨：アプリ側の保存で消えます）' },
     ],
     examples: [
       'mojioko preset list',
