@@ -25,7 +25,7 @@ import { resolveTranslationRuntime } from '../translation-runtime'
 import type { WhisperModelId } from '../../../shared/types'
 import type { TranslationToolId } from '../../../shared/translation-tools'
 import { optString, type ParsedArgs } from '../args'
-import { CliError, emitFailure, emitLog, emitProgress, emitSuccess, type CliContext } from '../output'
+import { CliError, emitFailure, emitProgress, emitSuccess, type CliContext } from '../output'
 
 const WHISPER_IDS = new Set(['large-v3', 'large-v3-turbo'])
 
@@ -135,29 +135,35 @@ export async function runToolsCommand(ctx: CliContext, args: ParsedArgs): Promis
 /**
  * Guard against a last-write-wins race with a running MOJIOKO app. The GUI
  * holds the single-instance lock (see main/index.ts); if the CLI cannot acquire
- * it, the app is running. Returns true when it is safe to write (lock held or
- * `--force`). The lock is released on process exit.
+ * it, the app is running. The lock is released on process exit.
+ *
+ * ## Why there is no `--force` escape (REQ-0506 §2-2)
+ *
+ * There used to be one. It could not work: the keys this command writes are
+ * clobbered by the GUI's next settings save regardless.
+ *   - `transcriptionDefaults` (carrying `whisperModel`) is `'incoming-wins'`
+ *     and merged as ONE object, so the renderer's copy replaces it wholesale.
+ *   - `activeModelId` / `translationToolActiveId` / `activeAccelerator` are
+ *     `'incoming-else-existing'` = `incoming ?? existing`, so any non-null
+ *     value from the renderer wins.
+ * So `--force` reported success and the setting reverted — the "succeeds but
+ * does not take effect" class REQ-0499 onwards has been deleting. `preset`
+ * dropped its copy of this flag in REQ-0505; keeping this one would have been
+ * the same defect, differing only in which key it silently discards.
  */
-function acquireWriteLock(ctx: CliContext, force: boolean): boolean {
-  const got = app.requestSingleInstanceLock()
-  if (got) return true
-  if (force) {
-    emitLog(ctx, 'warning: MOJIOKO app appears to be running; writing anyway (--force).')
-    return true
-  }
-  return false
+function acquireWriteLock(): boolean {
+  return app.requestSingleInstanceLock()
 }
 
 async function runUse(ctx: CliContext, args: ParsedArgs): Promise<number> {
   const what = args.positionals[1]
   const value = args.positionals[2] ?? optString(args.opts, 'model') ?? optString(args.opts, 'device')
-  const force = args.opts.force === true
 
-  if (!acquireWriteLock(ctx, force)) {
+  if (!acquireWriteLock()) {
     throw new CliError(
       'USAGE',
       'MOJIOKO アプリ起動中は CLI から設定を書き込めません（競合回避）。',
-      'アプリを閉じてから再実行するか、アプリ内で設定してください（--force で上書き可）。',
+      'MOJIOKO を終了してから再実行するか、アプリ内で設定してください。アプリ起動中の書き込みはアプリ側の保存で失われるため、強制する手段は用意していません。',
     )
   }
 

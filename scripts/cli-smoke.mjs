@@ -411,6 +411,9 @@ try {
     // REQ-0502 §2 — "accepted, succeeds, renders nothing" warnings.
     // Each is checked in BOTH directions: a warning that fires on ordinary
     // input is noise, and noise is unread (§2-4).
+    // REQ-0506 §2-1 — every check built on this MUST also assert `code === 0`.
+    // `?? []` means a crashed invocation yields an empty code list, so a
+    // "warning must NOT appear" check would read as green on a hard failure.
     const warnCodesOf = (...flags) => {
       const r = cli(['burn', s2clip, s2srt, '--dry-run', ...flags], 20000)
       return { code: r.code, codes: (r.json?.warnings ?? []).map((w) => w.code) }
@@ -420,7 +423,8 @@ try {
       wBoxNoBorder.codes.includes('BACKGROUND_BOX_NOT_DRAWN'), JSON.stringify(wBoxNoBorder.codes))
     const wBoxOk = warnCodesOf('--background', 'on', '--outline', '2', '--shadow', '0')
     check('background box + outline 2 → NO box warning (the other half of the gate)',
-      !wBoxOk.codes.includes('BACKGROUND_BOX_NOT_DRAWN'), JSON.stringify(wBoxOk.codes))
+      wBoxOk.code === 0 && !wBoxOk.codes.includes('BACKGROUND_BOX_NOT_DRAWN'),
+      `code=${wBoxOk.code} ${JSON.stringify(wBoxOk.codes)}`)
     const wEmph = warnCodesOf('--emphasis', 'on')
     check('--emphasis on with no spans → EMPHASIS_NO_SPANS', wEmph.codes.includes('EMPHASIS_NO_SPANS'), JSON.stringify(wEmph.codes))
     const wIgnored = warnCodesOf('--karaoke', 'off', '--karaoke-color', '#FF00FF')
@@ -428,7 +432,8 @@ try {
       wIgnored.codes.includes('KARAOKE_FLAGS_WITHOUT_KARAOKE'), JSON.stringify(wIgnored.codes))
     const wIgnoredOff = warnCodesOf('--karaoke', 'on', '--karaoke-color', '#FF00FF')
     check('--karaoke-color with karaoke on → NO ignored-flag warning',
-      !wIgnoredOff.codes.includes('KARAOKE_FLAGS_WITHOUT_KARAOKE'), JSON.stringify(wIgnoredOff.codes))
+      wIgnoredOff.code === 0 && !wIgnoredOff.codes.includes('KARAOKE_FLAGS_WITHOUT_KARAOKE'),
+      `code=${wIgnoredOff.code} ${JSON.stringify(wIgnoredOff.codes)}`)
     const wClean = warnCodesOf()
     check('a plain burn emits NO no-op warnings (warnings stay rare)', wClean.code === 0 && wClean.codes.length === 0, JSON.stringify(wClean.codes))
 
@@ -482,12 +487,12 @@ try {
         JSON.stringify((wPin.json?.warnings ?? []).map((w) => w.code)))
       const wNoPin = cli(['burn', s2clip, unpinnedP, '--dry-run', '--style', presetName], 40000)
       check('applying the same preset to UNPINNED cues does NOT warn',
-        !(wNoPin.json?.warnings ?? []).some((w) => w.code === 'PRESET_CLEARED_POSITION'),
-        JSON.stringify((wNoPin.json?.warnings ?? []).map((w) => w.code)))
+        wNoPin.code === 0 && !(wNoPin.json?.warnings ?? []).some((w) => w.code === 'PRESET_CLEARED_POSITION'),
+        `code=${wNoPin.code} ${JSON.stringify((wNoPin.json?.warnings ?? []).map((w) => w.code))}`)
       const wNoStyle = cli(['burn', s2clip, pinned, '--dry-run'], 40000)
       check('pinned cues WITHOUT --style do not warn',
-        !(wNoStyle.json?.warnings ?? []).some((w) => w.code === 'PRESET_CLEARED_POSITION'),
-        JSON.stringify((wNoStyle.json?.warnings ?? []).map((w) => w.code)))
+        wNoStyle.code === 0 && !(wNoStyle.json?.warnings ?? []).some((w) => w.code === 'PRESET_CLEARED_POSITION'),
+        `code=${wNoStyle.code} ${JSON.stringify((wNoStyle.json?.warnings ?? []).map((w) => w.code))}`)
     } else {
       log('SKIP: no saved style preset on this box — PRESET_CLEARED_POSITION gate not exercised.')
     }

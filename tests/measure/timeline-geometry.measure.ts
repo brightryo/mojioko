@@ -16,9 +16,48 @@
  *   - count how many of the seed fixtures' blocks fall below the
  *     220 px threshold so Phase 4-3's "how many lose their timecode
  *     row" question has a concrete number
+ *
+ * ★ REQ-0506 §3 — this is a MEASUREMENT HARNESS, not a gate. It was in
+ * `tests/e2e/` and ran under `npm run test:e2e`, so it read as one, but its
+ * assertions were against a hand-built replica (a hardcoded 220 px div with the
+ * block's classes copied onto it), and two of its four sections asserted
+ * nothing at all. Changing the real `TIME_ROW_MIN_BLOCK_WIDTH_PX` did not
+ * affect it. See `tests/measure/README.md`.
+ *
+ * The hardcoded thresholds it used to carry now come from the source
+ * (`readSourceConstant` / the exported `chooseRulerStepSec`), so the numbers it
+ * prints track the app instead of a copy someone forgot to update.
  */
 import { _electron as electron, test, expect } from '@playwright/test'
 import path from 'path'
+import { readFileSync } from 'fs'
+
+/**
+ * Read a module-private numeric constant out of its source file.
+ *
+ * `TIME_ROW_MIN_BLOCK_WIDTH_PX` is not exported, and exporting it purely to
+ * feed a measurement harness would be tail-wagging-dog. Reading it keeps the
+ * number in one place — the previous copy in this file silently stopped
+ * matching the app the moment anyone changed it.
+ */
+function readSourceConstant(relPath: string, name: string): number {
+  const text = readFileSync(path.resolve(__dirname, '../../', relPath), 'utf-8')
+  // Built from a plain string, not a template literal: `\s` inside a template
+  // literal is just `s`, which silently matches nothing.
+  const m = new RegExp(name + '\\s*=\\s*(\\d+)').exec(text)
+  if (!m) throw new Error(`constant ${name} not found in ${relPath} — update the reader or the name`)
+  return Number(m[1])
+}
+
+const TIME_ROW_MIN_BLOCK_WIDTH_PX = readSourceConstant(
+  'src/renderer/components/timeline-view/timeline-view.tsx',
+  'TIME_ROW_MIN_BLOCK_WIDTH_PX',
+)
+/** `chooseRulerStepSec`'s target label spacing (`const targetPx` in that fn). */
+const RULER_TARGET_GAP_PX = readSourceConstant(
+  'src/renderer/lib/timeline-layout.ts',
+  'targetPx',
+)
 
 test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks do not collide', async () => {
   const electronApp = await electron.launch({
@@ -41,7 +80,7 @@ test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks
   // 1) Synthesise a 220-px-wide HH:MM:SS.cc timecode row exactly as the
   //    Block renders it, attach to the DOM, and measure.  This is the
   //    REQ-061 budget being tested.
-  const timecodeFit = await window.evaluate(() => {
+  const timecodeFit = await window.evaluate((MIN_W: number) => {
     const probe = document.createElement('div')
     // Match the block's button container styling: 220 px wide, px-2
     // padding (8 px each side), flex with timecodes pinned to the two
@@ -49,7 +88,7 @@ test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks
     probe.style.position = 'fixed'
     probe.style.left = '-9999px'
     probe.style.top = '0'
-    probe.style.width = '220px'
+    probe.style.width = `${MIN_W}px`
     probe.style.padding = '0 8px' // px-2
     probe.style.boxSizing = 'border-box'
     probe.innerHTML = `
@@ -77,7 +116,7 @@ test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks
     }
     probe.remove()
     return result
-  })
+  }, TIME_ROW_MIN_BLOCK_WIDTH_PX)
 
   // eslint-disable-next-line no-console
   console.log('\n[Phase 4-2 probe] 220 px block timecode row:', JSON.stringify(timecodeFit, null, 2))
@@ -89,7 +128,9 @@ test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks
   //   - both timecodes fit without overflow
   //   - there is some visible gap between the two timecodes (not zero,
   //     not negative); REQ-061's math budgeted ≥ 24 px
-  expect(timecodeFit.rowWidthPx).toBeCloseTo(220 - 16, 0) // 220 minus px-2 padding × 2
+  // REQ-0506 §3 — removed: `rowWidthPx ≈ width - 16` asserted that a
+  // border-box div with 8px padding has (width-16) content width, i.e. it
+  // tested the browser's box model, not the app.
   expect(timecodeFit.startOverflowed, '"00:00:06.92" overflows at left').toBe(false)
   expect(timecodeFit.endOverflowed, '"00:00:06.92" overflows at right').toBe(false)
   expect(timecodeFit.gapPx, 'gap between the two timecodes').toBeGreaterThan(0)
@@ -97,7 +138,7 @@ test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks
   // 2) Inventory: count fixture blocks that fall below the 220 px
   //    threshold at the default pps (100), so Phase 4-3 has the real
   //    "how many lose their timecode row" number.
-  const blockInventory = await window.evaluate(() => {
+  const blockInventory = await window.evaluate((MIN_W: number) => {
     const t = (window as unknown as { __mojioko_test: { project: { getState: () => { entries: { id: string; isDeleted: boolean; startSec: number; endSec: number }[] } }; ui: { getState: () => { timelinePixelsPerSec: number } } } }).__mojioko_test
     const entries = t.project.getState().entries.filter((e) => !e.isDeleted)
     const pps = t.ui.getState().timelinePixelsPerSec
@@ -106,7 +147,7 @@ test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks
       durSec: e.endSec - e.startSec,
       widthPx: (e.endSec - e.startSec) * pps
     }))
-    const TIME_ROW_THRESHOLD_PX = 220
+    const TIME_ROW_THRESHOLD_PX = MIN_W
     const blocksHidingTimecode = visible.filter((v) => v.widthPx < TIME_ROW_THRESHOLD_PX)
     return {
       pps,
@@ -117,7 +158,7 @@ test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks
       shortest: Math.min(...visible.map((v) => v.widthPx)),
       longest: Math.max(...visible.map((v) => v.widthPx))
     }
-  })
+  }, TIME_ROW_MIN_BLOCK_WIDTH_PX)
   // eslint-disable-next-line no-console
   console.log('\n[Phase 4-3 probe] fixture block widths at default pps:', JSON.stringify(blockInventory, null, 2))
 
@@ -125,7 +166,7 @@ test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks
   //    inside the densest sub-second chooseRulerStepSec target spacing.
   //    The chooser keeps adjacent ticks ≥ 100 px apart.  Render two
   //    "0:00.0" labels in monospace and confirm they do not collide.
-  const rulerCollision = await window.evaluate(() => {
+  const rulerCollision = await window.evaluate((TARGET_GAP: number) => {
     const wrapper = document.createElement('div')
     wrapper.style.position = 'fixed'
     wrapper.style.left = '-9999px'
@@ -138,7 +179,7 @@ test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks
     const span = wrapper.firstElementChild as HTMLElement
     const labelWidth = span.getBoundingClientRect().width
     wrapper.remove()
-    const targetGapPx = 100 // chooseRulerStepSec's target
+    const targetGapPx = TARGET_GAP
     return {
       labelWidthPx: labelWidth,
       targetGapPx,
@@ -148,7 +189,7 @@ test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks
       // margin (labelWidth < ~70 leaves 30+ px of breathing room).
       headroomPx: targetGapPx - labelWidth
     }
-  })
+  }, RULER_TARGET_GAP_PX)
   // eslint-disable-next-line no-console
   console.log('\n[Phase 4-2 probe] ruler label vs 100 px target spacing:', JSON.stringify(rulerCollision, null, 2))
 

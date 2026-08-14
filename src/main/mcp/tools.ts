@@ -479,12 +479,11 @@ export const TOOLS: ToolSpec[] = [
       properties: {
         target: { type: 'string', enum: ['whisper', 'translation', 'device'], description: '対象' },
         value: { type: 'string', description: 'モデル id もしくは cpu|gpu' },
-        force: { type: 'boolean', description: 'アプリ起動中でも上書き' },
       },
       additionalProperties: false,
     },
     async: false,
-    build: (i) => ({ fn: runToolsCommand, args: toArgs(['use', str(i.target), str(i.value)], { force: boolTrue(i.force) }) }),
+    build: (i) => ({ fn: runToolsCommand, args: toArgs(['use', str(i.target), str(i.value)], {}) }),
   },
 ]
 

@@ -282,5 +282,23 @@ async function runDelete(ctx: CliContext, args: ParsedArgs): Promise<number> {
     deleted: preset.name,
     id: preset.id,
     presetCount: remaining,
+    /**
+     * REQ-0506 §2-3 — the FULL deleted preset, so an accidental delete is
+     * recoverable from the command's own output.
+     *
+     * Not hypothetical: RES-0505 §4 records exactly that mistake — a
+     * `preset delete` run to inspect an error message, against a machine with
+     * no GUI open, which succeeded. Recovery there needed a settings backup
+     * taken for an unrelated reason.
+     *
+     * No confirmation prompt (the REQ rules it out, rightly — it would break
+     * every scripted and agent-driven use). Returning the payload is the
+     * cheaper answer: the delete stays a one-liner, and the undo is a copy of
+     * the JSON that just came back.
+     */
+    removed: preset,
+    restoreHint:
+      'この JSON の `removed` が削除されたプリセットの全内容です。' +
+      '復元するには settings.json の stylePresets に戻すか、同じスタイルの cue から preset save し直してください。',
   })
 }

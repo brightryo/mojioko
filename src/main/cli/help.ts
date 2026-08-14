@@ -127,7 +127,6 @@ const COMMANDS: CommandDoc[] = [
     optionSpecs: [
       { flag: '--model', type: 'string', desc: 'whisper: large-v3|large-v3-turbo / translation: 3b|7b' },
       { flag: '--device', type: 'enum', values: ['cpu', 'gpu'], desc: 'use device の値（位置引数でも可）' },
-      { flag: '--force', type: 'boolean', default: 'false', desc: 'アプリ起動中でも設定を上書き（use）' },
     ],
     examples: ['mojioko tools', 'mojioko tools download whisper --model large-v3-turbo', 'mojioko tools use device gpu'],
     errorCodes: ['USAGE', 'MODEL_NOT_FOUND', 'TOOL_NOT_DOWNLOADED', 'OUTPUT_WRITE_FAILED'],
