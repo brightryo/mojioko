@@ -5,8 +5,9 @@ import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
 import { getBinPath, getFontResolveDir } from '../lib/paths'
 import { generateAss } from './ass-generator'
-import { isPackagedAsMsix, getCurrentProcessContext } from '../lib/msix'
+import { resolveTier } from '../lib/tier'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
+import { applyFontTierPolicy } from '../../shared/font-tier'
 import { ASS_MARGIN_LR_PX } from '../../shared/constants'
 import type { ExportFrameRequest, ExportFrameResult } from '../../shared/ipc-contracts'
 import type { SubtitleEntry } from '../../shared/types'
@@ -133,13 +134,33 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
     if (includeSubtitles && entries.length > 0) {
       // Reuse the burn-in font staging + ASS generation so the still is
       // pixel-equivalent to whatever the burn-in would emit at this instant.
-      const resolvedFontId: FontId = isFontId(fontId) ? fontId : DEFAULT_FONT_ID
+      const requestedFontId: FontId = isFontId(fontId) ? fontId : DEFAULT_FONT_ID
+
+      /**
+       * REQ-0508 §1 — **font tier enforcement, call site 2 of 4.**
+       *
+       * A still export is the cheapest way to see what a burn will look like,
+       * so a still that ignores the tier is a preview of an output the user
+       * cannot get. It is also the path RES-0507 used to prove the leak with
+       * pixels, and `ipc/video.ts` routes the GUI's own image export through
+       * here, so this call closes the GUI and the CLI at once.
+       */
+      const tier = resolveTier()
+      const fontPolicy = applyFontTierPolicy(tier.isPaid, requestedFontId, entries)
+      const resolvedFontId = fontPolicy.defaultFontId
+      const tieredEntries = fontPolicy.entries
+      if (fontPolicy.substitutions.length > 0) {
+        log.info(
+          `[frame-exporter] REQ-0508 font tier (${tier.tier}/${tier.source}): ` +
+          fontPolicy.substitutions.map((s) => `${s.from}→${s.to} (${s.cueCount} cue)`).join(', ')
+        )
+      }
       const fontMeta = getFontMeta(resolvedFontId)
-      const referencedFontIds = collectReferencedFontIds(resolvedFontId, entries)
+      const referencedFontIds = collectReferencedFontIds(resolvedFontId, tieredEntries)
       fontsDir = await stageFontsDir(referencedFontIds)
 
       const assContent = generateAss(
-        entries,
+        tieredEntries,
         video,
         // `burnin` (BurninPosition) is vestigial in generateAss — pass any
         // legal value so the signature is satisfied (matches ENTRY_LAYOUT_DEFAULTS).
@@ -150,7 +171,8 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
         // exports too.  Frame at time T renders the karaoke state at T
         // (some words highlighted, some not); libass handles the time-
         // slicing naturally when we render a single frame.
-        isPackagedAsMsix(getCurrentProcessContext()),
+        // REQ-0508 — one tier read for this export (see the policy block above).
+        tier.isPaid,
         // REQ-0344 §2-2 — the seventh argument this call used to omit, so a
         // still was written with whatever `generateAss` defaulted to while the
         // burn-in used the requested value.  Both now come from the caller.

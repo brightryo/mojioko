@@ -5,7 +5,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { useStoreUpsellStore } from '@/stores/store-upsell-store'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
-import { isFamilyTierLocked } from '@/lib/font-tier'
+import { isFamilyTierLocked } from '../../../shared/font-tier'
 import { cn } from '@/lib/utils'
 import { StyleRow } from '@/components/subtitle-table/style-row'
 import { FontFamilyBadges } from '@/components/font-lang-badge/font-family-badges'

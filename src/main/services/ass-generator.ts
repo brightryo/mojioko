@@ -1,6 +1,7 @@
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground, WordSpan } from '../../shared/types'
 import { ASS_MARGIN_LR_PX, SHADOW_DEPTH_MAX_PX } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
+import { resolveFontIdForTier } from '../../shared/font-tier'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../shared/karaoke-gate'
 import { buildKaraokeAssText, computeKaraokeBreaks, splitWordsAtHardBreaks } from '../../shared/karaoke-ass'
 // REQ-0311 §4 / REQ-0315 §2 — the sweep emitter.
@@ -386,7 +387,17 @@ export function generateAss(
       // the default would just bloat the ASS file without changing the
       // rendered result.  isFontId is defensive against stale entries
       // (e.g. fontId from a settings file that referenced a removed font).
-      const rowAssFontName = isFontId(e.fontId) ? getFontMeta(e.fontId).assFontName : assFontName
+      //
+      // REQ-0508 §1 — **font tier enforcement, call site 3 of 4** (the
+      // backstop).  Both production callers already substituted before they
+      // got here, and `resolveFontIdForTier` is idempotent, so this changes
+      // nothing for them.  It exists because this function — not those two
+      // callers — is what a future path will reach for when it needs an ASS
+      // file, and a gate that only lives in the callers is a gate that the
+      // next caller has to remember.  Cheap: the tier flag is already a
+      // parameter (`isMsix`), so no new argument and no new dependency.
+      const rowFontId = isFontId(e.fontId) ? resolveFontIdForTier(isMsix, e.fontId) : undefined
+      const rowAssFontName = rowFontId ? getFontMeta(rowFontId).assFontName : assFontName
       const fontTag = rowAssFontName !== assFontName ? `\\fn${rowAssFontName}` : ''
 
       // Per-row alignment — REQ-20260613-016 Phase 2 §A.  Always emit

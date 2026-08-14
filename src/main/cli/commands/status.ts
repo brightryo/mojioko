@@ -86,12 +86,18 @@ export async function runStatusCommand(ctx: CliContext): Promise<number> {
       isPaid: tier.isPaid,
       source: tier.source,
       /**
-       * REQ-0507 §1 — stated plainly because it is currently surprising:
-       * paid-only enforcement lives in the RENDERER, so the CLI/MCP render
-       * path does not apply it (RES-0507 §1). This field reports which tier
-       * the process believes it is, NOT that the tier is enforced.
+       * REQ-0508 §2-4 — was `'renderer-only'`, which was the honest answer
+       * while the tier was reported but not enforced (RES-0507 §1). The render
+       * path now applies the policy for every caller, so the value changes with
+       * the behaviour: leaving it stale would recreate, in the field that
+       * exists to prevent it, the report-versus-reality gap REQ-0507 measured.
+       *
+       * `'render-path'` names WHERE it is enforced, because that is the part
+       * an agent can act on: choosing a paid font still succeeds everywhere
+       * (settings, presets, project files, `font:download`) and is substituted
+       * at draw time with a `FONT_TIER_SUBSTITUTED` warning.
        */
-      fontEnforcement: 'renderer-only',
+      fontEnforcement: 'render-path',
     },
     // REQ-0458 §2 — MCP launch-spec revision + stale-bundle verdict.
     mcpBundle: {

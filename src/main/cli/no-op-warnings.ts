@@ -35,6 +35,9 @@
  * deliberately NOT warned about; they are listed in RES-0502 instead.
  */
 import { resolveEmphasis } from '../../shared/emphasis'
+import { applyFontTierPolicy } from '../../shared/font-tier'
+import { getFontMeta, type FontId } from '../../shared/fonts'
+import type { TierResolution } from '../lib/tier'
 import type { SubtitleEntry } from '../../shared/types'
 import type { CliWarning } from './output'
 
@@ -241,4 +244,64 @@ export function detectIgnoredFlags(
   }
 
   return warnings
+}
+
+/**
+ * REQ-0508 §1-3 — the free tier substituted a paid font, and says so.
+ *
+ * ## Which of the two families this belongs to
+ *
+ * **Cue-derived**, like `detectNoOpCombinations`: the condition is a property
+ * of the cues about to be rendered, no matter where the font came from. A
+ * `.mojioko` authored in the paid edition carries paid `fontId`s with no flag
+ * involved at all, and that is the main case this REQ exists for. Keying it on
+ * flags would report `--weight` while missing the project file entirely.
+ *
+ * It differs from its neighbours in one way worth stating: those warn that
+ * something was ignored, this warns that something was CHANGED. Substituting
+ * silently would be the exact failure mode REQ-0499 → REQ-0506 removed — an
+ * output that is not what was asked for, reported as plain success.
+ *
+ * ## Why it recomputes rather than being handed the result
+ *
+ * The substitution happens deep inside `ffmpeg-burnin` / `frame-exporter`,
+ * after the CLI has already built its warning list. Rather than thread a
+ * channel back out, both sides call the same pure `applyFontTierPolicy`, so the
+ * warning cannot describe a substitution different from the one performed.
+ */
+export function detectFontTierSubstitution(
+  entries: readonly SubtitleEntry[],
+  defaultFontId: FontId,
+  tier: TierResolution,
+): CliWarning[] {
+  const policy = applyFontTierPolicy(tier.isPaid, defaultFontId, visible(entries))
+  if (policy.substitutions.length === 0) return []
+
+  const substitutedCueCount = policy.substitutions.reduce((n, s) => n + s.cueCount, 0)
+  const describe = (id: FontId): string => getFontMeta(id).displayName
+  return [{
+    code: 'FONT_TIER_SUBSTITUTED',
+    message:
+      `追加フォントは有料版の機能です。無料版のため ` +
+      policy.substitutions.map((s) => `${describe(s.from)} → ${describe(s.to)}`).join(' / ') +
+      ` に置換して描画します（対象 ${substitutedCueCount} cue` +
+      (policy.defaultSubstituted ? '＋プロジェクト既定フォント' : '') +
+      '）。',
+    detail: {
+      tier: tier.tier,
+      tierSource: tier.source,
+      substitutedCueCount,
+      defaultSubstituted: policy.defaultSubstituted,
+      substitutions: policy.substitutions.map((s) => ({
+        from: s.from,
+        fromName: describe(s.from),
+        to: s.to,
+        toName: describe(s.to),
+        cueCount: s.cueCount,
+      })),
+      remedy:
+        '追加 12 書体を焼き込むには有料版（Microsoft Store 版）が必要です。' +
+        '無料版では同梱の Noto Sans JP 全 9 ウェイトが使えます。',
+    },
+  }]
 }

@@ -28,7 +28,8 @@ import { CliError, emitSuccess, type CliContext } from '../output'
 import { assertWritable } from '../overwrite'
 import { detectFormat, entriesFromSegments } from '../subtitle-io'
 import { resolvePlacementAndLayout } from '../placement'
-import { detectNoOpCombinations, detectIgnoredFlags } from '../no-op-warnings'
+import { detectNoOpCombinations, detectIgnoredFlags, detectFontTierSubstitution } from '../no-op-warnings'
+import { resolveTier } from '../../lib/tier'
 // REQ-0502 §1 — pure helpers live in their own electron-free module so the
 // cap / rejection rules / filename scheme are unit-testable; re-exported so
 // this command stays the single import site.
@@ -104,6 +105,10 @@ export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): 
     ...placement.warnings,
     ...detectNoOpCombinations(entries),
     ...detectIgnoredFlags(args.opts, entries),
+    // REQ-0508 §1-3 — the free tier replaced a paid font. Computed from the
+    // SAME pure policy the renderer applies, so the warning and the pixels
+    // cannot disagree.
+    ...detectFontTierSubstitution(entries, fontId, resolveTier()),
   ]
 
   // Parity with `burn`: `--overflow error` rejects instead of rendering.

@@ -6,12 +6,13 @@ import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
 import { getBinPath, getFontResolveDir } from '../lib/paths'
 import { generateAss } from './ass-generator'
-import { isPackagedAsMsix, getCurrentProcessContext } from '../lib/msix'
+import { resolveTier } from '../lib/tier'
 import { getBestEncoder, buildEncoderArgs } from './encoder-detector'
 import { probeMediaBitrate } from './ffprobe'
 import { buildTrimConcatFilter } from './ffmpeg-trim-filter'
 import { buildAmixAudioFilter } from './preview-mix-filter'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
+import { applyFontTierPolicy } from '../../shared/font-tier'
 import {
   editedDuration,
   translateEntryToEditedAxis
@@ -113,14 +114,40 @@ export async function startBurnin(
   // Resolve project default font.  Defensive: an unknown / missing fontId
   // falls back to the bundled default so a stale renderer never blocks a
   // burn-in.
-  const resolvedFontId = (fontId && isFontId(fontId)) ? fontId : DEFAULT_FONT_ID
+  const requestedFontId = (fontId && isFontId(fontId)) ? fontId : DEFAULT_FONT_ID
+
+  /**
+   * REQ-0508 §1 — **font tier enforcement, call site 1 of 4.**
+   *
+   * Applied HERE rather than only inside `generateAss` because the tier answer
+   * has to be known before three other things happen: the Style default's
+   * `assFontName` is derived from it, `collectReferencedFontIds` decides which
+   * TTFs to stage from it, and `stageFontsDir` THROWS on a font that is not on
+   * disk.  A free build asking for a paid family it never downloaded used to
+   * die there with `BURN_FAILED`; substituting first means it renders Noto,
+   * which is the behaviour REQ-0508 §2 asked for.
+   *
+   * `resolveTier()` rather than `isPackagedAsMsix` directly: same answer in a
+   * shipped build, plus the unpackaged-only `MOJIOKO_FORCE_TIER` override that
+   * makes both sides of this gate testable (REQ-0507 §3-1).
+   */
+  const tier = resolveTier()
+  const fontPolicy = applyFontTierPolicy(tier.isPaid, requestedFontId, entries)
+  const resolvedFontId = fontPolicy.defaultFontId
+  const tieredEntries = fontPolicy.entries
+  if (fontPolicy.substitutions.length > 0) {
+    log.info(
+      `[ffmpeg-burnin] REQ-0508 font tier (${tier.tier}/${tier.source}): ` +
+      fontPolicy.substitutions.map((s) => `${s.from}→${s.to} (${s.cueCount} cue)`).join(', ')
+    )
+  }
   const fontMeta = getFontMeta(resolvedFontId)
 
   // Collect every font referenced by this run (default + per-row overrides
   // from REQ-021) and stage them into a single directory that libass will
   // read on init.  Copy-based (not symlink) to dodge the Windows symlink
   // privilege requirement.
-  const referencedFontIds = collectReferencedFontIds(resolvedFontId, entries)
+  const referencedFontIds = collectReferencedFontIds(resolvedFontId, tieredEntries)
   const fontsDir = await stageFontsDir(referencedFontIds)
   log.info(
     `[ffmpeg-burnin] referenced fonts: ${referencedFontIds.length} — ${referencedFontIds.join(', ')}; staged at ${fontsDir}`
@@ -150,13 +177,13 @@ export async function startBurnin(
   // backstop) are documented on the function in `shared/cuts.ts`.
   const droppedWordsIds: string[] = []
   const entriesForAss: SubtitleEntry[] = hasCuts
-    ? entries.flatMap((e) => {
+    ? tieredEntries.flatMap((e) => {
         const translated = translateEntryToEditedAxis(e, cutsList)
         if (translated === null) return []
         if (translated.wordsDropped) droppedWordsIds.push(e.id)
         return [translated.entry]
       })
-    : entries
+    : tieredEntries
   if (droppedWordsIds.length > 0) {
     // Not silent: this means a cue's translated word spans left its own
     // window, and it is now burning from the equal split instead.  Nothing
@@ -168,7 +195,7 @@ export async function startBurnin(
   }
   log.info(
     `[ffmpeg-burnin] cuts=${cutsList.length} effectiveDuration=${effectiveDurationSec.toFixed(3)}s ` +
-    `entries=${entries.length}→${entriesForAss.length}`
+    `entries=${tieredEntries.length}→${entriesForAss.length}`
   )
 
   // Write ASS to temp file (project default goes into Style:, per-row
@@ -177,7 +204,14 @@ export async function startBurnin(
   // gate (`canUseKaraokeInTier`) inside ass-generator can gate the `\k`
   // emit path.  Free builds get the plain path even when a project file
   // carries `karaokeEnabled=true` (defence-in-depth vs. tier bypass).
-  const isMsix = isPackagedAsMsix(getCurrentProcessContext())
+  //
+  // REQ-0508 — sourced from `resolveTier()` (above) instead of a second inline
+  // `isPackagedAsMsix` read.  Identical in any packaged build; the difference is
+  // that `MOJIOKO_FORCE_TIER` now reaches the writer in dev, which is what lets
+  // the paid side of the font gate be exercised at all.  Karaoke and emphasis
+  // are unaffected either way: both `canUseKaraokeInTier` and
+  // `canUseKeywordEmphasisInTier` return true unconditionally (REQ-0299).
+  const isMsix = tier.isPaid
   // REQ-0456 — pass `marginLrPx` (from `--margin-x`) through so the Style
   // MarginL/MarginR match the headless wrap budget.  `forceSelfPositionAll`
   // stays the production default (true); it must be supplied explicitly to

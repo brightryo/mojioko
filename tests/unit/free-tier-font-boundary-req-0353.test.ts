@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { canSelectFontInTier, canDownloadFontInTier } from '../../src/renderer/lib/font-tier'
+import { canSelectFontInTier, canDownloadFontInTier } from '../../src/shared/font-tier'
 import {
   FONT_REGISTRY,
   DEFAULT_FONT_ID,

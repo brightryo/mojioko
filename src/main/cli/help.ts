@@ -407,8 +407,27 @@ const ERROR_CODE_DESCRIPTIONS: Record<string, string> = {
 const WARNING_CODES: [string, string][] = [
   ['GPU_INIT_FAILED', 'CPU フォールバック時（成功レスポンス内）'],
   ['SUBTITLE_OVERFLOW', '--overflow warn 時（成功レスポンス内）'],
-  ['FONT_UNAVAILABLE', '利用不可フォントを Noto へ置換（成功レスポンス内）'],
-  ['FONT_RESTRICTED', '同上（tier/未同梱）'],
+  /**
+   * REQ-0508 §1-4 — this line replaces `FONT_UNAVAILABLE` / `FONT_RESTRICTED`,
+   * BOTH of which were advertised here with no emitter anywhere in `src`
+   * (REQ-0507 §1 found the second; grepping for the first while fixing it found
+   * the same hole).
+   *
+   *   - `FONT_RESTRICTED` described a tier refusal. The chosen behaviour is
+   *     substitute-and-warn, not refusal, so the warning it described cannot
+   *     occur; `FONT_TIER_SUBSTITUTED` is what actually happens and is emitted
+   *     by `detectFontTierSubstitution`.
+   *   - `FONT_UNAVAILABLE` described "font file missing → substitute + warn".
+   *     The code does not do that: `stageFontsDir` THROWS, and the caller turns
+   *     it into a `BURN_FAILED` failure. Advertising a warning for a case that
+   *     is really a hard error is worse than saying nothing. Making it true is
+   *     a behaviour change (fail → substitute) that REQ-0508 puts out of scope,
+   *     so the advert goes and RES-0508 records the gap.
+   *
+   * `tests/unit/font-tier-req-0508.test.ts` now scans this table and fails on
+   * any code with no emitter in `src/`, so the next hollow entry cannot land.
+   */
+  ['FONT_TIER_SUBSTITUTED', '無料版で有料フォントを Noto へ置換（成功レスポンス内・REQ-0508）'],
 ]
 
 const CHAINED_EXAMPLE = [

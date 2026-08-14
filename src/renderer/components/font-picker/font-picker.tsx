@@ -16,7 +16,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useProjectStore } from '@/stores/project-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { useStoreUpsellStore } from '@/stores/store-upsell-store'
-import { canDownloadFontInTier, isFamilyTierLocked } from '@/lib/font-tier'
+import { canDownloadFontInTier, isFamilyTierLocked } from '../../../shared/font-tier'
 import {
   listFonts,
   setActiveFont,

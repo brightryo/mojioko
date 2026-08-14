@@ -31,12 +31,12 @@ function check(name, cond, extra = '') {
 }
 
 /** Run the CLI headless with a hard timeout; return {code, json}. */
-function cli(args, timeoutMs = 300000) {
+function cli(args, timeoutMs = 300000, extraEnv = {}) {
   const r = spawnSync(ELECTRON, ['.', ...args], {
     cwd: ROOT,
     timeout: timeoutMs,
     encoding: 'utf-8',
-    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1' },
+    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1', ...extraEnv },
   })
   const line = (r.stdout || '').trim().split('\n').filter((l) => l.startsWith('{')).pop()
   let json = null
@@ -133,6 +133,14 @@ function inkStats(png, bg = [0, 0, 128], tol = 60) {
     if (!isBg) { ink++; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }
   }
   return { ink, white, black, w: maxX - minX + 1, h: maxY - minY + 1 }
+}
+
+/** SRT line terminator (the format's spec is CRLF). */
+const CRLF = String.fromCharCode(13, 10)
+
+/** SHA-256 of a file, for "is this the same image" assertions. */
+function sha256(path) {
+  return createHash('sha256').update(readFileSync(path)).digest('hex')
 }
 
 /** Make a solid-colour clip under `work` and return its path. */
@@ -319,6 +327,82 @@ try {
     check('--karaoke off removes EVERY highlight pixel', offHl === 0, `px=${offHl} (was ${onHl})`)
     check('--karaoke-color repaints the highlight', countColor(kHue, MAGENTA) > 200 && countColor(kHue, HL) === 0,
       `magenta=${countColor(kHue, MAGENTA)} oldHighlight=${countColor(kHue, HL)}`)
+
+    // REQ-0508 §3 — FONT TIER gate, in REAL PIXELS, BOTH SIDES.
+    //
+    // RES-0507 proved the leak here: a free-tier `export_frame` drew Anton.
+    // The two sides are not optional. Checking only "free does not draw Anton"
+    // stays green if the paid tier breaks too (e.g. someone hard-codes Noto),
+    // which would delete the feature being sold rather than protect it.
+    //
+    // ★ The warning is NOT the gate. While building this, the enforcement was
+    // removed on purpose and `FONT_TIER_SUBSTITUTED` still appeared in the
+    // response — the CLI derives the warning from the policy independently of
+    // the render. A warning-only assertion would have passed on a build that
+    // renders the paid font. Hence: pixels, and the SHA.
+    const tierClip = makeClipFor('tier.mp4', '1280x720')
+    const tierSrt = join(work, 'tier.srt')
+    writeFileSync(tierSrt, ['1', '00:00:00,200 --> 00:00:01,800', 'HAMBURGEFONS', '', ''].join(CRLF), 'utf-8')
+    const tierBase = join(work, 'tier.mojioko')
+    const cvTier = cli(['convert', tierSrt, '-o', tierBase, '--video', tierClip], 30000)
+    const PAID_FONT = 'anton'
+    const SUBSTITUTE = 'noto-sans-jp-regular'
+    // The 12 paid families are DOWNLOADED, not bundled (RES-0507 §2.1), so a
+    // machine without them cannot exercise the paid side. Skip loudly rather
+    // than pass quietly — a silently-skipped tier gate is the failure this
+    // whole sequence of REQs is about.
+    const paidTtf = join(process.env.APPDATA || '', 'MOJIOKO', 'fonts', PAID_FONT)
+    if (!cvTier.code === 0 || !existsSync(tierBase)) {
+      check('REQ-0508 fixture built', false)
+    } else if (!existsSync(paidTtf)) {
+      log(`NOTE: REQ-0508 font tier gate SKIPPED — ${PAID_FONT} is not installed at ${paidTtf}.`)
+      log('      (Install it from the paid GUI, or drop the TTF there, to run the two-sided pixel check.)')
+    } else {
+      const withFont = (id, name) => {
+        const j = JSON.parse(readFileSync(tierBase, 'utf-8'))
+        for (const c of j.editing.subtitles) { c.fontId = id; c.fontSizePx = 96 }
+        const out = join(work, name)
+        writeFileSync(out, JSON.stringify(j), 'utf-8')
+        return out
+      }
+      const projPaidFont = withFont(PAID_FONT, 'tier-paid-font.mojioko')
+      const projSubstitute = withFont(SUBSTITUTE, 'tier-noto.mojioko')
+
+      const shot = (proj, tier, name) => {
+        const png = join(work, name)
+        const r = cli(['export_frame', tierClip, proj, '-o', png, '--time', '1.0'], 60000, { MOJIOKO_FORCE_TIER: tier })
+        return { png, r, sha: existsSync(png) ? sha256(png) : '', ink: existsSync(png) ? inkStats(png) : null }
+      }
+      const free = shot(projPaidFont, 'free', 'tier-free.png')
+      const paid = shot(projPaidFont, 'paid', 'tier-paid.png')
+      // The reference: what the free tier SHOULD look like, rendered by asking
+      // for the substitute directly. Equality with this is a stronger claim
+      // than "different from paid" — it names the font that was drawn.
+      const ref = shot(projSubstitute, 'free', 'tier-ref.png')
+
+      check('REQ-0508 all three tier renders succeeded', free.r.code === 0 && paid.r.code === 0 && ref.r.code === 0,
+        `${free.r.code}/${paid.r.code}/${ref.r.code}`)
+      check('REQ-0508 FREE tier renders the SUBSTITUTE, byte-identical to asking for Noto directly',
+        free.sha === ref.sha, `free=${free.sha.slice(0, 12)} ref=${ref.sha.slice(0, 12)}`)
+      check('REQ-0508 PAID tier still renders the paid font (the other side of the gate)',
+        paid.sha !== ref.sha, `paid=${paid.sha.slice(0, 12)} ref=${ref.sha.slice(0, 12)}`)
+      // Geometry, so a future change that swaps fonts but happens to collide on
+      // a hash still trips: Anton is markedly narrower than Noto at the same
+      // point size (RES-0507 measured 333px vs 539px on its fixture).
+      check('REQ-0508 the paid face is geometrically different (not just a different file)',
+        paid.ink && free.ink && Math.abs(paid.ink.w - free.ink.w) > 50,
+        `paidW=${paid.ink?.w} freeW=${free.ink?.w}`)
+      const codes = (r) => (r.json?.warnings || []).map((w) => w.code)
+      check('REQ-0508 free tier WARNS about the substitution',
+        codes(free.r).includes('FONT_TIER_SUBSTITUTED'), codes(free.r).join(','))
+      check('REQ-0508 paid tier does NOT warn', !codes(paid.r).includes('FONT_TIER_SUBSTITUTED'), codes(paid.r).join(','))
+      check('REQ-0508 free tier + a BUNDLED font does not warn (the warning is not always-on)',
+        !codes(ref.r).includes('FONT_TIER_SUBSTITUTED'), codes(ref.r).join(','))
+      // §2-4 — the reported enforcement point must match the behaviour above.
+      const tierStatus = cli(['status'], 60000, { MOJIOKO_FORCE_TIER: 'free' }).json?.data?.tier
+      check('REQ-0508 status reports tier=free and fontEnforcement=render-path',
+        tierStatus?.tier === 'free' && tierStatus?.fontEnforcement === 'render-path', JSON.stringify(tierStatus))
+    }
 
     // REQ-0501 §3 — the second-wave style axes, in REAL PIXELS.
     //
