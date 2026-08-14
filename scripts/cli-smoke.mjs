@@ -106,6 +106,34 @@ function countColor(png, [r, g, b], tol = 24) {
   return n
 }
 
+/**
+ * REQ-0501 §3 — caption ink measurements on a SOLID-colour clip.
+ *
+ * `ink` = every pixel that is not the flat background, so the bounding box
+ * (`w`/`h`) tracks geometry changes (rotation, line spacing, ALL CAPS) while
+ * `white`/`black` track fill and outline coverage. Only meaningful against a
+ * `makeSolidClip` background — on `testsrc` everything is "ink".
+ */
+function inkStats(png, bg = [0, 0, 128], tol = 60) {
+  const out = spawnSync(FFMPEG, ['-v', 'error', '-i', png, '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], {
+    encoding: 'buffer',
+    maxBuffer: 512 * 1024 * 1024,
+  })
+  const wh = spawnSync(FFPROBE, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', png], { encoding: 'utf-8' }).stdout.trim().split(',')
+  const W = +wh[0], H = +wh[1]
+  const b = out.stdout
+  if (!b || b.length < W * H * 3) return { ink: 0, white: 0, black: 0, w: 0, h: 0 }
+  let ink = 0, white = 0, black = 0, minX = 1e9, maxX = -1, minY = 1e9, maxY = -1
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 3, r = b[i], g = b[i + 1], bl = b[i + 2]
+    if (r > 200 && g > 200 && bl > 200) white++
+    if (r < 40 && g < 40 && bl < 40) black++
+    const isBg = Math.abs(r - bg[0]) <= tol && Math.abs(g - bg[1]) <= tol && Math.abs(bl - bg[2]) <= tol
+    if (!isBg) { ink++; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }
+  }
+  return { ink, white, black, w: maxX - minX + 1, h: maxY - minY + 1 }
+}
+
 /** Make a solid-colour clip under `work` and return its path. */
 function makeClipFor(name, size) {
   const p = join(work, name)
@@ -239,19 +267,20 @@ try {
     // warnings, so a hallucinated flag looked like it worked. Default is now a
     // warning; `--strict-args` makes it exit 2.
     //
-    // `--shadow` is used as the specimen because it is a REAL GUI capability
-    // with no CLI flag (second-wave work), so it is exactly the kind of thing an
-    // agent guesses. NOTE: `--karaoke` was the original specimen here and had to
-    // be swapped when REQ-0500 made it real — if a later REQ adds `--shadow`,
-    // this check will start failing and must be re-pointed at another unknown.
-    const warned = cli(['burn', clip, srt, '--dry-run', '--shadow', '40'], 20000)
+    // Specimen choice has churned twice: `--karaoke` (REQ-0500 made it real),
+    // then `--shadow` (REQ-0501 made it real). `--shadow-color` is the stable
+    // pick — it is a real cue FIELD that no GUI surface can set (auto-seeded to
+    // #000000), so REQ-0501 deliberately did NOT add a flag for it and the
+    // "GUI-settable only" rule means it should stay unknown. It is also exactly
+    // what an agent guesses once it sees `--shadow` work.
+    const warned = cli(['burn', clip, srt, '--dry-run', '--shadow-color', '#FF0000'], 20000)
     const warnCodes = (warned.json?.warnings ?? []).map((x) => x.code)
     check(
       'unknown option warns but still succeeds (default)',
       warned.code === 0 && warnCodes.includes('UNKNOWN_OPTION'),
       `code=${warned.code} warnings=${JSON.stringify(warnCodes)}`,
     )
-    const strictArgs = cli(['burn', clip, srt, '--dry-run', '--shadow', '40', '--strict-args'], 20000)
+    const strictArgs = cli(['burn', clip, srt, '--dry-run', '--shadow-color', '#FF0000', '--strict-args'], 20000)
     check(
       'unknown option + --strict-args → USAGE / exit 2',
       strictArgs.code === 2 && strictArgs.json?.code === 'USAGE',
@@ -289,6 +318,81 @@ try {
     check('--karaoke off removes EVERY highlight pixel', offHl === 0, `px=${offHl} (was ${onHl})`)
     check('--karaoke-color repaints the highlight', countColor(kHue, MAGENTA) > 200 && countColor(kHue, HL) === 0,
       `magenta=${countColor(kHue, MAGENTA)} oldHighlight=${countColor(kHue, HL)}`)
+
+    // REQ-0501 §3 — the second-wave style axes, in REAL PIXELS.
+    //
+    // Every check is a COMPARISON between two renders, so it cannot degrade
+    // into a tautology the way a bare "== 0" could: the baseline side has to
+    // exhibit the thing that is expected to change. Karaoke is forced off
+    // throughout so the sweep highlight cannot confound the colour counts.
+    //
+    // Own fixture rather than the `clip`/`srt` above: `inkStats` measures
+    // "pixels that are not the flat background", which requires a SOLID clip
+    // (the style-override block uses `testsrc`, where everything is ink).
+    const s2clip = makeClipFor('s2.mp4', '1280x720')
+    const s2srt = join(work, 's2.srt')
+    writeFileSync(s2srt, '1\n00:00:00,300 --> 00:00:02,000\nhello world test\n', 'utf-8')
+    const style2 = (name, ...flags) => {
+      const p = join(work, `s2-${name}.png`)
+      const r = cli(['export_frame', s2clip, s2srt, '-o', p, '--time', '1.0', '--karaoke', 'off', ...flags], 60000)
+      if (r.code !== 0) { check(`style2 ${name} exits 0`, false, `code=${r.code}/${r.json?.code ?? ''}`); return null }
+      return inkStats(p)
+    }
+    const s2base = style2('base')
+    check('style2 baseline renders a caption (control for the comparisons below)',
+      !!s2base && s2base.ink > 1000 && s2base.white > 1000 && s2base.black > 1000,
+      s2base ? `ink=${s2base.ink} white=${s2base.white} black=${s2base.black}` : 'no frame')
+
+    if (s2base) {
+      const sShadow = style2('shadow', '--shadow', '40')
+      check('--shadow adds dark pixels', sShadow && sShadow.black > s2base.black * 1.2,
+        `black ${s2base.black} -> ${sShadow?.black}`)
+
+      const sRot = style2('rot', '--rotation', '20')
+      check('--rotation tilts the caption (ink box grows taller)', sRot && sRot.h > s2base.h + 20,
+        `inkH ${s2base.h} -> ${sRot?.h}`)
+
+      const sUpper = style2('upper', '--uppercase', 'on')
+      check('--uppercase widens the caption (ALL CAPS is wider)', sUpper && sUpper.w > s2base.w + 20,
+        `inkW ${s2base.w} -> ${sUpper?.w}`)
+
+      const sAlpha = style2('talpha', '--text-alpha', '0')
+      check('--text-alpha 0 removes every white fill pixel (and 100 had them)',
+        sAlpha && s2base.white > 1000 && sAlpha.white === 0,
+        `white ${s2base.white} -> ${sAlpha?.white}`)
+
+      const sOut = style2('oalpha', '--outline-alpha', '0')
+      check('--outline-alpha 0 removes outline pixels', sOut && sOut.black < s2base.black * 0.9,
+        `black ${s2base.black} -> ${sOut?.black}`)
+
+      const sBg = style2('bg', '--background', 'on', '--background-color', 'white', '--background-opacity', '100')
+      check('--background on paints a box behind the caption', sBg && sBg.white > s2base.white * 3,
+        `white ${s2base.white} -> ${sBg?.white}`)
+
+      // Line spacing only exists BETWEEN lines, so a single-line cue cannot show
+      // it (the writer skips the split entirely). Needs its own 2-line fixture.
+      const multi = join(work, 's2-multi.srt')
+      writeFileSync(multi, '1\n00:00:00,300 --> 00:00:02,000\nfirst line\nsecond line\n', 'utf-8')
+      const lsPng = (v) => {
+        const p = join(work, `s2-ls${v}.png`)
+        cli(['export_frame', s2clip, multi, '-o', p, '--time', '1.0', '--karaoke', 'off', '--line-spacing', String(v)], 60000)
+        return inkStats(p)
+      }
+      const ls0 = lsPng(0)
+      const ls80 = lsPng(80)
+      check('--line-spacing separates the two lines (two-line cue)',
+        ls0.ink > 1000 && ls80.h > ls0.h + 40, `inkH ${ls0.h} -> ${ls80.h}`)
+    }
+
+    // Emphasis is echoed rather than measured: enabling it changes NO pixels
+    // without `emphasisSpans` (which words to emphasise), and spans are per-cue
+    // character offsets deliberately out of scope for this REQ. Verified with
+    // real pixels that the frame is unchanged, so the echo is the only signal.
+    const emph = cli(['burn', s2clip, s2srt, '--dry-run', '--emphasis', 'on', '--emphasis-color', '#FF00FF', '--emphasis-scale', '175'], 20000)
+    const em = emph.json?.data?.subtitleStyle?.emphasis
+    check('--emphasis on/color/scale reach the resolved style (echo; see comment)',
+      emph.code === 0 && em?.enabled === true && em?.color === '#FF00FF' && em?.scalePercent === 175,
+      JSON.stringify(em))
   }
 
   // REQ-0500 §3-1 — `run --burn --dry-run` must not claim a burn that never

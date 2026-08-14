@@ -54,6 +54,13 @@ const OUT_REQ: OptionSpec = { flag: '-o, --out', type: 'path', required: true, d
  */
 const DEVICE_ASSERT: OptionSpec = { flag: '--device', type: 'enum', values: ['cpu', 'gpu'], desc: '期待デバイスの表明（選択はしない。実デバイスは設定の activeAccelerator。--strict と併用）' }
 const DEVICE_SELECT: OptionSpec = { flag: '--device', type: 'enum', values: ['cpu', 'gpu'], desc: '実行デバイスを選択（既定: CUDA があれば gpu）' }
+/**
+ * REQ-0501 §2-1 — `--overwrite` is enforced by `overwrite.ts:assertWritable` on
+ * EIGHT commands but was advertised on only three, so five commands could fail
+ * with OUTPUT_EXISTS and offer no documented way out (the error's `remedy`
+ * named the flag, but help did not).  One shared spec so they cannot drift.
+ */
+const OVERWRITE: OptionSpec = { flag: '--overwrite', type: 'boolean', default: 'false', desc: '既存出力を上書き（既定は拒否＝OUTPUT_EXISTS）' }
 const STRICT: OptionSpec = { flag: '--strict', type: 'boolean', default: 'false', desc: '--device gpu で CUDA 不可なら fallback せず失敗' }
 
 const COMMANDS: CommandDoc[] = [
@@ -99,6 +106,9 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--min-speech-ms', type: 'int', default: '250', desc: '最小発話長(ms)' },
       { flag: '--min-silence-ms', type: 'int', default: '2000', desc: '最小無音長(ms)' },
       { flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '既定: -o 拡張子から判定' },
+      // REQ-0501 §2-1 — implemented since REQ-0456 but never advertised.
+      { flag: '--auto-break', type: 'enum', values: ['on', 'off'], default: 'on', desc: '自動折り返し（ASS の \\N 挿入）。off で無効' },
+      OVERWRITE,
       DEVICE_ASSERT,
       STRICT,
     ],
@@ -116,6 +126,7 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--model', type: 'enum', values: ['3b', '7b'], desc: '既定: 設定のアクティブ翻訳モデル' },
       { flag: '--from-original', type: 'boolean', default: 'false', desc: '文字起こし原文から訳す（.mojioko 必須）' },
       { flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '既定: -o 拡張子から判定' },
+      OVERWRITE,
       DEVICE_SELECT,
       STRICT,
     ],
@@ -155,9 +166,24 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--karaoke', type: 'enum', values: ['on', 'off'], desc: 'カラオケ表示の ON/OFF（既定=アプリ設定）' },
       { flag: '--karaoke-color', type: 'string', desc: '発話済み色 #RRGGBB' },
       { flag: '--karaoke-style', type: 'enum', values: ['sweep', 'switch'], desc: 'カラオケ表示方式（既定 sweep）' },
+      // REQ-0501 §1 — the remaining GUI-settable style axes (second wave).
+      // Ranges mirror the GUI controls exactly. `shadowColor` / `shadowAlpha`
+      // are intentionally absent: no GUI surface can set them.
+      { flag: '--emphasis', type: 'enum', values: ['on', 'off'], desc: 'キーワード強調の ON/OFF（強調語の指定は非対応）' },
+      { flag: '--emphasis-color', type: 'string', desc: '強調色 #RRGGBB' },
+      { flag: '--emphasis-scale', type: 'int', default: '130', desc: '強調の拡大率(%) 50..200' },
+      { flag: '--shadow', type: 'int', desc: '影の大きさ(px) 0..50（0=影なし）' },
+      { flag: '--rotation', type: 'int', desc: '回転(度) 0..359' },
+      { flag: '--uppercase', type: 'enum', values: ['on', 'off'], desc: '大文字化（表示のみ・SRT 出力は原文）' },
+      { flag: '--line-spacing', type: 'int', desc: '行間(%) -50..100（フォントサイズ比）' },
+      { flag: '--text-alpha', type: 'int', desc: '文字の不透明度(%) 0..100' },
+      { flag: '--outline-alpha', type: 'int', desc: '縁の不透明度(%) 0..100' },
+      { flag: '--background', type: 'enum', values: ['on', 'off'], desc: '背景ボックスの ON/OFF' },
+      { flag: '--background-color', type: 'enum', values: ['black', 'white'], desc: '背景ボックスの色' },
+      { flag: '--background-opacity', type: 'int', desc: '背景ボックスの不透明度(%) 0..100' },
       { flag: '--position', type: 'enum', values: ['top', 'center', 'bottom'], desc: '縦位置' },
       { flag: '--style', type: 'string', desc: 'GUI 保存のスタイルプリセット名を全 cue に適用（status で一覧）' },
-      { flag: '--overwrite', type: 'boolean', default: 'false', desc: '既存出力を上書き（既定は拒否）' },
+      OVERWRITE,
       { flag: '--dry-run', type: 'boolean', default: 'false', desc: '焼かずに overflow(shrink/warn/error)判定のみ返す' },
     ],
     examples: ['mojioko burn input.mp4 out.en.mojioko -o final.mp4 --preset shorts --style "My Bold"'],
@@ -175,13 +201,34 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--burn', type: 'boolean', default: 'false', desc: '焼き込みまで実行（-o は .mp4）' },
       { flag: '--preset', type: 'enum', values: PRESETS, desc: 'burn 用（--burn 時）' },
       { flag: '--style', type: 'string', desc: 'スタイルプリセット名（--burn 時）' },
+      // REQ-0501 §2-4 — these already worked (run spreads its opts into the
+      // burn stage) and the MCP schema already declared them; only help was
+      // silent, so the parity gate flagged the reverse asymmetry.
+      { flag: '--crf', type: 'int', desc: '画質(定質) 0..51（--burn 時）' },
+      { flag: '--bitrate', type: 'string', desc: 'VBR目標ビットレート 例 16M（--burn 時）' },
+      { flag: '--quality', type: 'int', desc: '画質 1..100（--burn 時）' },
       // REQ-0500 §2 — karaoke was previously inescapable from a headless run:
       // cues inherit `karaokeEnabled` from the app settings and no flag could
       // turn it off. `--karaoke-style` had no headless route at all.
       { flag: '--karaoke', type: 'enum', values: ['on', 'off'], desc: 'カラオケ表示の ON/OFF（既定=アプリ設定）' },
       { flag: '--karaoke-color', type: 'string', desc: '発話済み色 #RRGGBB' },
       { flag: '--karaoke-style', type: 'enum', values: ['sweep', 'switch'], desc: 'カラオケ表示方式（既定 sweep）' },
-      { flag: '--overwrite', type: 'boolean', default: 'false', desc: '既存出力を上書き' },
+      // REQ-0501 §1 — the remaining GUI-settable style axes (second wave).
+      // Ranges mirror the GUI controls exactly. `shadowColor` / `shadowAlpha`
+      // are intentionally absent: no GUI surface can set them.
+      { flag: '--emphasis', type: 'enum', values: ['on', 'off'], desc: 'キーワード強調の ON/OFF（強調語の指定は非対応）' },
+      { flag: '--emphasis-color', type: 'string', desc: '強調色 #RRGGBB' },
+      { flag: '--emphasis-scale', type: 'int', default: '130', desc: '強調の拡大率(%) 50..200' },
+      { flag: '--shadow', type: 'int', desc: '影の大きさ(px) 0..50（0=影なし）' },
+      { flag: '--rotation', type: 'int', desc: '回転(度) 0..359' },
+      { flag: '--uppercase', type: 'enum', values: ['on', 'off'], desc: '大文字化（表示のみ・SRT 出力は原文）' },
+      { flag: '--line-spacing', type: 'int', desc: '行間(%) -50..100（フォントサイズ比）' },
+      { flag: '--text-alpha', type: 'int', desc: '文字の不透明度(%) 0..100' },
+      { flag: '--outline-alpha', type: 'int', desc: '縁の不透明度(%) 0..100' },
+      { flag: '--background', type: 'enum', values: ['on', 'off'], desc: '背景ボックスの ON/OFF' },
+      { flag: '--background-color', type: 'enum', values: ['black', 'white'], desc: '背景ボックスの色' },
+      { flag: '--background-opacity', type: 'int', desc: '背景ボックスの不透明度(%) 0..100' },
+      OVERWRITE,
       DEVICE_ASSERT,
       STRICT,
     ],
@@ -216,6 +263,21 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--karaoke', type: 'enum', values: ['on', 'off'], desc: 'カラオケ表示の ON/OFF（既定=アプリ設定）' },
       { flag: '--karaoke-color', type: 'string', desc: '発話済み色 #RRGGBB' },
       { flag: '--karaoke-style', type: 'enum', values: ['sweep', 'switch'], desc: 'カラオケ表示方式（既定 sweep）' },
+      // REQ-0501 §1 — the remaining GUI-settable style axes (second wave).
+      // Ranges mirror the GUI controls exactly. `shadowColor` / `shadowAlpha`
+      // are intentionally absent: no GUI surface can set them.
+      { flag: '--emphasis', type: 'enum', values: ['on', 'off'], desc: 'キーワード強調の ON/OFF（強調語の指定は非対応）' },
+      { flag: '--emphasis-color', type: 'string', desc: '強調色 #RRGGBB' },
+      { flag: '--emphasis-scale', type: 'int', default: '130', desc: '強調の拡大率(%) 50..200' },
+      { flag: '--shadow', type: 'int', desc: '影の大きさ(px) 0..50（0=影なし）' },
+      { flag: '--rotation', type: 'int', desc: '回転(度) 0..359' },
+      { flag: '--uppercase', type: 'enum', values: ['on', 'off'], desc: '大文字化（表示のみ・SRT 出力は原文）' },
+      { flag: '--line-spacing', type: 'int', desc: '行間(%) -50..100（フォントサイズ比）' },
+      { flag: '--text-alpha', type: 'int', desc: '文字の不透明度(%) 0..100' },
+      { flag: '--outline-alpha', type: 'int', desc: '縁の不透明度(%) 0..100' },
+      { flag: '--background', type: 'enum', values: ['on', 'off'], desc: '背景ボックスの ON/OFF' },
+      { flag: '--background-color', type: 'enum', values: ['black', 'white'], desc: '背景ボックスの色' },
+      { flag: '--background-opacity', type: 'int', desc: '背景ボックスの不透明度(%) 0..100' },
       { flag: '--position', type: 'enum', values: ['top', 'center', 'bottom'], desc: '縦位置（burn と同一）' },
       { flag: '--margin-x', type: 'int', default: '10', desc: '横マージン(px)。改行幅＋ASS MarginL/R' },
       { flag: '--margin-y', type: 'int', desc: '縦オーバーフロー判定の上下安全域(px)。既定は --margin-v' },
@@ -223,6 +285,7 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--preset', type: 'enum', values: PRESETS, desc: '出力プリセット（縦ショート等）。burn と同一' },
       { flag: '--resolution', type: 'string', desc: 'WxH（例 1080x1920）。--preset と排他' },
       { flag: '--style', type: 'string', desc: 'GUI 保存のスタイルプリセット名を全 cue に適用（status で一覧）' },
+      OVERWRITE,
     ],
     examples: ['mojioko export_frame input.mp4 out.mojioko -o frame.png --time 1.5 --position bottom --margin-v 200 --preset shorts'],
     errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'SUBTITLE_OVERFLOW', 'BURN_FAILED'],
@@ -258,6 +321,7 @@ const COMMANDS: CommandDoc[] = [
       OUT_REQ,
       { flag: '--index', type: 'int', required: true, desc: '対象 cue 番号（0始まり・read_subtitle 参照）' },
       { flag: '--text', type: 'string', required: true, desc: '新しいテキスト' },
+      OVERWRITE,
     ],
     examples: ['mojioko edit_subtitle out.mojioko -o out.mojioko --index 3 --text "正しいテキスト"'],
     errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'OUTPUT_WRITE_FAILED'],
@@ -270,6 +334,7 @@ const COMMANDS: CommandDoc[] = [
     optionSpecs: [
       OUT_REQ,
       { flag: '--video', type: 'path', desc: 'SRT→.mojioko 時に参照する動画（任意）' },
+      OVERWRITE,
     ],
     examples: ['mojioko convert out.mojioko -o out.srt'],
     errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'OUTPUT_WRITE_FAILED'],
@@ -281,7 +346,7 @@ const COMMANDS: CommandDoc[] = [
     positionals: [],
     optionSpecs: [
       OUT_REQ,
-      { flag: '--overwrite', type: 'boolean', default: 'false', desc: '既存出力を上書き（既定は拒否）' },
+      OVERWRITE,
     ],
     examples: ['mojioko export-mcpb -o mojioko.mcpb'],
     errorCodes: ['USAGE', 'OUTPUT_EXISTS', 'OUTPUT_WRITE_FAILED'],

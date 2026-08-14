@@ -66,6 +66,8 @@ interface ToolSpec {
 const DEVICE_ASSERT_PROP = { type: 'string', enum: ['cpu', 'gpu'], description: '期待デバイスの表明（選択はしない。strict と併用）' }
 const DEVICE_SELECT_PROP = { type: 'string', enum: ['cpu', 'gpu'], description: '実行デバイスを選択（既定: CUDA があれば gpu）' }
 const FORMAT_PROP = { type: 'string', enum: ['mojioko', 'srt'], description: '出力フォーマット（既定: 拡張子）' }
+/** REQ-0501 §2-2 — advertised by the CLI but previously unreachable via MCP. */
+const STRICT_PROP = { type: 'boolean', description: 'device=gpu で CUDA 不可なら fallback せず失敗（REQ-0501）' }
 
 /**
  * REQ-0500 §2 — karaoke overrides.  Cues seeded from the app defaults inherit
@@ -83,6 +85,46 @@ const karaokeArgs = (i: Record<string, unknown>): Record<string, string | undefi
   karaoke: str(i.karaoke),
   'karaoke-color': str(i.karaoke_color),
   'karaoke-style': str(i.karaoke_style),
+})
+
+/**
+ * REQ-0501 §1 — the remaining GUI-settable style axes.
+ *
+ * Bundled like `KARAOKE_PROPS` so `burn` / `export_frame` / `run` cannot drift
+ * apart: adding an axis to one tool adds it to all three, which is what the
+ * REQ-0468 margin_x incident (present on one tool, missing on its sibling) cost
+ * us before. `shadow_color` / `shadow_alpha` are absent on purpose — no GUI
+ * surface can set them, so exposing them here would invent a capability.
+ */
+const STYLE2_PROPS = {
+  emphasis: { type: 'string', enum: ['on', 'off'], description: 'キーワード強調の ON/OFF（強調語の指定は非対応）（REQ-0501）' },
+  emphasis_color: { type: 'string', description: '強調色 #RRGGBB（REQ-0501）' },
+  emphasis_scale: { type: 'integer', description: '強調の拡大率(%) 50..200（既定130）（REQ-0501）' },
+  shadow: { type: 'integer', description: '影の大きさ(px) 0..50（0=影なし）（REQ-0501）' },
+  rotation: { type: 'integer', description: '回転(度) 0..359（REQ-0501）' },
+  uppercase: { type: 'string', enum: ['on', 'off'], description: '大文字化（表示のみ）（REQ-0501）' },
+  line_spacing: { type: 'integer', description: '行間(%) -50..100（REQ-0501）' },
+  text_alpha: { type: 'integer', description: '文字の不透明度(%) 0..100（REQ-0501）' },
+  outline_alpha: { type: 'integer', description: '縁の不透明度(%) 0..100（REQ-0501）' },
+  background: { type: 'string', enum: ['on', 'off'], description: '背景ボックスの ON/OFF（REQ-0501）' },
+  background_color: { type: 'string', enum: ['black', 'white'], description: '背景ボックスの色（REQ-0501）' },
+  background_opacity: { type: 'integer', description: '背景ボックスの不透明度(%) 0..100（REQ-0501）' },
+} as const
+
+/** REQ-0501 §1 — the CLI option mapping for `STYLE2_PROPS`. */
+const style2Args = (i: Record<string, unknown>): Record<string, string | undefined> => ({
+  emphasis: str(i.emphasis),
+  'emphasis-color': str(i.emphasis_color),
+  'emphasis-scale': numStr(i.emphasis_scale),
+  shadow: numStr(i.shadow),
+  rotation: numStr(i.rotation),
+  uppercase: str(i.uppercase),
+  'line-spacing': numStr(i.line_spacing),
+  'text-alpha': numStr(i.text_alpha),
+  'outline-alpha': numStr(i.outline_alpha),
+  background: str(i.background),
+  'background-color': str(i.background_color),
+  'background-opacity': numStr(i.background_opacity),
 })
 
 
@@ -107,6 +149,15 @@ export const TOOLS: ToolSpec[] = [
         lang: { type: 'string', enum: LANGS, description: '言語（既定 auto）' },
         track: { type: 'integer', description: '音声トラック(1-based, 既定1)' },
         vad: { type: 'string', enum: ['on', 'off'], description: 'VAD（既定 on）' },
+        // REQ-0501 §2-2 — advertised by the CLI (and wired by REQ-0499) but
+        // absent from this schema, so MCP callers could not reach them at all:
+        // the server drops undeclared keys.
+        vad_threshold: { type: 'number', description: 'VAD しきい値 0..1（既定 0.5）（REQ-0501）' },
+        beam_size: { type: 'integer', description: 'ビームサイズ（既定 5）（REQ-0501）' },
+        min_speech_ms: { type: 'integer', description: '最小発話長(ms)（既定 250）（REQ-0501）' },
+        min_silence_ms: { type: 'integer', description: '最小無音長(ms)（既定 2000）（REQ-0501）' },
+        auto_break: { type: 'string', enum: ['on', 'off'], description: '自動折り返し（既定 on）（REQ-0501）' },
+        strict: STRICT_PROP,
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
         device: DEVICE_ASSERT_PROP,
         format: FORMAT_PROP,
@@ -116,7 +167,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runTranscribeCommand,
-      args: toArgs([str(i.input)], { out: str(i.out), model: str(i.model), lang: str(i.lang), track: numStr(i.track), vad: str(i.vad), overwrite: boolTrue(i.overwrite), device: str(i.device), format: str(i.format) }),
+      args: toArgs([str(i.input)], { out: str(i.out), model: str(i.model), lang: str(i.lang), track: numStr(i.track), vad: str(i.vad), 'vad-threshold': numStr(i.vad_threshold), 'beam-size': numStr(i.beam_size), 'min-speech-ms': numStr(i.min_speech_ms), 'min-silence-ms': numStr(i.min_silence_ms), 'auto-break': str(i.auto_break), strict: boolTrue(i.strict), overwrite: boolTrue(i.overwrite), device: str(i.device), format: str(i.format) }),
     }),
   },
   {
@@ -132,6 +183,7 @@ export const TOOLS: ToolSpec[] = [
         model: { type: 'string', enum: ['3b', '7b'], description: '既定: 設定のアクティブ翻訳モデル' },
         from_original: { type: 'boolean', description: '文字起こし原文から訳す（.mojioko 必須）' },
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
+        strict: STRICT_PROP,
         device: DEVICE_SELECT_PROP,
         format: FORMAT_PROP,
       },
@@ -140,7 +192,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runTranslateCommand,
-      args: toArgs([str(i.input)], { out: str(i.out), to: str(i.to), model: str(i.model), 'from-original': boolTrue(i.from_original), overwrite: boolTrue(i.overwrite), device: str(i.device), format: str(i.format) }),
+      args: toArgs([str(i.input)], { out: str(i.out), to: str(i.to), model: str(i.model), 'from-original': boolTrue(i.from_original), strict: boolTrue(i.strict), overwrite: boolTrue(i.overwrite), device: str(i.device), format: str(i.format) }),
     }),
   },
   {
@@ -161,6 +213,7 @@ export const TOOLS: ToolSpec[] = [
         bitrate: { type: 'string', description: 'VBR目標ビットレート（例 "16M" / "16000k"）。crf/quality より優先（REQ-0460）' },
         quality: { type: 'integer', description: '画質 1..100 高いほど高画質（crf の代替・REQ-0460）' },
         audio: { type: 'string', enum: ['preserve', 'simple', 'none'], description: '既定 simple' },
+        container: { type: 'string', enum: ['mp4', 'same'], description: '出力コンテナ（既定 mp4）（REQ-0501）' },
         weight: { type: 'string', enum: WEIGHTS, description: 'フォントウェイト（既定: 設定）（REQ-0461）' },
         font_size: { type: 'integer', description: 'フォントサイズ上書き(px)（REQ-0461）' },
         text_color: { type: 'string', description: '文字色 #RRGGBB（REQ-0461）' },
@@ -174,6 +227,7 @@ export const TOOLS: ToolSpec[] = [
         margin_x: { type: 'integer', description: '横マージン(px)。改行幅＋ASS MarginL/R（既定10・REQ-0499）' },
         margin_y: { type: 'integer', description: '縦オーバーフロー判定の上下安全域(px)。既定は margin_v（REQ-0499）' },
         ...KARAOKE_PROPS,
+        ...STYLE2_PROPS,
         position: { type: 'string', enum: ['top', 'center', 'bottom'], description: '縦位置' },
         style: { type: 'string', description: 'GUI 保存のスタイルプリセット名（全 cue に適用。REQ-0457 D12）' },
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false で拒否）' },
@@ -184,7 +238,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runBurnCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), audio: str(i.audio), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), 'margin-x': numStr(i.margin_x), 'margin-y': numStr(i.margin_y), position: str(i.position), ...karaokeArgs(i), style: str(i.style), overwrite: boolTrue(i.overwrite), 'dry-run': boolTrue(i.dry_run) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), preset: str(i.preset), resolution: str(i.resolution), overflow: str(i.overflow), encoder: str(i.encoder), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), audio: str(i.audio), container: str(i.container), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), 'margin-x': numStr(i.margin_x), 'margin-y': numStr(i.margin_y), position: str(i.position), ...karaokeArgs(i), ...style2Args(i), style: str(i.style), overwrite: boolTrue(i.overwrite), 'dry-run': boolTrue(i.dry_run) }),
     }),
   },
   {
@@ -205,7 +259,9 @@ export const TOOLS: ToolSpec[] = [
         quality: { type: 'integer', description: '画質 1..100（burn 時・REQ-0460）' },
         style: { type: 'string', description: 'スタイルプリセット名（burn 時・REQ-0457 D12）' },
         ...KARAOKE_PROPS,
+        ...STYLE2_PROPS,
         overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false）' },
+        strict: STRICT_PROP,
         device: DEVICE_ASSERT_PROP,
       },
       additionalProperties: false,
@@ -213,7 +269,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runRunCommand,
-      args: toArgs([str(i.video)], { out: str(i.out), subtitle: str(i.subtitle), translate: str(i.translate), burn: boolTrue(i.burn), preset: str(i.preset), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), style: str(i.style), ...karaokeArgs(i), overwrite: boolTrue(i.overwrite), device: str(i.device) }),
+      args: toArgs([str(i.video)], { out: str(i.out), subtitle: str(i.subtitle), translate: str(i.translate), burn: boolTrue(i.burn), preset: str(i.preset), crf: numStr(i.crf), bitrate: str(i.bitrate), quality: numStr(i.quality), style: str(i.style), ...karaokeArgs(i), ...style2Args(i), overwrite: boolTrue(i.overwrite), strict: boolTrue(i.strict), device: str(i.device) }),
     }),
   },
   {
@@ -227,6 +283,7 @@ export const TOOLS: ToolSpec[] = [
         subtitle: { type: 'string', description: '.mojioko または .srt の絶対パス' },
         out: { type: 'string', description: '出力画像パス（.png または .jpg）' },
         time: { type: 'number', description: '抽出する時刻（秒）' },
+        format: FORMAT_PROP,
         // REQ-0461 — same per-cue style overrides as `burn` (faithful preview still).
         weight: { type: 'string', enum: WEIGHTS, description: 'フォントウェイト（既定: 設定）（REQ-0461）' },
         font_size: { type: 'integer', description: 'フォントサイズ上書き(px)（REQ-0461）' },
@@ -236,6 +293,7 @@ export const TOOLS: ToolSpec[] = [
         margin_v: { type: 'integer', description: '縦マージン(px)。ASS verticalMarginPx に反映（REQ-0461）' },
         // REQ-0468 — same placement/layout args as `burn` (faithful preview still).
         ...KARAOKE_PROPS,
+        ...STYLE2_PROPS,
         position: { type: 'string', enum: ['top', 'center', 'bottom'], description: '縦位置（burn と同一。REQ-0468）' },
         margin_x: { type: 'integer', description: '横マージン(px)。改行幅＋ASS MarginL/R（REQ-0468）' },
         margin_y: { type: 'integer', description: '縦オーバーフロー判定の上下安全域(px)（REQ-0468）' },
@@ -250,7 +308,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runExportFrameCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), position: str(i.position), ...karaokeArgs(i), 'margin-x': numStr(i.margin_x), 'margin-y': numStr(i.margin_y), overflow: str(i.overflow), preset: str(i.preset), resolution: str(i.resolution), style: str(i.style), overwrite: boolTrue(i.overwrite) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time), format: str(i.format), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), position: str(i.position), ...karaokeArgs(i), ...style2Args(i), 'margin-x': numStr(i.margin_x), 'margin-y': numStr(i.margin_y), overflow: str(i.overflow), preset: str(i.preset), resolution: str(i.resolution), style: str(i.style), overwrite: boolTrue(i.overwrite) }),
     }),
   },
   {
@@ -273,12 +331,13 @@ export const TOOLS: ToolSpec[] = [
       required: ['input'],
       properties: {
         input: { type: 'string', description: '.mojioko または .srt の絶対パス' },
+        format: FORMAT_PROP,
         with_style: { type: 'boolean', description: 'cue ごとの解決済みスタイルと id/cueNumber も返す（.mojioko のみ）。styleVaries=true なら cue ごとに異なる＝一括上書きは既存の作り込みを潰す（REQ-0500）' },
       },
       additionalProperties: false,
     },
     async: false,
-    build: (i) => ({ fn: runReadSubtitleCommand, args: toArgs([str(i.input)], { 'with-style': boolTrue(i.with_style) }) }),
+    build: (i) => ({ fn: runReadSubtitleCommand, args: toArgs([str(i.input)], { 'with-style': boolTrue(i.with_style), format: str(i.format) }) }),
   },
   {
     name: 'edit_subtitle',

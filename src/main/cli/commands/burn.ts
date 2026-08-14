@@ -32,6 +32,7 @@ import { resolvePlacementAndLayout, optInt } from '../placement'
 
 const ENCODERS = new Set(['auto', 'h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf'])
 const AUDIO_MODES = new Set(['preserve', 'simple', 'none'])
+const CONTAINERS = new Set(['mp4', 'same'])
 
 export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise<number> {
   const videoPath = args.positionals[0]
@@ -88,7 +89,14 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
   if (audioFlag && !AUDIO_MODES.has(audioFlag)) {
     throw new CliError('USAGE', `unknown --audio: ${audioFlag}`, `preserve|simple|none`)
   }
+  // REQ-0501 §2-3 — validate like every neighbouring enum.  This used to be a
+  // bare `=== 'same' ? … : 'mp4'`, so `--container mkv` silently produced an
+  // mp4 while `--audio mkv` (one line up) raised USAGE.  Same class of silent
+  // acceptance as the unknown-option problem REQ-0499 fixed one level up.
   const containerFlag = optString(args.opts, 'container')
+  if (containerFlag && !CONTAINERS.has(containerFlag)) {
+    throw new CliError('USAGE', `unknown --container: ${containerFlag}`, `mp4|same`)
+  }
   const outputContainer: OutputContainer = containerFlag === 'same' ? 'sameAsInput' : 'mp4'
 
   // REQ-0460 — explicit encode-quality overrides.  These are OVERRIDES only;

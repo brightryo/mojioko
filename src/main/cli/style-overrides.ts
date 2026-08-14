@@ -15,7 +15,7 @@ import {
   getFontIdForFamilyAndWeight,
   type FontId,
 } from '../../shared/fonts'
-import type { SubtitleEntry } from '../../shared/types'
+import type { SubtitleBackground, SubtitleEntry } from '../../shared/types'
 import type { KaraokeStyle } from '../../shared/karaoke-style'
 import { optString, type ParsedArgs } from './args'
 import { CliError } from './output'
@@ -101,6 +101,37 @@ export interface StyleOverrides {
   karaokeEnabled?: boolean
   karaokeHighlightColor?: string
   karaokeStyle?: KaraokeStyle
+
+  /**
+   * REQ-0501 §1 — the remaining GUI-settable style axes (second wave).
+   *
+   * Ranges mirror the GUI controls exactly, because "what the GUI can set" is
+   * the contract these flags exist to expose headlessly.  `shadowColor` and
+   * `shadowAlpha` are deliberately ABSENT: they are real cue fields, but no GUI
+   * surface can set them (they are auto-seeded to `#000000` / `100` the first
+   * time shadow depth crosses 0), so a CLI flag would create a capability the
+   * app itself does not offer.
+   */
+  keywordEmphasisEnabled?: boolean
+  emphasisColorHex?: string
+  emphasisScalePercent?: number
+  shadowDepth?: number
+  rotation?: number
+  casing?: 'none' | 'uppercase'
+  lineSpacingPercent?: number
+  textAlpha?: number
+  outlineAlpha?: number
+  /**
+   * Background box, kept as three FLAT fields rather than a nested object.
+   *
+   * `subtitleBackground` is a required concrete object on every cue, so
+   * overriding it wholesale would clobber the sub-fields the caller did not
+   * mention.  Flat fields let `applyStyleOverrides` merge onto the cue's own
+   * value, so `--background on` alone keeps that cue's colour and opacity.
+   */
+  backgroundEnabled?: boolean
+  backgroundColor?: SubtitleBackground['color']
+  backgroundOpacityPercent?: number
 }
 
 /** Read an integer CLI option (first non-empty of `keys`), or undefined. */
@@ -109,6 +140,51 @@ function optIntOpt(opts: ParsedArgs['opts'], ...keys: string[]): number | undefi
   if (s === undefined || s === '') return undefined
   const n = Number.parseInt(s, 10)
   return Number.isFinite(n) ? n : undefined
+}
+
+/**
+ * REQ-0501 §1 — an integer option constrained to the GUI's range.
+ *
+ * Rejects rather than clamps: a silently clamped value is the same class of
+ * lie as a silently ignored flag (REQ-0499).  Returns undefined when the flag
+ * is absent, so an omitted flag never writes to the cue.
+ */
+function optRangedInt(
+  opts: ParsedArgs['opts'],
+  key: string,
+  min: number,
+  max: number,
+  example: string,
+): number | undefined {
+  const s = optString(opts, key)
+  if (s === undefined || s === '') return undefined
+  const n = Number.parseInt(s, 10)
+  if (!Number.isFinite(n) || String(n) !== s.trim()) {
+    throw new CliError('USAGE', `--${key} は整数: ${s}`, example)
+  }
+  if (n < min || n > max) {
+    throw new CliError('USAGE', `--${key} は ${min}..${max} の範囲: ${n}`, example)
+  }
+  return n
+}
+
+/** An `on|off` option.  Undefined when absent; USAGE on anything else. */
+function optOnOff(opts: ParsedArgs['opts'], key: string): boolean | undefined {
+  const s = optString(opts, key)
+  if (s === undefined || s === '') return undefined
+  const v = s.trim().toLowerCase()
+  if (v !== 'on' && v !== 'off') {
+    throw new CliError('USAGE', `--${key} は on|off: ${s}`, `例: --${key} off`)
+  }
+  return v === 'on'
+}
+
+/** A `#RRGGBB` option.  Undefined when absent; USAGE on a malformed value. */
+function optHexColor(opts: ParsedArgs['opts'], key: string, example: string): string | undefined {
+  const s = optString(opts, key)
+  if (s === undefined || s === '') return undefined
+  if (!isHexColor(s)) throw new CliError('USAGE', `--${key} は #RRGGBB 形式: ${s}`, example)
+  return s.trim()
 }
 
 /**
@@ -193,6 +269,46 @@ export function parseStyleOverrides(
     ov.karaokeStyle = v
   }
 
+  // --- REQ-0501 §1 — remaining GUI-settable axes -----------------------------
+  // Every bound below is the GUI control's own min/max, verified against the
+  // inspector / bulk-edit / defaults panels.  Where the GUI's *step* is coarser
+  // than its range (opacity steps by 5, rotation by 15), the CLI accepts the
+  // full integer range: the shared clamp helpers already do, and refusing a
+  // value the app can store would be a gratuitous difference.
+
+  // Keyword emphasis.  The master toggle + colour + scale only; the emphasized
+  // SPANS are per-cue character offsets, so a whole-file broadcast of them is
+  // meaningless (they belong with the cue-addressing API).
+  ov.keywordEmphasisEnabled = optOnOff(opts, 'emphasis')
+  ov.emphasisColorHex = optHexColor(opts, 'emphasis-color', '例: --emphasis-color #FFD400')
+  ov.emphasisScalePercent = optRangedInt(opts, 'emphasis-scale', 50, 200, '例: --emphasis-scale 130')
+
+  // Shadow: depth only (0 = off, which is how the GUI encodes the toggle).
+  ov.shadowDepth = optRangedInt(opts, 'shadow', 0, 50, '例: --shadow 10（0=影なし）')
+
+  ov.rotation = optRangedInt(opts, 'rotation', 0, 359, '例: --rotation 15')
+  ov.lineSpacingPercent = optRangedInt(opts, 'line-spacing', -50, 100, '例: --line-spacing -20')
+  ov.textAlpha = optRangedInt(opts, 'text-alpha', 0, 100, '例: --text-alpha 100')
+  ov.outlineAlpha = optRangedInt(opts, 'outline-alpha', 0, 100, '例: --outline-alpha 100')
+
+  // Casing is a two-state switch in the GUI, so the flag is on|off rather than
+  // exposing the internal `'none' | 'uppercase'` spelling.
+  const uppercase = optOnOff(opts, 'uppercase')
+  if (uppercase !== undefined) ov.casing = uppercase ? 'uppercase' : 'none'
+
+  ov.backgroundEnabled = optOnOff(opts, 'background')
+  const bgColor = optString(opts, 'background-color')
+  if (bgColor !== undefined && bgColor !== '') {
+    const v = bgColor.trim().toLowerCase()
+    // Deliberately NOT a hex: the cue field is a two-value union, and the GUI
+    // offers a segmented black/white control rather than a colour picker.
+    if (v !== 'black' && v !== 'white') {
+      throw new CliError('USAGE', `--background-color は black|white: ${bgColor}`, '例: --background-color black')
+    }
+    ov.backgroundColor = v
+  }
+  ov.backgroundOpacityPercent = optRangedInt(opts, 'background-opacity', 0, 100, '例: --background-opacity 50')
+
   return ov
 }
 
@@ -212,6 +328,18 @@ export function isEmptyStyleOverrides(ov: StyleOverrides): boolean {
     karaokeEnabled: true,
     karaokeHighlightColor: true,
     karaokeStyle: true,
+    keywordEmphasisEnabled: true,
+    emphasisColorHex: true,
+    emphasisScalePercent: true,
+    shadowDepth: true,
+    rotation: true,
+    casing: true,
+    lineSpacingPercent: true,
+    textAlpha: true,
+    outlineAlpha: true,
+    backgroundEnabled: true,
+    backgroundColor: true,
+    backgroundOpacityPercent: true,
   }
   return Object.keys(probe).every((k) => ov[k as keyof StyleOverrides] === undefined)
 }
@@ -243,6 +371,31 @@ export function applyStyleOverrides(
           ...(ov.karaokeEnabled !== undefined ? { karaokeEnabled: ov.karaokeEnabled } : {}),
           ...(ov.karaokeHighlightColor !== undefined ? { karaokeHighlightColor: ov.karaokeHighlightColor } : {}),
           ...(ov.karaokeStyle !== undefined ? { karaokeStyle: ov.karaokeStyle } : {}),
+          // REQ-0501 §1
+          ...(ov.keywordEmphasisEnabled !== undefined ? { keywordEmphasisEnabled: ov.keywordEmphasisEnabled } : {}),
+          ...(ov.emphasisColorHex !== undefined ? { emphasisColorHex: ov.emphasisColorHex } : {}),
+          ...(ov.emphasisScalePercent !== undefined ? { emphasisScalePercent: ov.emphasisScalePercent } : {}),
+          ...(ov.shadowDepth !== undefined ? { shadowDepth: ov.shadowDepth } : {}),
+          ...(ov.rotation !== undefined ? { rotation: ov.rotation } : {}),
+          ...(ov.casing !== undefined ? { casing: ov.casing } : {}),
+          ...(ov.lineSpacingPercent !== undefined ? { lineSpacingPercent: ov.lineSpacingPercent } : {}),
+          ...(ov.textAlpha !== undefined ? { textAlpha: ov.textAlpha } : {}),
+          ...(ov.outlineAlpha !== undefined ? { outlineAlpha: ov.outlineAlpha } : {}),
+          // The background box is a required concrete object, so its three
+          // flags MERGE onto the cue's own value instead of replacing it —
+          // `--background on` alone must not reset that cue's colour/opacity.
+          ...(ov.backgroundEnabled !== undefined ||
+          ov.backgroundColor !== undefined ||
+          ov.backgroundOpacityPercent !== undefined
+            ? {
+                subtitleBackground: {
+                  ...e.subtitleBackground,
+                  ...(ov.backgroundEnabled !== undefined ? { enabled: ov.backgroundEnabled } : {}),
+                  ...(ov.backgroundColor !== undefined ? { color: ov.backgroundColor } : {}),
+                  ...(ov.backgroundOpacityPercent !== undefined ? { opacityPercent: ov.backgroundOpacityPercent } : {}),
+                },
+              }
+            : {}),
         },
   )
 }

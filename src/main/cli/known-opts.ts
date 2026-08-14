@@ -53,17 +53,16 @@ export const GLOBAL_OPTION_KEYS: readonly string[] = [
  * from help is intentional — not a licence to skip documenting new flags.
  */
 export const HIDDEN_OPTION_KEYS: Readonly<Record<string, readonly string[]>> = {
-  // `--overwrite` is enforced by `overwrite.ts:assertWritable` on these five
-  // commands but advertised only on burn/run/export-mcpb.  The OUTPUT_EXISTS
-  // remedy string names it, so it is discoverable — just not in help.
-  transcribe: ['overwrite', 'auto-break'],
-  translate: ['overwrite'],
-  convert: ['overwrite', 'input', 'from', 'to'],
-  edit_subtitle: ['overwrite', 'input', 'from', 'to'],
+  // REQ-0501 §2-1 — `overwrite` (5 commands) and `auto-break` left this list:
+  // both are now advertised in help, and keeping them here too would be exactly
+  // the double bookkeeping the allowlist exists to avoid.  `transcribe` now has
+  // no hidden options at all.
+  convert: ['input', 'from', 'to'],
+  edit_subtitle: ['input', 'from', 'to'],
   read_subtitle: ['input'],
   probe: ['input'],
   // `--at` is an accepted alias for `--time` (`export-frame.ts` reads both).
-  export_frame: ['overwrite', 'at'],
+  export_frame: ['at'],
   // `burn` reads `--format` to override subtitle-format detection on the
   // <subtitle> positional; advertised on transcribe/translate/export_frame but
   // not on burn.

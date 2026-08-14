@@ -28,16 +28,18 @@ describe('REQ-0499 §1 — unknown option detection', () => {
     expect(unknown).toEqual([])
   })
 
-  it('flags the flags RES-0498 showed passing silently', () => {
-    // `karaoke` is deliberately ABSENT from this list: REQ-0500 made it real.
-    // The rest are still GUI-only capabilities with no CLI flag (second wave),
-    // which is exactly what an agent guesses at.
+  it('flags things that are still not CLI options', () => {
+    // This list has shrunk twice as the waves landed: REQ-0500 made `karaoke`
+    // real, REQ-0501 made `shadow` / `rotation` / `line-spacing` /
+    // `emphasis-color` real. What remains is genuinely unreachable:
+    //   - `layer` / `pos-x`: cue-addressed attributes (third wave)
+    //   - `shadow-color` / `shadow-alpha`: real cue fields that NO GUI surface
+    //     can set, so the "GUI-settable only" rule keeps them out permanently
     const unknown = detectUnknownOptions('burn', {
-      shadow: '40', rotation: '45', layer: '3',
-      'line-spacing': '50', 'emphasis-color': '#FF0000',
+      layer: '3', 'pos-x': '100', 'shadow-color': '#FF0000', 'shadow-alpha': '50',
     })
     expect(unknown.map((u) => u.key).sort()).toEqual([
-      'emphasis-color', 'layer', 'line-spacing', 'rotation', 'shadow',
+      'layer', 'pos-x', 'shadow-alpha', 'shadow-color',
     ])
   })
 
@@ -47,6 +49,25 @@ describe('REQ-0499 §1 — unknown option detection', () => {
         detectUnknownOptions(command, { karaoke: 'off', 'karaoke-color': '#FF00FF', 'karaoke-style': 'switch' }),
         command,
       ).toEqual([])
+    }
+  })
+
+  it('accepts the second-wave style flags REQ-0501 added, on all three commands', () => {
+    const flags = {
+      emphasis: 'on', 'emphasis-color': '#FF00FF', 'emphasis-scale': '150',
+      shadow: '10', rotation: '15', uppercase: 'on', 'line-spacing': '-20',
+      'text-alpha': '100', 'outline-alpha': '100',
+      background: 'on', 'background-color': 'black', 'background-opacity': '50',
+    }
+    for (const command of ['burn', 'export_frame', 'run']) {
+      expect(detectUnknownOptions(command, flags), command).toEqual([])
+    }
+  })
+
+  it('accepts transcribe --auto-break and the 5 commands’ --overwrite (REQ-0501 §2-1)', () => {
+    expect(detectUnknownOptions('transcribe', { 'auto-break': 'off' })).toEqual([])
+    for (const c of ['transcribe', 'translate', 'convert', 'edit_subtitle', 'export_frame']) {
+      expect(detectUnknownOptions(c, { overwrite: true }), c).toEqual([])
     }
   })
 
