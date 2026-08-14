@@ -60,6 +60,9 @@ const COMMAND_SOURCES: Readonly<Record<string, readonly string[]>> = {
   read_subtitle: ['cli/commands/read-subtitle.ts'],
   edit_subtitle: ['cli/commands/edit-subtitle.ts', OVERWRITE],
   convert: ['cli/commands/convert.ts', OVERWRITE],
+  // `preset save` layers the ordinary style flags on top of the captured cue,
+  // so it reads them through the shared style-override parser.
+  preset: ['cli/commands/preset.ts', ...PLACEMENT, OVERWRITE],
   'export-mcpb': ['cli/commands/export-mcpb.ts', OVERWRITE],
   // `run` spreads `{ ...args.opts }` into the transcribe / translate / burn
   // stages (run.ts), so every flag those read is legitimately readable here.

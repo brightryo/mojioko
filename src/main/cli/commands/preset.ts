@@ -1,0 +1,286 @@
+/**
+ * REQ-0504 — `mojioko preset list | show | save | delete`.
+ *
+ * ## Why this exists
+ *
+ * Presets were apply-only from the CLI (`burn --style <name>`). Since per-cue
+ * styling is still GUI-only, a preset is currently the ONLY way to move a
+ * worked-out look between the app and a headless run — and the bridge only had
+ * a deck on one side.
+ *
+ * ## Where presets live
+ *
+ * `AppSettings.stylePresets[]` in `%APPDATA%/MOJIOKO/settings.json`. The merge
+ * rule for that key is `'incoming-wins'` (`ipc/settings-merge.ts`) with the
+ * comment "written only by the renderer … the payload is authoritative". That
+ * is precisely why the write path here MUST take the single-instance lock: a
+ * running GUI saving settings for any unrelated reason would send its whole
+ * in-memory list and silently erase whatever the CLI just wrote.
+ *
+ * ## What a saved preset is built from
+ *
+ * A cue in a `.mojioko` (`--from`, `--index`), with the ordinary style flags
+ * applied on top. Two reasons over "build it from flags alone":
+ *   - Strictly more expressive. Animation has no CLI flags at all, so a
+ *     flags-only preset could never carry one; a cue can.
+ *   - No new vocabulary. The agent describes the look exactly as it would for a
+ *     burn, and saves it instead of rendering it.
+ * SRT is rejected: it holds no style, so it could only ever mint a preset of
+ * pure defaults while looking like it captured something.
+ */
+import { existsSync, readFileSync } from 'node:fs'
+import { app } from 'electron'
+import { loadSettings, mutateSettings } from '../../services/settings-store'
+import { parseProjectFile } from '../../../shared/project-file'
+import {
+  STYLE_PRESET_MAX,
+  STYLE_PRESET_NAME_MAX_LEN,
+  validatePresetName,
+  type StylePreset,
+} from '../../../shared/style-preset'
+import { buildStylePreset } from '../../../renderer/lib/style-preset-apply'
+import type { FontId } from '../../../shared/fonts'
+import { optString, type ParsedArgs } from '../args'
+import { CliError, emitLog, emitSuccess, type CliContext, type CliWarning } from '../output'
+import { detectFormat } from '../subtitle-io'
+import { applyStyleOverrides, parseStyleOverrides } from '../style-overrides'
+import { findStylePreset } from '../style-preset-cli'
+import { summarizeSubtitleStyle } from '../subtitle-style'
+
+/** A compact per-preset row for `list` (full contents come from `show`). */
+function summarize(p: StylePreset): Record<string, unknown> {
+  const style = p.style as unknown as Record<string, unknown>
+  const has = (k: string): boolean => style[k] !== undefined
+  return {
+    name: p.name,
+    id: p.id,
+    version: p.version,
+    createdAtMs: p.createdAtMs,
+    fieldCount: Object.keys(style).length,
+    // The axes an agent is most likely to be choosing between.
+    fontSizePx: style.fontSizePx ?? null,
+    textColorHex: style.textColorHex ?? null,
+    karaokeEnabled: style.karaokeEnabled ?? null,
+    emphasisEnabled: style.keywordEmphasisEnabled ?? null,
+    animationType: style.animationType ?? null,
+    backgroundEnabled: (style.subtitleBackground as { enabled?: boolean } | undefined)?.enabled ?? null,
+    /** REQ-0504 §1-2 — whether this preset will pin cues when applied. */
+    carriesPosition: has('posOffsetX') && has('posOffsetY'),
+  }
+}
+
+/**
+ * Guard against a last-write-wins race with a running MOJIOKO app.
+ *
+ * Identical to `tools use` (REQ-0449): the GUI holds the single-instance lock,
+ * so failing to acquire it means the app is up. This matters MORE for presets
+ * than for the model settings, because `stylePresets` is `'incoming-wins'` —
+ * the GUI's next settings save replaces the whole array.
+ */
+function acquireWriteLock(ctx: CliContext, force: boolean): boolean {
+  if (app.requestSingleInstanceLock()) return true
+  if (force) {
+    emitLog(ctx, 'warning: MOJIOKO app appears to be running; writing anyway (--force).')
+    return true
+  }
+  return false
+}
+
+function requireLock(ctx: CliContext, args: ParsedArgs, action: string): void {
+  if (acquireWriteLock(ctx, args.opts.force === true)) return
+  throw new CliError(
+    'USAGE',
+    `MOJIOKO アプリ起動中は CLI からプリセットを${action}できません（競合回避）。`,
+    'アプリを閉じてから再実行してください。アプリ側の保存で CLI の変更が消えるため、--force は非推奨です。',
+  )
+}
+
+/** Translate the shared name-rule verdict into a CLI error. */
+function assertNameOk(name: string, existing: readonly StylePreset[], ignoreId?: string): void {
+  // REQ-0504 §1-2 — the GUI's rules, reused verbatim. A CLI-specific rule set
+  // would let the CLI mint names the GUI then refuses to rename or re-save.
+  const verdict = validatePresetName(name, existing, ignoreId ? { ignoreId } : undefined)
+  if (verdict === null) return
+  const messages: Record<string, [string, string]> = {
+    empty: ['プリセット名が空です。', '名前を指定してください。'],
+    'too-long': [`プリセット名が長すぎます（最大 ${STYLE_PRESET_NAME_MAX_LEN} 文字）。`, '短い名前にしてください。'],
+    duplicate: [`プリセット "${name.trim()}" は既に存在します。`, '--overwrite で置き換えるか、別名にしてください。'],
+    'cap-reached': [`プリセットは最大 ${STYLE_PRESET_MAX} 件までです。`, '不要なプリセットを preset delete で削除してください。'],
+  }
+  const [message, remedy] = messages[verdict]
+  throw new CliError(verdict === 'duplicate' ? 'OUTPUT_EXISTS' : 'USAGE', message, remedy, { name: name.trim(), reason: verdict })
+}
+
+export async function runPresetCommand(ctx: CliContext, args: ParsedArgs): Promise<number> {
+  const sub = args.positionals[0] ?? 'list'
+  switch (sub) {
+    case 'list':
+      return runList(ctx)
+    case 'show':
+      return runShow(ctx, args)
+    case 'save':
+      return runSave(ctx, args)
+    case 'delete':
+      return runDelete(ctx, args)
+    default:
+      throw new CliError('USAGE', `unknown preset subcommand: "${sub}"`, 'list | show <name> | save <name> --from <sub.mojioko> | delete <name>')
+  }
+}
+
+async function runList(ctx: CliContext): Promise<number> {
+  const settings = await loadSettings()
+  const presets = settings.stylePresets ?? []
+  return emitSuccess(ctx, 'preset', {
+    subcommand: 'list',
+    count: presets.length,
+    max: STYLE_PRESET_MAX,
+    presets: presets.map(summarize),
+  })
+}
+
+async function runShow(ctx: CliContext, args: ParsedArgs): Promise<number> {
+  const name = args.positionals[1] ?? optString(args.opts, 'name')
+  if (!name) throw new CliError('USAGE', 'プリセット名が必要です。', 'mojioko preset show <name>')
+  const settings = await loadSettings()
+  const presets = settings.stylePresets ?? []
+  const preset = findStylePreset(presets, name)
+  if (!preset) {
+    throw new CliError('USAGE', `プリセット "${name}" が見つかりません。`, `利用可能: ${presets.map((p) => p.name).join(', ') || '(なし)'}`)
+  }
+  return emitSuccess(ctx, 'preset', {
+    subcommand: 'show',
+    ...summarize(preset),
+    // The raw stored payload, so an agent can diff two presets exactly.
+    style: preset.style,
+  })
+}
+
+async function runSave(ctx: CliContext, args: ParsedArgs): Promise<number> {
+  const name = args.positionals[1] ?? optString(args.opts, 'name')
+  if (!name) throw new CliError('USAGE', 'プリセット名が必要です。', 'mojioko preset save <name> --from <sub.mojioko>')
+
+  const from = optString(args.opts, 'from')
+  if (!from) {
+    throw new CliError('USAGE', '--from <subtitle.mojioko> が必要です。', 'プリセットは .mojioko の cue から作ります（スタイルフラグは上乗せできます）。')
+  }
+  if (!existsSync(from)) throw new CliError('INPUT_NOT_FOUND', `字幕が見つかりません: ${from}`, 'パスを確認してください。')
+  if (detectFormat(from, optString(args.opts, 'format')) !== 'mojioko') {
+    throw new CliError(
+      'UNSUPPORTED_FORMAT',
+      'プリセットの元にできるのは .mojioko だけです。',
+      'SRT はスタイルを保持しないため、既定値だけのプリセットになってしまいます。mojioko convert で .mojioko にしてください。',
+    )
+  }
+
+  const parsed = parseProjectFile(readFileSync(from, 'utf-8'))
+  if (!parsed.ok) throw new CliError('UNSUPPORTED_FORMAT', `.mojioko を読み取れません（${parsed.reason}）。`)
+
+  const cues = parsed.project.editing.subtitles.filter((e) => !e.isDeleted)
+  if (cues.length === 0) throw new CliError('USAGE', 'cue がありません。', '字幕を含む .mojioko を指定してください。')
+  const indexRaw = optString(args.opts, 'index')
+  const index = indexRaw === undefined ? 0 : Number.parseInt(indexRaw, 10)
+  if (!Number.isInteger(index) || index < 0 || index >= cues.length) {
+    throw new CliError('USAGE', `--index ${indexRaw ?? 0} は範囲外（cue 数 ${cues.length}）。`, 'read_subtitle で番号を確認してください。')
+  }
+
+  // Style flags layer on top of the captured cue, using the same parser the
+  // burn path uses — so "the flags that produced the look I want" and "the
+  // preset that reproduces it" are written the same way.
+  const settings = await loadSettings()
+  const fontId = (settings.activeFontId ?? 'noto-sans-jp-semibold') as FontId
+  const [entry] = applyStyleOverrides([cues[index]], parseStyleOverrides(args.opts, fontId))
+
+  // Geometry for the `\pos` → anchor-offset conversion comes from the project's
+  // own `source.resolution`; no `--video` needed.
+  const geometry = {
+    videoWidthPx: parsed.project.source.resolution.width,
+    videoHeightPx: parsed.project.source.resolution.height,
+  }
+
+  const warnings: CliWarning[] = []
+  // REQ-0504 §1-2 — if the cue IS pinned but geometry is unusable, the offset
+  // cannot be computed and the position is dropped. Saying so is the mirror of
+  // the RES-0503 complaint: a silent drop here would produce a preset that
+  // quietly fails to reproduce the look it was saved from.
+  const pinned = entry.posX !== undefined && entry.posY !== undefined
+  if (pinned && !(geometry.videoWidthPx && geometry.videoHeightPx)) {
+    warnings.push({
+      code: 'PRESET_POSITION_NOT_SAVED',
+      message: 'cue は固定座標を持っていますが、動画の解像度が不明なため位置はプリセットに保存されません。',
+      detail: {
+        reason: '位置はアンカーからのオフセットとして保存するため、動画の幅・高さが要ります。',
+        remedy: '動画情報を含む .mojioko（mojioko convert --video で作成）を --from に指定してください。',
+      },
+    })
+  }
+
+  const existing = settings.stylePresets ?? []
+  const prior = findStylePreset(existing, name)
+  const overwrite = args.opts.overwrite === true
+  if (prior && !overwrite) {
+    // Matches every other output-producing command: refuse, name the flag.
+    throw new CliError('OUTPUT_EXISTS', `プリセット "${prior.name}" は既に存在します。`, '--overwrite で置き換えるか、別名にしてください。', { name: prior.name })
+  }
+  assertNameOk(name, existing, prior?.id)
+
+  requireLock(ctx, args, '保存')
+
+  // Reuse of the id on overwrite is deliberate: anything already referring to
+  // this preset keeps referring to the same thing.
+  const preset = buildStylePreset(entry, name, geometry, prior?.id)
+
+  const saved = await mutateSettings((s) => {
+    const list = [...(s.stylePresets ?? [])]
+    const at = prior ? list.findIndex((p) => p.id === prior.id) : -1
+    if (at >= 0) list[at] = preset
+    else list.push(preset)
+    s.stylePresets = list
+    return { save: s, value: list.length }
+  })
+
+  return emitSuccess(
+    ctx,
+    'preset',
+    {
+      subcommand: 'save',
+      ...summarize(preset),
+      replaced: prior !== undefined,
+      sourceSubtitle: from,
+      sourceCueIndex: index,
+      presetCount: saved,
+      // What the preset will actually reproduce, in the same shape `status` and
+      // `burn` report — so the agent can verify without applying it.
+      style: summarizeSubtitleStyle(entry, settings.autoLineBreak ?? true),
+    },
+    warnings,
+  )
+}
+
+async function runDelete(ctx: CliContext, args: ParsedArgs): Promise<number> {
+  const name = args.positionals[1] ?? optString(args.opts, 'name')
+  if (!name) throw new CliError('USAGE', 'プリセット名が必要です。', 'mojioko preset delete <name>')
+
+  const settings = await loadSettings()
+  const existing = settings.stylePresets ?? []
+  const preset = findStylePreset(existing, name)
+  // REQ-0504 §2-4 — never a silent success. Deleting something that is not
+  // there means the caller's model of the world is wrong, and it should learn.
+  if (!preset) {
+    throw new CliError('USAGE', `プリセット "${name}" が見つかりません。`, `利用可能: ${existing.map((p) => p.name).join(', ') || '(なし)'}`)
+  }
+
+  requireLock(ctx, args, '削除')
+
+  const remaining = await mutateSettings((s) => {
+    const list = (s.stylePresets ?? []).filter((p) => p.id !== preset.id)
+    s.stylePresets = list
+    return { save: s, value: list.length }
+  })
+
+  return emitSuccess(ctx, 'preset', {
+    subcommand: 'delete',
+    deleted: preset.name,
+    id: preset.id,
+    presetCount: remaining,
+  })
+}

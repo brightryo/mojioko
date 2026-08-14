@@ -10,6 +10,7 @@ export const CLI_COMMANDS: ReadonlySet<string> = new Set([
   'tools', 'status', 'transcribe', 'translate', 'burn', 'run', 'mcp',
   'export_frame', 'export-frame', 'probe', 'read_subtitle', 'read-subtitle',
   'edit_subtitle', 'edit-subtitle', 'convert',
+  'preset',
   'export-mcpb', 'export_mcpb', // REQ-0467 §2 — headless .mcpb export
 ])
 

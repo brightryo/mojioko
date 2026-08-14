@@ -8,7 +8,7 @@ vi.mock('electron', () => ({
 }))
 
 const { TOOLS } = await import('../../src/main/mcp/tools')
-const { advertisedOptionKeys } = await import('../../src/main/cli/help')
+const { advertisedOptionKeys, helpCommandNames } = await import('../../src/main/cli/help')
 
 /**
  * REQ-0501 §2-4 — every option the CLI advertises must also be reachable
@@ -52,10 +52,16 @@ const TOOL_TO_COMMAND: Readonly<Record<string, string>> = {
   // `tools`' advertised set. Checked only in the MCP→CLI direction.
   tools_download: 'tools',
   tools_use: 'tools',
+  // REQ-0504 — verb-split facades over the single `preset` command, same
+  // shape as tools_download/tools_use.
+  preset_list: 'preset',
+  preset_show: 'preset',
+  preset_save: 'preset',
+  preset_delete: 'preset',
 }
 
 /** Tools whose arguments are a deliberate subset of the CLI command's. */
-const SUBSET_TOOLS = new Set(['tools_download', 'tools_use'])
+const SUBSET_TOOLS = new Set(['tools_download', 'tools_use', 'preset_list', 'preset_show', 'preset_save', 'preset_delete'])
 
 /**
  * CLI commands with no MCP tool at all.
@@ -93,7 +99,7 @@ function schemaProps(toolName: string): string[] {
  * `burn`'s video/subtitle are `args.positionals[0..1]`; MCP has no positional
  * concept so they become properties. They correctly have no `optionSpec`.
  */
-const POSITIONAL_PROPS = new Set(['input', 'video', 'subtitle', 'out', 'target', 'value', 'text', 'index', 'time', 'to'])
+const POSITIONAL_PROPS = new Set(['input', 'video', 'subtitle', 'out', 'target', 'value', 'text', 'index', 'time', 'to', 'name'])
 
 describe('REQ-0501 §2-4 — CLI ↔ MCP option parity', () => {
   it.each(Object.keys(TOOL_TO_COMMAND))('%s: every advertised CLI option is reachable via MCP', (tool) => {
@@ -124,8 +130,12 @@ describe('REQ-0501 §2-4 — CLI ↔ MCP option parity', () => {
   })
 
   it('every CLI command has an MCP tool, or is explicitly exempt', () => {
+    // REQ-0504 — derived from help rather than a hand-written list. The
+    // hard-coded version silently ignored `preset` when it was added, which is
+    // the precise failure this gate exists to prevent: a new CLI command that
+    // never reaches MCP because nobody remembered to extend the checklist.
     const mapped = new Set(Object.values(TOOL_TO_COMMAND))
-    for (const c of ['status', 'tools', 'transcribe', 'translate', 'burn', 'run', 'export_frame', 'probe', 'read_subtitle', 'edit_subtitle', 'convert', 'export-mcpb']) {
+    for (const c of helpCommandNames()) {
       expect(mapped.has(c) || EXEMPT_COMMANDS.has(c), `unmapped CLI command: ${c}`).toBe(true)
     }
   })

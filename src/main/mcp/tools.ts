@@ -25,6 +25,7 @@ import { runReadSubtitleCommand } from '../cli/commands/read-subtitle'
 import { runEditSubtitleCommand } from '../cli/commands/edit-subtitle'
 import { runConvertCommand } from '../cli/commands/convert'
 import { runToolsCommand } from '../cli/commands/tools'
+import { runPresetCommand } from '../cli/commands/preset'
 import { createJob, finishJob, getJob, jobSnapshot, updateJobStage, setJobCancel, listJobs, cancelJob } from './jobs'
 
 type CommandFn = (ctx: CliContext, args: ParsedArgs) => Promise<number>
@@ -386,6 +387,73 @@ export const TOOLS: ToolSpec[] = [
     },
     async: false,
     build: (i) => ({ fn: runConvertCommand, args: toArgs([str(i.input)], { out: str(i.out), video: str(i.video), overwrite: boolTrue(i.overwrite) }) }),
+  },
+  // REQ-0504 — verb-split facades over the single `preset` command, the same
+  // shape as `tools_download` / `tools_use`: one schema per verb reads better
+  // for an agent than one tool with a `subcommand` discriminator.
+  {
+    name: 'preset_list',
+    description: 'スタイルプリセット一覧（GUI と同じ保存先）。--style / burn.style に渡せる名前が分かる。',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    async: false,
+    build: () => ({ fn: runPresetCommand, args: toArgs(['list'], {}) }),
+  },
+  {
+    name: 'preset_show',
+    description: 'スタイルプリセットの中身を返す（保存されている全フィールド）。',
+    inputSchema: {
+      type: 'object',
+      required: ['name'],
+      properties: { name: { type: 'string', description: 'プリセット名' } },
+      additionalProperties: false,
+    },
+    async: false,
+    build: (i) => ({ fn: runPresetCommand, args: toArgs(['show', str(i.name)], {}) }),
+  },
+  {
+    name: 'preset_save',
+    description: '.mojioko の cue からスタイルプリセットを保存する（スタイル引数を上乗せ可）。アプリ起動中は競合回避のため拒否。',
+    inputSchema: {
+      type: 'object',
+      required: ['name', 'from'],
+      properties: {
+        name: { type: 'string', description: 'プリセット名' },
+        from: { type: 'string', description: '元にする .mojioko の絶対パス（SRT 不可＝スタイルを持たないため）' },
+        index: { type: 'integer', description: '元にする cue 番号（0始まり・既定 0）' },
+        overwrite: { type: 'boolean', description: '同名を置き換える（既定 false で OUTPUT_EXISTS）' },
+        ...KARAOKE_PROPS,
+        ...STYLE2_PROPS,
+        weight: { type: 'string', enum: WEIGHTS, description: 'フォントウェイト' },
+        font_size: { type: 'integer', description: 'フォントサイズ(px)' },
+        text_color: { type: 'string', description: '文字色 #RRGGBB' },
+        outline_color: { type: 'string', description: '縁色 #RRGGBB' },
+        outline: { type: 'integer', description: '縁の太さ(px)' },
+        margin_v: { type: 'integer', description: '縦マージン(px)' },
+      },
+      additionalProperties: false,
+    },
+    async: false,
+    build: (i) => ({
+      fn: runPresetCommand,
+      args: toArgs(['save', str(i.name)], {
+        from: str(i.from), index: numStr(i.index), overwrite: boolTrue(i.overwrite),
+        weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color),
+        'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v),
+        ...karaokeArgs(i), ...style2Args(i),
+      }),
+    }),
+  },
+  {
+    name: 'preset_delete',
+    description: 'スタイルプリセットを削除する。存在しない名前は USAGE（黙って成功しない）。アプリ起動中は拒否。',
+    inputSchema: {
+      type: 'object',
+      required: ['name'],
+      properties: { name: { type: 'string', description: 'プリセット名' } },
+      additionalProperties: false,
+    },
+    async: false,
+    build: (i) => ({ fn: runPresetCommand, args: toArgs(['delete', str(i.name)], {}) }),
   },
   {
     name: 'tools_download',

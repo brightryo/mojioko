@@ -63,6 +63,48 @@ const DEVICE_SELECT: OptionSpec = { flag: '--device', type: 'enum', values: ['cp
 const OVERWRITE: OptionSpec = { flag: '--overwrite', type: 'boolean', default: 'false', desc: '既存出力を上書き（既定は拒否＝OUTPUT_EXISTS）' }
 const STRICT: OptionSpec = { flag: '--strict', type: 'boolean', default: 'false', desc: '--device gpu で CUDA 不可なら fallback せず失敗' }
 
+/**
+ * REQ-0504 — the per-cue style flags, defined ONCE.
+ *
+ * `burn` / `export_frame` / `run` / `preset save` all feed the same
+ * `parseStyleOverrides`, so four hand-maintained copies of this list was three
+ * chances for them to drift — the exact shape of the REQ-0468 `margin_x`
+ * incident. The CLI↔MCP parity gate is what surfaced the fourth copy.
+ */
+const STYLE_FLAG_SPECS: OptionSpec[] = [
+  // REQ-0500 §2 — karaoke was previously inescapable from a headless run: cues
+  // inherit `karaokeEnabled` from the app settings and no flag could turn it
+  // off. `--karaoke-style` had no headless route at all.
+  { flag: '--karaoke', type: 'enum', values: ['on', 'off'], desc: 'カラオケ表示の ON/OFF（既定=アプリ設定）' },
+  { flag: '--karaoke-color', type: 'string', desc: '発話済み色 #RRGGBB' },
+  { flag: '--karaoke-style', type: 'enum', values: ['sweep', 'switch'], desc: 'カラオケ表示方式（既定 sweep）' },
+  // REQ-0501 §1 — the remaining GUI-settable style axes. Ranges mirror the GUI
+  // controls exactly. `shadowColor` / `shadowAlpha` are intentionally absent:
+  // no GUI surface can set them.
+  { flag: '--emphasis', type: 'enum', values: ['on', 'off'], desc: 'キーワード強調の ON/OFF（強調語の指定は非対応）' },
+  { flag: '--emphasis-color', type: 'string', desc: '強調色 #RRGGBB' },
+  { flag: '--emphasis-scale', type: 'int', default: '130', desc: '強調の拡大率(%) 50..200' },
+  { flag: '--shadow', type: 'int', desc: '影の大きさ(px) 0..50（0=影なし）' },
+  { flag: '--rotation', type: 'int', desc: '回転(度) 0..359' },
+  { flag: '--uppercase', type: 'enum', values: ['on', 'off'], desc: '大文字化（表示のみ・SRT 出力は原文）' },
+  { flag: '--line-spacing', type: 'int', desc: '行間(%) -50..100（フォントサイズ比）' },
+  { flag: '--text-alpha', type: 'int', desc: '文字の不透明度(%) 0..100' },
+  { flag: '--outline-alpha', type: 'int', desc: '縁の不透明度(%) 0..100' },
+  { flag: '--background', type: 'enum', values: ['on', 'off'], desc: '背景ボックスの ON/OFF' },
+  { flag: '--background-color', type: 'enum', values: ['black', 'white'], desc: '背景ボックスの色' },
+  { flag: '--background-opacity', type: 'int', desc: '背景ボックスの不透明度(%) 0..100' },
+]
+
+/** REQ-0504 — the base typography overrides, shared by the same four commands. */
+const BASE_STYLE_SPECS: OptionSpec[] = [
+  { flag: '--weight', type: 'enum', values: WEIGHTS, desc: 'フォントウェイト（既定=アプリ設定）' },
+  { flag: '--font-size', type: 'int', desc: 'フォントサイズ上書き(px)' },
+  { flag: '--text-color', type: 'string', desc: '文字色 #RRGGBB' },
+  { flag: '--outline-color', type: 'string', desc: '縁色 #RRGGBB' },
+  { flag: '--outline', type: 'int', desc: '縁の太さ(px)' },
+  { flag: '--margin-v', type: 'int', desc: '字幕を画面の下端(または上端)からどれだけ離すか。入力動画の px で指定し、--preset/--resolution では一緒に縮小される' },
+]
+
 const COMMANDS: CommandDoc[] = [
   {
     name: 'status',
@@ -160,27 +202,7 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--text-color', type: 'string', desc: '文字色 #RRGGBB' },
       { flag: '--outline-color', type: 'string', desc: '縁色 #RRGGBB' },
       { flag: '--outline', type: 'int', desc: '縁の太さ(px)' },
-      // REQ-0500 §2 — karaoke was previously inescapable from a headless run:
-      // cues inherit `karaokeEnabled` from the app settings and no flag could
-      // turn it off. `--karaoke-style` had no headless route at all.
-      { flag: '--karaoke', type: 'enum', values: ['on', 'off'], desc: 'カラオケ表示の ON/OFF（既定=アプリ設定）' },
-      { flag: '--karaoke-color', type: 'string', desc: '発話済み色 #RRGGBB' },
-      { flag: '--karaoke-style', type: 'enum', values: ['sweep', 'switch'], desc: 'カラオケ表示方式（既定 sweep）' },
-      // REQ-0501 §1 — the remaining GUI-settable style axes (second wave).
-      // Ranges mirror the GUI controls exactly. `shadowColor` / `shadowAlpha`
-      // are intentionally absent: no GUI surface can set them.
-      { flag: '--emphasis', type: 'enum', values: ['on', 'off'], desc: 'キーワード強調の ON/OFF（強調語の指定は非対応）' },
-      { flag: '--emphasis-color', type: 'string', desc: '強調色 #RRGGBB' },
-      { flag: '--emphasis-scale', type: 'int', default: '130', desc: '強調の拡大率(%) 50..200' },
-      { flag: '--shadow', type: 'int', desc: '影の大きさ(px) 0..50（0=影なし）' },
-      { flag: '--rotation', type: 'int', desc: '回転(度) 0..359' },
-      { flag: '--uppercase', type: 'enum', values: ['on', 'off'], desc: '大文字化（表示のみ・SRT 出力は原文）' },
-      { flag: '--line-spacing', type: 'int', desc: '行間(%) -50..100（フォントサイズ比）' },
-      { flag: '--text-alpha', type: 'int', desc: '文字の不透明度(%) 0..100' },
-      { flag: '--outline-alpha', type: 'int', desc: '縁の不透明度(%) 0..100' },
-      { flag: '--background', type: 'enum', values: ['on', 'off'], desc: '背景ボックスの ON/OFF' },
-      { flag: '--background-color', type: 'enum', values: ['black', 'white'], desc: '背景ボックスの色' },
-      { flag: '--background-opacity', type: 'int', desc: '背景ボックスの不透明度(%) 0..100' },
+      ...STYLE_FLAG_SPECS,
       { flag: '--position', type: 'enum', values: ['top', 'center', 'bottom'], desc: '縦位置' },
       { flag: '--style', type: 'string', desc: 'GUI 保存のスタイルプリセット名を全 cue に適用（status で一覧）' },
       OVERWRITE,
@@ -207,27 +229,7 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--crf', type: 'int', desc: '画質(定質) 0..51（--burn 時）' },
       { flag: '--bitrate', type: 'string', desc: 'VBR目標ビットレート 例 16M（--burn 時）' },
       { flag: '--quality', type: 'int', desc: '画質 1..100（--burn 時）' },
-      // REQ-0500 §2 — karaoke was previously inescapable from a headless run:
-      // cues inherit `karaokeEnabled` from the app settings and no flag could
-      // turn it off. `--karaoke-style` had no headless route at all.
-      { flag: '--karaoke', type: 'enum', values: ['on', 'off'], desc: 'カラオケ表示の ON/OFF（既定=アプリ設定）' },
-      { flag: '--karaoke-color', type: 'string', desc: '発話済み色 #RRGGBB' },
-      { flag: '--karaoke-style', type: 'enum', values: ['sweep', 'switch'], desc: 'カラオケ表示方式（既定 sweep）' },
-      // REQ-0501 §1 — the remaining GUI-settable style axes (second wave).
-      // Ranges mirror the GUI controls exactly. `shadowColor` / `shadowAlpha`
-      // are intentionally absent: no GUI surface can set them.
-      { flag: '--emphasis', type: 'enum', values: ['on', 'off'], desc: 'キーワード強調の ON/OFF（強調語の指定は非対応）' },
-      { flag: '--emphasis-color', type: 'string', desc: '強調色 #RRGGBB' },
-      { flag: '--emphasis-scale', type: 'int', default: '130', desc: '強調の拡大率(%) 50..200' },
-      { flag: '--shadow', type: 'int', desc: '影の大きさ(px) 0..50（0=影なし）' },
-      { flag: '--rotation', type: 'int', desc: '回転(度) 0..359' },
-      { flag: '--uppercase', type: 'enum', values: ['on', 'off'], desc: '大文字化（表示のみ・SRT 出力は原文）' },
-      { flag: '--line-spacing', type: 'int', desc: '行間(%) -50..100（フォントサイズ比）' },
-      { flag: '--text-alpha', type: 'int', desc: '文字の不透明度(%) 0..100' },
-      { flag: '--outline-alpha', type: 'int', desc: '縁の不透明度(%) 0..100' },
-      { flag: '--background', type: 'enum', values: ['on', 'off'], desc: '背景ボックスの ON/OFF' },
-      { flag: '--background-color', type: 'enum', values: ['black', 'white'], desc: '背景ボックスの色' },
-      { flag: '--background-opacity', type: 'int', desc: '背景ボックスの不透明度(%) 0..100' },
+      ...STYLE_FLAG_SPECS,
       OVERWRITE,
       DEVICE_ASSERT,
       STRICT,
@@ -259,27 +261,7 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--margin-v', type: 'int', desc: '字幕を画面の下端(または上端)からどれだけ離すか。入力動画の px で指定し、--preset/--resolution では一緒に縮小される' },
       // REQ-0468 — same placement/layout args as `burn`, resolved by the shared
       // pipeline, so a still previews the burn (position/margins/overflow/解像度).
-      // REQ-0500 §2 — karaoke was previously inescapable from a headless run:
-      // cues inherit `karaokeEnabled` from the app settings and no flag could
-      // turn it off. `--karaoke-style` had no headless route at all.
-      { flag: '--karaoke', type: 'enum', values: ['on', 'off'], desc: 'カラオケ表示の ON/OFF（既定=アプリ設定）' },
-      { flag: '--karaoke-color', type: 'string', desc: '発話済み色 #RRGGBB' },
-      { flag: '--karaoke-style', type: 'enum', values: ['sweep', 'switch'], desc: 'カラオケ表示方式（既定 sweep）' },
-      // REQ-0501 §1 — the remaining GUI-settable style axes (second wave).
-      // Ranges mirror the GUI controls exactly. `shadowColor` / `shadowAlpha`
-      // are intentionally absent: no GUI surface can set them.
-      { flag: '--emphasis', type: 'enum', values: ['on', 'off'], desc: 'キーワード強調の ON/OFF（強調語の指定は非対応）' },
-      { flag: '--emphasis-color', type: 'string', desc: '強調色 #RRGGBB' },
-      { flag: '--emphasis-scale', type: 'int', default: '130', desc: '強調の拡大率(%) 50..200' },
-      { flag: '--shadow', type: 'int', desc: '影の大きさ(px) 0..50（0=影なし）' },
-      { flag: '--rotation', type: 'int', desc: '回転(度) 0..359' },
-      { flag: '--uppercase', type: 'enum', values: ['on', 'off'], desc: '大文字化（表示のみ・SRT 出力は原文）' },
-      { flag: '--line-spacing', type: 'int', desc: '行間(%) -50..100（フォントサイズ比）' },
-      { flag: '--text-alpha', type: 'int', desc: '文字の不透明度(%) 0..100' },
-      { flag: '--outline-alpha', type: 'int', desc: '縁の不透明度(%) 0..100' },
-      { flag: '--background', type: 'enum', values: ['on', 'off'], desc: '背景ボックスの ON/OFF' },
-      { flag: '--background-color', type: 'enum', values: ['black', 'white'], desc: '背景ボックスの色' },
-      { flag: '--background-opacity', type: 'int', desc: '背景ボックスの不透明度(%) 0..100' },
+      ...STYLE_FLAG_SPECS,
       { flag: '--position', type: 'enum', values: ['top', 'center', 'bottom'], desc: '縦位置（burn と同一）' },
       { flag: '--margin-x', type: 'int', default: '10', desc: '左右の余白(px)。字幕はここに収まるよう自動折り返しされる（位置そのものは動かさない）。出力解像度の px' },
       { flag: '--margin-y', type: 'int', desc: '「縦にはみ出した」と判定する上下の余白(px)。判定にのみ影響し、字幕は動かない。出力解像度の px（未指定なら --margin-v を換算）' },
@@ -340,6 +322,32 @@ const COMMANDS: CommandDoc[] = [
     ],
     examples: ['mojioko convert out.mojioko -o out.srt'],
     errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'OUTPUT_WRITE_FAILED'],
+  },
+  {
+    name: 'preset',
+    summary: 'スタイルプリセットの一覧・確認・保存・削除（GUI と同じ保存先）',
+    usage: 'mojioko preset [list | show <name> | save <name> --from <sub.mojioko> | delete <name>]',
+    positionals: [
+      { name: 'subcommand', required: false, desc: 'list（既定）| show | save | delete' },
+      { name: 'name', required: false, desc: 'show / save / delete の対象名' },
+    ],
+    optionSpecs: [
+      { flag: '--from', type: 'path', desc: 'save: 元にする .mojioko（cue のスタイルを取り込む）' },
+      { flag: '--index', type: 'int', default: '0', desc: 'save: 元にする cue 番号（0始まり）' },
+      // save: the captured cue can be tweaked on the way in, using the same
+      // flags a burn would take.
+      ...BASE_STYLE_SPECS,
+      ...STYLE_FLAG_SPECS,
+      OVERWRITE,
+      { flag: '--force', type: 'boolean', default: 'false', desc: 'アプリ起動中でも書き込む（非推奨：アプリ側の保存で消えます）' },
+    ],
+    examples: [
+      'mojioko preset list',
+      'mojioko preset show "My Bold"',
+      'mojioko preset save "My Bold" --from out.mojioko --index 3',
+      'mojioko preset delete "My Bold"',
+    ],
+    errorCodes: ['USAGE', 'INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'OUTPUT_EXISTS'],
   },
   {
     name: 'export-mcpb',

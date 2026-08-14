@@ -555,6 +555,73 @@ try {
   }
 
 
+  // REQ-0504 — style presets from the CLI: list / show / save / delete, and the
+  // round trip that makes them a bridge rather than a one-way door.
+  //
+  // NOTE: this writes to the REAL settings.json (that IS the shared store — a
+  // preset the GUI cannot see would be pointless). The name is namespaced, the
+  // preset is deleted at the end, and the count is asserted back to its
+  // starting value so a failure here cannot quietly leave residue behind.
+  {
+    const before = cli(['preset', 'list'], 30000)
+    const startCount = before.json?.data?.count
+    check('preset list works and reports a count', before.code === 0 && typeof startCount === 'number', `count=${startCount}`)
+
+    const pclip = makeClipFor('preset.mp4', '1280x720')
+    const psrt = join(work, 'preset.srt')
+    writeFileSync(psrt, '1\n00:00:00,200 --> 00:00:02,000\npreset probe\n', 'utf-8')
+    const pmoj = join(work, 'preset.mojioko')
+    cli(['convert', psrt, '-o', pmoj, '--video', pclip], 40000)
+
+    const NAME = 'CLI Smoke Preset (REQ-0504)'
+    const FLAGS = ['--karaoke', 'off', '--text-color', '#FF00FF', '--font-size', '90', '--shadow', '0']
+
+    // SRT must be refused — it holds no style, so it could only mint defaults.
+    const fromSrt = cli(['preset', 'save', NAME, '--from', psrt], 30000)
+    check('preset save --from an SRT is refused (no style to capture)',
+      fromSrt.code === 4 && fromSrt.json?.code === 'UNSUPPORTED_FORMAT', `${fromSrt.code}/${fromSrt.json?.code}`)
+
+    const saved = cli(['preset', 'save', NAME, '--from', pmoj, ...FLAGS, '--overwrite'], 40000)
+    check('preset save succeeds and echoes the resolved style',
+      saved.code === 0 && saved.json?.data?.style?.fontSizePx === 90 && saved.json?.data?.style?.textColorHex === '#FF00FF',
+      `code=${saved.code} fs=${saved.json?.data?.style?.fontSizePx}`)
+
+    const shown = cli(['preset', 'show', NAME], 30000)
+    check('a CLI-saved preset is readable back by name', shown.code === 0 && shown.json?.data?.name === NAME)
+    const listed = cli(['preset', 'list'], 30000)
+    check('a CLI-saved preset appears in list (this is what the GUI reads)',
+      (listed.json?.data?.presets ?? []).some((p) => p.name === NAME))
+
+    // Saving the same name again must refuse, like every other output command.
+    const dup = cli(['preset', 'save', NAME, '--from', pmoj], 30000)
+    check('duplicate preset save → OUTPUT_EXISTS / exit 8', dup.code === 8 && dup.json?.code === 'OUTPUT_EXISTS', `${dup.code}/${dup.json?.code}`)
+
+    // ★ ROUND TRIP in real pixels: the saved preset must reproduce the look
+    // that the equivalent flags produce. Both halves measured, so a preset that
+    // renders nothing cannot pass by accident.
+    const pFlags = join(work, 'preset-flags.png')
+    const pStyle = join(work, 'preset-style.png')
+    cli(['export_frame', pclip, pmoj, '-o', pFlags, '--time', '1.0', ...FLAGS], 60000)
+    cli(['export_frame', pclip, pmoj, '-o', pStyle, '--time', '1.0', '--style', NAME], 60000)
+    const MAGENTA = [0xff, 0x00, 0xff]
+    const mFlags = countColor(pFlags, MAGENTA)
+    const mStyle = countColor(pStyle, MAGENTA)
+    check('the flag-rendered frame actually has the colour (control)', mFlags > 500, `magenta=${mFlags}`)
+    check('--style <saved preset> reproduces the flag-rendered look (real pixels)',
+      mStyle > 500 && Math.abs(mFlags - mStyle) <= Math.max(50, mFlags * 0.02), `flags=${mFlags} preset=${mStyle}`)
+
+    // Deleting something absent must not report success.
+    const delMissing = cli(['preset', 'delete', 'no-such-preset-req-0504'], 30000)
+    check('deleting a missing preset → USAGE (never a silent success)',
+      delMissing.code === 2 && delMissing.json?.code === 'USAGE', `${delMissing.code}/${delMissing.json?.code}`)
+
+    const del = cli(['preset', 'delete', NAME], 30000)
+    check('preset delete removes it', del.code === 0 && del.json?.data?.deleted === NAME)
+    const after = cli(['preset', 'list'], 30000)
+    check('preset count is back to where it started (no residue)',
+      after.json?.data?.count === startCount, `${startCount} -> ${after.json?.data?.count}`)
+  }
+
   // REQ-0468 — PREVIEW == BURN placement gate.  With the SAME placement flags
   // (--position bottom --margin-v <v>), the caption must land at the SAME Y in an
   // export_frame still and in a frame pulled from the burn output.  Both now run
