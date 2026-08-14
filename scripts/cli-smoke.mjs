@@ -13,6 +13,7 @@
  * cleared without a multi-GB download.
  */
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -383,6 +384,53 @@ try {
       check('--line-spacing separates the two lines (two-line cue)',
         ls0.ink > 1000 && ls80.h > ls0.h + 40, `inkH ${ls0.h} -> ${ls80.h}`)
     }
+
+    // REQ-0502 §1 — MULTI-TIME capture. The failure mode worth guarding is not
+    // "no files" but "N copies of the same frame", so this compares the bytes.
+    const mt = cli(['export_frame', s2clip, s2srt, '-o', join(work, 'mt.png'), '--time', '0.3,0.9,1.5'], 90000)
+    const mtFrames = mt.json?.data?.frames ?? []
+    check('export_frame --time a,b,c renders one frame per time', mt.code === 0 && mt.json?.data?.frameCount === 3 && mtFrames.length === 3,
+      `code=${mt.code} frameCount=${mt.json?.data?.frameCount}`)
+    check('multi-time reports the time each frame was taken AT',
+      mtFrames.map((f) => f.timeSec).join(',') === '0.3,0.9,1.5', JSON.stringify(mtFrames.map((f) => f.timeSec)))
+    const mtPaths = mtFrames.map((f) => f.outputPath)
+    check('multi-time writes distinct, time-labelled files', mtPaths.every((p) => existsSync(p)) && new Set(mtPaths).size === 3,
+      mtPaths.map((p) => p.split(/[\\/]/).pop()).join(' '))
+    // ★ the real check: different timestamps must be different pictures.
+    const digests = new Set(mtPaths.filter((p) => existsSync(p)).map((p) => createHash('sha256').update(readFileSync(p)).digest('hex')))
+    check('multi-time frames are DISTINCT images (not N copies of one frame)', digests.size === 3, `distinct=${digests.size}/3`)
+    // Backward compatibility: a single time keeps the exact -o path.
+    const st1 = cli(['export_frame', s2clip, s2srt, '-o', join(work, 'single.png'), '--time', '1.0'], 60000)
+    check('single --time still returns the exact -o path (backward compatible)',
+      st1.code === 0 && st1.json?.data?.frameCount === 1 && String(st1.json?.data?.outputPath).endsWith('single.png'))
+    // Out of range is a clear USAGE, not a bare ffmpeg exit code.
+    const oob = cli(['export_frame', s2clip, s2srt, '-o', join(work, 'oob.png'), '--time', '9999'], 60000)
+    check('a time past the end → USAGE naming the duration', oob.code === 2 && oob.json?.code === 'USAGE' && /秒/.test(String(oob.json?.message)),
+      `${oob.code}/${oob.json?.code}`)
+
+    // REQ-0502 §2 — "accepted, succeeds, renders nothing" warnings.
+    // Each is checked in BOTH directions: a warning that fires on ordinary
+    // input is noise, and noise is unread (§2-4).
+    const warnCodesOf = (...flags) => {
+      const r = cli(['burn', s2clip, s2srt, '--dry-run', ...flags], 20000)
+      return { code: r.code, codes: (r.json?.warnings ?? []).map((w) => w.code) }
+    }
+    const wBoxNoBorder = warnCodesOf('--background', 'on', '--outline', '0')
+    check('background box + outline 0 → BACKGROUND_BOX_NOT_DRAWN',
+      wBoxNoBorder.codes.includes('BACKGROUND_BOX_NOT_DRAWN'), JSON.stringify(wBoxNoBorder.codes))
+    const wBoxOk = warnCodesOf('--background', 'on', '--outline', '2', '--shadow', '0')
+    check('background box + outline 2 → NO box warning (the other half of the gate)',
+      !wBoxOk.codes.includes('BACKGROUND_BOX_NOT_DRAWN'), JSON.stringify(wBoxOk.codes))
+    const wEmph = warnCodesOf('--emphasis', 'on')
+    check('--emphasis on with no spans → EMPHASIS_NO_SPANS', wEmph.codes.includes('EMPHASIS_NO_SPANS'), JSON.stringify(wEmph.codes))
+    const wIgnored = warnCodesOf('--karaoke', 'off', '--karaoke-color', '#FF00FF')
+    check('--karaoke-color with karaoke off → KARAOKE_FLAGS_WITHOUT_KARAOKE',
+      wIgnored.codes.includes('KARAOKE_FLAGS_WITHOUT_KARAOKE'), JSON.stringify(wIgnored.codes))
+    const wIgnoredOff = warnCodesOf('--karaoke', 'on', '--karaoke-color', '#FF00FF')
+    check('--karaoke-color with karaoke on → NO ignored-flag warning',
+      !wIgnoredOff.codes.includes('KARAOKE_FLAGS_WITHOUT_KARAOKE'), JSON.stringify(wIgnoredOff.codes))
+    const wClean = warnCodesOf()
+    check('a plain burn emits NO no-op warnings (warnings stay rare)', wClean.code === 0 && wClean.codes.length === 0, JSON.stringify(wClean.codes))
 
     // Emphasis is echoed rather than measured: enabling it changes NO pixels
     // without `emphasisSpans` (which words to emphasise), and spans are per-cue

@@ -28,6 +28,12 @@ import { CliError, emitSuccess, type CliContext } from '../output'
 import { assertWritable } from '../overwrite'
 import { detectFormat, entriesFromSegments } from '../subtitle-io'
 import { resolvePlacementAndLayout } from '../placement'
+import { detectNoOpCombinations, detectIgnoredFlags } from '../no-op-warnings'
+// REQ-0502 §1 — pure helpers live in their own electron-free module so the
+// cap / rejection rules / filename scheme are unit-testable; re-exported so
+// this command stays the single import site.
+import { EXPORT_FRAME_MAX_TIMES, frameOutputPath, parseTimes } from '../frame-times'
+export { EXPORT_FRAME_MAX_TIMES, frameOutputPath, parseTimes }
 
 export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): Promise<number> {
   const videoPath = args.positionals[0]
@@ -40,13 +46,15 @@ export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): 
 
   const out = optString(args.opts, 'out')
   if (!out) throw new CliError('USAGE', '出力パス（-o <out.png|.jpg>）が必要です。')
-  assertWritable(out, args.opts) // REQ-0457 D13
 
-  const timeStr = optString(args.opts, 'time', 'at')
-  const timeSec = Number.parseFloat(timeStr ?? '')
-  if (!Number.isFinite(timeSec) || timeSec < 0) {
-    throw new CliError('USAGE', '時刻（--time <秒>）が必要です。', 'mojioko export_frame ... --time 1.5')
-  }
+  // REQ-0502 §1 — `--time` accepts a comma-separated list.  Extending the
+  // EXISTING flag rather than adding `--times` keeps `--time 1.5` (and the
+  // `--at` alias) byte-identical in behaviour, so nothing that works today
+  // changes, and there is no second spelling for an agent to choose between.
+  const times = parseTimes(optString(args.opts, 'time', 'at'))
+  const multi = times.length > 1
+  // Single time keeps the exact `-o` path; only a multi-shot derives names.
+  if (!multi) assertWritable(out, args.opts) // REQ-0457 D13
 
   const subFmt = detectFormat(subPath, optString(args.opts, 'format'))
   if (!subFmt) throw new CliError('UNSUPPORTED_FORMAT', `字幕フォーマット不明: ${subPath}`, '.mojioko / .srt を指定してください。')
@@ -89,6 +97,11 @@ export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): 
   entries = placement.entries
   const { renderVideo, scaleTo, resized, overflow, marginX, appliedStylePreset, subtitleStyle } = placement
 
+  // REQ-0502 §2 — flag combinations that render nothing. Computed on the
+  // RESOLVED cues, so it catches both a CLI flag and a `.mojioko` that already
+  // carried the combination.
+  const noOpWarnings = [...detectNoOpCombinations(entries), ...detectIgnoredFlags(args.opts, entries)]
+
   // Parity with `burn`: `--overflow error` rejects instead of rendering.
   if (placement.overflowMode === 'error' && overflow.overflowCueCount > 0) {
     throw new CliError(
@@ -99,44 +112,91 @@ export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): 
     )
   }
 
-  const cueVisible = entries.some((e) => !e.isDeleted && e.startSec <= timeSec && timeSec < e.endSec && e.text.trim() !== '')
-
-  const req: ExportFrameRequest = {
-    inputPath: videoPath,
-    outputPath: out,
-    timeSec,
-    // REQ-0468 — render canvas = the post-scaling target (PlayRes for the ASS),
-    // with `scaleTo` telling the exporter to scale+pad the source frame into it.
-    video: renderVideo,
-    format,
-    includeSubtitles: true,
-    entries,
-    subtitleBackground: BURNIN_DEFAULTS.subtitleBackground,
-    fontId,
-    karaokeStyle: KARAOKE_STYLE_DEFAULT,
-    ...(scaleTo ? { scaleTo } : {}),
-    marginLrPx: marginX,
+  // REQ-0502 §1-4 — reject a time past the end instead of letting ffmpeg fail.
+  // Before this the call reached ffmpeg and came back as
+  // `BURN_FAILED: ffmpeg exited with code 4294967294`, which tells the caller
+  // nothing. Rejecting (rather than clamping to the last frame) keeps the rule
+  // that a result never silently describes something other than the request.
+  const durationSec = video.durationSec
+  if (durationSec > 0) {
+    const past = times.filter((t) => t >= durationSec)
+    if (past.length > 0) {
+      throw new CliError(
+        'USAGE',
+        `動画の尺（${durationSec.toFixed(3)} 秒）を超える時刻です: ${past.map((t) => t.toFixed(3)).join(', ')}`,
+        `0 以上 ${durationSec.toFixed(3)} 秒未満で指定してください。`,
+        { durationSec, outOfRange: past },
+      )
+    }
   }
 
-  let result
-  try {
-    result = await exportFrame(req)
-  } catch (e) {
-    throw new CliError('BURN_FAILED', `フレーム出力に失敗: ${e instanceof Error ? e.message : String(e)}`, 'ffmpeg の入力/コーデック/出力先を確認してください。')
+  // REQ-0502 §1-2 — placement/layout is resolved ONCE, above, and every frame
+  // reuses those entries. That single resolution is the reason batching is
+  // worth having: the per-frame work is just the two-pass ffmpeg extract.
+  const frames: { timeSec: number; outputPath: string; sizeBytes: number; cueVisible: boolean }[] = []
+  for (const [i, timeSec] of times.entries()) {
+    const target = multi ? frameOutputPath(out, i, timeSec) : out
+    if (multi) assertWritable(target, args.opts)
+
+    const req: ExportFrameRequest = {
+      inputPath: videoPath,
+      outputPath: target,
+      timeSec,
+      // REQ-0468 — render canvas = the post-scaling target (PlayRes for the ASS),
+      // with `scaleTo` telling the exporter to scale+pad the source frame into it.
+      video: renderVideo,
+      format,
+      includeSubtitles: true,
+      entries,
+      subtitleBackground: BURNIN_DEFAULTS.subtitleBackground,
+      fontId,
+      karaokeStyle: KARAOKE_STYLE_DEFAULT,
+      ...(scaleTo ? { scaleTo } : {}),
+      marginLrPx: marginX,
+    }
+
+    let result
+    try {
+      result = await exportFrame(req)
+    } catch (e) {
+      throw new CliError(
+        'BURN_FAILED',
+        `フレーム出力に失敗（t=${timeSec}）: ${e instanceof Error ? e.message : String(e)}`,
+        'ffmpeg の入力/コーデック/出力先を確認してください。',
+      )
+    }
+    frames.push({
+      timeSec,
+      outputPath: result.outputPath,
+      sizeBytes: result.sizeBytes,
+      cueVisible: entries.some((e) => !e.isDeleted && e.startSec <= timeSec && timeSec < e.endSec && e.text.trim() !== ''),
+    })
   }
 
-  return emitSuccess(ctx, 'export_frame', {
-    outputPath: result.outputPath,
-    sizeBytes: result.sizeBytes,
-    timeSec,
-    format,
-    // REQ-0468 — the OUTPUT resolution (post `--resolution`/`--preset`), like burn.
-    resolution: { width: renderVideo.widthPx, height: renderVideo.heightPx },
-    resized,
-    cueVisible,
-    // REQ-0468 — same fields `burn` reports so a still is verifiable the same way.
-    overflow,
-    subtitleStyle,
-    stylePreset: appliedStylePreset,
-  })
+  const first = frames[0]
+  return emitSuccess(
+    ctx,
+    'export_frame',
+    {
+      // Single-frame fields kept at the top level so every existing caller and
+      // the REQ-0468 parity gate read exactly what they read before.
+      outputPath: first.outputPath,
+      sizeBytes: first.sizeBytes,
+      timeSec: first.timeSec,
+      cueVisible: first.cueVisible,
+      // REQ-0502 §1-4 — every frame actually written, with the time it was
+      // written AT (not merely the time that was asked for).
+      frameCount: frames.length,
+      frames,
+      format,
+      // REQ-0468 — the OUTPUT resolution (post `--resolution`/`--preset`), like burn.
+      resolution: { width: renderVideo.widthPx, height: renderVideo.heightPx },
+      resized,
+      // REQ-0468 — same fields `burn` reports so a still is verifiable the same way.
+      overflow,
+      subtitleStyle,
+      stylePreset: appliedStylePreset,
+    },
+    noOpWarnings,
+  )
 }

@@ -29,6 +29,7 @@ import { parseBitrateKbps } from '../../../shared/encode-quality'
 // resolver used by BOTH burn and export_frame, so a still previews the burn and
 // neither drifts.  `optInt` is re-exported from there.
 import { resolvePlacementAndLayout, optInt } from '../placement'
+import { detectNoOpCombinations, detectIgnoredFlags } from '../no-op-warnings'
 
 const ENCODERS = new Set(['auto', 'h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf'])
 const AUDIO_MODES = new Set(['preserve', 'simple', 'none'])
@@ -132,6 +133,10 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
       `overflow=${placement.overflowMode}/${overflow.overflowCueCount} preset=${appliedStylePreset ?? 'none'} cues=${entries.filter((e) => !e.isDeleted).length}`,
   )
 
+  // REQ-0502 §2 — combinations that render nothing (background box with a
+  // zero outline, emphasis with no spans). Same detector `export_frame` uses.
+  const noOpWarnings = [...detectNoOpCombinations(entries), ...detectIgnoredFlags(args.opts, entries)]
+
   if (placement.overflowMode === 'error' && overflow.overflowCueCount > 0) {
     throw new CliError(
       'SUBTITLE_OVERFLOW',
@@ -154,7 +159,7 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
       stylePreset: appliedStylePreset,
       // REQ-0460 — echo the quality override that WOULD be applied (if any).
       quality: quality ?? null,
-    })
+    }, noOpWarnings)
   }
 
   const request: BurninStartRequest = {
@@ -230,5 +235,5 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     subtitleStyle,
     // REQ-0457 D12 — the style preset applied to all cues, if any.
     stylePreset: appliedStylePreset,
-  })
+  }, noOpWarnings)
 }

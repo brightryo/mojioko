@@ -46,6 +46,14 @@ function toArgs(positionals: (string | undefined)[], opts: Record<string, string
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined)
 const numStr = (v: unknown): string | undefined => (typeof v === 'number' ? String(v) : str(v))
+/**
+ * REQ-0502 §1 — a scalar OR a list, rendered as the CLI's comma-separated form.
+ *
+ * `export_frame.time` accepts `1.5`, `"1.0,3.5"`, and `[1.0, 3.5]`: an array is
+ * the natural shape for a JSON client, while the CLI keeps one flag spelling.
+ */
+const numListStr = (v: unknown): string | undefined =>
+  Array.isArray(v) ? (v.length ? v.map((x) => String(x)).join(',') : undefined) : numStr(v)
 const boolTrue = (v: unknown): true | undefined => (v === true ? true : undefined)
 
 interface ToolSpec {
@@ -282,7 +290,12 @@ export const TOOLS: ToolSpec[] = [
         video: { type: 'string', description: '入力動画の絶対パス' },
         subtitle: { type: 'string', description: '.mojioko または .srt の絶対パス' },
         out: { type: 'string', description: '出力画像パス（.png または .jpg）' },
-        time: { type: 'number', description: '抽出する時刻（秒）' },
+        // REQ-0502 §1 — one call can render several timestamps; placement is
+        // resolved once and reused, so batching is cheaper than N calls.
+        time: {
+          description: '抽出する時刻（秒）。複数指定可（配列 [1.0,3.5] / 文字列 "1.0,3.5" / 単一の数値）。最大20件（REQ-0502）',
+          oneOf: [{ type: 'number' }, { type: 'string' }, { type: 'array', items: { type: 'number' } }],
+        },
         format: FORMAT_PROP,
         // REQ-0461 — same per-cue style overrides as `burn` (faithful preview still).
         weight: { type: 'string', enum: WEIGHTS, description: 'フォントウェイト（既定: 設定）（REQ-0461）' },
@@ -308,7 +321,7 @@ export const TOOLS: ToolSpec[] = [
     async: true,
     build: (i) => ({
       fn: runExportFrameCommand,
-      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numStr(i.time), format: str(i.format), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), position: str(i.position), ...karaokeArgs(i), ...style2Args(i), 'margin-x': numStr(i.margin_x), 'margin-y': numStr(i.margin_y), overflow: str(i.overflow), preset: str(i.preset), resolution: str(i.resolution), style: str(i.style), overwrite: boolTrue(i.overwrite) }),
+      args: toArgs([str(i.video), str(i.subtitle)], { out: str(i.out), time: numListStr(i.time), format: str(i.format), weight: str(i.weight), 'font-size': numStr(i.font_size), 'text-color': str(i.text_color), 'outline-color': str(i.outline_color), outline: numStr(i.outline), 'margin-v': numStr(i.margin_v), position: str(i.position), ...karaokeArgs(i), ...style2Args(i), 'margin-x': numStr(i.margin_x), 'margin-y': numStr(i.margin_y), overflow: str(i.overflow), preset: str(i.preset), resolution: str(i.resolution), style: str(i.style), overwrite: boolTrue(i.overwrite) }),
     }),
   },
   {
