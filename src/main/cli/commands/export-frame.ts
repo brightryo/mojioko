@@ -100,7 +100,11 @@ export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): 
   // REQ-0502 §2 — flag combinations that render nothing. Computed on the
   // RESOLVED cues, so it catches both a CLI flag and a `.mojioko` that already
   // carried the combination.
-  const noOpWarnings = [...detectNoOpCombinations(entries), ...detectIgnoredFlags(args.opts, entries)]
+  const noOpWarnings = [
+    ...placement.warnings,
+    ...detectNoOpCombinations(entries),
+    ...detectIgnoredFlags(args.opts, entries),
+  ]
 
   // Parity with `burn`: `--overflow error` rejects instead of rendering.
   if (placement.overflowMode === 'error' && overflow.overflowCueCount > 0) {

@@ -432,6 +432,66 @@ try {
     const wClean = warnCodesOf()
     check('a plain burn emits NO no-op warnings (warnings stay rare)', wClean.code === 0 && wClean.codes.length === 0, JSON.stringify(wClean.codes))
 
+    // REQ-0503 §1 — a downscale must not delete the outline (and with it the
+    // background box). 4K → shorts is factor 0.28, where `--outline 1` used to
+    // round to 0. Both halves: the effect survives, and an explicit 0 stays 0.
+    const uhd = makeClipFor('uhd.mp4', '3840x2160')
+    const shrunk = cli(['burn', uhd, s2srt, '--dry-run', '--preset', 'shorts', '--outline', '1', '--shadow', '1'], 40000)
+    check('4K → shorts keeps outline 1 (was rounded to 0)',
+      shrunk.json?.data?.subtitleStyle?.outlineThicknessPx === 1, `outline=${shrunk.json?.data?.subtitleStyle?.outlineThicknessPx}`)
+    check('4K → shorts keeps shadow 1', shrunk.json?.data?.subtitleStyle?.shadow?.depthPx === 1,
+      `shadow=${shrunk.json?.data?.subtitleStyle?.shadow?.depthPx}`)
+    const zeroed = cli(['burn', uhd, s2srt, '--dry-run', '--preset', 'shorts', '--outline', '0', '--shadow', '0'], 40000)
+    check('an explicit --outline 0 is NOT pushed up to 1 (the other half)',
+      zeroed.json?.data?.subtitleStyle?.outlineThicknessPx === 0 && zeroed.json?.data?.subtitleStyle?.shadow?.depthPx === 0,
+      `outline=${zeroed.json?.data?.subtitleStyle?.outlineThicknessPx} shadow=${zeroed.json?.data?.subtitleStyle?.shadow?.depthPx}`)
+    // ...and the box survives in REAL pixels, which is the harm that motivated it.
+    const boxPng = join(work, 's3-box.png')
+    cli(['export_frame', uhd, s2srt, '-o', boxPng, '--time', '1.0', '--preset', 'shorts', '--karaoke', 'off',
+      '--outline', '1', '--background', 'on', '--background-color', 'white', '--background-opacity', '100', '--shadow', '0'], 90000)
+    const boxWhite = existsSync(boxPng) ? inkStats(boxPng).white : -1
+    check('4K → shorts still paints the background box (real pixels)', boxWhite > 1500, `white=${boxWhite}`)
+
+    // REQ-0503 §2 — the overflow budget defaulted from `--margin-v` used to be a
+    // SOURCE-space number compared against the OUTPUT canvas. It must now match
+    // the margin actually drawn.
+    const mv = cli(['burn', uhd, s2srt, '--dry-run', '--preset', 'shorts', '--margin-v', '200'], 40000)
+    const drawnMargin = mv.json?.data?.subtitleStyle?.position?.verticalMarginPx
+    const budget = mv.json?.data?.overflow?.marginY
+    check('--margin-v default budget is converted to output space (drawn === budget)',
+      drawnMargin === budget, `drawn=${drawnMargin} budget=${budget}`)
+    // An EXPLICIT --margin-y is already output-space and must stay untouched.
+    const my = cli(['burn', uhd, s2srt, '--dry-run', '--preset', 'shorts', '--margin-v', '200', '--margin-y', '300'], 40000)
+    check('an explicit --margin-y is NOT scaled', my.json?.data?.overflow?.marginY === 300, `budget=${my.json?.data?.overflow?.marginY}`)
+
+    // REQ-0503 §3 — a preset carries position, so applying one un-pins cues.
+    // Intended and documented, but invisible; warn. Both halves.
+    const pinned = join(work, 's3-pinned.mojioko')
+    const unpinnedP = join(work, 's3-unpinned.mojioko')
+    cli(['convert', s2srt, '-o', pinned, '--video', s2clip], 40000)
+    const proj = JSON.parse(readFileSync(pinned, 'utf-8'))
+    const bare = JSON.parse(JSON.stringify(proj))
+    for (const c of proj.editing.subtitles) { c.posX = 500; c.posY = 800 }
+    writeFileSync(pinned, JSON.stringify(proj), 'utf-8')
+    writeFileSync(unpinnedP, JSON.stringify(bare), 'utf-8')
+    const presetName = (st.json?.data?.settings?.stylePresets ?? [])[0]
+    if (presetName) {
+      const wPin = cli(['burn', s2clip, pinned, '--dry-run', '--style', presetName], 40000)
+      check('applying a preset to PINNED cues warns that positions were cleared',
+        (wPin.json?.warnings ?? []).some((w) => w.code === 'PRESET_CLEARED_POSITION'),
+        JSON.stringify((wPin.json?.warnings ?? []).map((w) => w.code)))
+      const wNoPin = cli(['burn', s2clip, unpinnedP, '--dry-run', '--style', presetName], 40000)
+      check('applying the same preset to UNPINNED cues does NOT warn',
+        !(wNoPin.json?.warnings ?? []).some((w) => w.code === 'PRESET_CLEARED_POSITION'),
+        JSON.stringify((wNoPin.json?.warnings ?? []).map((w) => w.code)))
+      const wNoStyle = cli(['burn', s2clip, pinned, '--dry-run'], 40000)
+      check('pinned cues WITHOUT --style do not warn',
+        !(wNoStyle.json?.warnings ?? []).some((w) => w.code === 'PRESET_CLEARED_POSITION'),
+        JSON.stringify((wNoStyle.json?.warnings ?? []).map((w) => w.code)))
+    } else {
+      log('SKIP: no saved style preset on this box — PRESET_CLEARED_POSITION gate not exercised.')
+    }
+
     // Emphasis is echoed rather than measured: enabling it changes NO pixels
     // without `emphasisSpans` (which words to emphasise), and spans are per-cue
     // character offsets deliberately out of scope for this REQ. Verified with

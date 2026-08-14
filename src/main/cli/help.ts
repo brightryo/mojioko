@@ -145,9 +145,9 @@ const COMMANDS: CommandDoc[] = [
       OUT_REQ,
       { flag: '--preset', type: 'enum', values: PRESETS, desc: '出力プリセット（縦ショート等）' },
       { flag: '--resolution', type: 'string', desc: 'WxH（例 1080x1920）。--preset と排他' },
-      { flag: '--margin-v', type: 'int', desc: '縦マージン(px)。ASS verticalMarginPx に反映＝実描画の下/上端オフセット' },
-      { flag: '--margin-x', type: 'int', default: '10', desc: '横マージン(px)。改行幅＋ASS MarginL/R' },
-      { flag: '--margin-y', type: 'int', default: '10', desc: '縦オーバーフロー判定の上下安全域(px)。既定は --margin-v' },
+      { flag: '--margin-v', type: 'int', desc: '字幕を画面の下端(または上端)からどれだけ離すか。入力動画の px で指定し、--preset/--resolution では一緒に縮小される' },
+      { flag: '--margin-x', type: 'int', default: '10', desc: '左右の余白(px)。字幕はここに収まるよう自動折り返しされる（位置そのものは動かさない）。出力解像度の px' },
+      { flag: '--margin-y', type: 'int', default: '10', desc: '「縦にはみ出した」と判定する上下の余白(px)。判定と --overflow shrink の縮小にのみ影響し、字幕は動かない。出力解像度の px（未指定なら --margin-v を出力解像度へ換算した値）' },
       { flag: '--overflow', type: 'enum', values: ['shrink', 'warn', 'error'], default: 'warn', desc: '縦はみ出し（warn=計上 / shrink=自動縮小 / error=失敗）' },
       { flag: '--encoder', type: 'enum', values: ['auto', 'h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf'], default: 'auto', desc: '映像エンコーダ' },
       { flag: '--crf', type: 'int', desc: '画質(定質) 0..51 低いほど高画質。既定=エンコーダ既定(≈GUI)' },
@@ -256,7 +256,7 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--text-color', type: 'string', desc: '文字色 #RRGGBB' },
       { flag: '--outline-color', type: 'string', desc: '縁色 #RRGGBB' },
       { flag: '--outline', type: 'int', desc: '縁の太さ(px)' },
-      { flag: '--margin-v', type: 'int', desc: '縦マージン(px)。ASS verticalMarginPx に反映' },
+      { flag: '--margin-v', type: 'int', desc: '字幕を画面の下端(または上端)からどれだけ離すか。入力動画の px で指定し、--preset/--resolution では一緒に縮小される' },
       // REQ-0468 — same placement/layout args as `burn`, resolved by the shared
       // pipeline, so a still previews the burn (position/margins/overflow/解像度).
       // REQ-0500 §2 — karaoke was previously inescapable from a headless run:
@@ -281,8 +281,8 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--background-color', type: 'enum', values: ['black', 'white'], desc: '背景ボックスの色' },
       { flag: '--background-opacity', type: 'int', desc: '背景ボックスの不透明度(%) 0..100' },
       { flag: '--position', type: 'enum', values: ['top', 'center', 'bottom'], desc: '縦位置（burn と同一）' },
-      { flag: '--margin-x', type: 'int', default: '10', desc: '横マージン(px)。改行幅＋ASS MarginL/R' },
-      { flag: '--margin-y', type: 'int', desc: '縦オーバーフロー判定の上下安全域(px)。既定は --margin-v' },
+      { flag: '--margin-x', type: 'int', default: '10', desc: '左右の余白(px)。字幕はここに収まるよう自動折り返しされる（位置そのものは動かさない）。出力解像度の px' },
+      { flag: '--margin-y', type: 'int', desc: '「縦にはみ出した」と判定する上下の余白(px)。判定にのみ影響し、字幕は動かない。出力解像度の px（未指定なら --margin-v を換算）' },
       { flag: '--overflow', type: 'enum', values: ['shrink', 'warn', 'error'], default: 'warn', desc: '縦はみ出し（warn=計上 / shrink=自動縮小 / error=失敗）' },
       { flag: '--preset', type: 'enum', values: PRESETS, desc: '出力プリセット（縦ショート等）。burn と同一' },
       { flag: '--resolution', type: 'string', desc: 'WxH（例 1080x1920）。--preset と排他' },

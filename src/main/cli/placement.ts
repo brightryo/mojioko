@@ -31,7 +31,7 @@ import type { SubtitleEntry, VideoInfo } from '../../shared/types'
 import type { FontId } from '../../shared/fonts'
 import type { loadSettings } from '../services/settings-store'
 import { optString, type ParsedArgs } from './args'
-import { CliError } from './output'
+import { CliError, type CliWarning } from './output'
 import { resolveDefaultSubtitleStyle, summarizeSubtitleStyle, type SubtitleStyleSummary } from './subtitle-style'
 import { findStylePreset, applyStylePreset } from './style-preset-cli'
 import { applyStyleOverrides, parseStyleOverrides } from './style-overrides'
@@ -68,6 +68,12 @@ export interface ResolvedPlacement {
   verticalPositionOverride?: 'top' | 'center' | 'bottom'
   /** The resolved style of a representative final cue (post-override/scale/layout). */
   subtitleStyle: SubtitleStyleSummary
+  /**
+   * REQ-0503 §3 — warnings that need BEFORE/AFTER state and so cannot be
+   * derived from the final entries (which is all `no-op-warnings.ts` sees).
+   * Currently: a style preset un-pinning cues that carried absolute positions.
+   */
+  warnings: CliWarning[]
 }
 
 /**
@@ -84,6 +90,7 @@ export function resolvePlacementAndLayout(
   inputEntries: SubtitleEntry[],
 ): ResolvedPlacement {
   let entries = inputEntries
+  const warnings: CliWarning[] = []
 
   // 1) `--style` preset — SOURCE-pixel space (scaling happens after).
   const stylePresetName = optString(opts, 'style')
@@ -94,8 +101,33 @@ export function resolvePlacementAndLayout(
       const names = (settings.stylePresets ?? []).map((p) => p.name).join(', ') || '(なし)'
       throw new CliError('USAGE', `スタイルプリセット "${stylePresetName}" が見つかりません。`, `利用可能: ${names}（GUI で保存）。`)
     }
+    // REQ-0503 §3 — a preset carries position (as an anchor-relative offset,
+    // `style-presets.md` §5), so applying one legitimately REPLACES `posX`/
+    // `posY`. When the preset has no stored offset that replacement is
+    // `undefined`, i.e. every pinned cue silently reverts to aligned layout.
+    //
+    // The overwrite is intended and documented, so it is NOT suppressed here —
+    // but it is invisible in the result, and losing hand-placed positions is
+    // not something a caller should discover from the pixels. Warn instead.
+    const pinnedBefore = entries.filter((e) => !e.isDeleted && e.posX !== undefined && e.posY !== undefined)
     entries = applyStylePreset(entries, preset, { videoWidthPx: video.widthPx, videoHeightPx: video.heightPx })
     appliedStylePreset = preset.name
+    const unpinned = pinnedBefore.filter((before) => {
+      const after = entries.find((e) => e.id === before.id)
+      return after !== undefined && (after.posX === undefined || after.posY === undefined)
+    })
+    if (unpinned.length > 0) {
+      warnings.push({
+        code: 'PRESET_CLEARED_POSITION',
+        message: `スタイルプリセット "${preset.name}" は位置を含むため、${unpinned.length} 件の cue の固定座標が解除されました。`,
+        detail: {
+          cueCount: unpinned.length,
+          preset: preset.name,
+          reason: 'プリセットは位置をアンカーからのオフセットとして保持します。オフセットを持たないプリセットを適用すると整列配置に戻ります。',
+          remedy: '固定座標を保ちたい場合は --style を使わず、個別のスタイルフラグで指定してください。',
+        },
+      })
+    }
   }
 
   // 2) per-cue style overrides (REQ-0461) — explicit flags win over the preset.
@@ -110,24 +142,45 @@ export function resolvePlacementAndLayout(
   }
   const verticalPositionOverride = positionFlag ? (positionFlag as 'top' | 'center' | 'bottom') : undefined
 
-  // 4) margins + overflow (REQ-0456/0461).  `--margin-y` (overflow-safety budget)
-  // falls back to `--margin-v`; `--margin-x` feeds ASS MarginL/R + wrap budget.
+  // 4) Resolve the output canvas FIRST, because the margins below live in
+  // different coordinate spaces and one of them has to be converted.
+  //
+  // REQ-0503 §2 — the three margin flags are NOT interchangeable:
+  //   `--margin-v` is a CUE FIELD in SOURCE pixels. It is written onto the
+  //     entries and then scaled with everything else by `scaleEntries`.
+  //   `--margin-y` is a BUDGET compared against the OUTPUT canvas height by
+  //     `layoutForBurn`, so an explicit value is already in output pixels and
+  //     must NOT be scaled.
+  //   `--margin-x` is likewise output-space (wrap budget + ASS MarginL/R, and
+  //     the ASS PlayRes is the output canvas).
+  //
+  // Each of those is right on its own. The bug was the FALLBACK: `--margin-y`
+  // defaulted to the raw `--margin-v`, feeding a source-space number into an
+  // output-space comparison. At 1920×1080 → shorts, `--margin-v 200` drew at
+  // 113 output px while the overflow guard budgeted 200. Converting the
+  // fallback keeps the intent ("default the budget to your margin") without
+  // mixing spaces.
+  const tgt = resolveTarget(optString(opts, 'resolution'), optString(opts, 'preset'))
+  if (!tgt.ok) throw new CliError('USAGE', tgt.message, 'mojioko ... --preset shorts | --resolution 1080x1920')
+  const scaleFactor = tgt.target
+    ? contentScaleFactor(video.widthPx, video.heightPx, tgt.target.w, tgt.target.h)
+    : 1
+
   const marginX = optInt(opts, 'margin-x') ?? ASS_MARGIN_LR_PX
-  const marginY = optInt(opts, 'margin-y') ?? marginVFlag ?? ASS_MARGIN_LR_PX
+  const marginY =
+    optInt(opts, 'margin-y') ??
+    (marginVFlag !== undefined ? Math.round(marginVFlag * scaleFactor) : ASS_MARGIN_LR_PX)
   const overflowMode = (optString(opts, 'overflow') || 'warn') as OverflowMode
   if (!OVERFLOW_MODES.has(overflowMode)) {
     throw new CliError('USAGE', `unknown --overflow: ${overflowMode}`, 'warn|shrink|error')
   }
 
   // 5) `--resolution` / `--preset` — pre-scale the canvas + cue pixel fields.
-  const tgt = resolveTarget(optString(opts, 'resolution'), optString(opts, 'preset'))
-  if (!tgt.ok) throw new CliError('USAGE', tgt.message, 'mojioko ... --preset shorts | --resolution 1080x1920')
   let renderVideo: VideoInfo = video
   let scaleTo: { w: number; h: number } | undefined
   let resized = false
   if (tgt.target) {
-    const f = contentScaleFactor(video.widthPx, video.heightPx, tgt.target.w, tgt.target.h)
-    entries = scaleEntries(entries, f)
+    entries = scaleEntries(entries, scaleFactor)
     scaleTo = { w: tgt.target.w, h: tgt.target.h }
     renderVideo = { ...video, widthPx: tgt.target.w, heightPx: tgt.target.h }
     resized = true
@@ -171,5 +224,6 @@ export function resolvePlacementAndLayout(
     appliedStylePreset,
     verticalPositionOverride,
     subtitleStyle,
+    warnings,
   }
 }

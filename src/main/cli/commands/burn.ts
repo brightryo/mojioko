@@ -135,7 +135,11 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
 
   // REQ-0502 §2 — combinations that render nothing (background box with a
   // zero outline, emphasis with no spans). Same detector `export_frame` uses.
-  const noOpWarnings = [...detectNoOpCombinations(entries), ...detectIgnoredFlags(args.opts, entries)]
+  const noOpWarnings = [
+    ...placement.warnings,
+    ...detectNoOpCombinations(entries),
+    ...detectIgnoredFlags(args.opts, entries),
+  ]
 
   if (placement.overflowMode === 'error' && overflow.overflowCueCount > 0) {
     throw new CliError(

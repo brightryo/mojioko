@@ -59,16 +59,44 @@ export function contentScaleFactor(origW: number, origH: number, w: number, h: n
   return Math.min(w / origW, h / origH)
 }
 
-/** Scale a cue's pixel-space fields so its apparent size is preserved (spec §3.4). */
+/**
+ * Scale a cue's pixel-space fields so its apparent size is preserved (spec §3.4).
+ *
+ * ## Three different rounding rules, on purpose (REQ-0503 §1)
+ *
+ * - **`fontSizePx`** — floored at 1 unconditionally. There is no such thing as
+ *   a legitimate zero font size, so clamping can never contradict a request.
+ * - **`outlineThicknessPx` / `shadowDepth`** — floored at 1 ONLY when the
+ *   pre-scale value was already > 0. These are *effects that can be switched
+ *   off by setting them to zero*, so an unconditional floor would turn an
+ *   explicit `--outline 0` into a 1px outline the caller never asked for. But
+ *   letting a REQUESTED effect round away to nothing is the other failure: at
+ *   4K → shorts the factor is 0.28, so `--outline 1` became 0, the outline
+ *   vanished, and the background box went with it (libass draws the box AS the
+ *   border). "Preserve the apparent size" cannot mean "delete the feature".
+ * - **`verticalMarginPx` / `posX` / `posY`** — plain rounding, no floor. These
+ *   are POSITIONS, not effects. A margin that scales to 0 is genuinely at the
+ *   edge, and flooring a coordinate would move the cue somewhere it was not
+ *   asked to be.
+ *
+ * History: `px()` and its `Math.max(1, …)` arrived with this function
+ * (REQ-0447 Phase 2b) and was wired to `fontSizePx` alone. Nothing documents or
+ * tests the difference, and the simple fix — reusing `px()` — would have broken
+ * `--outline 0`, so the nuanced form below was simply never written. Treated as
+ * an omission rather than a decision (RES-0503 §1.1 records the evidence).
+ */
 export function scaleEntries(entries: SubtitleEntry[], f: number): SubtitleEntry[] {
+  /** Sizes: never below 1, because 0 is not a meaningful size. */
   const px = (n: number): number => Math.max(1, Math.round(n * f))
+  /** Effects: 0 stays 0 (switched off); anything positive survives as ≥1. */
+  const effectPx = (n: number): number => (n > 0 ? Math.max(1, Math.round(n * f)) : Math.round(n * f))
   return entries.map((e) => ({
     ...e,
     fontSizePx: px(e.fontSizePx),
-    outlineThicknessPx: Math.round(e.outlineThicknessPx * f),
+    outlineThicknessPx: effectPx(e.outlineThicknessPx),
     verticalMarginPx: Math.round(e.verticalMarginPx * f),
     ...(typeof e.posX === 'number' ? { posX: Math.round(e.posX * f) } : {}),
     ...(typeof e.posY === 'number' ? { posY: Math.round(e.posY * f) } : {}),
-    ...(typeof e.shadowDepth === 'number' ? { shadowDepth: Math.round(e.shadowDepth * f) } : {}),
+    ...(typeof e.shadowDepth === 'number' ? { shadowDepth: effectPx(e.shadowDepth) } : {}),
   }))
 }
