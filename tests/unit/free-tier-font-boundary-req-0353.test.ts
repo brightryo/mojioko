@@ -96,13 +96,25 @@ describe('REQ-0353 — the twelve additional families stay paid-only', () => {
     }
   })
 
-  it('NEGATIVE CONTROL — a gate that admits everything is caught', () => {
-    // Stand-in for the mistake this file exists to catch: a predicate that
-    // forgets the family check. If the assertions above could pass with THIS
-    // as the gate, they would not be testing the boundary at all.
-    const brokenGate = (_isMsix: boolean, _id: FontId): boolean => true
-    const leaked = OTHER_FAMILIES.filter((m) => brokenGate(false, m.id)).map((m) => m.id)
-    expect(leaked.length, 'the broken gate must leak, proving the check is real').toBeGreaterThan(0)
+  /**
+   * REQ-0511 L2 — a real control now.
+   *
+   * It used to define `brokenGate = () => true` and assert that it leaks, which
+   * is true of any function returning `true` and touched no product code. The
+   * version below runs the SAME boundary check twice — once with the real
+   * predicate, once with the broken one — so it states the thing that matters:
+   * this check distinguishes them. Swap the real gate for the broken one and
+   * the first expectation fails.
+   */
+  it('NEGATIVE CONTROL — the boundary check separates the real gate from a broken one', () => {
+    const leakedUnder = (gate: (isMsix: boolean, id: FontId) => boolean): FontId[] =>
+      OTHER_FAMILIES.filter((m) => gate(false, m.id)).map((m) => m.id)
+
+    expect(leakedUnder(canSelectFontInTier), 'the real gate must leak nothing in the free tier').toEqual([])
+    expect(
+      leakedUnder(() => true).length,
+      'a gate that forgets the family check must leak — otherwise the assertion above is vacuous',
+    ).toBe(OTHER_FAMILIES.length)
   })
 
   it('NEGATIVE CONTROL — the predicate itself rejects a non-bundled family', () => {

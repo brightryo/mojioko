@@ -120,7 +120,7 @@ const browser = await chromium.launch()
 const page = await browser.newPage({ viewport: { width: W, height: H } })
 await page.evaluate(() => { document.body.style.margin = '0'; document.body.style.background = '#000' })
 
-let worstShipRel = 0, fail = false
+let worstShipRel = 0, fail = false, gatedCount = 0
 console.log(`ASS_BLUR_TO_CSS_SIGMA = ${SIGMA_K} | shippable ceiling ANIMATION_BLUR_MAX_PX = ${CEILING}`)
 console.log('   N |  σ_libass |   σ_css | σl/N  | σc/N  | |Δ|/σl   scope')
 for (const n of NS) {
@@ -130,7 +130,7 @@ for (const n of NS) {
   const shipped = n <= CEILING
   const bad = shipped && !(rel <= TOL) // only the shippable range gates
   if (bad) fail = true
-  if (shipped) worstShipRel = Math.max(worstShipRel, rel)
+  if (shipped) { worstShipRel = Math.max(worstShipRel, rel); gatedCount++ }
   console.log(
     `${bad ? 'x' : ' '}${String(n).padStart(3)} | ${sl.toFixed(2).padStart(9)} | ${sc.toFixed(2).padStart(7)} | ` +
     `${(sl / n).toFixed(3)} | ${(sc / n).toFixed(3)} | ${(rel * 100).toFixed(1).padStart(5)}%   ` +
@@ -142,6 +142,20 @@ rmSync(DIR, { recursive: true, force: true })
 console.log(`\nworst |Δ|/σ_libass within the shippable range (N ≤ ${CEILING}) = ${(worstShipRel * 100).toFixed(1)}% (tol ${TOL * 100}%)`)
 console.log('Note: libass \\blur saturates around N ≈ 100 (σ ≈ 84); probe rows above the ceiling show')
 console.log('the widening gap — do not raise ANIMATION_BLUR_MAX_PX past ~100 without re-measuring.')
+
+/**
+ * REQ-0511 L5 — refuse to report OK on an empty gate.
+ *
+ * Only rows with `N <= CEILING` are gated. Lower `ANIMATION_BLUR_MAX_PX` below
+ * the smallest probe (or shrink `NS`) and every row becomes a non-gating probe:
+ * `fail` stays false and the script exits 0 announcing agreement it never
+ * checked. A gate that can pass while testing nothing is worse than no gate,
+ * because it is reported as coverage.
+ */
+if (gatedCount === 0) {
+  console.error(`\nFAIL — no probe fell within the shipped range (ceiling ${CEILING}, probes ${NS.join(', ')}), so nothing was verified.`)
+  process.exit(1)
+}
 
 if (fail) {
   console.error(`\nFAIL — preview CSS blur and burn libass \\blur diverge beyond ${TOL * 100}% within the shipped range.`)

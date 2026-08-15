@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { pickTranslateSpawn } from '../../src/main/services/translate-spawn'
 
 /**
@@ -40,11 +42,93 @@ describe('REQ-0494 pickTranslateSpawn (packaged prefers bundled exe)', () => {
     expect(r).toEqual({ exe: PY, args: [SCRIPT], mode: 'venv' })
   })
 
-  it('NEGATIVE CONTROL — packaged with neither exe nor python throws PYTHON_MISSING', () => {
-    // This is the pre-fix production reality (no bundled exe path existed, and
-    // packaged has no interpreter): the resolver surfaces PYTHON_MISSING.
+  /**
+   * REQ-0511 M3 — this test used to be titled "NEGATIVE CONTROL" and claimed to
+   * reproduce "the pre-fix production reality". It did neither: it calls the
+   * FIXED resolver and walks its error path, so reverting REQ-0494 would leave
+   * it green. A negative control has to fail when the fix is removed; this one
+   * could not, and the label made it look like the ordering above was covered
+   * twice when it was covered once (RES-0505 M3).
+   *
+   * What it actually pins is worth keeping, so it stays — under its real name.
+   */
+  it('with neither a bundled exe nor an interpreter, it throws PYTHON_MISSING rather than spawning nothing', () => {
     expect(() =>
       pickTranslateSpawn({ isPackaged: true, bundledExe: null, pythonExe: null, translateScript: SCRIPT }),
     ).toThrow('PYTHON_MISSING')
+  })
+})
+
+/**
+ * REQ-0511 M3 — the negative control the name above was promising, placed where
+ * the regression can actually happen.
+ *
+ * `pickTranslateSpawn` is pure and already pinned, so no realistic edit breaks
+ * it silently. The REQ-0493 bug was one level up: `translation-sidecar.ts`
+ * called `getPythonExecutable()` and spawned it, which is invisible to any test
+ * of the resolver. This scan fails if that caller stops routing through the
+ * resolver — and, unlike the old test, removing the fix is exactly what turns
+ * it red (demonstrated by patching the real file, RES-0511 §1.2).
+ */
+describe('REQ-0511 M3 — the CALLER routes through the resolver', () => {
+  const SIDECAR = 'src/main/services/translation-sidecar.ts'
+
+  /** Blank out comments so prose about `getPythonExecutable` cannot trip it. */
+  function stripComments(text: string): string {
+    const out: string[] = []
+    let inBlock = false
+    for (const raw of text.split('\n')) {
+      let line = raw
+      if (inBlock) {
+        const end = line.indexOf('*/')
+        if (end === -1) { out.push(''); continue }
+        line = line.slice(end + 2)
+        inBlock = false
+      }
+      for (;;) {
+        const open = line.indexOf('/*')
+        if (open === -1) break
+        const close = line.indexOf('*/', open + 2)
+        if (close === -1) { line = line.slice(0, open); inBlock = true; break }
+        line = line.slice(0, open) + ' ' + line.slice(close + 2)
+      }
+      const slash = line.indexOf('//')
+      if (slash !== -1) line = line.slice(0, slash)
+      out.push(line)
+    }
+    return out.join('\n')
+  }
+
+  /**
+   * `getPythonExecutable()` may appear ONLY as an argument to
+   * `pickTranslateSpawn` — i.e. as one candidate the resolver ranks, never as
+   * the spawn target itself.
+   */
+  function findDirectPythonSpawn(code: string): string[] {
+    const lines = stripComments(code).split('\n')
+    return lines
+      .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+      .filter(({ line }) => /getPythonExecutable\s*\(/.test(line))
+      .filter(({ line }) => !/^import\b/.test(line) && !/pythonExe:\s*getPythonExecutable\(\)/.test(line))
+      .map(({ line, n }) => `${SIDECAR}:${n}  ${line}`)
+  }
+
+  const source = (): string => readFileSync(join(__dirname, '..', '..', SIDECAR), 'utf-8')
+
+  it('the sidecar calls pickTranslateSpawn', () => {
+    expect(/pickTranslateSpawn\s*\(/.test(stripComments(source()))).toBe(true)
+  })
+
+  it('it never resolves the interpreter itself', () => {
+    expect(findDirectPythonSpawn(source()), 'getPythonExecutable() is being used outside the resolver').toEqual([])
+  })
+
+  it('NEGATIVE CONTROL — the pre-REQ-0494 shape (spawn python directly) is detected', () => {
+    const preFix = source().replace(
+      /return pickTranslateSpawn\(\{/,
+      'const exe = getPythonExecutable()\n  return pickTranslateSpawn({',
+    )
+    expect(preFix, 'the resolver call site moved — update this control').not.toBe(source())
+    expect(findDirectPythonSpawn(preFix)).toHaveLength(1)
   })
 })

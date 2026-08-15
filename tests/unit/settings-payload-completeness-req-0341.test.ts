@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'fs'
-import path from 'path'
+import { appSettingsPayloadKeys } from '../helpers/app-settings-payload'
 import { SETTINGS_MERGE_RULES } from '../../src/main/ipc/settings-merge'
 import type { AppSettings } from '../../src/shared/ipc-contracts'
 
@@ -35,35 +34,13 @@ import type { AppSettings } from '../../src/shared/ipc-contracts'
  * test fails loudly rather than passing vacuously — a failure here means
  * "re-point the parser AND re-check the invariant", not "delete the test".
  */
-const APP_TSX = path.resolve(__dirname, '../../src/renderer/App.tsx')
-
-/** Top-level keys of the `const settings: AppSettings = { ... }` literal. */
-function payloadKeys(): string[] {
-  const src = readFileSync(APP_TSX, 'utf8')
-  const start = src.indexOf('const settings: AppSettings = {')
-  expect(start, 'settings payload literal not found in App.tsx').toBeGreaterThan(-1)
-  const open = src.indexOf('{', start)
-  let depth = 0
-  let end = -1
-  for (let i = open; i < src.length; i++) {
-    if (src[i] === '{') depth++
-    else if (src[i] === '}') {
-      depth--
-      if (depth === 0) { end = i; break }
-    }
-  }
-  expect(end, 'unbalanced braces in the settings payload literal').toBeGreaterThan(open)
-  const body = src.slice(open + 1, end)
-  // Strip nested objects so only top-level `key:` survives.
-  let flat = ''
-  let d = 0
-  for (const ch of body) {
-    if (ch === '{' || ch === '[') d++
-    else if (ch === '}' || ch === ']') d--
-    else if (d === 0) flat += ch
-  }
-  return Array.from(flat.matchAll(/(?:^|\n)\s*([A-Za-z_$][\w$]*)\s*:/g)).map((m) => m[1])
-}
+/**
+ * REQ-0511 M4 — the parser moved to `tests/helpers/app-settings-payload.ts` so
+ * `font-set-version-preserved-across-save` can check its hand-written payload
+ * copy against the same source of truth. Two parsers of one literal would be
+ * the very drift both tests exist to catch.
+ */
+const payloadKeys = appSettingsPayloadKeys
 
 describe('REQ-0341 §3-2 — the settings save payload matches the merge rules', () => {
   const keys = payloadKeys()

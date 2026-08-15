@@ -57,6 +57,30 @@ describe('REQ-0344 §2-2 — karaokeStyle and isMsix have no defaults', () => {
     expect(src).not.toMatch(/isMsix: boolean\s*=/)
   })
 
+  /**
+   * REQ-0511 L6 — look inside the CALL, not across the whole file.
+   *
+   * This used to be `expect(src).toMatch(/karaokeStyle/)`, a search of the
+   * entire source. Both files mention `karaokeStyle` in imports, in destructured
+   * request fields and in prose, so the assertion held even when the argument
+   * itself was gone — which is precisely the bug REQ-0344 was written for. The
+   * argument list of the `generateAss(` call is the only place worth looking.
+   */
+  function generateAssCallArgs(src: string): string {
+    const at = src.indexOf('generateAss(')
+    expect(at, 'no generateAss( call found').toBeGreaterThan(-1)
+    const open = src.indexOf('(', at)
+    let depth = 0
+    for (let i = open; i < src.length; i++) {
+      if (src[i] === '(') depth++
+      else if (src[i] === ')') {
+        depth--
+        if (depth === 0) return src.slice(open + 1, i)
+      }
+    }
+    throw new Error('unbalanced parentheses in the generateAss call')
+  }
+
   it('both production call sites pass a karaokeStyle argument', () => {
     // The frame exporter is the one that was missing it.  Pinning both means
     // a future call site copied from either one starts from a correct shape.
@@ -66,7 +90,11 @@ describe('REQ-0344 §2-2 — karaokeStyle and isMsix have no defaults', () => {
     ]) {
       const src = readFileSync(path.resolve(__dirname, '../..', rel), 'utf8')
       expect(src, `${rel} calls generateAss`).toMatch(/generateAss\(/)
-      expect(src, `${rel} passes karaokeStyle`).toMatch(/karaokeStyle/)
+      const args = generateAssCallArgs(src)
+      // Strip comments: the argument list is heavily annotated, and prose about
+      // karaokeStyle is exactly what the old whole-file match was matching.
+      const code = args.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
+      expect(code, `${rel} passes karaokeStyle to generateAss`).toMatch(/karaokeStyle/)
     }
   })
 

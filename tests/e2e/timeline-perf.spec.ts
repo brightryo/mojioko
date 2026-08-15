@@ -78,14 +78,36 @@ test('timeline render volume — zoom slider drag vs playhead tick', async () =>
       __mojioko_profile: Record<string, number>
       __mojioko_profile_reset: () => void
     }
+    // Every Tailwind `overflow-auto` box on the page, so this does not depend
+    // on identifying the timeline's scroller by class or test id (there is no
+    // test id, and adding one to ship just for this would be product change).
+    // ANY of them moving during a playhead-only burst is the condition that
+    // invalidates the zero assertions, so watching all of them is also the
+    // stricter check.
+    const scrollers = Array.from(document.querySelectorAll('[class*="overflow-auto"]')) as HTMLElement[]
+    const scrollBefore = scrollers.map((el) => el.scrollLeft)
     w.__mojioko_profile_reset()
     const start = performance.now()
     for (let i = 0; i < 50; i++) {
-      w.__mojioko_test.ui.setState({ videoCurrentTimeSec: 1 + i * 0.5 })
+      // REQ-0511 M1 - the sweep stays INSIDE the visible window (0.5s total,
+      // was 25s). Two things follow a long sweep and neither is a memoisation
+      // failure: `maybeScrollPlayheadIntoView` scrolls the timeline once the
+      // playhead leaves the viewport, and the block list is VIRTUALISED on
+      // that viewport, so scrolled-in blocks mount and legitimately bump the
+      // counter. Measured: sweeping 1s to 25.5s produced `Block: 5`, i.e. this
+      // spec had been RED for a behaviour that is correct. The scenario's own
+      // premise - "these do NOT change block geometry" - only holds while the
+      // view stays put, so the sweep now honours it and `scrolled` proves it.
+      w.__mojioko_test.ui.setState({ videoCurrentTimeSec: 1 + i * 0.01 })
       await new Promise((r) => requestAnimationFrame(r))
     }
     const end = performance.now()
-    return { totalMs: Math.round(end - start), counters: { ...w.__mojioko_profile } }
+    return {
+      totalMs: Math.round(end - start),
+      counters: { ...w.__mojioko_profile },
+      scrolled: scrollers.some((el, i) => el.scrollLeft !== scrollBefore[i]),
+      hasScroller: scrollers.length > 0,
+    }
   })
 
   // -------------------------------------------------------------------
@@ -325,31 +347,65 @@ test('timeline render volume — zoom slider drag vs playhead tick', async () =>
   // memoisation contract has been broken (see commit history for
   // Phase 3.9 — the bug was `openEditTimeDialog` getting a fresh
   // reference on every Step 2 tick).
-  expect(playheadResult.counters.Block ?? 0).toBe(0)
-  expect(playheadResult.counters.Ruler ?? 0).toBe(0)
+  /**
+   * REQ-0511 M1 - assert zero WITHOUT accepting "the probe is gone" as zero.
+   *
+   * `counters.X ?? 0` reads the same for "rendered zero times" and "nobody
+   * calls bumpRenderCount('X') any more", so deleting one probe turned five
+   * assertions green at once. `__mojioko_profile` only gains a key when the
+   * probe fires, and `__mojioko_profile_reset` zeroes existing keys rather
+   * than deleting them - so key PRESENCE means "this probe ran at least once
+   * since page load" (every component here renders during mount, which the
+   * `waitForFunction` above already waits for). Presence plus zero is the
+   * assertion that was intended all along.
+   */
+  const expectZeroWithLiveProbe = (counters: Record<string, number>, name: string): void => {
+    expect(
+      Object.prototype.hasOwnProperty.call(counters, name),
+      `probe "${name}" never fired - bumpRenderCount('${name}') is missing, so "0 renders" here would prove nothing`,
+    ).toBe(true)
+    expect(counters[name], `${name} re-rendered when it should not have`).toBe(0)
+  }
+
+  // The zero assertions below only mean anything while the view is still: a
+  // scrolling timeline mounts virtualised blocks (see Scenario B's comment).
+  expect(playheadResult.hasScroller, 'no scrollable container found - the scroll premise is unverified').toBe(true)
+  expect(playheadResult.scrolled, 'the playhead sweep scrolled the timeline; shorten the sweep or widen the window').toBe(false)
+
+  expectZeroWithLiveProbe(playheadResult.counters, 'Block')
+  expectZeroWithLiveProbe(playheadResult.counters, 'Ruler')
 
   // REQ-094 case B: TimelineView itself no longer subscribes to
   // videoCurrentTimeSec — the Playhead sub-component does instead.
   // So TimelineView must read 0 during a playhead-only burst.
-  expect(playheadResult.counters.TimelineView ?? 0).toBe(0)
+  expectZeroWithLiveProbe(playheadResult.counters, 'TimelineView')
   // REQ-094 case C: Step2Route stopped forwarding videoCurrentTimeSec
   // as a prop, so it no longer re-renders during a playhead-only
   // burst (and VideoPreviewPanel no longer cascades from it).
-  expect(playheadResult.counters.Step2Route ?? 0).toBe(0)
-  expect(playheadResult.counters.VideoPreviewPanel ?? 0).toBe(0)
+  expectZeroWithLiveProbe(playheadResult.counters, 'Step2Route')
+  expectZeroWithLiveProbe(playheadResult.counters, 'VideoPreviewPanel')
+  // The playhead itself MUST move - otherwise the burst did nothing at all and
+  // every zero above is vacuous.
+  expect(playheadResult.counters.Playhead ?? 0, 'the playhead never re-rendered - the burst did nothing').toBeGreaterThan(0)
 
   // REQ-094 case B + C: scrub via seek-request must also leave
   // Step2Route and TimelineView alone.  VideoPreviewPanel still
   // renders (it OWNS the videoSeekRequestSec subscription and clears
   // it from its effect — ~2 renders per scrub tick), so we assert
   // upper bounds rather than zero on VPP.
-  expect(scrubResult.counters.Step2Route ?? 0).toBe(0)
-  expect(scrubResult.counters.TimelineView ?? 0).toBe(0)
+  expectZeroWithLiveProbe(scrubResult.counters, 'Step2Route')
+  expectZeroWithLiveProbe(scrubResult.counters, 'TimelineView')
 
   // Zoom drag MUST re-render Blocks (block geometry depends on pps), but
   // the count should stay close to N × ticks with no doubling.  With 11
   // visible fixtures + 50 ticks we expect ~550 Block renders.  Allow a
   // generous ceiling so this doesn't flake on StrictMode toggles.
+  // REQ-0511 M1 - a RANGE, not just a ceiling. `toBeLessThanOrEqual(700)` was
+  // satisfied by 0, so on its own it could not tell "memoised correctly" from
+  // "the probe is gone". ~550 expected (11 fixtures x 50 ticks); the floor is
+  // deliberately loose because the visible-block count follows the viewport,
+  // and the only claim here is that blocks DID repaint.
+  expect(dragResult.counters.Block ?? 0).toBeGreaterThan(10)
   expect(dragResult.counters.Block ?? 0).toBeLessThanOrEqual(700)
 
   // REQ-094 case E: 10 synchronous input events within one rAF must
