@@ -18,8 +18,25 @@ export const TIMELINE_PPS_DEFAULT = 50
 /** Maximum number of recent colors kept in memory. */
 const MAX_RECENT_COLORS = 5
 
+/** Tabs of the settings dialog, in display order. */
+export type SettingsDialogTab = 'general' | 'fonts' | 'translation' | 'shortcuts' | 'cli' | 'ai'
+
 interface UiStore {
   isSettingsDialogOpen: boolean
+  /**
+   * REQ-0510 §2-4 — which tab the settings dialog shows.
+   *
+   * The dialog used to be uncontrolled (`Tabs defaultValue="general"`), which
+   * was fine while nothing needed to point at a specific tab. The
+   * font-substitution toast does: its remedy is "download the font", and the
+   * download button is on the Fonts tab, so landing the user on General makes
+   * them hunt for the fix they were just offered.
+   *
+   * `setSettingsDialogOpen(true)` resets this to `'general'` so the plain
+   * "open settings" path behaves exactly as it did when the dialog remounted
+   * with its default each time.
+   */
+  settingsDialogTab: SettingsDialogTab
   isAboutDialogOpen: boolean
   isDonationDialogOpen: boolean
   isFontLicensesDialogOpen: boolean
@@ -214,6 +231,9 @@ interface UiStore {
   lastTranscriptionWasEmpty: boolean
 
   setSettingsDialogOpen: (open: boolean) => void
+  setSettingsDialogTab: (tab: SettingsDialogTab) => void
+  /** Open the settings dialog directly on `tab` (REQ-0510). */
+  openSettingsDialogAt: (tab: SettingsDialogTab) => void
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
   setFontLicensesDialogOpen: (open: boolean) => void
@@ -292,8 +312,15 @@ export const useUiStore = create<UiStore>((set) => ({
   step2LeftLayout:  { 'step2-pane-preview': 50, 'step2-pane-bottom': 50 },
   step2TimelineToolsExpanded: false,
   lastTranscriptionWasEmpty: false,
+  settingsDialogTab: 'general',
 
-  setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
+  setSettingsDialogOpen: (open) => set(
+    // Resetting the tab on OPEN preserves the pre-REQ-0510 behaviour: the
+    // dialog content unmounts when closed, so it always came back on General.
+    open ? { isSettingsDialogOpen: true, settingsDialogTab: 'general' } : { isSettingsDialogOpen: false },
+  ),
+  setSettingsDialogTab: (tab) => set({ settingsDialogTab: tab }),
+  openSettingsDialogAt: (tab) => set({ isSettingsDialogOpen: true, settingsDialogTab: tab }),
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
   setDonationDialogOpen: (open) => set({ isDonationDialogOpen: open }),
   setFontLicensesDialogOpen: (open) => set({ isFontLicensesDialogOpen: open }),

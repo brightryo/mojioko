@@ -7,7 +7,7 @@ import { getBinPath, getFontFilePath } from '../lib/paths'
 import { generateAss } from './ass-generator'
 import { resolveTier } from '../lib/tier'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
-import { applyFontPolicy } from '../../shared/font-tier'
+import { applyFontPolicy, groupFontSubstitutions, type FontSubstitutionNotice } from '../../shared/font-tier'
 import { createInstalledFontProbe } from '../lib/font-availability'
 import { ASS_MARGIN_LR_PX } from '../../shared/constants'
 import type { ExportFrameRequest, ExportFrameResult } from '../../shared/ipc-contracts'
@@ -101,6 +101,13 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
 
   let assPath: string | null = null
   let fontsDir: string | null = null
+  /**
+   * REQ-0510 §1 — substitutions this export performed, for the caller to
+   * surface. Declared out here because it is filled inside the subtitle branch
+   * and read at the return: a still without subtitles resolves no fonts, so it
+   * correctly reports none.
+   */
+  let fontNotices: FontSubstitutionNotice[] = []
   // REQ-0381 — pass-1 still for the two-pass subtitle export (see below).
   let rawFramePath: string | null = null
 
@@ -163,6 +170,7 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
           fontPolicy.substitutions.map((s) => `${s.from}→${s.to} [${s.reason}] (${s.cueCount} cue)`).join(', ')
         )
       }
+      fontNotices = groupFontSubstitutions(fontPolicy, requestedFontId)
       const fontMeta = getFontMeta(resolvedFontId)
       const referencedFontIds = collectReferencedFontIds(resolvedFontId, tieredEntries)
       fontsDir = await stageFontsDir(referencedFontIds)
@@ -253,7 +261,7 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
     }
 
     const stat = await fs.stat(outputPath)
-    return { outputPath, sizeBytes: stat.size }
+    return { outputPath, sizeBytes: stat.size, ...(fontNotices.length > 0 ? { fontNotices } : {}) }
   } finally {
     // Best-effort cleanup of temp ASS file + staged fonts dir.  Failures
     // here are logged at warn level but never bubble up since the user

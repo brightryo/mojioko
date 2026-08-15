@@ -1,5 +1,6 @@
 import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, EncodeQuality, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams, WordSpan } from './types'
 import type { FontId } from './fonts'
+import type { FontSubstitutionNotice } from './font-tier'
 import type { KaraokeStyle } from './karaoke-style'
 import type { Cut } from './cuts'
 export type { ModelsState }
@@ -184,6 +185,16 @@ export interface ExportFrameRequest {
 export interface ExportFrameResult {
   outputPath: string
   sizeBytes: number
+  /**
+   * REQ-0510 §1 — fonts the renderer asked for but did not get, grouped by
+   * cause. OPTIONAL and additive: pre-REQ-0510 callers ignore it.
+   *
+   * The GUI had no way to learn this. The substitution happens in the main
+   * process (REQ-0508 / REQ-0509) and only reached the CLI, which computes the
+   * same notices for its `warnings[]`; the GUI rendered a still in Noto while
+   * the inspector still said "Anton" and said nothing about it.
+   */
+  fontNotices?: FontSubstitutionNotice[]
 }
 
 export interface EncoderDetectionResult {
@@ -288,7 +299,20 @@ export type BurninEvent =
    * to a size/duration estimate; `resolvedEncoder` is the output of
    * `getBestEncoder` (never the requested `'auto'`).
    */
-  | { event: 'completed'; outputPath: string; sizeMB: number; videoBitrateKbps?: number; resolvedEncoder?: H264Encoder }
+  | {
+      event: 'completed'
+      outputPath: string
+      sizeMB: number
+      videoBitrateKbps?: number
+      resolvedEncoder?: H264Encoder
+      /**
+       * REQ-0510 §1 — same notices as `ExportFrameResult.fontNotices`, on the
+       * event that already carries the burn's outcome. Attached to `completed`
+       * rather than streamed as its own event so a caller cannot receive it
+       * without also receiving the result it describes.
+       */
+      fontNotices?: FontSubstitutionNotice[]
+    }
   | { event: 'failed'; error: string }
 
 /**

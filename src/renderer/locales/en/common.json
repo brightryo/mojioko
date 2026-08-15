@@ -152,5 +152,16 @@
       "discardConfirmOk": "OK",
       "toastSuccess": "Project opened"
     }
+  },
+  "fontSubstitution": {
+    "tier": {
+      "title": "Paid-edition font replaced",
+      "action": "About the paid edition"
+    },
+    "missing": {
+      "title": "Font file not found",
+      "action": "Open font settings"
+    },
+    "detail": "{{pairs}} ({{count}} subtitle(s))"
   }
 }

@@ -35,7 +35,7 @@
  * deliberately NOT warned about; they are listed in RES-0502 instead.
  */
 import { resolveEmphasis } from '../../shared/emphasis'
-import { applyFontPolicy, type FontTierSubstitution } from '../../shared/font-tier'
+import { applyFontPolicy, groupFontSubstitutions, type FontTierSubstitution } from '../../shared/font-tier'
 import { getFontMeta, type FontId } from '../../shared/fonts'
 import type { TierResolution } from '../lib/tier'
 import type { SubtitleEntry } from '../../shared/types'
@@ -296,61 +296,57 @@ export function detectFontSubstitutions(
   if (policy.substitutions.length === 0) return []
 
   const describe = (id: FontId): string => getFontMeta(id).displayName
-  const detailFor = (subs: FontTierSubstitution[]): Record<string, unknown> => ({
-    tier: tier.tier,
-    tierSource: tier.source,
-    substitutedCueCount: subs.reduce((n, s) => n + s.cueCount, 0),
-    defaultSubstituted: policy.defaultSubstituted && subs.some((s) => s.from === defaultFontId),
-    substitutions: subs.map((s) => ({
-      from: s.from,
-      fromName: describe(s.from),
-      to: s.to,
-      toName: describe(s.to),
-      cueCount: s.cueCount,
-    })),
-  })
   const pairs = (subs: FontTierSubstitution[]): string =>
     subs.map((s) => `${describe(s.from)} → ${describe(s.to)}`).join(' / ')
-  const scope = (subs: FontTierSubstitution[]): string =>
-    `（対象 ${subs.reduce((n, s) => n + s.cueCount, 0)} cue` +
-    (policy.defaultSubstituted && subs.some((s) => s.from === defaultFontId) ? '＋プロジェクト既定フォント' : '') +
-    '）'
 
-  const warnings: CliWarning[] = []
-  const byTier = policy.substitutions.filter((s) => s.reason === 'tier')
-  const byMissing = policy.substitutions.filter((s) => s.reason === 'missing')
-
-  if (byTier.length > 0) {
-    warnings.push({
-      code: 'FONT_TIER_SUBSTITUTED',
-      message: `追加フォントは有料版の機能です。無料版のため ${pairs(byTier)} に置換して描画します${scope(byTier)}。`,
-      detail: {
-        ...detailFor(byTier),
-        remedy:
-          '追加 12 書体を焼き込むには有料版（Microsoft Store 版）が必要です。' +
-          '無料版では同梱の Noto Sans JP 全 9 ウェイトが使えます。',
-      },
-    })
-  }
-
-  if (byMissing.length > 0) {
-    warnings.push({
-      code: 'FONT_UNAVAILABLE',
+  /**
+   * REQ-0510 §1-2 — the split into codes comes from `groupFontSubstitutions`,
+   * shared with the GUI. This function now only writes the CLI's sentences; a
+   * second copy of "tier ⇒ which code" here is what would let the two surfaces
+   * disagree about the same burn.
+   */
+  return groupFontSubstitutions(policy, defaultFontId).map((notice) => {
+    const scope = `（対象 ${notice.cueCount} cue${notice.defaultSubstituted ? '＋プロジェクト既定フォント' : ''}）`
+    const detail: Record<string, unknown> = {
+      tier: tier.tier,
+      tierSource: tier.source,
+      substitutedCueCount: notice.cueCount,
+      defaultSubstituted: notice.defaultSubstituted,
+      substitutions: notice.substitutions.map((s) => ({
+        from: s.from,
+        fromName: describe(s.from),
+        to: s.to,
+        toName: describe(s.to),
+        cueCount: s.cueCount,
+      })),
+    }
+    if (notice.code === 'FONT_TIER_SUBSTITUTED') {
+      return {
+        code: notice.code,
+        message: `追加フォントは有料版の機能です。無料版のため ${pairs(notice.substitutions)} に置換して描画します${scope}。`,
+        detail: {
+          ...detail,
+          remedy:
+            '追加 12 書体を焼き込むには有料版（Microsoft Store 版）が必要です。' +
+            '無料版では同梱の Noto Sans JP 全 9 ウェイトが使えます。',
+        },
+      }
+    }
+    return {
+      code: notice.code,
       message:
-        `フォントファイルが見つからないため ${pairs(byMissing)} に置換して描画します${scope(byMissing)}。` +
+        `フォントファイルが見つからないため ${pairs(notice.substitutions)} に置換して描画します${scope}。` +
         '焼き込み自体は続行しました。',
       detail: {
-        ...detailFor(byMissing),
+        ...detail,
         // REQ-0509 §2-4 — the user can fix this one themselves, so say how.
         // Naming the id matters: the GUI list is long and the display name
         // ("Poppins Bold") is not what the download row is keyed by.
         remedy:
           '設定 ▸ フォントから該当フォントをダウンロードしてください（' +
-          byMissing.map((s) => s.from).join(', ') +
+          notice.substitutions.map((s) => s.from).join(', ') +
           '）。ダウンロード済みのはずなら、ファイルが削除・移動されていないか確認してください。',
       },
-    })
-  }
-
-  return warnings
+    }
+  })
 }

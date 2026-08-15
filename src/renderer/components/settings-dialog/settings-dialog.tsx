@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { useUiStore } from '@/stores/ui-store'
+import { useUiStore, type SettingsDialogTab } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useTranslationToolStore } from '@/stores/translation-tool-store'
 import {
@@ -31,6 +31,10 @@ export function SettingsDialog() {
   const { t, i18n } = useTranslation('settings')
   const isOpen = useUiStore((s) => s.isSettingsDialogOpen)
   const setOpen = useUiStore((s) => s.setSettingsDialogOpen)
+  // REQ-0510 §2-4 — the active tab lives in the store so other surfaces can
+  // point at one (see `openSettingsDialogAt`).
+  const settingsTab = useUiStore((s) => s.settingsDialogTab)
+  const setSettingsTab = useUiStore((s) => s.setSettingsDialogTab)
 
   // General
   const language = useSettingsStore((s) => s.language)
@@ -134,7 +138,11 @@ export function SettingsDialog() {
           <DialogTitle>{t('title')}</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="general" className="flex-1 min-h-0 flex flex-col w-full">
+        {/* REQ-0510 §2-4 — controlled, so a toast can open this dialog ON a
+            specific tab. `setSettingsDialogOpen(true)` resets the tab to
+            'general', which is what the previous uncontrolled
+            `defaultValue="general"` did every time the content remounted. */}
+        <Tabs value={settingsTab} onValueChange={(v) => setSettingsTab(v as SettingsDialogTab)} className="flex-1 min-h-0 flex flex-col w-full">
           <TabsList className="shrink-0">
             <TabsTrigger value="general">{t('tabs.general')}</TabsTrigger>
             <TabsTrigger value="fonts">{t('tabs.fonts')}</TabsTrigger>

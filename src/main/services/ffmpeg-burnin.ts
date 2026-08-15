@@ -12,7 +12,7 @@ import { probeMediaBitrate } from './ffprobe'
 import { buildTrimConcatFilter } from './ffmpeg-trim-filter'
 import { buildAmixAudioFilter } from './preview-mix-filter'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
-import { applyFontPolicy } from '../../shared/font-tier'
+import { applyFontPolicy, groupFontSubstitutions } from '../../shared/font-tier'
 import { createInstalledFontProbe } from '../lib/font-availability'
 import {
   editedDuration,
@@ -153,6 +153,7 @@ export async function startBurnin(
   })
   const resolvedFontId = fontPolicy.defaultFontId
   const tieredEntries = fontPolicy.entries
+  const fontNotices = groupFontSubstitutions(fontPolicy, requestedFontId)
   if (fontPolicy.substitutions.length > 0) {
     log.info(
       `[ffmpeg-burnin] font policy (${tier.tier}/${tier.source}): ` +
@@ -463,7 +464,17 @@ export async function startBurnin(
           videoBitrateKbps = Math.round((sizeBytes * 8) / effectiveDurationSec / 1000)
         }
         log.info(`[ffmpeg-burnin] completed: ${sizeMB}MB, videoBitrate≈${videoBitrateKbps ?? '?'}kbps, encoder=${encoder}`)
-        onEvent({ event: 'completed', outputPath, sizeMB, videoBitrateKbps, resolvedEncoder: encoder })
+        onEvent({
+          event: 'completed',
+          outputPath,
+          sizeMB,
+          videoBitrateKbps,
+          resolvedEncoder: encoder,
+          // REQ-0510 §1-2 — the SAME notices the CLI turns into `warnings[]`,
+          // from the same `applyFontPolicy` result. The renderer decides how to
+          // say it; it does not decide WHETHER it happened.
+          ...(fontNotices.length > 0 ? { fontNotices } : {}),
+        })
         resolve()
       } else if (wasAborted) {
         // User-initiated cancel.  Emit a 'failed' event with a stable marker

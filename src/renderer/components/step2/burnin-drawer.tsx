@@ -17,6 +17,7 @@ import {
   Check
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { showFontSubstitutionToasts } from '@/lib/font-substitution-toast'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
@@ -303,6 +304,11 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
         onOpenChange(false)
         setCompletionOpen(true)
         toast.success(t('success.title'))
+        // REQ-0510 §2-1 — if the render substituted a font, say so HERE: this
+        // is the moment a file exists whose typeface differs from what the
+        // inspector shows. Silent until then by design (§2-2: no toast from the
+        // live preview, and none when nothing was substituted).
+        showFontSubstitutionToasts(evt.fontNotices, t)
       } else if (evt.event === 'failed') {
         const errMsg = evt.error
         setErrorMessage(errMsg)

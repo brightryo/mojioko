@@ -185,6 +185,64 @@ export interface FontTierPolicyResult<E> {
   defaultSubstituted: boolean
 }
 
+/**
+ * REQ-0510 §1-2 — one substitution event, grouped by its cause, in a form every
+ * surface can render.
+ *
+ * ## Why this exists rather than each surface grouping for itself
+ *
+ * The CLI already turned `substitutions` into two warning codes. The GUI needs
+ * the same split to pick the right toast and the right remedy — and a second
+ * copy of "which reason maps to which code" is exactly the drift this codebase
+ * keeps paying for. So the grouping is shared and the WORDING is not: the CLI
+ * writes its own Japanese strings (it is JP-only by contract), the renderer runs
+ * the fields through i18next. Same judgement, same codes, two presentations.
+ */
+export interface FontSubstitutionNotice {
+  /** The stable code, identical to the CLI/MCP `warnings[].code`. */
+  code: 'FONT_TIER_SUBSTITUTED' | 'FONT_UNAVAILABLE'
+  reason: FontSubstitutionReason
+  /** The pairs that share this cause. */
+  substitutions: FontTierSubstitution[]
+  /** Visible cues affected by THIS cause (not by the run as a whole). */
+  cueCount: number
+  /** True when the project default font is one of the fonts in this group. */
+  defaultSubstituted: boolean
+}
+
+const CODE_FOR_REASON: Record<FontSubstitutionReason, FontSubstitutionNotice['code']> = {
+  tier: 'FONT_TIER_SUBSTITUTED',
+  missing: 'FONT_UNAVAILABLE',
+}
+
+/**
+ * Split a policy result into at most two notices — one per cause, and only for
+ * causes that actually occurred. An empty array means nothing was substituted,
+ * which is the common case and must stay silent: a notice that always appears
+ * is a notice nobody reads (the REQ-0502 bar for warnings).
+ */
+export function groupFontSubstitutions(
+  result: Pick<FontTierPolicyResult<never>, 'substitutions' | 'defaultSubstituted' | 'defaultFontId'>,
+  requestedDefaultFontId: FontId,
+): FontSubstitutionNotice[] {
+  const notices: FontSubstitutionNotice[] = []
+  for (const reason of ['tier', 'missing'] as const) {
+    const subs = result.substitutions.filter((s) => s.reason === reason)
+    if (subs.length === 0) continue
+    notices.push({
+      code: CODE_FOR_REASON[reason],
+      reason,
+      substitutions: subs,
+      cueCount: subs.reduce((n, s) => n + s.cueCount, 0),
+      // The project default belongs to whichever group replaced IT, so a run
+      // that substitutes the default for one reason and a cue for another does
+      // not credit both notices with it.
+      defaultSubstituted: result.defaultSubstituted && subs.some((s) => s.from === requestedDefaultFontId),
+    })
+  }
+  return notices
+}
+
 export interface FontPolicyInput<E> {
   /** Paid tier? Comes from `resolveTier().isPaid` in the main process. */
   isPaid: boolean

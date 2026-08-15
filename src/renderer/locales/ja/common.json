@@ -152,5 +152,16 @@
       "discardConfirmOk": "OK",
       "toastSuccess": "プロジェクトを開きました"
     }
+  },
+  "fontSubstitution": {
+    "tier": {
+      "title": "有料版のフォントのため置換しました",
+      "action": "有料版について"
+    },
+    "missing": {
+      "title": "フォントファイルが見つかりません",
+      "action": "フォント設定を開く"
+    },
+    "detail": "{{pairs}}（{{count}} 件の字幕）"
   }
 }
