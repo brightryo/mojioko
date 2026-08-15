@@ -14,7 +14,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync, renameSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -402,6 +402,62 @@ try {
       const tierStatus = cli(['status'], 60000, { MOJIOKO_FORCE_TIER: 'free' }).json?.data?.tier
       check('REQ-0508 status reports tier=free and fontEnforcement=render-path',
         tierStatus?.tier === 'free' && tierStatus?.fontEnforcement === 'render-path', JSON.stringify(tierStatus))
+
+      // REQ-0509 §3 — a MISSING font file must cost that cue its typeface, not
+      // the whole render. Measured before the fix: `BURN_FAILED`, exit 7, no
+      // output file, from `stageFontsDir`'s copyFile ENOENT.
+      //
+      // Creating the condition needs a font that is genuinely absent, and this
+      // machine has all of them, so the TTF is renamed IN PLACE and restored in
+      // a `finally`. In place (not moved to a temp dir) so that a hard kill
+      // between the two leaves an obviously-named sibling next to the original
+      // rather than a file somewhere the user will never look — and the block
+      // below cleans up such a leftover before it starts. `%APPDATA%` cannot be
+      // redirected for this: Electron reads the user-data path from the OS, not
+      // from the environment (measured — setting APPDATA changes nothing).
+      const paidTtfDir = paidTtf
+      const ttfName = existsSync(paidTtfDir)
+        ? readdirSync(paidTtfDir).find((n) => n.toLowerCase().endsWith('.ttf'))
+        : undefined
+      if (!ttfName) {
+        log(`NOTE: REQ-0509 missing-font gate SKIPPED — no .ttf under ${paidTtfDir}.`)
+      } else {
+        const livePath = join(paidTtfDir, ttfName)
+        const hiddenPath = livePath + '.req0509-hidden'
+        // Leftover from an earlier interrupted run.
+        if (existsSync(hiddenPath) && !existsSync(livePath)) renameSync(hiddenPath, livePath)
+        const sizeBefore = statSync(livePath).size
+        try {
+          renameSync(livePath, hiddenPath)
+          // PAID tier throughout: the tier substitution would otherwise mask the
+          // missing file and this would test REQ-0508 again instead.
+          const gone = shot(projPaidFont, 'paid', 'missing-font.png')
+          const codesGone = (gone.r.json?.warnings || []).map((w) => w.code)
+          check('REQ-0509 a missing font no longer kills the render (was BURN_FAILED / exit 7)',
+            gone.r.code === 0 && existsSync(gone.png), `exit=${gone.r.code}`)
+          check('REQ-0509 it warns FONT_UNAVAILABLE', codesGone.includes('FONT_UNAVAILABLE'), codesGone.join(','))
+          check('REQ-0509 and NOT the tier warning — the cause decides the remedy',
+            !codesGone.includes('FONT_TIER_SUBSTITUTED'), codesGone.join(','))
+          check('REQ-0509 the remedy tells the user to download it (not to buy anything)',
+            /ダウンロード/.test(JSON.stringify(gone.r.json?.warnings || [])), '')
+          // The substitute is DEFAULT_FONT_ID (SemiBold) — deliberately NOT the
+          // weight-matched Regular the TIER path uses (REQ-0508 §1-2). Pixels,
+          // because the warning fires whether or not the render obeys it.
+          const semibold = shot(withFont('noto-sans-jp-semibold', 'tier-semibold.mojioko'), 'paid', 'missing-ref.png')
+          check('REQ-0509 the substitute is Noto SemiBold, byte-identical to asking for it directly',
+            gone.sha === semibold.sha, `missing=${gone.sha.slice(0, 12)} semibold=${semibold.sha.slice(0, 12)}`)
+          check('REQ-0509 and NOT the tier path\'s weight-matched Regular',
+            gone.sha !== free.sha, `missing=${gone.sha.slice(0, 12)} tierFree=${free.sha.slice(0, 12)}`)
+        } finally {
+          if (existsSync(hiddenPath)) renameSync(hiddenPath, livePath)
+        }
+        // Never leave the user's font set worse than we found it. This is an
+        // assertion, not a hope: a silent restore failure would take a font
+        // away permanently.
+        check('REQ-0509 the borrowed font file was restored intact',
+          existsSync(livePath) && !existsSync(hiddenPath) && statSync(livePath).size === sizeBefore,
+          `${ttfName} ${existsSync(livePath) ? statSync(livePath).size : 'MISSING'} (was ${sizeBefore})`)
+      }
     }
 
     // REQ-0501 §3 — the second-wave style axes, in REAL PIXELS.

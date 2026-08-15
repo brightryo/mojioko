@@ -4,7 +4,7 @@ import { join, relative } from 'node:path'
 import {
   canSelectFontInTier,
   resolveFontIdForTier,
-  applyFontTierPolicy,
+  applyFontPolicy,
 } from '../../src/shared/font-tier'
 import {
   DEFAULT_FONT_ID,
@@ -13,7 +13,7 @@ import {
   resolveRenderableFontId,
   type FontId,
 } from '../../src/shared/fonts'
-import { detectFontTierSubstitution } from '../../src/main/cli/no-op-warnings'
+import { detectFontSubstitutions } from '../../src/main/cli/no-op-warnings'
 import type { SubtitleEntry } from '../../src/shared/types'
 
 /**
@@ -128,10 +128,18 @@ const cue = (over: Partial<SubtitleEntry> = {}): SubtitleEntry => ({
   ...over,
 }) as SubtitleEntry
 
-describe('REQ-0508 §1 — applyFontTierPolicy over a whole burn', () => {
+/**
+ * REQ-0509 — `applyFontTierPolicy(isPaid, default, entries)` became
+ * `applyFontPolicy({isPaid, isInstalled, default, entries})`. These cases still
+ * exercise the TIER axis, so they pass an all-installed probe explicitly; the
+ * missing-file axis has its own block in `font-availability-req-0509.test.ts`.
+ */
+const ALL_INSTALLED = (): boolean => true
+
+describe('REQ-0508 §1 — applyFontPolicy over a whole burn (tier axis)', () => {
   it('paid tier changes nothing and preserves cue identity', () => {
     const entries = [cue({ id: 'a', fontId: 'anton' }), cue({ id: 'b', fontId: 'poppins-bold' })]
-    const r = applyFontTierPolicy(true, 'dela-gothic-one', entries)
+    const r = applyFontPolicy({ isPaid: true, isInstalled: ALL_INSTALLED, defaultFontId: 'dela-gothic-one', entries })
     expect(r.defaultFontId).toBe('dela-gothic-one')
     expect(r.substitutions).toEqual([])
     expect(r.defaultSubstituted).toBe(false)
@@ -148,7 +156,7 @@ describe('REQ-0508 §1 — applyFontTierPolicy over a whole burn', () => {
       cue({ id: 'd', fontId: 'noto-sans-jp-bold' }),
       cue({ id: 'e' }),
     ]
-    const r = applyFontTierPolicy(false, DEFAULT_FONT_ID, entries)
+    const r = applyFontPolicy({ isPaid: false, isInstalled: ALL_INSTALLED, defaultFontId: DEFAULT_FONT_ID, entries })
     expect(r.entries.map((e) => e.fontId)).toEqual([
       'noto-sans-jp-regular',
       'noto-sans-jp-regular',
@@ -157,8 +165,8 @@ describe('REQ-0508 §1 — applyFontTierPolicy over a whole burn', () => {
       undefined,
     ])
     expect(r.substitutions).toEqual([
-      { from: 'anton', to: 'noto-sans-jp-regular', cueCount: 2 },
-      { from: 'poppins-bold', to: 'noto-sans-jp-bold', cueCount: 1 },
+      { from: 'anton', to: 'noto-sans-jp-regular', cueCount: 2, reason: 'tier' },
+      { from: 'poppins-bold', to: 'noto-sans-jp-bold', cueCount: 1, reason: 'tier' },
     ])
     expect(r.defaultSubstituted).toBe(false)
     // The untouched cues keep their identity even when siblings changed.
@@ -167,19 +175,21 @@ describe('REQ-0508 §1 — applyFontTierPolicy over a whole burn', () => {
   })
 
   it('substitutes the project default font too, and says so', () => {
-    const r = applyFontTierPolicy(false, 'bebas-neue', [cue()])
+    const r = applyFontPolicy({ isPaid: false, isInstalled: ALL_INSTALLED, defaultFontId: 'bebas-neue', entries: [cue()] })
     expect(r.defaultFontId).toBe('noto-sans-jp-regular')
     expect(r.defaultSubstituted).toBe(true)
     // cueCount 0: the default was substituted but no cue overrides it.
-    expect(r.substitutions).toEqual([{ from: 'bebas-neue', to: 'noto-sans-jp-regular', cueCount: 0 }])
+    expect(r.substitutions).toEqual([{ from: 'bebas-neue', to: 'noto-sans-jp-regular', cueCount: 0, reason: 'tier' }])
   })
 
   it('does not count DELETED cues — a warning must describe visible output', () => {
-    const r = applyFontTierPolicy(false, DEFAULT_FONT_ID, [
-      cue({ id: 'a', fontId: 'anton' }),
-      cue({ id: 'b', fontId: 'anton', isDeleted: true }),
-    ])
-    expect(r.substitutions).toEqual([{ from: 'anton', to: 'noto-sans-jp-regular', cueCount: 1 }])
+    const r = applyFontPolicy({
+      isPaid: false,
+      isInstalled: ALL_INSTALLED,
+      defaultFontId: DEFAULT_FONT_ID,
+      entries: [cue({ id: 'a', fontId: 'anton' }), cue({ id: 'b', fontId: 'anton', isDeleted: true })],
+    })
+    expect(r.substitutions).toEqual([{ from: 'anton', to: 'noto-sans-jp-regular', cueCount: 1, reason: 'tier' }])
     // The deleted cue is still rewritten — it must not be able to reach libass
     // if some later stage un-deletes it.
     expect(r.entries[1].fontId).toBe('noto-sans-jp-regular')
@@ -187,7 +197,7 @@ describe('REQ-0508 §1 — applyFontTierPolicy over a whole burn', () => {
 
   it('leaves an unrecognised fontId alone rather than inventing one', () => {
     const entries = [cue({ fontId: 'not-a-font' as FontId })]
-    const r = applyFontTierPolicy(false, DEFAULT_FONT_ID, entries)
+    const r = applyFontPolicy({ isPaid: false, isInstalled: ALL_INSTALLED, defaultFontId: DEFAULT_FONT_ID, entries })
     expect(r.entries[0]).toBe(entries[0])
     expect(r.substitutions).toEqual([])
   })
@@ -198,7 +208,7 @@ describe('REQ-0508 §1-3 / §3-4 — the FONT_TIER_SUBSTITUTED warning', () => {
   const paid = { tier: 'paid', isPaid: true, source: 'msix' } as const
 
   it('free tier + paid font → warns, naming from, to and cue count', () => {
-    const w = detectFontTierSubstitution([cue({ fontId: 'anton' })], DEFAULT_FONT_ID, free)
+    const w = detectFontSubstitutions([cue({ fontId: 'anton' })], DEFAULT_FONT_ID, free, ALL_INSTALLED)
     expect(w).toHaveLength(1)
     expect(w[0].code).toBe('FONT_TIER_SUBSTITUTED')
     expect(w[0].message).toContain('Anton')
@@ -213,15 +223,15 @@ describe('REQ-0508 §1-3 / §3-4 — the FONT_TIER_SUBSTITUTED warning', () => {
   })
 
   it('free tier + bundled font → NO warning (a warning that always fires is not read)', () => {
-    expect(detectFontTierSubstitution([cue({ fontId: 'noto-sans-jp-black' })], DEFAULT_FONT_ID, free)).toEqual([])
+    expect(detectFontSubstitutions([cue({ fontId: 'noto-sans-jp-black' })], DEFAULT_FONT_ID, free, ALL_INSTALLED)).toEqual([])
   })
 
   it('paid tier + paid font → NO warning', () => {
-    expect(detectFontTierSubstitution([cue({ fontId: 'anton' })], 'dela-gothic-one', paid)).toEqual([])
+    expect(detectFontSubstitutions([cue({ fontId: 'anton' })], 'dela-gothic-one', paid, ALL_INSTALLED)).toEqual([])
   })
 
   it('a deleted-only substitution still warns, but reports 0 visible cues', () => {
-    const w = detectFontTierSubstitution([cue({ fontId: 'anton', isDeleted: true })], DEFAULT_FONT_ID, free)
+    const w = detectFontSubstitutions([cue({ fontId: 'anton', isDeleted: true })], DEFAULT_FONT_ID, free, ALL_INSTALLED)
     // `visible()` drops it, so nothing is substituted in what gets drawn.
     expect(w).toEqual([])
   })
@@ -244,7 +254,7 @@ describe('REQ-0508 §1-3 / §3-4 — the FONT_TIER_SUBSTITUTED warning', () => {
  * A file that imports the policy and never calls it is exactly the state this
  * scan has to catch, so import lines are stripped and a `(` is required.
  */
-const POLICY_CALL = /\b(resolveFontIdForTier|applyFontTierPolicy|canSelectFontInTier|isFamilyTierLocked)\s*\(/
+const POLICY_CALL = /\b(resolveFontIdForTier|applyFontPolicy|canSelectFontInTier|isFamilyTierLocked)\s*\(/
 
 const callsPolicy = (code: string): boolean =>
   POLICY_CALL.test(
@@ -350,7 +360,7 @@ describe('REQ-0508 §1-1 — every enumerated render site applies the policy', (
   it('NEGATIVE CONTROL — deleting the call from ffmpeg-burnin.ts is detected', () => {
     const real = sources.find((f) => f.path.replace(/\\/g, '/') === 'src/main/services/ffmpeg-burnin.ts')
     expect(real, 'fixture source not found').toBeDefined()
-    const gutted = real!.text.replace(/applyFontTierPolicy/g, 'somethingElse')
+    const gutted = real!.text.replace(/applyFontPolicy/g, 'somethingElse')
     expect(gutted).not.toBe(real!.text)
     const patched = sources.map((f) => (f === real ? { path: f.path, text: gutted } : f))
     expect(findUnguardedRequiredSites(patched)).toHaveLength(1)
@@ -359,11 +369,11 @@ describe('REQ-0508 §1-1 — every enumerated render site applies the policy', (
 
   it('NEGATIVE CONTROL — a policy mention that is only a COMMENT does not count', () => {
     const real = sources.find((f) => f.path.replace(/\\/g, '/') === 'src/main/services/frame-exporter.ts')
-    const commentedOut = real!.text.replace(/^(\s*)(const fontPolicy = applyFontTierPolicy)/m, '$1// $2')
+    const commentedOut = real!.text.replace(/^(\s*)(const fontPolicy = applyFontPolicy)/m, '$1// $2')
     expect(commentedOut).not.toBe(real!.text)
     // The file still MENTIONS the policy in its JSDoc; the scan must not accept
     // prose as enforcement.
-    expect(commentedOut).toContain('applyFontTierPolicy')
+    expect(commentedOut).toContain('applyFontPolicy')
     const patched = sources.map((f) => (f === real ? { path: f.path, text: commentedOut } : f))
     expect(findUnguardedRequiredSites(patched).join()).toContain('frame-exporter')
   })

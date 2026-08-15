@@ -89,6 +89,19 @@ export function getFontResolveDir(meta: FontMeta): string {
 }
 
 /**
+ * The absolute path of the TTF itself.
+ *
+ * REQ-0509 — exists so "does this font exist?" and "copy this font" cannot
+ * disagree. Both burn-in and frame export stage a font by copying exactly this
+ * path, and the availability probe that decides whether to substitute checks
+ * exactly this path. Two hand-rolled `join(dir, meta.fileName)` expressions
+ * would work today and drift the day a font gains a subdirectory.
+ */
+export function getFontFilePath(meta: FontMeta): string {
+  return join(getFontResolveDir(meta), meta.fileName)
+}
+
+/**
  * Resolve the path to the SIL OFL v1.1 text shipped alongside a bundled font.
  *
  * Convention: the OFL.txt lives at the **family root** (one level up from the

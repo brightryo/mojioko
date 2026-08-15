@@ -3,11 +3,12 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
-import { getBinPath, getFontResolveDir } from '../lib/paths'
+import { getBinPath, getFontFilePath } from '../lib/paths'
 import { generateAss } from './ass-generator'
 import { resolveTier } from '../lib/tier'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
-import { applyFontTierPolicy } from '../../shared/font-tier'
+import { applyFontPolicy } from '../../shared/font-tier'
+import { createInstalledFontProbe } from '../lib/font-availability'
 import { ASS_MARGIN_LR_PX } from '../../shared/constants'
 import type { ExportFrameRequest, ExportFrameResult } from '../../shared/ipc-contracts'
 import type { SubtitleEntry } from '../../shared/types'
@@ -34,8 +35,8 @@ async function stageFontsDir(fontIds: FontId[]): Promise<string> {
   await fs.mkdir(tempDir, { recursive: true })
   for (const id of fontIds) {
     const meta: FontMeta = getFontMeta(id)
-    const srcDir = getFontResolveDir(meta)
-    const srcPath = join(srcDir, meta.fileName)
+    // REQ-0509 — shared with the availability probe (see ffmpeg-burnin).
+    const srcPath = getFontFilePath(meta)
     const dstPath = join(tempDir, meta.fileName)
     try {
       await fs.copyFile(srcPath, dstPath)
@@ -146,13 +147,20 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
        * here, so this call closes the GUI and the CLI at once.
        */
       const tier = resolveTier()
-      const fontPolicy = applyFontTierPolicy(tier.isPaid, requestedFontId, entries)
+      const fontPolicy = applyFontPolicy({
+        isPaid: tier.isPaid,
+        // REQ-0509 — a still must survive a missing font for the same reason a
+        // burn must: `stageFontsDir` throws, and the export died whole.
+        isInstalled: createInstalledFontProbe(),
+        defaultFontId: requestedFontId,
+        entries,
+      })
       const resolvedFontId = fontPolicy.defaultFontId
       const tieredEntries = fontPolicy.entries
       if (fontPolicy.substitutions.length > 0) {
         log.info(
-          `[frame-exporter] REQ-0508 font tier (${tier.tier}/${tier.source}): ` +
-          fontPolicy.substitutions.map((s) => `${s.from}→${s.to} (${s.cueCount} cue)`).join(', ')
+          `[frame-exporter] font policy (${tier.tier}/${tier.source}): ` +
+          fontPolicy.substitutions.map((s) => `${s.from}→${s.to} [${s.reason}] (${s.cueCount} cue)`).join(', ')
         )
       }
       const fontMeta = getFontMeta(resolvedFontId)

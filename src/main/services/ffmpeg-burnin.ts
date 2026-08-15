@@ -4,7 +4,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
-import { getBinPath, getFontResolveDir } from '../lib/paths'
+import { getBinPath, getFontFilePath } from '../lib/paths'
 import { generateAss } from './ass-generator'
 import { resolveTier } from '../lib/tier'
 import { getBestEncoder, buildEncoderArgs } from './encoder-detector'
@@ -12,7 +12,8 @@ import { probeMediaBitrate } from './ffprobe'
 import { buildTrimConcatFilter } from './ffmpeg-trim-filter'
 import { buildAmixAudioFilter } from './preview-mix-filter'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
-import { applyFontTierPolicy } from '../../shared/font-tier'
+import { applyFontPolicy } from '../../shared/font-tier'
+import { createInstalledFontProbe } from '../lib/font-availability'
 import {
   editedDuration,
   translateEntryToEditedAxis
@@ -54,10 +55,17 @@ function collectReferencedFontIds(
  *    where we don't want to mutate.
  *  - The copy cost is negligible (a few MB even for the largest CJK font).
  *
- * Throws `FfmpegError` when any referenced font lacks a TTF on disk — the
- * renderer should already be enforcing this in REQ-021's UI, but a
- * defensive backend check stops a bad request from spawning ffmpeg with a
+ * Throws `FfmpegError` when any referenced font lacks a TTF on disk — a
+ * defensive backend check that stops a bad request from spawning ffmpeg with a
  * fontsdir that libass would silently fall through on.
+ *
+ * REQ-0509 — this throw is now a LAST RESORT rather than the normal way a
+ * missing font is handled. `applyFontPolicy` substitutes anything absent before
+ * the id list reaches here, so the only way to trip it is for the bundled
+ * fallback itself (`DEFAULT_FONT_ID`, shipped in the installer) to be missing —
+ * a damaged install, where there is no font left to render with and failing is
+ * the honest outcome. It terminates: the policy's ladder ends at
+ * `DEFAULT_FONT_ID` unconditionally, it does not search on.
  *
  * Caller is responsible for `fs.rm(tempDir, { recursive: true })` in a
  * `finally` block, even on failure.
@@ -68,8 +76,9 @@ async function stageFontsDir(fontIds: FontId[]): Promise<string> {
 
   for (const id of fontIds) {
     const meta: FontMeta = getFontMeta(id)
-    const srcDir = getFontResolveDir(meta)
-    const srcPath = join(srcDir, meta.fileName)
+    // REQ-0509 — the same helper the availability probe checks, so "present"
+    // and "copied" can never mean different paths.
+    const srcPath = getFontFilePath(meta)
     const dstPath = join(tempDir, meta.fileName)
     try {
       await fs.copyFile(srcPath, dstPath)
@@ -117,9 +126,9 @@ export async function startBurnin(
   const requestedFontId = (fontId && isFontId(fontId)) ? fontId : DEFAULT_FONT_ID
 
   /**
-   * REQ-0508 §1 — **font tier enforcement, call site 1 of 4.**
+   * REQ-0508 §1 / REQ-0509 §1 — **font policy, call site 1 of 4.**
    *
-   * Applied HERE rather than only inside `generateAss` because the tier answer
+   * Applied HERE rather than only inside `generateAss` because the answer
    * has to be known before three other things happen: the Style default's
    * `assFontName` is derived from it, `collectReferencedFontIds` decides which
    * TTFs to stage from it, and `stageFontsDir` THROWS on a font that is not on
@@ -132,13 +141,22 @@ export async function startBurnin(
    * makes both sides of this gate testable (REQ-0507 §3-1).
    */
   const tier = resolveTier()
-  const fontPolicy = applyFontTierPolicy(tier.isPaid, requestedFontId, entries)
+  const fontPolicy = applyFontPolicy({
+    isPaid: tier.isPaid,
+    // REQ-0509 — the second axis. Before this, a font whose TTF was absent
+    // reached `stageFontsDir`, which THREW, and the whole burn died with
+    // `BURN_FAILED` (measured: exit 7, no output file). One missing font is not
+    // a reason to lose the render.
+    isInstalled: createInstalledFontProbe(),
+    defaultFontId: requestedFontId,
+    entries,
+  })
   const resolvedFontId = fontPolicy.defaultFontId
   const tieredEntries = fontPolicy.entries
   if (fontPolicy.substitutions.length > 0) {
     log.info(
-      `[ffmpeg-burnin] REQ-0508 font tier (${tier.tier}/${tier.source}): ` +
-      fontPolicy.substitutions.map((s) => `${s.from}→${s.to} (${s.cueCount} cue)`).join(', ')
+      `[ffmpeg-burnin] font policy (${tier.tier}/${tier.source}): ` +
+      fontPolicy.substitutions.map((s) => `${s.from}→${s.to} [${s.reason}] (${s.cueCount} cue)`).join(', ')
     )
   }
   const fontMeta = getFontMeta(resolvedFontId)

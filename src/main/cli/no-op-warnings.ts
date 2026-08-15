@@ -35,7 +35,7 @@
  * deliberately NOT warned about; they are listed in RES-0502 instead.
  */
 import { resolveEmphasis } from '../../shared/emphasis'
-import { applyFontTierPolicy } from '../../shared/font-tier'
+import { applyFontPolicy, type FontTierSubstitution } from '../../shared/font-tier'
 import { getFontMeta, type FontId } from '../../shared/fonts'
 import type { TierResolution } from '../lib/tier'
 import type { SubtitleEntry } from '../../shared/types'
@@ -247,7 +247,18 @@ export function detectIgnoredFlags(
 }
 
 /**
- * REQ-0508 §1-3 — the free tier substituted a paid font, and says so.
+ * REQ-0508 §1-3 / REQ-0509 §2 — a font was replaced, and the caller is told
+ * which one, what with, and **why**.
+ *
+ * Two codes, because the two causes have different remedies (REQ-0509 §2-2):
+ *
+ *   - `FONT_TIER_SUBSTITUTED` — a paid family in a free build. Remedy: the paid
+ *     edition. Downloading the font would not help.
+ *   - `FONT_UNAVAILABLE` — the TTF is not on disk. Remedy: download it in
+ *     Settings ▸ Fonts. Nothing to buy.
+ *
+ * A font that is BOTH gets the tier code only (see `FontSubstitutionReason`), so
+ * one cue never produces two warnings.
  *
  * ## Which of the two families this belongs to
  *
@@ -266,42 +277,80 @@ export function detectIgnoredFlags(
  *
  * The substitution happens deep inside `ffmpeg-burnin` / `frame-exporter`,
  * after the CLI has already built its warning list. Rather than thread a
- * channel back out, both sides call the same pure `applyFontTierPolicy`, so the
- * warning cannot describe a substitution different from the one performed.
+ * channel back out, both sides call the same pure `applyFontPolicy` with the
+ * same probe, so the warning cannot describe a substitution different from the
+ * one performed.
  */
-export function detectFontTierSubstitution(
+export function detectFontSubstitutions(
   entries: readonly SubtitleEntry[],
   defaultFontId: FontId,
   tier: TierResolution,
+  isInstalled: (id: FontId) => boolean,
 ): CliWarning[] {
-  const policy = applyFontTierPolicy(tier.isPaid, defaultFontId, visible(entries))
+  const policy = applyFontPolicy({
+    isPaid: tier.isPaid,
+    isInstalled,
+    defaultFontId,
+    entries: visible(entries),
+  })
   if (policy.substitutions.length === 0) return []
 
-  const substitutedCueCount = policy.substitutions.reduce((n, s) => n + s.cueCount, 0)
   const describe = (id: FontId): string => getFontMeta(id).displayName
-  return [{
-    code: 'FONT_TIER_SUBSTITUTED',
-    message:
-      `追加フォントは有料版の機能です。無料版のため ` +
-      policy.substitutions.map((s) => `${describe(s.from)} → ${describe(s.to)}`).join(' / ') +
-      ` に置換して描画します（対象 ${substitutedCueCount} cue` +
-      (policy.defaultSubstituted ? '＋プロジェクト既定フォント' : '') +
-      '）。',
-    detail: {
-      tier: tier.tier,
-      tierSource: tier.source,
-      substitutedCueCount,
-      defaultSubstituted: policy.defaultSubstituted,
-      substitutions: policy.substitutions.map((s) => ({
-        from: s.from,
-        fromName: describe(s.from),
-        to: s.to,
-        toName: describe(s.to),
-        cueCount: s.cueCount,
-      })),
-      remedy:
-        '追加 12 書体を焼き込むには有料版（Microsoft Store 版）が必要です。' +
-        '無料版では同梱の Noto Sans JP 全 9 ウェイトが使えます。',
-    },
-  }]
+  const detailFor = (subs: FontTierSubstitution[]): Record<string, unknown> => ({
+    tier: tier.tier,
+    tierSource: tier.source,
+    substitutedCueCount: subs.reduce((n, s) => n + s.cueCount, 0),
+    defaultSubstituted: policy.defaultSubstituted && subs.some((s) => s.from === defaultFontId),
+    substitutions: subs.map((s) => ({
+      from: s.from,
+      fromName: describe(s.from),
+      to: s.to,
+      toName: describe(s.to),
+      cueCount: s.cueCount,
+    })),
+  })
+  const pairs = (subs: FontTierSubstitution[]): string =>
+    subs.map((s) => `${describe(s.from)} → ${describe(s.to)}`).join(' / ')
+  const scope = (subs: FontTierSubstitution[]): string =>
+    `（対象 ${subs.reduce((n, s) => n + s.cueCount, 0)} cue` +
+    (policy.defaultSubstituted && subs.some((s) => s.from === defaultFontId) ? '＋プロジェクト既定フォント' : '') +
+    '）'
+
+  const warnings: CliWarning[] = []
+  const byTier = policy.substitutions.filter((s) => s.reason === 'tier')
+  const byMissing = policy.substitutions.filter((s) => s.reason === 'missing')
+
+  if (byTier.length > 0) {
+    warnings.push({
+      code: 'FONT_TIER_SUBSTITUTED',
+      message: `追加フォントは有料版の機能です。無料版のため ${pairs(byTier)} に置換して描画します${scope(byTier)}。`,
+      detail: {
+        ...detailFor(byTier),
+        remedy:
+          '追加 12 書体を焼き込むには有料版（Microsoft Store 版）が必要です。' +
+          '無料版では同梱の Noto Sans JP 全 9 ウェイトが使えます。',
+      },
+    })
+  }
+
+  if (byMissing.length > 0) {
+    warnings.push({
+      code: 'FONT_UNAVAILABLE',
+      message:
+        `フォントファイルが見つからないため ${pairs(byMissing)} に置換して描画します${scope(byMissing)}。` +
+        '焼き込み自体は続行しました。',
+      detail: {
+        ...detailFor(byMissing),
+        // REQ-0509 §2-4 — the user can fix this one themselves, so say how.
+        // Naming the id matters: the GUI list is long and the display name
+        // ("Poppins Bold") is not what the download row is keyed by.
+        remedy:
+          '設定 ▸ フォントから該当フォントをダウンロードしてください（' +
+          byMissing.map((s) => s.from).join(', ') +
+          '）。ダウンロード済みのはずなら、ファイルが削除・移動されていないか確認してください。',
+      },
+    })
+  }
+
+  return warnings
 }

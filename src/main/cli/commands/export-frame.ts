@@ -28,8 +28,9 @@ import { CliError, emitSuccess, type CliContext } from '../output'
 import { assertWritable } from '../overwrite'
 import { detectFormat, entriesFromSegments } from '../subtitle-io'
 import { resolvePlacementAndLayout } from '../placement'
-import { detectNoOpCombinations, detectIgnoredFlags, detectFontTierSubstitution } from '../no-op-warnings'
+import { detectNoOpCombinations, detectIgnoredFlags, detectFontSubstitutions } from '../no-op-warnings'
 import { resolveTier } from '../../lib/tier'
+import { createInstalledFontProbe } from '../../lib/font-availability'
 // REQ-0502 §1 — pure helpers live in their own electron-free module so the
 // cap / rejection rules / filename scheme are unit-testable; re-exported so
 // this command stays the single import site.
@@ -105,10 +106,10 @@ export async function runExportFrameCommand(ctx: CliContext, args: ParsedArgs): 
     ...placement.warnings,
     ...detectNoOpCombinations(entries),
     ...detectIgnoredFlags(args.opts, entries),
-    // REQ-0508 §1-3 — the free tier replaced a paid font. Computed from the
-    // SAME pure policy the renderer applies, so the warning and the pixels
-    // cannot disagree.
-    ...detectFontTierSubstitution(entries, fontId, resolveTier()),
+    // REQ-0508 §1-3 / REQ-0509 §2 — a font was replaced (tier-locked, or its
+    // file is missing). Computed from the SAME pure policy and the SAME probe
+    // the renderer uses, so the warning and the pixels cannot disagree.
+    ...detectFontSubstitutions(entries, fontId, resolveTier(), createInstalledFontProbe()),
   ]
 
   // Parity with `burn`: `--overflow error` rejects instead of rendering.

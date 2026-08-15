@@ -118,11 +118,11 @@ export function isFamilyTierLocked(isPaid: boolean, family: FontFamily): boolean
  * and REQ-0508 §1-5 rejects exactly that: a GUI and a CLI that substitute
  * differently is a NEW inconsistency, traded for the one being fixed.
  *
- * `isInstalled: () => true` is deliberate. This function answers the TIER
- * question only. Whether the TTF is on disk is a separate axis that the main
- * process already handles its own way (`stageFontsDir` throws when a staged
- * font is missing), and folding it in here would change failure behaviour for
- * the paid tier, which REQ-0508 puts out of scope.
+ * `isInstalled: () => true` is deliberate: this function answers the TIER
+ * question ALONE. It is what `ass-generator.ts` uses as its backstop, and that
+ * module deliberately touches no filesystem (it is importable from Node-only
+ * unit tests). The on-disk axis is handled by {@link applyFontPolicy}, which
+ * the two callers that actually stage TTFs use — see REQ-0509.
  *
  * ## Where the substitute lands (§1-2)
  *
@@ -142,6 +142,14 @@ export function resolveFontIdForTier(isPaid: boolean, fontId: FontId): FontId {
   return resolveRenderableFontId(fontId, () => true, (id) => canSelectFontInTier(isPaid, id))
 }
 
+/**
+ * Why a font was replaced. The distinction is not cosmetic: it decides what the
+ * user can do about it. `'tier'` → buy the paid edition. `'missing'` → download
+ * the font (Settings ▸ Fonts). One warning covering both would tell half the
+ * audience the wrong thing (REQ-0509 §2-2).
+ */
+export type FontSubstitutionReason = 'tier' | 'missing'
+
 /** One requested→rendered pair, with how many visible cues it affects. */
 export interface FontTierSubstitution {
   /** The font the project asked for. */
@@ -154,38 +162,80 @@ export interface FontTierSubstitution {
    * an explicit override of it (see `defaultSubstituted`).
    */
   cueCount: number
+  /**
+   * REQ-0509 — why. When a font is BOTH tier-locked and absent from disk,
+   * `'tier'` wins: in a free build the download would not make it usable, so
+   * "buy the paid edition" is the only remedy that leads anywhere.
+   */
+  reason: FontSubstitutionReason
 }
 
 export interface FontTierPolicyResult<E> {
   /** The project default font after substitution. */
   defaultFontId: FontId
   /**
-   * `entries` with every tier-locked per-cue `fontId` rewritten. Untouched cues
-   * keep their ORIGINAL object identity, so the paid tier — and any free build
-   * that only uses Noto — flows through unchanged.
+   * `entries` with every substituted per-cue `fontId` rewritten. Untouched cues
+   * keep their ORIGINAL object identity, so a run with nothing to substitute
+   * flows through unchanged.
    */
   entries: E[]
   /** Empty when nothing was substituted. Ordered by first appearance. */
   substitutions: FontTierSubstitution[]
-  /** True when the project's default font itself was tier-locked. */
+  /** True when the project's default font itself was substituted. */
   defaultSubstituted: boolean
 }
 
+export interface FontPolicyInput<E> {
+  /** Paid tier? Comes from `resolveTier().isPaid` in the main process. */
+  isPaid: boolean
+  /**
+   * Is this font's file actually on disk?
+   *
+   * REQ-0509 §1-4 — **required, with no default.** A default of `() => true`
+   * would be fail-open in the direction that costs the user a whole burn: the
+   * caller that forgot it would go back to handing libass a font it cannot
+   * stage. Main passes `createInstalledFontProbe()` (`main/lib/font-availability.ts`),
+   * which answers the exact question `stageFontsDir` is about to ask.
+   */
+  isInstalled: (id: FontId) => boolean
+  /** The project default font (the ASS `Style:` line). */
+  defaultFontId: FontId
+  entries: readonly E[]
+}
+
 /**
- * REQ-0508 §1 — apply {@link resolveFontIdForTier} to a whole burn: the project
- * default font plus every per-cue override, reporting what changed so the
- * caller can warn about it.
+ * REQ-0508 §1 / REQ-0509 §1 — resolve every font a burn will use, and report
+ * what changed and why.
  *
- * Reporting is not optional. Substituting silently would recreate, in the one
- * place this REQ exists to fix, the "reports success for something that did not
- * happen" shape that REQ-0499 through REQ-0506 spent six requests removing.
+ * ## One ladder, two axes
+ *
+ * Both questions — "may this tier use it?" and "is the file there?" — go into a
+ * SINGLE `resolveRenderableFontId` call, which is exactly how the renderer has
+ * always composed them. Running two sequential passes instead would need a rule
+ * for their order and could report one cue twice; with one call each font
+ * produces exactly one outcome and exactly one reason (REQ-0509 §1-3).
+ *
+ * ## Where the substitute lands
+ *
+ * The ladder's own steps, unchanged: an installed+selectable weight of the SAME
+ * family first (so a missing Poppins Bold prefers Poppins Regular over Noto —
+ * REQ-0269 D-1 behaviour the renderer still has), then the weight-matched
+ * bundled family for TIER rejections (REQ-0508 §1-2), then `DEFAULT_FONT_ID`.
+ *
+ * Reporting is not optional. Substituting silently would recreate the "reports
+ * success for something that did not happen" shape that REQ-0499 through
+ * REQ-0506 spent six requests removing.
  */
-export function applyFontTierPolicy<E extends { fontId?: FontId; isDeleted?: boolean }>(
-  isPaid: boolean,
-  defaultFontId: FontId,
-  entries: readonly E[],
+export function applyFontPolicy<E extends { fontId?: FontId; isDeleted?: boolean }>(
+  input: FontPolicyInput<E>,
 ): FontTierPolicyResult<E> {
-  const resolvedDefault = resolveFontIdForTier(isPaid, defaultFontId)
+  const { isPaid, isInstalled, defaultFontId, entries } = input
+  const selectable = (id: FontId): boolean => canSelectFontInTier(isPaid, id)
+  const resolve = (id: FontId): FontId => resolveRenderableFontId(id, isInstalled, selectable)
+  // Tier first: see `FontTierSubstitution.reason`.
+  const reasonFor = (id: FontId): FontSubstitutionReason => (selectable(id) ? 'missing' : 'tier')
+
+  const resolvedDefault = resolve(defaultFontId)
   const defaultSubstituted = resolvedDefault !== defaultFontId
 
   // Count only cues that will be drawn: a warning saying "3 cues" when two of
@@ -193,7 +243,7 @@ export function applyFontTierPolicy<E extends { fontId?: FontId; isDeleted?: boo
   const counts = new Map<string, FontTierSubstitution>()
   const note = (from: FontId, to: FontId, visible: boolean): void => {
     const key = `${from}>${to}`
-    const hit = counts.get(key) ?? { from, to, cueCount: 0 }
+    const hit = counts.get(key) ?? { from, to, cueCount: 0, reason: reasonFor(from) }
     if (visible) hit.cueCount += 1
     counts.set(key, hit)
   }
@@ -201,7 +251,7 @@ export function applyFontTierPolicy<E extends { fontId?: FontId; isDeleted?: boo
 
   const mapped = entries.map((e) => {
     if (!isFontId(e.fontId)) return e
-    const to = resolveFontIdForTier(isPaid, e.fontId)
+    const to = resolve(e.fontId)
     if (to === e.fontId) return e
     note(e.fontId, to, e.isDeleted !== true)
     return { ...e, fontId: to }

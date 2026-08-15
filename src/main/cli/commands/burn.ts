@@ -29,8 +29,9 @@ import { parseBitrateKbps } from '../../../shared/encode-quality'
 // resolver used by BOTH burn and export_frame, so a still previews the burn and
 // neither drifts.  `optInt` is re-exported from there.
 import { resolvePlacementAndLayout, optInt } from '../placement'
-import { detectNoOpCombinations, detectIgnoredFlags, detectFontTierSubstitution } from '../no-op-warnings'
+import { detectNoOpCombinations, detectIgnoredFlags, detectFontSubstitutions } from '../no-op-warnings'
 import { resolveTier } from '../../lib/tier'
+import { createInstalledFontProbe } from '../../lib/font-availability'
 
 const ENCODERS = new Set(['auto', 'h264_nvenc', 'h264_amf', 'h264_qsv', 'h264_mf'])
 const AUDIO_MODES = new Set(['preserve', 'simple', 'none'])
@@ -140,10 +141,10 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     ...placement.warnings,
     ...detectNoOpCombinations(entries),
     ...detectIgnoredFlags(args.opts, entries),
-    // REQ-0508 §1-3 — the free tier replaced a paid font. Computed from the
-    // SAME pure policy the renderer applies, so the warning and the pixels
-    // cannot disagree.
-    ...detectFontTierSubstitution(entries, fontId, resolveTier()),
+    // REQ-0508 §1-3 / REQ-0509 §2 — a font was replaced (tier-locked, or its
+    // file is missing). Computed from the SAME pure policy and the SAME probe
+    // the renderer uses, so the warning and the pixels cannot disagree.
+    ...detectFontSubstitutions(entries, fontId, resolveTier(), createInstalledFontProbe()),
   ]
 
   if (placement.overflowMode === 'error' && overflow.overflowCueCount > 0) {
