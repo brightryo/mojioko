@@ -178,10 +178,16 @@ try {
   // REQ-0458 §2 — status reports the MCP launch-spec revision + stale verdict.
   check('status → mcpBundle{launchSpecRevision, stale}', typeof stData?.data?.mcpBundle?.launchSpecRevision === 'number' && typeof stData?.data?.mcpBundle?.stale === 'boolean', JSON.stringify(stData?.data?.mcpBundle))
 
+// ★ REQ-0516 §2 — `track: 1` states a FACT about the fixture: the clip these
+// tests generate has exactly one audio stream, so track 1 is the only one that
+// exists.  Without it the job inherits `settings.defaultAudioTrackIndex` from
+// whoever runs the smoke, and a developer who has ever picked track 2 in
+// Settings gets TRANSCRIBE_FAILED from a raw ffmpeg `-map 0:a:1` error.  Third
+// instance of the same family; see RES-0516 §2.
   // 4) transcribe as async job (only if ready)
   if (stData?.data?.ready) {
     const out = join(work, 'out.mojioko')
-    const start = await rpc('tools/call', { name: 'transcribe', arguments: { input: clip, out } })
+    const start = await rpc('tools/call', { name: 'transcribe', arguments: { input: clip, out, track: 1 } })
     const startData = parseContent(start)
     check('transcribe returns a job_id (async)', typeof startData?.job_id === 'string' && startData?.status === 'running', JSON.stringify({ job_id: startData?.job_id, status: startData?.status }))
 
@@ -201,7 +207,7 @@ try {
     const list = parseContent(await rpc('tools/call', { name: 'list_jobs', arguments: {} }))
     check('list_jobs returns the transcribe job', Array.isArray(list?.jobs) && list.jobs.some((j) => j.job_id === startData.job_id))
     // Start a fresh transcribe and cancel it mid-flight.
-    const c = parseContent(await rpc('tools/call', { name: 'transcribe', arguments: { input: clip, out: join(work, 'cancel.mojioko') } }))
+    const c = parseContent(await rpc('tools/call', { name: 'transcribe', arguments: { input: clip, out: join(work, 'cancel.mojioko'), track: 1 } }))
     await sleep(300)
     const cancel = parseContent(await rpc('tools/call', { name: 'cancel_job', arguments: { job_id: c.job_id } }))
     check('cancel_job accepts a running job', cancel?.ok === true, JSON.stringify(cancel))
