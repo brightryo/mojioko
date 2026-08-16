@@ -2,14 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { toast } from 'sonner'
-import { showFontSubstitutionToasts } from '../../src/renderer/lib/font-substitution-toast'
+import { showRenderNoticeToasts } from '../../src/renderer/lib/render-notice-toast'
 import { useStoreUpsellStore } from '../../src/renderer/stores/store-upsell-store'
 import { useUiStore } from '../../src/renderer/stores/ui-store'
 import {
   applyFontPolicy,
-  groupFontSubstitutions,
-  type FontSubstitutionNotice,
+  fontSubstitutionRenderNotices,
 } from '../../src/shared/font-tier'
+import { getFontMeta } from '../../src/shared/fonts'
+import { fontSubstitutionDetail, type RenderNotice } from '../../src/shared/render-notice'
 import { DEFAULT_FONT_ID, type FontId } from '../../src/shared/fonts'
 import { detectFontSubstitutions } from '../../src/main/cli/no-op-warnings'
 import type { SubtitleEntry } from '../../src/shared/types'
@@ -56,8 +57,12 @@ const allBut = (...missing: FontId[]) => (id: FontId): boolean => !missing.inclu
 const t = ((key: string, opts?: Record<string, unknown>) =>
   opts && 'pairs' in opts ? `${key}|${String(opts.pairs)}|${String(opts.count)}` : key) as never
 
-const notices = (opts: { isPaid: boolean; isInstalled?: (id: FontId) => boolean; entries: SubtitleEntry[] }): FontSubstitutionNotice[] =>
-  groupFontSubstitutions(
+// REQ-0517 §2 — the toast now takes the general `RenderNotice`, built by the
+// shared converter the main process uses.  The judgement behind it
+// (`applyFontPolicy` + the grouping) is unchanged, which is the point: every
+// REQ-0510 assertion below still describes the same behaviour.
+const notices = (opts: { isPaid: boolean; isInstalled?: (id: FontId) => boolean; entries: SubtitleEntry[] }): RenderNotice[] =>
+  fontSubstitutionRenderNotices(
     applyFontPolicy({
       isPaid: opts.isPaid,
       isInstalled: opts.isInstalled ?? ALL_INSTALLED,
@@ -65,6 +70,7 @@ const notices = (opts: { isPaid: boolean; isInstalled?: (id: FontId) => boolean;
       entries: opts.entries,
     }),
     DEFAULT_FONT_ID,
+    (id) => getFontMeta(id).displayName,
   )
 
 beforeEach(() => {
@@ -75,7 +81,7 @@ beforeEach(() => {
 
 describe('REQ-0510 §2-1 — it fires when a font was actually replaced', () => {
   it('free tier + paid font → one WARNING toast, tier wording', () => {
-    showFontSubstitutionToasts(notices({ isPaid: false, entries: [cue({ fontId: 'anton' })] }), t)
+    showRenderNoticeToasts(notices({ isPaid: false, entries: [cue({ fontId: 'anton' })] }), t)
     expect(toast.warning).toHaveBeenCalledTimes(1)
     const [title, opts] = vi.mocked(toast.warning).mock.calls[0]
     expect(title).toBe('common:fontSubstitution.tier.title')
@@ -86,7 +92,7 @@ describe('REQ-0510 §2-1 — it fires when a font was actually replaced', () => 
   })
 
   it('paid tier + missing file → one WARNING toast, missing wording', () => {
-    showFontSubstitutionToasts(
+    showRenderNoticeToasts(
       notices({ isPaid: true, isInstalled: allBut('anton'), entries: [cue({ fontId: 'anton' })] }),
       t,
     )
@@ -95,7 +101,7 @@ describe('REQ-0510 §2-1 — it fires when a font was actually replaced', () => 
   })
 
   it('both causes in one render → two toasts, one per cause', () => {
-    showFontSubstitutionToasts(
+    showRenderNoticeToasts(
       notices({
         isPaid: false,
         isInstalled: allBut('noto-sans-jp-black'),
@@ -110,7 +116,7 @@ describe('REQ-0510 §2-1 — it fires when a font was actually replaced', () => 
   })
 
   it('uses toast.warning, not error or success — the render succeeded', () => {
-    showFontSubstitutionToasts(notices({ isPaid: false, entries: [cue({ fontId: 'anton' })] }), t)
+    showRenderNoticeToasts(notices({ isPaid: false, entries: [cue({ fontId: 'anton' })] }), t)
     expect(toast.error).not.toHaveBeenCalled()
     expect(toast.success).not.toHaveBeenCalled()
   })
@@ -118,24 +124,24 @@ describe('REQ-0510 §2-1 — it fires when a font was actually replaced', () => 
 
 describe('REQ-0510 §2-2 / §3-1 — it stays silent otherwise', () => {
   it('nothing substituted → NO toast (the other side of the gate)', () => {
-    showFontSubstitutionToasts(notices({ isPaid: true, entries: [cue({ fontId: 'anton' })] }), t)
+    showRenderNoticeToasts(notices({ isPaid: true, entries: [cue({ fontId: 'anton' })] }), t)
     expect(toast.warning).not.toHaveBeenCalled()
   })
 
   it('free tier + a bundled font → NO toast', () => {
-    showFontSubstitutionToasts(notices({ isPaid: false, entries: [cue({ fontId: 'noto-sans-jp-black' })] }), t)
+    showRenderNoticeToasts(notices({ isPaid: false, entries: [cue({ fontId: 'noto-sans-jp-black' })] }), t)
     expect(toast.warning).not.toHaveBeenCalled()
   })
 
   it.each([undefined, []])('an absent / empty notice list is silent (%s)', (value) => {
-    showFontSubstitutionToasts(value, t)
+    showRenderNoticeToasts(value, t)
     expect(toast.warning).not.toHaveBeenCalled()
   })
 })
 
 describe('REQ-0510 §2-4 / §3-2 — the two remedies are not interchangeable', () => {
   it('the tier toast opens the STORE upsell and does not touch settings', () => {
-    showFontSubstitutionToasts(notices({ isPaid: false, entries: [cue({ fontId: 'anton' })] }), t)
+    showRenderNoticeToasts(notices({ isPaid: false, entries: [cue({ fontId: 'anton' })] }), t)
     expect(actionOf(0).label).toBe('common:fontSubstitution.tier.action')
     actionOf(0).onClick()
     expect(useStoreUpsellStore.getState().open).toBe(true)
@@ -145,7 +151,7 @@ describe('REQ-0510 §2-4 / §3-2 — the two remedies are not interchangeable', 
   it('the missing toast opens SETTINGS on the Fonts tab and does not upsell', () => {
     // Sending someone to the Store to fix a file that is simply not downloaded
     // would sell them something that does not fix it (RES-0509 §2-2).
-    showFontSubstitutionToasts(
+    showRenderNoticeToasts(
       notices({ isPaid: true, isInstalled: allBut('anton'), entries: [cue({ fontId: 'anton' })] }),
       t,
     )
@@ -181,7 +187,10 @@ describe('REQ-0510 §1-2 — GUI and CLI read the SAME judgement', () => {
       c.isInstalled,
     )
     expect(gui.map((n) => n.code)).toEqual(cli.map((w) => w.code))
-    expect(gui.map((n) => n.cueCount)).toEqual(
+    // REQ-0517 §2 — both sides are `RenderNotice` now, so the count lives in
+    // the same place on both.  That the two still agree is the REQ-0510
+    // invariant: one judgement, two surfaces.
+    expect(gui.map((n) => fontSubstitutionDetail(n)?.substitutedCueCount)).toEqual(
       cli.map((w) => (w.detail as Record<string, unknown>).substitutedCueCount),
     )
   })
@@ -247,13 +256,13 @@ describe('REQ-0510 §2-3 — the strings exist in BOTH locales', () => {
 // re-renders per frame — "a warning that always fires is not read", REQ-0502).
 // ---------------------------------------------------------------------------
 
-const TOAST_FN = 'showFontSubstitutionToasts'
+const TOAST_FN = 'showRenderNoticeToasts'
 
 /** Files allowed to raise the toast, and why each one is a file-producing end. */
 export const ALLOWED_CALLERS: Record<string, string> = {
   'src/renderer/components/step2/burnin-drawer.tsx': 'burn completion — the video exists now',
   'src/renderer/components/step2/export-frame-button.tsx': 'image export completion — the still exists now',
-  'src/renderer/lib/font-substitution-toast.ts': 'the helper itself',
+  'src/renderer/lib/render-notice-toast.ts': 'the helper itself',
 }
 
 function stripComments(text: string): string {
@@ -322,7 +331,7 @@ describe('REQ-0510 §3-3 — wired at the two completions, nowhere else', () => 
   it('NEGATIVE CONTROL — removing the burn-completion call is detected', () => {
     const real = sources.find((f) =>
       f.path.replace(/\\/g, '/') === 'src/renderer/components/step2/burnin-drawer.tsx')
-    const gutted = real!.text.replace(new RegExp(`${TOAST_FN}\\(evt\\.fontNotices, t\\)`), '/* removed */')
+    const gutted = real!.text.replace(new RegExp(`${TOAST_FN}\\(evt\\.renderNotices, t\\)`), '/* removed */')
     expect(gutted).not.toBe(real!.text)
     const patched = sources.map((f) => (f === real ? { path: f.path, text: gutted } : f))
     expect(findToastCallers(patched)).not.toContain('src/renderer/components/step2/burnin-drawer.tsx')

@@ -11,7 +11,7 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore } from '@/stores/ui-store'
 import { saveFileDialog } from '@/services/dialog'
 import { exportFrame as ipcExportFrame } from '@/services/video'
-import { showFontSubstitutionToasts } from '@/lib/font-substitution-toast'
+import { showRenderNoticeToasts } from '@/lib/render-notice-toast'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
 import { KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
 
@@ -102,9 +102,9 @@ export function ExportFrameButton() {
       if (result.ok) {
         toast.success(t('videoPreview.exportFrame.success', { path: result.data.outputPath }))
         // REQ-0510 §2-1 — a still is a file too, and it is the surface people
-        // use to check what a burn will look like; a substitution it does not
+        // use to check what a burn will look like; a decision it does not
         // mention is a preview that lies about itself.
-        showFontSubstitutionToasts(result.data.fontNotices, t)
+        showRenderNoticeToasts(result.data.renderNotices, t)
       } else {
         toast.error(t('videoPreview.exportFrame.error', { error: result.error.message }))
       }

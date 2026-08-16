@@ -12,7 +12,9 @@ import { probeMediaBitrate } from './ffprobe'
 import { buildTrimConcatFilter } from './ffmpeg-trim-filter'
 import { buildAmixAudioFilter } from './preview-mix-filter'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
-import { applyFontPolicy, groupFontSubstitutions } from '../../shared/font-tier'
+import { applyFontPolicy, fontSubstitutionRenderNotices } from '../../shared/font-tier'
+import type { RenderNotice } from '../../shared/render-notice'
+import { detectNoOpCombinations } from '../cli/no-op-warnings'
 import { createInstalledFontProbe } from '../lib/font-availability'
 import {
   editedDuration,
@@ -153,7 +155,17 @@ export async function startBurnin(
   })
   const resolvedFontId = fontPolicy.defaultFontId
   const tieredEntries = fontPolicy.entries
-  const fontNotices = groupFontSubstitutions(fontPolicy, requestedFontId)
+  // REQ-0517 §2 — everything this render wants to tell the caller, as the one
+  // `RenderNotice` shape the CLI already returns.  Two sources, both shared
+  // with the headless paths so the GUI never re-derives a judgement:
+  //   - font substitutions (REQ-0508/0509), reshaped by the same grouping;
+  //   - the cue-derived no-op / divergence checks (REQ-0502, REQ-0516).
+  // Carrying all of them is deliberate; which ones become a TOAST is decided
+  // once, in `renderer/lib/render-notice-toast.ts`.
+  const renderNotices: RenderNotice[] = [
+    ...fontSubstitutionRenderNotices(fontPolicy, requestedFontId, (id) => getFontMeta(id).displayName),
+    ...detectNoOpCombinations(entries),
+  ]
   if (fontPolicy.substitutions.length > 0) {
     log.info(
       `[ffmpeg-burnin] font policy (${tier.tier}/${tier.source}): ` +
@@ -473,7 +485,7 @@ export async function startBurnin(
           // REQ-0510 §1-2 — the SAME notices the CLI turns into `warnings[]`,
           // from the same `applyFontPolicy` result. The renderer decides how to
           // say it; it does not decide WHETHER it happened.
-          ...(fontNotices.length > 0 ? { fontNotices } : {}),
+          ...(renderNotices.length > 0 ? { renderNotices } : {}),
         })
         resolve()
       } else if (wasAborted) {

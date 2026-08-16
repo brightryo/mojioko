@@ -7,7 +7,9 @@ import { getBinPath, getFontFilePath } from '../lib/paths'
 import { generateAss } from './ass-generator'
 import { resolveTier } from '../lib/tier'
 import { getFontMeta, DEFAULT_FONT_ID, isFontId, type FontId, type FontMeta } from '../../shared/fonts'
-import { applyFontPolicy, groupFontSubstitutions, type FontSubstitutionNotice } from '../../shared/font-tier'
+import { applyFontPolicy, fontSubstitutionRenderNotices } from '../../shared/font-tier'
+import type { RenderNotice } from '../../shared/render-notice'
+import { detectNoOpCombinations } from '../cli/no-op-warnings'
 import { createInstalledFontProbe } from '../lib/font-availability'
 import { ASS_MARGIN_LR_PX } from '../../shared/constants'
 import type { ExportFrameRequest, ExportFrameResult } from '../../shared/ipc-contracts'
@@ -107,7 +109,7 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
    * and read at the return: a still without subtitles resolves no fonts, so it
    * correctly reports none.
    */
-  let fontNotices: FontSubstitutionNotice[] = []
+  let renderNotices: RenderNotice[] = []
   // REQ-0381 — pass-1 still for the two-pass subtitle export (see below).
   let rawFramePath: string | null = null
 
@@ -170,7 +172,11 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
           fontPolicy.substitutions.map((s) => `${s.from}→${s.to} [${s.reason}] (${s.cueCount} cue)`).join(', ')
         )
       }
-      fontNotices = groupFontSubstitutions(fontPolicy, requestedFontId)
+      // REQ-0517 §2 — the general notice shape, same sources as the burn path.
+      renderNotices = [
+        ...fontSubstitutionRenderNotices(fontPolicy, requestedFontId, (id) => getFontMeta(id).displayName),
+        ...detectNoOpCombinations(entries),
+      ]
       const fontMeta = getFontMeta(resolvedFontId)
       const referencedFontIds = collectReferencedFontIds(resolvedFontId, tieredEntries)
       fontsDir = await stageFontsDir(referencedFontIds)
@@ -261,7 +267,7 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
     }
 
     const stat = await fs.stat(outputPath)
-    return { outputPath, sizeBytes: stat.size, ...(fontNotices.length > 0 ? { fontNotices } : {}) }
+    return { outputPath, sizeBytes: stat.size, ...(renderNotices.length > 0 ? { renderNotices } : {}) }
   } finally {
     // Best-effort cleanup of temp ASS file + staged fonts dir.  Failures
     // here are logged at warn level but never bubble up since the user

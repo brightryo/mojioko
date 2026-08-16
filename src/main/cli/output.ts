@@ -10,6 +10,8 @@
  * Kept free of `electron` imports so vitest can exercise the exit-code
  * mapping and envelope shapes directly.
  */
+import type { RenderNotice } from '../../shared/render-notice'
+
 
 export const EXIT_OK = 0
 
@@ -60,12 +62,15 @@ export class CliError extends Error {
   }
 }
 
-/** A non-fatal warning carried in the success envelope's `warnings[]` (§4.4). */
-export interface CliWarning {
-  code: string
-  message: string
-  detail?: unknown
-}
+/**
+ * A non-fatal warning carried in the success envelope's `warnings[]` (§4.4).
+ *
+ * REQ-0517 §2 — the declaration moved to `shared/render-notice.ts` because the
+ * GUI now carries the same objects over IPC (`BurninEvent.completed
+ * .renderNotices`).  This alias keeps every CLI call site reading `CliWarning`,
+ * which is the right name in that context.
+ */
+export type CliWarning = RenderNotice
 
 /** The structured result of a command (what the MCP layer captures). */
 export type CliResult =

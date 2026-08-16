@@ -1,6 +1,6 @@
 import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, EncodeQuality, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams, WordSpan } from './types'
 import type { FontId } from './fonts'
-import type { FontSubstitutionNotice } from './font-tier'
+import type { RenderNotice } from './render-notice'
 import type { KaraokeStyle } from './karaoke-style'
 import type { Cut } from './cuts'
 export type { ModelsState }
@@ -186,15 +186,15 @@ export interface ExportFrameResult {
   outputPath: string
   sizeBytes: number
   /**
-   * REQ-0510 §1 — fonts the renderer asked for but did not get, grouped by
-   * cause. OPTIONAL and additive: pre-REQ-0510 callers ignore it.
+   * REQ-0510 §1 / REQ-0517 §2 — non-fatal notices about this export. OPTIONAL
+   * and additive: pre-REQ-0510 callers ignore it.
    *
-   * The GUI had no way to learn this. The substitution happens in the main
-   * process (REQ-0508 / REQ-0509) and only reached the CLI, which computes the
-   * same notices for its `warnings[]`; the GUI rendered a still in Noto while
-   * the inspector still said "Anton" and said nothing about it.
+   * The GUI had no way to learn any of this. The judgements happen in the main
+   * process and only reached the CLI's `warnings[]`; the GUI rendered a still
+   * in Noto while the inspector still said "Anton" and said nothing about it.
+   * REQ-0517 widened the field from font-only to every `RenderNotice`.
    */
-  fontNotices?: FontSubstitutionNotice[]
+  renderNotices?: RenderNotice[]
 }
 
 export interface EncoderDetectionResult {
@@ -306,12 +306,20 @@ export type BurninEvent =
       videoBitrateKbps?: number
       resolvedEncoder?: H264Encoder
       /**
-       * REQ-0510 §1 — same notices as `ExportFrameResult.fontNotices`, on the
-       * event that already carries the burn's outcome. Attached to `completed`
+       * REQ-0510 §1 / REQ-0517 §2 — non-fatal notices about this render, on
+       * the event that already carries its outcome. Attached to `completed`
        * rather than streamed as its own event so a caller cannot receive it
        * without also receiving the result it describes.
+       *
+       * Was `fontNotices?: FontSubstitutionNotice[]`, whose `code` is a
+       * two-member union — so font substitution was the only thing the GUI
+       * could ever be told (RES-0516 §3-5). It is now the SAME `RenderNotice`
+       * the CLI and MCP already return in `warnings[]`, so a warning is
+       * written once and both surfaces get it. Which of them the GUI actually
+       * toasts is a separate, deliberately narrow decision — see
+       * `renderer/lib/render-notice-toast.ts`.
        */
-      fontNotices?: FontSubstitutionNotice[]
+      renderNotices?: RenderNotice[]
     }
   | { event: 'failed'; error: string }
 

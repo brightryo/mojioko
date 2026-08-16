@@ -1,3 +1,4 @@
+import type { FontSubstitutionDetail, RenderNotice } from './render-notice'
 import {
   DEFAULT_FONT_ID,
   isBundledFamilyFontId,
@@ -241,6 +242,51 @@ export function groupFontSubstitutions(
     })
   }
   return notices
+}
+
+/**
+ * REQ-0517 §2 — the same font notices, as the general `RenderNotice` the GUI
+ * transport and the CLI `warnings[]` both carry.
+ *
+ * The judgement is NOT redone here: this takes `groupFontSubstitutions`'
+ * output and only reshapes it, so the GUI and the CLI describe one render with
+ * one decision behind them.  `detail` matches `FontSubstitutionDetail`
+ * (`shared/render-notice.ts`), which is what the toast reads back.
+ *
+ * `message` is the Japanese one-liner for headless callers and logs.  The GUI
+ * never shows it — it looks `code` up in i18n so the wording follows the app's
+ * language — but it travels so a single object serves both.
+ */
+export function fontSubstitutionRenderNotices(
+  result: Pick<FontTierPolicyResult<never>, 'substitutions' | 'defaultSubstituted' | 'defaultFontId'>,
+  requestedDefaultFontId: FontId,
+  displayName: (id: FontId) => string,
+): RenderNotice[] {
+  return groupFontSubstitutions(result, requestedDefaultFontId).map((notice) => {
+    const pairs = notice.substitutions
+      .map((sub) => `${displayName(sub.from)} → ${displayName(sub.to)}`)
+      .join(' / ')
+    const scope = `（対象 ${notice.cueCount} cue${notice.defaultSubstituted ? '＋プロジェクト既定フォント' : ''}）`
+    const detail: FontSubstitutionDetail = {
+      substitutions: notice.substitutions.map((sub) => ({
+        from: sub.from,
+        fromName: displayName(sub.from),
+        to: sub.to,
+        toName: displayName(sub.to),
+        cueCount: sub.cueCount,
+      })),
+      substitutedCueCount: notice.cueCount,
+      defaultSubstituted: notice.defaultSubstituted,
+    }
+    return {
+      code: notice.code,
+      message:
+        notice.code === 'FONT_TIER_SUBSTITUTED'
+          ? `追加フォントは有料版の機能です。無料版のため ${pairs} に置換して描画します${scope}。`
+          : `フォントファイルが見つからないため ${pairs} に置換して描画します${scope}。`,
+      detail,
+    }
+  })
 }
 
 export interface FontPolicyInput<E> {
