@@ -73,8 +73,19 @@ const TOL_ENGINE = 0.40
 // (C) each step of the ladder must widen the cue by at least this much, or the
 //     metric is not actually reading the whitespace.
 const MIN_WIDTH_STEP = 0.15
+// (D) REQ-0516 §1 — how far a cue's ink may move when whitespace is added at a
+//     LINE EDGE.  It must draw nothing, so the answer is "not at all"; the
+//     budget is rasteriser noise, one pixel at these sizes being ~0.02.
+const TOL_EDGE = 0.10
 // A control must be off by at least this much to count as detected.
 const NEG_MIN = 0.20
+// The EDGE controls are measured in the same units, but the normaliser is the
+// cue's own ink HEIGHT — so a two-line cue reports the same physical shift at
+// roughly half the magnitude of a one-line cue.  Measured: 0.390 / 0.378 on the
+// one-line rows, 0.151 on the two-line row, and exactly 0.000 wherever the
+// pre-fix render is genuinely identical.  0.10 sits an order of magnitude above
+// the 0.022 rasteriser noise floor and well under every real signal.
+const NEG_MIN_EDGE = 0.10
 
 function bundleAll() {
   esbuild.buildSync({
@@ -159,7 +170,20 @@ function inkWidth(buf, w, h) {
   if (maxX < 0) return null
   const glyphH = maxY - minY + 1
   if (glyphH <= 0) return null
-  return { ratio: (maxX - minX + 1) / glyphH, widthPx: maxX - minX + 1, glyphH }
+  return {
+    ratio: (maxX - minX + 1) / glyphH,
+    widthPx: maxX - minX + 1,
+    glyphH,
+    // REQ-0516 §1 — the edge cases need POSITION, not width: a space at a
+    // line's edge draws nothing, so it cannot widen the ink.  What it does on
+    // a centre-aligned cue is SHIFT it, because the line's advance width
+    // includes the space and the glyphs are then centred around it.  Measured
+    // in glyph heights and compared within one engine, so the two engines'
+    // different canvas origins never enter the comparison.
+    cx: ((minX + maxX) / 2) / glyphH,
+    x0: minX / glyphH,
+    x1: maxX / glyphH,
+  }
 }
 
 // --- Burn side ----------------------------------------------------------------
@@ -238,7 +262,42 @@ async function applyPreFixSpelling(page) {
   })
 }
 
-async function measurePreview(page, spec, preFix = false) {
+/**
+ * ★ THE NEGATIVE CONTROL for REQ-0516 §1, preview side.
+ *
+ * Puts each display line's edge whitespace back into the rendered DOM — which
+ * is precisely what the pre-REQ-0516 preview showed, since CSS
+ * `white-space: pre` preserved it.  Re-deriving the edges from the case's own
+ * `text` means the control cannot silently become a no-op if the trim moves.
+ */
+async function restoreEdgeWhitespace(page, text) {
+  const BR = String.fromCharCode(92) + 'N'
+  const edges = text.split(BR).map((line) => ({
+    lead: (line.match(/^\s+/) ?? [''])[0],
+    trail: (line.match(/\s+$/) ?? [''])[0],
+  }))
+  return page.evaluate(({ edges }) => {
+    const wrap = document.querySelector('[data-subtitle-text-wrapper]')
+    if (!wrap) return { touched: 0 }
+    // Walk the wrapper's text nodes, grouped into lines by <br>.
+    const lines = [[]]
+    for (const node of wrap.childNodes) {
+      if (node.nodeName === 'BR') { lines.push([]); continue }
+      const texts = node.nodeType === 3 ? [node] : [...node.childNodes].filter((n) => n.nodeType === 3)
+      lines[lines.length - 1].push(...texts)
+    }
+    let touched = 0
+    lines.forEach((nodes, i) => {
+      const e = edges[i]
+      if (!e || nodes.length === 0) return
+      if (e.lead) { nodes[0].nodeValue = e.lead + nodes[0].nodeValue; touched++ }
+      if (e.trail) { nodes[nodes.length - 1].nodeValue += e.trail; touched++ }
+    })
+    return { touched }
+  }, { edges })
+}
+
+async function measurePreview(page, spec, preFix = false, restoreEdgesOf = null) {
   currentHtml = harnessHtml(spec)
   await page.goto(ORIGIN + '/')
   await page.waitForFunction('window.__ready === true', { timeout: 20000 })
@@ -274,13 +333,20 @@ async function measurePreview(page, spec, preFix = false) {
     if (r.touched === 0) return { error: 'negative control changed nothing — spelling shape moved' }
     await page.waitForTimeout(100)
   }
+  let edgeTouched = null
+  if (restoreEdgesOf !== null) {
+    const r = await restoreEdgeWhitespace(page, restoreEdgesOf)
+    if (r.touched === 0) return { error: 'edge control changed nothing — text-node shape moved' }
+    edgeTouched = r
+    await page.waitForTimeout(100)
+  }
 
   const png = path.join(DIR, 'p.png')
   await frame.screenshot({ path: png })
   const raw = path.join(DIR, 'p.rgb')
   ff(['-i', png, '-f', 'rawvideo', '-pix_fmt', 'rgb24', raw], 'png')
   const m = inkWidth(readFileSync(raw), w, h)
-  return m === null ? { error: 'no ink in the preview' } : m
+  return m === null ? { error: 'no ink in the preview' } : (edgeTouched ? { ...m, edgeTouched } : m)
 }
 
 // --- Cases --------------------------------------------------------------------
@@ -341,6 +407,60 @@ for (const [label, text] of TEXTS) {
   )
 }
 
+// --- REQ-0516 §1 — whitespace at a LINE's EDGES -------------------------------
+// libass drops it; CSS `white-space: pre` kept it, so the preview showed an
+// indent the MP4 never had.  These rows assert the preview now matches: an
+// edge-whitespace cue must render at the SAME width as the cue without it, in
+// BOTH engines.  Interior whitespace is the ladder above — the two rules must
+// not be confused, which is why they are separate case groups.
+// Each case carries its OWN no-edge counterpart, because the comparison is
+// "does the edge whitespace change anything" — and a two-line cue is not
+// comparable to a one-line one under a glyph-height-normalised metric.
+// `shifts` marks the asymmetric cases: those are the ones whose control can
+// move the ink at all (leading AND trailing in equal measure cancel out on a
+// centre-aligned cue, so that row is a pass-only case).
+const BR = String.fromCharCode(92) + 'N'
+// `expect` is what libass does with this cue's edge whitespace, MEASURED:
+// it drops ASCII space and tab and nothing else, so a full-width space at a
+// line edge is drawn by both engines.  Pinning the `kept` case matters as much
+// as the `dropped` ones — trimming `\s` in the preview would hide a character
+// the MP4 shows, which is the same defect pointing the other way.
+const EDGE_TEXTS = [
+  ['leading 3', '   テストです', 'テストです', 'dropped', true],
+  ['trailing 3', 'テストです   ', 'テストです', 'dropped', true],
+  ['both ends 3', '   テストです   ', 'テストです', 'dropped', false],
+  ['leading 3 fullwidth', '　　　テストです', 'テストです', 'kept', false],
+  // Line 2 is deliberately the WIDER line: the ink box of a two-line cue is the
+  // union of both lines, so perturbing the shorter one stays inside the other's
+  // extent and the sampler cannot see it — which is what happened when this
+  // case had 「テスト」 above 「です」.
+  ['2 lines, leading on l2', 'テ' + BR + '   ですです', 'テ' + BR + 'ですです', 'dropped', true],
+]
+console.log('\nREQ-0516 §1 — whitespace at a line\'s EDGES (libass drops it; the preview must too)')
+console.log('metric: ink CENTRE in glyph heights, vs the same cue without the edge whitespace\n')
+const edgeRows = []
+for (const [label, text, plain, expect, shifts] of EDGE_TEXTS) {
+  const on = { text, karaoke: true }
+  const row = {
+    label, shifts, expect,
+    burnOn: measureBurn(burnSide.renderAss(on), 'eon'),
+    burnOff: measureBurn(burnSide.renderAss({ text, karaoke: false }), 'eoff'),
+    burnPlain: measureBurn(burnSide.renderAss({ text: plain, karaoke: true }), 'epl'),
+    prevOn: await measurePreview(page, on),
+    prevPlain: await measurePreview(page, { text: plain, karaoke: true }),
+    // Control: put the edge whitespace back into the rendered DOM, which is
+    // exactly what the pre-REQ-0516 preview showed.
+    prevPre: await measurePreview(page, on, false, text),
+  }
+  edgeRows.push(row)
+  const d = (a, b) => (a && b && !a.error && !b.error ? (a.cx - b.cx).toFixed(3) : 'n/a')
+  console.log(
+    `  ${label.padEnd(24)} Δcx burn=${d(row.burnOn, row.burnPlain)} ` +
+    `preview=${d(row.prevOn, row.prevPlain)} | pre-fix preview=${d(row.prevPre, row.prevPlain)} ` +
+    `${JSON.stringify(row.prevPre?.edgeTouched ?? null)}`,
+  )
+}
+
 await browser.close()
 server.close()
 
@@ -391,10 +511,70 @@ for (const r of rows.slice(1)) {
 }
 console.log(`negative controls: burn ${negBurn}/${spaced}, preview ${negPrev}/${spaced} detected (≥${NEG_MIN})`)
 
+// --- (D) REQ-0516 §1 — whitespace at a line's EDGES draws nothing ------------
+// The reference is the plain no-space cue: an edge-whitespace cue must come out
+// exactly that wide, in BOTH engines.  (A) and (B) are re-applied to these rows
+// too, so karaoke cannot spell them differently and the preview cannot diverge.
+let worstEdge = 0, negEdge = 0, negEdgeWanted = 0
+for (const r of edgeRows) {
+  for (const [k, v] of Object.entries(r)) {
+    if (k === 'label' || k === 'shifts') continue
+    if (v === null || v?.error) bad(`${r.label}: ${k} → ${v?.error ?? 'no ink'}`)
+  }
+  const ok = (m) => m && !m.error
+  if (!ok(r.burnOn) || !ok(r.prevOn) || !ok(r.burnPlain) || !ok(r.prevPlain)) continue
+  // (A) again — karaoke must not spell an edge-whitespace cue differently.
+  if (ok(r.burnOff)) {
+    const d = Math.abs(r.burnOn.cx - r.burnOff.cx)
+    worstKaraoke = Math.max(worstKaraoke, d)
+    if (d > TOL_KARAOKE) bad(`${r.label}: burn karaoke ON vs OFF differ by ${d.toFixed(3)} (tol ${TOL_KARAOKE})`)
+  }
+  // (D) the two engines must AGREE about this cue's edge whitespace — whether
+  // libass drops it (ASCII space/tab) or draws it (everything else).  Comparing
+  // each engine against its OWN no-edge rendering is what makes that one
+  // assertion cover both outcomes.
+  const dBurn = r.burnOn.cx - r.burnPlain.cx
+  const dPrev = r.prevOn.cx - r.prevPlain.cx
+  const disagree = Math.abs(dBurn - dPrev)
+  worstEdge = Math.max(worstEdge, disagree)
+  if (disagree > TOL_EDGE) {
+    bad(`${r.label}: burn moved ${dBurn.toFixed(3)} but preview moved ${dPrev.toFixed(3)} `
+      + `— the two disagree by ${disagree.toFixed(3)} (tol ${TOL_EDGE})`)
+  }
+  // …and the direction must be the measured one, so a build that drops
+  // everything (or nothing) in BOTH engines cannot pass by agreeing.
+  if (r.expect === 'dropped' && Math.abs(dBurn) > TOL_EDGE) {
+    bad(`${r.label}: expected libass to DROP this edge whitespace, but the burn moved ${dBurn.toFixed(3)}`)
+  }
+  if (r.expect === 'kept' && Math.abs(dBurn) <= TOL_EDGE) {
+    bad(`${r.label}: expected libass to DRAW this edge whitespace, but the burn did not move`)
+  }
+  // The control only has something to move on the asymmetric cases; a matched
+  // pair of leading and trailing spaces cancels out on a centre-aligned cue.
+  if (r.shifts) {
+    negEdgeWanted++
+    // The control only has to prove the sampler CAN see the pre-fix render, so
+    // it takes the most sensitive of the three ink landmarks.  The centre alone
+    // is diluted on a two-line cue: shifting line 2 moves the union box's right
+    // edge by the full amount but its centre by half, which put the two-line
+    // case just under the threshold while the defect was plainly visible.
+    if (ok(r.prevPre)) {
+      const moved = Math.max(
+        Math.abs(r.prevPre.cx - r.prevPlain.cx),
+        Math.abs(r.prevPre.x0 - r.prevPlain.x0),
+        Math.abs(r.prevPre.x1 - r.prevPlain.x1),
+      )
+      if (moved >= NEG_MIN_EDGE) negEdge++
+    }
+  }
+}
+console.log(`(D) worst preview-vs-burn edge disagree = ${worstEdge.toFixed(3)} (tol ${TOL_EDGE})`)
+console.log(`    edge negative control: ${negEdge}/${negEdgeWanted} detected (≥${NEG_MIN_EDGE})`)
+
 rmSync(DIR, { recursive: true, force: true })
 for (const f of [DUMP, BUNDLE]) if (existsSync(f)) rmSync(f, { force: true })
 
-if (negBurn < spaced || negPrev < spaced) {
+if (negBurn < spaced || negPrev < spaced || negEdge < negEdgeWanted) {
   console.error('\nFAIL: a negative control was not detected — the gate proves nothing.')
   process.exit(1)
 }

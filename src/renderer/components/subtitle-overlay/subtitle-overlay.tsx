@@ -22,6 +22,7 @@ import { resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../../shared/kara
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { computeKaraokeBreaks } from '../../../shared/karaoke-ass'
 import { resolveKaraokeUnits } from '../../../shared/karaoke-units'
+import { trimCueTextLineEdges, trimLineEdgePieces, trimPiecesByBreaks } from '../../../shared/display-line-trim'
 // REQ-0332 — line spacing.  Same module the ASS writer reads.
 import {
   estimateCueHeightAssPx,
@@ -561,7 +562,12 @@ export function SubtitleOverlay({
   // is never mutated.
   const cmapCoverage = getCmapCoverageFor(resolvedFontId)
   const tofuSubstitute = getTofuSubstituteFor(resolvedFontId)
-  const rawText = entry.text.replace(/\\N/g, '\n')
+  // REQ-0516 §1 — drop each display LINE's outer whitespace, because libass
+  // does (measured: leading/trailing spaces on either line of a two-line cue
+  // produce byte-identical ink).  CSS `white-space: pre` would otherwise show
+  // an indent the exported video never has.  `entry.text` is untouched — this
+  // is the drawing only.  See `shared/display-line-trim.ts`.
+  const rawText = trimCueTextLineEdges(entry.text).replace(/\\N/g, '\n')
   const renderedText = cmapCoverage !== null && tofuSubstitute !== null
     ? substituteMissingGlyphs(rawText, cmapCoverage, tofuSubstitute)
     : rawText
@@ -622,12 +628,29 @@ export function SubtitleOverlay({
   // codepoint to a font-native placeholder — matches the plain
   // render and the burn-in tofu-substitution in
   // `services/burnin.ts`.
-  const karaokeWordsRendered = karaokeActive && cmapCoverage !== null && tofuSubstitute !== null
+  const karaokeWordsSubstituted = karaokeActive && cmapCoverage !== null && tofuSubstitute !== null
     ? karaokeWords.map((w) => {
         const substituted = substituteMissingGlyphs(w.text, cmapCoverage, tofuSubstitute)
         return substituted === w.text ? w : { ...w, text: substituted }
       })
     : karaokeWords
+  // REQ-0516 §1 — same line-edge rule as the plain path, applied across the
+  // units of each line.  This SUBSUMES the REQ-0294 strip that used to live
+  // inline at the render site (`brokenHere ? text.replace(/^\s+/,'') : text`):
+  // that handled only "a unit right after a break", and the two would have
+  // been separate rules that happen to agree on one case.  Trimming here —
+  // after substitution, on resolved units — moves no character index, so
+  // timings, `karaokeBreaks` and the emphasis ranges are all untouched.
+  const karaokeWordsRendered = karaokeActive
+    ? (() => {
+        const trimmed = trimPiecesByBreaks(
+          karaokeWordsSubstituted.map((w) => w.text),
+          (i) => karaokeBreaks.has(i),
+        )
+        return karaokeWordsSubstituted.map((w, i) =>
+          trimmed[i] === w.text ? w : { ...w, text: trimmed[i] })
+      })()
+    : karaokeWordsSubstituted
   const karaokeHighlightColorResolved = entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR
   // REQ-0293 §2 — base (unspoken) colour is ALWAYS `textColorHex`.
   // The pre-REQ-0293 per-cue `karaokeBaseColor` override was removed;
@@ -668,7 +691,35 @@ export function SubtitleOverlay({
   // emphasised / plain runs (+ `\N` breaks) so each run gets its own colour +
   // size.  When karaoke is ON, emphasis rides on the karaoke word spans below.
   const emphasisRenderActive = !karaokeActive && emphasisActive
-  const emphasisTokens = emphasisRenderActive ? tokenizeEmphasis(entry.text, emphasisRanges) : []
+  const emphasisTokensRaw = emphasisRenderActive ? tokenizeEmphasis(entry.text, emphasisRanges) : []
+  // REQ-0516 §1 — the third render path gets the same line-edge rule.  The
+  // tokens are already resolved against `entry.text`, so trimming their text
+  // moves no emphasis index; `break` tokens mark the line boundaries.
+  const emphasisTokens = (() => {
+    const out = [...emphasisTokensRaw]
+    // Collect each line's text-token positions, then hand that line's strings
+    // to the shared trimmer and write them back in place.  A `break` token is
+    // the line boundary and carries no text of its own.
+    let line: number[] = []
+    const flushLine = (): void => {
+      if (line.length === 0) return
+      const trimmed = trimLineEdgePieces(line.map((i) => {
+        const t = out[i]
+        return t.kind === 'break' ? '' : t.text
+      }))
+      line.forEach((i, n) => {
+        const t = out[i]
+        if (t.kind !== 'break' && t.text !== trimmed[n]) out[i] = { ...t, text: trimmed[n] }
+      })
+      line = []
+    }
+    for (let i = 0; i < out.length; i++) {
+      if (out[i].kind === 'break') flushLine()
+      else line.push(i)
+    }
+    flushLine()
+    return out
+  })()
 
   // REQ-20260615-039 — always wrap the visible text in this inline span so
   // the parent's position-guide measurement is consistent across layouts.
@@ -1017,7 +1068,12 @@ export function SubtitleOverlay({
               path change. */}
           {karaokeWordsRendered.map((w, i) => {
             const brokenHere = karaokeBreaks.has(i)
-            const wordText = brokenHere ? w.text.replace(/^\s+/, '') : w.text
+            // REQ-0516 §1 — the leading-whitespace strip that used to be here
+            // (REQ-0294, `brokenHere ? replace(/^\s+/,'') : text`) moved into
+            // `karaokeWordsRendered`, where the general line-edge rule lives.
+            // Keeping a second, narrower copy at the render site is how the two
+            // would drift.
+            const wordText = w.text
             // REQ-0306 §3 (Option A) / REQ-0307 §4 — emphasised karaoke text
             // grows AND, when spoken, lights up in the emphasis colour.  A
             // span may cover only part of a word, so the word is split into
