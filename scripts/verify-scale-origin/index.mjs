@@ -38,7 +38,7 @@ import { createRequire } from 'module'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import http from 'http'
-import { spawnSync, execSync } from 'child_process'
+import { spawnSync } from 'child_process'
 import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 
@@ -107,8 +107,7 @@ function bundleAll() {
   })
 }
 bundleAll()
-// Re-required after every re-bundle (the negative control swaps source files).
-let burnSide = require(DUMP)
+const burnSide = require(DUMP)
 const { BASE, CUE_START, VIDEO_W, VIDEO_H } = burnSide
 
 // --- ffmpeg preflight ---------------------------------------------------------
@@ -274,7 +273,44 @@ const server = http.createServer((req, res) => {
 await new Promise((r) => server.listen(0, '127.0.0.1', r))
 const ORIGIN = `http://127.0.0.1:${server.address().port}`
 
-async function measurePreview(page, spec) {
+/**
+ * The NEGATIVE CONTROL, applied in the page just before each screenshot.
+ *
+ * It rewrites the overlay's own transform back into its pre-REQ-0514 shape:
+ * the animation layer moved from the END of the list to the FRONT (so the
+ * layout translate is inside the scale again), and — because the pre-fix code
+ * gave a rotated cue `center center` — that origin restored when the cue is
+ * rotated.  Nothing else is touched; the string being rearranged is the one
+ * production actually emitted this frame.
+ *
+ * ★ Why a rewrite and not a `git checkout` of the pre-fix file.  That is what
+ * this gate did first, and it is wrong twice over.  It rots: historical sources
+ * import the tree as it was then while the rest of the bundle is the tree as it
+ * is now — the sibling gate `verify:anim-first-frame` had been dead for four
+ * REQs from exactly that (see its `pre-fix-cue-animation.ts`).  And resolving
+ * "the fix commit" by `git rev-list --grep` silently picks up any LATER commit
+ * mentioning the same REQ, so the control ends up measuring the fixed code and
+ * passes while proving nothing — observed here, with a gate-maintenance commit.
+ * Rewriting the live string needs no history and cannot drift out of date: if
+ * production stops emitting `var(--cue-anim-transform)` in a list, the rewrite
+ * matches nothing, `applied` comes back 0, and the gate says so.
+ */
+async function applyPreFixComposition(page, rotationDeg) {
+  return page.evaluate((rot) => {
+    let applied = 0
+    for (const el of document.querySelectorAll('span')) {
+      const t = el.style.transform
+      if (!t || !t.includes('var(--cue-anim-transform)')) continue
+      const rest = t.replace('var(--cue-anim-transform)', '').trim()
+      el.style.transform = `var(--cue-anim-transform) ${rest}`.trim()
+      if (rot !== 0) el.style.transformOrigin = 'center center'
+      applied++
+    }
+    return applied
+  }, rotationDeg)
+}
+
+async function measurePreview(page, spec, preFix = false) {
   currentHtml = harnessHtml(spec)
   await page.goto(ORIGIN + '/')
   await page.waitForFunction('window.__ready === true', { timeout: 20000 })
@@ -317,6 +353,13 @@ async function measurePreview(page, spec) {
       window.__ui.setState({ videoSeekRequestSec: tt })
     }, t)
     await page.waitForTimeout(450)
+    if (preFix) {
+      // Re-applied per sample: React owns `style.transform` and re-renders.
+      const applied = await applyPreFixComposition(page, spec.rotation)
+      if (applied === 0) {
+        return { error: 'negative control matched no overlay — the transform shape changed' }
+      }
+    }
     const png = path.join(DIR, `p${i}.png`)
     await frame.screenshot({ path: png })
     const raw = path.join(DIR, `p${i}.rgb`)
@@ -385,10 +428,10 @@ page.on('console', (m) => {
   if (m.type() === 'error') console.error('  [console.error]', m.text().split('\n')[0].slice(0, 200))
 })
 
-async function runAll(label, previewOnly = false) {
+async function runAll(label, { previewOnly = false, preFix = false } = {}) {
   const results = []
   for (const [name, pair, spec] of CASES) {
-    const pre = await measurePreview(page, spec)
+    const pre = await measurePreview(page, spec, preFix)
     const burn = previewOnly ? null : measureBurn(spec)
     results.push({ name, pair, spec, pre, burn })
     const fmt = (r) => r?.error ? `ERROR(${r.error})` : `(${r.nx.toFixed(3)}, ${r.ny.toFixed(3)})`
@@ -467,32 +510,11 @@ console.log('=== current tree ===')
 const head = await runAll('HEAD')
 
 // --- Negative control ---------------------------------------------------------
-// The pre-fix preview composed the animation scale OUTSIDE the layout transform,
-// so the anchor translate was itself scaled and the cue drifted toward the
-// untranslated box corner.  Restore those files and prove the SAME sampler sees
-// it — a gate whose negative control passes is proving nothing.
-const FILES = [
-  'src/renderer/components/subtitle-overlay/subtitle-overlay.tsx',
-]
-let neg = null
-let preFixRef = execSync(`git rev-list -1 --grep=REQ-0514 HEAD -- ${FILES.join(' ')}`,
-  { cwd: REPO }).toString().trim()
-preFixRef = preFixRef ? `${preFixRef}~1` : 'HEAD'
-console.log(`\n=== negative control (pre-fix ${preFixRef}) ===`)
-// ★ Restore the WORKING TREE, not `HEAD`.  `git checkout HEAD -- <file>` is the
-// obvious-looking undo and it is wrong: it discards uncommitted edits, so
-// running this gate while developing the very fix it guards DELETES that fix
-// (it happened during REQ-0514 itself).  Snapshot the bytes that were on disk
-// when the run started and put exactly those back.
-const snapshot = FILES.map((f) => [path.join(REPO, f), readFileSync(path.join(REPO, f))])
-try {
-  execSync(`git checkout ${preFixRef} -- ${FILES.join(' ')}`, { cwd: REPO, stdio: 'pipe' })
-  bundleAll()
-  neg = await runAll('PRE ', true)
-} finally {
-  for (const [abs, bytes] of snapshot) writeFileSync(abs, bytes)
-  bundleAll()
-}
+// Same run, with the pre-REQ-0514 composition rewritten back onto the live
+// overlay — see `applyPreFixComposition`.  A gate whose negative control passes
+// is proving nothing.
+console.log('\n=== negative control (pre-REQ-0514 transform composition) ===')
+const neg = await runAll('PRE ', { previewOnly: true, preFix: true })
 
 await browser.close()
 
