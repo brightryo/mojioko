@@ -35,7 +35,7 @@ import { styleFieldsFromDefaults } from '@/lib/style-defaults-to-entry'
 import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { pickInitialOpenSection } from './step1-initial-open'
-import { pickTranscriptionTrack } from './step1-track-pick'
+import { pickTranscriptionTrack } from '../../shared/track-pick'
 
 // REQ-0185 §3 — `appVersion` prop dropped alongside the removed
 // top breadcrumb.  About dialog still shows the version.
@@ -296,7 +296,7 @@ export default function Step1Route(_: Step1RouteProps) {
     // now means the drawer's autoselect effect already sees a valid selection
     // and skips, and no intermediate track is ever shown.
     //
-    // REQ-0121 — audio-track fallback ladder.  See step1-track-pick.ts.
+    // REQ-0121 — audio-track fallback ladder.  See shared/track-pick.ts.
     //   preferred exists          → use it, no notice
     //   preferred missing, T1 ok  → use Track 1, non-blocking toast
     //   nothing usable            → leave selection empty (existing "no

@@ -12,6 +12,7 @@ import { probeVideo } from '../../services/ffprobe'
 import { checkModelInstalled } from '../../services/check-model-installed'
 import { loadSettings } from '../../services/settings-store'
 import { getBinPath, getModelsDir } from '../../lib/paths'
+import { pickTranscriptionTrack } from '../../../shared/track-pick'
 import { TRANSCRIPTION_DEFAULTS, ASS_MARGIN_LR_PX } from '../../../shared/constants'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
 import { autoLineBreakTranscribedEntries } from '../../services/headless-layout'
@@ -94,7 +95,80 @@ export async function runTranscribeCommand(ctx: CliContext, args: ParsedArgs): P
     })
   }
 
-  const track = Number.parseInt(optString(args.opts, 'track') || String(settings.defaultAudioTrackIndex ?? 1), 10)
+  // ★ REQ-0517 §1 — resolve the audio track AGAINST THE FILE.
+  //
+  // This used to be `parseInt(--track || settings.defaultAudioTrackIndex ?? 1)`
+  // with no reference to `video` at all.  A user who set their default to
+  // Track 2 in Settings — a legitimate, supported choice — then got `-map
+  // 0:a:1` on every single-track video, and ffmpeg's failure
+  // (`Failed to set value '0:a:1' for option 'map'`) never mentions the track.
+  // The GUI had been rounding all along (`pickTranscriptionTrack`); only the
+  // headless paths had not.
+  //
+  // No extra probing: `probeVideo(input)` ran a few lines above and
+  // `video.audioTracks` is exactly what the ladder needs, so the ffprobe count
+  // for a transcribe is unchanged at one.
+  //
+  // The two cases are deliberately NOT treated alike:
+  //
+  //   - `--track N` is an explicit instruction.  If N is not in the file we
+  //     REFUSE (`USAGE`) rather than quietly substituting another track —
+  //     returning something other than what was asked for is the family
+  //     REQ-0499 onward has been removing, and here it would mean
+  //     transcribing the wrong language.
+  //   - the SETTING is a preference, not an instruction, so it rounds through
+  //     the shared ladder and says so in a warning.
+  const trackOpt = optString(args.opts, 'track')
+  const trackFallback: CliWarning[] = []
+  let track: number
+  if (trackOpt) {
+    const asked = Number.parseInt(trackOpt, 10)
+    if (!Number.isFinite(asked) || asked < 1) {
+      throw new CliError('USAGE', `--track は 1 以上の整数: ${trackOpt}`, '例: --track 1')
+    }
+    if (!video.audioTracks.some((t) => t.index === asked)) {
+      const have = video.audioTracks.map((t) => t.index).join(', ') || 'なし'
+      throw new CliError(
+        'USAGE',
+        `--track ${asked} はこのファイルに存在しません（音声トラック: ${have}）。`,
+        video.audioTracks.length > 0
+          ? `--track ${video.audioTracks[0].index} など、存在する番号を指定してください。`
+          : 'このファイルには音声トラックがありません。',
+        { requested: asked, available: video.audioTracks.map((t) => t.index) },
+      )
+    }
+    track = asked
+  } else {
+    const preferred = settings.defaultAudioTrackIndex ?? 1
+    // The GUI's own ladder, not a second copy of it (REQ-0517 §1-1).
+    const picked = pickTranscriptionTrack(video.audioTracks, preferred)
+    if (picked.trackIndex === null) {
+      throw new CliError(
+        'UNSUPPORTED_FORMAT',
+        `音声トラックがありません: ${input}`,
+        '音声を含む動画/音声ファイルを指定してください。',
+        { availableTracks: video.audioTracks.map((t) => t.index) },
+      )
+    }
+    track = picked.trackIndex
+    if (picked.fallbackUsed) {
+      // REQ-0517 §1-4 — never round silently.  The caller has to be able to
+      // tell "I set 2 and got 2" from "I set 2 and this file only has 1".
+      trackFallback.push({
+        code: 'AUDIO_TRACK_FALLBACK',
+        message:
+          `既定の音声トラックは ${preferred} ですが、このファイルには存在しないため ` +
+          `トラック ${track} を使いました。`,
+        detail: {
+          preferred,
+          used: track,
+          available: video.audioTracks.map((t) => t.index),
+          reason: '設定「デフォルト音声トラック」の番号が入力ファイルに無い場合、トラック 1 に落とします（GUI と同じ規則）。',
+          remedy: `意図した音声が別なら --track で明示してください（このファイルの音声トラック: ${video.audioTracks.map((t) => t.index).join(', ')}）。`,
+        },
+      })
+    }
+  }
   const advanced = { ...TRANSCRIPTION_DEFAULTS, ...settings.transcriptionAdvanced }
   const lang = optString(args.opts, 'lang')
   if (lang) advanced.language = lang
@@ -222,7 +296,7 @@ export async function runTranscribeCommand(ctx: CliContext, args: ParsedArgs): P
     })
   }
 
-  const warnings: CliWarning[] = []
+  const warnings: CliWarning[] = [...trackFallback]
   if (fellBack) {
     warnings.push({ code: 'GPU_INIT_FAILED', message: 'CUDA 利用不可のため CPU にフォールバックしました。', detail: { fellBackTo: 'cpu' } })
   }

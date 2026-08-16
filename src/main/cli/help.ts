@@ -154,7 +154,9 @@ const COMMANDS: CommandDoc[] = [
       STRICT,
     ],
     examples: ['mojioko transcribe input.mp4 -o out.mojioko --lang ja'],
-    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'MODEL_NOT_FOUND', 'TRANSCRIBE_FAILED', 'OUTPUT_WRITE_FAILED', 'GPU_INIT_FAILED'],
+    // REQ-0517 §1-3 — `--track N` for a track the file does not have is a
+    // USAGE refusal, not a silent substitution.
+    errorCodes: ['USAGE', 'INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'MODEL_NOT_FOUND', 'TRANSCRIBE_FAILED', 'OUTPUT_WRITE_FAILED', 'GPU_INIT_FAILED'],
   },
   {
     name: 'translate',
@@ -431,6 +433,13 @@ const WARNING_CODES: [string, string][] = [
    */
   ['FONT_TIER_SUBSTITUTED', '無料版で有料フォントを Noto へ置換（成功レスポンス内・REQ-0508）'],
   ['FONT_UNAVAILABLE', 'フォントファイルが無く Noto へ置換して続行（成功レスポンス内・REQ-0509）'],
+  // REQ-0517 §1-4 — the settings default did not exist in the input file, so
+  // the shared ladder fell back to Track 1.  Advertised together with its
+  // emitter (`commands/transcribe.ts`), per the scan test's rule above.
+  ['AUDIO_TRACK_FALLBACK', '既定の音声トラックが入力に無く、トラック 1 で続行（成功レスポンス内・REQ-0517）'],
+  // REQ-0516 §3 — scale/pop animation on a multi-line cue: the burn's line
+  // pitch does not scale, so the preview and the output differ.
+  ['SCALE_ANIM_LINE_PITCH_FIXED', '複数行 cue の scale/pop で行間が拡大縮小しない（成功レスポンス内・REQ-0516）'],
 ]
 
 const CHAINED_EXAMPLE = [

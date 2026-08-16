@@ -241,7 +241,7 @@ export function SettingsDialog() {
               {/* REQ-0121 — default transcription audio track (1..6).  Fixed
                   1..6 dropdown regardless of the current video's track count
                   (OBS supports up to 6).  Runtime fallback lives in
-                  step1-track-pick.ts (preferred → Track 1 → none). */}
+                  shared/track-pick.ts (preferred → Track 1 → none). */}
               <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
                 {t('general.defaultAudioTrack')}
               </span>

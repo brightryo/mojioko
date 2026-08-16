@@ -879,6 +879,25 @@ try {
 
   // 4) agent loop — only if the box is ready (avoids a multi-GB download here).
   if (st.json?.data?.ready) {
+    // ★ REQ-0517 §1-3 — an explicit `--track` for a track the file does not
+    // have is REFUSED, not quietly redirected to another one.  Env-independent:
+    // the fixture always has exactly one audio stream, so track 9 never exists
+    // on any machine, whatever the caller's `defaultAudioTrackIndex` is.
+    //
+    // §1-5 — the `--track 1` pins added in REQ-0516 STAY.  The rounding added
+    // in REQ-0517 would keep them passing without it, but pinning the track
+    // states what the fixture actually is and keeps these assertions
+    // independent of the runner's settings; the rounding itself is covered by
+    // `tests/unit/track-pick-req-0517.test.ts` and by the end-to-end runs in
+    // RES-0517 §1-5.  This assertion is the one thing the smoke can check
+    // about tracks that no machine's settings can change.
+    const trackClip = join(work, 'track-probe.mp4')
+    makeClip(trackClip, '320x180')
+    const badTrack = cli(['transcribe', trackClip, '-o', join(work, 'bad-track.mojioko'), '--track', '9'], 60000)
+    check('explicit --track for a track the file lacks → USAGE / exit 2',
+      badTrack.code === 2 && badTrack.json?.code === 'USAGE',
+      `${badTrack.code}/${badTrack.json?.code}`)
+
     const sizes = ['640x360', '1280x720']
     for (let i = 0; i < sizes.length; i++) {
       const clip = join(work, `clip${i}.mp4`)

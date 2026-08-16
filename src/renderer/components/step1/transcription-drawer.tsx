@@ -40,7 +40,7 @@ import { useProjectStore } from '@/stores/project-store'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { useStoreUpsellStore } from '@/stores/store-upsell-store'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
-import { pickTranscriptionTrack } from '@/routes/step1-track-pick'
+import { pickTranscriptionTrack } from '../../../shared/track-pick'
 import type { AudioTrack, VideoInfo } from '../../../shared/types'
 
 /**
