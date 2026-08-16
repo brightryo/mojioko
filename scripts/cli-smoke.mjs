@@ -189,8 +189,69 @@ try {
   // 3) error path returns the spec code + a remedy.
   const badModel = cli(['transcribe', join(work, 'nope.mp4'), '-o', join(work, 'o.mojioko')], 40000)
   check('missing input → INPUT_NOT_FOUND / exit 3', badModel.code === 3 && badModel.json?.code === 'INPUT_NOT_FOUND', `got ${badModel.code}/${badModel.json?.code}`)
-  const notInstalled = cli(['tools', 'use', 'whisper', '--model', 'large-v3'], 40000)
-  check('uninstalled model → MODEL_NOT_FOUND / exit 5 + remedy', notInstalled.code === 5 && notInstalled.json?.code === 'MODEL_NOT_FOUND' && !!notInstalled.json?.remedy, notInstalled.json?.remedy || '')
+  // ★ REQ-0516 §2 — the Whisper model contract, WITHOUT assuming what this
+  // machine happens to have downloaded.
+  //
+  // The contract `tools use whisper --model <id>` implements has two halves,
+  // and they are different errors on purpose (src/main/cli/commands/tools.ts):
+  //
+  //   - an id that is not a known model      → USAGE / exit 2   ("no such model")
+  //   - a known id that is not installed     → MODEL_NOT_FOUND / exit 5 + remedy
+  //
+  // This assertion used to hardcode `--model large-v3` and assume it was NOT
+  // installed.  On a machine that has downloaded it — the owner's, since
+  // REQ-0514 — the smoke failed for a reason that had nothing to do with the
+  // build.  Same family as the REQ-0511 audit: an assertion that encodes the
+  // author's environment.
+  //
+  // So the not-installed model is now DISCOVERED from `tools list`, never
+  // named here.  Swapping in a different hardcoded id would only move the
+  // problem to whoever downloads that one next.
+  const toolsList = cli(['tools', 'list', '--json'], 60000)
+  const whisperModels = toolsList.json?.data?.whisperModels?.models ?? []
+  check('tools list --json reports the whisper model inventory',
+    Array.isArray(whisperModels) && whisperModels.length > 0,
+    `${whisperModels.length} models`)
+
+  // Half 1 — always reachable, on every machine, whatever is installed.
+  // This is the half that distinguishes the two errors, and it had no test.
+  const bogus = cli(['tools', 'use', 'whisper', '--model', 'no-such-model-req0516'], 40000)
+  check('unknown model id → USAGE / exit 2 (NOT MODEL_NOT_FOUND)',
+    bogus.code === 2 && bogus.json?.code === 'USAGE',
+    `${bogus.code}/${bogus.json?.code}`)
+
+  // Half 2 — needs a known model that is genuinely absent, so it runs only
+  // when this machine has one.  On a fully-downloaded machine there is no
+  // input for it; rather than fake the coverage, assert the complementary
+  // deterministic fact (an installed model IS selectable) and say out loud
+  // which branch ran, so the gap is visible in the log instead of silent.
+  // `status` is a THREE-value enum — `not-installed` | `installed` | `active`
+  // (src/main/ipc/transcription.ts:94-98).  Test for the absent value
+  // explicitly: `!== 'installed'` also matches the ACTIVE model, which is
+  // installed, and would send this assertion after a model that is present.
+  const absent = whisperModels.find((m) => m.status === 'not-installed')
+  if (absent) {
+    const notInstalled = cli(['tools', 'use', 'whisper', '--model', absent.id], 40000)
+    check(`uninstalled model "${absent.id}" → MODEL_NOT_FOUND / exit 5 + remedy`,
+      notInstalled.code === 5 && notInstalled.json?.code === 'MODEL_NOT_FOUND' && !!notInstalled.json?.remedy,
+      notInstalled.json?.remedy || '')
+  } else {
+    // ★ Deliberately assert NOTHING here, and say so.
+    //
+    // The obvious filler — "an installed model is selectable" — would run
+    // `tools use`, which WRITES `settings.activeModelId`.  A smoke test must
+    // not mutate the developer's real settings: doing exactly that during
+    // REQ-0516 switched the owner's active model out from under them and took
+    // eight later `run --burn` assertions down with it.  There is no
+    // read-only way to reach the MODEL_NOT_FOUND branch on a machine where
+    // every known model is present, so the honest outcome is a visible gap
+    // rather than a fake green.
+    console.log(`  NOTE  every known Whisper model is installed here, so the `
+      + `MODEL_NOT_FOUND branch had no input and was NOT exercised this run. `
+      + `It runs on any machine missing a model (fresh checkout, CI). Making it `
+      + `deterministic everywhere needs a models-dir override in production `
+      + `paths — see RES-0516 §2.`)
+  }
 
   // REQ-0459 §1/§5 — the .mojioko file-association change must NOT swallow CLI:
   // an unknown token, and a .mojioko path that does NOT exist, both stay CLI
@@ -823,7 +884,18 @@ try {
       const clip = join(work, `clip${i}.mp4`)
       const out = join(work, `out${i}.mp4`)
       makeClip(clip, sizes[i])
-      const run = cli(['run', clip, '--burn', '-o', out], 300000)
+      // ★ REQ-0516 §2 — `--track 1` is a FACT about the fixture, not a
+      // workaround: `makeClip` writes exactly one audio stream, so track 1 is
+      // the only one that exists.  Without it the run inherits
+      // `settings.defaultAudioTrackIndex` from whoever is running the smoke
+      // (`src/main/cli/commands/transcribe.ts:97`), and a developer who has
+      // ever picked track 2 in Settings gets `-map 0:a:1` against a one-track
+      // clip — eight assertions here failed for that reason during REQ-0516,
+      // with a raw ffmpeg message that never mentions the track.  Second
+      // instance of the same family as the model assertion above.
+      // The unclamped CLI default itself is reported in RES-0516 §2, not fixed
+      // here.
+      const run = cli(['run', clip, '--burn', '--track', '1', '-o', out], 300000)
       check(`run --burn #${i} exits 0`, run.code === 0, `code=${run.code}`)
       check(`run --burn #${i} stages transcribe+burn`, JSON.stringify(run.json?.data?.stages) === JSON.stringify(['transcribe', 'burn']))
       check(`run --burn #${i} produced a video`, existsSync(out) && probeWH(out).includes(','), probeWH(out))
