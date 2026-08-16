@@ -34,6 +34,8 @@
  * gap to change on a single-line cue, a value that equals the default — are
  * deliberately NOT warned about; they are listed in RES-0502 instead.
  */
+import { isAnimationInert, resolveAnimation } from '../../shared/cue-animation'
+import { ASS_HARD_BREAK } from '../../shared/line-spacing'
 import { resolveEmphasis } from '../../shared/emphasis'
 import { applyFontPolicy, groupFontSubstitutions, type FontTierSubstitution } from '../../shared/font-tier'
 import { getFontMeta, type FontId } from '../../shared/fonts'
@@ -133,6 +135,64 @@ export function detectNoOpCombinations(entries: readonly SubtitleEntry[]): CliWa
         cueCount: boxInvisible.length,
         reason: '背景ボックスと縁は同じアルファチャンネル（\\3a）を共有するため、0 にすると縁も消えます。',
         remedy: '--background-opacity を 1 以上にするか、箱が不要なら --background off にしてください。',
+      },
+    })
+  }
+
+  // (5) REQ-0516 §3 — a scale animation on a MULTI-LINE cue: the line pitch
+  // does not scale in the burn, and the preview says otherwise.
+  //
+  // The all-`\pos` runtime emits a multi-line cue as one event PER LINE, so
+  // libass scales each line about that line's own anchor and the distance
+  // between the lines stays put.  The preview scales the whole block, gaps
+  // included.  Measured at `\fs100`, S = 0.705 (RES-0514 §5-3), as the cue's
+  // ink height against its settled height — a pure block scale would give
+  // 0.705 for all of them:
+  //
+  //     1 line          0.732        2 lines, spacing 0     0.904
+  //     2 lines, -20 %  0.890        2 lines, +100 %        0.941
+  //
+  // NOTE it fires at line spacing 0 as well: the per-line split is what the
+  // all-`\pos` placement does, not something line spacing turns on.
+  //
+  // This is the one entry here that is a preview↔burn DIVERGENCE rather than a
+  // pure no-op, which is the same shape `detectFontSubstitutions` has (it
+  // reports a change, not an omission).  It belongs in this pass anyway: from
+  // the caller's side the animation was accepted and part of it — the pitch —
+  // provably does nothing, which is exactly what this function reports.
+  //
+  // Fixing it is not a warning's job: the per-line `\pos` values would have to
+  // move over time, and `\t` cannot animate `\pos` (`\move` is one per event
+  // and linear only — `dev-docs/specs/event-splitting.md`).  Owner decision,
+  // REQ-0516 §3-1: warn, do not fix.
+  const scaledMultiline = cues.filter((e) => {
+    // The renderer's own resolver, not a re-derivation — same rule as the
+    // emphasis check above.
+    const spec = resolveAnimation(e)
+    if (isAnimationInert(spec)) return false
+    if (spec.type !== 'scale' && spec.type !== 'pop') return false
+    // Lines with something ON them.  Counting raw `\N`s would fire on a cue
+    // like `テスト\N` — the writer does emit two events for it, but the second
+    // draws nothing, so there is no visible pitch to be wrong about and the
+    // warning would be noise.  (`visible()` above cannot catch that: it trims
+    // the whole cue, and a cue of `  \N  ` trims to the sentinel, not to ''.)
+    return e.text.split(ASS_HARD_BREAK).filter((line) => line.trim() !== '').length > 1
+  })
+  if (scaledMultiline.length > 0) {
+    warnings.push({
+      code: 'SCALE_ANIM_LINE_PITCH_FIXED',
+      message:
+        `拡大縮小するアニメーション（scale / pop）が有効な複数行 cue が ${scaledMultiline.length} 件あります。` +
+        '焼き込みでは行と行の間隔だけが拡大縮小しません（文字は拡大縮小します）。' +
+        'プレビューは行間ごと拡大縮小するため、見え方が異なります。',
+      detail: {
+        cueCount: scaledMultiline.length,
+        reason:
+          '複数行の cue は 1 行 = 1 イベントとして出力され、libass は各行をその行自身の' +
+          'アンカーを中心に拡大縮小するため、行のピッチは固定のままになります。行間の設定が 0 でも同じです。',
+        remedy:
+          '行間まで拡大縮小させたい場合は、その cue を 1 行にするか、アニメーションを ' +
+          'none / fade / blur のいずれかにしてください。',
       },
     })
   }

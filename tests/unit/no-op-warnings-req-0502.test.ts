@@ -232,3 +232,88 @@ describe('REQ-0502 §1 — multi-time parsing and naming', () => {
     expect(new Set(paths).size).toBe(4)
   })
 })
+
+/**
+ * REQ-0516 §3 — a scale animation on a multi-line cue.
+ *
+ * The all-`\pos` runtime emits a multi-line cue as one event per line, so
+ * libass scales each line about its own anchor and the distance BETWEEN the
+ * lines never changes.  The preview scales the whole block.  Owner decision
+ * (REQ-0516 §3-1): warn, do not fix — animating the per-line `\pos` values is
+ * not expressible in `\t`.
+ *
+ * The firing condition is deliberately narrow (§3-3): a warning that fires on
+ * ordinary input is noise, so BOTH halves of each axis are asserted.
+ */
+describe('REQ-0516 §3 — scale animation on a multi-line cue', () => {
+  // The libass hard-break sentinel, built without an escape so no tooling
+  // between here and the file can eat the backslash (one did, and the whole
+  // block silently tested single-line cues instead).
+  const BR = String.fromCharCode(92) + 'N'
+  const anim = (type: NonNullable<SubtitleEntry['animationType']>) => ({
+    animationType: type,
+    animationInEnabled: true,
+    animationOutEnabled: true,
+    animationDurationSec: 0.4,
+    animationStartScalePercent: 30,
+  })
+  const has = (entries: SubtitleEntry[]) => codes(entries).includes('SCALE_ANIM_LINE_PITCH_FIXED')
+
+  it('★ fires on multi-line + scale', () => {
+    expect(has([cue({ text: `テスト${BR}です`, ...anim('scale') })])).toBe(true)
+  })
+
+  it('★ fires on multi-line + pop — it carries the same scale channel', () => {
+    expect(has([cue({ text: `テスト${BR}です`, ...anim('pop') })])).toBe(true)
+  })
+
+  it('★ fires at line spacing 0 — the per-line split is the placement, not the spacing', () => {
+    expect(has([cue({ text: `テスト${BR}です`, ...anim('scale'), lineSpacingPercent: 0 })])).toBe(true)
+  })
+
+  it('★ does NOT fire on a single-line cue with the same animation', () => {
+    expect(has([cue({ text: 'テストです', ...anim('scale') })])).toBe(false)
+    expect(has([cue({ text: 'テストです', ...anim('pop') })])).toBe(false)
+  })
+
+  it('★ does NOT fire on a multi-line cue with no animation', () => {
+    expect(has([cue({ text: `テスト${BR}です` })])).toBe(false)
+    expect(has([cue({ text: `テスト${BR}です`, ...anim('none') })])).toBe(false)
+  })
+
+  it('★ does NOT fire for animations with no scale channel', () => {
+    for (const t of ['fade', 'blur'] as const) {
+      expect(has([cue({ text: `テスト${BR}です`, ...anim(t) })]), t).toBe(false)
+    }
+  })
+
+  it('does NOT fire when the animation is inert (duration 0, or both ends off)', () => {
+    expect(has([cue({ text: `テスト${BR}です`, ...anim('scale'), animationDurationSec: 0 })])).toBe(false)
+    expect(has([cue({
+      text: `テスト${BR}です`,
+      ...anim('scale'),
+      animationInEnabled: false,
+      animationOutEnabled: false,
+    })])).toBe(false)
+  })
+
+  it('ignores deleted and blank cues, like every other check here', () => {
+    expect(has([cue({ text: `テスト${BR}です`, ...anim('scale'), isDeleted: true })])).toBe(false)
+    expect(has([cue({ text: `  ${BR}  `, ...anim('scale') })])).toBe(false)
+  })
+
+  it('counts the affected cues and says both what breaks and that the preview differs', () => {
+    const w = detectNoOpCombinations([
+      cue({ id: 'a', text: `テスト${BR}です`, ...anim('scale') }),
+      cue({ id: 'b', text: `もう${BR}一つ`, ...anim('pop') }),
+      cue({ id: 'c', text: 'single', ...anim('scale') }),
+    ]).find((x) => x.code === 'SCALE_ANIM_LINE_PITCH_FIXED')
+    expect(w).toBeDefined()
+    expect((w!.detail as { cueCount: number }).cueCount).toBe(2)
+    // §3-4 — the caller must learn WHAT does not happen and that the preview
+    // disagrees, or "プレビューでは縮んだのに出力では縮まない" stays a mystery.
+    expect(w!.message).toContain('行と行の間隔')
+    expect(w!.message).toContain('プレビュー')
+    expect((w!.detail as { remedy: string }).remedy).toBeTruthy()
+  })
+})
