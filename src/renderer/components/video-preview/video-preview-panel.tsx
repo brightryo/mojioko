@@ -6,19 +6,20 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore, isAnyOverlayOpen } from '@/stores/ui-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { usePreviewMixStore } from '@/stores/preview-mix-store'
+import { useAppEnvStore } from '@/stores/app-env-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { shellShowInFolder } from '@/services/dialog'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
-import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
+import { SubtitleOverlay, estimateOverlayHeightPx } from '@/components/subtitle-overlay/subtitle-overlay'
 import { PositionGuideOverlay } from '@/components/subtitle-overlay/position-guide-overlay'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { hexWithOpacity } from '../../../shared/alpha'
-import { findActiveEntryId, findActiveEntryIds } from '@/lib/active-entry'
+import { findActiveEntryId, findActiveEntryIds, computeFixedStackOffsets } from '@/lib/active-entry'
 import {
   previewPxToAss,
   getAnchorAssPosition,
@@ -26,7 +27,6 @@ import {
 } from '@/lib/preview-coords'
 import { editedDuration, editedToOrig, effectiveEntryState, origToEdited } from '../../../shared/cuts'
 import { resolveCueAnimState } from '../../../shared/cue-animation'
-import { formatTimecode } from '../../../shared/timecode'
 import { applyCueAnimationPaint, cueAnimOpacityCss, cueAnimTransformCss } from '@/lib/cue-anim-paint'
 import { createPreviewSeeker, type PreviewSeeker } from '@/lib/preview-seek'
 import type { SubtitleEntry } from '../../../shared/types'
@@ -76,8 +76,20 @@ function getBasename(filePath: string): string {
   return filePath.split(/[\\/]/).pop() ?? filePath
 }
 
-// REQ-0382 §A — the seekbar timecode is now `M:SS.mmm (fF)` (frame-precision),
-// formatted by the pure `formatTimecode` in `shared/timecode.ts`.
+/**
+ * Format seconds to "M:SS" or "H:MM:SS".
+ * Returns "0:00" for non-finite / negative values (before metadata loads).
+ */
+function formatTime(sec: number): string {
+  if (!isFinite(sec) || isNaN(sec) || sec < 0) return '0:00'
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = Math.floor(sec % 60)
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
+  return `${m}:${String(s).padStart(2, '0')}`
+}
 
 // findActiveEntryId moved to @/lib/active-entry for shared use + unit tests.
 // REQ-080 #1: range semantics changed to [start, end) — end exclusive.
@@ -127,19 +139,14 @@ export function VideoPreviewPanel() {
   // REQ-20260613-016 Phase 4: the global "字幕レイアウト" + "文字背景"
   // panels that previously lived in this component were retired — each
   // SubtitleEntry now carries its own per-row layout / background, edited
-  // from the Style column in SubtitleTable (機能A).  `activeFontId` is still
-  // consumed here to pre-load the subtitle font (ensureFontLoaded below); the
-  // global burnin / subtitleBackground store slices were dropped from
-  // settings-store in the same phase.
-  //
-  // REQ-0391 — the emphasis-aware stack-height memo that also read `activeFontId`
-  // / `isMsix` is gone: all-`\pos` is WYSIWYG with no runtime auto-stacking, so
-  // the preview no longer computes stack offsets (see the overlay map below).
+  // from the Style column in SubtitleTable (機能A).  Only `activeFontId`
+  // is still consumed here to feed estimateOverlayHeightPx via the stack
+  // memo below; the global burnin / subtitleBackground store slices were
+  // dropped from settings-store in the same phase.
   const activeFontId       = useSettingsStore((s) => s.activeFontId)
-  // REQ-0443 §1 — preview timecode verbosity (simple M:SS ↔ detailed
-  // M:SS.mmm (fF)), persisted in AppSettings.  Toggled by clicking the readout.
-  const playbackTimeDetailed = useSettingsStore((s) => s.playbackTimeDetailed)
-  const setPlaybackTimeDetailed = useSettingsStore((s) => s.setPlaybackTimeDetailed)
+  // REQ-0376 §A — tier flag for the emphasis-aware stack height (mirrors
+  // subtitle-overlay's `isMsix ?? false`; null pre-boot renders as free tier).
+  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
   // REQ-20260615-050 — fade duration is now per-entry; no global slice
   // is read here.  The rAF loop below pulls `entry.fadeDurationSec`
   // from each active SubtitleEntry.
@@ -678,16 +685,23 @@ export function VideoPreviewPanel() {
     ? videoContainerWidth / videoWidthPx
     : 1
 
-  // REQ-0391 (positioning-redesign Phase 1b) — runtime auto-stacking is GONE.
-  // MOJIOKO is the single positioning authority (all-`\pos`) and it is WYSIWYG:
-  // every cue renders at its own authored position and overlapping cues overlap,
-  // exactly as the burn-in now does.  The preview therefore no longer computes
-  // `computeFixedStackOffsets` for live positioning; `stackOffsetPx` is 0 for
-  // every overlay.  (`computeFixedStackOffsets` / `estimateOverlayHeightPx`
-  // remain in the codebase for the Phase 4 migration and the verify:pos-parity
-  // reference path.)  z-order is unchanged: `overlayEntries` DOM paint order
-  // equals the ASS Dialogue emission order, so a later / duplicated cue paints
-  // on top in both preview and burn.
+  const stackOffsetsByEntryId = useMemo(() => {
+    if (videoWidthPx <= 0 || videoContainerWidth <= 0) {
+      return new Map<string, number>()
+    }
+    return measureSync('vpp.stackOffsets', () => computeFixedStackOffsets(
+      sortedActiveEntries,
+      (entry) => estimateOverlayHeightPx(
+        entry,
+        activeFontId,
+        videoWidthPx,
+        videoContainerWidth,
+        // REQ-0376 §A — tier gate for emphasis-aware height; matches the emit
+        // path so preview and burn-in reserve the same box for an emphasised cue.
+        isMsix,
+      ),
+    ))
+  }, [sortedActiveEntries, activeFontId, videoWidthPx, videoContainerWidth, isMsix])
 
   // Load the subtitle font on mount and refresh whenever the active font
   // changes so the preview reflects the new metrics without requiring a
@@ -1259,7 +1273,7 @@ export function VideoPreviewPanel() {
           }
         }}
         className={cn(
-          'grid items-center gap-2 px-3 py-1.5 border-b border-line/50 flex-shrink-0 min-w-0',
+          'grid items-center gap-2 px-3 py-1.5 border-b border-border/50 flex-shrink-0 min-w-0',
           // Three-column grid: title left, filename+folder center,
           // chevron right.  Center column is `min-w-0` so long file
           // names truncate within their allotted middle band without
@@ -1277,7 +1291,7 @@ export function VideoPreviewPanel() {
         {/* Column 2 — filename + folder icon, centred as a pair */}
         <div className="flex items-center justify-center gap-1.5 min-w-0">
           <span
-            className="min-w-0 truncate text-body-sm text-fg-primary/80"
+            className="min-w-0 truncate text-body-sm text-foreground/80"
             title={video.path}
           >
             {filename}
@@ -1292,8 +1306,8 @@ export function VideoPreviewPanel() {
             }}
             title={t('videoPreview.showInFolder')}
             className={cn(
-              'flex-shrink-0 rounded p-0.5 text-fg-secondary transition-colors duration-150',
-              'hover:text-fg-primary focus:outline-none focus-visible:text-fg-primary',
+              'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
+              'hover:text-foreground focus:outline-none focus-visible:text-foreground',
             )}
             aria-label={t('videoPreview.showInFolder')}
           >
@@ -1347,19 +1361,11 @@ export function VideoPreviewPanel() {
         className="flex-1 min-h-0 flex items-center justify-center p-2 bg-surface-0"
       >
         {hasError ? (
-          <span className="px-6 text-body-sm text-fg-secondary">{t('videoPreview.error')}</span>
+          <span className="px-6 text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
         ) : videoFrameW > 0 && videoFrameH > 0 ? (
           <div
             ref={videoContainerRef}
-            // REQ-0398 §1 — `isolate` (isolation: isolate) confines the subtitle
-            // overlays to their OWN stacking context.  Each cue's CSS `z-index`
-            // mirrors its z-order `layer` (subtitle-overlay.tsx), so without this
-            // a high layer produced a high z-index that competed with the app's
-            // chrome and could paint the subtitle ABOVE a drawer's scrim or the
-            // export-result dialog.  Isolated, the whole preview participates in
-            // the parent stacking order as a single unit (z-auto), so no cue
-            // z-index — however large — can rise above the surrounding UI.
-            className="relative bg-input rounded overflow-hidden isolate"
+            className="relative bg-input rounded overflow-hidden"
             style={{
               width: `${videoFrameW}px`,
               height: `${videoFrameH}px`,
@@ -1416,7 +1422,7 @@ export function VideoPreviewPanel() {
               />
             )}
             {videoContainerWidth > 0 && overlayEntries.map((entry) => {
-              const offset = 0 // REQ-0391 — no runtime auto-stacking (WYSIWYG)
+              const offset = stackOffsetsByEntryId.get(entry.id) ?? 0
               const isSelected = entry.id === selectedEntryId
               const isDragging = entry.id === draggingEntryId
               // REQ-0378 — seed the overlay's animation custom properties from
@@ -1475,14 +1481,14 @@ export function VideoPreviewPanel() {
 
       {/* Seekbar — REQ-20260614-001 §3: moved from the right column to
           DIRECTLY below the video frame. */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-line/50 flex-shrink-0">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border/50 flex-shrink-0">
         <button
           type="button"
           onClick={togglePlay}
           disabled={hasError || duration === 0}
           className={cn(
             'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
-            'bg-surface-2 text-fg-primary transition-all duration-150',
+            'bg-secondary text-foreground transition-all duration-150',
             'hover:bg-accent active:scale-95',
             'focus:outline-none focus-visible:outline-none',
             'disabled:cursor-not-allowed disabled:opacity-40'
@@ -1512,22 +1518,14 @@ export function VideoPreviewPanel() {
           }}
           className="flex-1 h-1.5 cursor-pointer disabled:cursor-default disabled:opacity-40"
         />
-        <button
-          type="button"
-          onClick={() => setPlaybackTimeDetailed(!playbackTimeDetailed)}
-          title={t('videoPreview.timecodeToggle')}
-          aria-label={t('videoPreview.timecodeToggle')}
-          className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-fg-secondary hover:text-fg-primary cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:outline-none"
-        >
-          {/* REQ-0382 §A / REQ-0443 §1 — click toggles simple (M:SS) ↔ detailed
-              (M:SS.mmm (fF)); the choice is persisted in AppSettings. */}
-          {formatTimecode(editedCurrentTime, video.fps, playbackTimeDetailed)}&nbsp;/&nbsp;{formatTimecode(editedTotalSec, video.fps, playbackTimeDetailed)}
-        </button>
+        <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-muted-foreground">
+          {formatTime(editedCurrentTime)}&nbsp;/&nbsp;{formatTime(editedTotalSec)}
+        </span>
       </div>
 
       {/* Warning / approximate-preview note — REQ-20260614-001 §3:
           relocated below the seekbar. */}
-      <p className="px-3 py-1 text-caption text-fg-secondary flex-shrink-0">
+      <p className="px-3 py-1 text-caption text-muted-foreground flex-shrink-0">
         {t('subtitleLayout.previewNote')}
       </p>
       </div>{/* REQ-0186 §1 — close media-stack collapse wrapper */}

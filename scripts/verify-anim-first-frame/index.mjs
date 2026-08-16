@@ -8,14 +8,15 @@
  * (~1) before the animation's initial (~0) — logic tests could not see it.
  *
  * Pass: for every entrance type, the first present frame's opacity is LOW
- * (animation initial), not ~1.  A negative control (pre-fix files) proves the
- * sampler detects the flash.  Requires playwright + esbuild (already deps).
+ * (animation initial), not ~1.  A negative control — the same harness with the
+ * pre-REQ-0379 rule swapped back into `resolveCueAnimState`, see
+ * `pre-fix-cue-animation.ts` — proves the sampler detects the flash.  Requires
+ * playwright + esbuild (already deps); touches git not at all.
  */
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { readFileSync, writeFileSync } from 'node:fs'
-import { execSync } from 'node:child_process'
 
 const require = createRequire(import.meta.url)
 const esbuild = require('esbuild')
@@ -31,8 +32,32 @@ const START = 2.0
 const TYPES = ['blur', 'fade', 'scale', 'pop']
 const FLASH_OPACITY = 0.5 // first-present opacity above this = settled flash
 
-function bundle() {
-  esbuild.buildSync({
+const PRE_FIX_ANIM = path.join(HERE, 'pre-fix-cue-animation.ts')
+
+/**
+ * Bundle the harness.  `preFix` swaps the ONE decision under test
+ * (`resolveCueAnimState`) for its pre-REQ-0379 form — see
+ * `pre-fix-cue-animation.ts` for why the control is a perturbation rather than
+ * a `git checkout` of the historical sources.  Everything else in both bundles
+ * is the real production code.
+ *
+ * The swap is an onResolve plugin, not an `alias`: `cue-animation` is imported
+ * by several files at several relative depths, and an alias matches the
+ * specifier STRING, so it would catch some importers and miss others.
+ */
+async function bundle(preFix = false) {
+  const swapAnimation = {
+    name: 'pre-fix-cue-animation',
+    setup(build) {
+      build.onResolve({ filter: /(^|[\\/])cue-animation$/ }, (args) => {
+        // The shim itself imports the real module by absolute path, so it is
+        // not caught here and there is no cycle.
+        if (args.importer === PRE_FIX_ANIM) return null
+        return { path: PRE_FIX_ANIM }
+      })
+    },
+  }
+  await esbuild.build({
     entryPoints: [path.join(HERE, 'harness-entry.tsx')],
     bundle: true,
     outfile: OUT,
@@ -44,6 +69,7 @@ function bundle() {
       '@': path.join(REPO, 'src/renderer'),
       'react-i18next': path.join(HERE, 'react-i18next-stub.ts'),
     },
+    plugins: preFix ? [swapAnimation] : [],
     logLevel: 'silent',
   })
 }
@@ -165,8 +191,8 @@ await page.addInitScript((dataUrl) => {
 page.on('pageerror', (e) => console.error('  [pageerror]', String(e).split('\n')[0]))
 page.on('console', (m) => { if (m.type() === 'error') console.error('  [console.error]', m.text().split('\n')[0].slice(0, 200)) })
 
-async function runAll(label) {
-  bundle()
+async function runAll(label, preFix = false) {
+  await bundle(preFix)
   const results = {}
   for (const animType of TYPES) {
     const r = await measure(page, animType)
@@ -185,32 +211,21 @@ async function runAll(label) {
 console.log('=== current HEAD (with fix) ===')
 const head = await runAll('HEAD')
 
-// Negative control — check out the pre-fix overlay/animation files and confirm
-// the SAME sampler detects the settled flash, so a pass on HEAD is meaningful.
-const FILES = [
-  'src/renderer/lib/cue-anim-paint.ts',
-  'src/shared/cue-animation.ts',
-  'src/renderer/components/subtitle-overlay/subtitle-overlay.tsx',
-  'src/renderer/components/video-preview/video-preview-panel.tsx',
-]
-let neg = {}
-// Resolve the pre-fix state by the REQ-0379 commit's PARENT rather than a
-// hardcoded HEAD~1, which drifts (and silently defeats the control) as soon as
-// any later commit lands on top.
-// Path-limited to the fixed source files so it resolves the commit that
-// actually changed them for REQ-0379, not a later commit that merely mentions
-// REQ-0379 in its message (e.g. a gate-maintenance commit).
-const FIX_COMMIT = execSync(
-  `git rev-list -1 --grep=REQ-0379 HEAD -- ${FILES.join(' ')}`,
-  { cwd: REPO }).toString().trim()
-const PRE_FIX = `${FIX_COMMIT}~1`
-console.log(`\n=== negative control (pre-fix ${PRE_FIX.slice(0, 11)}) ===`)
-try {
-  execSync(`git checkout ${PRE_FIX} -- ${FILES.join(' ')}`, { cwd: REPO, stdio: 'pipe' })
-  neg = await runAll('PRE ')
-} finally {
-  execSync(`git checkout HEAD -- ${FILES.join(' ')}`, { cwd: REPO, stdio: 'pipe' })
-}
+// Negative control — re-run the WHOLE harness with the pre-REQ-0379 rule
+// swapped back into `resolveCueAnimState`, and confirm the SAME sampler
+// detects the settled flash.  A pass on HEAD means nothing without this.
+//
+// ★ REQ-0514 — this used to `git checkout` the four pre-fix source files and
+// bundle them, then `git checkout HEAD --` them back.  Both halves were wrong.
+// Bundling historical sources against a CURRENT tree rots on any refactor
+// elsewhere (REQ-0508 moved `font-tier`, REQ-0466 dropped an `active-entry`
+// export — by REQ-0514 the historical bundle could not be built at all, and
+// this gate had been dying on that, unnoticed, ever since).  And the restore
+// discarded uncommitted work in those four files, which is how it was found.
+// `pre-fix-cue-animation.ts` documents the perturbation and why it is the
+// right size.
+console.log('\n=== negative control (pre-REQ-0379 resolveCueAnimState) ===')
+const neg = await runAll('PRE ', true)
 
 await browser.close()
 
