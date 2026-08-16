@@ -22,6 +22,7 @@
     "verify:stack-emphasis": "node scripts/verify-stack-emphasis/index.mjs",
     "verify:blur-parity": "node scripts/verify-blur-parity/index.mjs",
     "verify:anim-first-frame": "node scripts/verify-anim-first-frame/index.mjs",
+    "verify:text-whitespace": "node scripts/verify-text-whitespace/index.mjs",
     "verify:scale-origin": "node scripts/verify-scale-origin/index.mjs",
     "verify:overlap-parity": "node scripts/verify-overlap-parity/index.mjs",
     "verify:pos-parity": "node scripts/verify-pos-parity/index.mjs",

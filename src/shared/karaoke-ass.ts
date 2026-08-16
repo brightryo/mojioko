@@ -420,6 +420,98 @@ export function splitWordsAtHardBreaks(
 }
 
 /**
+ * REQ-0515 — re-project the cue text's WHITESPACE onto the karaoke units.
+ *
+ * ## The bug this closes
+ *
+ * `words` is the transcription's per-word output; `text` is what the user has
+ * since edited.  `areWordsValidForText` compares the two **with all whitespace
+ * stripped** (REQ-0287, so an auto-line-break `\N` does not kill karaoke), and
+ * everything downstream then took the DISPLAY text from `words` while taking
+ * the line breaks from `text`.  So typing a space into a karaoke cue changed
+ * `text`, left the predicate true — and the space never reached the screen or
+ * the MP4, because both renderers were drawing the stale word strings.
+ *
+ * The owner's report is the exact signature: 「テスト␣␣␣です」 renders packed,
+ * and then **deleting one character makes the spaces appear**, because that
+ * deletion is what finally breaks the stripped comparison, drops the cue to
+ * the equal-split fallback, and the fallback builds its units from `text`.
+ *
+ * ## The rule
+ *
+ * The cue's `text` is the authority for WHAT IS DRAWN; `words` is the
+ * authority for WHEN.  This function enforces that split: it walks `cueText`
+ * and the units in visible-character lockstep — the same lockstep
+ * `computeKaraokeBreaks`, `splitWordsAtHardBreaks` and `emphasizedWordRanges`
+ * already walk — and rebuilds each unit's `text` from the cue's own
+ * characters, keeping every unit's timing untouched.
+ *
+ * Whitespace attaches as **leading** whitespace of the unit that follows it.
+ * That is not a new convention: faster-whisper already emits Latin words as
+ * `' World'`, `buildFallbackKaraokeUnits` already groups them that way, and
+ * `buildKaraokeAssText` already strips a unit's leading whitespace when a `\N`
+ * lands in front of it.  Trailing whitespace with no following unit attaches
+ * to the last one.  `\N` sentinels are NOT copied into unit text — they are
+ * re-inserted by `computeKaraokeBreaks`, which owns line breaks.
+ *
+ * ## Byte-identity
+ *
+ * A cue whose units already spell its text — i.e. every transcribed cue the
+ * user has not retyped whitespace into — comes back as the **same array
+ * reference**, so the emitted ASS is unchanged to the byte.  Verified against
+ * `ass-generator-baseline-ac1fd67.test.ts`.
+ *
+ * Defensive: if the visible characters do not line up (the caller violated the
+ * `areWordsValidForText` precondition), the input is returned untouched rather
+ * than producing a scrambled cue.
+ */
+export function projectCueWhitespaceOntoWords(
+  cueText: string,
+  words: readonly WordSpan[],
+): readonly WordSpan[] {
+  if (words.length === 0) return words
+
+  const counts = words.map((w) => visibleLength(w.text))
+  const wanted = counts.reduce((a, b) => a + b, 0)
+  if (wanted === 0) return words
+  if (visibleLength(cueText.replace(/\\N/g, '')) !== wanted) return words
+
+  const out = new Array<string>(words.length).fill('')
+  let wi = 0
+  let consumed = 0
+  let pending = ''
+  const skipEmpty = (): void => {
+    while (wi < words.length && counts[wi] === 0) wi++
+  }
+  skipEmpty()
+
+  for (let i = 0; i < cueText.length; ) {
+    if (cueText[i] === '\\' && cueText[i + 1] === 'N') { i += 2; continue }
+    const ch = cueText[i]
+    if (/\s/.test(ch)) { pending += ch; i++; continue }
+    if (wi >= words.length) break
+    out[wi] += pending + ch
+    pending = ''
+    consumed++
+    i++
+    if (consumed === counts[wi]) { wi++; consumed = 0; skipEmpty() }
+  }
+  if (pending !== '') {
+    // Trailing whitespace: hand it to the last unit that holds any character.
+    for (let k = words.length - 1; k >= 0; k--) {
+      if (counts[k] > 0) { out[k] += pending; break }
+    }
+  }
+
+  let changed = false
+  for (let k = 0; k < words.length; k++) {
+    if (out[k] !== words[k].text) { changed = true; break }
+  }
+  if (!changed) return words
+  return words.map((w, k) => ({ ...w, text: out[k] }))
+}
+
+/**
  * REQ-0294 — figure out which word indices should be preceded by a
  * `\N` line break so the karaoke render matches the plain (karaoke-
  * off) render's wrap positions.

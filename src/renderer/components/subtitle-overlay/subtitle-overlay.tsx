@@ -20,9 +20,8 @@ import { paintOutlineLayers } from '@/lib/outline-ring'
 import { sweepWordTimings } from '../../../shared/karaoke-sweep'
 import { resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
-import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
-import { resolveKaraokeTiming } from '../../../shared/karaoke-timing'
-import { computeKaraokeBreaks, splitWordsAtHardBreaks } from '../../../shared/karaoke-ass'
+import { computeKaraokeBreaks } from '../../../shared/karaoke-ass'
+import { resolveKaraokeUnits } from '../../../shared/karaoke-units'
 // REQ-0332 — line spacing.  Same module the ASS writer reads.
 import {
   estimateCueHeightAssPx,
@@ -585,23 +584,11 @@ export function SubtitleOverlay({
   // text-only predicate) left a cue whose times had been dragged rendering
   // from word timestamps that no longer fell inside its own window — the
   // preview lit nothing, or stopped part-way, and the burn matched it.
-  const karaokeUsesRealWords = resolveKaraokeTiming(entry).mode === 'words'
-  // REQ-0308 §1 — `splitWordsAtHardBreaks` gives every `\N` in the cue text a
-  // unit boundary to attach to.  Without it a break landing mid-word (the norm
-  // for Japanese, where REQ-0303 does NOT protect word boundaries) was silently
-  // dropped by `computeKaraokeBreaks` and this overlay rendered FEWER lines
-  // than `entry.text` contains — the cue overflowed the frame while the editor
-  // and the table showed the wrapped text.  The ass-generator applies the same
-  // split, so preview and burn-in stay in agreement.  A no-op (same array
-  // reference) for cues whose breaks already sit on unit boundaries.
-  const karaokeWords: readonly WordSpan[] = karaokeGateOn
-    ? splitWordsAtHardBreaks(
-        entry.text,
-        karaokeUsesRealWords
-          ? entry.words!
-          : buildFallbackKaraokeUnits(entry.text, entry.startSec, entry.endSec),
-      )
-    : []
+  // REQ-0515 — the whole pipeline (timing source → the cue text's own
+  // characters → a unit boundary at every `\N`) is `resolveKaraokeUnits`,
+  // shared with the ASS writer, so the preview cannot spell a cue differently
+  // from the burn.
+  const karaokeWords: readonly WordSpan[] = resolveKaraokeUnits(entry, karaokeGateOn)
   const karaokeActive = karaokeWords.length > 0
   // REQ-0311 §4 / REQ-0322 §3 — sweep (`\kf`) vs switch (`\k`), resolved
   // PER CUE with the settings value as the default.  Timings come from the

@@ -3,7 +3,8 @@ import { ASS_MARGIN_LR_PX, SHADOW_DEPTH_MAX_PX } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
 import { resolveFontIdForTier } from '../../shared/font-tier'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../shared/karaoke-gate'
-import { buildKaraokeAssText, computeKaraokeBreaks, splitWordsAtHardBreaks } from '../../shared/karaoke-ass'
+import { buildKaraokeAssText, computeKaraokeBreaks } from '../../shared/karaoke-ass'
+import { resolveKaraokeUnits } from '../../shared/karaoke-units'
 // REQ-0311 §4 / REQ-0315 §2 — the sweep emitter.
 import { buildKaraokeSweepAssText, buildSweepGapBlock } from '../../shared/karaoke-sweep'
 import type { KaraokeStyle } from '../../shared/karaoke-style'
@@ -26,8 +27,6 @@ import { computeFixedStackOffsets } from '../../shared/stack-offsets'
 import { computeCuePlacement, resolveLayer } from '../../shared/cue-placement'
 import { groupByTimeOverlap } from '../../shared/simultaneous-groups'
 import { buildAnimationTags } from '../../shared/cue-animation-ass'
-import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
-import { resolveKaraokeTiming } from '../../shared/karaoke-timing'
 import { assAlphaValue, isFullyOpaque, OPACITY_MAX_PERCENT } from '../../shared/alpha'
 import {
   canUseKeywordEmphasisInTier,
@@ -457,22 +456,12 @@ export function generateAss(
       // its correspondence with the audio, so it drops to the equal split —
       // which spans exactly this cue's own window and therefore colours every
       // character between its start and its end.
-      const karaokeUsesRealWords = resolveKaraokeTiming(e).mode === 'words'
-      // REQ-0308 §1 — split any unit a `\N` falls inside so every hard break
-      // has a unit boundary to attach to.  A mid-word break (the norm for
-      // Japanese — REQ-0303 protects Latin word boundaries only) was otherwise
-      // dropped by `computeKaraokeBreaks`, burning in fewer lines than the cue
-      // text contains.  subtitle-overlay applies the identical split so the
-      // preview matches.  No-op for cues whose breaks already sit on
-      // boundaries, keeping existing output byte-identical.
-      const karaokeWords: readonly WordSpan[] = karaokeGateOn
-        ? splitWordsAtHardBreaks(
-            e.text,
-            karaokeUsesRealWords
-              ? e.words!
-              : buildFallbackKaraokeUnits(e.text, e.startSec, e.endSec),
-          )
-        : []
+      // REQ-0515 — the whole pipeline (timing source → the cue text's own
+      // characters → a unit boundary at every `\N`) is now `resolveKaraokeUnits`,
+      // shared with subtitle-overlay.  It used to be this expression, written
+      // out here and again in the preview; REQ-0515's whitespace fix would have
+      // had to be added to both.
+      const karaokeWords: readonly WordSpan[] = resolveKaraokeUnits(e, karaokeGateOn)
       const karaokeActive = karaokeWords.length > 0
       const fillTag = karaokeActive
         ? `\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}`
