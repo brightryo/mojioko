@@ -7,6 +7,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
+import { FOLDER_SETTINGS } from '../../../shared/folder-settings'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore } from '@/stores/ui-store'
 import { saveFileDialog } from '@/services/dialog'
@@ -34,7 +35,10 @@ export function ExportFrameButton() {
   const entries = useProjectStore((s) => s.entries)
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   // REQ-0121 — user-preferred output folder applied to the frame save dialog.
-  const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
+  // REQ-0518 — the still export has its OWN folder row now (画像保存フォルダ,
+  // falling back to Pictures).  It used to share 動画出力フォルダ, so an image
+  // landed next to the burned video.
+  const defaultImageDir = useSettingsStore((s) => s.defaultImageDir)
   // REQ-20260615-050 — fade lives per-entry; the still uses each entry's
   // own `fadeDurationSec`, no global slice is read here.
   const currentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
@@ -66,10 +70,11 @@ export function ExportFrameButton() {
 
     const savePath = await saveFileDialog(
       defaultName,
-      defaultOutputDir ?? undefined,
+      defaultImageDir ?? undefined,
       format === 'jpg'
         ? [{ name: 'JPEG image', extensions: ['jpg', 'jpeg'] }, { name: 'All Files', extensions: ['*'] }]
-        : [{ name: 'PNG image', extensions: ['png'] }, { name: 'All Files', extensions: ['*'] }]
+        : [{ name: 'PNG image', extensions: ['png'] }, { name: 'All Files', extensions: ['*'] }],
+      FOLDER_SETTINGS.image.osFolder,
     )
     if (!savePath) return
 

@@ -43,12 +43,16 @@ const electronAPI = {
   saveFileDialog: (
     defaultName: string,
     defaultDir?: string,
-    filters?: { name: string; extensions: string[] }[]
+    filters?: { name: string; extensions: string[] }[],
+    // REQ-0518 — the OS folder to fall back to when `defaultDir` is unset or
+    // gone.  The save dialog serves every "produce a file" flow, so the
+    // fallback belongs to the CALLER's row, not to the handler.
+    fallbackOsFolder?: string,
   ): Promise<string | null> =>
-    ipcRenderer.invoke(Channels.dialogSaveFile, defaultName, defaultDir, filters),
+    ipcRenderer.invoke(Channels.dialogSaveFile, defaultName, defaultDir, filters, fallbackOsFolder),
   // REQ-0121 — folder picker used by Settings > General.
-  openDirectoryDialog: (defaultDir?: string): Promise<string | null> =>
-    ipcRenderer.invoke(Channels.dialogOpenDir, defaultDir),
+  openDirectoryDialog: (defaultDir?: string, fallbackOsFolder?: string): Promise<string | null> =>
+    ipcRenderer.invoke(Channels.dialogOpenDir, defaultDir, fallbackOsFolder),
   // REQ-0194 — .mojioko project file open dialog.
   openProjectDialog: (defaultDir?: string): Promise<string | null> =>
     ipcRenderer.invoke(Channels.dialogOpenProject, defaultDir),

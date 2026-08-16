@@ -85,6 +85,12 @@ describe('REQ-0312 §1 — the rule table pins every field s classification', ()
     defaultInputDir: 'presence-wins',
     defaultOutputDir: 'presence-wins',
     defaultProjectDir: 'presence-wins',
+    // REQ-0518 — three more folder rows.  `presence-wins` like the three above:
+    // a folder the user picked must survive a save from a surface that does not
+    // know the key.
+    defaultImageDir: 'presence-wins',
+    defaultTextDir: 'presence-wins',
+    defaultSrtDir: 'presence-wins',
     fontSetInstalledVersion: 'presence-wins',
     activeFontId: 'presence-wins',
     burnin: 'session-only',

@@ -72,7 +72,20 @@
     "defaultProjectDir": "Project folder",
     "folderPathUsingSystemVideos": "System Videos folder",
     "folderPathBrowse": "Browse…",
-    "folderPathClear": "Clear"
+    "folderPathClear": "Clear",
+    "folders": {
+      "videoInput": "Video input folder",
+      "videoOutput": "Video output folder",
+      "project": "Project folder",
+      "image": "Image save folder",
+      "text": "Text save folder",
+      "srtInput": "SRT input folder"
+    },
+    "folderPlaceholder": {
+      "documents": "System Documents folder",
+      "pictures": "System Pictures folder",
+      "videos": "System Videos folder"
+    }
   },
   "fonts": {
     "hint": "Click a font to set it as the default. Adding and downloading fonts is a paid-version feature."

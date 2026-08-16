@@ -7,6 +7,7 @@
  * up in the callers — this module only handles I/O + serialisation.
  */
 
+import { FOLDER_SETTINGS } from '../../shared/folder-settings'
 import { APP_VERSION } from '../../shared/app-info'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -62,6 +63,10 @@ export async function saveCurrentProject(): Promise<SaveResult> {
     defaultName,
     settings.defaultProjectDir ?? undefined,
     [{ name: 'MOJIOKO Project', extensions: ['mojioko'] }],
+    // ★ REQ-0518 — this is the row whose DEFAULT moved: Videos → Documents.
+    // Only the fallback moved; a user who picked a folder keeps it, because
+    // the fallback is reached solely when `defaultProjectDir` is null.
+    FOLDER_SETTINGS.project.osFolder,
   )
   if (!targetPath) {
     return { ok: false, reason: 'cancelled' }

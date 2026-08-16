@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { formatElapsed } from '@/lib/format-elapsed'
 import { useProjectStore } from '@/stores/project-store'
+import { FOLDER_SETTINGS } from '../../../shared/folder-settings'
 import { useSettingsStore } from '@/stores/settings-store'
 import { startBurnin } from '@/services/burnin'
 import { detectEncoders, resolveEffectiveEncoder, ENCODER_LABELS } from '@/services/encoder'
@@ -243,7 +244,13 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
     const pad = (n: number) => String(n).padStart(2, '0')
     const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
     const defaultName = `${stem}_subtitled_${ts}.${outExt}`
-    const targetPath = await saveFileDialog(defaultName, defaultOutputDir ?? undefined)
+    const targetPath = await saveFileDialog(
+      defaultName,
+      defaultOutputDir ?? undefined,
+      undefined,
+      // REQ-0518 — explicit, so no call site relies on the handler's default.
+      FOLDER_SETTINGS.videoOutput.osFolder,
+    )
     if (!targetPath) return
 
     const exists = await fileExists(targetPath).catch(() => false)

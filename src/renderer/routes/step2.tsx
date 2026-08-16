@@ -16,6 +16,7 @@ import { TimeEditorDialog } from '@/components/time-editor-dialog/time-editor-di
 import { ExportFrameButton } from '@/components/step2/export-frame-button'
 import { BurninDrawer } from '@/components/step2/burnin-drawer'
 import { useProjectStore } from '@/stores/project-store'
+import { FOLDER_SETTINGS } from '../../shared/folder-settings'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore, type TableFilter } from '@/stores/ui-store'
@@ -371,7 +372,12 @@ export default function Step2Route(_: Step2RouteProps) {
   // built via the add-row dialog seeds `fadeDurationSec` from here.
   const settingsFadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   // REQ-0121 — applied to the text / SRT save dialogs below.
-  const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
+  // REQ-0518 — STEP2's three dialogs each have their own row now; 動画出力
+  // フォルダ is left to the burn drawer, which is the only thing that writes a
+  // video.  (`defaultOutputDir` was read here for all three and is now unused,
+  // which is how we know every one of them moved.)
+  const defaultTextDir = useSettingsStore((s) => s.defaultTextDir)
+  const defaultSrtDir = useSettingsStore((s) => s.defaultSrtDir)
   const [subtitleFont, setSubtitleFont] = useState<SubtitleFont | null>(getSubtitleFont)
 
   // Re-load the opentype.js Font whenever the active font selection changes.
@@ -903,11 +909,12 @@ export default function Step2Route(_: Step2RouteProps) {
     const stem = video?.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'transcript'
     const savePath = await saveFileDialog(
       `${stem}_transcript.txt`,
-      defaultOutputDir ?? undefined,
+      defaultTextDir ?? undefined,
       [
         { name: 'Text File', extensions: ['txt'] },
         { name: 'All Files', extensions: ['*'] }
-      ]
+      ],
+      FOLDER_SETTINGS.text.osFolder,
     )
     if (!savePath) return
     const content = getOutputEntries()
@@ -922,11 +929,17 @@ export default function Step2Route(_: Step2RouteProps) {
     const stem = video?.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'subtitles'
     const savePath = await saveFileDialog(
       `${stem}_subtitles.srt`,
-      defaultOutputDir ?? undefined,
+      // REQ-0518 — an SRT export is a text-shaped save, so it follows
+      // テキスト保存フォルダ rather than 動画出力フォルダ.  The REQ named the
+      // three new rows but not this dialog; leaving it on the video folder
+      // while its sibling text export moved would be the "fixed one, left the
+      // rest" state §2-4 forbids.  Flagged for the owner in RES-0518 §2-2.
+      defaultTextDir ?? undefined,
       [
         { name: 'SRT Subtitle', extensions: ['srt'] },
         { name: 'All Files', extensions: ['*'] }
-      ]
+      ],
+      FOLDER_SETTINGS.text.osFolder,
     )
     if (!savePath) return
     const content = buildSrtContent(getOutputEntries())
@@ -970,7 +983,7 @@ export default function Step2Route(_: Step2RouteProps) {
     // Phase 1 — pick a file.  Cancel = quiet no-op, existing store
     // untouched.  We do NOT toast a "cancelled" message because the
     // user's intent is unambiguous when the picker dismisses.
-    const srtPath = await openSrtDialog(defaultOutputDir ?? undefined)
+    const srtPath = await openSrtDialog(defaultSrtDir ?? undefined)
     if (!srtPath) return
 
     // From here on the user waits, so show the modal.  It is opened BEFORE

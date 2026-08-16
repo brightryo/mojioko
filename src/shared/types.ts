@@ -846,8 +846,26 @@ export interface AppSettings {
    * lazy existence check on use, silent fallback to the OS Videos
    * folder).  Optional in the persisted struct so settings.json files
    * predating this REQ hydrate cleanly.
+   *
+   * REQ-0518 — the LABEL became 「プロジェクト保存フォルダ」 and the OS fallback
+   * moved Videos → Documents.  The KEY is unchanged on purpose: renaming it
+   * would discard the folder every existing user had already chosen, and only
+   * the row's name and its unset-fallback were meant to change.
    */
   defaultProjectDir?: string | null
+  /**
+   * REQ-0518 — three more folder rows, same shape and same rules as the three
+   * above: nullable, folder-picker on Settings ▸ 一般, lazy existence check at
+   * dialog-open, silent per-row OS fallback (pictures / documents /
+   * documents).  Optional so settings.json files predating this REQ hydrate.
+   *
+   * Each one is WIRED, not merely stored — `shared/folder-settings.ts` names
+   * the dialog it feeds.  A setting that exists and changes nothing is the
+   * family REQ-0499 onward has been removing.
+   */
+  defaultImageDir?: string | null
+  defaultTextDir?: string | null
+  defaultSrtDir?: string | null
   /**
    * REQ-0150 — user-picked transcription accelerator.  `'cpu'` (default)
    * runs faster-whisper on the CPU path; `'gpu'` opts into CUDA via the

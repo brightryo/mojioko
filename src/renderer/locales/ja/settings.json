@@ -72,7 +72,20 @@
     "defaultProjectDir": "プロジェクト保存フォルダ",
     "folderPathUsingSystemVideos": "システムの Videos フォルダ",
     "folderPathBrowse": "参照…",
-    "folderPathClear": "クリア"
+    "folderPathClear": "クリア",
+    "folders": {
+      "videoInput": "動画入力フォルダ",
+      "videoOutput": "動画出力フォルダ",
+      "project": "プロジェクト保存フォルダ",
+      "image": "画像保存フォルダ",
+      "text": "テキスト保存フォルダ",
+      "srtInput": "SRT入力フォルダ"
+    },
+    "folderPlaceholder": {
+      "documents": "システムの ドキュメント フォルダ",
+      "pictures": "システムの ピクチャ フォルダ",
+      "videos": "システムの ビデオ フォルダ"
+    }
   },
   "fonts": {
     "hint": "フォントをクリックして既定フォントを選択します。フォントの追加およびダウンロードは有料版のみの機能です。"

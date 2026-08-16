@@ -1,3 +1,5 @@
+import type { OsFolder } from '../../shared/folder-settings'
+
 export async function openVideoDialog(defaultDir?: string): Promise<string | null> {
   return window.electronAPI.openVideoDialog(defaultDir)
 }
@@ -5,17 +7,25 @@ export async function openVideoDialog(defaultDir?: string): Promise<string | nul
 export async function saveFileDialog(
   defaultName: string,
   defaultDir?: string,
-  filters?: { name: string; extensions: string[] }[]
+  filters?: { name: string; extensions: string[] }[],
+  // REQ-0518 — the OS folder this save falls back to when the caller's
+  // settings row is unset.  Callers take it from `FOLDER_SETTINGS`, so the
+  // dialog opens where the settings screen promised.
+  fallbackOsFolder?: OsFolder,
 ): Promise<string | null> {
-  return window.electronAPI.saveFileDialog(defaultName, defaultDir, filters)
+  return window.electronAPI.saveFileDialog(defaultName, defaultDir, filters, fallbackOsFolder)
 }
 
 /**
  * REQ-0121 — folder picker used by the Settings > General folder inputs.
  * Returns the chosen directory or null when the user cancelled.
  */
-export async function openDirectoryDialog(defaultDir?: string): Promise<string | null> {
-  return window.electronAPI.openDirectoryDialog(defaultDir)
+export async function openDirectoryDialog(
+  defaultDir?: string,
+  // REQ-0518 — which OS folder to open when the row has no value yet.
+  fallbackOsFolder?: OsFolder,
+): Promise<string | null> {
+  return window.electronAPI.openDirectoryDialog(defaultDir, fallbackOsFolder)
 }
 
 export async function shellOpenPath(path: string): Promise<void> {

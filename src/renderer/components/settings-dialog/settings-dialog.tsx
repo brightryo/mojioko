@@ -1,6 +1,12 @@
+import { Fragment } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useUiStore, type SettingsDialogTab } from '@/stores/ui-store'
+import {
+  FOLDER_PURPOSE_ORDER,
+  FOLDER_SETTINGS,
+  type FolderSettingKey,
+} from '../../../shared/folder-settings'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useTranslationToolStore } from '@/stores/translation-tool-store'
 import {
@@ -57,13 +63,35 @@ export function SettingsDialog() {
   // REQ-0121 — audio track selector + input/output folder inputs.
   const defaultAudioTrackIndex = useSettingsStore((s) => s.defaultAudioTrackIndex)
   const setDefaultAudioTrackIndex = useSettingsStore((s) => s.setDefaultAudioTrackIndex)
+  // REQ-0518 — one value map + one setter, keyed by the persisted settings
+  // key, so the six rows below need no per-row wiring.  Selecting the whole
+  // slice individually (rather than an object literal) keeps zustand's
+  // reference equality intact per field.
   const defaultInputDir = useSettingsStore((s) => s.defaultInputDir)
-  const setDefaultInputDir = useSettingsStore((s) => s.setDefaultInputDir)
   const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
-  const setDefaultOutputDir = useSettingsStore((s) => s.setDefaultOutputDir)
-  // REQ-0194 — default folder for `.mojioko` project save/open dialogs.
   const defaultProjectDir = useSettingsStore((s) => s.defaultProjectDir)
+  const defaultImageDir = useSettingsStore((s) => s.defaultImageDir)
+  const defaultTextDir = useSettingsStore((s) => s.defaultTextDir)
+  const defaultSrtDir = useSettingsStore((s) => s.defaultSrtDir)
+  const setDefaultInputDir = useSettingsStore((s) => s.setDefaultInputDir)
+  const setDefaultOutputDir = useSettingsStore((s) => s.setDefaultOutputDir)
   const setDefaultProjectDir = useSettingsStore((s) => s.setDefaultProjectDir)
+  const setDefaultImageDir = useSettingsStore((s) => s.setDefaultImageDir)
+  const setDefaultTextDir = useSettingsStore((s) => s.setDefaultTextDir)
+  const setDefaultSrtDir = useSettingsStore((s) => s.setDefaultSrtDir)
+  const folderValues: Record<FolderSettingKey, string | null> = {
+    defaultInputDir, defaultOutputDir, defaultProjectDir,
+    defaultImageDir, defaultTextDir, defaultSrtDir,
+  }
+  const folderSetters: Record<FolderSettingKey, (p: string | null) => void> = {
+    defaultInputDir: setDefaultInputDir,
+    defaultOutputDir: setDefaultOutputDir,
+    defaultProjectDir: setDefaultProjectDir,
+    defaultImageDir: setDefaultImageDir,
+    defaultTextDir: setDefaultTextDir,
+    defaultSrtDir: setDefaultSrtDir,
+  }
+  const setFolderValue = (key: FolderSettingKey, next: string | null): void => folderSetters[key](next)
 
   // REQ-0426 — the 字幕スタイル / Whisper設定 store subscriptions were removed
   // with their tabs; those settings are edited in STEP 1's setup drawer now.
@@ -263,44 +291,42 @@ export function SettingsDialog() {
                 </Select>
               </div>
 
-              {/* REQ-0121 — user-preferred fixed default input folder for
-                  the "Choose input video" dialog.  The active session's
-                  MRU (last-opened video's directory) still wins; this
-                  setting is the fallback when no MRU exists yet. */}
-              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
-                {t('general.defaultInputDir')}
-              </span>
-              <FolderPathInput
-                value={defaultInputDir}
-                onChange={setDefaultInputDir}
-                placeholder={t('general.folderPathUsingSystemVideos')}
-                ariaLabel={t('general.defaultInputDir')}
-              />
+              {/* ★ REQ-0518 — the six folder rows are RENDERED FROM
+                  `FOLDER_SETTINGS`, not written out one by one.
+                  Each row's three facts — the persisted key, the OS folder it
+                  falls back to, and its label — have to agree, and the
+                  fallback is also needed in `main/ipc/dialog.ts`.  Spelling
+                  them out here would put the mapping in two files.
 
-              {/* REQ-0121 — user-preferred fixed default output folder for
-                  ALL save dialogs (burn-in video, transcription text, SRT
-                  subtitles, exported frame). */}
-              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
-                {t('general.defaultOutputDir')}
-              </span>
-              <FolderPathInput
-                value={defaultOutputDir}
-                onChange={setDefaultOutputDir}
-                placeholder={t('general.folderPathUsingSystemVideos')}
-                ariaLabel={t('general.defaultOutputDir')}
-              />
+                  REQ-0121 / REQ-0194 behaviour is unchanged per row: the
+                  session MRU still wins for the input folder, the value is
+                  validated lazily at dialog-open, and a folder that has
+                  vanished falls back silently (no toast).
 
-              {/* REQ-0194 — user-preferred fixed default folder for the
-                  `.mojioko` project save/open dialogs. */}
-              <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
-                {t('general.defaultProjectDir')}
-              </span>
-              <FolderPathInput
-                value={defaultProjectDir}
-                onChange={setDefaultProjectDir}
-                placeholder={t('general.folderPathUsingSystemVideos')}
-                ariaLabel={t('general.defaultProjectDir')}
-              />
+                  The persisted KEYS are untouched; only the labels changed
+                  (REQ-0518 §1-1) — renaming a key would discard the folder an
+                  existing user had already chosen. */}
+              {FOLDER_PURPOSE_ORDER.map((purpose) => {
+                const row = FOLDER_SETTINGS[purpose]
+                const label = t(`general.folders.${row.i18n}`)
+                return (
+                  <Fragment key={purpose}>
+                    <span className="whitespace-nowrap text-body text-fg-secondary self-center leading-none mt-1">
+                      {label}
+                    </span>
+                    <FolderPathInput
+                      value={folderValues[row.key]}
+                      onChange={(next) => setFolderValue(row.key, next)}
+                      // The placeholder names the row's OWN fallback, so it
+                      // stops promising Videos for a folder that now opens in
+                      // Documents or Pictures.
+                      placeholder={t(`general.folderPlaceholder.${row.osFolder}`)}
+                      ariaLabel={label}
+                      fallbackOsFolder={row.osFolder}
+                    />
+                  </Fragment>
+                )
+              })}
             </div>
           </TabsContent>
 

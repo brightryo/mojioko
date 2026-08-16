@@ -139,6 +139,12 @@ export const SETTINGS_MERGE_RULES: { readonly [K in keyof AppSettings]-?: MergeR
   defaultInputDir: 'presence-wins',
   defaultOutputDir: 'presence-wins',
   defaultProjectDir: 'presence-wins',
+  // REQ-0518 — same rule as the three folder rows above: a folder the user
+  // picked must survive a partial save from a surface that does not know
+  // about it.
+  defaultImageDir: 'presence-wins',
+  defaultTextDir: 'presence-wins',
+  defaultSrtDir: 'presence-wins',
   // REQ-0279: written only by `fontList:recordSetVersion`; the renderer has
   // never sent it, so this always resolves to `existing`.
   fontSetInstalledVersion: 'presence-wins',

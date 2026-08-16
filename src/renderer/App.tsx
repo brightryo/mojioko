@@ -260,6 +260,13 @@ function AppInner() {
           // folders above (a null must propagate to disk so a manual
           // "clear" round-trips).
           defaultProjectDir: s.defaultProjectDir,
+          // REQ-0518 — the three new folder rows follow the SAME include-always
+          // contract: `presence-wins` keeps main's value when the key is
+          // absent, so omitting them here would make the settings dialog unable
+          // to change (or clear) them at all.
+          defaultImageDir: s.defaultImageDir,
+          defaultTextDir: s.defaultTextDir,
+          defaultSrtDir: s.defaultSrtDir,
           // REQ-0335 §3-6 — renderer-owned (`incoming-wins`), so it MUST be
           // sent on every save: omitting it would make main keep the
           // previous list and a deletion would never reach disk.

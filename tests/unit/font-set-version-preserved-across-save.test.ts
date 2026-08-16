@@ -73,6 +73,10 @@ function makeRendererPayload(): AppSettings {
     defaultInputDir: null,
     defaultOutputDir: null,
     defaultProjectDir: null,
+    // REQ-0518 — three more folder rows in the payload.
+    defaultImageDir: null,
+    defaultTextDir: null,
+    defaultSrtDir: null,
     // REQ-0511 M4 — the four keys the fixture had fallen behind on. Values
     // mirror a default install; only their PRESENCE matters to this scenario.
     translationAutoEnabled: false,

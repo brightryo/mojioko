@@ -31,10 +31,12 @@ declare global {
       saveFileDialog: (
         defaultName: string,
         defaultDir?: string,
-        filters?: { name: string; extensions: string[] }[]
+        filters?: { name: string; extensions: string[] }[],
+        // REQ-0518 — OS folder to fall back to; supplied by the caller's row.
+        fallbackOsFolder?: string,
       ) => Promise<string | null>
       // REQ-0121 — folder picker used by Settings > General.
-      openDirectoryDialog: (defaultDir?: string) => Promise<string | null>
+      openDirectoryDialog: (defaultDir?: string, fallbackOsFolder?: string) => Promise<string | null>
       // REQ-0194 — `.mojioko` project file open dialog.
       openProjectDialog: (defaultDir?: string) => Promise<string | null>
       // REQ-0223 — `.srt` file open dialog for the step2 import flow.

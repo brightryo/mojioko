@@ -65,6 +65,12 @@ function buildDefaults(language?: SupportedLanguage): AppSettings {
     // REQ-0194 — same shape as the REQ-0121 input/output folder defaults;
     // `null` = OS Videos fallback in the dialog handler.
     defaultProjectDir: null,
+    // REQ-0518 — unset is `null` for all six folder rows; the OS fallback is
+    // applied at dialog-open (`main/ipc/dialog.ts`), never written here, so a
+    // user who has chosen a folder keeps it when a default changes.
+    defaultImageDir: null,
+    defaultTextDir: null,
+    defaultSrtDir: null,
     // REQ-0150 — default the accelerator to CPU.  Every fresh install
     // and every settings.json older than v1.3.3 lands on CPU which
     // matches the pre-REQ-0150 behaviour (no GPU tools bundled = no

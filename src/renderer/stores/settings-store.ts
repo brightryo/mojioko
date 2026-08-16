@@ -63,6 +63,14 @@ interface SettingsStore {
    */
   defaultProjectDir: string | null
   /**
+   * REQ-0518 — three more folder rows (画像保存 / テキスト保存 / SRT入力).
+   * Same shape and rules as the three above; the per-row OS fallback lives in
+   * `shared/folder-settings.ts` and is applied by the main-side dialog handler.
+   */
+  defaultImageDir: string | null
+  defaultTextDir: string | null
+  defaultSrtDir: string | null
+  /**
    * REQ-0208 — "user has clicked the Store review CTA in the export-
    * complete dialog at least once".  One-shot boolean: flips false → true
    * the first time the button is pressed and never flips back.  Used by
@@ -108,6 +116,9 @@ interface SettingsStore {
   setDefaultInputDir: (path: string | null) => void
   setDefaultOutputDir: (path: string | null) => void
   setDefaultProjectDir: (path: string | null) => void
+  setDefaultImageDir: (path: string | null) => void
+  setDefaultTextDir: (path: string | null) => void
+  setDefaultSrtDir: (path: string | null) => void
   /**
    * REQ-0208 — one-way setter for the Store review CTA.  Only flips to
    * true (idempotent on repeat calls); there is no path back to false.
@@ -136,7 +147,7 @@ interface SettingsStore {
   resetStep3Settings: () => void
 
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'translationAutoEnabled' | 'translationTargetLang' | 'playbackTimeDetailed' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'stylePresets'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'translationAutoEnabled' | 'translationTargetLang' | 'playbackTimeDetailed' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'defaultImageDir' | 'defaultTextDir' | 'defaultSrtDir' | 'stylePresets'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -169,6 +180,9 @@ export const useSettingsStore = create<SettingsStore>()(
       defaultInputDir: null,
       defaultOutputDir: null,
       defaultProjectDir: null,
+      defaultImageDir: null,
+      defaultTextDir: null,
+      defaultSrtDir: null,
       // REQ-0208 — user has not yet clicked the Store review CTA.  Once
       // true, stays true across sessions via the persist middleware.
       hasClickedStoreReview: false,
@@ -198,6 +212,9 @@ export const useSettingsStore = create<SettingsStore>()(
       setDefaultInputDir: (path) => set({ defaultInputDir: path }),
       setDefaultOutputDir: (path) => set({ defaultOutputDir: path }),
       setDefaultProjectDir: (path) => set({ defaultProjectDir: path }),
+      setDefaultImageDir: (path) => set({ defaultImageDir: path }),
+      setDefaultTextDir: (path) => set({ defaultTextDir: path }),
+      setDefaultSrtDir: (path) => set({ defaultSrtDir: path }),
       markStoreReviewClicked: () => set({ hasClickedStoreReview: true }),
 
       addStylePreset: (preset) => {
@@ -355,6 +372,9 @@ export const useSettingsStore = create<SettingsStore>()(
           // REQ-0194 — optional for backward compat with settings.json files
           // that predate the project-save feature.  Same fallback semantics.
           defaultProjectDir: typeof s.defaultProjectDir === 'string' ? s.defaultProjectDir : null,
+          defaultImageDir: typeof s.defaultImageDir === 'string' ? s.defaultImageDir : null,
+          defaultTextDir: typeof s.defaultTextDir === 'string' ? s.defaultTextDir : null,
+          defaultSrtDir: typeof s.defaultSrtDir === 'string' ? s.defaultSrtDir : null,
           // REQ-0335 §3 — presets from settings.json.  Only the envelope is
           // validated here (id / name / style object); individual style
           // fields are NOT clamped, because a preset written by a NEWER
