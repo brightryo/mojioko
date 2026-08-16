@@ -19,7 +19,6 @@ import { paintOutlineLayers } from '@/lib/outline-ring'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 import { sweepWordTimings } from '../../../shared/karaoke-sweep'
 import { resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
-import { resolveAnimation, isAnimationInert } from '../../../shared/cue-animation'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
 import { resolveKaraokeTiming } from '../../../shared/karaoke-timing'
@@ -463,11 +462,13 @@ export function SubtitleOverlay({
   // of pinned-anchor / centre-translate offsets.  When `rotation ===
   // undefined` OR `0` no extra transform is added.
   const rotationDeg = entry.rotation ?? 0
-  // REQ-0323 §1-3 — does this cue's animation change `scale`?  Only then
-  // does the transform origin need to move off its historical value.
-  const animSpecForOrigin = resolveAnimation(entry)
-  const animScales = !isAnimationInert(animSpecForOrigin)
-    && (animSpecForOrigin.type === 'scale' || animSpecForOrigin.type === 'pop')
+  // REQ-0514 — there is no longer an "is this cue scaling?" branch here.  The
+  // transform origin is the cue's `\an` anchor UNCONDITIONALLY (see the
+  // `transformOrigin` docblock below): one rule, one value, applying to the
+  // rotation and the animation alike, because libass anchors both at that same
+  // point.  The old `animScales` predicate existed only to keep a
+  // scale-animated cue off the rotation's `center center`, and a per-cue
+  // *conditional* origin is precisely how the two ended up disagreeing.
   if (rotationDeg !== 0) {
     const rotateFrag = `rotate(${rotationDeg}deg)`
     transform = transform ? `${transform} ${rotateFrag}` : rotateFrag
@@ -903,27 +904,61 @@ export function SubtitleOverlay({
         // React-owned base (pinned anchor / centre-translate / rotation).
         // Animation first so it acts in the element's own frame before the
         // layout offsets move it into place.
-        transform: `var(--cue-anim-transform) ${transform ?? ''}`.trim(),
-        // Rotation keeps its pre-REQ-0323 `center center` origin so rotated
-        // cues render exactly as before.  Otherwise, when a SCALING
-        // animation is active, scale about the cue's alignment anchor —
-        // libass scales `\fscx\fscy` about the `\an` anchor, so matching it
-        // is the parity-correct choice (a 50%/50% origin would drift a
-        // left- or right-aligned cue sideways as it grew).
-        // Known limitation: a cue with BOTH rotation and a scale animation
-        // gets the rotation origin; the two want different anchors and one
-        // property has to win.
-        transformOrigin: rotationDeg !== 0
-          ? 'center center'
-          : animScales
-            ? `${
-                entry.horizontalPosition === 'left' ? '0%'
-                : entry.horizontalPosition === 'right' ? '100%' : '50%'
-              } ${
-                entry.verticalPosition === 'top' ? '0%'
-                : entry.verticalPosition === 'bottom' ? '100%' : '50%'
-              }`
-            : undefined,
+        // ★ REQ-0514 — THE ANIMATION LAYER GOES LAST, AND THE ORIGIN IS THE
+        // `\an` ANCHOR.  Both halves are load-bearing; changing either one
+        // reintroduces the drift this REQ removed.
+        //
+        // ## Why last
+        //
+        // A CSS transform list is applied right-to-left, so `A B` means "B,
+        // then A" — and EVERY function in the list acts about the single
+        // `transform-origin`.  With the animation FIRST (the pre-REQ-0514
+        // order) the layout translate sat *inside* the scale, so the scale
+        // multiplied the anchor correction too:
+        //
+        //     p ↦ o + S·( D·R·(p − o) )        ← anchor shift D is scaled
+        //
+        // A cue pinned by a drag carries `translate(-50%, -50%)` as D, so at
+        // S = 0.7 its own centre landed 0.15·w to the RIGHT and 0.15·h BELOW
+        // the pinned point, and slid back as it grew.  That is exactly the
+        // owner's report (REQ-0514: dragged to 463/263, shrinks rightward),
+        // and it measured 0.516 cue-widths off centre in
+        // `scripts/verify-scale-origin` before this line changed.  Putting the
+        // animation LAST leaves the anchor shift outside the scale:
+        //
+        //     p ↦ o + R·S·(p − o) + d          ← D is a constant offset now
+        //
+        // whose fixed point is `o` — independent of S, of the pin, and of the
+        // drag.
+        //
+        // ## Why the `\an` anchor
+        //
+        // libass anchors the SCALED text box by the cue's `\an`, so `\fscx` is
+        // effectively applied about that anchor point; and `\frz` rotates about
+        // the same point (no `\org` is ever emitted — verified on real output).
+        // Both were measured in real burned pixels: a left/top cue's scale
+        // fixed point sits at its `\pos`, and so does its rotation origin.
+        // Pointing `transform-origin` at that anchor therefore makes ONE
+        // property serve both, and makes the preview reproduce the burn for
+        // every alignment — including the rotated off-centre cues the old
+        // unconditional `center center` got wrong.
+        //
+        // Consequence to know about: for a CENTRE/CENTRE cue — the owner's
+        // configuration, and what the drag path produces — this IS
+        // `center center`, so it scales from its own centre and its rotation is
+        // unchanged.  For an off-centre alignment the rotation pivot moves from
+        // the box centre to the alignment corner: a visible change, and the
+        // correct one, because that is where libass has always pivoted.
+        //
+        // Gated by `npm run verify:scale-origin` (real pixels, both engines).
+        transform: `${transform ?? ''} var(--cue-anim-transform)`.trim(),
+        transformOrigin: `${
+          entry.horizontalPosition === 'left' ? '0%'
+          : entry.horizontalPosition === 'right' ? '100%' : '50%'
+        } ${
+          entry.verticalPosition === 'top' ? '0%'
+          : entry.verticalPosition === 'bottom' ? '100%' : '50%'
+        }`,
         // REQ-0277 §1 — CSS `text-transform: uppercase` handles Latin
         // case-mapping natively; CJK code points have no case and pass
         // through unchanged.  Matches ass-generator's `.toUpperCase()`
