@@ -1,7 +1,7 @@
 import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X, HelpCircle,
+  ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X,
   ChevronFirst, ChevronLast, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -46,13 +46,13 @@ import {
   findNextBoundary
 } from '@/lib/timeline-boundaries'
 import type { EntryWarnings } from '@/lib/entry-warnings'
-// REQ-20260614-001 Phase 4 — the per-Block Inspector Popover was
-// retired.  `Popover` / `PopoverTrigger` / `PopoverContent` stay imported
-// because the same primitives still power the "How to use" help popover
-// in the toolbar (see ~l.1471).  `TimelineBlockInspector` is now rendered
-// by `step2.tsx`'s `inspectorSlot` (always-on right pane) and no longer
-// imported here.
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+// REQ-20260614-001 Phase 4 — the per-Block Inspector Popover was retired;
+// `TimelineBlockInspector` is rendered by `step2.tsx`'s `inspectorSlot`
+// (always-on right pane) and no longer imported here.
+// REQ-0521 §1-3 — the Radix `Popover` primitives are no longer imported either:
+// the "how to use" popover they powered moved into `help-popover.tsx`, shared
+// with the subtitle-list header.
+import { HelpPopover } from '@/components/help-popover'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
 import { SCRUB_SEEK_THROTTLE_ENABLED } from '../../../shared/constants'
@@ -1939,122 +1939,28 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
             )}
           </div>
 
-          {/* REQ-122 — "How to use" Popover.  Documents trimming, the
-              scissor marker undo, zoom + snap, and the "keep subtitles in
-              a single row" recommendation — the last item is the practical
-              reason the popover was added (preview vs. burnin diverge when
-              clips stack into multiple rows).
+          {/* REQ-122 / 0127 / 0128 / 0520 — the "how to use" guide for this pane.
+              REQ-0521 §1-3 — the popover itself now lives in
+              `components/help-popover.tsx`, shared with the subtitle-list
+              header; only the copy differs between the two.
 
-              REQ-20260615-058 — the bare HelpCircle icon button was easy to
-              miss in the toolbar's icon strip.  The trigger wears a 1-px
-              outline + the localised "使い方" / "How to use" label so it
-              reads as a distinct affordance ("the guide to this whole pane")
-              rather than a per-row inline `?` tooltip.  Colour stays neutral
-              grey so the row of inline help icons elsewhere in the app does
-              not start looking inconsistent.
-
-              REQ-0519 — moved from the LEFT end of Row 1 to the right end.
-              `ml-auto` eats the remaining free space, so the trigger hugs
-              the right edge and reads as separate from the zoom / snap /
-              trim group regardless of how wide those grow.  `shrink-0` keeps
-              it from being the element that gives up width first when the
-              pane is narrow — it is the one control that must never be
-              squeezed out of the row. */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                title={t('timeline.help.button')}
-                aria-label={t('timeline.help.button')}
-                className={cn(
-                  'ml-auto shrink-0',
-                  'inline-flex h-7 items-center gap-1 rounded-md border border-line bg-surface-0 px-2 text-caption text-fg-tertiary',
-                  'hover:bg-surface-2 hover:text-fg-primary hover:border-line-strong transition-colors duration-150',
-                )}
-              >
-                <HelpCircle className="h-3.5 w-3.5" />
-                <span>{t('timeline.help.button')}</span>
-              </button>
-            </PopoverTrigger>
-            <PopoverContent
-              // REQ-128 — open SIDEWAYS instead of downward.  A
-              // downward-opening panel always pushes its bottom edge toward
-              // the viewport floor; long copy (English in particular)
-              // clipped the last section in REQ-127's 2x2 grid.  Pointing
-              // sideways escapes that constraint by using the wide
-              // horizontal space beside the toolbar.
-              //
-              // REQ-0519 — the trigger moved to the RIGHT end of the row, so
-              // the side that has room is now `left`, not `right`.  Leaving
-              // it at "right" would have relied on Radix's collision flip to
-              // do the same thing one frame later; naming the side that
-              // actually has space is the honest version.  `avoidCollisions`
-              // stays on as the fallback.
-              //
-              // The width + 2x2 grid from REQ-127 stay; the `max-h` +
-              // scroll fallback stays as belt-and-braces for unusually
-              // long future copy.
-              side="left"
-              align="start"
-              sideOffset={8}
-              avoidCollisions
-              collisionPadding={12}
-              className="w-[720px] p-4 space-y-3 text-fg-primary max-h-[calc(100vh-40px)] overflow-y-auto"
-            >
-              <div className="text-body font-semibold text-fg-primary">
-                {t('timeline.help.title')}
-              </div>
-              {/* REQ-127 — 2x2 grid.  Each cell is one help section.
-                  REQ-0520 — the four sections are now scope / trim / snap /
-                  layers.  Zoom lost its cell (the [−][slider][+] cluster needs
-                  no prose), the scissor-marker text folded into trim where it
-                  belongs, and the old "keep subtitles in a single row" tip was
-                  replaced: it described the pre-REQ-0394 model where rows came
-                  from TIME overlap, which stopped being true when rows became
-                  the stored z-order layer.
-
-                  `scope` keeps the amber tint the single-row tip used to carry.
-                  It is the one cell stating hard limitations (no video editing,
-                  no joining, no audio/image compositing), so it inherits the
-                  caution colour rather than leaving the grid tonally flat.
-                  `items-start` so a short cell (snap) does not stretch to its
-                  row's height. */}
-              <ul className="grid grid-cols-2 items-start gap-x-6 gap-y-4 text-body-sm leading-relaxed">
-                <li>
-                  <div className="font-semibold text-warning-faint">
-                    {t('timeline.help.scope.title')}
-                  </div>
-                  <div className="text-fg-secondary">
-                    {t('timeline.help.scope.body')}
-                  </div>
-                </li>
-                <li>
-                  <div className="font-semibold text-fg-secondary">
-                    {t('timeline.help.trim.title')}
-                  </div>
-                  <div className="text-fg-tertiary">
-                    {t('timeline.help.trim.body')}
-                  </div>
-                </li>
-                <li>
-                  <div className="font-semibold text-fg-secondary">
-                    {t('timeline.help.snap.title')}
-                  </div>
-                  <div className="text-fg-tertiary">
-                    {t('timeline.help.snap.body')}
-                  </div>
-                </li>
-                <li>
-                  <div className="font-semibold text-fg-secondary">
-                    {t('timeline.help.layers.title')}
-                  </div>
-                  <div className="text-fg-tertiary">
-                    {t('timeline.help.layers.body')}
-                  </div>
-                </li>
-              </ul>
-            </PopoverContent>
-          </Popover>
+              REQ-0519 — sits at the RIGHT end of row 1. `ml-auto` eats the
+              remaining free space so it hugs the right edge and reads as
+              separate from the zoom / snap / trim group however wide those grow.
+              It therefore opens to the LEFT (the side with room). */}
+          <HelpPopover
+            label={t('timeline.help.button')}
+            title={t('timeline.help.title')}
+            triggerClassName="ml-auto"
+            sections={[
+              // `scope` carries the caution tint: it is the one cell stating
+              // hard limitations. See `help-popover.tsx`.
+              { title: t('timeline.help.scope.title'), body: t('timeline.help.scope.body'), tone: 'caution' },
+              { title: t('timeline.help.trim.title'), body: t('timeline.help.trim.body') },
+              { title: t('timeline.help.snap.title'), body: t('timeline.help.snap.body') },
+              { title: t('timeline.help.layers.title'), body: t('timeline.help.layers.body') },
+            ]}
+          />
       </div>
 
       {/* Row 2 — REQ-0519: 再生位置送りの矢印だけ。`justify-center` で

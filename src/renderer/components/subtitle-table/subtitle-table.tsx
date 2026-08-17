@@ -13,6 +13,7 @@ import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { Checkbox } from '@/components/ui/checkbox'
+import { HelpPopover } from '@/components/help-popover'
 import { RowStylePreview } from '@/components/subtitle-table/row-style-preview'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
@@ -832,10 +833,28 @@ export function SubtitleTable({
             aria-label={t('table.selectAllAria')}
           />
         </div>
-        <div className="flex items-center gap-3 py-1.5 pr-2 text-caption font-normal text-fg-secondary">
-          <span>{t('table.colTime')}</span>
-          <span className="flex-1" />
-          <span>{t('table.colText')}</span>
+        {/* REQ-0521 §1 — the 「時間」/「テキスト」 labels are gone. REQ-0473 had
+            already collapsed the per-column labels into one band because they no
+            longer mapped onto the two-tier row, which left them naming nothing in
+            particular; the row itself STAYS because it carries the select-all
+            checkbox (the column to the left), which spans both tiers.
+            The band now holds only the "how to use" guide, right-aligned into
+            the slot 「テキスト」 used to occupy. */}
+        {/* `py-0.5`: the h-7 trigger is taller than the 12px labels it replaced,
+            so the band drives the header's height now. Trimming the padding
+            keeps the header at 33px instead of 37px — same reasoning as
+            REQ-0519's row 2 (cut the padding, never the hit target). */}
+        <div className="flex items-center justify-end py-0.5 pr-2">
+          <HelpPopover
+            label={t('table.help.button')}
+            title={t('table.help.title')}
+            sections={[
+              { title: t('table.help.bulk.title'), body: t('table.help.bulk.body') },
+              // The caution tint: this is the cell explaining that the row
+              // preview deliberately does NOT show some of the style.
+              { title: t('table.help.preview.title'), body: t('table.help.preview.body'), tone: 'caution' },
+            ]}
+          />
         </div>
       </div>
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" onScroll={handleScroll}>
