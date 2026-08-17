@@ -176,8 +176,61 @@ describe('REQ-0521 §3-2 — the orphaned keys are gone', () => {
       'timeline.help.zoom',
       'timeline.help.scissor',
       'timeline.help.singleRow',
+      // REQ-0522 §3-1 — the whole `table.col*` family. REQ-0473 orphaned five of
+      // them when the header became two-tier; REQ-0521 orphaned the last two.
+      'table.colIndex',
+      'table.colTime',
+      'table.colSize',
+      'table.colStyle',
+      'table.colText',
+      'table.colState',
+      'table.colActions',
     ]) {
       expect(read(LOCALES[name], dotted), `${name} still defines ${dotted}`).toBeUndefined()
+    }
+  })
+})
+
+describe('REQ-0522 — the bulk copy names the real UI', () => {
+  /**
+   * REQ-0521's copy said a bulk-edit bar "appears above the list". That was
+   * wrong: REQ-20260614-001 補遺⑤ relocated `BulkEditBar` into the RIGHT pane,
+   * where it becomes the Inspector's body while the heading switches to
+   * `inspector.bulkHeading`. The filename still says "bar", which is what misled
+   * the copy — so pin the render site, not the filename.
+   */
+  it('BulkEditBar really is the Inspector body, not a bar above the list', () => {
+    const step2 = src('src/renderer/routes/step2.tsx')
+    expect(step2, 'BulkEditBar is no longer the inspector body — recheck the copy')
+      .toMatch(/inspectorBody\s*=\s*isBulkMode\s*\?\s*\(\s*<BulkEditBar/)
+    expect(step2).toContain("t('inspector.bulkHeading')")
+  })
+
+  it.each(['ja', 'en'] as const)('%s bulk copy points at the Inspector switching', (name) => {
+    const body = String(read(LOCALES[name], 'table.help.bulk.body'))
+    const heading = String(read(LOCALES[name], 'inspector.bulkHeading'))
+    const inspector = String(read(LOCALES[name], 'inspector.heading'))
+    // Names the panel that changes, using the panel's OWN strings.
+    expect(body, `${name} copy does not mention the Inspector`).toContain(inspector)
+    expect(body, `${name} copy does not name the bulk mode "${heading}"`).toContain(heading)
+    // And must not resurrect the "bar above the list" claim.
+    const stale = name === 'ja' ? ['上に一括編集バー'] : ['bar appears above the list', 'above the list']
+    for (const s of stale) {
+      expect(body.includes(s), `${name} copy reintroduces the stale "${s}"`).toBe(false)
+    }
+  })
+
+  it.each(['ja', 'en'] as const)('%s names the undo control by its real tooltip', (name) => {
+    const body = String(read(LOCALES[name], 'table.help.bulk.body'))
+    const undoLabel = String(read(LOCALES[name], 'tooltip.undo'))
+    expect(body, `${name} copy does not use the undo button's own label "${undoLabel}"`)
+      .toContain(undoLabel)
+    // ja only: the owner's phrasing was 「戻るボタン」, but `nav.back` 「戻る」 is a
+    // DIFFERENT, existing button (footer: back to STEP 1). Calling the undo
+    // control 「戻るボタン」 would point at the wrong one, so the copy uses the
+    // real tooltip 「元に戻す」 instead. Guard against the collision returning.
+    if (name === 'ja') {
+      expect(body.includes('戻るボタン'), 'ja copy says 「戻るボタン」, which collides with nav.back 「戻る」').toBe(false)
     }
   })
 })

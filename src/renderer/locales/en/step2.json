@@ -10,13 +10,6 @@
     "cueId": "Subtitle ID: {{n}}"
   },
   "table": {
-    "colIndex": "#",
-    "colTime": "Time",
-    "colSize": "Size",
-    "colStyle": "Style",
-    "colText": "Text",
-    "colState": "State",
-    "colActions": "",
     "fadeTooltip": "Fade",
     "selectAllAria": "Select all visible rows",
     "help": {
@@ -24,11 +17,11 @@
       "title": "Using the list",
       "bulk": {
         "title": "Bulk editing",
-        "body": "Tick the checkboxes on the left to select several rows and a bulk-edit bar appears above the list, letting you change text colour, size, outline, shadow and more for all of them at once. Ctrl+Z undoes it. Each setting you change is one step, so a single undo reverts it across every selected row (change colour and size and that is two undos). Selection is separate from undo — Ctrl+Z does not clear your selection."
+        "body": "Tick the checkboxes on the left to select several rows and the Inspector switches to Bulk edit, letting you change text colour, size, outline, shadow and more for all of them at once. To undo, use the Undo button in the toolbar (Ctrl+Z). Each setting you change is one step, so a single undo reverts every selected row (change colour and size and that is two undos). Selection is separate from undo — undoing does not clear your selection."
       },
       "preview": {
-        "title": "What the list does not show",
-        "body": "Each row is drawn by the same renderer as the real subtitles, so font, text colour and opacity, outline colour and thickness, shadow, uppercasing, the background box and the keyword-emphasis colour all appear as they will. Font size, emphasis scale, rotation, karaoke, animation, and position and margins are deliberately not applied, because the list has to stay readable: a 4K cue's size runs to hundreds of pixels, rotation would push text out of its row, and positions assume the bottom of the frame. Sizes are scaled down to fit the column, and a line too long even then is cut off with an ellipsis. Check the preview and the exported video for the final look."
+        "title": "Which settings the list shows",
+        "body": "The subtitle text shown in the list reflects your Inspector settings. Applied: font, text colour and opacity, outline colour and thickness, shadow, uppercasing, the background box and the keyword-emphasis colour. Not applied: font size, emphasis scale, rotation, karaoke, animation, and position and margins. Font size is scaled down to fit the column, and a line too long even then is cut off with an ellipsis. Check the preview and the exported video for the final look."
       }
     }
   },
