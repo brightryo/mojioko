@@ -2,8 +2,7 @@ import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X, HelpCircle,
-  ChevronFirst, ChevronLast, ChevronLeft, ChevronRight,
-  SlidersHorizontal
+  ChevronFirst, ChevronLast, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useProjectStore } from '@/stores/project-store'
@@ -684,10 +683,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   const setPixelsPerSec = useUiStore((s) => s.setTimelinePixelsPerSec)
   const snapEnabled = useUiStore((s) => s.timelineSnapEnabled)
   const setSnapEnabled = useUiStore((s) => s.setTimelineSnapEnabled)
-  // REQ-20260614-001 補遺⑧ — Row 2 (トリミング + 吸着) の表示状態。
-  // 1 行目右端の「ツール」ボタンで toggle。
-  const toolsExpanded = useUiStore((s) => s.step2TimelineToolsExpanded)
-  const toggleTools = useUiStore((s) => s.toggleStep2TimelineTools)
+  // REQ-0519 — 吸着 / トリミングの開閉トグル (REQ-20260614-001 補遺⑧ の
+  // `step2TimelineToolsExpanded`) は撤去した。両者は常時 Row 1 に出る。
   const scrollToRowId = useUiStore((s) => s.scrollToRowId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
   const isAudioOnly = useIsAudioOnly()
@@ -1734,30 +1731,235 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
 
   return (
     <div className="flex flex-col h-full bg-surface-0">
-      {/* Toolbar — REQ-20260614-001 補遺⑧: 2 行構成。
-          Row 1 は常時表示（使い方 / ズーム / カーソル送り + 右端の
-          「ツール」トグル）。Row 2 はトグルで開閉し、トリミング操作と
-          吸着を含む。Row 1 に詰め込みすぎず、1 行目が最小ペイン幅でも
-          折り返さないようにするのが分割の目的。 */}
+      {/* Toolbar — REQ-0519: 2 行構成のまま、中身を組み替えた。
+          Row 1 = ［ズーム］［吸着］［トリミング］…右端に［使い方］。
+          Row 2 = カーソル送りの矢印だけを中央寄せ・低い高さで。
+
+          REQ-20260614-001 補遺⑧ の「ツール」トグル（Row 2 を開閉し、
+          吸着とトリミングを隠していた）は撤去。分割の目的だった「Row 1 が
+          最小ペイン幅で折り返さない」は、開閉ではなく実測で担保する
+          (`tests/e2e/timeline-toolbar-layout.spec.ts`, 1280px × ja/en)。 */}
       <div className="flex flex-col flex-shrink-0 border-b border-line bg-surface-1">
-      {/* Row 1 */}
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          {/* REQ-122 — "How to use" Popover, anchored before the zoom
-              cluster.  Documents trimming, the scissor marker undo,
-              zoom + snap, and the "keep subtitles in a single row"
-              recommendation — the last item is the practical reason
-              the popover was added (preview vs. burnin diverge when
+      {/* Row 1 — 左から ズーム → 吸着 → トリミング、右端に 使い方。
+          `justify-between` ではなく「使い方」側の `ml-auto` で右寄せする:
+          前者だと要素間が均等に開いてしまい、ズーム・吸着・トリミングが
+          ひとまとまりに見えなくなる。 */}
+      <div className="flex items-center gap-3 px-3 py-1.5">
+        {/* Zoom cluster — [−][slider][+][readout].
+            `min-w-0` so this is the element that gives up width when row 1 gets
+            tight: the slider below can shrink, and it is the only control here
+            whose width is decorative rather than informational (the readout
+            still shows the exact px/sec, and [−]/[+] still step precisely).
+            Everything to its right is `shrink-0`. See the width budget in
+            `tests/e2e/timeline-toolbar-layout.spec.ts`. */}
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={handleZoomOut}
+            disabled={pixelsPerSec <= TIMELINE_PPS_MIN}
+            title={t('timeline.toolbar.zoomOut')}
+            aria-label={t('timeline.toolbar.zoomOut')}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150',
+              'disabled:opacity-30 disabled:pointer-events-none'
+            )}
+          >
+            <ZoomOut className="h-3.5 w-3.5" />
+          </button>
+          {/* Continuous zoom slider — REQ-063 #3.  Native <input
+              type=range> instead of the commit-only OutlineThicknessSlider
+              because zoom needs LIVE updates so the user sees the timeline
+              re-scale while they drag.  accentColor routes the thumb through
+              --primary like every other slider in the app.  Reads pixelsPerSec
+              from the store, so the slider stays in sync if some other
+              caller mutates the zoom (currently only the [−] / [+] buttons). */}
+          <input
+            type="range"
+            min={TIMELINE_PPS_MIN}
+            max={TIMELINE_PPS_MAX}
+            step={1}
+            value={pixelsPerSec}
+            onChange={handleSliderChange}
+            title={t('timeline.toolbar.zoomSlider')}
+            aria-label={t('timeline.toolbar.zoomSlider')}
+            // REQ-0519 — `min-w-[64px]` overrides a flex item's default
+            // `min-width: auto`, which would otherwise pin the slider at its
+            // intrinsic width and force row 1 to overflow once snap + trim
+            // moved up here.  64px still spans the full PPS range at ~4px per
+            // step, and only narrow panes ever see less than the 128px.
+            className="w-32 min-w-[64px]"
+            style={{ accentColor: 'hsl(var(--primary))' }}
+          />
+          <button
+            type="button"
+            onClick={handleZoomIn}
+            disabled={pixelsPerSec >= TIMELINE_PPS_MAX}
+            title={t('timeline.toolbar.zoomIn')}
+            aria-label={t('timeline.toolbar.zoomIn')}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150',
+              'disabled:opacity-30 disabled:pointer-events-none'
+            )}
+          >
+            <ZoomIn className="h-3.5 w-3.5" />
+          </button>
+          {/* REQ-068: zoom level label moved to the END of the cluster
+              ([−][slider][+][label]).  Reading order matches "control inputs
+              first, then the readout that reflects the result".
+              REQ-069 #1: text-[11px] → text-body-sm (body-sm tier) so the
+              "px/秒" readout reads at the same scale as other status text;
+              w-[64px] → w-[72px] to absorb the slightly wider 13-px digits.
+              Phase 3.5: bumped 13 → body (15) so the readout — which IS the
+              value the user reads off the toolbar — stops sitting one tier
+              below the body text on the rest of the screen.  w-[72px] →
+              w-[84px] for the wider 15-px tabular digits ("130 px/秒" was
+              previously ~70px, now ~80px).
+              REQ-0443 §2 — zoom readout (「50 px/秒」) body → body-sm. */}
+          <span className="font-mono tabular-nums text-body-sm text-fg-muted select-none w-[84px] text-center">
+            {t('timeline.toolbar.zoomLevel', { pps: pixelsPerSec })}
+          </span>
+        </div>
+
+          {/* 吸着 + トリミング — REQ-0519 で Row 2 から Row 1 のズームの右へ。
+              REQ-20260614-001 補遺⑩ の並び ([吸着] [トリミング (ラベル)
+              [始点] [終点] [実行] [X (条件付)]]) と挙動はそのまま:
+              始点 / 終点は再押下で解除、X は両点一括解除、実行ボタンの
+              ラベルは「実行」(group label の「トリミング」と区別)。
+              変わったのは所属する行だけである。 */}
+          {/* Snap toggle. */}
+          <button
+            type="button"
+            onClick={() => setSnapEnabled(!snapEnabled)}
+            title={t('timeline.toolbar.snapHelp')}
+            aria-label={t('timeline.toolbar.snap')}
+            aria-pressed={snapEnabled}
+            className={cn(
+              'flex h-7 shrink-0 items-center gap-1.5 px-2 rounded-md text-body-sm font-medium',
+              'border transition-colors duration-150',
+              snapEnabled
+                ? 'bg-surface-2 text-fg-secondary border-line-strong'
+                : 'text-fg-tertiary border-line hover:text-fg-secondary hover:bg-surface-2/50'
+            )}
+          >
+            <Magnet className="h-3.5 w-3.5" />
+            <span>{t('timeline.toolbar.snap')}</span>
+          </button>
+
+          {/* Trim cluster — group label + 4 buttons (始点 / 終点 / 実行 /
+              X-clear-both).  X は両点のうち少なくとも片方が set の
+              ときだけ表示。 */}
+          <div className="flex shrink-0 items-center gap-2 rounded-md border border-line px-2 py-1">
+            <span className="text-caption text-fg-muted select-none">
+              {t('timeline.trim.toolbarLabel')}
+            </span>
+            {/* 始点 — 再押下で解除 (toggle off). 設定時は label に時刻チップ。 */}
+            <button
+              type="button"
+              onClick={handleSetIn}
+              title={t('timeline.trim.setInTooltip')}
+              aria-label={t('timeline.trim.setIn')}
+              aria-pressed={pendingCutInSec !== null}
+              className={cn(
+                'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
+                'border transition-colors duration-150',
+                pendingCutInSec !== null
+                  ? 'bg-warning/15 text-warning-faint border-warning/40 hover:bg-warning/25'
+                  : 'bg-surface-2 text-fg-secondary border-line-strong hover:bg-surface-3 hover:border-surface-4 hover:text-fg-primary'
+              )}
+            >
+              <span>{t('timeline.trim.setIn')}</span>
+              {pendingCutInSec !== null && (
+                <span className="font-mono tabular-nums text-caption text-warning-faint/80 whitespace-nowrap">
+                  {formatEditedTimecode(pendingCutInSec, cuts)}
+                </span>
+              )}
+            </button>
+            {/* 終点 — 始点と同じパターン。 */}
+            <button
+              type="button"
+              onClick={handleSetOut}
+              title={t('timeline.trim.setOutTooltip')}
+              aria-label={t('timeline.trim.setOut')}
+              aria-pressed={pendingCutOutSec !== null}
+              className={cn(
+                'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
+                'border transition-colors duration-150',
+                pendingCutOutSec !== null
+                  ? 'bg-warning/15 text-warning-faint border-warning/40 hover:bg-warning/25'
+                  : 'bg-surface-2 text-fg-secondary border-line-strong hover:bg-surface-3 hover:border-surface-4 hover:text-fg-primary'
+              )}
+            >
+              <span>{t('timeline.trim.setOut')}</span>
+              {pendingCutOutSec !== null && (
+                <span className="font-mono tabular-nums text-caption text-warning-faint/80 whitespace-nowrap">
+                  {formatEditedTimecode(pendingCutOutSec, cuts)}
+                </span>
+              )}
+            </button>
+            {/* 実行 — 両 set かつ in < out で有効化。
+                3.8 invariant: green-button text MUST be zinc-950 on green-500. */}
+            <button
+              type="button"
+              onClick={handleConfirmCut}
+              disabled={
+                pendingCutInSec === null ||
+                pendingCutOutSec === null ||
+                !(pendingCutInSec < pendingCutOutSec)
+              }
+              title={t('timeline.trim.confirmCutTooltip')}
+              aria-label={t('timeline.trim.confirmCutRun')}
+              className={cn(
+                'flex h-7 items-center gap-1.5 px-3 rounded-md text-body-sm font-semibold',
+                'border transition-colors duration-150',
+                'bg-primary text-fg-inverse border-primary-soft hover:bg-primary-soft',
+                'disabled:bg-surface-2 disabled:text-fg-muted disabled:border-line-strong disabled:hover:bg-surface-2 disabled:cursor-not-allowed'
+              )}
+            >
+              <span>{t('timeline.trim.confirmCutRun')}</span>
+            </button>
+            {/* X — clear both pending points at once (補遺⑩ §修正3).
+                少なくとも片方が set のときに表示。 */}
+            {(pendingCutInSec !== null || pendingCutOutSec !== null) && (
+              <button
+                type="button"
+                onClick={clearPendingCut}
+                title={t('timeline.trim.clearAllTooltip')}
+                aria-label={t('timeline.trim.clearAll')}
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-md',
+                  'border border-line-strong text-fg-tertiary',
+                  'hover:bg-surface-2 hover:text-fg-primary hover:border-surface-4',
+                  'transition-colors duration-150'
+                )}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* REQ-122 — "How to use" Popover.  Documents trimming, the
+              scissor marker undo, zoom + snap, and the "keep subtitles in
+              a single row" recommendation — the last item is the practical
+              reason the popover was added (preview vs. burnin diverge when
               clips stack into multiple rows).
 
-              REQ-20260615-058 — the bare HelpCircle icon button was
-              easy to miss in the toolbar's icon strip.  The trigger
-              now wears a 1-px outline + the localised "使い方" /
-              "How to use" label so it reads as a distinct affordance
-              ("the guide to this whole pane") rather than a per-row
-              inline `?` tooltip.  Colour stays neutral grey so the
-              row of inline help icons elsewhere in the app does not
-              start looking inconsistent. */}
+              REQ-20260615-058 — the bare HelpCircle icon button was easy to
+              miss in the toolbar's icon strip.  The trigger wears a 1-px
+              outline + the localised "使い方" / "How to use" label so it
+              reads as a distinct affordance ("the guide to this whole pane")
+              rather than a per-row inline `?` tooltip.  Colour stays neutral
+              grey so the row of inline help icons elsewhere in the app does
+              not start looking inconsistent.
+
+              REQ-0519 — moved from the LEFT end of Row 1 to the right end.
+              `ml-auto` eats the remaining free space, so the trigger hugs
+              the right edge and reads as separate from the zoom / snap /
+              trim group regardless of how wide those grow.  `shrink-0` keeps
+              it from being the element that gives up width first when the
+              pane is narrow — it is the one control that must never be
+              squeezed out of the row. */}
           <Popover>
             <PopoverTrigger asChild>
               <button
@@ -1765,6 +1967,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 title={t('timeline.help.button')}
                 aria-label={t('timeline.help.button')}
                 className={cn(
+                  'ml-auto shrink-0',
                   'inline-flex h-7 items-center gap-1 rounded-md border border-line bg-surface-0 px-2 text-caption text-fg-tertiary',
                   'hover:bg-surface-2 hover:text-fg-primary hover:border-line-strong transition-colors duration-150',
                 )}
@@ -1774,23 +1977,24 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               </button>
             </PopoverTrigger>
             <PopoverContent
-              // REQ-128 — open SIDEWAYS (to the right of the help
-              // button) instead of downward.  The help button sits at
-              // the very top-left of the timeline toolbar, so a
-              // downward-opening panel always pushes its bottom edge
-              // toward the viewport floor; long copy (English in
-              // particular) clipped the last section in REQ-127's
-              // 2x2 grid.  Pointing right escapes that constraint:
-              // the panel uses the wide horizontal space to the right
-              // of the toolbar, and Radix's collision avoidance flips
-              // it to the opposite side only if the right edge runs
-              // out (avoidCollisions defaults back to true here,
-              // unlike REQ-124's pin-down).
+              // REQ-128 — open SIDEWAYS instead of downward.  A
+              // downward-opening panel always pushes its bottom edge toward
+              // the viewport floor; long copy (English in particular)
+              // clipped the last section in REQ-127's 2x2 grid.  Pointing
+              // sideways escapes that constraint by using the wide
+              // horizontal space beside the toolbar.
+              //
+              // REQ-0519 — the trigger moved to the RIGHT end of the row, so
+              // the side that has room is now `left`, not `right`.  Leaving
+              // it at "right" would have relied on Radix's collision flip to
+              // do the same thing one frame later; naming the side that
+              // actually has space is the honest version.  `avoidCollisions`
+              // stays on as the fallback.
               //
               // The width + 2x2 grid from REQ-127 stay; the `max-h` +
               // scroll fallback stays as belt-and-braces for unusually
               // long future copy.
-              side="right"
+              side="left"
               align="start"
               sideOffset={8}
               avoidCollisions
@@ -1840,275 +2044,70 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               </ul>
             </PopoverContent>
           </Popover>
-          <button
-            type="button"
-            onClick={handleZoomOut}
-            disabled={pixelsPerSec <= TIMELINE_PPS_MIN}
-            title={t('timeline.toolbar.zoomOut')}
-            aria-label={t('timeline.toolbar.zoomOut')}
-            className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
-              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150',
-              'disabled:opacity-30 disabled:pointer-events-none'
-            )}
-          >
-            <ZoomOut className="h-3.5 w-3.5" />
-          </button>
-          {/* Continuous zoom slider — REQ-063 #3.  Native <input
-              type=range> instead of the commit-only OutlineThicknessSlider
-              because zoom needs LIVE updates so the user sees the timeline
-              re-scale while they drag.  accentColor routes the thumb through
-              --primary like every other slider in the app.  Reads pixelsPerSec
-              from the store, so the slider stays in sync if some other
-              caller mutates the zoom (currently only the [−] / [+] buttons). */}
-          <input
-            type="range"
-            min={TIMELINE_PPS_MIN}
-            max={TIMELINE_PPS_MAX}
-            step={1}
-            value={pixelsPerSec}
-            onChange={handleSliderChange}
-            title={t('timeline.toolbar.zoomSlider')}
-            aria-label={t('timeline.toolbar.zoomSlider')}
-            className="w-32"
-            style={{ accentColor: 'hsl(var(--primary))' }}
-          />
-          <button
-            type="button"
-            onClick={handleZoomIn}
-            disabled={pixelsPerSec >= TIMELINE_PPS_MAX}
-            title={t('timeline.toolbar.zoomIn')}
-            aria-label={t('timeline.toolbar.zoomIn')}
-            className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
-              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150',
-              'disabled:opacity-30 disabled:pointer-events-none'
-            )}
-          >
-            <ZoomIn className="h-3.5 w-3.5" />
-          </button>
-          {/* REQ-068: zoom level label moved to the END of the cluster
-              ([−][slider][+][label]).  Reading order matches "control inputs
-              first, then the readout that reflects the result".
-              REQ-069 #1: text-[11px] → text-body-sm (body-sm tier) so the
-              "px/秒" readout reads at the same scale as other status text;
-              w-[64px] → w-[72px] to absorb the slightly wider 13-px digits.
-              Phase 3.5: bumped 13 → body (15) so the readout — which IS the
-              value the user reads off the toolbar — stops sitting one tier
-              below the body text on the rest of the screen.  w-[72px] →
-              w-[84px] for the wider 15-px tabular digits ("130 px/秒" was
-              previously ~70px, now ~80px).
-              REQ-0443 §2 — zoom readout (「50 px/秒」) body → body-sm. */}
-          <span className="font-mono tabular-nums text-body-sm text-fg-muted select-none w-[84px] text-center">
-            {t('timeline.toolbar.zoomLevel', { pps: pixelsPerSec })}
-          </span>
-        </div>
-
-          {/* REQ-078 #2 — toolbar even-spacing.  Lifted the playhead-nav
-              cluster, the trim cluster, and the snap toggle out of their
-              former wrapping <div className="flex gap-3">; with
-              `justify-between` on the toolbar itself, the four top-level
-              children (zoom on the left, nav, trim, snap) now distribute
-              evenly across the row — zoom hugs the left edge, snap hugs
-              the right, and nav + trim sit at evenly spaced points in
-              between.  Nothing else moved. */}
-          {/* REQ-077 #4 — playhead navigation cluster.
-              [先頭へ] [前境界へ] [次境界へ] [末尾へ] */}
-          <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={handleNavFirst}
-              title={t('timeline.nav.first')}
-              aria-label={t('timeline.nav.first')}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
-                'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
-              )}
-            >
-              <ChevronFirst className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleNavPrev}
-              title={t('timeline.nav.prevBoundary')}
-              aria-label={t('timeline.nav.prevBoundary')}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
-                'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
-              )}
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleNavNext}
-              title={t('timeline.nav.nextBoundary')}
-              aria-label={t('timeline.nav.nextBoundary')}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
-                'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
-              )}
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleNavLast}
-              title={t('timeline.nav.last')}
-              aria-label={t('timeline.nav.last')}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
-                'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
-              )}
-            >
-              <ChevronLast className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          {/* REQ-20260614-001 補遺⑧ — Row 1 右端の「ツール」トグル。
-              押下で Row 2 (トリミング + 吸着) を表示/折り畳み。展開状態は
-              ui-store.step2TimelineToolsExpanded (session-only) に保持。
-              pressed state (zinc-800 bg) で開閉状態を視覚化。 */}
-          <button
-            type="button"
-            onClick={toggleTools}
-            title={toolsExpanded
-              ? t('timeline.toolbar.toolsTooltipCollapse')
-              : t('timeline.toolbar.toolsTooltipExpand')}
-            aria-label={t('timeline.toolbar.tools')}
-            aria-expanded={toolsExpanded}
-            className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-md',
-              'transition-colors duration-150',
-              toolsExpanded
-                ? 'bg-surface-2 text-fg-secondary'
-                : 'text-fg-tertiary hover:text-fg-primary hover:bg-surface-2/60'
-            )}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-          </button>
       </div>
 
-      {/* Row 2 — REQ-20260614-001 補遺⑩: 左から右に
-          [吸着] [トリミング (ラベル) [始点] [終点] [実行] [X (条件付)]]
-          の順に配置。吸着が左端、トリミングのグループは右側にひとまとまり
-          (border-md group)。始点 / 終点ボタンは再押下で解除 (補遺⑨で
-          一旦撤回した toggle off を復活)、X は両点一括解除。実行ボタンの
-          ラベルは「実行」(group label の「トリミング」と区別)。 */}
-      {toolsExpanded && (
-        <div className="flex items-center gap-3 px-3 py-1.5 border-t border-line/60">
-          {/* Snap toggle — Row 2 left end (補遺⑩ §修正1). */}
+      {/* Row 2 — REQ-0519: 再生位置送りの矢印だけ。`justify-center` で
+          行の中央に置く（親の幅いっぱいを使うので、Row 1 の中身が伸び縮み
+          しても中央は動かない）。
+
+          高さ: 縦 padding を py-1.5 (6px) から py-0.5 (2px) に詰めた。
+          ボタン自体は h-7 w-7 (28x28 px) のままで、当たり判定は変えていない
+          — 削ったのは余白だけである。行の実測は 51px → 33px
+          (28 + 2*2 + 1px の border-t)。
+
+          REQ-077 #4 — [先頭へ] [前境界へ] [次境界へ] [末尾へ]。 */}
+      <div className="flex items-center justify-center px-3 py-0.5 border-t border-line/60">
+        <div className="flex items-center gap-0.5">
           <button
             type="button"
-            onClick={() => setSnapEnabled(!snapEnabled)}
-            title={t('timeline.toolbar.snapHelp')}
-            aria-label={t('timeline.toolbar.snap')}
-            aria-pressed={snapEnabled}
+            onClick={handleNavFirst}
+            title={t('timeline.nav.first')}
+            aria-label={t('timeline.nav.first')}
             className={cn(
-              'flex h-7 items-center gap-1.5 px-2 rounded-md text-body-sm font-medium',
-              'border transition-colors duration-150',
-              snapEnabled
-                ? 'bg-surface-2 text-fg-secondary border-line-strong'
-                : 'text-fg-tertiary border-line hover:text-fg-secondary hover:bg-surface-2/50'
+              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
             )}
           >
-            <Magnet className="h-3.5 w-3.5" />
-            <span>{t('timeline.toolbar.snap')}</span>
+            <ChevronFirst className="h-3.5 w-3.5" />
           </button>
-
-          {/* Trim cluster — group label + 4 buttons (始点 / 終点 / 実行 /
-              X-clear-both).  X は両点のうち少なくとも片方が set の
-              ときだけ表示。 */}
-          <div className="flex items-center gap-2 rounded-md border border-line px-2 py-1">
-            <span className="text-caption text-fg-muted select-none">
-              {t('timeline.trim.toolbarLabel')}
-            </span>
-            {/* 始点 — 再押下で解除 (toggle off). 設定時は label に時刻チップ。 */}
-            <button
-              type="button"
-              onClick={handleSetIn}
-              title={t('timeline.trim.setInTooltip')}
-              aria-label={t('timeline.trim.setIn')}
-              aria-pressed={pendingCutInSec !== null}
-              className={cn(
-                'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
-                'border transition-colors duration-150',
-                pendingCutInSec !== null
-                  ? 'bg-warning/15 text-warning-faint border-warning/40 hover:bg-warning/25'
-                  : 'bg-surface-2 text-fg-secondary border-line-strong hover:bg-surface-3 hover:border-surface-4 hover:text-fg-primary'
-              )}
-            >
-              <span>{t('timeline.trim.setIn')}</span>
-              {pendingCutInSec !== null && (
-                <span className="font-mono tabular-nums text-caption text-warning-faint/80">
-                  {formatEditedTimecode(pendingCutInSec, cuts)}
-                </span>
-              )}
-            </button>
-            {/* 終点 — 始点と同じパターン。 */}
-            <button
-              type="button"
-              onClick={handleSetOut}
-              title={t('timeline.trim.setOutTooltip')}
-              aria-label={t('timeline.trim.setOut')}
-              aria-pressed={pendingCutOutSec !== null}
-              className={cn(
-                'flex h-7 items-center gap-1.5 px-2.5 rounded-md text-body-sm font-medium',
-                'border transition-colors duration-150',
-                pendingCutOutSec !== null
-                  ? 'bg-warning/15 text-warning-faint border-warning/40 hover:bg-warning/25'
-                  : 'bg-surface-2 text-fg-secondary border-line-strong hover:bg-surface-3 hover:border-surface-4 hover:text-fg-primary'
-              )}
-            >
-              <span>{t('timeline.trim.setOut')}</span>
-              {pendingCutOutSec !== null && (
-                <span className="font-mono tabular-nums text-caption text-warning-faint/80">
-                  {formatEditedTimecode(pendingCutOutSec, cuts)}
-                </span>
-              )}
-            </button>
-            {/* 実行 — 両 set かつ in < out で有効化。
-                3.8 invariant: green-button text MUST be zinc-950 on green-500. */}
-            <button
-              type="button"
-              onClick={handleConfirmCut}
-              disabled={
-                pendingCutInSec === null ||
-                pendingCutOutSec === null ||
-                !(pendingCutInSec < pendingCutOutSec)
-              }
-              title={t('timeline.trim.confirmCutTooltip')}
-              aria-label={t('timeline.trim.confirmCutRun')}
-              className={cn(
-                'flex h-7 items-center gap-1.5 px-3 rounded-md text-body-sm font-semibold',
-                'border transition-colors duration-150',
-                'bg-primary text-fg-inverse border-primary-soft hover:bg-primary-soft',
-                'disabled:bg-surface-2 disabled:text-fg-muted disabled:border-line-strong disabled:hover:bg-surface-2 disabled:cursor-not-allowed'
-              )}
-            >
-              <span>{t('timeline.trim.confirmCutRun')}</span>
-            </button>
-            {/* X — clear both pending points at once (補遺⑩ §修正3).
-                少なくとも片方が set のときに表示。 */}
-            {(pendingCutInSec !== null || pendingCutOutSec !== null) && (
-              <button
-                type="button"
-                onClick={clearPendingCut}
-                title={t('timeline.trim.clearAllTooltip')}
-                aria-label={t('timeline.trim.clearAll')}
-                className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded-md',
-                  'border border-line-strong text-fg-tertiary',
-                  'hover:bg-surface-2 hover:text-fg-primary hover:border-surface-4',
-                  'transition-colors duration-150'
-                )}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+          <button
+            type="button"
+            onClick={handleNavPrev}
+            title={t('timeline.nav.prevBoundary')}
+            aria-label={t('timeline.nav.prevBoundary')}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
             )}
-          </div>
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={handleNavNext}
+            title={t('timeline.nav.nextBoundary')}
+            aria-label={t('timeline.nav.nextBoundary')}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
+            )}
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={handleNavLast}
+            title={t('timeline.nav.last')}
+            aria-label={t('timeline.nav.last')}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
+            )}
+          >
+            <ChevronLast className="h-3.5 w-3.5" />
+          </button>
         </div>
-      )}
+      </div>
       </div>
 
       {/* Scroll container.
