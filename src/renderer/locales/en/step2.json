@@ -418,9 +418,21 @@
     "help": {
       "button": "How to use",
       "title": "Timeline tips",
+      "scope": {
+        "title": "What MOJIOKO can and cannot do",
+        "body": "MOJIOKO adds subtitles to a video you have already finished editing — it does not edit the video itself. You can only work inside the original video's running time, and you cannot join another video or add audio or images. Concatenate several clips into one, and mix in music, sound effects or graphics, in a video editor first, then load the result here."
+      },
       "trim": {
         "title": "Trimming",
-        "body": "Set In and Out around the range you want to remove, then press Trim. The selected span is removed from the video and the rest of the timeline ripples forward to fill the gap. Press Clear to drop pending In / Out points before you commit."
+        "body": "In and Out are placed at the playhead position when you press them. Once both are set, Run becomes available and removes that span from the video itself, rippling the rest forward to fill the gap (with only one point set, Run stays disabled). Placing Out at or before In is refused as you set it. Before you commit, press the same button again or use the clear button beside them. Afterwards, click the scissor marker left on the timeline to undo the trim — with nested trims the outermost goes first, and removing it reveals the marker inside it."
+      },
+      "snap": {
+        "title": "Snap",
+        "body": "With Snap on, dragging a subtitle edge lines it up with nearby subtitle edges and ruler ticks. Turn it off to place edges freely."
+      },
+      "layers": {
+        "title": "Rows are stacking order",
+        "body": "A timeline row is the subtitle's stacking order. The bottom row sits furthest back and higher rows draw in front. Rows do not appear on their own when subtitles overlap in time — drag a block up or down to change its row, or use Stacking order in the inspector. Subtitles that share a row and overlap in time overlap on it; move one to another row to separate them."
       },
       "scissor": {
         "title": "Undo a cut with the scissor marker",

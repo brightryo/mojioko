@@ -2004,11 +2004,30 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               <div className="text-body font-semibold text-fg-primary">
                 {t('timeline.help.title')}
               </div>
-              {/* REQ-127 — 2x2 grid.  Each cell is one help section; the
-                  amber-tinted single-row tip sits bottom-right so it is
-                  still the last thing the eye lands on while staying on
-                  the same fold as the rest. */}
-              <ul className="grid grid-cols-2 gap-x-5 gap-y-3 text-body-sm leading-relaxed">
+              {/* REQ-127 — 2x2 grid.  Each cell is one help section.
+                  REQ-0520 — the four sections are now scope / trim / snap /
+                  layers.  Zoom lost its cell (the [−][slider][+] cluster needs
+                  no prose), the scissor-marker text folded into trim where it
+                  belongs, and the old "keep subtitles in a single row" tip was
+                  replaced: it described the pre-REQ-0394 model where rows came
+                  from TIME overlap, which stopped being true when rows became
+                  the stored z-order layer.
+
+                  `scope` keeps the amber tint the single-row tip used to carry.
+                  It is the one cell stating hard limitations (no video editing,
+                  no joining, no audio/image compositing), so it inherits the
+                  caution colour rather than leaving the grid tonally flat.
+                  `items-start` so a short cell (snap) does not stretch to its
+                  row's height. */}
+              <ul className="grid grid-cols-2 items-start gap-x-6 gap-y-4 text-body-sm leading-relaxed">
+                <li>
+                  <div className="font-semibold text-warning-faint">
+                    {t('timeline.help.scope.title')}
+                  </div>
+                  <div className="text-fg-secondary">
+                    {t('timeline.help.scope.body')}
+                  </div>
+                </li>
                 <li>
                   <div className="font-semibold text-fg-secondary">
                     {t('timeline.help.trim.title')}
@@ -2019,26 +2038,18 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 </li>
                 <li>
                   <div className="font-semibold text-fg-secondary">
-                    {t('timeline.help.scissor.title')}
+                    {t('timeline.help.snap.title')}
                   </div>
                   <div className="text-fg-tertiary">
-                    {t('timeline.help.scissor.body')}
+                    {t('timeline.help.snap.body')}
                   </div>
                 </li>
                 <li>
                   <div className="font-semibold text-fg-secondary">
-                    {t('timeline.help.zoom.title')}
+                    {t('timeline.help.layers.title')}
                   </div>
                   <div className="text-fg-tertiary">
-                    {t('timeline.help.zoom.body')}
-                  </div>
-                </li>
-                <li>
-                  <div className="font-semibold text-warning-faint">
-                    {t('timeline.help.singleRow.title')}
-                  </div>
-                  <div className="text-fg-secondary">
-                    {t('timeline.help.singleRow.body')}
+                    {t('timeline.help.layers.body')}
                   </div>
                 </li>
               </ul>
