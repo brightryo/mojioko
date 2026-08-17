@@ -113,14 +113,21 @@ export function buildMenu(win: BrowserWindow, lang: Lang = 'en'): Menu {
       ]
     },
     {
-      label: L.tools,
-      submenu: [
-        {
-          // REQ-082: accelerator removed (no keyboard shortcuts except Space).
-          label: L.settings,
-          click: () => send('menu:openSettings')
-        }
-      ]
+      // REQ-0523 — was a "Tools" menu whose submenu held exactly one item.  It is
+      // now the top-level item itself: clicking "設定" / "Settings" opens the
+      // dialog with no submenu to traverse.  `menu:openSettings` and its
+      // renderer handler are unchanged — only the menu's shape moved.
+      //
+      // A top-level item with `click` and no `submenu` is not universally
+      // clickable: on macOS every top-level NSMenu item opens a menu and can
+      // never be a plain button.  Verified on win32 (the shipped target) that it
+      // DOES fire — 6/6 activations driving the real menu bar from outside the
+      // process; see RES-0523 §1-2.  On darwin it would be inert, so keep the
+      // one-item submenu there rather than shipping a dead entry.
+      label: L.settings,
+      ...(process.platform === 'darwin'
+        ? { submenu: [{ label: L.settings, click: () => send('menu:openSettings') }] }
+        : { click: () => send('menu:openSettings') })
     },
     {
       label: L.help,
