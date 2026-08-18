@@ -81,6 +81,15 @@ const config: Config = {
         },
         row: {
           edited:  'hsl(var(--row-edited))',
+          // REQ-0526 — pre-composed weights of `edited`.  Full colours (not
+          // HSL triplets), because the alpha lives in a var so the DEV token
+          // editor can move it live; that also means `/opacity` modifiers do
+          // not apply to these four, which is intended — the weight is the
+          // token.  All of them resolve through --row-edited.
+          'edited-fill':       'var(--row-edited-fill)',
+          'edited-fill-hover': 'var(--row-edited-fill-hover)',
+          'edited-frame':      'var(--row-edited-frame)',
+          'edited-row-tint':   'var(--row-edited-row-tint)',
           error:   'hsl(var(--row-error))',
           playing: 'hsl(var(--row-playing))'
         },

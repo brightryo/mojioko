@@ -21,7 +21,7 @@
  * conversions can be unit-tested without a browser.
  */
 
-export type DevTokenKind = 'color' | 'size'
+export type DevTokenKind = 'color' | 'size' | 'alpha'
 
 export interface DevTokenGroupSpec {
   /** Stable id (also used as React key). */
@@ -43,6 +43,17 @@ export interface DevTokenGroupSpec {
    * with the Tailwind class `text-<name>`.
    */
   sizes?: string[]
+  /**
+   * ALPHA groups (REQ-0526): plain 0–1 `:root` variables, edited as numbers
+   * rather than colours.  `alphas[].name` is the var name without `--`;
+   * `label` is what the panel shows.
+   *
+   * Why this kind exists: judging a state colour means moving the hue AND the
+   * weights it is used at together, and a weight baked into a Tailwind class
+   * (`bg-row-edited/70`) cannot move at runtime.  Lifting those weights into
+   * vars is what makes them tunable — see globals.css `--row-edited-*-alpha`.
+   */
+  alphas?: { name: string; label: string }[]
 }
 
 /**
@@ -116,6 +127,38 @@ export const DEV_TOKEN_GROUPS: readonly DevTokenGroupSpec[] = [
       'primary-foreground',
     ],
     discoverPrefixes: ['primary'],
+  },
+  /*
+   * REQ-0526 — state colours.  Added because `--row-edited` was invisible to
+   * this panel: it is in none of the curated lists and matches none of the
+   * `discoverPrefixes` above (`text-` / `surface-` / `border-` / `primary`),
+   * so the drift reconciler never surfaced it either.  That was deliberate at
+   * the time — the REQ-0414 spec put subtitle state colours out of scope —
+   * but tuning the edited blue on a running screen is exactly what REQ-0526
+   * asks for.
+   *
+   * NOTE the absent `discoverPrefixes`.  `['row-']` would look right and be
+   * wrong: `--row-selected-alpha` is declared on `:root` and is a NUMBER, so
+   * the reconciler would append it to a colour group and the panel would try
+   * to render 0.10 in a colour input.  The members are listed by hand for
+   * that reason; a new `--row-*` colour has to be added here.
+   */
+  {
+    id: 'state',
+    title: 'State colors (rows / clips)',
+    kind: 'color',
+    members: ['row-edited', 'row-error', 'row-playing', 'row-selected', 'row-selected-border'],
+  },
+  {
+    id: 'stateAlpha',
+    title: 'Edited state — weights',
+    kind: 'alpha',
+    alphas: [
+      { name: 'row-edited-fill-alpha', label: 'clip fill' },
+      { name: 'row-edited-fill-hover-alpha', label: 'clip fill (hover)' },
+      { name: 'row-edited-frame-alpha', label: 'clip frame' },
+      { name: 'row-edited-row-alpha', label: 'list row tint' },
+    ],
   },
 ] as const
 
@@ -334,6 +377,55 @@ export function serializeTailwindFontSize(snap: TokenSnapshot): string {
     lines.push(`${key}: ['var(--fs-${name}, ${s.px}px)', { lineHeight: '${s.lineHeight}' }],`)
   }
   return lines.join('\n')
+}
+
+/* -------------------------------------------------------------------------
+ * REQ-0526 — "edited state" decision block
+ *
+ * The point of the live editor is to end with a decision, so the decision has
+ * to leave the app in a form that can be pasted somewhere useful.  This emits
+ * ONE chunk carrying everything that defines the edited-state look: the hue in
+ * both notations the codebase uses, and the four weights.  The first line is a
+ * one-liner for chat; the rest is paste-able over the globals.css block.
+ * ------------------------------------------------------------------------- */
+
+/** The four weights, in the order the panel shows them. */
+export const EDITED_ALPHA_VARS = [
+  'row-edited-fill-alpha',
+  'row-edited-fill-hover-alpha',
+  'row-edited-frame-alpha',
+  'row-edited-row-alpha',
+] as const
+
+export interface EditedStateSnapshot {
+  /** `236 73% 54%` */
+  triplet: string
+  /** `#343fdf` */
+  hex: string
+  /** var name (no `--`) → value as authored, e.g. `0.7`. */
+  alphas: Record<string, string>
+}
+
+/**
+ * Format the current edited-state decision.  Pure so it can be unit-tested
+ * without a DOM; the panel feeds it a snapshot read live from the document.
+ */
+export function serializeEditedState(snap: EditedStateSnapshot): string {
+  const a = (n: string) => snap.alphas[n] ?? '?'
+  const summary =
+    `${snap.hex}  /  ${snap.triplet}   ·  fill ${a('row-edited-fill-alpha')}` +
+    `  ·  hover ${a('row-edited-fill-hover-alpha')}` +
+    `  ·  frame ${a('row-edited-frame-alpha')}` +
+    `  ·  row ${a('row-edited-row-alpha')}`
+  return [
+    `/* edited state — tuned in the dev token editor (REQ-0526) */`,
+    `/* ${summary} */`,
+    `--row-edited:  ${snap.triplet};          /* ${snap.hex} */`,
+    `--row-edited-fill-alpha:       ${a('row-edited-fill-alpha')};`,
+    `--row-edited-fill-hover-alpha: ${a('row-edited-fill-hover-alpha')};`,
+    `--row-edited-frame-alpha:      ${a('row-edited-frame-alpha')};`,
+    `--row-edited-row-alpha:        ${a('row-edited-row-alpha')};`,
+  ].join('\n')
 }
 
 /* -------------------------------------------------------------------------

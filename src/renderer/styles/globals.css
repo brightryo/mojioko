@@ -403,6 +403,36 @@
           value is deliberately unchanged.
        #343FDF, owner's pick.  The HSL below round-trips to it exactly. */
     --row-edited:  236 73% 54%;          /* #343FDF */
+
+    /* REQ-0526 — the four weights the edited colour is used at, lifted out of
+       the Tailwind class strings (`bg-row-edited/70` &c.) and named here.
+       Two reasons, in order of importance:
+
+         1. They are not independent of each other or of the hue.  Judging
+            "is this the right blue" means moving the colour AND the weights
+            together on a running screen, and an alpha baked into a utility
+            class cannot move at runtime.  These vars are what the DEV token
+            editor (Ctrl+Shift+D) binds its sliders to.
+         2. 70 / 85 / 1 / 0.10 were magic numbers spread across two
+            components.  CLAUDE.md §3-3 says they belong in a token.
+
+       Each composed colour still resolves THROUGH --row-edited, so the
+       single-source property REQ-0525 established is intact: change the hue
+       and all four surfaces move together.  Pinned by
+       tests/e2e/edited-colour-unified-req-0525.spec.ts, which compares the
+       rendered RGB triples. */
+    --row-edited-fill-alpha:       0.70;  /* timeline clip body            */
+    --row-edited-fill-hover-alpha: 0.85;  /* …under the cursor             */
+    --row-edited-frame-alpha:      1;     /* clip 1px frame — full, so two
+                                             touching edited clips show a
+                                             seam against their own fill    */
+    --row-edited-row-alpha:        0.10;  /* list-view row tint            */
+
+    --row-edited-fill:       hsl(var(--row-edited) / var(--row-edited-fill-alpha));
+    --row-edited-fill-hover: hsl(var(--row-edited) / var(--row-edited-fill-hover-alpha));
+    --row-edited-frame:      hsl(var(--row-edited) / var(--row-edited-frame-alpha));
+    --row-edited-row-tint:   hsl(var(--row-edited) / var(--row-edited-row-alpha));
+
     --row-error:   0 84% 60%;            /* red-500 */
     --row-playing: 199 89% 48%;          /* sky-500 — kept for legend / inspector */
 

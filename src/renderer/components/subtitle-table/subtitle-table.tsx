@@ -416,7 +416,10 @@ function SubtitleRow({
     // to rgb(30,33,44) — 7 units from an untinted row, i.e. invisible.  At
     // 10 % it is ~19 units and reads as a faint blue cast without shouting in
     // a dense table.
-    !isSelected && rowState === 'edited' && 'bg-row-edited/[0.10]',
+    // REQ-0526 — the 0.10 moved into `--row-edited-row-alpha` (globals.css) so
+    // the DEV token editor can move it live; `row-edited-row-tint` still
+    // resolves through `--row-edited`.
+    !isSelected && rowState === 'edited' && 'bg-row-edited-row-tint',
     !isSelected && rowState === 'overflow' && 'bg-destructive/[0.04]'
   )
 

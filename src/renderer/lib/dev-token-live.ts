@@ -110,11 +110,49 @@ export function resetSize(name: string): void {
   document.documentElement.style.removeProperty(`--fs-${name}`)
 }
 
-/** Remove every `--fs-*` and colour override this editor may have set. */
-export function resetAll(colorNames: readonly string[], sizeNames: readonly string[]): void {
+/* -------------------------------------------------------------------------
+ * Alphas — plain 0–1 `:root` numbers (REQ-0526)
+ *
+ * Unlike colours these are read straight off the cascade rather than through a
+ * probe: there is no `hsl()` chain to resolve, the value IS the number.
+ * ------------------------------------------------------------------------- */
+
+/** Current value of an alpha var, as a number.  Falls back to 1 if unset. */
+export function readAlpha(name: string): number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim()
+  const n = Number.parseFloat(raw)
+  return Number.isFinite(n) ? n : 1
+}
+
+/** Current value of an alpha var as authored text (for the export block). */
+export function readAlphaRaw(name: string): string {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim()
+  return raw === '' ? '1' : raw
+}
+
+/** Override an alpha live.  Clamped to [0, 1] — outside that CSS ignores it. */
+export function applyAlpha(name: string, value: number): void {
+  const v = Math.min(1, Math.max(0, value))
+  // Trailing zeros trimmed so the export reads like the authored file
+  // (`0.7`, not `0.70000000000000001`).
+  document.documentElement.style.setProperty(`--${name}`, String(Number(v.toFixed(3))))
+}
+
+/** Remove an alpha override, reverting to the authored globals.css value. */
+export function resetAlpha(name: string): void {
+  document.documentElement.style.removeProperty(`--${name}`)
+}
+
+/** Remove every override this editor may have set. */
+export function resetAll(
+  colorNames: readonly string[],
+  sizeNames: readonly string[],
+  alphaNames: readonly string[] = [],
+): void {
   const root = document.documentElement
   for (const n of colorNames) root.style.removeProperty(`--${n}`)
   for (const n of sizeNames) root.style.removeProperty(`--fs-${n}`)
+  for (const n of alphaNames) root.style.removeProperty(`--${n}`)
 }
 
 // Re-export for panel convenience.

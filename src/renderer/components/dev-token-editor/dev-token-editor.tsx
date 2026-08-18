@@ -19,22 +19,28 @@ import { X, Copy, RotateCcw } from 'lucide-react'
 import { useRadixModalIsolation } from './use-radix-isolation'
 import {
   DEV_TOKEN_GROUPS,
+  EDITED_ALPHA_VARS,
   FIXED_FONT_FAMILY,
   discoverRootVarNames,
   driftFor,
   hexToHslTriplet,
   orderedColorMembers,
+  serializeEditedState,
   serializeGlobalsCss,
   serializeTailwindFontSize,
   type TokenSnapshot,
 } from '@/lib/dev-tokens'
 import {
+  applyAlpha,
   applyColorHex,
   applySize,
+  readAlpha,
+  readAlphaRaw,
   readColorHex,
   readColorTriplet,
   readSize,
   resetAll,
+  resetAlpha,
   resetColor,
   resetSize,
 } from '@/lib/dev-token-live'
@@ -46,8 +52,11 @@ const SIZE_MAX_PX = 48
 interface ResolvedGroup {
   id: string
   title: string
-  kind: 'color' | 'size'
-  members: string[] // color var names, or type-scale names
+  kind: 'color' | 'size' | 'alpha'
+  /** color var names, type-scale names, or alpha var names. */
+  members: string[]
+  /** alpha groups only: var name → human label. */
+  labels?: Record<string, string>
 }
 
 export function DevTokenEditor(): JSX.Element | null {
@@ -104,6 +113,15 @@ function DevTokenPanel({
       if (g.kind === 'size') {
         return { id: g.id, title: g.title, kind: 'size' as const, members: g.sizes ?? [] }
       }
+      if (g.kind === 'alpha') {
+        return {
+          id: g.id,
+          title: g.title,
+          kind: 'alpha' as const,
+          members: (g.alphas ?? []).map((a) => a.name),
+          labels: Object.fromEntries((g.alphas ?? []).map((a) => [a.name, a.label])),
+        }
+      }
       const drift = driftFor(g, rootVars)
       if (drift.length > 0) {
         // eslint-disable-next-line no-console
@@ -126,6 +144,10 @@ function DevTokenPanel({
     () => groups.filter((g) => g.kind === 'size').flatMap((g) => g.members),
     [groups],
   )
+  const alphaNames = useMemo(
+    () => groups.filter((g) => g.kind === 'alpha').flatMap((g) => g.members),
+    [groups],
+  )
 
   // Live-read seed.  `version` bumps force a re-read after reset-all.
   const [version, setVersion] = useState(0)
@@ -134,18 +156,22 @@ function DevTokenPanel({
     for (const n of colorNames) colorHex[n] = readColorHex(n)
     const size: Record<string, { px: number; lineHeight: string }> = {}
     for (const n of sizeNames) size[n] = readSize(n)
-    return { colorHex, size }
+    const alpha: Record<string, number> = {}
+    for (const n of alphaNames) alpha[n] = readAlpha(n)
+    return { colorHex, size, alpha }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colorNames, sizeNames, version])
+  }, [colorNames, sizeNames, alphaNames, version])
 
   const [colorHex, setColorHex] = useState<Record<string, string>>(initial.colorHex)
   const [sizePx, setSizePx] = useState<Record<string, number>>(
     Object.fromEntries(Object.entries(initial.size).map(([k, v]) => [k, v.px])),
   )
+  const [alpha, setAlpha] = useState<Record<string, number>>(initial.alpha)
   // Re-sync local state whenever the seed changes (reset-all).
   useEffect(() => {
     setColorHex(initial.colorHex)
     setSizePx(Object.fromEntries(Object.entries(initial.size).map(([k, v]) => [k, v.px])))
+    setAlpha(initial.alpha)
   }, [initial])
 
   const onColorChange = useCallback((name: string, hex: string) => {
@@ -168,10 +194,20 @@ function DevTokenPanel({
     setSizePx((s) => ({ ...s, [name]: readSize(name).px }))
   }, [])
 
+  const onAlphaChange = useCallback((name: string, value: number) => {
+    applyAlpha(name, value)
+    setAlpha((s) => ({ ...s, [name]: value }))
+  }, [])
+
+  const onAlphaReset = useCallback((name: string) => {
+    resetAlpha(name)
+    setAlpha((s) => ({ ...s, [name]: readAlpha(name) }))
+  }, [])
+
   const onResetAll = useCallback(() => {
-    resetAll(colorNames, sizeNames)
+    resetAll(colorNames, sizeNames, alphaNames)
     setVersion((v) => v + 1)
-  }, [colorNames, sizeNames])
+  }, [colorNames, sizeNames, alphaNames])
 
   const [exportOpen, setExportOpen] = useState(false)
   const snapshot = useMemo<TokenSnapshot>(() => {
@@ -188,6 +224,19 @@ function DevTokenPanel({
 
   const globalsBlock = useMemo(() => serializeGlobalsCss(snapshot), [snapshot])
   const tailwindBlock = useMemo(() => serializeTailwindFontSize(snapshot), [snapshot])
+  // REQ-0526 — the edited-state decision, as one paste-able chunk.  Read live
+  // from the DOM like the others, so it always reflects the current knobs.
+  const editedBlock = useMemo(
+    () =>
+      serializeEditedState({
+        triplet: readColorTriplet('row-edited'),
+        hex: readColorHex('row-edited'),
+        alphas: Object.fromEntries(EDITED_ALPHA_VARS.map((n) => [n, readAlphaRaw(n)])),
+      }),
+    // Same recompute-trigger pattern as `snapshot` above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [colorHex, alpha, exportOpen],
+  )
 
   // REQ-0421 — stay operable when a Radix modal (Sheet/drawer) is open.
   const rootRef = useRef<HTMLDivElement>(null)
@@ -253,25 +302,37 @@ function DevTokenPanel({
           <section key={g.id} className="mb-4">
             <h3 className="mb-2 text-caption font-medium uppercase text-fg-tertiary">{g.title}</h3>
             <div className="flex flex-col gap-1.5">
-              {g.kind === 'color'
-                ? g.members.map((name) => (
-                    <ColorRow
-                      key={name}
-                      name={name}
-                      hex={colorHex[name] ?? '#000000'}
-                      onChange={onColorChange}
-                      onReset={onColorReset}
-                    />
-                  ))
-                : g.members.map((name) => (
-                    <SizeRow
-                      key={name}
-                      name={name}
-                      px={sizePx[name] ?? 0}
-                      onChange={onSizeChange}
-                      onReset={onSizeReset}
-                    />
-                  ))}
+              {g.kind === 'color' &&
+                g.members.map((name) => (
+                  <ColorRow
+                    key={name}
+                    name={name}
+                    hex={colorHex[name] ?? '#000000'}
+                    onChange={onColorChange}
+                    onReset={onColorReset}
+                  />
+                ))}
+              {g.kind === 'size' &&
+                g.members.map((name) => (
+                  <SizeRow
+                    key={name}
+                    name={name}
+                    px={sizePx[name] ?? 0}
+                    onChange={onSizeChange}
+                    onReset={onSizeReset}
+                  />
+                ))}
+              {g.kind === 'alpha' &&
+                g.members.map((name) => (
+                  <AlphaRow
+                    key={name}
+                    name={name}
+                    label={g.labels?.[name] ?? name}
+                    value={alpha[name] ?? 1}
+                    onChange={onAlphaChange}
+                    onReset={onAlphaReset}
+                  />
+                ))}
             </div>
           </section>
         ))}
@@ -298,6 +359,9 @@ function DevTokenPanel({
 
         {exportOpen && (
           <div className="mt-3 flex max-h-[40vh] flex-col gap-3 overflow-y-auto">
+            {/* REQ-0526 first — it is the one most likely to be wanted, and
+                it is small enough to read without scrolling. */}
+            <ExportBlock title="edited state  →  paste into the REQ" body={editedBlock} />
             <ExportBlock title="globals.css  (:root)" body={globalsBlock} />
             <ExportBlock title="tailwind.config.ts  (fontSize)" body={tailwindBlock} />
           </div>
@@ -386,6 +450,63 @@ function SizeRow({
         onClick={() => onReset(name)}
         className="shrink-0 rounded p-1 text-fg-muted hover:bg-surface-2 hover:text-fg-secondary"
         aria-label={`Reset ${name}`}
+        title="Reset"
+      >
+        <RotateCcw className="h-3 w-3" />
+      </button>
+    </div>
+  )
+}
+
+/**
+ * REQ-0526 — a 0–1 weight.  Slider for feel, number box for a value you can
+ * state exactly; 0.01 steps because the differences that matter here are
+ * visible well below 0.05.
+ */
+function AlphaRow({
+  name,
+  label,
+  value,
+  onChange,
+  onReset,
+}: {
+  name: string
+  label: string
+  value: number
+  onChange: (name: string, value: number) => void
+  onReset: (name: string) => void
+}): JSX.Element {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex w-24 shrink-0 flex-col leading-tight">
+        <span className="truncate text-caption text-fg-secondary">{label}</span>
+        <span className="truncate text-micro text-fg-muted">--{name}</span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={value}
+        onChange={(e) => onChange(name, Number(e.target.value))}
+        className="min-w-0 flex-1 accent-[hsl(var(--primary))]"
+        aria-label={`${label} alpha`}
+      />
+      <input
+        type="number"
+        min={0}
+        max={1}
+        step={0.01}
+        value={value}
+        onChange={(e) => onChange(name, Number(e.target.value))}
+        className="w-14 shrink-0 rounded border border-line bg-surface-0 px-1 py-0.5 text-caption text-fg-primary"
+        aria-label={`${label} alpha value`}
+      />
+      <button
+        type="button"
+        onClick={() => onReset(name)}
+        className="shrink-0 rounded p-1 text-fg-muted hover:bg-surface-2 hover:text-fg-secondary"
+        aria-label={`Reset --${name}`}
         title="Reset"
       >
         <RotateCcw className="h-3 w-3" />

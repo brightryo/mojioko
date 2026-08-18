@@ -21,6 +21,7 @@ import {
   isHslTriplet,
   orderedColorMembers,
   rgbStringToHex,
+  serializeEditedState,
   serializeGlobalsCss,
   serializeTailwindFontSize,
   TYPE_SCALE_TOKENS,
@@ -79,14 +80,55 @@ describe('REQ-0414 colour conversions', () => {
 })
 
 describe('REQ-0414 registry', () => {
-  it('every group is either a colour group with members or a size group with sizes', () => {
+  it('every group carries the payload its kind requires', () => {
     for (const g of DEV_TOKEN_GROUPS) {
       if (g.kind === 'color') {
-        expect(g.members && g.members.length).toBeTruthy()
+        expect(g.members && g.members.length, `${g.id} has no members`).toBeTruthy()
+      } else if (g.kind === 'size') {
+        expect(g.sizes && g.sizes.length, `${g.id} has no sizes`).toBeTruthy()
       } else {
-        expect(g.sizes && g.sizes.length).toBeTruthy()
+        // REQ-0526 — alpha groups.
+        expect(g.alphas && g.alphas.length, `${g.id} has no alphas`).toBeTruthy()
+        for (const a of g.alphas!) {
+          expect(a.name, `${g.id} alpha has no name`).toBeTruthy()
+          expect(a.label, `${g.id}/${a.name} has no label`).toBeTruthy()
+        }
       }
     }
+  })
+
+  /*
+   * REQ-0526 — `--row-edited` has to be reachable from the panel, and the
+   * reason it was not is worth pinning: it is in none of the curated colour
+   * lists and matches none of the discover prefixes, so the drift reconciler
+   * never surfaced it either. If someone deletes the `state` group this fails.
+   */
+  it('the edited state colour is editable, and its four weights are too (REQ-0526)', () => {
+    const colourMembers = DEV_TOKEN_GROUPS.filter((g) => g.kind === 'color').flatMap(
+      (g) => g.members ?? [],
+    )
+    expect(colourMembers).toContain('row-edited')
+
+    const alphaNames = DEV_TOKEN_GROUPS.filter((g) => g.kind === 'alpha').flatMap((g) =>
+      (g.alphas ?? []).map((a) => a.name),
+    )
+    expect(alphaNames).toEqual([
+      'row-edited-fill-alpha',
+      'row-edited-fill-hover-alpha',
+      'row-edited-frame-alpha',
+      'row-edited-row-alpha',
+    ])
+  })
+
+  /*
+   * The `state` group deliberately has NO discoverPrefixes. `['row-']` would
+   * look correct and would pull `--row-selected-alpha` — a number — into a
+   * colour group, where the panel would render 0.10 in a colour input.
+   */
+  it('the state colour group does not auto-discover `row-` vars (REQ-0526)', () => {
+    const state = DEV_TOKEN_GROUPS.find((g) => g.id === 'state')!
+    expect(state.discoverPrefixes).toBeUndefined()
+    expect(driftFor(state, ['row-edited', 'row-selected-alpha', 'row-brand-new'])).toEqual([])
   })
 
   it('font-size group lists the collapsed 6-step type scale (REQ-0416)', () => {
@@ -216,5 +258,50 @@ describe('REQ-0420 token overlay helpers', () => {
     expect(out).toContain('text-body → text-title')
     expect(out).toContain('入力ファイル')
     expect(out).toContain('div.flex > label')
+  })
+})
+
+/*
+ * REQ-0526 — the decision block. The whole point of the live editor is to end
+ * with a value someone can act on, so the copy-out is the deliverable, not a
+ * convenience. These pin the shape the owner will paste back.
+ */
+describe('REQ-0526 edited-state decision block', () => {
+  const snap = {
+    triplet: '236 73% 54%',
+    hex: '#343fdf',
+    alphas: {
+      'row-edited-fill-alpha': '0.7',
+      'row-edited-fill-hover-alpha': '0.85',
+      'row-edited-frame-alpha': '1',
+      'row-edited-row-alpha': '0.1',
+    },
+  }
+
+  it('carries both notations and all four weights', () => {
+    const out = serializeEditedState(snap)
+    expect(out).toContain('#343fdf')
+    expect(out).toContain('236 73% 54%')
+    expect(out).toContain('--row-edited:  236 73% 54%;')
+    expect(out).toContain('--row-edited-fill-alpha:       0.7;')
+    expect(out).toContain('--row-edited-fill-hover-alpha: 0.85;')
+    expect(out).toContain('--row-edited-frame-alpha:      1;')
+    expect(out).toContain('--row-edited-row-alpha:        0.1;')
+  })
+
+  it('leads with a one-line summary that can be pasted into chat', () => {
+    const lines = serializeEditedState(snap).split('\n')
+    // Line 0 is the banner, line 1 the summary.
+    expect(lines[1]).toContain('#343fdf')
+    expect(lines[1]).toContain('fill 0.7')
+    expect(lines[1]).toContain('hover 0.85')
+    expect(lines[1]).toContain('frame 1')
+    expect(lines[1]).toContain('row 0.1')
+  })
+
+  it('marks a missing weight rather than silently emitting a wrong one', () => {
+    const out = serializeEditedState({ ...snap, alphas: {} })
+    // A blank or a stale default here would be pasted back as fact.
+    expect(out).toContain('--row-edited-fill-alpha:       ?;')
   })
 })

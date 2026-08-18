@@ -362,9 +362,13 @@ const BLOCK_TONE = {
      * That frees hover to move the FILL again (70 → 85 %), which REQ-0524's
      * yellow could not afford — at 85 % white text is still 7.7:1 and the
      * green selection frame is still 4.4:1.
+     *
+     * REQ-0526 — the three weights moved into `--row-edited-*-alpha` vars so
+     * the DEV token editor can move them on a running screen; the numbers
+     * quoted above are those vars' authored values.
      */
-    bg: 'bg-row-edited/70 hover:bg-row-edited/85',
-    border: 'border-row-edited hover:border-row-edited',
+    bg: 'bg-row-edited-fill hover:bg-row-edited-fill-hover',
+    border: 'border-row-edited-frame hover:border-row-edited-frame',
     timecode: 'text-fg-primary',
   },
   overflow: {
