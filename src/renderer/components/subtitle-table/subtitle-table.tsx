@@ -102,6 +102,15 @@ function getRowState(entry: SubtitleEntry, isOverflow: boolean): RowState {
  * icon shape (+ tooltip), never by colour alone — colour only grades severity
  * (danger / warning / neutral).  Icon-only packs the state area far tighter
  * than the old text badges, which wrapped raggedly at a fixed 150px.
+ *
+ * REQ-0525 — `edited` joins the severity list so the pencil carries the same
+ * `--row-edited` blue as the row tint, the timeline clip and the inspector
+ * badge.  It is the only severity drawn as a FILLED chip, and that is forced
+ * rather than decorative: #343FDF as a glyph colour on this dark table
+ * measures 2.27:1 against the row background — well under the 3:1 floor for
+ * graphics, i.e. a blue pencil would simply be hard to see.  As a fill with a
+ * white glyph it is 6.59:1.  Note also that being edited is not a severity at
+ * all, so looking unlike the danger/warning glyphs is correct.
  */
 function StatusIcon({
   Icon,
@@ -110,7 +119,7 @@ function StatusIcon({
 }: {
   Icon: LucideIcon
   label: string
-  severity: 'danger' | 'warning' | 'neutral'
+  severity: 'danger' | 'warning' | 'neutral' | 'edited'
 }) {
   return (
     <span
@@ -121,7 +130,8 @@ function StatusIcon({
         'flex h-4 w-4 items-center justify-center',
         severity === 'danger' && 'text-destructive',
         severity === 'warning' && 'text-warning-soft',
-        severity === 'neutral' && 'text-fg-secondary'
+        severity === 'neutral' && 'text-fg-secondary',
+        severity === 'edited' && 'rounded-sm bg-row-edited text-fg-primary'
       )}
     >
       <Icon className="h-3.5 w-3.5" />
@@ -397,7 +407,16 @@ function SubtitleRow({
     isUserSelected && rowState !== 'edited' && rowState !== 'overflow' && 'bg-surface-2/50',
     !isUserSelected && !isSelected && 'hover:bg-surface-2/20',
     rowState === 'deleted' && 'opacity-40',
-    !isSelected && rowState === 'edited' && 'bg-warning-soft/[0.04]',
+    // REQ-0525 — off `warning-soft` and onto `--row-edited`, the single source
+    // the timeline clip and the inspector badge also read.  This was the only
+    // place still borrowing the warning family to mean "edited".
+    //
+    // Alpha raised 0.04 → 0.10, measured rather than kept: #343FDF is much
+    // darker than amber-400, so at 4 % over the row background it composited
+    // to rgb(30,33,44) — 7 units from an untinted row, i.e. invisible.  At
+    // 10 % it is ~19 units and reads as a faint blue cast without shouting in
+    // a dense table.
+    !isSelected && rowState === 'edited' && 'bg-row-edited/[0.10]',
     !isSelected && rowState === 'overflow' && 'bg-destructive/[0.04]'
   )
 
@@ -565,7 +584,7 @@ function SubtitleRow({
               <StatusIcon Icon={Scissors} label={t('state.trimDeleted')} severity="danger" />
             )}
             {(entry.isEdited || clipStatus === 'edited') && (
-              <StatusIcon Icon={Pencil} label={t('state.edited')} severity="neutral" />
+              <StatusIcon Icon={Pencil} label={t('state.edited')} severity="edited" />
             )}
             {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.timeInvalid && (
               <StatusIcon Icon={CircleAlert} label={t('badge.timeInvalid')} severity="danger" />

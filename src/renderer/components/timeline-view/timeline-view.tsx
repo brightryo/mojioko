@@ -329,20 +329,42 @@ const BLOCK_TONE = {
   },
   edited: {
     /*
-     * 40 % is a ceiling, not a taste call, and it was measured rather than
-     * picked: composited over the clips lane it yields rgb(118, 104, 36),
-     * which holds the clip's body text at 5.1:1 (WCAG AA).  45 % already
-     * falls to 4.42:1.  For the same reason hover brightens the FRAME rather
-     * than the fill — the usual hover fill bump would put the text under
-     * 4.5:1 for as long as the cursor sits on the clip.
+     * REQ-0525 — 70 %, and NOT at a contrast ceiling any more.
      *
-     * The timecode row drops its `/80` dimming here: at 80 % over this much
-     * brighter fill it measured 2.37:1, i.e. genuinely hard to read.  Undimmed
-     * it is 5.1:1 like the body text.  This is the text-colour change REQ-0524
-     * §2-1 asked to be reported.
+     * REQ-0524's yellow was pinned at 40 % because that was the most fill it
+     * could take before white text fell under 4.5:1.  That constraint was a
+     * property of the yellow, not of the design: #343FDF is a DARK blue, so
+     * piling it on over the near-black clips lane makes the fill darker, and
+     * the white text gets MORE readable, not less.  Measured over the lane:
+     *
+     *     alpha   fill            white text   green selection frame
+     *     0.40    rgb(36,41,105)     12.07:1        6.93:1
+     *     0.70    rgb(44,52,164)      9.02:1        5.19:1   ← chosen
+     *     1.00    rgb(52,63,223)      6.59:1        3.79:1
+     *
+     * Every row clears AA, so the value was picked for how the blue READS
+     * (the owner asked for "cyber"), with 100 % held back because that is
+     * where the green 1px selection frame starts to lose the fill.
+     *
+     * REQ-0525 §2-3 asked whether the timecode row still needs REQ-0524's
+     * undimming, now that the fill is no longer a bright yellow.  Measured,
+     * and the answer is yes: the shared `text-fg-secondary/80` over this fill
+     * comes to 4.29:1 — closer than the yellow's 2.37:1, but still under AA.
+     * So `text-fg-primary` stays.  (Estimating it would have shipped 4.29 as
+     * "about 4.8"; the gate is what caught it.)
+     *
+     * The frame goes to FULL opacity while the fill stays at 70 %, which is
+     * what keeps two touching edited clips separable: at 70/70 the border and
+     * the fill composite to nearly the same colour and the seam between
+     * neighbours all but disappeared (caught in the REQ-0525 screenshots, not
+     * by reasoning).  Full-vs-70 puts 60 units of RGB distance between them.
+     *
+     * That frees hover to move the FILL again (70 → 85 %), which REQ-0524's
+     * yellow could not afford — at 85 % white text is still 7.7:1 and the
+     * green selection frame is still 4.4:1.
      */
-    bg: 'bg-row-edited/40 hover:bg-row-edited/40',
-    border: 'border-row-edited/70 hover:border-row-edited',
+    bg: 'bg-row-edited/70 hover:bg-row-edited/85',
+    border: 'border-row-edited hover:border-row-edited',
     timecode: 'text-fg-primary',
   },
   overflow: {
@@ -556,7 +578,8 @@ function BlockImpl({
           // REQ-20260614-001 補遺⑬: 再生アクティブ (sky) ハイライトは
           // 廃止。`focusedRowId` 自体は再生中の一覧自動スクロール (subtitle-
           // table.tsx) を駆動するため残してあるが、視覚的な色付けは行わない。
-          // 状態色は白 (通常) / 黄 (編集済み) / 赤 (overflow) / 緑 (ユーザー
+          // 状態色は白 (通常) / 青 (編集済み・REQ-0525 で黄から変更) /
+          // 赤 (overflow) / 緑 (ユーザー
           // 選択) の 4 色のみ。
           //
           // REQ-089 / REQ-088 #1 の教訓は BLOCK_TONE 側に移した: どの tone も

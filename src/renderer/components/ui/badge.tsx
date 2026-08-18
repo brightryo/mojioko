@@ -15,6 +15,18 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default: 'bg-surface-2 text-fg-secondary',
+        // REQ-0525 — the 編集済み badge.  It used to be `default` (a neutral
+        // grey chip), which said nothing about the state; it now carries the
+        // same `--row-edited` blue as the timeline clip and the list row, so
+        // the three read as one thing.
+        //
+        // Solid rather than the soft 10 %-tint the sibling variants use, and
+        // that is forced rather than chosen: #343FDF is a DARK blue, so as a
+        // foreground on this dark UI it measures ~2.3:1 — unreadable.  It only
+        // works as a fill, and white on the solid fill is 6.59:1.  The
+        // different weight is also useful: "edited" is a state, the amber and
+        // red badges beside it are warnings, and they should not read alike.
+        edited: 'bg-row-edited text-fg-primary border-row-edited',
         success: 'bg-primary/10 text-primary border-primary/20',
         // REQ-0421 (step2) — overlay reassignment: warning badge (時間重複 /
         // 文字あふれ / 空テキスト) body-sm → micro. text-micro is appended AFTER the

@@ -459,8 +459,20 @@ test('timeline clip frame + state colours — REQ-0524', async () => {
   const editedFill = parseRgb(colours.edited.fill)
   expect({ r: editedFill.r, g: editedFill.g, b: editedFill.b },
     'the edited clip fill is not --row-edited — it has been hardcoded or repointed').toEqual(rowEditedRgb)
+
+  // REQ-0525 restated this clause.  REQ-0524 pinned it as "not amber-400",
+  // which was really a proxy for the thing that keeps going wrong: the edited
+  // colour drifting back into the WARNING family.  Being edited is not a
+  // warning, so the durable form is to compare the two tokens directly — that
+  // catches the literal amber-400 regression AND any future re-borrow, without
+  // pinning a specific blue that the owner is still free to tune.
   expect(colours.tokens.rowEdited.trim(),
-    '--row-edited is back on amber-400; the owner reported that as "beige"').not.toBe('43 96% 56%')
+    '--row-edited has been set back to --warning-soft — "edited" is a state, not a warning (REQ-0525)')
+    .not.toBe(colours.tokens.warningSoft.trim())
+  const rowEditedHue = Number(colours.tokens.rowEdited.trim().split(/\s+/)[0])
+  expect(rowEditedHue > 60 && rowEditedHue < 330,
+    `--row-edited is at hue ${rowEditedHue}, back in the amber/red band the warning family owns (REQ-0525)`)
+    .toBe(true)
 
   // Composite each state over what is actually behind it and check the four
   // are distinguishable and legible.

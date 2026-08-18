@@ -1049,11 +1049,15 @@ export function TimelineBlockInspector({
           factors in posX/posY). */}
       <div className="flex flex-wrap gap-1 min-h-5">
         {entry.isEdited && !entry.isDeleted && (
-          <Badge variant="default">{t('state.edited')}</Badge>
+          <Badge variant="edited">{t('state.edited')}</Badge>
         )}
         {/* REQ-121 — errors (timeInvalid / overDuration / invalidSize)
             wear the danger variant; warnings (overlap / overflow /
-            emptyText) keep the warning amber. */}
+            emptyText) keep the warning amber.
+            REQ-0525 — and they STAY amber.  Only the 編集済み badge above
+            moved to the blue `edited` variant: being edited is not a
+            warning, and the point of the change is that the two stop
+            looking related. */}
         {warnings?.timeInvalid  && <Badge variant="danger">{t('badge.timeInvalid')}</Badge>}
         {warnings?.overlap      && <Badge variant="warning">{t('badge.overlap')}</Badge>}
         {warnings?.overDuration && <Badge variant="danger">{t('badge.overDuration')}</Badge>}
