@@ -27,6 +27,23 @@
  * The hardcoded thresholds it used to carry now come from the source
  * (`readSourceConstant` / the exported `chooseRulerStepSec`), so the numbers it
  * prints track the app instead of a copy someone forgot to update.
+ *
+ * ★ REQ-0524 §3-5 — premises re-checked and two stale ones corrected:
+ *
+ *   1. The replica in section 1 carried `text-zinc-300/80`, a class the app
+ *      dropped when the colour tokens landed. It now uses the real
+ *      `text-fg-secondary/80`. (REQ-0524 additionally gives the EDITED tone's
+ *      timecode row `text-fg-primary` — colour only, no metric effect.)
+ *   2. Section 2's comments said "the default pps (100)". The default is 50,
+ *      and at 50 **10 of the 11 fixture blocks are under the 220 px
+ *      threshold**, i.e. almost none of them show a timecode row at rest.
+ *      That is the opposite of what the old wording implied, and it is why
+ *      `tests/e2e/timeline-clip-frame-req-0524.spec.ts` sets the zoom
+ *      explicitly instead of inheriting it.
+ *
+ * REQ-0524's own changes (1 px frame in every state, square corners) do not
+ * move any number here: the frame was already 1 px at rest and the replica is
+ * a border-box div whose content width is unaffected by the radius.
  */
 import { _electron as electron, test, expect } from '@playwright/test'
 import path from 'path'
@@ -92,7 +109,7 @@ test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks
     probe.style.padding = '0 8px' // px-2
     probe.style.boxSizing = 'border-box'
     probe.innerHTML = `
-      <div class="flex w-full items-baseline justify-between text-caption font-mono tabular-nums text-zinc-300/80 leading-none">
+      <div class="flex w-full items-baseline justify-between text-caption font-mono tabular-nums text-fg-secondary/80 leading-none">
         <span>00:00:06.92</span>
         <span>00:00:06.92</span>
       </div>
@@ -136,7 +153,8 @@ test('timeline geometry budget — 12 px timecode fits 220 px block; ruler ticks
   expect(timecodeFit.gapPx, 'gap between the two timecodes').toBeGreaterThan(0)
 
   // 2) Inventory: count fixture blocks that fall below the 220 px
-  //    threshold at the default pps (100), so Phase 4-3 has the real
+  //    threshold at the default pps (50 — measured, not assumed; REQ-0524 §3-5
+  //    corrected the "100" this comment used to claim), so Phase 4-3 has the real
   //    "how many lose their timecode row" number.
   const blockInventory = await window.evaluate((MIN_W: number) => {
     const t = (window as unknown as { __mojioko_test: { project: { getState: () => { entries: { id: string; isDeleted: boolean; startSec: number; endSec: number }[] } }; ui: { getState: () => { timelinePixelsPerSec: number } } } }).__mojioko_test

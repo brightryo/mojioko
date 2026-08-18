@@ -293,7 +293,8 @@
      *   --border-subtle   zinc-900   barely-there rule (between rows)
      *
      * State row tints (consumed with /xx alpha at the call-site):
-     *   --row-edited   amber-400   modified-from-original row tint
+     *   --row-edited   yellow      modified-from-original row tint (REQ-0524
+     *                              moved it off amber-400 — see below)
      *   --row-error    red-500     overflow / error row tint
      *   --row-playing  sky-500     playback-follower (kept for residual
      *                              use after 補遺⑬ retired the row tint;
@@ -372,14 +373,24 @@
     --destructive-soft:  0 91% 71%;      /* red-400  #f87171 */
 
     /* Warning variants (amber family) */
-    --warning-soft:       43 96% 56%;    /* amber-400 #fbbf24 — same hue as --row-edited */
+    --warning-soft:       43 96% 56%;    /* amber-400 #fbbf24 */
     --warning-faint:      46 97% 65%;    /* amber-300 #fcd34d */
     --warning-very-faint: 48 96% 89%;    /* amber-100 #fef3c7 */
 
     /* Info accent (single-use blue) — REQ-0418 v2 */
     --info: 210 84% 65%;                 /* was 213 45% 62% */
 
-    --row-edited:  43 96% 56%;           /* amber-400 */
+    /* REQ-0524 — was amber-400 (43 96% 56%), identical to --warning-soft.  At
+       the timeline clip's low tint alpha, amber over the near-black clips lane
+       composited to a brown-beige (measured: rgb(60,50,27) = #3C321B), which
+       the owner read as "beige, not yellow".  Pushed the hue off amber
+       (43 → 50) and to full saturation so the same tint reads as yellow.
+       The timeline clip consumes it as `bg-row-edited` / `border-row-edited`;
+       it used to borrow --warning-soft, which is a different role (toolbar
+       warnings) and only happened to hold the same value.  NOTE the list
+       view's edited row tint is still `warning-soft/[0.04]` — it was left
+       alone because at 4 % nothing reads as any hue at all. */
+    --row-edited:  50 100% 60%;          /* #ffdd33 */
     --row-error:   0 84% 60%;            /* red-500 */
     --row-playing: 199 89% 48%;          /* sky-500 — kept for legend / inspector */
 

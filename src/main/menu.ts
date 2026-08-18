@@ -23,7 +23,10 @@ interface MenuLabels {
   openProject: string
   saveProject: string
   quit: string
-  tools: string
+  // REQ-0524 — `tools` removed.  REQ-0523 promoted Settings to a top-level
+  // entry and deleted the "Tools" submenu that used to hold it; the label
+  // has had zero readers since (RES-0523 §3 listed it as a deletion
+  // candidate, owner signed off in REQ-0524).
   settings: string
   help: string
   about: string
@@ -39,7 +42,6 @@ const JA: MenuLabels = {
   openProject: 'プロジェクトを開く…',
   saveProject: 'プロジェクトを保存…',
   quit: '終了',
-  tools: 'ツール',
   settings: '設定',
   help: 'ヘルプ',
   about: 'このアプリについて',
@@ -55,7 +57,6 @@ const EN: MenuLabels = {
   openProject: 'Open Project…',
   saveProject: 'Save Project…',
   quit: 'Quit',
-  tools: 'Tools',
   settings: 'Settings',
   help: 'Help',
   about: 'About',

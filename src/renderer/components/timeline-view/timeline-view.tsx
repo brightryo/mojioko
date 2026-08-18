@@ -263,7 +263,8 @@ interface BlockProps {
   topPx: number
   trackIndex: number
   /**
-   * REQ-20260614-001 Phase 3 — user single-selection (green ring/border).
+   * REQ-20260614-001 Phase 3 — user single-selection (green frame; REQ-0524
+   * dropped the extra `ring-2` that used to sit outside it).
    * Pre-Phase-3 this prop was named `isFocused` and conflated the user
    * selection with the playback follower.
    */
@@ -304,6 +305,58 @@ interface BlockProps {
   isDragFloating?: boolean
 }
 
+/**
+ * REQ-0524 — the clip's fill and frame, one entry per visual state.
+ *
+ * Why a lookup and not the previous stack of conditional class strings: each
+ * branch used to append ANOTHER `bg-*` / `border-*` utility on top of the base
+ * pair and leave it to Tailwind's generated-stylesheet order to decide which
+ * declaration won.  That order is a property of Tailwind's own sort, not of the
+ * order they appear in the `cn()` call, so it is invisible from here and it
+ * changes when a colour is renamed — REQ-0524 renames the edited tint from
+ * `warning-soft` to `row-edited`, which sorts on the other side of
+ * `surface-3` and would have silently lost to the base fill.  Resolving to
+ * exactly one class per property removes the dependence outright.
+ *
+ * The frame width is NOT in this table: it is a plain `border` (1px) on the
+ * button in every state.  Only the colour varies.
+ */
+const BLOCK_TONE = {
+  normal: {
+    bg: 'bg-surface-3/70 hover:bg-surface-3',
+    border: 'border-surface-4/70 hover:border-fg-muted',
+    timecode: 'text-fg-secondary/80',
+  },
+  edited: {
+    /*
+     * 40 % is a ceiling, not a taste call, and it was measured rather than
+     * picked: composited over the clips lane it yields rgb(118, 104, 36),
+     * which holds the clip's body text at 5.1:1 (WCAG AA).  45 % already
+     * falls to 4.42:1.  For the same reason hover brightens the FRAME rather
+     * than the fill — the usual hover fill bump would put the text under
+     * 4.5:1 for as long as the cursor sits on the clip.
+     *
+     * The timecode row drops its `/80` dimming here: at 80 % over this much
+     * brighter fill it measured 2.37:1, i.e. genuinely hard to read.  Undimmed
+     * it is 5.1:1 like the body text.  This is the text-colour change REQ-0524
+     * §2-1 asked to be reported.
+     */
+    bg: 'bg-row-edited/40 hover:bg-row-edited/40',
+    border: 'border-row-edited/70 hover:border-row-edited',
+    timecode: 'text-fg-primary',
+  },
+  overflow: {
+    bg: 'bg-destructive/15 hover:bg-destructive/25',
+    border: 'border-destructive/40 hover:border-destructive',
+    timecode: 'text-fg-secondary/80',
+  },
+  selected: {
+    bg: 'bg-primary/15 hover:bg-primary/15',
+    border: 'border-primary hover:border-primary',
+    timecode: 'text-fg-secondary/80',
+  },
+} as const
+
 function BlockImpl({
   entry,
   leftPx,
@@ -325,6 +378,24 @@ function BlockImpl({
     index: displayIndex
   })
   const displayText = entry.text.replace(/\\N/g, ' ').trim()
+
+  // REQ-0524 — resolve the clip's tone once, so exactly one bg/border pair
+  // reaches the class list.  Precedence is unchanged from the pre-0524 class
+  // stack it replaces: a deleted clip keeps the neutral fill (the
+  // `opacity-40 line-through` further down is what marks it), overflow
+  // outranks edited, and the green selection FILL only replaces a neutral
+  // fill — a selected edited / overflow clip keeps its state colour and shows
+  // the selection through the frame alone.
+  const tone: keyof typeof BLOCK_TONE = entry.isDeleted
+    ? 'normal'
+    : isOverflow
+      ? 'overflow'
+      : entry.isEdited
+        ? 'edited'
+        : 'normal'
+  const selectable = isUserSelected && !entry.isDeleted
+  const fillClass = selectable && tone === 'normal' ? BLOCK_TONE.selected.bg : BLOCK_TONE[tone].bg
+  const frameClass = selectable ? BLOCK_TONE.selected.border : BLOCK_TONE[tone].border
 
   // Click-vs-drag bookkeeping for the body button (Phase 4).  Pointerdown
   // records the origin; pointermove flips `moved` once the cursor crosses
@@ -462,33 +533,55 @@ function BlockImpl({
         onClick={handleBodyClick}
         title={displayText}
         className={cn(
-          'absolute inset-0 flex flex-col justify-center gap-0.5 px-2 py-1 rounded-md text-left',
+          'absolute inset-0 flex flex-col justify-center gap-0.5 px-2 py-1 text-left',
           'transition-colors duration-150 select-none overflow-hidden',
-          'focus:outline-none focus-visible:outline-none',
-          'bg-surface-3/70 text-fg-primary border border-surface-4/70',
-          'hover:bg-surface-3 hover:border-fg-muted',
-          entry.isEdited && !entry.isDeleted && 'bg-warning-soft/15 border-warning-soft/40 hover:bg-warning-soft/25',
-          isOverflow && !entry.isDeleted && 'bg-destructive/15 border-destructive/40 hover:bg-destructive/25',
+          // REQ-0524 §2-2 — square corners.  Was `rounded-md` (3px after the
+          // REQ-0177 radius flattening).  The owner reads a clip's start edge
+          // against the 1px playhead, and a 3px arc pulls the topmost and
+          // bottommost pixels of that edge inward, so the clip appears to
+          // begin a couple of pixels later than it does.  Adjacent clips stay
+          // separable because each keeps its own 1px frame — two touching
+          // clips show a 2px seam.
+          'rounded-none',
+          // REQ-0524 §1 — ONE frame, 1px, identical in every state.  Before,
+          // selection added `ring-2 ring-primary` (a 2px outset box-shadow)
+          // ON TOP of this 1px border, so a clip's frame jumped 1 → 3px the
+          // moment it was clicked.  That is the "太さが曖昧" the owner
+          // reported: nothing else was changing width, the ring and the
+          // border were simply stacking.  Only the colour varies now — see
+          // BLOCK_TONE.
+          'border text-fg-primary',
+          fillClass,
+          frameClass,
           // REQ-20260614-001 補遺⑬: 再生アクティブ (sky) ハイライトは
           // 廃止。`focusedRowId` 自体は再生中の一覧自動スクロール (subtitle-
           // table.tsx) を駆動するため残してあるが、視覚的な色付けは行わない。
           // 状態色は白 (通常) / 黄 (編集済み) / 赤 (overflow) / 緑 (ユーザー
           // 選択) の 4 色のみ。
           //
-          // REQ-088 #1 fix-up — pin `hover:border-primary` and (for the
-          // plain-active variant) `hover:bg-primary/15` so the base
-          // `hover:border-fg-muted` / `hover:bg-surface-3` declarations
-          // higher up in the class list cannot override the active
-          // green on hover.  Tailwind's `:hover` pseudo always wins
-          // over plain classes regardless of source order, so the
-          // active state must declare its own `hover:` variants to
-          // survive a cursor that's still over the freshly-clicked
-          // block.  Without these, the green border / bg disappeared
-          // while hovering and reappeared only after the cursor left
-          // the clip — confusing right after a click-to-activate
-          // since the user has not moved the cursor yet.  REQ-089.
-          isUserSelected && 'ring-2 ring-primary border-primary hover:border-primary text-fg-primary',
-          isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-primary/15 hover:bg-primary/15',
+          // REQ-089 / REQ-088 #1 の教訓は BLOCK_TONE 側に移した: どの tone も
+          // 自前の `hover:` を宣言しているので、`:hover` が素のクラスに勝つ
+          // 件で選択中の緑が消える問題は構造的に起きない。
+          //
+          // REQ-0524 §1-4 — keyboard focus, carried by the frame's COLOUR.
+          //
+          // It cannot be carried by an outline or a ring: globals.css has an
+          // app-wide `:focus, :focus-visible, :focus-within { outline: none
+          // !important }` plus `--tw-ring-shadow: 0 0 #0000 !important`
+          // (REQ-044), which the owner asked for deliberately.  Anything
+          // outline- or ring-shaped added here is silently zeroed — measured,
+          // not assumed (RES-0524 §1-1).  A border-colour swap is outside
+          // that hammer's reach, changes no width, and is the mechanism the
+          // owner suggested first.
+          //
+          // Scoped to unselected clips so it cannot overwrite the green: a
+          // selected clip is already the highlighted one, so Tab landing back
+          // on it needs no extra mark, whereas Tab moving to a NEIGHBOUR has
+          // to show somewhere.  `:focus-visible` also means a mouse click
+          // never triggers it — the click/keyboard ambiguity the owner
+          // reported is gone in both directions.
+          !selectable && 'focus-visible:border-fg-primary',
+          'focus:outline-none',
           entry.isDeleted && 'opacity-40 line-through',
           !entry.isDeleted && 'cursor-grab active:cursor-grabbing'
         )}
@@ -499,7 +592,12 @@ function BlockImpl({
             (the user can't tell whether it's start or end), so we
             go all-or-nothing.  REQ-061. */}
         {widthPx >= TIME_ROW_MIN_BLOCK_WIDTH_PX && (
-          <div className="flex w-full items-baseline justify-between text-caption font-mono tabular-nums text-fg-secondary/80 leading-none">
+          <div className={cn(
+            'flex w-full items-baseline justify-between text-caption font-mono tabular-nums leading-none',
+            // REQ-0524 — follows the FILL, not the selection: the selected
+            // fill is a dark green tint, so it keeps the dimmed colour.
+            BLOCK_TONE[tone].timecode,
+          )}>
             <span>{formatEditedTimecode(entry.startSec, cuts)}</span>
             <span>{formatEditedTimecode(entry.endSec, cuts)}</span>
           </div>
@@ -2306,11 +2404,12 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                       to.
                     - The grid-kind branch rendered zinc-400 which
                       reads as white on the dark timeline background.
-                    - green-500 matches the focused block's `ring-2
-                      ring-primary border-primary` highlight in
-                      `BlockImpl` so the relationship "the selected
-                      block (green ring) is snapping to this line
-                      (green)" is immediately readable.
+                    - green-500 matches the focused block's
+                      `border-primary` frame in `BlockImpl` (REQ-0524
+                      removed the `ring-2` that used to sit outside it,
+                      but the colour is the same) so the relationship
+                      "the selected block (green frame) is snapping to
+                      this line (green)" is immediately readable.
                   `snapGuideKind` is still tracked through the drag
                   pipeline because the drag-snap unit tests assert on
                   it, but it no longer drives presentation.
