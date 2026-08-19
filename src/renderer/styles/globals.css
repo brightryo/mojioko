@@ -401,8 +401,23 @@
           the amber family to mean only "warning" (overlap, vertical overflow,
           trim, cut markers), which is what --warning-soft still does; its
           value is deliberately unchanged.
-       #343FDF, owner's pick.  The HSL below round-trips to it exactly. */
-    --row-edited:  236 73% 54%;          /* #343FDF */
+       ┌ REQ-0527: settled on a DARKER, CYAN-ward blue, chosen by the owner on a
+       │  running screen with the REQ-0526 dev token editor rather than picked
+       │  from a palette.  #00648c — hue 236 → 197, and L 54 % → 27 %, i.e. half
+       │  the lightness.  The fill weight drops with it (70 % → 30 %, below), so
+       │  the clip reads as a tinted lane rather than a saturated slab.
+       └ ROUND-TRIP, measured (REQ-0527 asked): the triplet does NOT return
+          #00648c exactly.  #00648c is rgb(0,100,140) = hsl(197.143, 100 %,
+          27.451 %); rounding that to the integer triplet CSS carries here and
+          converting back gives rgb(0,99,138) = #00638a — 1 unit of green and 2
+          of blue low, ΔE00 ≈ 0.5, i.e. below a just-noticeable difference.  The
+          drift is the dev editor's colour input quantising to whole HSL units,
+          not a transcription error, and every surface moves together because
+          they all resolve through this one token.  Left as authored: matching
+          the hex exactly would need fractional percentages that the editor
+          cannot round-trip either, and would make the pasted block stop
+          matching what the owner saw. */
+    --row-edited:  197 100% 27%;          /* #00648c as picked; renders #00638a */
 
     /* REQ-0526 — the four weights the edited colour is used at, lifted out of
        the Tailwind class strings (`bg-row-edited/70` &c.) and named here.
@@ -420,9 +435,19 @@
        single-source property REQ-0525 established is intact: change the hue
        and all four surfaces move together.  Pinned by
        tests/e2e/edited-colour-unified-req-0525.spec.ts, which compares the
-       rendered RGB triples. */
-    --row-edited-fill-alpha:       0.70;  /* timeline clip body            */
-    --row-edited-fill-hover-alpha: 0.85;  /* …under the cursor             */
+       rendered RGB triples.
+
+       REQ-0527 — the owner's settled weights, from the same session that picked
+       the hue above.  fill 0.70 → 0.30; frame and row tint unchanged.
+
+       ★ fill and fill-hover are DELIBERATELY EQUAL at 0.30, which means an
+       edited clip does not change colour under the cursor.  This is the owner's
+       choice off the live panel, recorded here so it is not "tidied" back to a
+       gap by someone reading it as a copy-paste slip.  Hover feedback on an
+       edited clip therefore comes only from the cursor and the frame; if that
+       turns out to be too little, raise hover ALONE in a follow-up. */
+    --row-edited-fill-alpha:       0.3;   /* timeline clip body            */
+    --row-edited-fill-hover-alpha: 0.3;   /* …under the cursor — same, ★    */
     --row-edited-frame-alpha:      1;     /* clip 1px frame — full, so two
                                              touching edited clips show a
                                              seam against their own fill    */

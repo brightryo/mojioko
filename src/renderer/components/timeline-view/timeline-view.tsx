@@ -366,6 +366,38 @@ const BLOCK_TONE = {
      * REQ-0526 — the three weights moved into `--row-edited-*-alpha` vars so
      * the DEV token editor can move them on a running screen; the numbers
      * quoted above are those vars' authored values.
+     *
+     * ─── REQ-0527 — everything above this line is now HISTORY ──────────────
+     *
+     * The owner drove the REQ-0526 panel and settled on a darker, cyan-ward
+     * blue (#343FDF → #00638a) at a much lighter fill (70 % → 30 %).  Frame
+     * stays at 100 %.  Re-measured on real pixels over the lane rgb(26,26,26):
+     *
+     *     surface              colour        vs REQ-0525
+     *     edited fill          rgb(18,48,59)   was rgb(44,52,164)
+     *     edited frame         rgb(0,99,138)   was rgb(52,63,223)
+     *     white body text      12.74:1         was  9.02:1
+     *     green selection frame 7.32:1         was  5.19:1
+     *
+     * Both text figures IMPROVED, because a 30 % dark-cyan fill barely lifts
+     * the near-black lane.  That is also the cost: the fill is now only 26 RGB
+     * units from a normal clip (was 115).  What separates the states at a
+     * glance is the FRAME — 99 units, and a saturated cyan against a grey.
+     * RES-0527 §2 puts both numbers to the owner rather than compensating here.
+     *
+     * ★ `hover:` intentionally resolves to the SAME colour as the base: the
+     * owner set fill and fill-hover both to 0.30, so an edited clip does not
+     * change under the cursor.  The classes stay in place so the pair remains
+     * one knob-turn apart if that is revisited — see globals.css.
+     *
+     * The timecode KEEPS `text-fg-primary`, but no longer because it has to:
+     * the shared `text-fg-secondary/80` over this fill now measures 5.84:1
+     * (REQ-0525 measured 4.29:1 over the old 70 % fill and had to undim).  It
+     * would pass AA today.  It is kept because the fill lost most of its
+     * separation from a normal clip, so the brighter timecode is now one of
+     * the few things carrying the state — dropping it would spend contrast the
+     * clip can no longer spare.  Removing the exception is a one-line change
+     * if the owner prefers the uniform look; RES-0527 §2-2 asks.
      */
     bg: 'bg-row-edited-fill hover:bg-row-edited-fill-hover',
     border: 'border-row-edited-frame hover:border-row-edited-frame',

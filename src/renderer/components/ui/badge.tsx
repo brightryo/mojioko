@@ -21,11 +21,17 @@ const badgeVariants = cva(
         // the three read as one thing.
         //
         // Solid rather than the soft 10 %-tint the sibling variants use, and
-        // that is forced rather than chosen: #343FDF is a DARK blue, so as a
-        // foreground on this dark UI it measures ~2.3:1 — unreadable.  It only
-        // works as a fill, and white on the solid fill is 6.59:1.  The
-        // different weight is also useful: "edited" is a state, the amber and
-        // red badges beside it are warnings, and they should not read alike.
+        // that is forced rather than chosen: --row-edited is a DARK blue, so as
+        // a foreground on this dark UI it is unreadable.  It only works as a
+        // fill.  The different weight is also useful: "edited" is a state, the
+        // amber and red badges beside it are warnings, and they should not read
+        // alike.
+        //
+        // Re-measured at REQ-0527's #00638a (was #343FDF), real pixels:
+        //   as a foreground on the dark UI   2.72:1  (was 2.52) — still unusable
+        //   white on the solid fill          6.11:1  (was 6.59) — still clears AA
+        // The badge therefore keeps its shape through the recolour; only the
+        // margin above 4.5:1 narrowed slightly.
         edited: 'bg-row-edited text-fg-primary border-row-edited',
         success: 'bg-primary/10 text-primary border-primary/20',
         // REQ-0421 (step2) — overlay reassignment: warning badge (時間重複 /

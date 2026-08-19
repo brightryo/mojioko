@@ -106,11 +106,16 @@ function getRowState(entry: SubtitleEntry, isOverflow: boolean): RowState {
  * REQ-0525 — `edited` joins the severity list so the pencil carries the same
  * `--row-edited` blue as the row tint, the timeline clip and the inspector
  * badge.  It is the only severity drawn as a FILLED chip, and that is forced
- * rather than decorative: #343FDF as a glyph colour on this dark table
- * measures 2.27:1 against the row background — well under the 3:1 floor for
- * graphics, i.e. a blue pencil would simply be hard to see.  As a fill with a
- * white glyph it is 6.59:1.  Note also that being edited is not a severity at
- * all, so looking unlike the danger/warning glyphs is correct.
+ * rather than decorative: the blue as a GLYPH colour on this dark table falls
+ * well under the 3:1 floor for graphics, i.e. a blue pencil would simply be
+ * hard to see.  As a fill with a white glyph it clears AA.  Note also that
+ * being edited is not a severity at all, so looking unlike the danger/warning
+ * glyphs is correct.
+ *
+ * Re-measured at REQ-0527's #00638a (was #343FDF), real pixels against the
+ * table row background rgb(20,22,26): as a glyph 2.72:1 (was 2.52 — still far
+ * under 3:1), as a fill with the white glyph 6.11:1 (was 6.59).  The recolour
+ * does not change which of the two shapes is viable.
  */
 function StatusIcon({
   Icon,
@@ -419,6 +424,14 @@ function SubtitleRow({
     // REQ-0526 — the 0.10 moved into `--row-edited-row-alpha` (globals.css) so
     // the DEV token editor can move it live; `row-edited-row-tint` still
     // resolves through `--row-edited`.
+    //
+    // REQ-0527 — the alpha is UNCHANGED at 0.10, but the hue underneath it went
+    // darker still (#343FDF → #00638a), so the same 10 % now composites to
+    // rgb(18,30,37): 14 units from an untinted row, down from ~19.  That is
+    // back near the 4 %-era invisibility this comment's own reasoning rejected,
+    // and it is flagged in RES-0527 for the owner rather than silently
+    // compensated here — raising the alpha would undo a value the owner set on
+    // a live screen.
     !isSelected && rowState === 'edited' && 'bg-row-edited-row-tint',
     !isSelected && rowState === 'overflow' && 'bg-destructive/[0.04]'
   )

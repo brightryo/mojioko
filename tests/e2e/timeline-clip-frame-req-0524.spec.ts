@@ -489,10 +489,25 @@ test('timeline clip frame + state colours — REQ-0524', async () => {
     edited: compositeOf(colours.edited),
     overflow: compositeOf(colours.overflow),
   }
+  /*
+   * REQ-0527 — the same fold for the 1px FRAME.  The border paints over the
+   * clip's own background (background-clip is border-box by default), so the
+   * frame's backdrop is the fill composite, not the lane.  Verified against
+   * real screenshot pixels: overflow's `rgba(241,111,111,0.4)` predicts
+   * rgb(131,68,68) and the screenshot reads rgb(131,67,67).
+   */
+  const frameCompositeOf = (state: { fill: string; border: string; bgStack: string[] }) =>
+    over(parseRgb(state.border), compositeOf(state))
+  const frames = {
+    normal: frameCompositeOf(colours.normal),
+    edited: frameCompositeOf(colours.edited),
+    overflow: frameCompositeOf(colours.overflow),
+  }
   const textRgb = parseRgb(colours.normal.text)
   const report = {
     tokens: colours.tokens,
     composites,
+    frameComposites: frames,
     textContrast: Object.fromEntries(Object.entries(composites).map(([k, v]) => [k, contrast(v, textRgb)])),
     timecodeContrast: Object.fromEntries(
       Object.entries(composites).map(([k, v]) => [
@@ -525,31 +540,102 @@ test('timeline clip frame + state colours — REQ-0524', async () => {
       .not.toBeNull()
     expect(v as number, `clip timecode row over the ${k} fill`).toBeGreaterThanOrEqual(4.5)
   }
-  // §2-1 "他の状態の色と混同しないこと": the fills are pairwise distinct.  ΔL
+  // §2-1 "他の状態の色と混同しないこと": the states are pairwise distinct.  ΔL
   // alone is not enough (amber and red can share a luminance), so distance is
   // taken in RGB.
   //
-  // The floors differ, and the difference is reported rather than hidden
-  // (CLAUDE.md §18 "no silent caps"):
-  //   - anything involving `edited` must clear 60.  That is the tone REQ-0524
-  //     changed, and it is the one the owner has to be able to pick out.
-  //   - `normal` vs `overflow` gets 15.  It measures ~21 and REQ-0524 did not
-  //     touch either of them: `bg-destructive/15` over the near-black lane is
-  //     a genuinely faint red wash.  Gating it at 60 would fail this spec for
-  //     a condition that predates it; gating it at 15 still catches the two
-  //     tones collapsing onto each other.  The real number is in the log above
-  //     and is called out in RES-0524 for the owner to decide on.
-  const pairs: [string, string, number][] = [
-    ['normal', 'edited', 60],
-    ['edited', 'overflow', 60],
-    ['normal', 'overflow', 15],
+  // ★ REQ-0527 rewrote WHAT is measured, and the reason is a real design shift
+  // rather than a gate being bent to fit a number.
+  //
+  // REQ-0524 gated the FILL alone at 60, because in that design the fill was
+  // what carried the state: `edited` was a 70 % slab of a bright colour.
+  // REQ-0527's settled value moves the weight the other way — a 30 % dark-cyan
+  // fill with a 100 % frame — so the fill is now only 26 units from a normal
+  // clip while the frame is 99.  The state is still obvious on screen (the
+  // frame is a saturated cyan against a grey one), but the old assertion calls
+  // that a failure because it can only see fills.
+  //
+  // So the contract becomes what it always meant: a state must be separable by
+  // its fill OR by its frame.  Both numbers are logged for every pair either
+  // way (CLAUDE.md §18 "no silent caps") — this is not a licence to let the
+  // fill collapse unnoticed, it is a statement that either carrier counts.
+  //
+  //   - anything involving `edited` must clear 60 on max(fill, frame).  That is
+  //     the tone REQ-0524/0527 keep changing, and the one the owner has to be
+  //     able to pick out.
+  //   - `normal` vs `overflow` still gets 15, still on the FILL alone, and is
+  //     deliberately NOT switched to max(): it measures ~20 and both tones
+  //     predate REQ-0524.  Letting the frame answer for it would paper over a
+  //     known-weak pair (the frames are 77 apart) that the owner has twice
+  //     chosen not to fix — it would go green while nothing improved.
+  const pairs: [string, string, number, 'fill' | 'max'][] = [
+    ['normal', 'edited', 60, 'max'],
+    ['edited', 'overflow', 60, 'max'],
+    ['normal', 'overflow', 15, 'fill'],
   ]
-  for (const [a, b, floor] of pairs) {
-    const ca = composites[a as keyof typeof composites]
-    const cb = composites[b as keyof typeof composites]
-    const dist = Math.round(Math.hypot(ca.r - cb.r, ca.g - cb.g, ca.b - cb.b))
-    expect(dist, `${a} vs ${b} fills are too close (RGB distance ${dist}, floor ${floor})`).toBeGreaterThan(floor)
+  const rgbDist = (a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }) =>
+    Math.round(Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b))
+  const separation: Record<string, { fill: number; frame: number; gatedOn: string; floor: number }> = {}
+  for (const [a, b, floor, mode] of pairs) {
+    const k = a as keyof typeof composites
+    const j = b as keyof typeof composites
+    const fill = rgbDist(composites[k], composites[j])
+    const frame = rgbDist(frames[k], frames[j])
+    separation[`${a}↔${b}`] = { fill, frame, gatedOn: mode, floor }
   }
+  // eslint-disable-next-line no-console
+  console.log('\n[REQ-0524/0527] state separation:', JSON.stringify(separation, null, 2))
+
+  /** The contract as data, so the negative control can re-run it verbatim. */
+  const checkSeparation = (sep: typeof separation): string[] => {
+    const v: string[] = []
+    for (const [a, b, floor, mode] of pairs) {
+      const s = sep[`${a}↔${b}`]
+      const value = mode === 'fill' ? s.fill : Math.max(s.fill, s.frame)
+      if (value <= floor) {
+        v.push(
+          mode === 'fill'
+            ? `${a} vs ${b} fills are too close (RGB distance ${s.fill}, floor ${floor})`
+            : `${a} vs ${b} are indistinguishable: fill distance ${s.fill} AND frame distance ${s.frame}, ` +
+              `and one of the two must clear ${floor}`,
+        )
+      }
+    }
+    return v
+  }
+  expect(checkSeparation(separation), 'clip states are not separable').toEqual([])
+
+  /*
+   * Negative control for the clause REQ-0527 relaxed.  Widening the edited
+   * pairs from `fill > 60` to `max(fill, frame) > 60` is exactly the kind of
+   * edit that can quietly stop testing anything, so the widened form is re-run
+   * against a state where the edited clip has collapsed onto the normal one on
+   * BOTH carriers.  It has to complain.
+   *
+   * No DOM to perturb here — the check is a pure function of the distances, so
+   * the control feeds it collapsed distances directly.
+   */
+  const collapsed = {
+    ...separation,
+    'normal↔edited': { ...separation['normal↔edited'], fill: 3, frame: 5 },
+  }
+  const caughtSeparation = checkSeparation(collapsed)
+  expect(caughtSeparation.join(' | '),
+    'the widened separation check no longer notices an edited clip that matches a normal one on fill AND frame')
+    .toContain('normal vs edited are indistinguishable')
+
+  /*
+   * REQ-0527 — and the fill must still SAY something.  Relaxing the pair check
+   * to max(fill, frame) opens a hole the old form did not have: an edited clip
+   * whose fill is identical to a normal one would now pass on the frame alone,
+   * which is not the design — the fill is a 30 % tint, not nothing.  A clip is
+   * 300 px wide and 1 px of that is frame, so a fill that has gone flat is a
+   * real regression even when the frame is fine.
+   */
+  expect(
+    separation['normal↔edited'].fill,
+    'the edited fill is now identical to a normal clip — the state has fallen entirely onto the 1px frame',
+  ).toBeGreaterThan(10)
 
   // ---------------------------------------------------------------------------
   // Negative control — put the pre-REQ-0524 frame back onto the LIVE element
