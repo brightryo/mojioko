@@ -6,7 +6,7 @@ import {
   type SnapKind,
 } from './timeline-snap'
 import { chooseRulerStepSec } from './timeline-layout'
-import { roundToCs } from './entry-edits'
+import { roundToCs, cueCeilingSec } from './entry-edits'
 import { MIN_LAYER, resolveLayer } from '../../shared/cue-placement'
 import {
   origToEdited,
@@ -240,15 +240,15 @@ export function computeDragPatch(input: DragPatchInputs): DragPatchOutput {
   const editedTotalSec = isFinite(dur) && dur > 0
     ? editedDuration(dur, cuts)
     : Number.MAX_VALUE
-  const editedMaxEnd = isFinite(editedTotalSec) && editedTotalSec > 0
-    ? Math.floor(editedTotalSec * 100) / 100
-    : Number.MAX_VALUE
+  // REQ-0528 §2-2 — this centisecond-floor rule now has ONE definition,
+  // `cueCeilingSec`, shared with the 「時間を調整」 dialog's clamp so the two
+  // edit routes cannot disagree about where the video ends.  Byte-identical to
+  // the expression it replaces.
+  const editedMaxEnd = cueCeilingSec(editedTotalSec)
   // Defensive Original-axis ceiling — used as a final clamp so
   // origToEdited/editedToOrig round-trip drift cannot push entry.endSec
   // above the video's physical length.
-  const origMaxEnd = isFinite(dur) && dur > 0
-    ? Math.floor(dur * 100) / 100
-    : Number.MAX_VALUE
+  const origMaxEnd = cueCeilingSec(dur)
 
   // Snapshot translated to the Edited axis so we can add the Edited-seconds
   // delta directly.  editedToOrig round-trips back to Original for the

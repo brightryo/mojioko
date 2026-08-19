@@ -58,6 +58,30 @@ export function computeEntryWarnings(
     entry.endSec <= entry.startSec ||
     (entry.startSec === 0 && entry.endSec === 0)
 
+  /*
+   * REQ-0528 §2-4 — KEPT after the §2 clamp, and deliberately so.
+   *
+   * The question the REQ asks is whether clamping makes this unreachable, i.e.
+   * whether it becomes an advertised warning with nothing behind it.  It does
+   * not: the clamp governs what the GUI newly WRITES, while this flag describes
+   * what a project can CONTAIN, and those are not the same set.  It still fires
+   * for:
+   *
+   *   1. Projects relinked to a shorter video.  `project-open-controller`'s
+   *      identity-mismatch dialog explicitly offers this and shows the two
+   *      durations side by side, so a user can knowingly attach a 7 s video to
+   *      a project cut against a 20 s one.
+   *   2. Projects saved before REQ-0528, which are not rewritten on open
+   *      (§2-5 — silently truncating someone's existing work is destructive,
+   *      so it is not done).
+   *   3. `.mojioko` files produced by the CLI / MCP, which perform no duration
+   *      validation on cue times at all.
+   *
+   * In every one of those the cue is excluded from the burn by `isBurninTarget`
+   * below, so without this badge the cue would simply be missing from the
+   * output video with nothing on screen explaining why.  That is the failure it
+   * exists to prevent, and the clamp does not remove it.
+   */
   const overDuration =
     entry.startSec > videoDurationSec ||
     entry.endSec > videoDurationSec

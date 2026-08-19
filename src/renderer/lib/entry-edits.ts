@@ -29,6 +29,61 @@ export function roundToCs(sec: number): number {
 }
 
 /**
+ * REQ-0528 §2-2 — the highest cue time the video can carry, in seconds.
+ *
+ * FLOORED to a centisecond, and that is not cosmetic: every write path rounds
+ * through {@link roundToCs}, which is HALF-UP, so a ceiling of e.g. 7.235 would
+ * let a clamped value round back up to 7.24 — above the video. Flooring first
+ * means the post-round value can never exceed the duration. The rule was
+ * established for the drag path by REQ-20260613-012; this is that same
+ * expression, lifted so the drag and the dialog cannot drift apart.
+ *
+ * Returns `Number.MAX_VALUE` when there is no usable duration (no video loaded,
+ * or audio-only mode, which deliberately passes `Infinity`) — i.e. no ceiling,
+ * which is what every caller wants in that state.
+ */
+export function cueCeilingSec(videoDurationSec: number): number {
+  return isFinite(videoDurationSec) && videoDurationSec > 0
+    ? Math.floor(videoDurationSec * CENTISECOND_PER_SEC) / CENTISECOND_PER_SEC
+    : Number.MAX_VALUE
+}
+
+/**
+ * REQ-0528 §2 — bring a cue's times inside the video's duration.
+ *
+ * The single clamp for NON-DRAG edit paths. The timeline drag/resize path has
+ * always clamped (inside `computeDragPatch`), and it now shares
+ * {@link cueCeilingSec} with this function so "the ceiling" has exactly one
+ * definition; what REQ-0528 fixes is that the 「時間を調整」 dialog — the other
+ * way to set a time — had no ceiling at all and could push a cue to 16 s on a
+ * 7 s video.
+ *
+ * Both ends are clamped, not just the end: a start beyond the video is equally
+ * unrenderable. If a cue lies ENTIRELY beyond the duration both ends land on
+ * the ceiling and it becomes zero-length — deliberately left to surface as the
+ * existing `timeInvalid` badge rather than silently invented into some
+ * plausible-looking span, because there is no honest guess for where a cue that
+ * was never inside the video "should" go.
+ *
+ * `clamped` lets a caller tell the user something happened instead of silently
+ * moving their input.
+ */
+export function clampCueTimesToDuration(
+  startSec: number,
+  endSec: number,
+  videoDurationSec: number,
+): { startSec: number; endSec: number; clamped: boolean } {
+  const ceiling = cueCeilingSec(videoDurationSec)
+  const nextStart = Math.min(startSec, ceiling)
+  const nextEnd = Math.min(endSec, ceiling)
+  return {
+    startSec: nextStart,
+    endSec: nextEnd,
+    clamped: nextStart !== startSec || nextEnd !== endSec,
+  }
+}
+
+/**
  * True iff `a` and `b` would render to the same centisecond display tag
  * (`HH:MM:SS.cc`).  Uses integer-cs comparison rather than float subtraction
  * with an epsilon so values straddling a 0.005 s bucket boundary still get

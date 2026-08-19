@@ -887,9 +887,13 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   // rows, but since REQ-0396 rows are the stored `layer` (not time-derived), so
   // a horizontal drag never changes a cue's row anyway (`layoutEntries` `void`s
   // the old override).  Removing the plumbing changes nothing on screen.
+  // REQ-0528 §2-3 — `videoDurationSec` is passed as the HARD length so the
+  // ruler stops at the end of the footage instead of following an over-long
+  // cue past it.  It is `Infinity` in audio-only mode, which `layoutEntries`
+  // treats as "no hard duration" and falls back to spanning the entries.
   const layout = useMemo(
-    () => layoutEntries(visibleEntries, fallbackDurationSec, LAYOUT_MIN_BLOCK_SEC),
-    [visibleEntries, fallbackDurationSec]
+    () => layoutEntries(visibleEntries, fallbackDurationSec, LAYOUT_MIN_BLOCK_SEC, videoDurationSec),
+    [visibleEntries, fallbackDurationSec, videoDurationSec]
   )
 
   // Index in the unfiltered, unsorted entries array — used for the human-

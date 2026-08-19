@@ -161,6 +161,7 @@
     "srtImportEmpty": "読み込める字幕が見つかりませんでした",
     "srtImportReadFailed": "SRTファイルの読み込みに失敗しました: {{error}}",
     "srtImportParseFailed": "SRT形式を解析できませんでした: {{error}}",
+    "timeClampedToDuration": "終了時間が動画の尺を超えていたため、尺内に収めました",
     "srtImportAllOutOfDuration": "すべての字幕が動画の尺を超えていたため読み込めませんでした（{{count}}件除外）"
   },
   "tooltip": {

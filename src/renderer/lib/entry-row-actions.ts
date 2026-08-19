@@ -13,7 +13,7 @@ import {
 } from '../../shared/emphasis'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { buildDuplicateEntry } from '@/lib/duplicate-entry'
-import { resolveLayer, MAX_LAYER } from '../../shared/cue-placement'
+import { resolveLayer, findFreeLayerAbove } from '../../shared/cue-placement'
 
 /**
  * Row-level edit operations that are shared between the list view
@@ -423,12 +423,31 @@ export function duplicateRow(
   const originalIdx = projectStore.entries.findIndex((e) => e.id === entry.id)
   if (originalIdx === -1) return
 
-  // REQ-0398 §3 — the duplicate lands one layer above the source (front,
-  // REQ-0397 §2).  If the source already sits at the top of the [0, MAX_LAYER]
-  // z-order range there is no free layer above it, so block the duplication
-  // outright (rather than silently clamping to the same layer, which would put
-  // the copy on the source's row and overlap it) and tell the user why.
-  if (resolveLayer(entry) >= MAX_LAYER) {
+  /*
+   * REQ-0398 §3 — the duplicate lands ABOVE the source (front, REQ-0397 §2),
+   * and if there is no free layer left it is blocked outright rather than
+   * silently clamped onto an occupied row.
+   *
+   * REQ-0528 §1 — "above" now means "the first layer above the source that is
+   * actually FREE at these times", not "source + 1".  The old form never looked
+   * at what was already there, so the reported bug was: duplicate a layer-0
+   * cue (copy → layer 1), then duplicate the same source again → a second copy
+   * on layer 1, stacked on the first.
+   *
+   * The MAX_LAYER check is now the search returning `null` — one condition
+   * instead of two, so "the top of the range" and "everything above is taken"
+   * cannot disagree.  A source already AT MAX_LAYER still fails, because the
+   * search starts above it and has nowhere to go.
+   *
+   * Blocked BEFORE anything is mutated: no id minted, no history op pushed, no
+   * entry added.  REQ-0528 §1-3 asks for no half-applied state.
+   */
+  const targetLayer = findFreeLayerAbove(
+    entry,
+    resolveLayer(entry) + 1,
+    projectStore.entries,
+  )
+  if (targetLayer === null) {
     toast.error(labels.maxLayerBlocked)
     return
   }
@@ -447,7 +466,7 @@ export function duplicateRow(
   // a new field that nobody classifies fails `tsc` instead of being
   // silently dropped from every duplicate.  See that module for the
   // per-field copy / deep-copy / regenerate / reset / snapshot table.
-  const duplicate: SubtitleEntry = buildDuplicateEntry(entry, newId)
+  const duplicate: SubtitleEntry = buildDuplicateEntry(entry, newId, targetLayer)
 
   pushHistory({
     label: labels.history,

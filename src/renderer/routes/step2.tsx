@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { TimeEditorDialog } from '@/components/time-editor-dialog/time-editor-dialog'
 import { ExportFrameButton } from '@/components/step2/export-frame-button'
 import { BurninDrawer } from '@/components/step2/burnin-drawer'
+import { clampCueTimesToDuration } from '@/lib/entry-edits'
 import { useProjectStore } from '@/stores/project-store'
 import { FOLDER_SETTINGS } from '../../shared/folder-settings'
 import { useSettingsStore } from '@/stores/settings-store'
@@ -763,8 +764,37 @@ export default function Step2Route(_: Step2RouteProps) {
     return { fullIdx: pivotFullIdx, visiblePos: afterActiveIdx + 1 }
   }
 
-  function handleEditorConfirm(startSec: number, endSec: number) {
+  function handleEditorConfirm(rawStartSec: number, rawEndSec: number) {
     if (!editor.open) return
+
+    /*
+     * REQ-0528 §2 — the ONE clamp for this route, and the route that was
+     * actually leaking.
+     *
+     * The owner reported stretching a cue to 16 s on a 7 s video.  The timeline
+     * drag AND right-edge resize have always clamped (both go through
+     * `computeDragPatch`), and SRT import rejects out-of-range cues outright —
+     * the 「時間を調整」 dialog was the hole: it is handed `videoDurationSec`
+     * for its scrubber but never bounded its own output, so the stepper and the
+     * typed timecode field could write any value.
+     *
+     * Clamped HERE rather than inside the dialog: this is the single function
+     * both dialog modes (add / edit) commit through, so one clamp covers both,
+     * and it sits on the store side of the boundary where the value is actually
+     * persisted.  `cueCeilingSec` is shared with the drag path so the two edit
+     * routes agree on where the video ends (§2-2).
+     *
+     * Audio-only mode passes `Infinity`, so this is a no-op there — matching
+     * how the `overDuration` badge is already suppressed for audio.
+     */
+    const clamp = clampCueTimesToDuration(rawStartSec, rawEndSec, videoDurationSec)
+    const startSec = clamp.startSec
+    const endSec = clamp.endSec
+    if (clamp.clamped) {
+      // Told, not silently applied: the user typed a number and got a
+      // different one, which they must be able to see.
+      toast.info(t('toast.timeClampedToDuration'))
+    }
 
     if (editor.mode === 'add') {
       // Position is decided HERE, from the chosen startSec — not from any

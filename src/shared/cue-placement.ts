@@ -95,6 +95,88 @@ export function sendToBackLayer(layers: readonly number[]): number {
   return Math.max(MIN_LAYER, Math.min(...layers) - 1)
 }
 
+/**
+ * REQ-0528 §1-2 — do two cues share any frame?
+ *
+ * ## The interval convention, and why touching endpoints do NOT overlap
+ *
+ * `[startSec, endSec)` — END EXCLUSIVE, the codebase-wide rule stated in
+ * `simultaneous-groups.ts` ("a cue starting exactly when another ends does NOT
+ * share a frame with it") and already implied by the two predicates that
+ * predate this one, both of which use a strict `<`:
+ *
+ *   - `entry-warnings.ts`      `entry.startSec < prevActiveEndSec`
+ *   - `simultaneous-groups.ts` `item.startSec < groupEnd`
+ *
+ * So a cue ending at 3.000 and one starting at 3.000 are adjacent, not
+ * overlapping, and the duplicate of the first may sit on the same layer as the
+ * second.  That is the right call for subtitles: back-to-back cues are the
+ * normal case, and treating them as colliding would push almost every
+ * duplicate a layer higher than it needs to be.
+ *
+ * ## Why this is a NEW function rather than a reuse of the badge's predicate
+ *
+ * REQ-0528 asked to reuse the 時間重複 badge's detection.  It cannot be reused
+ * as-is, and pretending otherwise would have been the actual drift risk:
+ * `computeEntryWarnings`'s `overlap` is not a pairwise interval test at all.
+ * It compares each entry against a single running scalar — the end of the
+ * immediately preceding non-deleted entry IN ARRAY ORDER — and it never reads
+ * `layer`.  It cannot answer "is layer 4 free between 3 s and 6 s".
+ *
+ * What is shared instead is the CONVENTION: this is the one place that spells
+ * the half-open rule out, and the two older call sites are named above so the
+ * three can be reconciled deliberately rather than drifting apart unnoticed.
+ * See RES-0528 §1-2 for the full reasoning.
+ */
+export function cueTimesOverlap(
+  a: { startSec: number; endSec: number },
+  b: { startSec: number; endSec: number },
+): boolean {
+  return a.startSec < b.endSec && b.startSec < a.endSec
+}
+
+/** The minimal shape {@link findFreeLayerAbove} needs off a cue. */
+export interface LayerOccupant {
+  id: string
+  startSec: number
+  endSec: number
+  layer?: number
+  isDeleted?: boolean
+}
+
+/**
+ * REQ-0528 §1-2 — the lowest layer at or above `fromLayer` on which `cue`'s
+ * time span collides with nothing, or `null` when every layer up to
+ * {@link MAX_LAYER} is occupied.
+ *
+ * Before this existed, duplicating always wrote `source.layer + 1` without
+ * looking at what was already there (`duplicate-entry.ts`), so duplicating the
+ * same layer-0 cue twice put both copies on layer 1, stacked on top of each
+ * other.  That is the bug REQ-0528 §1 reports.
+ *
+ * Deleted cues do not occupy a layer: they are not rendered and not burned, and
+ * `warningsMap` skips them for the same reason.  `cue.id` is excluded so a cue
+ * never collides with itself.
+ *
+ * Returning `null` rather than clamping to MAX_LAYER is deliberate — clamping
+ * would silently reintroduce exactly the stacking this function exists to
+ * prevent.  The caller turns `null` into the existing "can't duplicate" toast.
+ */
+export function findFreeLayerAbove(
+  cue: LayerOccupant,
+  fromLayer: number,
+  occupants: readonly LayerOccupant[],
+): number | null {
+  const start = Math.max(MIN_LAYER, fromLayer)
+  const blocking = occupants.filter(
+    (o) => o.id !== cue.id && !o.isDeleted && cueTimesOverlap(cue, o),
+  )
+  for (let layer = start; layer <= MAX_LAYER; layer++) {
+    if (!blocking.some((o) => resolveLayer(o) === layer)) return layer
+  }
+  return null
+}
+
 export function alignmentNumpad(
   horizontalPosition: 'left' | 'center' | 'right',
   verticalPosition: 'top' | 'center' | 'bottom',

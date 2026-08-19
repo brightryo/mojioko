@@ -493,6 +493,11 @@ export function TimeEditorDialog({
             ref={confirmButtonRef}
             variant="primary"
             size="md"
+            // REQ-0528 — named so a gate can press CONFIRM specifically.  The
+            // dialog's last <button> is Radix's X close control, so "the last
+            // button" silently discards the edit instead of applying it; the
+            // §2 clamp test passed vacuously that way before this existed.
+            data-testid="time-editor-confirm"
             onClick={() => onConfirm(roundCs(startSec), roundCs(endSec))}
           >
             {t(confirmKey)}

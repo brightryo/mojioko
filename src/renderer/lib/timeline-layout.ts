@@ -93,6 +93,12 @@ export function layoutEntries(
   entries: readonly SubtitleEntry[],
   fallbackDurationSec: number,
   minBlockSec: number = 0,
+  /**
+   * REQ-0528 §2-3 — the video's real duration, when one is loaded.  When
+   * finite and positive it FIXES the timeline's length; otherwise the length
+   * falls back to spanning the entries (audio-only / no video yet).
+   */
+  hardDurationSec?: number,
 ): TimelineLayout {
   if (entries.length === 0) {
     return { placements: [], trackCount: 0, trackLayers: [], totalSec: Math.max(1, fallbackDurationSec) }
@@ -118,10 +124,33 @@ export function layoutEntries(
     return { entry: e, trackIndex: maxRow - layer }
   })
 
-  // totalSec is sourced from the LIVE entry endSecs — the visible timeline width
-  // must always accommodate the rightmost block as the user sees it.
+  /*
+   * REQ-0528 §2-3 — the timeline is the VIDEO's axis, so when a video is
+   * loaded its duration fixes the length outright.
+   *
+   * It used to be `max(fallbackDurationSec, maxEntryEnd)` — "always accommodate
+   * the rightmost block" — which is why the owner saw the timeline stretch to
+   * 16 s on a 7 s video: one over-long cue dragged the whole ruler out past the
+   * end of the footage, inventing timeline that has no video under it.
+   *
+   * With §2's clamp in place no GUI edit can produce such a cue any more, so in
+   * normal use this changes nothing.  It still matters for the cues REQ-0528
+   * §2-5 deliberately does NOT rewrite — legacy projects, and projects relinked
+   * to a shorter video.  Such a cue now sits past the right edge and is not
+   * reachable in the timeline; it stays fully visible and editable in the LIST
+   * view, carries the 時間超過 badge there, and confirming the 「時間を調整」
+   * dialog on it now pulls it into range.  Stranding it on an imaginary
+   * extension of the video was not better — it was just less obvious.
+   *
+   * Without a usable duration (audio-only, or no video yet) there is no video
+   * axis to honour, so the old entry-spanning behaviour is kept.
+   */
   const maxEntryEnd = entries.reduce((m, e) => (e.endSec > m ? e.endSec : m), 0)
-  const totalSec = Math.max(fallbackDurationSec, maxEntryEnd)
+  const hasHardDuration =
+    hardDurationSec !== undefined && isFinite(hardDurationSec) && hardDurationSec > 0
+  const totalSec = hasHardDuration
+    ? (hardDurationSec as number)
+    : Math.max(fallbackDurationSec, maxEntryEnd)
 
   return {
     placements,

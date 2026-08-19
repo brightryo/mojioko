@@ -240,7 +240,19 @@ function carryFields(entry: SubtitleEntry): SubtitleEntryOriginal {
  * *what the duplicate contains*, so the contents can be tested without
  * standing up the whole renderer.
  */
-export function buildDuplicateEntry(entry: SubtitleEntry, newId: string): SubtitleEntry {
+export function buildDuplicateEntry(
+  entry: SubtitleEntry,
+  newId: string,
+  /**
+   * REQ-0528 §1-2 — the layer the copy should land on, normally resolved by
+   * `findFreeLayerAbove` so the duplicate skips past any layer already occupied
+   * at these times.  Optional, and defaulting to the historical `source + 1`,
+   * because this function's contract is "what the duplicate CONTAINS" — layer
+   * SELECTION needs the whole entry list and therefore belongs to the caller.
+   * The default keeps this module usable (and unit-testable) standalone.
+   */
+  targetLayer?: number,
+): SubtitleEntry {
   const carried = carryFields(entry)
 
   // REQ-0396 — `shift` fields are recomputed for the duplicate rather than
@@ -252,7 +264,10 @@ export function buildDuplicateEntry(entry: SubtitleEntry, newId: string): Subtit
   // "one above" (front) is literally one row up the stack.
   // (The `Pick` over `KeysWithRule<'shift'>` makes tsc demand exactly the shift
   // fields, so reclassifying a field to `shift` without computing it fails.)
-  const shiftedLayer = Math.max(MIN_LAYER, resolveLayer(entry) + 1)
+  // REQ-0528 §1 — `targetLayer` (when the caller resolved one) replaces the
+  // blind `+ 1`.  The old expression only knew the SOURCE's layer, so two
+  // duplicates of the same cue both landed on source+1 and overlapped.
+  const shiftedLayer = Math.max(MIN_LAYER, targetLayer ?? resolveLayer(entry) + 1)
   const shifted: Pick<SubtitleEntryOriginal, KeysWithRule<'shift'>> = {
     layer: shiftedLayer,
   }

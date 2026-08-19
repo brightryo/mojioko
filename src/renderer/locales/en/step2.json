@@ -161,6 +161,7 @@
     "srtImportEmpty": "No subtitles were found in the file",
     "srtImportReadFailed": "Failed to read the SRT file: {{error}}",
     "srtImportParseFailed": "Could not parse the SRT: {{error}}",
+    "timeClampedToDuration": "Time was beyond the video duration, so it was clamped to fit",
     "srtImportAllOutOfDuration": "All subtitles were outside the video duration ({{count}} skipped)"
   },
   "tooltip": {
