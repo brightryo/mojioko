@@ -85,6 +85,15 @@ export const NOT_TOASTED: Record<string, string> = {
   // Reported through their own, richer surfaces.
   GPU_INIT_FAILED: 'the device chip in STEP 1 already shows CPU/GPU',
   SUBTITLE_OVERFLOW: 'the overflow badge marks the exact rows in STEP 2',
+  // REQ-0529 §2-2 — withheld for BOTH available reasons, which is unusual
+  // enough to spell out.  (a) The 時間超過 badge already marks the exact rows
+  // in STEP 2, same as SUBTITLE_OVERFLOW above.  (b) It is structurally
+  // unreachable here anyway: `burnin-drawer` filters these cues out with
+  // `isBurninTarget` before the request is built, so a GUI burn never contains
+  // one to warn about — the warning exists for the CLI/MCP, which apply no such
+  // filter.  If (b) ever changes (i.e. the GUI stops dropping them), revisit —
+  // (a) alone still argues for silence, but the reasoning would be weaker.
+  CUE_BEYOND_VIDEO_END: 'REQ-0529 — the 時間超過 badge marks the rows, and the GUI drops these cues before the burn',
   UNKNOWN_OPTION: 'CLI dispatcher-level; unreachable from the GUI',
   STALE_MCP_BUNDLE: 'surfaced in the settings AI tab, where the fix is',
 }

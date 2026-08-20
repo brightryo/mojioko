@@ -963,6 +963,100 @@ try {
     // REQ-0457 Phase E — burn --dry-run reports overflow without encoding (no -o).
     const dry = cli(['burn', efClip, efSrt, '--dry-run'], 30000)
     check('burn --dry-run returns overflow judgement, no encode', dry.code === 0 && dry.json?.data?.dryRun === true && !!dry.json?.data?.overflow)
+
+    /*
+     * REQ-0529 — cues past the end of the video are reported headlessly.
+     *
+     * The fixture clip is 2 s (`makeSolidClip`), stated explicitly rather than
+     * assumed (CLAUDE.md §18 "環境を仮定したアサーションを書かない"): the cue
+     * times below are chosen against that known length, and the assertions read
+     * `videoDurationSec` back out of the result instead of hardcoding 2.
+     *
+     * Three cases, because the warning makes two DIFFERENT claims and both have
+     * to be true:
+     *   - in-range  → silent (a warning that always fires is not read)
+     *   - overhangs → "truncated": libass draws it up to the last frame
+     *   - past end  → "not shown": nothing is drawn at all
+     */
+    /*
+     * A SOLID clip of its own, not the shared `efClip`. `efClip` is `testsrc`,
+     * whose colour bars contain large white areas — measuring "near-white
+     * pixels" there reads the PATTERN, not the caption, and the first version of
+     * this check failed because of it (the "absent" cue scored 0.108 of pure
+     * background). REQ-0468 hit the same wall and drew the same conclusion.
+     * On navy, white pixels can only be caption ink.
+     */
+    const bdClip = makeClipFor('bd.mp4', '640x360')   // solid navy, 2 s
+    const bdBase = join(work, 'bd-base.mojioko')
+    cli(['convert', efSrt, '-o', bdBase, '--video', bdClip], 40000)
+    const bdVariant = (name, mutate) => {
+      const j = JSON.parse(readFileSync(bdBase, 'utf-8'))
+      mutate(j.editing.subtitles)
+      const p = join(work, name)
+      writeFileSync(p, JSON.stringify(j), 'utf-8')
+      return p
+    }
+    const bdIn = bdVariant('bd-in.mojioko', (cues) => { for (const c of cues) { c.startSec = 0.2; c.endSec = 1.0 } })
+    const bdOver = bdVariant('bd-over.mojioko', (cues) => { for (const c of cues) { c.startSec = 0.5; c.endSec = 30 } })
+    const bdPast = bdVariant('bd-past.mojioko', (cues) => { for (const c of cues) { c.startSec = 20; c.endSec = 25 } })
+    const bdWarn = (r) => (r.json?.warnings ?? []).find((w) => w.code === 'CUE_BEYOND_VIDEO_END')
+
+    const bdInR = cli(['burn', bdClip, bdIn, '--dry-run'], 40000)
+    check('REQ-0529 in-range cues produce NO beyond-duration warning',
+      bdInR.code === 0 && !bdWarn(bdInR) && bdInR.json?.data?.beyondDuration?.cueCount === 0,
+      JSON.stringify(bdInR.json?.data?.beyondDuration))
+
+    const bdOverR = cli(['burn', bdClip, bdOver, '--dry-run'], 40000)
+    const ow = bdWarn(bdOverR)
+    check('REQ-0529 a cue overhanging the end warns as TRUNCATED (not "missing")',
+      !!ow && ow.detail?.truncatedCount === 1 && ow.detail?.notShownCount === 0 && !!ow.detail?.remedy,
+      JSON.stringify(ow?.detail))
+
+    const bdPastR = cli(['burn', bdClip, bdPast, '--dry-run'], 40000)
+    const pw = bdWarn(bdPastR)
+    check('REQ-0529 a cue starting past the end warns as NOT SHOWN',
+      !!pw && pw.detail?.notShownCount === 1 && pw.detail?.truncatedCount === 0,
+      JSON.stringify(pw?.detail))
+
+    /*
+     * ★ §3-2 — the warning's CLAIM must match the output, not merely appear.
+     * Burn for real and read the pixels: the fixture is a solid navy clip and
+     * the caption is white, so "is the cue on screen at time t" is just "are
+     * there near-white pixels". A frame near the very end must show the
+     * overhanging cue (it is truncated, NOT dropped) and must be blank for the
+     * one that starts past the end.
+     */
+    const bdOverMp4 = join(work, 'bd-over.mp4')
+    const bdPastMp4 = join(work, 'bd-past.mp4')
+    const rOver = cli(['burn', bdClip, bdOver, '-o', bdOverMp4], 120000)
+    const rPast = cli(['burn', bdClip, bdPast, '-o', bdPastMp4], 120000)
+    const whiteAt = (video, t) => {
+      const raw = join(work, `bd-${String(t).replace('.', '_')}-${video.length}.rgb`)
+      spawnSync(FFMPEG, ['-y', '-loglevel', 'error', '-ss', String(t), '-i', video,
+        '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', raw], { encoding: 'utf-8' })
+      if (!existsSync(raw)) return -1
+      const buf = readFileSync(raw)
+      let white = 0
+      for (let i = 0; i + 2 < buf.length; i += 3) if (buf[i] > 200 && buf[i + 1] > 200 && buf[i + 2] > 200) white++
+      return white / (buf.length / 3)
+    }
+    const overLate = rOver.code === 0 ? whiteAt(bdOverMp4, 1.8) : -1
+    const pastLate = rPast.code === 0 ? whiteAt(bdPastMp4, 1.8) : -1
+    check('REQ-0529 §3-2 the "truncated" cue really IS drawn to the end of the video',
+      overLate > 0.001, `whiteFraction@1.8s=${overLate.toFixed(4)}`)
+    check('REQ-0529 §3-2 the "not shown" cue really is absent from every frame',
+      pastLate === 0, `whiteFraction@1.8s=${pastLate.toFixed(4)}`)
+    check('REQ-0529 the real burn carries the warning too (not just --dry-run)',
+      rOver.code === 0 && !!bdWarn(rOver))
+
+    // REQ-0529 §2-1 — `run --burn` forwards burn-stage warnings. It used to
+    // pass NO warnings argument at all, so every burn warning (fonts, no-ops)
+    // vanished when the same work was driven through `run`.
+    const bdRunMp4 = join(work, 'bd-run.mp4')
+    const rRun = cli(['run', bdClip, '--subtitle', bdOver, '--burn', '-o', bdRunMp4], 120000)
+    check('REQ-0529 run --burn forwards the burn stage\'s warnings',
+      rRun.code === 0 && !!bdWarn(rRun) && rRun.json?.data?.beyondDuration?.cueCount === 1,
+      JSON.stringify((rRun.json?.warnings ?? []).map((w) => w.code)))
   } else {
     log('NOTE: status.ready=false — skipping transcribe/burn loop. Blockers:')
     for (const b of st.json?.data?.blockers || []) log(`  - ${b.what}: ${b.command}`)

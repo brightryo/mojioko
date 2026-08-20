@@ -273,6 +273,39 @@ try {
     check('burn dry_run subtitleStyle reflects style overrides (REQ-0461)',
       dryDone?.status === 'done' && ss?.fontSizePx === 72 && ss?.textColorHex === '#FFEE00' && ss?.outlineColorHex === '#112233' && ss?.outlineThicknessPx === 5 && ss?.position?.verticalMarginPx === 120 && /bold/i.test(ss?.fontId || ''),
       JSON.stringify(ss))
+
+    /*
+     * REQ-0529 — the beyond-duration warning reaches MCP callers too.
+     *
+     * MCP wraps the same CLI command functions with a capturing sink, so this
+     * is really asserting the wrapper does not lose `warnings[]` on the async
+     * job path — the result has to survive `finishJob` → `get_job_status`.
+     * Both sides are checked: the in-range control above (`brSrt`, 0–2 s on a
+     * 2 s clip) already ran and must NOT have warned.
+     *
+     * The fixture clip is 2 s; cue times below are stated against that.
+     */
+    const bdSrt = join(work, 'beyond.srt')
+    writeFileSync(bdSrt, '1\n00:00:00,500 --> 00:00:30,000\nbeyond the end\n', 'utf-8')
+    const bdDry = parseContent(await rpc('tools/call', { name: 'burn', arguments: { video: clip, subtitle: bdSrt, dry_run: true } }))
+    let bdDone = null
+    for (let i = 0; i < 30; i++) {
+      await sleep(500)
+      const pd = parseContent(await rpc('tools/call', { name: 'get_job_status', arguments: { job_id: bdDry.job_id } }))
+      if (pd?.status === 'done' || pd?.status === 'failed') { bdDone = pd; break }
+    }
+    const bdW = (bdDone?.result?.warnings ?? []).find((w) => w.code === 'CUE_BEYOND_VIDEO_END')
+    check('REQ-0529 MCP burn surfaces CUE_BEYOND_VIDEO_END with counts + remedy',
+      bdDone?.status === 'done' && !!bdW && bdW.detail?.truncatedCount === 1 && !!bdW.detail?.remedy,
+      JSON.stringify(bdW?.detail))
+    check('REQ-0529 MCP burn reports beyondDuration in data',
+      bdDone?.result?.data?.beyondDuration?.cueCount === 1,
+      JSON.stringify(bdDone?.result?.data?.beyondDuration))
+    // ★ both sides — the earlier in-range burn must have stayed silent.
+    check('REQ-0529 MCP in-range burn produced NO beyond-duration warning',
+      !(brDone?.result?.warnings ?? []).some((w) => w.code === 'CUE_BEYOND_VIDEO_END') &&
+        brDone?.result?.data?.beyondDuration?.cueCount === 0,
+      JSON.stringify(brDone?.result?.data?.beyondDuration))
   }
 
   // 5) REQ-0455 — strict stdout framing: split on '\n'; every complete segment

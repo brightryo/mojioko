@@ -1,4 +1,5 @@
 import type { SubtitleEntry } from '../../shared/types'
+import { isCueBeyondVideoEnd } from '../../shared/cue-duration'
 
 /**
  * Per-entry warning flags consumed by the Step 2 table.  Any `true` flag here
@@ -77,14 +78,26 @@ export function computeEntryWarnings(
    *   3. `.mojioko` files produced by the CLI / MCP, which perform no duration
    *      validation on cue times at all.
    *
-   * In every one of those the cue is excluded from the burn by `isBurninTarget`
-   * below, so without this badge the cue would simply be missing from the
-   * output video with nothing on screen explaining why.  That is the failure it
-   * exists to prevent, and the clamp does not remove it.
+   * In every one of those the cue is excluded from THIS app's burn by
+   * `isBurninTarget` below, so without this badge the cue would simply be
+   * missing from the output video with nothing on screen explaining why.  That
+   * is the failure it exists to prevent, and the clamp does not remove it.
+   *
+   * ★ REQ-0529 correction to the sentence above: "excluded from the burn" is
+   * true of the GUI ONLY.  `isBurninTarget` is applied in `burnin-drawer.tsx`
+   * before the IPC request is built, so the main process never receives such a
+   * cue from the GUI — but the CLI/MCP load cues straight out of the `.mojioko`
+   * and apply no equivalent gate, so headlessly the cue IS handed to libass and
+   * its in-video portion IS drawn (measured on real pixels, RES-0529 §1-2).
+   * Case 3 above therefore describes a file the GUI opens, not what the CLI
+   * does with it.  The divergence is reported in RES-0529, not papered over.
+   *
+   * REQ-0529 §1-1 — the predicate itself moved to `shared/cue-duration.ts` so
+   * the headless `CUE_BEYOND_VIDEO_END` warning asks the identical question.
+   * Rewriting it there would have been the drift this codebase keeps paying
+   * for; this badge and that warning are now one test.
    */
-  const overDuration =
-    entry.startSec > videoDurationSec ||
-    entry.endSec > videoDurationSec
+  const overDuration = isCueBeyondVideoEnd(entry, videoDurationSec)
 
   const overlap =
     prevActiveEndSec !== null && entry.startSec < prevActiveEndSec

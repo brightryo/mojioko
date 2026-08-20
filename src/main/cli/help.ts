@@ -440,6 +440,11 @@ const WARNING_CODES: [string, string][] = [
   // REQ-0516 §3 — scale/pop animation on a multi-line cue: the burn's line
   // pitch does not scale, so the preview and the output differ.
   ['SCALE_ANIM_LINE_PITCH_FIXED', '複数行 cue の scale/pop で行間が拡大縮小しない（成功レスポンス内・REQ-0516）'],
+  // REQ-0529 §1 — cue times are never validated against the video's length on
+  // this path, so part of a subtitle track can fall off the end unreported.
+  // The GUI has shown this as the 時間超過 badge since v1.0; headless had
+  // nothing.  Emitter: `no-op-warnings.ts` `detectCuesBeyondVideoEnd`.
+  ['CUE_BEYOND_VIDEO_END', '動画の尺を超える cue がある（成功レスポンス内・REQ-0529）'],
 ]
 
 const CHAINED_EXAMPLE = [

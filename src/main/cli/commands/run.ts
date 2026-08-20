@@ -10,7 +10,7 @@ import { existsSync, copyFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { optString, type ParsedArgs } from '../args'
-import { CliError, emitSuccess, type CliContext, type CliResult } from '../output'
+import { CliError, emitSuccess, type CliContext, type CliResult, type CliWarning } from '../output'
 import { assertWritable } from '../overwrite'
 import { loadSettings } from '../../services/settings-store'
 import { resolveDefaultSubtitleStyle } from '../subtitle-style'
@@ -21,6 +21,21 @@ import { runBurnCommand } from './burn'
 /** Extract the success `data` object from a captured stage result. */
 function dataOf(r: CliResult | null): Record<string, unknown> | null {
   return r && r.ok ? (r.data as Record<string, unknown>) : null
+}
+
+/**
+ * REQ-0529 §2-1 — the warnings a captured stage produced.
+ *
+ * `run` swallowed these entirely: it cherry-picked fields out of each stage's
+ * `data` and called `emitSuccess` with no warnings argument, so
+ * `mojioko run --burn` reported `warnings: []` even when the burn had raised
+ * font substitutions or no-op combinations. Found while adding
+ * `CUE_BEYOND_VIDEO_END`, which would otherwise have been visible from `burn`
+ * and invisible from `run` — the same one-surface blindness REQ-0502 exists to
+ * remove. Fixing it here surfaces the pre-existing warnings too.
+ */
+function warningsOf(r: CliResult | null): CliWarning[] {
+  return r && r.ok ? r.warnings : []
 }
 
 export async function runRunCommand(ctx: CliContext, args: ParsedArgs): Promise<number> {
@@ -47,6 +62,7 @@ export async function runRunCommand(ctx: CliContext, args: ParsedArgs): Promise<
   // burn details (resolution/encoder/audio/overflow/sizeMB/subtitleStyle) and
   // the transcribe signals (detectedLanguage/hasWordTimestamps) into its own JSON.
   let transcribeResult: CliResult | null = null
+  let translateResult: CliResult | null = null
   let burnResult: CliResult | null = null
 
   // REQ-0457 B5 — band each stage's local 0–99 progress into a MONOTONIC overall
@@ -88,7 +104,10 @@ export async function runRunCommand(ctx: CliContext, args: ParsedArgs): Promise<
     // 2) translate (optional) → temp .mojioko
     if (translateTo) {
       const t2 = join(workDir, 'translate.mojioko')
-      await runTranslateCommand(stageCtx('translate', () => {}), { positionals: [subtitle], opts: { ...args.opts, to: translateTo, out: t2, format: 'mojioko' } })
+      // REQ-0529 §2-1 — capture rather than discard: the sink was `() => {}`,
+      // so this stage's warnings had nowhere to go even once `run` started
+      // forwarding them.
+      await runTranslateCommand(stageCtx('translate', (r) => { translateResult = r }), { positionals: [subtitle], opts: { ...args.opts, to: translateTo, out: t2, format: 'mojioko' } })
       stages.push('translate')
       subtitle = t2
     }
@@ -129,12 +148,22 @@ export async function runRunCommand(ctx: CliContext, args: ParsedArgs): Promise<
             resolvedEncoder: bData.resolvedEncoder ?? null,
             audio: bData.audio,
             overflow: bData.overflow,
+            // REQ-0529 §2-1 — cues past the end of the video, same shape `burn`
+            // reports, so `run --burn` is as checkable as `burn`.
+            beyondDuration: bData.beyondDuration ?? null,
             sizeMB: bData.sizeMB,
             videoBitrateKbps: bData.videoBitrateKbps ?? null,
             quality: bData.quality ?? null,
           }
         : {}),
-    })
+    }, [
+      // Order mirrors the pipeline, so a reader sees them in the order the
+      // stages ran. Every stage `run` can drive is represented; a future stage
+      // that forgets to appear here reintroduces the swallowing above.
+      ...warningsOf(transcribeResult),
+      ...warningsOf(translateResult),
+      ...warningsOf(burnResult),
+    ])
   } finally {
     // Clean up intermediates (keep only `-o`).
     try {

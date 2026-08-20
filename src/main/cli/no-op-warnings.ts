@@ -39,6 +39,7 @@ import { ASS_HARD_BREAK } from '../../shared/line-spacing'
 import { resolveEmphasis } from '../../shared/emphasis'
 import { applyFontPolicy, groupFontSubstitutions, type FontTierSubstitution } from '../../shared/font-tier'
 import { getFontMeta, type FontId } from '../../shared/fonts'
+import { classifyCuesBeyondVideoEnd } from '../../shared/cue-duration'
 import type { TierResolution } from '../lib/tier'
 import type { SubtitleEntry } from '../../shared/types'
 import type { CliWarning } from './output'
@@ -341,6 +342,77 @@ export function detectIgnoredFlags(
  * same probe, so the warning cannot describe a substitution different from the
  * one performed.
  */
+/**
+ * REQ-0529 — cues that reach past the end of the video.
+ *
+ * ## What the GUI shows and the CLI did not
+ *
+ * A cue whose start or end lies beyond `video.durationSec` wears the 時間超過
+ * badge in STEP 2. Headlessly there was nothing at all: `burn` loaded the cue
+ * out of the `.mojioko`, handed it to libass, reported `ok: true`, and the
+ * caller had no way to know part of their subtitle track fell off the end.
+ *
+ * ## ★ Why the wording is "beyond the end", not "not in the output"
+ *
+ * REQ-0529 framed these as excluded from the burn by `isBurninTarget`. That is
+ * true of the GUI, which applies that filter in the renderer before the request
+ * is sent — but NOT of this path, which has no equivalent gate. Measured on
+ * real pixels (RES-0529 §1-2): a cue 0.5 s → 10 s on a 2 s clip is drawn from
+ * 0.5 s to the final frame. So the two cases are counted apart:
+ *
+ *   - `notShownCount`  — starts after the video ends; genuinely never drawn.
+ *   - `truncatedCount` — starts inside, ends outside; drawn, then cut off.
+ *
+ * Telling someone a cue they can see on screen is "missing" would send them
+ * hunting for a bug that is not there.
+ *
+ * ## ★ Why this only warns, and never clamps
+ *
+ * The GUI clamps such an edit as it is made (REQ-0528 §2); the CLI must not
+ * rewrite times in a file it was asked to render. Attaching a project to a
+ * shorter video is a deliberate act — the app's own identity-mismatch dialog
+ * offers it — and silently trimming cues would destroy work the user chose to
+ * keep, with no undo and no prompt. The asymmetry is intentional: clamp where
+ * the user is typing, report where the user handed us a finished file.
+ */
+export function detectCuesBeyondVideoEnd(
+  entries: readonly SubtitleEntry[],
+  videoDurationSec: number,
+): CliWarning[] {
+  // A synthetic / unprobeable video reports 0; there is no meaningful end to be
+  // past, and warning on every cue would be the "always fires" failure this
+  // module's own docstring rules out.
+  if (!isFinite(videoDurationSec) || videoDurationSec <= 0) return []
+
+  const report = classifyCuesBeyondVideoEnd(entries, videoDurationSec)
+  if (report.cueCount === 0) return []
+
+  const parts: string[] = []
+  if (report.notShownCount > 0) parts.push(`${report.notShownCount} 件は動画が終わった後に始まるため描画されません`)
+  if (report.truncatedCount > 0) parts.push(`${report.truncatedCount} 件は動画の末尾で途切れます`)
+
+  return [
+    {
+      code: 'CUE_BEYOND_VIDEO_END',
+      message:
+        `動画の尺（${videoDurationSec.toFixed(3)} 秒）を超える cue が ${report.cueCount} 件あります: ` +
+        `${parts.join('、')}。`,
+      detail: {
+        cueCount: report.cueCount,
+        notShownCount: report.notShownCount,
+        truncatedCount: report.truncatedCount,
+        videoDurationSec,
+        reason:
+          '字幕の時刻は動画の尺に対して検証されません。尺の外に出た部分は libass が描画できないため、' +
+          'その cue は途中で切れるか、まったく表示されません。',
+        remedy:
+          'GUI の STEP 2 で該当 cue（「時間超過」バッジ付き）の「時間を調整」を開いて確定すると尺内に収まります。' +
+          'CLI は指定されたファイルの時刻を書き換えません。',
+      },
+    },
+  ]
+}
+
 export function detectFontSubstitutions(
   entries: readonly SubtitleEntry[],
   defaultFontId: FontId,

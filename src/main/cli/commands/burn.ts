@@ -29,7 +29,8 @@ import { parseBitrateKbps } from '../../../shared/encode-quality'
 // resolver used by BOTH burn and export_frame, so a still previews the burn and
 // neither drifts.  `optInt` is re-exported from there.
 import { resolvePlacementAndLayout, optInt } from '../placement'
-import { detectNoOpCombinations, detectIgnoredFlags, detectFontSubstitutions } from '../no-op-warnings'
+import { detectNoOpCombinations, detectIgnoredFlags, detectFontSubstitutions, detectCuesBeyondVideoEnd } from '../no-op-warnings'
+import { classifyCuesBeyondVideoEnd } from '../../../shared/cue-duration'
 import { resolveTier } from '../../lib/tier'
 import { createInstalledFontProbe } from '../../lib/font-availability'
 
@@ -145,6 +146,12 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     // file is missing). Computed from the SAME pure policy and the SAME probe
     // the renderer uses, so the warning and the pixels cannot disagree.
     ...detectFontSubstitutions(entries, fontId, resolveTier(), createInstalledFontProbe()),
+    // REQ-0529 §1 — cues reaching past the end of the video. Uses `video`, the
+    // ALREADY-probed source (line ~61), so this adds no ffprobe call. It is
+    // deliberately measured against the SOURCE duration rather than the
+    // possibly-rescaled `renderVideo`: `--resolution` changes the frame size,
+    // never the length, and the cue times are on the source's timeline.
+    ...detectCuesBeyondVideoEnd(entries, video.durationSec),
   ]
 
   if (placement.overflowMode === 'error' && overflow.overflowCueCount > 0) {
@@ -156,6 +163,14 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     )
   }
 
+  /*
+   * REQ-0529 §2-1 — the same judgement as a countable field, shaped like
+   * `overflow` (its REQ-0456 neighbour) so a caller reads both the same way.
+   * Always present, `cueCount: 0` when clean, because a field that appears only
+   * on failure cannot be used to assert success.
+   */
+  const beyondDuration = classifyCuesBeyondVideoEnd(entries, video.durationSec)
+
   // REQ-0457 Phase E — dry-run: report the overflow judgement without encoding.
   if (dryRun) {
     return emitSuccess(ctx, 'burn', {
@@ -164,6 +179,7 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
       resolution: { width: renderVideo.widthPx, height: renderVideo.heightPx },
       resized,
       overflow,
+      beyondDuration,
       cueCount: entries.filter((e) => !e.isDeleted).length,
       subtitleStyle,
       stylePreset: appliedStylePreset,
@@ -239,6 +255,8 @@ export async function runBurnCommand(ctx: CliContext, args: ParsedArgs): Promise
     videoBitrateKbps,
     quality: quality ?? null,
     overflow,
+    // REQ-0529 §2-1 — how many cues reached past the end of this video.
+    beyondDuration,
     // REQ-0457 A2 — the resolved subtitle style applied (paired with `status`).
     // For `.mojioko` input, per-cue styles from the file are preserved; this is
     // the app default style (what SRT-seeded cues and un-overridden fields use).
