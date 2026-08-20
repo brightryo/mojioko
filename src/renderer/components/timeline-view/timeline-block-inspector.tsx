@@ -1051,16 +1051,20 @@ export function TimelineBlockInspector({
         {entry.isEdited && !entry.isDeleted && (
           <Badge variant="edited">{t('state.edited')}</Badge>
         )}
-        {/* REQ-121 — errors (timeInvalid / overDuration / invalidSize)
-            wear the danger variant; warnings (overlap / overflow /
-            emptyText) keep the warning amber.
+        {/* REQ-121 — errors (timeInvalid / invalidSize) wear the danger
+            variant; warnings (overlap / overflow / emptyText / overDuration)
+            keep the warning amber.
+            REQ-0530 — 時間超過 moved danger → warning with its reclassification
+            in `entry-warnings.ts`: the cue IS rendered now (truncated at the
+            end of the video), so a red "this is broken" badge overstated it.
+            The badge itself stays — the truncation still needs explaining.
             REQ-0525 — and they STAY amber.  Only the 編集済み badge above
             moved to the blue `edited` variant: being edited is not a
             warning, and the point of the change is that the two stop
             looking related. */}
         {warnings?.timeInvalid  && <Badge variant="danger">{t('badge.timeInvalid')}</Badge>}
         {warnings?.overlap      && <Badge variant="warning">{t('badge.overlap')}</Badge>}
-        {warnings?.overDuration && <Badge variant="danger">{t('badge.overDuration')}</Badge>}
+        {warnings?.overDuration && <Badge variant="warning">{t('badge.overDuration')}</Badge>}
         {warnings?.overflow     && <Badge variant="warning">{t('badge.overflow')}</Badge>}
         {warnings?.emptyText    && <Badge variant="warning">{t('badge.emptyText')}</Badge>}
         {warnings?.invalidSize  && <Badge variant="danger">{t('badge.invalidSize')}</Badge>}

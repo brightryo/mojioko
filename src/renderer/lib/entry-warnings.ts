@@ -121,26 +121,46 @@ export function computeEntryWarnings(
 }
 
 /**
- * REQ-121 — classification of the six `EntryWarnings` flags into
- * "errors" (= ffmpeg + libass physically cannot render the row, so the
- * export must stop) and "warnings" (= the row still ships, the user may
- * leave it).  Split as confirmed by the owner in RES-20260601-120 §3.1:
+ * REQ-121 — classification of the `EntryWarnings` flags into "errors"
+ * (= ffmpeg + libass physically cannot render the row, so the export must
+ * stop) and "warnings" (= the row still ships, the user may leave it).
  *
- *   errors   = timeInvalid (start ≥ end), overDuration (times outside
- *              the video duration), invalidSize (fontSizePx ≤ 0)
+ *   errors   = timeInvalid (start ≥ end), invalidSize (fontSizePx ≤ 0)
  *   warnings = emptyText (skipped from outputs but does not block burn-in),
  *              overlap (libass renders simultaneous captions),
- *              overflow (libass clips wide text)
+ *              overflow (libass clips wide text),
+ *              overDuration (REQ-0530 — see below)
  *
  * Both predicates are pure boolean ORs over the type's flags; together
- * they cover all six fields without overlap.
+ * they cover all fields without overlap.
+ *
+ * ## ★ REQ-0530 — `overDuration` moved from error to warning
+ *
+ * It was an error from the v1.0.0 commit onward, on the stated grounds that
+ * such a row is "physically un-renderable" (RES-20260601-120 §3.1:
+ * 「ffmpeg concat 不可、burnin で物理的に書き出せない」).  REQ-0529 measured
+ * that claim and it is false: the headless burn hands the cue to libass and the
+ * part inside the video is drawn, right through the final frame.  The owner's
+ * sign-off in that report was on badge colour and tab gating, not on refusing
+ * to render — the burn consequence rode along with `timeInvalid` /
+ * `invalidSize`, which really are unrenderable.
+ *
+ * The effect of it being an error was not "the cue is dropped from the output"
+ * but "there IS no output": `isError` feeds `errorCount`, which disables the
+ * 動画出力 button entirely (`step2.tsx`).  So a project carrying one such cue
+ * could not be burned at all from the GUI, while the still export, the
+ * SRT/TXT export, the preview and the CLI all included it.  The video burn was
+ * the only surface refusing.
+ *
+ * Now a warning: the row is reported (badge + Issues tab) and rendered, exactly
+ * as the CLI does, and `CUE_BEYOND_VIDEO_END` explains the truncation.
  */
 export function isError(w: EntryWarnings): boolean {
-  return w.timeInvalid || w.overDuration || w.invalidSize
+  return w.timeInvalid || w.invalidSize
 }
 
 export function isWarning(w: EntryWarnings): boolean {
-  return w.emptyText || w.overlap || w.overflow || w.verticalOverflow
+  return w.emptyText || w.overlap || w.overflow || w.verticalOverflow || w.overDuration
 }
 
 /**
@@ -187,16 +207,35 @@ export function isOutputTarget(entry: SubtitleEntry, w: EntryWarnings): boolean 
  *
  * Stricter than {@link isOutputTarget}: in addition to dropping deleted and
  * empty rows, also drops rows that the ASS renderer cannot physically
- * process — invalid time ordering (`endSec ≤ startSec`), times beyond the
- * video's duration, or a non-positive font size.  Overlap and overflow are
- * fine: libass renders simultaneous captions and tolerates overflowing
- * text widths.
+ * process — invalid time ordering (`endSec ≤ startSec`) or a non-positive font
+ * size.  Overlap and overflow are fine: libass renders simultaneous captions
+ * and tolerates overflowing text widths.
+ *
+ * ## ★ REQ-0530 — over-duration rows are no longer dropped
+ *
+ * `!w.overDuration` used to be a fourth condition here, on the same refuted
+ * "physically un-renderable" premise as the error classification above.  It is
+ * gone, and the reason is preview/output parity, this project's core promise:
+ *
+ *   - The preview DOES paint such a cue.  Measured on the running app with a
+ *     real 7 s video and a cue 5 → 16 s, the overlay shows it at playhead 6 s
+ *     and 6.9 s (RES-0530 §1-1).  The preview's filter has only ever been
+ *     `!effectivelyDeleted`.
+ *   - The still export (画像出力) includes it — its only filter is `!isDeleted`.
+ *   - The SRT / TXT export includes it (`isOutputTarget`, unchanged).
+ *   - The CLI / MCP burn includes it and warns `CUE_BEYOND_VIDEO_END`.
+ *
+ * The GUI video burn was the ONLY surface that removed it, so what the user
+ * saw could not be produced.  Aligning it here makes all five agree.
+ *
+ * What is deliberately NOT relaxed: `timeInvalid` and `invalidSize` really are
+ * unrenderable (a zero/negative-length event, a zero-size font), and deleted /
+ * empty rows still drop.  Only the duration condition moved.
  */
 export function isBurninTarget(entry: SubtitleEntry, w: EntryWarnings): boolean {
   return (
     isOutputTarget(entry, w) &&
     !w.timeInvalid &&
-    !w.overDuration &&
     !w.invalidSize
   )
 }

@@ -609,7 +609,10 @@ function SubtitleRow({
               <StatusIcon Icon={Layers} label={t('badge.overlap')} severity="warning" />
             )}
             {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overDuration && (
-              <StatusIcon Icon={Hourglass} label={t('badge.overDuration')} severity="danger" />
+              /* REQ-0530 — danger → warning: the cue is rendered (truncated
+                 at the end of the video) rather than dropped, so it is not an
+                 error any more.  See `entry-warnings.ts` isError. */
+              <StatusIcon Icon={Hourglass} label={t('badge.overDuration')} severity="warning" />
             )}
             {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overflow && (
               <StatusIcon Icon={WrapText} label={t('badge.overflow')} severity="warning" />
