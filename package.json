@@ -37,7 +37,8 @@
     "msix:register:skip-build": "powershell -ExecutionPolicy Bypass -NoProfile -File scripts/msix-register-sideload.ps1 -SkipBuild",
     "gen:srt": "node scripts/generate-test-srt.mjs",
     "measure:timeline": "playwright test --config playwright.measure.config.ts tests/measure/timeline-geometry.measure.ts",
-    "measure:list": "playwright test --config playwright.measure.config.ts tests/measure/list-virtualization.measure.ts"
+    "measure:list": "playwright test --config playwright.measure.config.ts tests/measure/list-virtualization.measure.ts",
+    "verify:cut-anim-parity": "node scripts/verify-cut-anim-parity/index.mjs"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.0.4",

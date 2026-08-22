@@ -751,10 +751,19 @@ function PlayheadImpl({ cuts, pixelsPerSec }: PlayheadProps) {
         background: 'hsl(var(--playhead))'
       }}
     >
-      {/* Top arrow head */}
+      {/* Top arrow head.
+          REQ-0532 §2-2/§2-3 — `sticky` rather than `absolute -top-px`, for the
+          same reason as the scissor icon: the red LINE spans the whole column
+          (`top-0 bottom-0`) and was always visible, but its head sat at the top
+          of the CONTENT and scrolled away once the layers overflowed, leaving
+          the user unable to see where the playhead's grabbable head was.
+          Sticky pins the head to the scrollport while the line keeps running
+          the full height, and horizontal scrolling still moves both (the
+          parent carries the `left` offset). */}
       <div
-        className="absolute -top-px -left-1.5 h-0 w-0"
+        className="sticky top-0 h-0 w-0"
         style={{
+          marginLeft: '-6px',
           borderLeft: '6px solid transparent',
           borderRight: '6px solid transparent',
           borderTop: '6px solid hsl(var(--playhead))'
@@ -2529,13 +2538,29 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                       // REQ-0397 §3 — full-height marker (`top-0 bottom-0`); the
                       // scissor icon sits at the top and the line (`flex-1`)
                       // fills the rest down to the bottom of the tracks.
-                      className="absolute top-0 bottom-0 z-20 flex flex-col items-center pointer-events-auto"
+                      //
+                      // REQ-0532 §2-6 — the BUTTON is pointer-transparent and
+                      // only the icon takes the pointer.  It spans the full
+                      // column height, so while it was `pointer-events-auto` it
+                      // swallowed every press in a 14 px strip and a clip
+                      // sitting under a cut could not be grabbed there.  The
+                      // click still reaches this button's handler because the
+                      // icon's event bubbles.
+                      className="absolute top-0 bottom-0 z-20 flex flex-col items-center pointer-events-none"
                       style={{
                         left: `${xPx - 7}px`,
                         width: '14px'
                       }}
                     >
-                      <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-surface-2 text-warning-faint hover:bg-warning/30 hover:text-warning-very-faint transition-colors duration-150">
+                      {/* REQ-0532 §2-2 — the icon STICKS to the top of the
+                          scrollport.  It used to sit at `top-0` of the content
+                          column, which is taller than the viewport once there
+                          are 3+ layers, so scrolling down carried the scissors
+                          out of sight and the only way back to it was to scroll
+                          up (the owner's report).  `sticky` keeps it pinned
+                          while its column still scrolls, so the marker stays on
+                          the same time position horizontally — REQ-0532 §2-4. */}
+                      <div className="sticky top-0 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-surface-2 text-warning-faint hover:bg-warning/30 hover:text-warning-very-faint transition-colors duration-150 pointer-events-auto">
                         <Scissors className="h-3 w-3" />
                       </div>
                       <div className="w-px flex-1 bg-warning-soft/60 pointer-events-none" />
