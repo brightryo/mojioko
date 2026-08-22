@@ -18,9 +18,8 @@ import { detectNoOpCombinations } from '../cli/no-op-warnings'
 import { createInstalledFontProbe } from '../lib/font-availability'
 import {
   editedDuration,
-  translateEntryToEditedAxis
+  translateEntriesToEditedAxis
 } from '../../shared/cuts'
-import type { SubtitleEntry } from '../../shared/types'
 import type { BurninStartRequest, BurninEvent } from '../../shared/ipc-contracts'
 import { FfmpegError } from '../../shared/errors'
 import log from '../lib/logger'
@@ -206,15 +205,12 @@ export async function startBurnin(
   //
   // The rules (word straddling a cut, word inside a cut, the out-of-bounds
   // backstop) are documented on the function in `shared/cuts.ts`.
-  const droppedWordsIds: string[] = []
-  const entriesForAss: SubtitleEntry[] = hasCuts
-    ? tieredEntries.flatMap((e) => {
-        const translated = translateEntryToEditedAxis(e, cutsList)
-        if (translated === null) return []
-        if (translated.wordsDropped) droppedWordsIds.push(e.id)
-        return [translated.entry]
-      })
-    : tieredEntries
+  //
+  // REQ-0531 §2-2 — the fold itself moved to `translateEntriesToEditedAxis` so
+  // `frame-exporter` runs the SAME one.  A still previews this burn; it cannot
+  // do that from a second copy of this logic.
+  const { entries: entriesForAss, droppedWordsIds } =
+    translateEntriesToEditedAxis(tieredEntries, cutsList)
   if (droppedWordsIds.length > 0) {
     // Not silent: this means a cue's translated word spans left its own
     // window, and it is now burning from the equal split instead.  Nothing

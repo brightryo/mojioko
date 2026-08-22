@@ -66,8 +66,11 @@ function makeClip(path, size) {
 // REQ-0468 — a SOLID-colour clip so a white caption is trivially isolatable
 // (flat background compresses near-losslessly, so the burn frame and the
 // export_frame still differ only in h264 noise + caption anti-aliasing).
-function makeSolidClip(path, size, color = 'navy') {
-  spawnSync(FFMPEG, ['-y', '-f', 'lavfi', '-i', `color=c=${color}:s=${size}:rate=30:duration=2`, '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2', '-c:v', 'h264_mf', '-c:a', 'aac', '-shortest', path], { encoding: 'utf-8' })
+// REQ-0531 — `durationSec` is a parameter (default 2, so every existing caller
+// is unchanged) because a cut gate needs a clip long enough to hold a cut plus
+// material on both sides of it.
+function makeSolidClip(path, size, color = 'navy', durationSec = 2) {
+  spawnSync(FFMPEG, ['-y', '-f', 'lavfi', '-i', `color=c=${color}:s=${size}:rate=30:duration=${durationSec}`, '-f', 'lavfi', '-i', `sine=frequency=440:duration=${durationSec}`, '-c:v', 'h264_mf', '-c:a', 'aac', '-shortest', path], { encoding: 'utf-8' })
 }
 
 // REQ-0468 — the vertical centre (px) of the white caption ink in a PNG, found
@@ -1057,6 +1060,238 @@ try {
     check('REQ-0529 run --burn forwards the burn stage\'s warnings',
       rRun.code === 0 && !!bdWarn(rRun) && rRun.json?.data?.beyondDuration?.cueCount === 1,
       JSON.stringify((rRun.json?.warnings ?? []).map((w) => w.code)))
+
+    /*
+     * ══════════════════════════════════════════════════════════════════════
+     * REQ-0531 — the still export honours `cuts`, on the EDITED axis.
+     * ══════════════════════════════════════════════════════════════════════
+     *
+     * The claim under test: `export_frame --time t` and the frame at t of
+     * `burn`'s output are the SAME PICTURE. Before this, `export_frame` never
+     * read `editing.cuts`, so on a trimmed project it returned an image of a
+     * moment the burned video does not contain.
+     *
+     * Method (REQ-0529/0530's): solid navy clip, white captions, so "which cue
+     * is on screen" reduces to "how much white ink is there". The three cues
+     * are given DIFFERENT lengths (1 / 8 / 4 chars) so the ink count identifies
+     * WHICH one is drawn — a gate that only asked "is there ink" would pass
+     * while showing the wrong caption, which is precisely the bug.
+     *
+     * Fixture facts, stated rather than assumed (CLAUDE.md §18):
+     *   clip = 6 s, 30 fps, solid navy, ONE audio track.
+     *   cut  = [2, 4) ⇒ edited duration 4 s.
+     *   A "A"        [0.2, 1.8]  → edited [0.2, 1.8]   (ahead of the cut)
+     *   B "BBBBBBBB" [2.2, 3.8]  → CONSUMED by the cut, must never be drawn
+     *   C "CCCC"     [4.2, 5.8]  → edited [2.2, 3.8]   (after the cut)
+     *
+     * §3-1 — the sampled times MUST include one the cut moves. t=3.0 is that
+     * time: it is source 5.0 (cue C) after the fix and source 3.0 (cue B)
+     * before it. Sampling only t=1.0 would go green on the broken build.
+     */
+    const cutClip = join(work, 'cut.mp4')
+    makeSolidClip(cutClip, '640x360', 'navy', 6)
+    const cutBase = join(work, 'cut-base.mojioko')
+    const convR = cli(['convert', efSrt, '-o', cutBase, '--video', cutClip], 40000)
+    check('REQ-0531 fixture: convert produced a .mojioko for the 6 s clip', convR.code === 0, convR.stderr?.slice(-160))
+
+    // One builder, two projects: identical cues, differing ONLY in whether the
+    // cut list is present. That difference is the whole experiment.
+    const cutProject = (name, cuts) => {
+      const j = JSON.parse(readFileSync(cutBase, 'utf-8'))
+      const proto = j.editing.subtitles[0]
+      const mk = (id, startSec, endSec, text) => ({
+        ...proto, id, startSec, endSec, text,
+        fontSizePx: 40, isDeleted: false, isEdited: false,
+        original: { ...(proto.original ?? proto), startSec, endSec, text },
+        // `words` from the SRT prototype describe different text; drop them so
+        // karaoke cannot reject the cue for a reason unrelated to this gate.
+        words: undefined,
+      })
+      j.editing.subtitles = [
+        mk('cue-a', 0.2, 1.8, 'A'),
+        mk('cue-b', 2.2, 3.8, 'BBBBBBBB'),
+        mk('cue-c', 4.2, 5.8, 'CCCC'),
+      ]
+      j.editing.cuts = cuts
+      const p = join(work, name)
+      writeFileSync(p, JSON.stringify(j), 'utf-8')
+      return p
+    }
+    const CUT = [{ id: 'cut-0', startSec: 2, endSec: 4 }]
+    const projCut = cutProject('cut-with.mojioko', CUT)
+    /*
+     * ★ §3-4 NEGATIVE CONTROL — same cues, empty cut list.
+     *
+     * This is the pre-REQ-0531 behaviour reproduced EXACTLY, because ignoring
+     * `cuts` and having no `cuts` are the same computation: the seek is
+     * `timeSec` itself, cue B is present, cue C sits at its raw times. It
+     * perturbs the single judgement under test (does the still see the cut?)
+     * through an INPUT, so there is no source injection to rot and no `git
+     * checkout` to eat the working tree (CLAUDE.md §18).
+     */
+    const projNoCut = cutProject('cut-without.mojioko', [])
+
+    const cutMp4 = join(work, 'cut-burn.mp4')
+    const rCutBurn = cli(['burn', cutClip, projCut, '-o', cutMp4], 180000)
+    check('REQ-0531 fixture: the trimmed burn succeeded', rCutBurn.code === 0, rCutBurn.stderr?.slice(-200))
+
+    /** A PNG of `video` at `t`, measured with the same `inkStats` as a still. */
+    const videoFramePng = (video, t, tag) => {
+      const p = join(work, `f-${tag}.png`)
+      spawnSync(FFMPEG, ['-y', '-loglevel', 'error', '-i', video, '-ss', String(t),
+        '-frames:v', '1', '-c:v', 'png', p], { encoding: 'utf-8' })
+      return existsSync(p) ? inkStats(p) : null
+    }
+    /** A still from `proj` at `t`, measured the same way. */
+    const stillInk = (proj, t, tag) => {
+      const p = join(work, `s-${tag}.png`)
+      const r = cli(['export_frame', cutClip, proj, '-o', p, '--time', String(t)], 90000)
+      return { r, stats: existsSync(p) ? inkStats(p) : null, png: p }
+    }
+
+    if (rCutBurn.code === 0) {
+      // Times on exact 30 fps frame boundaries so neither side is comparing
+      // across a frame edge. 1.0 is untouched by the cut (the control); 2.5 and
+      // 3.0 both sit after it, where the axes diverge by the full 2 s.
+      for (const [t, tag, expectCue] of [[1.0, 't10', 'A'], [2.5, 't25', 'C'], [3.0, 't30', 'C']]) {
+        const burn = videoFramePng(cutMp4, t, tag)
+        const still = stillInk(projCut, t, `fix-${tag}`)
+        const ok = burn && still.stats && still.r.code === 0
+        // h264 vs PNG-from-source differ in compression noise, so the tolerance
+        // is on the ink COUNT, not on bytes. The three cues differ by 2-8x, far
+        // outside this band — a wrong cue cannot pass as noise.
+        const rel = ok && burn.white > 0 ? Math.abs(still.stats.white - burn.white) / burn.white : 1
+        check(`REQ-0531 §3-1 still == burn at edited t=${t}s (cue ${expectCue})`,
+          ok && rel < 0.15,
+          `burnWhite=${burn?.white} stillWhite=${still.stats?.white} rel=${rel.toFixed(3)}`)
+      }
+
+      // ★ The negative control has to actually FAIL, or the gate above proves
+      // nothing. At t=3.0 the un-cut project draws cue B (8 chars); the burn
+      // draws cue C (4 chars).
+      const burn30 = videoFramePng(cutMp4, 3.0, 't30')
+      const pre30 = stillInk(projNoCut, 3.0, 'pre-t30')
+      const preRel = burn30 && pre30.stats && burn30.white > 0
+        ? Math.abs(pre30.stats.white - burn30.white) / burn30.white : 0
+      check('REQ-0531 §3-4 NEGATIVE CONTROL: ignoring cuts disagrees with the burn at t=3.0',
+        preRel > 0.5,
+        `burnWhite=${burn30?.white} preFixWhite=${pre30.stats?.white} rel=${preRel.toFixed(3)}`)
+
+      // A cue a cut consumed is drawn NOWHERE. Sampled across the whole edited
+      // range rather than at one point: "B is absent at t=3.0" would also hold
+      // if B had merely moved.
+      const bWhite = pre30.stats?.white ?? 0
+      let bLeak = 0
+      for (const t of [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5]) {
+        const s = stillInk(projCut, t, `leak-${String(t).replace('.', '_')}`)
+        if (s.stats && bWhite > 0 && Math.abs(s.stats.white - bWhite) / bWhite < 0.15) bLeak++
+      }
+      check('REQ-0531 a cue the cut consumed is never drawn by the still', bLeak === 0,
+        `frames matching cue B's ink signature=${bLeak} (B=${bWhite}px)`)
+    }
+
+    /*
+     * §2-5 — the `--time` ceiling is the EDITED duration (4 s), not the file's
+     * 6 s. The window [4, 6) used to be accepted and returned a frame that
+     * exists nowhere in the burn.
+     */
+    const overCeil = cli(['export_frame', cutClip, projCut, '-o', join(work, 'over.png'), '--time', '5.0'], 60000)
+    // The ceiling is REPORTED, not just enforced: a caller that hits this needs
+    // to see 4 s (and the 6 s source length) to understand why.
+    check('REQ-0531 §2-5 a time past the EDITED duration is rejected (USAGE)',
+      overCeil.code === 2 && overCeil.json?.code === 'USAGE'
+        && Math.abs((overCeil.json?.detail?.durationSec ?? 0) - 4) < 0.2
+        && Math.abs((overCeil.json?.detail?.sourceDurationSec ?? 0) - 6) < 0.2,
+      `code=${overCeil.code} durationSec=${overCeil.json?.detail?.durationSec} source=${overCeil.json?.detail?.sourceDurationSec}`)
+    // Both sides: the same time is FINE on the untrimmed project, so this is a
+    // narrower ceiling, not a blanket rejection.
+    const underCeil = cli(['export_frame', cutClip, projNoCut, '-o', join(work, 'under.png'), '--time', '5.0'], 60000)
+    check('REQ-0531 §2-5 the same time is still accepted without cuts', underCeil.code === 0,
+      `code=${underCeil.code}`)
+
+    /*
+     * §3-2 — NO-CUTS INERTNESS. The new `cuts` plumbing must not perturb the
+     * overwhelmingly common path, so a project with an EMPTY cut list and one
+     * with NO cut list at all must produce byte-identical PNGs.
+     */
+    {
+      const jNo = JSON.parse(readFileSync(projNoCut, 'utf-8'))
+      delete jNo.editing.cuts
+      const projAbsent = join(work, 'cut-absent.mojioko')
+      writeFileSync(projAbsent, JSON.stringify(jNo), 'utf-8')
+      const pA = join(work, 'inert-empty.png')
+      const pB = join(work, 'inert-absent.png')
+      const rA = cli(['export_frame', cutClip, projNoCut, '-o', pA, '--time', '1.0'], 60000)
+      const rB = cli(['export_frame', cutClip, projAbsent, '-o', pB, '--time', '1.0'], 60000)
+      check('REQ-0531 §3-2 empty cuts and absent cuts give a byte-identical still',
+        rA.code === 0 && rB.code === 0 && existsSync(pA) && existsSync(pB) && sha256(pA) === sha256(pB),
+        `${rA.code}/${rB.code}`)
+    }
+
+    /*
+     * ★ §3(追加) — ENTRANCE-ANIMATION PHASE, which is strictly stronger than
+     * frame selection.
+     *
+     * libass resolves `\fad` from the gap between the cue's own start and the
+     * clock, so a still can extract the RIGHT frame and still draw the caption
+     * at the wrong point in its entrance. Here both builds read the SAME source
+     * frame — only the phase differs.
+     *
+     * Fixture: cut [0,2] clamps cue D's head from 1 to 2, which the burn places
+     * at edited 0. With a 1 s fade, edited t=0.5 is HALF-WAY into the entrance.
+     * The pre-fix pairing (raw cue times, source clock) put t=0.5 before D
+     * started at all, so it drew nothing.
+     */
+    {
+      const j = JSON.parse(readFileSync(cutBase, 'utf-8'))
+      const proto = j.editing.subtitles[0]
+      const d = {
+        ...proto, id: 'cue-d', startSec: 1, endSec: 5, text: 'DDDD',
+        fontSizePx: 40, isDeleted: false, isEdited: false, fadeDurationSec: 1,
+        original: { ...(proto.original ?? proto), startSec: 1, endSec: 5, text: 'DDDD' },
+        words: undefined,
+      }
+      j.editing.subtitles = [d]
+      j.editing.cuts = [{ id: 'cut-head', startSec: 0, endSec: 2 }]
+      const projFade = join(work, 'fade-cut.mojioko')
+      writeFileSync(projFade, JSON.stringify(j), 'utf-8')
+
+      const mid = stillInk(projFade, 0.5, 'fade-mid')       // 50% through the fade
+      const full = stillInk(projFade, 2.0, 'fade-full')     // fade long finished
+      /*
+       * MEASURE `ink`, NOT `white`. A half-faded white caption composited over
+       * navy lands near (128,128,192) — plainly "not the background", but NOT
+       * over the r,g,b > 200 bar that `white` counts. The first version of this
+       * check read `white` and scored the mid-fade frame 0, i.e. it could not
+       * tell "drawn at 50% alpha" from "not drawn at all" — which is exactly
+       * the distinction the gate exists to make.
+       *
+       * So: `ink` says the glyphs are on screen, `white` says how opaque they
+       * are. Both are needed.
+       */
+      const midInk = mid.stats?.ink ?? -1
+      const fullInk = full.stats?.ink ?? -1
+      const midW = mid.stats?.white ?? -1
+      const fullW = full.stats?.white ?? -1
+      // Three claims, all needed. `midInk > 0` separates the fixed build from
+      // the pre-fix one (which drew NOTHING at 0.5). `midW < fullW/2` proves
+      // the caption is genuinely mid-fade rather than fully opaque — i.e. the
+      // PHASE came from the edited axis, not merely the frame.
+      check('REQ-0531 §6-2 the still draws the entrance MID-FADE at edited t=0.5s',
+        midInk > 0 && fullInk > 0 && fullW > 0 && midW < fullW * 0.5,
+        `midInk=${midInk} midWhite=${midW} fullInk=${fullInk} fullWhite=${fullW}`)
+
+      // ★ NEGATIVE CONTROL for the phase, same input-perturbation shape: with
+      // the cut removed, cue D starts at 1 s and edited t=0.5 is before it.
+      const jNo = JSON.parse(readFileSync(projFade, 'utf-8'))
+      jNo.editing.cuts = []
+      const projFadeNo = join(work, 'fade-nocut.mojioko')
+      writeFileSync(projFadeNo, JSON.stringify(jNo), 'utf-8')
+      const preMid = stillInk(projFadeNo, 0.5, 'fade-pre')
+      check('REQ-0531 §3-4 NEGATIVE CONTROL: ignoring cuts draws nothing at edited t=0.5s',
+        (preMid.stats?.ink ?? -1) === 0,
+        `preFixInk=${preMid.stats?.ink} preFixWhite=${preMid.stats?.white}`)
+    }
   } else {
     log('NOTE: status.ready=false — skipping transcribe/burn loop. Blockers:')
     for (const b of st.json?.data?.blockers || []) log(`  - ${b.what}: ${b.command}`)

@@ -250,7 +250,10 @@ const COMMANDS: CommandDoc[] = [
       OUT_REQ,
       // REQ-0502 §1 — the same flag now takes a list, so `--time 1.5` is
       // unchanged and there is no second spelling to choose between.
-      { flag: '--time', type: 'string', required: true, desc: '抽出する時刻（秒）。カンマ区切りで複数可（最大20・例 1.0,3.5,7.2）' },
+      // REQ-0531 §2-1 — the axis is stated because it is the one thing about
+      // this flag a caller cannot infer, and getting it wrong returns a
+      // plausible-looking image of the wrong moment.
+      { flag: '--time', type: 'string', required: true, desc: '抽出する時刻（秒。トリミング後＝焼き上がり動画上の位置）。カンマ区切りで複数可（最大20・例 1.0,3.5,7.2）' },
       { flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '字幕フォーマット（既定: 拡張子）' },
       // REQ-0461 — same per-cue style overrides as `burn`, so a preview frame is
       // a faithful still of the burn (change a flag → verify in real pixels).

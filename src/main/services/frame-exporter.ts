@@ -16,21 +16,36 @@ import type { ExportFrameRequest, ExportFrameResult } from '../../shared/ipc-con
 import type { SubtitleEntry } from '../../shared/types'
 import { FfmpegError } from '../../shared/errors'
 import { displayedFrameSeekSec, frameExportSubtitleFilter } from '../../shared/frame-seek'
+// REQ-0531 §2-2 — the cut arithmetic the burn uses, called rather than copied.
+import { editedToOrig, translateEntriesToEditedAxis } from '../../shared/cuts'
 import log from '../lib/logger'
 
 /**
- * REQ-20260615-021: extract a single video frame at `timeSec` (source /
- * original axis, the <video> element's `currentTime`) and save it to
+ * REQ-20260615-021: extract a single video frame at `timeSec` and save it to
  * `outputPath`.  When `includeSubtitles` is true the same ASS generator +
- * libass `subtitles=` filter as burn-in is used, so the output still
- * matches what a future burned video would render at that instant.
+ * libass `subtitles=` filter as burn-in is used, so the output still matches
+ * what a future burned video would render at that instant.
  *
- * Cuts handling: deliberately ignored.  The renderer hands the source-axis
- * time directly, so ffmpeg seeks against the raw video and ASS uses raw
- * (= original-axis) entry timestamps — the subtitle visible at `timeSec`
- * is the one whose [startSec, endSec] contains it.  This matches what the
- * user sees in the preview, since the preview's `<video>` element also
- * runs on the original axis.
+ * ## Cuts handling (REQ-0531 — this used to say "deliberately ignored")
+ *
+ * `timeSec` is on the EDITED axis and `cuts` is honoured: the source frame is
+ * picked with `editedToOrig`, and the cues go through the same
+ * `translateEntriesToEditedAxis` the burn runs.
+ *
+ * The old note claimed ignoring cuts was deliberate, "since the preview's
+ * `<video>` element also runs on the original axis".  That reasoning held only
+ * while this function had ONE caller.  Two things broke it:
+ *
+ *   - The preview's `<video>.currentTime` is an internal value.  Every number
+ *     the preview SHOWS (seekbar, ruler, time inputs) is already edited-axis,
+ *     so "matching the preview" argued for the opposite conclusion.
+ *   - REQ-0457 gave this function CLI and MCP callers, where `--time` is typed
+ *     by a caller reading the burn's timeline.  There, ignoring cuts returned
+ *     an image of an instant the output video does not contain — and could
+ *     name a time INSIDE a cut, which the GUI's cut-skip makes unreachable.
+ *
+ * With `cuts` empty every one of those functions is the identity, so the argv
+ * and the generated ASS are byte-identical to the pre-REQ-0531 output.
  */
 async function stageFontsDir(fontIds: FontId[]): Promise<string> {
   const tempDir = join(tmpdir(), `mojioko-frame-fonts-${randomUUID()}`)
@@ -85,14 +100,28 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
   } = req
 
   const ffmpeg = getBinPath('ffmpeg')
+  const cutsList = req.cuts ?? []
+
+  /**
+   * REQ-0531 §2-1 — `timeSec` names a position in the BURN; the frame that
+   * lives there comes from a different position in the source.  `editedToOrig`
+   * is the same inverse the seekbar uses to turn a slider value into
+   * `<video>.currentTime`, and its post-cut boundary convention means an
+   * edited time that lands exactly on a cut's collapse point resolves to the
+   * first surviving frame after the cut — never to a frame the burn dropped.
+   *
+   * Identity when `cutsList` is empty, so `seekSec` below is unchanged for
+   * projects without trimming.
+   */
+  const sourceTimeSec = editedToOrig(timeSec, cutsList)
 
   // REQ-0375 §3 — align the extracted frame with the one the preview shows.
-  // The preview <video> at `currentTime = timeSec` displays the frame with
-  // pts <= timeSec, but output-side `-ss timeSec` selects the first frame with
-  // pts >= timeSec — the NEXT frame whenever the playhead is between boundaries
+  // The preview <video> at `currentTime = sourceTimeSec` displays the frame
+  // with pts <= that, but output-side `-ss` selects the first frame with
+  // pts >= it — the NEXT frame whenever the playhead is between boundaries
   // (owner's §3 repro).  `displayedFrameSeekSec` snaps the seek so ffmpeg
   // extracts the displayed frame instead.
-  const seekSec = displayedFrameSeekSec(timeSec, req.video.fps)
+  const seekSec = displayedFrameSeekSec(sourceTimeSec, req.video.fps)
 
   // Codec choice — ffmpeg auto-picks by extension when the output filename
   // matches, but we set it explicitly for predictability and consistency
@@ -139,7 +168,14 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
     })
 
   try {
-    log.info(`[frame-exporter] start: ${inputPath} @ ${timeSec.toFixed(3)}s → ${outputPath} (format=${format}, includeSubtitles=${includeSubtitles})`)
+    // REQ-0531 — both axes in the log line.  When they differ, the gap IS the
+    // cut total before this instant, which makes a "wrong frame" report
+    // diagnosable from the log alone.
+    log.info(
+      `[frame-exporter] start: ${inputPath} @ edited ${timeSec.toFixed(3)}s ` +
+      `(source ${sourceTimeSec.toFixed(3)}s, cuts=${cutsList.length}) → ${outputPath} ` +
+      `(format=${format}, includeSubtitles=${includeSubtitles})`
+    )
 
     if (includeSubtitles && entries.length > 0) {
       // Reuse the burn-in font staging + ASS generation so the still is
@@ -181,8 +217,29 @@ export async function exportFrame(req: ExportFrameRequest): Promise<ExportFrameR
       const referencedFontIds = collectReferencedFontIds(resolvedFontId, tieredEntries)
       fontsDir = await stageFontsDir(referencedFontIds)
 
+      /**
+       * REQ-0531 §2-2 — the SAME fold `ffmpeg-burnin` runs, in the same order
+       * (font policy first, then the axis translation), so the ASS this still
+       * burns is the ASS the burn would burn.
+       *
+       * Doing this is what makes the libass clock below meaningful.  `subtitles=`
+       * resolves `\k` / `\kf` sweep and `\fad` / `\t` animation phase from the
+       * gap between the cue's own start and the clock; feeding it edited-axis
+       * cues with an edited-axis clock reproduces the burn's phase exactly.
+       * The previous pairing (original-axis cues, original-axis clock) agreed
+       * with the burn on which cue was on screen — `origToEdited` is monotone,
+       * so cue boundaries and the playhead moved together — but not on how far
+       * INTO that cue the moment was, whenever a cut sat between the cue's
+       * start and the playhead.  A head-clamped cue is the clear case: the burn
+       * restarts its entrance at the cut boundary and the still did not.
+       *
+       * Empty cuts returns `tieredEntries` by reference (see `shared/cuts.ts`),
+       * so the generated ASS is byte-identical without trimming.
+       */
+      const { entries: entriesForAss } = translateEntriesToEditedAxis(tieredEntries, cutsList)
+
       const assContent = generateAss(
-        tieredEntries,
+        entriesForAss,
         video,
         // `burnin` (BurninPosition) is vestigial in generateAss — pass any
         // legal value so the signature is satisfied (matches ENTRY_LAYOUT_DEFAULTS).

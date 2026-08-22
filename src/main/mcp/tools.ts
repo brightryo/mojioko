@@ -294,7 +294,9 @@ export const TOOLS: ToolSpec[] = [
         // REQ-0502 §1 — one call can render several timestamps; placement is
         // resolved once and reused, so batching is cheaper than N calls.
         time: {
-          description: '抽出する時刻（秒）。複数指定可（配列 [1.0,3.5] / 文字列 "1.0,3.5" / 単一の数値）。最大20件（REQ-0502）',
+          // REQ-0531 §2-3 — same wording as the CLI's `--time`, which this
+          // forwards to verbatim.
+          description: '抽出する時刻（秒。トリミング後＝焼き上がり動画上の位置）。複数指定可（配列 [1.0,3.5] / 文字列 "1.0,3.5" / 単一の数値）。最大20件（REQ-0502 / REQ-0531）',
           oneOf: [{ type: 'number' }, { type: 'string' }, { type: 'array', items: { type: 'number' } }],
         },
         format: FORMAT_PROP,

@@ -15,6 +15,7 @@ import { exportFrame as ipcExportFrame } from '@/services/video'
 import { showRenderNoticeToasts } from '@/lib/render-notice-toast'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
 import { KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
+import { origToEdited } from '../../../shared/cuts'
 
 /**
  * REQ-20260615-022: STEP2 footer's "image export" entry — opens a small
@@ -26,8 +27,9 @@ import { KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
  *
  * The current preview time is read from `useUiStore.videoCurrentTimeSec`
  * which the VideoPreviewPanel's `handleTimeUpdate` keeps synchronised
- * with `<video>.currentTime`.  This is the source / original axis, so
- * ffmpeg can seek the raw input directly.
+ * with `<video>.currentTime` — the source / original axis.  REQ-0531 puts
+ * it through `origToEdited` before it leaves this component, because the
+ * exporter's `timeSec` (like the seekbar's own label) is edited-axis.
  */
 export function ExportFrameButton() {
   const { t } = useTranslation(['step2'])
@@ -42,6 +44,24 @@ export function ExportFrameButton() {
   // REQ-20260615-050 — fade lives per-entry; the still uses each entry's
   // own `fadeDurationSec`, no global slice is read here.
   const currentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
+  // REQ-0531 §2-1 — the project's cuts, forwarded so the exporter resolves the
+  // same cue set and phase the burn will.
+  const cuts = useProjectStore((s) => s.cuts)
+  /**
+   * REQ-0531 §2-1 — `videoCurrentTimeSec` is `<video>.currentTime`, i.e. the
+   * SOURCE axis; `ExportFrameRequest.timeSec` is the edited axis.
+   *
+   * This one conversion is what keeps the three surfaces agreeing.  The
+   * seekbar beside this button already labels the playhead
+   * `origToEdited(currentTime, cuts)` (`video-preview-panel.tsx`), so passing
+   * the raw value would export under a timestamp the user never saw, and the
+   * saved filename below would disagree with the number on screen.  It also
+   * means the still stays a picture of the frame currently displayed:
+   * `editedToOrig` inverts this on the other side.
+   *
+   * Identity when `cuts` is empty.
+   */
+  const editedTimeSec = origToEdited(currentTimeSec, cuts)
 
   const [open, setOpen] = useState(false)
   const [includeSubtitles, setIncludeSubtitles] = useState(true)
@@ -64,7 +84,9 @@ export function ExportFrameButton() {
     if (busy) return
 
     const stem = video.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'frame'
-    const timecode = formatTimecode(currentTimeSec)
+    // REQ-0531 §6 — edited-axis, so the timestamp in the filename is the one
+    // the seekbar was showing when the user pressed save.
+    const timecode = formatTimecode(editedTimeSec)
     const ext = format === 'jpg' ? 'jpg' : 'png'
     const defaultName = `${stem}_${timecode}.${ext}`
 
@@ -84,11 +106,13 @@ export function ExportFrameButton() {
       const result = await ipcExportFrame({
         inputPath: video.path,
         outputPath: savePath,
-        timeSec: currentTimeSec,
+        timeSec: editedTimeSec,
         video,
         format,
         includeSubtitles,
         entries: includeSubtitles ? entries : undefined,
+        // REQ-0531 §2-1 — raw cues + cuts; the exporter runs the burn's fold.
+        cuts,
         subtitleBackground: {
           enabled: BURNIN_DEFAULTS.subtitleBackground.enabled,
           color: BURNIN_DEFAULTS.subtitleBackground.color,

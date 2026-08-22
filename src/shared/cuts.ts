@@ -399,6 +399,45 @@ export function translateEntryToEditedAxis(
 }
 
 /**
+ * REQ-0531 §2-2 — put a WHOLE cue list on the EDITED axis.
+ *
+ * The list-level counterpart of `translateEntryToEditedAxis`: drop the cues a
+ * cut fully consumed, translate the survivors, and report which ones lost their
+ * word timings on the way.  Callers get the two things they need (the cues to
+ * render, the ids to log) and cannot get the fold subtly wrong.
+ *
+ * ## Why this exists rather than a `flatMap` at each call site
+ *
+ * `ffmpeg-burnin` had this fold inline, and `frame-exporter` had nothing at all
+ * — a still ignored `cuts` entirely (REQ-0531 §1).  Fixing that by copying the
+ * fold would have produced the failure this codebase keeps re-learning: two
+ * renderers that agree on the day they are written and drift on the next
+ * change.  Both now call THIS, so a still and the burn cannot disagree about
+ * which cues exist or where they sit.
+ *
+ * Empty `cuts` short-circuits to the input array **by reference**, so the
+ * no-cuts path allocates nothing and every downstream byte (the generated ASS,
+ * the ffmpeg argv) is identical to what it was before this function existed.
+ * That is the REQ-0531 §2-4 contract, and it is why the guard is an early
+ * return rather than a reliance on `translateEntryToEditedAxis` being the
+ * identity on `[]` (it is, but it would still rebuild every object).
+ */
+export function translateEntriesToEditedAxis(
+  entries: readonly SubtitleEntry[],
+  cuts: CutList,
+): { entries: SubtitleEntry[]; droppedWordsIds: string[] } {
+  if (cuts.length === 0) return { entries: entries as SubtitleEntry[], droppedWordsIds: [] }
+  const droppedWordsIds: string[] = []
+  const out = entries.flatMap((e) => {
+    const translated = translateEntryToEditedAxis(e, cuts)
+    if (translated === null) return []
+    if (translated.wordsDropped) droppedWordsIds.push(e.id)
+    return [translated.entry]
+  })
+  return { entries: out, droppedWordsIds }
+}
+
+/**
  * REQ-103 — top-level mutually-exclusive status for one entry.
  * Drives the 行き先 tab partition (すべて / 出力対象 / 削除) and
  * the per-row status badge.  Exactly one of the four values applies

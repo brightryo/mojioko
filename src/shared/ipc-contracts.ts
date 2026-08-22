@@ -138,8 +138,36 @@ export interface BurninStartRequest {
 export interface ExportFrameRequest {
   inputPath: string
   outputPath: string
+  /**
+   * The instant to capture, **on the EDITED axis** — i.e. a position in the
+   * video a burn would produce, not an offset into `inputPath`.
+   *
+   * REQ-0531 §1-3 fixed the axis here. It used to be the source axis, which
+   * made `--time 6` on a project with 2s of cuts before that point return the
+   * frame that appears at 4s in the burn: an image of a moment the output does
+   * not contain, from the feature whose entire job is previewing the output.
+   * Every OTHER number MOJIOKO shows (seekbar, timeline ruler, time inputs,
+   * exported SRT, the burn itself) was already on this axis; the still was the
+   * last surface that was not.
+   *
+   * With `cuts` empty the two axes are the same number, so nothing changes for
+   * the overwhelming majority of projects (REQ-0531 §2-4).
+   */
   timeSec: number
   video: VideoInfo
+  /**
+   * REQ-0531 §2-1 — the project's cut list, same shape and meaning as
+   * `BurninStartRequest.cuts`. Absent / empty means "no trimming", which is the
+   * pre-REQ-0531 behaviour byte-for-byte.
+   *
+   * Consumed for two things, both delegated to `shared/cuts.ts` so this path
+   * shares its arithmetic with the burn rather than re-deriving it:
+   *   - `editedToOrig(timeSec, cuts)` picks which source frame to extract;
+   *   - `translateEntriesToEditedAxis` decides which cues survive and moves
+   *     their times (and karaoke word timings) onto the edited axis, so the
+   *     libass clock at `timeSec` resolves the same phase the burn resolves.
+   */
+  cuts?: Cut[]
   /** PNG (lossless, default) or JPG (mjpeg, high quality). */
   format: 'png' | 'jpg'
   includeSubtitles: boolean
