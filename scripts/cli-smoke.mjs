@@ -791,19 +791,51 @@ try {
       fromSrt.code === 4 && fromSrt.json?.code === 'UNSUPPORTED_FORMAT', `${fromSrt.code}/${fromSrt.json?.code}`)
 
     const saved = cli(['preset', 'save', NAME, '--from', pmoj, ...FLAGS, '--overwrite'], 40000)
-    check('preset save succeeds and echoes the resolved style',
-      saved.code === 0 && saved.json?.data?.style?.fontSizePx === 90 && saved.json?.data?.style?.textColorHex === '#FF00FF',
-      `code=${saved.code} fs=${saved.json?.data?.style?.fontSizePx}`)
 
-    const shown = cli(['preset', 'show', NAME], 30000)
-    check('a CLI-saved preset is readable back by name', shown.code === 0 && shown.json?.data?.name === NAME)
-    const listed = cli(['preset', 'list'], 30000)
-    check('a CLI-saved preset appears in list (this is what the GUI reads)',
-      (listed.json?.data?.presets ?? []).some((p) => p.name === NAME))
+    /*
+     * ★ REQ-0533 — the app being OPEN is not a build failure.
+     *
+     * `preset save` / `delete` refuse while MOJIOKO holds the single-instance
+     * lock, because `stylePresets` is renderer-owned ('incoming-wins') and the
+     * app's next settings save would silently discard a CLI write. That refusal
+     * is correct. What was wrong is that this block asserted straight through
+     * it, so the whole preset section went red — SIX checks — whenever the
+     * owner happened to have the app running. It was found exactly that way:
+     * the owner had MOJIOKO open from their manual A–E pass, and a smoke that
+     * had been green an hour earlier reported six failures that had nothing to
+     * do with any code change.
+     *
+     * This is the third recurrence of the CLAUDE.md §18 rule
+     * ("環境を仮定したアサーションを書かない" — REQ-0511, REQ-0516 ×3). The
+     * rule's other half applies too: do NOT go quietly green. The skip is
+     * printed, and it is keyed off `detail.reason` (REQ-0533) rather than a
+     * localised message, so a real USAGE bug here still fails.
+     */
+    const appRunning = saved.json?.detail?.reason === 'app-running'
+    if (appRunning) {
+      // Not a PASS. A skipped check that prints "PASS" is a lie of exactly the
+      // kind this project keeps removing, so the checks below are not emitted
+      // at all — the reason is, and it names what is left uncovered.
+      log('  SKIP  preset WRITE checks — MOJIOKO is running and holds the settings lock.')
+      log('        Uncovered: save / show-after-save / list-after-save / duplicate /')
+      log('        --style round-trip / delete.  Close the app and re-run to cover them.')
+      log('        (read-only preset checks and the no-residue check still ran)')
+    } else {
+      check('preset save succeeds and echoes the resolved style',
+        saved.code === 0 && saved.json?.data?.style?.fontSizePx === 90 && saved.json?.data?.style?.textColorHex === '#FF00FF',
+        `code=${saved.code} fs=${saved.json?.data?.style?.fontSizePx}`)
 
-    // Saving the same name again must refuse, like every other output command.
-    const dup = cli(['preset', 'save', NAME, '--from', pmoj], 30000)
-    check('duplicate preset save → OUTPUT_EXISTS / exit 8', dup.code === 8 && dup.json?.code === 'OUTPUT_EXISTS', `${dup.code}/${dup.json?.code}`)
+      const shown = cli(['preset', 'show', NAME], 30000)
+      check('a CLI-saved preset is readable back by name', shown.code === 0 && shown.json?.data?.name === NAME)
+      const listed = cli(['preset', 'list'], 30000)
+      check('a CLI-saved preset appears in list (this is what the GUI reads)',
+        (listed.json?.data?.presets ?? []).some((p) => p.name === NAME))
+
+      // Saving the same name again must refuse, like every other output command.
+      const dup = cli(['preset', 'save', NAME, '--from', pmoj], 30000)
+      check('duplicate preset save → OUTPUT_EXISTS / exit 8',
+        dup.code === 8 && dup.json?.code === 'OUTPUT_EXISTS', `${dup.code}/${dup.json?.code}`)
+    }
 
     // ★ ROUND TRIP in real pixels: the saved preset must reproduce the look
     // that the equivalent flags produce. Both halves measured, so a preset that
@@ -811,22 +843,38 @@ try {
     const pFlags = join(work, 'preset-flags.png')
     const pStyle = join(work, 'preset-style.png')
     cli(['export_frame', pclip, pmoj, '-o', pFlags, '--time', '1.0', ...FLAGS], 60000)
-    cli(['export_frame', pclip, pmoj, '-o', pStyle, '--time', '1.0', '--style', NAME], 60000)
     const MAGENTA = [0xff, 0x00, 0xff]
     const mFlags = countColor(pFlags, MAGENTA)
-    const mStyle = countColor(pStyle, MAGENTA)
+    // The flag half does not need the preset, so it runs either way and keeps
+    // its value as a control.
     check('the flag-rendered frame actually has the colour (control)', mFlags > 500, `magenta=${mFlags}`)
-    check('--style <saved preset> reproduces the flag-rendered look (real pixels)',
-      mStyle > 500 && Math.abs(mFlags - mStyle) <= Math.max(50, mFlags * 0.02), `flags=${mFlags} preset=${mStyle}`)
+    if (!appRunning) {
+      cli(['export_frame', pclip, pmoj, '-o', pStyle, '--time', '1.0', '--style', NAME], 60000)
+      const mStyle = countColor(pStyle, MAGENTA)
+      check('--style <saved preset> reproduces the flag-rendered look (real pixels)',
+        mStyle > 500 && Math.abs(mFlags - mStyle) <= Math.max(50, mFlags * 0.02), `flags=${mFlags} preset=${mStyle}`)
+    }
 
     // Deleting something absent must not report success.
     const delMissing = cli(['preset', 'delete', 'no-such-preset-req-0504'], 30000)
+    // REQ-0533 — `requireLock` ALSO raises USAGE, so the exit code alone cannot
+    // tell "no such preset" from "the app is open". `runDelete` checks
+    // existence BEFORE taking the lock, so the not-found path is reachable
+    // either way and must NOT carry the lock's reason — which is what pins this
+    // check to the behaviour it is named after.
     check('deleting a missing preset → USAGE (never a silent success)',
-      delMissing.code === 2 && delMissing.json?.code === 'USAGE', `${delMissing.code}/${delMissing.json?.code}`)
+      delMissing.code === 2 && delMissing.json?.code === 'USAGE' &&
+        delMissing.json?.detail?.reason !== 'app-running',
+      `${delMissing.code}/${delMissing.json?.code} reason=${delMissing.json?.detail?.reason}`)
 
-    const del = cli(['preset', 'delete', NAME], 30000)
-    check('preset delete removes it', del.code === 0 && del.json?.data?.deleted === NAME)
+    if (!appRunning) {
+      const del = cli(['preset', 'delete', NAME], 30000)
+      check('preset delete removes it', del.code === 0 && del.json?.data?.deleted === NAME)
+    }
     const after = cli(['preset', 'list'], 30000)
+    // Residue check stays live in BOTH cases: if the app is running nothing was
+    // written, so the count must still be unchanged.  That is what makes the
+    // skip safe — it can never leave a preset behind in the owner's settings.
     check('preset count is back to where it started (no residue)',
       after.json?.data?.count === startCount, `${startCount} -> ${after.json?.data?.count}`)
   }
@@ -1060,6 +1108,108 @@ try {
     check('REQ-0529 run --burn forwards the burn stage\'s warnings',
       rRun.code === 0 && !!bdWarn(rRun) && rRun.json?.data?.beyondDuration?.cueCount === 1,
       JSON.stringify((rRun.json?.warnings ?? []).map((w) => w.code)))
+
+    /*
+     * ══════════════════════════════════════════════════════════════════════
+     * REQ-0533 §2 — the rest of "F", so none of it is left to a human.
+     * ══════════════════════════════════════════════════════════════════════
+     *
+     * The REQ-0529 block above already covers most of it (warning fires, the
+     * two counts are separated, in-range stays silent, the pixels agree, the
+     * real burn carries it, `run --burn` forwards it). What was missing is
+     * below.
+     */
+
+    // (1) §2-3 for the `run` path. `run --burn` was only checked for the
+    // WARNING; a stage that forwards the warning while dropping the cue would
+    // pass. `bdRunMp4` was burned from `bdOver`, so the truncated cue must be
+    // on screen at the last frame exactly as the direct burn's was.
+    const runLate = rRun.code === 0 ? whiteAt(bdRunMp4, 1.8) : -1
+    check('REQ-0533 run --burn really DRAWS the truncated cue (not just warns)',
+      runLate > 0.001, `whiteFraction@1.8s=${runLate.toFixed(4)}`)
+    check('REQ-0533 run --burn output matches the direct burn at the same instant',
+      Math.abs(runLate - overLate) < 0.02, `run=${runLate.toFixed(4)} burn=${overLate.toFixed(4)}`)
+
+    /*
+     * (2) A MIXED project. Every fixture above is homogeneous — all cues get
+     * the same times — so "the two counts are separated" has only ever been
+     * observed one bucket at a time. A classifier that put every affected cue
+     * in whichever bucket the FIRST one landed in, or that stopped counting
+     * after the first hit, passes all of them.
+     *
+     * Three cues, one per outcome, against the same 2 s clip:
+     *   in range [0.2, 1.0]  → neither bucket
+     *   overhang [0.5, 30]   → truncated
+     *   past end [20, 25]    → not shown
+     *
+     * `cueCount` is derived as `notShown + truncated` in `cue-duration.ts`, so
+     * asserting the sum would be a tautology — what is asserted is that each
+     * bucket holds exactly the cue that belongs in it.
+     */
+    const bdMixed = bdVariant('bd-mixed.mojioko', (cues) => {
+      const proto = cues[0]
+      cues.length = 0
+      cues.push(
+        { ...proto, id: 'bd-mix-in', startSec: 0.2, endSec: 1.0 },
+        { ...proto, id: 'bd-mix-over', startSec: 0.5, endSec: 30 },
+        { ...proto, id: 'bd-mix-past', startSec: 20, endSec: 25 },
+      )
+    })
+    const bdMixedR = cli(['burn', bdClip, bdMixed, '--dry-run'], 40000)
+    const bdMixedD = bdMixedR.json?.data?.beyondDuration
+    check('REQ-0533 a MIXED project counts each cue into its own bucket',
+      bdMixedR.code === 0 && bdMixedD?.cueCount === 2 &&
+        bdMixedD?.truncatedCount === 1 && bdMixedD?.notShownCount === 1,
+      JSON.stringify(bdMixedD))
+
+    /*
+     * (3) ★ §3-1 NEGATIVE CONTROLS, by input perturbation — no `git checkout`,
+     * nothing to rot.
+     *
+     * The judgement under test is a COMPARISON: "does this cue's end reach past
+     * this video's duration". Two ways it can be wrong, and the existing checks
+     * only catch one of them:
+     *
+     *   - REMOVED / never fires — caught by the positive assertions above (they
+     *     go red immediately). Also pinned at unit level by
+     *     `cue-beyond-video-end-req-0529.test.ts`'s "the pre-REQ-0529 path
+     *     emitted nothing at all".
+     *   - CONSTANT / always fires, or off by one — caught by NOTHING until now.
+     *     A detector hardcoded to warn, or one written with `>=` instead of
+     *     `>`, passes every assertion above.
+     *
+     * So: perturb the comparison's OTHER side. Same cues, a video they fit in;
+     * and a cue that ends exactly ON the duration.
+     */
+    // (3a) The very same over-length projects, against a 35 s clip they fit in.
+    // A constant detector still warns here.
+    const bdLongClip = join(work, 'bd-long.mp4')
+    makeSolidClip(bdLongClip, '640x360', 'navy', 35)
+    const bdOverLong = cli(['burn', bdLongClip, bdOver, '--dry-run'], 40000)
+    const bdPastLong = cli(['burn', bdLongClip, bdPast, '--dry-run'], 40000)
+    check('REQ-0533 §3-1 NEGATIVE CONTROL: the SAME cues on a long enough clip do NOT warn',
+      bdOverLong.code === 0 && !bdWarn(bdOverLong) && bdOverLong.json?.data?.beyondDuration?.cueCount === 0 &&
+      bdPastLong.code === 0 && !bdWarn(bdPastLong) && bdPastLong.json?.data?.beyondDuration?.cueCount === 0,
+      `over=${JSON.stringify(bdOverLong.json?.data?.beyondDuration)} past=${JSON.stringify(bdPastLong.json?.data?.beyondDuration)}`)
+
+    // (3b) The boundary. A cue ending EXACTLY at the duration is not truncated
+    // — it plays to the last frame and stops. A `>=` re-implementation flags
+    // it; the shipping `>` does not. The clip's real length is read back out of
+    // the result rather than assumed (CLAUDE.md §18).
+    const bdDurSec = bdInR.json?.data?.beyondDuration?.videoDurationSec
+    if (typeof bdDurSec === 'number' && bdDurSec > 0.5) {
+      const bdEdge = bdVariant('bd-edge.mojioko', (cues) => {
+        for (const c of cues) { c.startSec = Math.max(0, bdDurSec - 1); c.endSec = bdDurSec }
+      })
+      const bdEdgeR = cli(['burn', bdClip, bdEdge, '--dry-run'], 40000)
+      check('REQ-0533 §3-1 NEGATIVE CONTROL: a cue ending EXACTLY at the duration is not flagged',
+        bdEdgeR.code === 0 && !bdWarn(bdEdgeR) && bdEdgeR.json?.data?.beyondDuration?.cueCount === 0,
+        `dur=${bdDurSec} ${JSON.stringify(bdEdgeR.json?.data?.beyondDuration)}`)
+    } else {
+      // Not silently green: say which assumption failed instead (CLAUDE.md §18).
+      check('REQ-0533 §3-1 boundary control could read the video duration', false,
+        `videoDurationSec=${JSON.stringify(bdDurSec)} — result shape changed?`)
+    }
 
     /*
      * ══════════════════════════════════════════════════════════════════════

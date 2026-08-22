@@ -92,6 +92,13 @@ function requireLock(action: string): void {
     'USAGE',
     `MOJIOKO アプリ起動中は CLI からプリセットを${action}できません（競合回避）。`,
     'MOJIOKO を終了してから再実行してください。アプリ起動中の書き込みはアプリ側の保存で失われるため、強制する手段は用意していません。',
+    // REQ-0533 — machine-readable, because "the app happens to be open" is not
+    // a usage mistake and a caller has to be able to tell the two apart. An
+    // agent that retries on USAGE would otherwise rewrite its arguments
+    // forever; the fix is to close the app, which no argument expresses.
+    // `verify:cli-smoke` keys its skip off this instead of pattern-matching a
+    // localised message.
+    { reason: 'app-running' },
   )
 }
 

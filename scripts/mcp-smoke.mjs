@@ -306,6 +306,75 @@ try {
       !(brDone?.result?.warnings ?? []).some((w) => w.code === 'CUE_BEYOND_VIDEO_END') &&
         brDone?.result?.data?.beyondDuration?.cueCount === 0,
       JSON.stringify(brDone?.result?.data?.beyondDuration))
+
+    /*
+     * ══════════════════════════════════════════════════════════════════════
+     * REQ-0533 §2 — the MCP half of "F" that was missing.
+     * ══════════════════════════════════════════════════════════════════════
+     *
+     * The block above only ever exercised the TRUNCATED outcome over MCP. The
+     * whole point of REQ-0529 is that the two outcomes are different claims —
+     * "drawn, then cut off at the last frame" vs "never drawn at all" — and
+     * over MCP only one of them had ever been observed. If the split collapsed
+     * on this path (both counted as truncated, say) every assertion here still
+     * passed, and the caller would be told a cue it never gets is merely
+     * truncated.
+     *
+     * A small helper because three more jobs go through the same poll.
+     */
+    const runJob = async (name, args) => {
+      const started = parseContent(await rpc('tools/call', { name, arguments: args }))
+      if (!started?.job_id) return null
+      for (let i = 0; i < 60; i++) {
+        await sleep(500)
+        const pd = parseContent(await rpc('tools/call', { name: 'get_job_status', arguments: { job_id: started.job_id } }))
+        if (pd?.status === 'done' || pd?.status === 'failed') return pd
+      }
+      return null
+    }
+    const bdCode = (d) => (d?.result?.warnings ?? []).find((w) => w.code === 'CUE_BEYOND_VIDEO_END')
+
+    // (1) The NOT-SHOWN outcome over MCP. Clip is 2 s (stated, not assumed);
+    // this cue starts well past it.
+    const pastSrt = join(work, 'past.srt')
+    writeFileSync(pastSrt, '1\n00:00:20,000 --> 00:00:25,000\npast the end\n', 'utf-8')
+    const pastDone = await runJob('burn', { video: clip, subtitle: pastSrt, dry_run: true })
+    const pastW = bdCode(pastDone)
+    check('REQ-0533 MCP burn separates NOT SHOWN from truncated',
+      pastDone?.status === 'done' && !!pastW &&
+        pastW.detail?.notShownCount === 1 && pastW.detail?.truncatedCount === 0 &&
+        pastDone?.result?.data?.beyondDuration?.notShownCount === 1,
+      JSON.stringify(pastW?.detail))
+
+    // (2) `run --burn` over MCP. The CLI equivalent is gated (REQ-0529 §2-1
+    // found `run` passing NO warnings argument at all, so every burn warning
+    // vanished when the same work went through `run`); the MCP wrapper adds a
+    // second place the array can be dropped, on the async job path.
+    const runOut = join(work, 'bd-run-mcp.mp4')
+    const runDone = await runJob('run', { video: clip, subtitle: bdSrt, burn: true, out: runOut, overwrite: true })
+    check('REQ-0533 MCP run --burn forwards the burn stage\'s beyond-duration warning',
+      runDone?.status === 'done' && !!bdCode(runDone) &&
+        runDone?.result?.data?.beyondDuration?.cueCount === 1,
+      `${runDone?.status} ${JSON.stringify((runDone?.result?.warnings ?? []).map((w) => w.code))}`)
+
+    /*
+     * (3) ★ §3-1 NEGATIVE CONTROL, by input perturbation (no `git checkout`).
+     *
+     * The same cue that just warned, against a clip long enough to hold it. A
+     * detector that always fires — or one written with `>=` — still warns here;
+     * the shipping comparison does not. Paired with the positive cases above,
+     * which go red if the derivation is removed, this pins the warning to the
+     * actual cue-vs-duration comparison rather than to the file.
+     */
+    const longClip = join(work, 'long.mp4')
+    spawnSync(FFMPEG, ['-y', '-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=30:duration=35',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=35',
+      '-c:v', 'h264_mf', '-c:a', 'aac', '-shortest', longClip], { encoding: 'utf-8' })
+    const longDone = await runJob('burn', { video: longClip, subtitle: bdSrt, dry_run: true })
+    check('REQ-0533 §3-1 NEGATIVE CONTROL: the same cue on a long enough clip does NOT warn',
+      longDone?.status === 'done' && !bdCode(longDone) &&
+        longDone?.result?.data?.beyondDuration?.cueCount === 0,
+      JSON.stringify(longDone?.result?.data?.beyondDuration))
   }
 
   // 5) REQ-0455 — strict stdout framing: split on '\n'; every complete segment
