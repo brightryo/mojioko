@@ -317,31 +317,54 @@ test('timeline clip frame + state colours — REQ-0524', async () => {
   })
   await window.waitForTimeout(250)
 
-  // Focusing programmatically does NOT arm :focus-visible in Chromium (the
-  // last interaction has to be a keyboard one), so we focus the clip, Tab
-  // away, then Shift+Tab back — the round trip is a real keyboard interaction
-  // and lands on the same element.
-  await window.evaluate((marker: string) => {
+  /*
+   * ★ REQ-0534 — this block used to assert a keyboard-focus indicator. It now
+   * asserts the OPPOSITE, because the indicator was removed: it could never
+   * paint, and the owner's decision is that keyboard operation is out of scope
+   * (a mouse is a listed Store requirement).
+   *
+   * ## Why the old version of this block was green while the feature was dead
+   *
+   * It did `el.focus()` (programmatic) to PLACE focus on the clip, then sent
+   * Tab + Shift+Tab to ARM `:focus-visible`. But `App.tsx`'s
+   * `useSuppressTabFocus()` `preventDefault()`s every Tab at the document root
+   * in the capture phase, so focus never moved — it stayed on the clip — while
+   * the `keydown` still convinced Chromium the last interaction was a keyboard
+   * one. The gate therefore measured a state that it had manufactured and that
+   * no user can reach. Synthesising the interaction hid the missing route.
+   *
+   * So the load-bearing fact is now asserted directly: Tab does not move focus.
+   * If that ever changes, this fails and whoever changed it has to decide
+   * whether the indicator should come back (see specs/timeline.md §4.4.3).
+   */
+  const tabBehaviour = await window.evaluate(async (marker: string) => {
     const buttons = Array.from(document.querySelectorAll('div[style*="height: 64px"] > button'))
     const el = buttons.find((b) => (b.textContent || '').includes(marker)) as HTMLElement
     el.focus()
+    return { placed: document.activeElement === el }
   }, MARKERS.normal)
+  expect(tabBehaviour.placed, 'programmatic focus should still land on the clip (it is a real <button>)').toBe(true)
+
   await window.keyboard.press('Tab')
-  await window.keyboard.press('Shift+Tab')
-  await window.waitForTimeout(200)
-  const focusLanded = await window.evaluate((marker: string) => {
-    const a = document.activeElement
-    return Boolean(a && (a.textContent || '').includes(marker) && a.matches(':focus-visible'))
+  await window.waitForTimeout(150)
+  const afterTab = await window.evaluate((marker: string) => {
+    const a = document.activeElement as HTMLElement | null
+    return {
+      stillOnClip: Boolean(a && (a.textContent || '').includes(marker)),
+      focusVisible: Boolean(a && a.matches(':focus-visible')),
+    }
   }, MARKERS.normal)
-  expect(focusLanded, 'the keyboard round-trip did not leave the clip in :focus-visible — the focus measurement below would prove nothing').toBe(true)
+  expect(afterTab.stillOnClip,
+    'Tab MOVED focus — `useSuppressTabFocus` is no longer suppressing it, so the timeline is now keyboard-reachable and needs a focus indicator again (specs/timeline.md §4.4.3)')
+    .toBe(true)
+
   measured.keyboardFocus = await frameOf(MARKERS.normal)
 
-  // §1-4: keyboard focus must be VISIBLE, and it must be visible WITHOUT
-  // adding width.  It is carried by the frame's colour because globals.css
-  // zeroes every outline and every Tailwind ring app-wide with `!important`
-  // (REQ-044) — so this asserts the colour, and separately asserts that the
-  // suppression is still in force, since the day it is lifted is the day an
-  // outline-based indicator would become the better mechanism.
+  // With the suppression in force, a "focused" clip must look EXACTLY like a
+  // resting one — that is the REQ-0534 decision, stated as a measurement.
+  // Asserted even though `:focus-visible` is armed here (see above), which is
+  // what makes it a real check: if someone re-adds a focus-visible rule, this
+  // catches it immediately.
   const focusFrame = await window.evaluate((marker: string) => {
     const buttons = Array.from(document.querySelectorAll('div[style*="height: 64px"] > button'))
     const el = buttons.find((b) => (b.textContent || '').includes(marker)) as HTMLElement
@@ -349,10 +372,13 @@ test('timeline clip frame + state colours — REQ-0524', async () => {
     return { borderColor: cs.borderTopColor, outlineStyle: cs.outlineStyle, outlineWidth: cs.outlineWidth }
   }, MARKERS.normal)
   expect(focusFrame.borderColor,
-    'a keyboard-focused clip looks exactly like an unfocused one — a Tab user cannot tell where they are')
-    .not.toBe(borderWhenResting)
+    'a focused clip no longer matches the resting frame — a focus indicator came back; REQ-0534 removed it deliberately')
+    .toBe(borderWhenResting)
+  expect(focusFrame.outlineStyle === 'none' || parseFloat(focusFrame.outlineWidth) === 0,
+    `a focused clip drew a ${focusFrame.outlineWidth} outline`).toBe(true)
   // eslint-disable-next-line no-console
-  console.log(`\n[REQ-0524] focus frame ${focusFrame.borderColor} vs resting ${borderWhenResting}`)
+  console.log(`\n[REQ-0534] focused frame ${focusFrame.borderColor} == resting ${borderWhenResting}; ` +
+    `Tab moved focus: ${!afterTab.stillOnClip}; :focus-visible armed: ${afterTab.focusVisible}`)
 
   // Every state gets the SAME check.
   for (const [name, f] of Object.entries(measured)) violations.push(...checkFrame(f, name))

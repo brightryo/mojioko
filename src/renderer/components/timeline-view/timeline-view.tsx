@@ -622,24 +622,47 @@ function BlockImpl({
           // 自前の `hover:` を宣言しているので、`:hover` が素のクラスに勝つ
           // 件で選択中の緑が消える問題は構造的に起きない。
           //
-          // REQ-0524 §1-4 — keyboard focus, carried by the frame's COLOUR.
-          //
-          // It cannot be carried by an outline or a ring: globals.css has an
-          // app-wide `:focus, :focus-visible, :focus-within { outline: none
-          // !important }` plus `--tw-ring-shadow: 0 0 #0000 !important`
-          // (REQ-044), which the owner asked for deliberately.  Anything
-          // outline- or ring-shaped added here is silently zeroed — measured,
-          // not assumed (RES-0524 §1-1).  A border-colour swap is outside
-          // that hammer's reach, changes no width, and is the mechanism the
-          // owner suggested first.
-          //
-          // Scoped to unselected clips so it cannot overwrite the green: a
-          // selected clip is already the highlighted one, so Tab landing back
-          // on it needs no extra mark, whereas Tab moving to a NEIGHBOUR has
-          // to show somewhere.  `:focus-visible` also means a mouse click
-          // never triggers it — the click/keyboard ambiguity the owner
-          // reported is gone in both directions.
-          !selectable && 'focus-visible:border-fg-primary',
+          /*
+           * REQ-0534 §1 — there is DELIBERATELY no keyboard-focus indicator
+           * here.  REQ-0524 §1-4 added `focus-visible:border-fg-primary`; it
+           * was removed because nothing could ever make it paint.
+           *
+           * ## Why it could not fire
+           *
+           * `:focus-visible` only matches on KEYBOARD-derived focus, and Tab
+           * does not work anywhere in this app: `App.tsx`'s
+           * `useSuppressTabFocus()` registers a `keydown` listener on the
+           * document root in the CAPTURE phase and calls `preventDefault()` on
+           * every Tab — Shift+Tab included, dialogs and Radix portals included
+           * (REQ-20260614-001 補遺⑤).  That predates REQ-0524, so the
+           * indicator was unreachable the moment it was written.
+           *
+           * Measured, not assumed (RES-0533 §1): 90 synthetic Tab presses in
+           * the real app never moved `document.activeElement` off the first
+           * button.  The clip body itself is fine — a native `<button>`,
+           * `tabIndex 0`, not disabled, `aria-label` set, and `.focus()` works
+           * programmatically — so the block below is not what is missing.
+           *
+           * ## Why we are not fixing the reachability instead
+           *
+           * Owner decision (REQ-0534 §1): keyboard operation is out of scope.
+           * A mouse is listed as a requirement in the Microsoft Store entry,
+           * so a mouse-less environment is not a supported configuration.
+           * `aria-label` additions and keyboard selection movement are out for
+           * the same reason.
+           *
+           * ## If that is ever revisited
+           *
+           * Removing `useSuppressTabFocus()` is the first step, not the last.
+           * Also needed, per RES-0533 §1-2: the timeline's arrow keys are
+           * already taken (←/→ move the playhead, ↑/↓ zoom), so "move the
+           * selection to the next cue" needs a key assignment decision first;
+           * and `Delete` / `Ctrl+D` / `Ctrl+R` act on the current selection,
+           * which only the mouse can create today (`Ctrl+A` aside).  The
+           * indicator itself is one line and can come back with the border
+           * token — the CSS was correct (`--text-primary` ≈ white); only the
+           * route to it was missing.
+           */
           'focus:outline-none',
           entry.isDeleted && 'opacity-40 line-through',
           !entry.isDeleted && 'cursor-grab active:cursor-grabbing'
