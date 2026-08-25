@@ -16,7 +16,9 @@ import { expandCueToEvents } from '../../shared/cue-events'
 // the same expressions; this file only transcribes the result into ASS.
 import {
   ASS_HARD_BREAK,
+  cueBlockOrigin,
   cueLineAnchors,
+  rotatePointClockwise,
   estimateCueHeightAssPx,
   formatAssCoord,
   lineHeightsAssPx,
@@ -1031,9 +1033,23 @@ export function generateAss(
         marginV: placement === undefined ? r.marginVCol : 0,
         styleTag: r.buildStyleTag(r.ownPosTag),
         lineBodies: placement === undefined ? r.lineBodies : r.splitLineBodies,
-        lineStyleTags: placement?.map((a) =>
-          r.buildStyleTag(`\\pos(${formatAssCoord(a.x)},${formatAssCoord(a.y)})`),
-        ),
+        // REQ-0538 — each line's anchor is ROTATED about the cue's origin
+        // before it is emitted.  `\frz` then spins the line about its moved
+        // anchor, and the two compose into a rigid rotation of the whole block.
+        //
+        // Without this the anchors stayed stacked vertically and every line
+        // merely spun in place, so the block sheared: the preview (one element,
+        // one CSS `rotate`) and the background (one shape, turned as a unit)
+        // both rotated rigidly while the text did not.  At 15 degrees that left
+        // line 2 about `pitch × sin θ` = 15.5 px away from its own background
+        // and the end of the line hung outside the box (measured: 0 stray ink
+        // pixels at 0° and 5°, 1623 at 15°, 1125 at 30°).
+        //
+        // At rotation 0 this is the identity, so an upright cue does not move.
+        lineStyleTags: placement?.anchors.map((a) => {
+          const p = rotatePointClockwise(a, placement.origin, r.entry.rotation ?? 0)
+          return r.buildStyleTag(`\\pos(${formatAssCoord(p.x)},${formatAssCoord(p.y)})`)
+        }),
       }).map((piece) =>
         // REQ-0392/0396 — ASS Dialogue Layer column = the cue's stored z-order
         // (`resolveLayer`; higher = drawn on top).  Default 0 → `Dialogue: 0,`
@@ -1057,7 +1073,7 @@ export function generateAss(
       const bgEvents = r.bgPlan && placement
         ? (() => {
             const plan = r.bgPlan
-            const lines: BgLine[] = placement.map((a, i) => ({
+            const lines: BgLine[] = placement.anchors.map((a, i) => ({
               anchorX: a.x,
               anchorY: a.y,
               textWidthPx: plan.lines[i]?.textWidthPx ?? 0,
@@ -1070,7 +1086,12 @@ export function generateAss(
             // means the background composites once and transforms as one
             // object; a cue-wide background scaling as a unit is the right
             // reading of a cue-wide animation anyway.
-            const a = placement[0]
+            // REQ-0538 — the cue's own origin, NOT line 0's anchor.  `\frz`
+            // turns this event about its `\pos`, so naming the block origin is
+            // what makes the background turn about the same point the text now
+            // does.  The rectangles are written relative to it, so at rotation
+            // 0 the shape lands exactly where it always did.
+            const a = placement.origin
             // `\bord0\shad0` — the shape IS the background; an outline on it
             // would be a second, differently-shaped layer around every line.
             const tag = r.buildStyleTag(`\\pos(${formatAssCoord(a.x)},${formatAssCoord(a.y)})`)
@@ -1114,6 +1135,15 @@ function warnBgFallback(reasons: readonly string[]): void {
   } catch {
     console.warn(message)
   }
+}
+
+/**
+ * REQ-0538 — a self-positioned cue's per-line anchors PLUS the single point the
+ * whole cue rotates about.
+ */
+interface CuePlacementResult {
+  anchors: { x: number; y: number }[]
+  origin: { x: number; y: number }
 }
 
 /** What `generateAss` needs to remember about a cue between its two passes. */
@@ -1193,8 +1223,8 @@ function resolveSelfPositionedCues(
   // REQ-0456 — horizontal margin for the anchor edge (matches the Style
   // MarginL/MarginR); defaults to ASS_MARGIN_LR_PX at the call site.
   marginLrPx: number,
-): Map<string, { x: number; y: number }[]> {
-  const out = new Map<string, { x: number; y: number }[]>()
+): Map<string, CuePlacementResult> {
+  const out = new Map<string, CuePlacementResult>()
 
   const needsSplit = (r: CueRender): boolean =>
     r.lineBodies.length > 1 && resolveLineSpacingPercent(r.entry) !== 0
@@ -1295,12 +1325,13 @@ function resolveSelfPositionedCues(
     // identical anchor values (computeCuePlacement wraps cueLineAnchors), so no
     // existing (non-forced) output changes — `computeCuePlacement` runs only
     // when the gate forces it.
-    if (forceSelfPositionAll) {
-      const placement = computeCuePlacement({ ...anchorInput, outlineThicknessPx: e.outlineThicknessPx })
-      out.set(e.id, placement.lines.map((l) => ({ x: l.anchorX, y: l.anchorY })))
-    } else {
-      out.set(e.id, cueLineAnchors(anchorInput))
-    }
+    const anchors = forceSelfPositionAll
+      ? computeCuePlacement({ ...anchorInput, outlineThicknessPx: e.outlineThicknessPx })
+        .lines.map((l) => ({ x: l.anchorX, y: l.anchorY }))
+      : cueLineAnchors(anchorInput)
+    // REQ-0538 — the origin the whole cue turns about, kept with the anchors so
+    // the text and the background cannot pick different ones.
+    out.set(e.id, { anchors, origin: cueBlockOrigin(anchorInput) })
   }
   return out
 }

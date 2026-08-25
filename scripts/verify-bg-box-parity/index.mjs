@@ -297,6 +297,110 @@ function backgroundRows(buf, w, h, region = null) {
   return { rows, x0, x1, y0: innerY0, y1: innerY1, src }
 }
 
+/**
+ * REQ-0538 — is every text pixel actually ON the background?
+ *
+ * The stripe checks above ask whether the background is uniform; they say
+ * nothing about whether it is in the right PLACE. A rotated cue whose text hung
+ * off the end of its own box passed all of them, because the box was still a
+ * perfectly uniform single layer — just not under the text.
+ *
+ * `full` is the normal render; `inkOnly` is the same ASS with the background
+ * drawing removed, so its white pixels are exactly the glyphs. A glyph pixel
+ * counts as covered when the background either paints it or ENCLOSES it — the
+ * glyphs sit on top of the box, so the box's own pixels are hidden wherever
+ * text is drawn, and a naive "is this pixel dark" test calls every glyph
+ * uncovered.
+ *
+ * `TOL` forgives the box's antialiased edge. A rotated rectangle has soft
+ * borders, so its outermost pixel is only partly dark; without the tolerance a
+ * 30-degree cue reports ~1000 stray pixels that are all within 1 px of the box.
+ * The real defect was 15 px out, an order of magnitude clear of this.
+ */
+const COVERAGE_TOL = 2
+function inkOutsideBackground(full, inkOnly, w, h, src) {
+  const lum = (b, x, y) => { const i = (y * w + x) * 3; return (b[i] + b[i + 1] + b[i + 2]) / 3 }
+  const bg = new Uint8Array(w * h)
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (lum(full, x, y) < src - 6) bg[y * w + x] = 1
+
+  // Flood the non-background from the border; what it cannot reach is enclosed.
+  const reach = new Uint8Array(w * h)
+  const stack = []
+  for (let x = 0; x < w; x++) { stack.push(x, 0); stack.push(x, h - 1) }
+  for (let y = 0; y < h; y++) { stack.push(0, y); stack.push(w - 1, y) }
+  while (stack.length) {
+    const y = stack.pop(), x = stack.pop()
+    if (x < 0 || y < 0 || x >= w || y >= h) continue
+    const i = y * w + x
+    if (reach[i] || bg[i]) continue
+    reach[i] = 1
+    stack.push(x + 1, y); stack.push(x - 1, y); stack.push(x, y + 1); stack.push(x, y - 1)
+  }
+  const rawCovered = (x, y) => bg[y * w + x] === 1 || reach[y * w + x] === 0
+  const covered = (x, y) => {
+    if (rawCovered(x, y)) return true
+    for (let dy = -COVERAGE_TOL; dy <= COVERAGE_TOL; dy++) {
+      for (let dx = -COVERAGE_TOL; dx <= COVERAGE_TOL; dx++) {
+        const nx = x + dx, ny = y + dy
+        if (nx >= 0 && ny >= 0 && nx < w && ny < h && rawCovered(nx, ny)) return true
+      }
+    }
+    return false
+  }
+
+  let ink = 0, outside = 0
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (lum(inkOnly, x, y) > src + 40) {
+        ink++
+        if (!covered(x, y)) outside++
+      }
+    }
+  }
+  return { ink, outside }
+}
+
+/** The same ASS with the background drawing dropped: glyphs only. */
+function withoutBackgroundDrawing(ass) {
+  return ass.split('\n').filter((l) => !(l.startsWith('Dialogue:') && l.includes('\\p1'))).join('\n')
+}
+
+/**
+ * ★ NEGATIVE CONTROL for coverage — put the text anchors back where REQ-0538
+ * found them.
+ *
+ * The defect was that a line's `\pos` was NOT rotated about the cue origin, so
+ * `\frz` spun each line in place while the background turned as a unit. This
+ * inverts the fix on production's own output: rotate every text event's `\pos`
+ * back about the drawing's `\pos` (the cue origin) by the emitted angle. No
+ * source edit and no git — the reconstruction is derived from the ASS itself,
+ * so it cannot drift from what the writer emits.
+ */
+function preFixRotationAnchors(ass) {
+  const lines = ass.split('\n')
+  const draw = lines.find((l) => l.startsWith('Dialogue:') && l.includes('\\p1'))
+  if (!draw) return null
+  const org = /\\pos\(([-\d.]+),([-\d.]+)\)/.exec(draw)
+  const frz = /\\frz([\d.]+)/.exec(draw)
+  if (!org || !frz) return null
+  const ox = Number(org[1]), oy = Number(org[2])
+  // `\frz` is counter-clockwise; the cue's own angle is the clockwise one.
+  const deg = (360 - Number(frz[1])) % 360
+  if (deg === 0) return null
+  const r = (-deg * Math.PI) / 180   // undo the clockwise rotation
+  const c = Math.cos(r), s = Math.sin(r)
+  let touched = 0
+  const out = lines.map((l) => {
+    if (!l.startsWith('Dialogue:') || l.includes('\\p1')) return l
+    return l.replace(/\\pos\(([-\d.]+),([-\d.]+)\)/, (_m, xs, ys) => {
+      const dx = Number(xs) - ox, dy = Number(ys) - oy
+      touched++
+      return `\\pos(${(ox + dx * c - dy * s).toFixed(3)},${(oy + dx * s + dy * c).toFixed(3)})`
+    })
+  })
+  return touched > 0 ? out.join('\n') : null
+}
+
 /** Judge a region against the single-layer prediction. */
 function judge(region, opacityPercent) {
   const expected = Math.round(region.src * (1 - opacityPercent / 100))
@@ -380,6 +484,38 @@ async function applyPreFixCss(page, colorRgba) {
   }, colorRgba)
 }
 
+/**
+ * Ink-only preview: hide every canvas layer, leaving the DOM text.
+ *
+ * The background, shadow and ring are all canvas layers
+ * (`data-mojioko-layer`), and the glyphs are ordinary DOM text, so hiding the
+ * canvases is the preview's equivalent of `--outline-alpha 0` on the burn side
+ * — nothing about the text's own layout changes.
+ */
+async function hideCanvasLayers(page) {
+  return page.evaluate(() => {
+    let hidden = 0
+    for (const c of document.querySelectorAll('canvas')) {
+      if (c.width > 0 && c.height > 0) { c.style.display = 'none'; hidden++ }
+    }
+    return hidden
+  })
+}
+
+/** The source grey, read from the image rather than assumed (burn 128, preview 126). */
+function modalLuminance(buf, w, h) {
+  const hist = new Uint32Array(256)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 3
+      hist[Math.round((buf[i] + buf[i + 1] + buf[i + 2]) / 3)]++
+    }
+  }
+  let best = 0
+  for (let v = 1; v < 256; v++) if (hist[v] > hist[best]) best = v
+  return best
+}
+
 const browser = await chromium.launch({
   args: [
     '--autoplay-policy=no-user-gesture-required',
@@ -391,7 +527,7 @@ const browser = await chromium.launch({
 })
 const page = await browser.newPage({ viewport: { width: PREVIEW_W + 40, height: PREVIEW_H + 80 } })
 
-async function previewFrame(spec, preFix) {
+async function previewFrame(spec, preFix, inkOnly = false) {
   currentHtml = harnessHtml(spec)
   await page.goto(ORIGIN + '/')
   await page.waitForFunction('window.__ready === true', { timeout: 20000 })
@@ -435,6 +571,11 @@ async function previewFrame(spec, preFix) {
     if (touched.hidden === 0) return { error: 'control hid no canvas — the background layer is gone?' }
     await page.waitForTimeout(120)
   }
+  if (inkOnly) {
+    const hidden = await hideCanvasLayers(page)
+    if (hidden === 0) return { error: 'ink-only run hid no canvas — the layers are gone?' }
+    await page.waitForTimeout(120)
+  }
 
   const png = path.join(DIR, 'p.png')
   await frame.screenshot({ path: png })
@@ -454,7 +595,9 @@ for (const spec of CASES) {
   console.log(`\n--- ${spec.name}  (one layer = ${expected}, two = ${twice}) ---`)
 
   // ---- burn ----
-  const fixed = backgroundRows(burn(tag, burnSide.renderAss(spec)), VIDEO_W, VIDEO_H)
+  const fixedAss = burnSide.renderAss(spec)
+  const fixedBuf = burn(tag, fixedAss)
+  const fixed = backgroundRows(fixedBuf, VIDEO_W, VIDEO_H)
   if (!fixed) { check(false, 'burn: a background was painted at all'); continue }
   check(fixed.rows.length >= MIN_REGION_ROWS,
     'burn: the region is a real multi-line band (not an empty set)',
@@ -475,6 +618,38 @@ for (const spec of CASES) {
       `darker=${cj.darker} gapRows=${cj.gaps} worst=${cj.worst}`)
   }
 
+  // ---- burn: is the text ON its background? (REQ-0538) ----
+  //
+  // Applied to EVERY case, not just the rotated one. Rotation is how the defect
+  // was found, but "the box is under the text" is a property the unrotated cases
+  // are supposed to have too, and asserting it there is what makes a later
+  // regression at 0 degrees visible.
+  {
+    const inkBuf = burn(`${tag}_ink`, withoutBackgroundDrawing(fixedAss))
+    const cov = inkOutsideBackground(fixedBuf, inkBuf, VIDEO_W, VIDEO_H, SOURCE_GREY)
+    check(cov.ink > 0, 'burn coverage: the ink-only render actually drew text',
+      `ink=${cov.ink}`)
+    check(cov.ink > 0 && cov.outside === 0,
+      '★ burn: every text pixel lies on the background',
+      `outside=${cov.outside} of ${cov.ink}`)
+  }
+
+  // ---- burn coverage, negative control (REQ-0538 §3-2) ----
+  //
+  // Only meaningful where there is a rotation to undo; `preFixRotationAnchors`
+  // returns null otherwise and the control is skipped rather than faked.
+  {
+    const preAss = preFixRotationAnchors(fixedAss)
+    if (preAss) {
+      const cf = burn(`${tag}_rotctl`, preAss)
+      const ci = burn(`${tag}_rotctl_ink`, withoutBackgroundDrawing(preAss))
+      const cc = inkOutsideBackground(cf, ci, VIDEO_W, VIDEO_H, SOURCE_GREY)
+      check(cc.ink > 0 && cc.outside > 0,
+        '★ burn coverage NEGATIVE CONTROL: un-rotated line anchors really do overflow the box',
+        `outside=${cc.outside} of ${cc.ink}`)
+    }
+  }
+
   // ---- preview ----
   const pv = await previewFrame(spec, false)
   if (pv.error) { check(false, `preview: ${pv.error}`); continue }
@@ -487,6 +662,27 @@ for (const spec of CASES) {
   check(pj.darker === 0, 'preview: no row is painted twice', `darker=${pj.darker} worst=${pj.worst}`)
   check(pj.gaps === 0, 'preview: no gap between the lines', `gapRows=${pj.gaps}`)
   check(pj.lighter === 0, 'preview: every row is one full layer', `off=${pj.lighter} worst=${pj.worst}`)
+
+  // ---- preview: is the text ON its background? (REQ-0538 §1-2) ----
+  //
+  // The preview rotates the whole overlay as one CSS transform, so it SHOULD be
+  // immune to the rotation-centre mismatch that broke the burn. That is a
+  // prediction, not a result — the same measurement runs here so the claim is
+  // made of pixels.
+  {
+    const pink = await previewFrame(spec, false, true)
+    if (pink.error) {
+      check(false, `preview coverage: ink-only render — ${pink.error}`)
+    } else {
+      const src = modalLuminance(pv.buf, pv.w, pv.h)
+      const cov = inkOutsideBackground(pv.buf, pink.buf, pv.w, pv.h, src)
+      check(cov.ink > 0, 'preview coverage: the ink-only render actually drew text',
+        `ink=${cov.ink} src=${src}`)
+      check(cov.ink > 0 && cov.outside === 0,
+        '★ preview: every text pixel lies on the background',
+        `outside=${cov.outside} of ${cov.ink}`)
+    }
+  }
 
   // ---- preview, negative control ----
   const pctl = await previewFrame(spec, true)
@@ -545,12 +741,12 @@ for (const spec of CASES) {
       const raw = path.join(DIR, `${tag}.rgb`)
       ff(['-ss', '1.0', '-i', outMp4, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', raw], tag)
       const buf = readFileSync(raw)
-      return { region: backgroundRows(buf, 1280, 720) }
+      return { buf, region: backgroundRows(buf, 1280, 720) }
     }
 
     for (const rotation of [0, 15]) {
       const tag = `e2e-rot${rotation}`
-      const { region, error } = realBurn(tag, ['--rotation', String(rotation)])
+      const { buf, region, error } = realBurn(tag, ['--rotation', String(rotation)])
       if (error || !region) { check(false, `real app rot ${rotation}: produced a measurable background`, error ?? 'no region'); continue }
       const j = judge(region, 60)
       check(region.rows.length >= MIN_REGION_ROWS,
@@ -558,6 +754,26 @@ for (const spec of CASES) {
       check(j.darker === 0, `★ real app rot ${rotation}: no row is painted twice`,
         `darker=${j.darker} worst=${j.worst} expected=${j.expected}`)
       check(j.gaps === 0, `real app rot ${rotation}: no gap between the lines`, `gapRows=${j.gaps}`)
+
+      // ★ REQ-0538 coverage, through the real app.
+      //
+      // The ink render must differ from the one above in ONE thing. `--outline`
+      // stays 8, because the outline width feeds the cue's height and therefore
+      // its placement: dropping it to 0 for this render moved the text and
+      // reported ~4300 stray pixels at rotation 0, where the output is known to
+      // be right. `--outline-alpha 0` removes the ring without moving anything.
+      const ink = realBurn(`${tag}-ink`, ['--rotation', String(rotation),
+        '--background', 'off', '--outline-alpha', '0'])
+      if (ink.error || !ink.buf) {
+        check(false, `real app rot ${rotation}: ink-only render succeeded`, ink.error ?? 'no frame')
+      } else {
+        const cov = inkOutsideBackground(buf, ink.buf, 1280, 720, 128)
+        check(cov.ink > 0, `real app rot ${rotation}: the ink-only render actually drew text`,
+          `ink=${cov.ink}`)
+        check(cov.ink > 0 && cov.outside === 0,
+          `★ real app rot ${rotation}: every text pixel lies on the background`,
+          `outside=${cov.outside} of ${cov.ink}`)
+      }
     }
 
     // ★ NEGATIVE CONTROL for the real-app path.
