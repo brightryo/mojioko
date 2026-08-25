@@ -23,6 +23,13 @@ import {
   maxFontSizeInLineBodyAssPx,
   resolveLineSpacingPercent,
 } from '../../shared/line-spacing'
+import {
+  bgRectsToAssDrawing,
+  cueBgRects,
+  type BgLine,
+} from '../../shared/bg-box-geometry'
+import { measureLineWidthPx, type LineBreakMetrics } from '../../shared/line-break-core'
+import { getLineBreakMetrics } from './font-metrics-node'
 import { computeFixedStackOffsets } from '../../shared/stack-offsets'
 import { computeCuePlacement, resolveLayer } from '../../shared/cue-placement'
 import { groupByTimeOverlap } from '../../shared/simultaneous-groups'
@@ -320,6 +327,23 @@ export function generateAss(
    * stays 7 and the REQ-0340 / REQ-0344 arity pins are unaffected.
    */
   marginLrPx: number = ASS_MARGIN_LR_PX,
+  /**
+   * REQ-0535 — how to obtain font metrics for a cue's background box width.
+   *
+   * Defaults to the production loader.  A default is safe here only because of
+   * what the caller does with a FAILED load: `getLineBreakMetrics` degrades to
+   * `{ font: null }` (its path resolution needs the Electron `app` global, so
+   * any non-Electron host gets that), and the writer then keeps libass's old
+   * box rather than sizing a rectangle from the character-class estimate.  So a
+   * caller that forgets this argument gets the pre-REQ-0535 rendering, not a
+   * plausible-looking wrong one.
+   *
+   * The gate passes a resolver that parses the real TTF off disk — without it,
+   * `verify:bg-box-parity` would silently be measuring the fallback path
+   * instead of the fix.  Sits after the other defaulted params so
+   * `generateAss.length` stays 7 and the REQ-0340 / REQ-0344 arity pins hold.
+   */
+  metricsFor: (fontId: string | undefined) => LineBreakMetrics = getLineBreakMetrics,
 ): string {
   // `burnin` / `subtitleBackground` are vestigial (see JSDoc above).  Reference
   // them once so `noUnusedParameters` stays quiet without disabling lint.
@@ -366,7 +390,31 @@ export function generateAss(
   const renders: CueRender[] = [
     ...activeEntries.map((e) => {
       const rowBgEnabled = e.subtitleBackground.enabled
-      const styleName = rowBgEnabled ? 'WithBox' : 'Default'
+      // REQ-0535 — a background cue draws its OWN background (one rectangle per
+      // display line, seams sealed) instead of letting libass paint a
+      // `BorderStyle=3` box per line.  libass composites those boxes
+      // separately, so wherever two lines' boxes overlap — which is ALWAYS, by
+      // `2 × bord`, even at the default 0 % line spacing — a translucent
+      // background was blended twice and read as a darker stripe.
+      //
+      // Drawing it ourselves needs the text's WIDTH, which needs real font
+      // metrics.  When they cannot be loaded the fallback is deliberately the
+      // OLD libass box, not a guessed width: the character-class estimate
+      // `getLineBreakMetrics` degrades to is fine for choosing a line break but
+      // would size a visible rectangle wrongly.  A stripe is a much smaller
+      // defect than a background that does not fit its text.
+      //
+      // `outlineThicknessPx > 0` is part of the condition because at 0 libass
+      // draws NO box at all — under `BorderStyle=3` the box IS the glyph outline
+      // grown by `\bord`, so at 0 it collapses onto the glyph and hides beneath
+      // it (measured in REQ-0340; the CLI still warns `BACKGROUND_BOX_NOT_DRAWN`
+      // about it, and the preview already suppresses its own box the same way).
+      // Drawing the rectangle ourselves would silently start showing a
+      // background where one has never appeared — a user-visible change this
+      // REQ was not asked to make, and one that would contradict the warning.
+      const bgMetrics: LineBreakMetrics | null = rowBgEnabled ? metricsFor(e.fontId) : null
+      const canDrawOwnBg = rowBgEnabled && e.outlineThicknessPx > 0 && bgMetrics?.font != null
+      const styleName = rowBgEnabled && !canDrawOwnBg ? 'WithBox' : 'Default'
 
       // REQ-0323 §1 — entrance / exit animation.  The curve is NOT derived
       // here: `shared/cue-animation.ts` owns it and the preview rAF loop
@@ -504,7 +552,12 @@ export function generateAss(
       const emphasisColorHex = e.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR
 
       const outlineTag = `\\3c${hexToAss(e.outlineColorHex)}`
-      const bordTag    = `\\bord${e.outlineThicknessPx}`
+      // REQ-0535 — with the background drawn by us, the glyphs carry no border
+      // at all.  That is not a change in appearance: under `BorderStyle=3` the
+      // "border" WAS the box, so the glyphs never had a visible outline while a
+      // background was on (REQ-0096).  `\bord` keeps its meaning as the box's
+      // padding — it is what `cueBgRects` inflates each line's text box by.
+      const bordTag    = canDrawOwnBg ? '\\bord0' : `\\bord${e.outlineThicknessPx}`
 
       // REQ-0310 §2 — per-cue opacity for the text fill and the outline.
       //
@@ -608,15 +661,24 @@ export function generateAss(
       // the bg color/alpha AFTER the per-row outline `\3c` so libass's
       // last-write-wins behavior overrides the outline color for the box
       // paint.  \shad0 ensures no shadow leaks regardless of style header.
+      // REQ-0535 — only the libass-box FALLBACK still needs these.  When the
+      // cue draws its own background the box tags would paint a second,
+      // per-line box on top of it — the very thing being removed — so they are
+      // omitted and `\shad0` is carried by the fallback branch alone.
       let bgFillTag  = ''
       let bgAlphaTag = ''
       let bgShadTag  = ''
+      const bgColorAss = e.subtitleBackground.color === 'white' ? '00FFFFFF' : '000000'
+      const bgAlphaAss = opacityToAssAlpha(e.subtitleBackground.opacityPercent)
       if (rowBgEnabled) {
-        const bgColor = e.subtitleBackground.color === 'white' ? '00FFFFFF' : '000000'
-        const bgAlpha = opacityToAssAlpha(e.subtitleBackground.opacityPercent)
-        bgFillTag  = `\\3c&H${bgColor}&`
-        bgAlphaTag = `\\3a&H${bgAlpha}&`
-        bgShadTag  = '\\shad0'
+        // `\shad0` stays on BOTH paths: a background cue never wants a drop
+        // shadow, and saying so explicitly is what made it independent of the
+        // Style header in the first place (REQ-0096).
+        bgShadTag = '\\shad0'
+        if (!canDrawOwnBg) {
+          bgFillTag  = `\\3c&H${bgColorAss}&`
+          bgAlphaTag = `\\3a&H${bgAlphaAss}&`
+        }
       }
 
       // REQ-0332 §3 — the override block is now built through a function
@@ -874,9 +936,49 @@ export function generateAss(
       // intent unambiguous to anyone reading the ASS file directly.
       const marginVCol = isPinned ? 0 : e.verticalMarginPx
 
+      // REQ-0535 — everything the background drawing needs, EXCEPT the anchors,
+      // which pass 2 resolves.  Widths come from `measureLineWidthPx`, the same
+      // accumulation the line breaker budgets against, so a line the breaker
+      // judged to fit cannot measure wider here.  Heights come from
+      // `maxFontSizeInLineBodyAssPx` — the emphasis-aware authority the line
+      // PITCH already uses (REQ-0350) — read off the emitted body, so a `\fs`
+      // run cannot be taller than the box behind it.
+      const bgPlan: CueBgPlan | null = canDrawOwnBg && bgMetrics
+        ? (() => {
+            const emph = emphasisActive
+              ? { ranges: emphasisRanges, scale: clampEmphasisScalePercent(e.emphasisScalePercent) / 100 }
+              : undefined
+            // The cue's own hard breaks are the authority on how many display
+            // lines there are — the same split `lineBodies` is built from.  A
+            // missing body degrades that line's height to the cue's base size
+            // (`maxFontSizeInLineBodyAssPx('')` returns it) rather than
+            // dropping the plan: `canDrawOwnBg` has already decided the text
+            // tags, so returning null here would leave the cue with NO
+            // background at all.
+            const plain = (e.casing === 'uppercase' ? e.text.toUpperCase() : e.text).split(ASS_HARD_BREAK)
+            let offset = 0
+            const lines = plain.map((lineText, i) => {
+              const at = offset
+              offset += lineText.length + ASS_HARD_BREAK.length
+              return {
+                textWidthPx: measureLineWidthPx(lineText, e.fontSizePx, bgMetrics, emph, at),
+                fontSizePx: maxFontSizeInLineBodyAssPx(lineBodies[i] ?? '', e.fontSizePx),
+              }
+            })
+            return {
+              lines,
+              outlinePx: e.outlineThicknessPx,
+              horizontal: e.horizontalPosition,
+              vertical: e.verticalPosition,
+              colorAss: bgColorAss,
+              alphaAss: bgAlphaAss,
+            }
+          })()
+        : null
+
       return {
         entry: e, styleName, buildStyleTag, ownPosTag: posTag,
-        lineBodies, splitLineBodies, marginVCol, isPinned,
+        lineBodies, splitLineBodies, marginVCol, isPinned, bgPlan,
       }
     }),
   ]
@@ -895,7 +997,7 @@ export function generateAss(
       // axis for line spacing, time axis for slide).  `lineStyleTags`
       // undefined ⇒ the lines are re-joined and ONE event comes back, which
       // is byte-identical to the pre-REQ-0327 output.
-      return expandCueToEvents({
+      const textEvents = expandCueToEvents({
         startSec: r.entry.startSec,
         endSec: r.entry.endSec,
         marginV: placement === undefined ? r.marginVCol : 0,
@@ -913,6 +1015,47 @@ export function generateAss(
         `Dialogue: ${resolveLayer(r.entry)},${formatAssTime(piece.startSec)},${formatAssTime(piece.endSec)},` +
         `${r.styleName},0,0,${piece.marginV},,{${piece.styleTag}}${piece.body}`
       )
+
+      // REQ-0535 — the background, emitted BEFORE the text so that within the
+      // cue's own layer libass paints the text on top (the emission-order
+      // tie-break above).  One event per display line, carrying the same
+      // `\an` / `\pos` / animation tags as the line it backs, so a fade, blur
+      // or scale moves the two together.
+      //
+      // The rectangles are disjoint by construction (`sealVerticalSeams`), and
+      // THAT is the fix: the old `BorderStyle=3` boxes overlapped by `2 × bord`
+      // and libass blended each separately, so a translucent background was
+      // painted twice in the overlap and read as a darker stripe.
+      const bgEvents = r.bgPlan && placement
+        ? (() => {
+            const plan = r.bgPlan
+            const lines: BgLine[] = placement.map((a, i) => ({
+              anchorX: a.x,
+              anchorY: a.y,
+              textWidthPx: plan.lines[i]?.textWidthPx ?? 0,
+              fontSizePx: plan.lines[i]?.fontSizePx ?? r.entry.fontSizePx,
+            }))
+            const rects = cueBgRects(lines, plan.horizontal, plan.vertical, plan.outlinePx)
+            // ONE event for the whole cue's background.  Every rectangle is
+            // written relative to a single anchor, which is what keeps the
+            // seams between them exact — see `bgRectsToAssDrawing`.  It also
+            // means the background composites once and transforms as one
+            // object; a cue-wide background scaling as a unit is the right
+            // reading of a cue-wide animation anyway.
+            const a = placement[0]
+            // `\bord0\shad0` — the shape IS the background; an outline on it
+            // would be a second, differently-shaped layer around every line.
+            const tag = r.buildStyleTag(`\\pos(${formatAssCoord(a.x)},${formatAssCoord(a.y)})`)
+              + `\\bord0\\shad0\\1c&H${plan.colorAss}&\\1a&H${plan.alphaAss}&\\p1`
+            return [
+              `Dialogue: ${resolveLayer(r.entry)},${formatAssTime(r.entry.startSec)},` +
+              `${formatAssTime(r.entry.endSec)},${r.styleName},0,0,0,,` +
+              `{${tag}}${bgRectsToAssDrawing(rects, a.x, a.y, plan.horizontal, plan.vertical)}`,
+            ]
+          })()
+        : []
+
+      return [...bgEvents, ...textEvents]
     }),
     ''
   ].join('\n')
@@ -934,6 +1077,23 @@ interface CueRender {
   splitLineBodies: string[]
   marginVCol: number
   isPinned: boolean
+  /** REQ-0535 — set when this cue draws its own background; null otherwise. */
+  bgPlan: CueBgPlan | null
+}
+
+/**
+ * REQ-0535 — everything the background drawing needs except the per-line
+ * anchors, which only pass 2 knows.
+ */
+interface CueBgPlan {
+  lines: { textWidthPx: number; fontSizePx: number }[]
+  outlinePx: number
+  horizontal: 'left' | 'center' | 'right'
+  vertical: 'top' | 'center' | 'bottom'
+  /** ASS colour body, e.g. `000000`. */
+  colorAss: string
+  /** ASS alpha body, e.g. `66`. */
+  alphaAss: string
 }
 
 /**

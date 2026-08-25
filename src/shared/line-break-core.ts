@@ -159,26 +159,46 @@ function breakSegment(
   return left + '\\N' + breakSegment(right, fontSizePx, effectivePx, font, libassScale, cmap, tofu, emph, baseOffset + rightStart)
 }
 
-function findBreakIndex(
+/**
+ * REQ-0535 — walk `seg` glyph by glyph, accumulating advance width in ASS px.
+ *
+ * `visit` is called after each glyph's own advance is added but BEFORE the
+ * kerning to the next glyph — which is exactly where `findBreakIndex` has
+ * always tested its budget — and returning `true` stops the walk.  The return
+ * value is the cumulative width, so a walk that never stops measures the whole
+ * string.
+ *
+ * ## Why this exists
+ *
+ * REQ-0535 needs each display line's WIDTH, to size the background box it now
+ * draws itself.  Writing a second accumulation loop for that would be a second
+ * authority on "how wide is this text", and the two would drift the first time
+ * anyone touched kerning, tofu substitution or the emphasis multiplier — the
+ * exact failure shape REQ-0350 hit when the pitch calculation did not know
+ * about `\fs` runs.  So the break finder and the width measurer are the same
+ * loop, and `findBreakIndex` keeps its behaviour byte-for-byte: same order of
+ * operations, same early-exit point.
+ */
+function walkAdvances(
   seg: string,
   fontSizePx: number,
-  effectivePx: number,
   font: Font | null,
   libassScale: number,
   cmap: Set<number> | null,
   tofu: string | null,
   emph: EmphAdvance,
   baseOffset: number,
+  visit: (cumulative: number, byteOffset: number) => boolean,
 ): number {
   const mult = (off: number): number =>
     emph !== null && isEmphasizedAt(off, emph.ranges) ? emph.scale : 1
+  let cumulative = 0
   if (font) {
     const scale = (fontSizePx / font.unitsPerEm) * libassScale
     const tofuAdvance = cmap !== null && tofu !== null
       ? (font.charToGlyph(tofu).advanceWidth ?? 0)
       : null
     const codePoints = [...seg]
-    let cumulative = 0
     let byteOffset = 0
 
     for (let gi = 0; gi < codePoints.length; gi++) {
@@ -192,9 +212,7 @@ function findBreakIndex(
       }
       cumulative += advance * scale * mult(baseOffset + byteOffset)
 
-      if (cumulative > effectivePx) {
-        return byteOffset
-      }
+      if (visit(cumulative, byteOffset)) return cumulative
 
       if (gi + 1 < codePoints.length) {
         const nextCh = codePoints[gi + 1]
@@ -208,7 +226,6 @@ function findBreakIndex(
       byteOffset += ch.length
     }
   } else {
-    let cumulative = 0
     let i = 0
     for (const char of seg) {
       const cp = seg.codePointAt(i) ?? 0
@@ -216,13 +233,54 @@ function findBreakIndex(
         ? fontSizePx * FALLBACK_LIBASS_SCALE
         : fontSizePx * 0.55 * FALLBACK_LIBASS_SCALE) * mult(baseOffset + i)
       cumulative += charWidth
-      if (cumulative > effectivePx) {
-        return i
-      }
+      if (visit(cumulative, i)) return cumulative
       i += char.length
     }
   }
-  return -1
+  return cumulative
+}
+
+function findBreakIndex(
+  seg: string,
+  fontSizePx: number,
+  effectivePx: number,
+  font: Font | null,
+  libassScale: number,
+  cmap: Set<number> | null,
+  tofu: string | null,
+  emph: EmphAdvance,
+  baseOffset: number,
+): number {
+  let hit = -1
+  walkAdvances(seg, fontSizePx, font, libassScale, cmap, tofu, emph, baseOffset, (cumulative, byteOffset) => {
+    if (cumulative > effectivePx) { hit = byteOffset; return true }
+    return false
+  })
+  return hit
+}
+
+/**
+ * REQ-0535 — the rendered width of ONE display line, in ASS pixels.
+ *
+ * `text` must not contain `\N`: a display line is what the caller has already
+ * split.  `baseOffset` is that line's start offset within the cue's full text,
+ * so the emphasis multiplier lands on the same characters the writer emits
+ * `\fs` runs for.
+ *
+ * This is the same accumulation the line breaker budgets against, so a line the
+ * breaker judged to fit cannot measure wider here.
+ */
+export function measureLineWidthPx(
+  text: string,
+  fontSizePx: number,
+  metrics: LineBreakMetrics,
+  emphasis?: { ranges: readonly EmphasisRange[]; scale: number },
+  baseOffset = 0,
+): number {
+  return walkAdvances(
+    text, fontSizePx, metrics.font, metrics.libassScale, metrics.cmap, metrics.tofu,
+    emphasis ?? null, baseOffset, () => false,
+  )
 }
 
 /** Mirror of isWide() in overflow-calculator.ts. */

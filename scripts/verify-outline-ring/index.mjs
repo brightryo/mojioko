@@ -193,8 +193,13 @@ window.__run = (async () => {
   if (!outer) return { error: 'no overlay span' }
   const wrap = outer.querySelector('[data-subtitle-text-wrapper]')
   if (!wrap) return { error: 'no text wrapper' }
-  const canvases = outer.querySelectorAll('canvas')
-  if (canvases.length !== 2) return { error: 'expected 2 canvases, got ' + canvases.length }
+  // REQ-0535 — ask for the layers BY NAME.  This used to demand "exactly two
+  // canvases", which is a statement about the overlay's DOM shape rather than
+  // about anything this gate measures; adding the background layer broke all 23
+  // cases without a single ring having moved (worst delta stayed 0.000 px).
+  const ring = outer.querySelector('canvas[data-mojioko-layer="ring"]')
+  const shadow = outer.querySelector('canvas[data-mojioko-layer="shadow"]')
+  if (!ring || !shadow) return { error: 'ring/shadow canvas layers not found' }
   const mctx = document.createElement('canvas').getContext('2d')
 
   // Same rotation neutralisation the overlay's layout effect performs.

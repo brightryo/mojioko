@@ -31,6 +31,7 @@
     "verify:font-weights": "node scripts/verify-font-weights/index.mjs",
     "verify:sidecar": "node scripts/verify-sidecar-fresh.mjs",
     "verify:package-fresh": "node scripts/verify-package-fresh.mjs",
+    "verify:bg-box-parity": "node scripts/verify-bg-box-parity/index.mjs",
     "verify:docs-layout": "node scripts/verify-docs-layout.mjs",
     "sidecar:stamp": "node scripts/verify-sidecar-fresh.mjs --write",
     "setup:hooks": "git config core.hooksPath scripts/hooks",

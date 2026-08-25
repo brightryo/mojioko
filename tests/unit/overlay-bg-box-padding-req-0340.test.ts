@@ -101,10 +101,15 @@ describe('REQ-0340 §1 — background box padding follows the outline width', ()
     expect(style).not.toMatch(/background/i)
   })
 
-  it('the box is still coloured and still per-line at every non-zero width', () => {
+  it('the box is still per-line at every non-zero width', () => {
+    // REQ-0535 — the wrapper no longer carries `background-color`: it defines
+    // the box GEOMETRY (padding + per-fragment clone) and `bg-layer.ts` paints
+    // it on a canvas, so the alpha is applied once instead of once per line
+    // fragment.  `box-decoration-break: clone` is still what makes the client
+    // rects per-line, which is what this test is really pinning.
     for (const outlineThicknessPx of [1, 20]) {
       const style = wrapperStyle(makeEntry({ outlineThicknessPx }))
-      expect(style).toMatch(/background-color:\s*rgba\(255, ?255, ?255/)
+      expect(style).not.toMatch(/background-color/)
       expect(style).toMatch(/box-decoration-break:\s*clone/)
     }
   })

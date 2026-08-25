@@ -15,6 +15,7 @@ import { useAppEnvStore } from '@/stores/app-env-store'
 import { canSelectFontInTier } from '../../../shared/font-tier'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
+import { paintBackgroundLayer } from '@/lib/bg-layer'
 import { paintOutlineLayers } from '@/lib/outline-ring'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 import { sweepWordTimings } from '../../../shared/karaoke-sweep'
@@ -444,11 +445,11 @@ export function SubtitleOverlay({
   const bg = entry.subtitleBackground
   const bgEnabled = bg.enabled
   const bgOpacity = bgEnabled ? (bg.opacityPercent / 100) : 0
-  const bgColor   = bgEnabled
-    ? (bg.color === 'white'
-        ? `rgba(255, 255, 255, ${bgOpacity})`
-        : `rgba(0, 0, 0, ${bgOpacity})`)
-    : undefined
+  // REQ-0535 — the OPAQUE colour.  The alpha is applied once, as the background
+  // canvas element's opacity, so overlapping line rectangles composite once
+  // (`bg-layer.ts`).  Baking it into an `rgba()` fill would put the alpha back
+  // on every rectangle and bring the stripe back.
+  const bgColorOpaque = bg.color === 'white' ? 'rgb(255, 255, 255)' : 'rgb(0, 0, 0)'
 
   // Outline is suppressed while the background panel is enabled — same rule as
   // libass (an opaque panel makes the outline visually redundant).
@@ -775,13 +776,23 @@ export function SubtitleOverlay({
   //
   // The 2 px `borderRadius` is gone for the same reason: libass' box has
   // square corners.
+  // REQ-0535 — the PADDING and `box-decoration-break` stay; the
+  // `background-color` does not.  The padding is what makes each line fragment's
+  // client rect the size of the box libass draws, and `paintBackgroundLayer`
+  // reads those rects — so the geometry above is still the single authority for
+  // the background's shape.  What changed is only WHO paints it: CSS painted one
+  // box per fragment and composited each separately, so a translucent
+  // background was blended twice wherever two lines overlapped (always, by
+  // `2 × bord`) and the overlap read as a darker stripe.  The canvas layer
+  // paints the same rectangles opaque, merges them, and applies the alpha ONCE
+  // as the canvas element's opacity — the same trick `paintOutlineLayers`
+  // already uses for `\3a`.
   const bgBoxVisible = bgEnabled && outlinePx > 0
   const textWrapperStyle: React.CSSProperties = bgBoxVisible
     ? {
         position:                 'relative',
         zIndex:                   1,
         display:                  'inline',
-        backgroundColor:          bgColor,
         padding:                  `${outlinePx}px`,
         boxDecorationBreak:       'clone',
         WebkitBoxDecorationBreak: 'clone',
@@ -800,6 +811,7 @@ export function SubtitleOverlay({
   const outerElRef = useRef<HTMLSpanElement | null>(null)
   const ringCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const shadowCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const bgCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const measureCtxRef = useRef<CanvasRenderingContext2D | null>(null)
 
   function setOuterRef(el: HTMLSpanElement | null) {
@@ -850,6 +862,19 @@ export function SubtitleOverlay({
       dpr: window.devicePixelRatio || 1,
     })
 
+    // REQ-0535 — the background, painted from the SAME live fragment rects the
+    // ring measurement uses, in the same effect so it can never be a frame
+    // behind the text it backs.
+    const bgCanvas = bgCanvasRef.current
+    if (bgCanvas) {
+      paintBackgroundLayer({
+        outer,
+        bgCanvas,
+        colorOpaque: bgColorOpaque,
+        opacity01: bgBoxVisible ? bgOpacity : 0,
+        dpr: window.devicePixelRatio || 1,
+      })
+    }
   })
 
   return (
@@ -1021,8 +1046,23 @@ export function SubtitleOverlay({
           wrapper's z-index.  `width`/`height` start at 0 and are sized by the
           layout effect; a cue with neither effect leaves them at 0 and paints
           nothing. */}
+      {/* REQ-0535 — the cue background, FIRST in DOM so it sits under the
+          shadow, the ring and the text. */}
+      <canvas
+        ref={bgCanvasRef}
+        // REQ-0535 — layers are identified by NAME, not by their index among
+        // the overlay's canvases.  `verify:outline-ring` asserted "exactly two
+        // canvases" and broke the moment this third one appeared; a name is
+        // what lets a harness ask for the layer it actually means.
+        data-mojioko-layer="background"
+        aria-hidden="true"
+        width={0}
+        height={0}
+        className="absolute pointer-events-none"
+      />
       <canvas
         ref={shadowCanvasRef}
+        data-mojioko-layer="shadow"
         aria-hidden="true"
         width={0}
         height={0}
@@ -1030,6 +1070,7 @@ export function SubtitleOverlay({
       />
       <canvas
         ref={ringCanvasRef}
+        data-mojioko-layer="ring"
         aria-hidden="true"
         width={0}
         height={0}
