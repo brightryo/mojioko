@@ -50,6 +50,8 @@ export interface CaseSpec {
   /** Background opacity %, < 100 so double-compositing is visible at all. */
   opacity: number
   fontSizePx: number
+  /** REQ-0537 — cue rotation in degrees; 0 / absent keeps the upright cases. */
+  rotation?: number
 }
 
 export const CASES: readonly CaseSpec[] = [
@@ -65,6 +67,11 @@ export const CASES: readonly CaseSpec[] = [
   { name: 'three lines', text: 'AAAA\\NAAAA\\NAAAA', spacing: 0, outline: 8, opacity: 60, fontSizePx: 60 },
   // A thin outline still overlaps by exactly 2×bord at spacing 0.
   { name: 'thin outline', text: 'AAAA\\NAAAA', spacing: 0, outline: 3, opacity: 60, fontSizePx: 60 },
+  // REQ-0537 §2 — rotation was never covered by REQ-0535, and the owner saw the
+  // stripe on a rotated cue.  `\frz` moves every line's box, so the seam between
+  // them is computed from rotated anchors; nothing else in the matrix exercises
+  // that.
+  { name: 'rotated 15deg', text: 'AAAA\\NAAAA', spacing: 0, outline: 8, opacity: 60, fontSizePx: 60, rotation: 15 },
 ]
 
 export function cue(spec: CaseSpec): SubtitleEntry {
@@ -80,6 +87,7 @@ export function cue(spec: CaseSpec): SubtitleEntry {
     verticalMarginPx: 40,
     subtitleBackground: { enabled: true, color: 'black' as const, opacityPercent: spec.opacity },
     lineSpacingPercent: spec.spacing,
+    rotation: spec.rotation ?? 0,
     words: [],
     karaokeEnabled: false,
     karaokeHighlightColor: '#ffffff',

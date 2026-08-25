@@ -62,6 +62,7 @@ import http from 'http'
 import { spawnSync } from 'child_process'
 import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
+import { createHash } from 'crypto'
 
 const require = createRequire(import.meta.url)
 const esbuild = require('esbuild')
@@ -95,7 +96,12 @@ esbuild.buildSync({
   // lives elsewhere, so `__dirname` has to be pinned to the source location.
   define: { __dirname: JSON.stringify(HERE) },
   loader: { '.css': 'empty', '.png': 'empty' },
-  alias: { '@': path.join(REPO, 'src/renderer') },
+  alias: {
+    '@': path.join(REPO, 'src/renderer'),
+    // `ass-generator` now reaches `main/lib/paths`, which imports electron; the
+    // npm shim throws when bundled for plain node. See scripts/electron-stub.ts.
+    electron: path.join(REPO, 'scripts/electron-stub.ts'),
+  },
   logLevel: 'silent',
 })
 esbuild.buildSync({
@@ -222,9 +228,37 @@ function backgroundRows(buf, w, h, region = null) {
   // darkened — so a low percentile still catches it while ignoring a few
   // outliers.  The 10th is well below any plausible stray count and well above
   // zero.
-  const rows = []
   const width = x1 - x0 + 1
-  for (let y = y0 + 1; y <= y1 - 1; y++) {
+
+  // ★ REQ-0537 — judge the shape's INTERIOR, not its bounding box.
+  //
+  // A rotated cue's background is a rotated rectangle, so near the top and
+  // bottom of its bounding box a row crosses only a corner and carries very
+  // little background. Measured against the full bbox width those rows look
+  // exactly like a gap, and the 15-degree case reported 9 "gap rows" that were
+  // nothing but the shape tapering. The row span is therefore trimmed to where
+  // the background is actually broad, and only that span is judged — a real gap
+  // BETWEEN two lines is interior by construction, so nothing under test is
+  // trimmed away.
+  const countAt = (y) => {
+    let n = 0
+    for (let x = x0; x <= x1; x++) if (px(x, y) < src - DARK_MARGIN) n++
+    return n
+  }
+  const counts = []
+  for (let y = y0; y <= y1; y++) counts.push(countAt(y))
+  const maxCount = Math.max(...counts, 1)
+  const broad = (i) => counts[i] >= maxCount * 0.25
+  let iFirst = 0
+  while (iFirst < counts.length && !broad(iFirst)) iFirst++
+  let iLast = counts.length - 1
+  while (iLast > iFirst && !broad(iLast)) iLast--
+  const innerY0 = y0 + iFirst
+  const innerY1 = y0 + iLast
+  if (innerY1 - innerY0 + 1 < 3) return null
+
+  const rows = []
+  for (let y = innerY0 + 1; y <= innerY1 - 1; y++) {
     const dark = []
     for (let x = x0; x <= x1; x++) {
       const v = px(x, y)
@@ -250,17 +284,17 @@ function backgroundRows(buf, w, h, region = null) {
     // far the most common value on the row — while a genuinely doubled band
     // moves the mode itself, since it darkens EVERY background pixel on the row.
     // No assumption about where the glyphs are, so it works for any alignment.
-    const counts = new Map()
+    const hist = new Map()
     let best = dark[0], bestN = 0
     for (const v of dark) {
       const k = Math.round(v)
-      const n = (counts.get(k) ?? 0) + 1
-      counts.set(k, n)
+      const n = (hist.get(k) ?? 0) + 1
+      hist.set(k, n)
       if (n > bestN) { bestN = n; best = k }
     }
     rows.push(best)
   }
-  return { rows, x0, x1, y0, y1, src }
+  return { rows, x0, x1, y0: innerY0, y1: innerY1, src }
 }
 
 /** Judge a region against the single-layer prediction. */
@@ -467,6 +501,122 @@ for (const spec of CASES) {
       check(pcj.darker > 0 || pcj.gaps > 0,
         '★ preview NEGATIVE CONTROL: the pre-fix CSS really does fail this test',
         `darker=${pcj.darker} gapRows=${pcj.gaps} worst=${pcj.worst}`)
+    }
+  }
+}
+
+// --- ★ REQ-0537 — the same thing again, through the REAL APP -----------------
+//
+// Everything above injects font metrics (`gate-metrics.ts`) so it can measure
+// the drawing path deterministically. That is also precisely why this gate
+// stayed green while the real app was broken for every cue: production resolves
+// its own metrics through `main/lib/paths`, that resolution threw in the
+// bundled main process, and `generateAss` fell back to the old per-line box.
+// The gate could not see it, because the gate never used that code.
+//
+// So this section drives the app's own `burn` command — Electron main, the same
+// path the GUI uses, production's own font resolution — and measures the frames
+// it produces. A synthetic green cannot cover for it.
+{
+  console.log('\n=== REQ-0537: through the REAL app (production font resolution) ===')
+  const ELECTRON = path.join(REPO, 'node_modules', 'electron', 'dist', 'electron.exe')
+  const MAIN = path.join(REPO, 'out', 'main', 'index.js')
+  if (!existsSync(ELECTRON) || !existsSync(MAIN)) {
+    check(false, 'real app: electron + out/main present (run `npm run build` first)',
+      `electron=${existsSync(ELECTRON)} out/main=${existsSync(MAIN)}`)
+  } else {
+    const NL = String.fromCharCode(10)
+    const srcMp4 = path.join(DIR, 'e2e-src.mp4')
+    ff(['-f', 'lavfi', '-i', `color=c=0x808080:s=1280x720:d=3:r=30`,
+      '-c:v', 'libx264', '-qp', '0', '-pix_fmt', 'yuv420p', srcMp4], 'e2e-src')
+    const srtPath = path.join(DIR, 'e2e.srt')
+    writeFileSync(srtPath, ['1', '00:00:00,100 --> 00:00:02,500', 'AAAA', 'AAAA', ''].join(NL), 'utf-8')
+
+    /** Burn through the real CLI and return the measured region, or null. */
+    const realBurn = (tag, extraArgs) => {
+      const outMp4 = path.join(DIR, `${tag}.mp4`)
+      const r = spawnSync(ELECTRON, ['.', 'burn', srcMp4, srtPath, '-o', outMp4,
+        '--background', 'on', '--background-color', 'black', '--background-opacity', '60',
+        '--outline', '8', '--font-size', '60', '--line-spacing', '0', ...extraArgs], {
+        cwd: REPO, encoding: 'utf-8', timeout: 300000,
+        env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1' },
+      })
+      if (r.status !== 0 || !existsSync(outMp4)) return { error: `burn exited ${r.status}` }
+      const raw = path.join(DIR, `${tag}.rgb`)
+      ff(['-ss', '1.0', '-i', outMp4, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', raw], tag)
+      const buf = readFileSync(raw)
+      return { region: backgroundRows(buf, 1280, 720) }
+    }
+
+    for (const rotation of [0, 15]) {
+      const tag = `e2e-rot${rotation}`
+      const { region, error } = realBurn(tag, ['--rotation', String(rotation)])
+      if (error || !region) { check(false, `real app rot ${rotation}: produced a measurable background`, error ?? 'no region'); continue }
+      const j = judge(region, 60)
+      check(region.rows.length >= MIN_REGION_ROWS,
+        `real app rot ${rotation}: the region is a real multi-line band`, `rows=${region.rows.length}`)
+      check(j.darker === 0, `★ real app rot ${rotation}: no row is painted twice`,
+        `darker=${j.darker} worst=${j.worst} expected=${j.expected}`)
+      check(j.gaps === 0, `real app rot ${rotation}: no gap between the lines`, `gapRows=${j.gaps}`)
+    }
+
+    // ★ NEGATIVE CONTROL for the real-app path.
+    //
+    // The perturbation has to make PRODUCTION's own metrics load fail, since
+    // that is what REQ-0537 was. Two obvious ideas do not work:
+    //
+    //   - Naming an uninstalled font. The app SUBSTITUTES a missing font before
+    //     generating ASS (REQ-0509), so it never asks for its metrics and no
+    //     fallback occurs — measured: darker=0, i.e. no stripe at all.
+    //   - Editing the source. Forbidden, and it rots (CLAUDE.md §18).
+    //
+    // What does work is a file that EXISTS but cannot be parsed: the
+    // availability probe is satisfied so no substitution happens, and
+    // `buildFontEntry` then fails, which is exactly the `{ font: null }` state
+    // the real bug produced. The file is written for a font this machine does
+    // not have, and removed again in `finally`.
+    // A PAID font is not usable either: dev runs as the free tier, so
+    // `resolveFontIdForTier` swaps it for a Noto weight before ass generation
+    // (REQ-0508) — measured, darker=0, no fallback reached. So the control has
+    // to use a free-tier font, and every free-tier font is bundled and present.
+    //
+    // That leaves making a bundled font temporarily unreadable. CLAUDE.md §18
+    // permits a gate to touch the working tree only if it snapshots the exact
+    // bytes and puts them back, so that is what happens here — and the restore
+    // is VERIFIED by hash before the gate reports anything, because a gate that
+    // corrupts a shipped font and moves on would be far worse than the bug.
+    // The font the burn ACTUALLY resolves to. `--font` selects a FAMILY and the
+    // weight comes from elsewhere, so corrupting a non-default weight changed
+    // nothing at all — the log kept reporting `referenced fonts: 1 —
+    // noto-sans-jp-semibold` while the control believed it had broken Thin.
+    // Perturbing the font the run really uses is the only version of this that
+    // means anything. It runs AFTER the positive cases above, and the bytes go
+    // back in `finally`.
+    const CONTROL_FONT = 'noto-sans-jp-semibold'
+    const target = burnSide.FONT_FILES.find((f) => f.id === CONTROL_FONT && existsSync(f.path))
+    if (!target) {
+      console.log(`NOTE  real-app NEGATIVE CONTROL could not run: ${CONTROL_FONT} is not on disk here.`)
+    } else {
+      const original = readFileSync(target.path)
+      const originalHash = createHash('sha256').update(original).digest('hex')
+      try {
+        writeFileSync(target.path, Buffer.alloc(original.length, 0x41))
+        const { region, error } = realBurn('e2e-fallback', ['--rotation', '0'])
+        if (error || !region) {
+          check(false, `real-app NEGATIVE CONTROL (${CONTROL_FONT}): produced a measurable background`, error ?? 'no region')
+        } else {
+          const j = judge(region, 60)
+          check(j.darker > 0,
+            `★ real-app NEGATIVE CONTROL: unreadable font metrics really do fall back and stripe`,
+            `darker=${j.darker} worst=${j.worst}`)
+        }
+      } finally {
+        writeFileSync(target.path, original)
+      }
+      const restoredHash = createHash('sha256').update(readFileSync(target.path)).digest('hex')
+      check(restoredHash === originalHash,
+        `real-app NEGATIVE CONTROL: ${CONTROL_FONT} restored byte-for-byte`,
+        restoredHash === originalHash ? '' : `sha256 ${restoredHash} != ${originalHash}`)
     }
   }
 }

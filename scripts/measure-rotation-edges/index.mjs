@@ -71,7 +71,12 @@ esbuild.buildSync({
   bundle: true, outfile: DUMP, format: 'cjs', platform: 'node',
   define: { __dirname: JSON.stringify(HERE) },
   loader: { '.css': 'empty', '.png': 'empty' },
-  alias: { '@': path.join(REPO, 'src/renderer') },
+  alias: {
+    '@': path.join(REPO, 'src/renderer'),
+    // `ass-generator` now reaches `main/lib/paths`, which imports electron; the
+    // npm shim throws when bundled for plain node. See scripts/electron-stub.ts.
+    electron: path.join(REPO, 'scripts/electron-stub.ts'),
+  },
   logLevel: 'silent',
 })
 const burnSide = require(DUMP)

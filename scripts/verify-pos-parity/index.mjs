@@ -46,7 +46,12 @@ esbuild.buildSync({
   entryPoints: [path.join(HERE, 'dump-entry.ts')],
   bundle: true, outfile: OUT, format: 'cjs', platform: 'node',
   loader: { '.css': 'empty', '.png': 'empty' },
-  alias: { '@': path.join(REPO, 'src/renderer') },
+  alias: {
+    '@': path.join(REPO, 'src/renderer'),
+    // REQ-0537 — `ass-generator` now imports `main/lib/paths` statically, which
+    // imports electron; the npm shim throws when bundled for plain node.
+    electron: path.join(REPO, 'scripts/electron-stub.ts'),
+  },
   logLevel: 'silent',
 })
 const { renderPair, renderNegControl, ASS_FONT_NAME } = require(OUT)

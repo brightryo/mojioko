@@ -29,7 +29,7 @@ import {
   type BgLine,
 } from '../../shared/bg-box-geometry'
 import { measureLineWidthPx, type LineBreakMetrics } from '../../shared/line-break-core'
-import { getLineBreakMetrics } from './font-metrics-node'
+import { getLineBreakMetrics, getFontMetricsFailure } from './font-metrics-node'
 import { computeFixedStackOffsets } from '../../shared/stack-offsets'
 import { computeCuePlacement, resolveLayer } from '../../shared/cue-placement'
 import { groupByTimeOverlap } from '../../shared/simultaneous-groups'
@@ -379,6 +379,13 @@ export function generateAss(
     ''
   ].join('\n')
 
+  /**
+   * REQ-0537 — cues that fell back to the old per-line box, reported at the end.
+   * Collected rather than logged inline so one burn produces one message
+   * instead of one per cue.
+   */
+  const bgFallbackReasons: string[] = []
+
   const activeEntries = entries.filter((e) => !e.isDeleted)
 
   // REQ-0332 §3 — TWO passes.  The first builds each cue's material (override
@@ -415,6 +422,27 @@ export function generateAss(
       const bgMetrics: LineBreakMetrics | null = rowBgEnabled ? metricsFor(e.fontId) : null
       const canDrawOwnBg = rowBgEnabled && e.outlineThicknessPx > 0 && bgMetrics?.font != null
       const styleName = rowBgEnabled && !canDrawOwnBg ? 'WithBox' : 'Default'
+      // REQ-0537 §1-4 — say so when the fallback fires.
+      //
+      // REQ-0535 shipped this fallback SILENT, and it then fired for every cue
+      // in the real app while `verify:bg-box-parity` stayed green (the gate
+      // injects its own metrics, so it could never take this branch). A stripe
+      // the user reports and the writer knows about, but never mentions, is the
+      // worst of both. Anything that lands here is a bug to chase, not a normal
+      // operating mode, so it is a warning.
+      if (rowBgEnabled && !canDrawOwnBg && e.outlineThicknessPx > 0) {
+        // The REASON, not just the fact: "no metrics" was the whole of what
+        // REQ-0535 could have told anyone, and it is not enough to act on.
+        let why = 'no usable font metrics'
+        try {
+          const f = getFontMetricsFailure(e.fontId)
+          if (f) why = `${f.reason} at ${f.path}${f.detail ? ' — ' + f.detail : ''}`
+        } catch { /* diagnostics must never break a burn */ }
+        bgFallbackReasons.push(
+          `cue ${e.id}: fontId=${String(e.fontId)} — ${why}; ` +
+          'falling back to the pre-REQ-0535 per-line BorderStyle=3 box (the seam will be visible)',
+        )
+      }
 
       // REQ-0323 §1 — entrance / exit animation.  The curve is NOT derived
       // here: `shared/cue-animation.ts` owns it and the preview rAF loop
@@ -1060,7 +1088,32 @@ export function generateAss(
     ''
   ].join('\n')
 
+  if (bgFallbackReasons.length > 0) warnBgFallback(bgFallbackReasons)
+
   return [scriptInfo, styles, events].join('\n')
+}
+
+/**
+ * REQ-0537 §1-4 — report a background fallback somewhere a human will see it.
+ *
+ * `electron-log` when it is reachable (the app and the CLI both run in Electron
+ * main, and that puts the line in the log FILE the owner can send), plain
+ * `console.warn` otherwise — the gates and unit tests bundle this module for
+ * plain node, where requiring electron-log would throw.
+ *
+ * Wrapped in try/catch because this is a diagnostic: a logger that cannot load
+ * must never be the reason a burn fails.
+ */
+function warnBgFallback(reasons: readonly string[]): void {
+  const message = `[ass-generator] REQ-0535 background drawing UNAVAILABLE for ${reasons.length} cue(s):\n  ` +
+    reasons.join('\n  ')
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const log = require('electron-log') as { warn: (m: string) => void }
+    log.warn(message)
+  } catch {
+    console.warn(message)
+  }
 }
 
 /** What `generateAss` needs to remember about a cue between its two passes. */

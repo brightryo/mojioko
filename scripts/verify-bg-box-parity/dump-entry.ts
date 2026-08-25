@@ -5,7 +5,8 @@
  * the REAL cue from `case-spec.ts` (REQ-0316 forbids hand-authored ASS).
  */
 import { generateAss } from '../../src/main/services/ass-generator'
-import { getFontMeta, DEFAULT_FONT_ID } from '../../src/shared/fonts'
+import { getFontMeta, DEFAULT_FONT_ID, FONT_REGISTRY } from '../../src/shared/fonts'
+import { getFontFilePath } from '../../src/main/lib/paths'
 import type { BurninPosition, VideoInfo } from '../../src/shared/types'
 import { CASES, CUE_END, CUE_START, SAMPLE_SEC, SOURCE_GREY, VIDEO, VIDEO_H, VIDEO_W, cue, type CaseSpec } from './case-spec'
 import { assertRealFont, metricsFor } from './gate-metrics'
@@ -13,6 +14,17 @@ import { assertRealFont, metricsFor } from './gate-metrics'
 export const ASS_FONT_NAME: string = getFontMeta(DEFAULT_FONT_ID).assFontName
 export { CASES, CUE_START, CUE_END, SAMPLE_SEC, SOURCE_GREY, VIDEO_W, VIDEO_H }
 export { assertRealFont }
+
+/**
+ * REQ-0537 — every registry font and where production would look for its file.
+ *
+ * Used to CHOOSE the real-app negative control by looking at the machine rather
+ * than hard-coding a font id that may or may not be installed.
+ */
+export const FONT_FILES: { id: string; path: string }[] = FONT_REGISTRY.map((m) => ({
+  id: m.id,
+  path: getFontFilePath(m),
+}))
 
 const burnin: BurninPosition = {
   horizontalPosition: 'center', verticalPosition: 'center', verticalMarginPx: 40,

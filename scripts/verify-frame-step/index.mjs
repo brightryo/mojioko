@@ -34,6 +34,10 @@ if (spawnSync('ffmpeg', ['-version'], { encoding: 'utf8' }).status !== 0) {
 esbuild.buildSync({
   entryPoints: [path.join(HERE, 'dump-entry.ts')],
   bundle: true, outfile: OUT, format: 'cjs', platform: 'node', logLevel: 'silent',
+  // REQ-0537 — harmless here today (this entry does not reach `ass-generator`),
+  // but every node harness gets the same alias so the next one that grows an
+  // import into main does not fail on the electron shim.
+  alias: { electron: path.join(HERE, '..', 'electron-stub.ts') },
 })
 const { frameStepSec } = require(OUT)
 

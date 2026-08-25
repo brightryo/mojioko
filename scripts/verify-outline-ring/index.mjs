@@ -146,7 +146,12 @@ await esbuild.build({
   // emit React.createElement into modules that never import React.
   jsx: 'automatic',
   // The renderer uses the '@/' alias from tsconfig.paths; esbuild needs it spelled out.
-  alias: { '@': path.join(REPO, 'src/renderer') },
+  alias: {
+    '@': path.join(REPO, 'src/renderer'),
+    // REQ-0537 — `ass-generator` now imports `main/lib/paths` statically, which
+    // imports electron; the npm shim throws when bundled for plain node.
+    electron: path.join(REPO, 'scripts/electron-stub.ts'),
+  },
   plugins: [stubPlugin],
   outfile: path.join(WORK, 'fixtures.cjs'),
 })

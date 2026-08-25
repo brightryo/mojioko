@@ -10,10 +10,25 @@ import {
   getCurrentProcessContext,
 } from './msix'
 
-const isDev = !app.isPackaged
+/**
+ * ★ REQ-0537 — a FUNCTION, not a module-level constant.
+ *
+ * This used to be `const isDev = !app.isPackaged`, evaluated the moment the
+ * module was imported. That single line forced every consumer that wanted to
+ * stay importable outside Electron to reach for a lazy `require('../lib/paths')`
+ * instead of a normal import — and a runtime relative `require` does not
+ * resolve inside electron-vite's single-file main bundle. It threw
+ * `Cannot find module '../lib/paths'` in the real app, `font-metrics-node`
+ * swallowed it as "no metrics", and REQ-0535's background silently reverted to
+ * the old per-line box for every cue.
+ *
+ * Deferring the read to call time makes this module import-safe everywhere, so
+ * consumers can import it statically and the bundler can see them.
+ */
+const isDev = (): boolean => !app.isPackaged
 
 export function getResourcesPath(): string {
-  return isDev ? join(app.getAppPath(), 'resources') : process.resourcesPath
+  return isDev() ? join(app.getAppPath(), 'resources') : process.resourcesPath
 }
 
 /**
@@ -35,7 +50,7 @@ export function getResourcesPath(): string {
  */
 export function getEulaPath(lang: 'ja' | 'en'): string {
   const filename = `license_${lang}.txt`
-  return isDev
+  return isDev()
     ? join(app.getAppPath(), 'build', filename)
     : join(getResourcesPath(), 'eula', filename)
 }
@@ -338,14 +353,14 @@ export function isPreviewMixFilename(name: string): boolean {
 }
 
 export function getPythonSidecarPath(): string {
-  return isDev
+  return isDev()
     ? join(app.getAppPath(), 'python-sidecar', 'main.py')
     : join(process.resourcesPath, 'python-sidecar', 'main.py')
 }
 
 /** REQ-0410 — path to the MADLAD translation sidecar script (prototype). */
 export function getTranslateSidecarPath(): string {
-  return isDev
+  return isDev()
     ? join(app.getAppPath(), 'python-sidecar', 'translate.py')
     : join(process.resourcesPath, 'python-sidecar', 'translate.py')
 }
@@ -361,7 +376,7 @@ export function getTranslateSidecarPath(): string {
  * clear error message.
  */
 export function getTranscriberExePath(): string | null {
-  if (isDev) return null
+  if (isDev()) return null
   const exe = process.platform === 'win32'
     ? join(process.resourcesPath, 'bin', 'transcriber', 'mojioko-transcriber.exe')
     : join(process.resourcesPath, 'bin', 'transcriber', 'mojioko-transcriber')
@@ -389,7 +404,7 @@ export function getTranscriberExePath(): string | null {
  * Returns null if the resolved executable does not exist on disk.
  */
 export function getPythonExecutable(): string | null {
-  if (isDev) {
+  if (isDev()) {
     const exe = process.platform === 'win32'
       ? join(app.getAppPath(), '.venv', 'Scripts', 'python.exe')
       : join(app.getAppPath(), '.venv', 'bin', 'python')
