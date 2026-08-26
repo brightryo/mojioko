@@ -1,6 +1,8 @@
 import { promises as fs } from 'fs'
 import { KARAOKE_STYLE_DEFAULT } from '../../shared/karaoke-style'
-import { join } from 'path'
+import { checkBurnDiskSpace, formatGb } from '../../shared/burn-disk'
+import { getDiskFree } from '../lib/disk-space'
+import { dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
@@ -115,6 +117,43 @@ export async function startBurnin(
   // filter_complex trim+concat (audio + video).  When empty / absent we
   // fall back to the legacy single-input argv byte-for-byte so every
   // pre-REQ-074 caller is unaffected.
+  /*
+   * ★ REQ-0548 (RES-0543 I2) — refuse a burn that cannot possibly fit.
+   *
+   * A long render that dies at 95 % with a full disk reaches the user as a tail
+   * of ffmpeg stderr, which tells them nothing to act on. Checked BEFORE any
+   * work starts, so the failure costs seconds rather than an hour.
+   *
+   * Conservative by construction (see `shared/burn-disk.ts`): the estimate is a
+   * floor, not a prediction, and an unreadable free-space figure PASSES —
+   * being unable to check must not become a reason not to burn.
+   */
+  try {
+    const { freeBytes, drive } = getDiskFree(dirname(outputPath))
+    const inputBytes = await fs.stat(inputPath).then((st) => st.size).catch(() => 0)
+    const verdict = checkBurnDiskSpace(freeBytes, inputBytes)
+    if (verdict.insufficient) {
+      const msg = `not enough free space on ${drive}: `
+        + `${formatGb(verdict.freeBytes ?? 0)} GB free, `
+        + `at least ${formatGb(verdict.requiredBytes)} GB needed`
+      log.warn(`[ffmpeg-burnin] pre-flight: ${msg}`)
+      onEvent({
+        event: 'failed',
+        error: msg,
+        errorCode: 'diskFull',
+        disk: {
+          requiredBytes: verdict.requiredBytes,
+          freeBytes: verdict.freeBytes ?? 0,
+          drive,
+        },
+      })
+      return
+    }
+  } catch (err) {
+    // The check itself broke. Log it and burn anyway — see above.
+    log.warn('[ffmpeg-burnin] disk pre-flight skipped', err)
+  }
+
   const cutsList = cuts ?? []
   const hasCuts = cutsList.length > 0
   const effectiveDurationSec = hasCuts

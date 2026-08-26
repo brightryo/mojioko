@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { formatGb } from '../../../shared/burn-disk'
 import { useTranslation } from 'react-i18next'
 import {
   Play,
@@ -329,6 +330,15 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
         if (errMsg === 'Cancelled') {
           setRenderState('idle')
           setProgress(0)
+        } else if (evt.errorCode === 'diskFull' && evt.disk) {
+          // REQ-0548 — the pre-flight refused before ffmpeg started. Say which
+          // drive and by how much, so the user has something to act on; the raw
+          // ffmpeg tail never did.
+          toast.error(t('error.diskFull', {
+            drive: evt.disk.drive,
+            free: formatGb(evt.disk.freeBytes),
+            required: formatGb(evt.disk.requiredBytes),
+          }))
         } else {
           toast.error(t('error.renderFailed', { reason: errMsg }))
         }

@@ -52,7 +52,8 @@
   },
   "error": {
     "unknown": "An unknown error occurred",
-    "settingsSaveFailed": "Settings could not be saved ({{reason}}). Check the free disk space, and whether another program is holding the file."
+    "settingsSaveFailed": "Settings could not be saved ({{reason}}). Check the free disk space, and whether another program is holding the file.",
+    "diskFull": "Not enough free disk space ({{drive}}: {{free}} GB free, at least {{required}} GB needed). Choose an output folder on another drive, or free some space."
   },
   "shortcuts": {
     "scopeGlobal": "Global",

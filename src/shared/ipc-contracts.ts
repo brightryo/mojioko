@@ -349,7 +349,19 @@ export type BurninEvent =
        */
       renderNotices?: RenderNotice[]
     }
-  | { event: 'failed'; error: string }
+  /**
+   * REQ-0548 — `errorCode` is OPTIONAL and additive, following the pattern the
+   * model-download event already uses: the renderer picks a localized message
+   * instead of parsing `error`.  `diskFull` is emitted by the pre-flight check
+   * BEFORE ffmpeg starts and carries the numbers that message needs.  `error`
+   * stays as the fallback and the log breadcrumb.
+   */
+  | {
+      event: 'failed'
+      error: string
+      errorCode?: 'diskFull'
+      disk?: { requiredBytes: number; freeBytes: number; drive: string }
+    }
 
 /**
  * REQ-20260615-081 — IPC contract for model download.  The `failed`

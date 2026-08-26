@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, statSync, statfsSync } from 'fs'
-import { join, parse } from 'path'
+import { existsSync, readdirSync, statSync } from 'fs'
+import { join } from 'path'
 import {
   TRANSLATION_TOOLS,
   TRANSLATION_TOOL_IDS,
@@ -9,6 +9,7 @@ import {
   type TranslationToolsState,
 } from '../../shared/translation-tools'
 import { getTranslationToolsDir } from '../lib/paths'
+import { getDiskFree as readDiskFree } from '../lib/disk-space'
 
 /**
  * REQ-0405 — main-side disk helpers for the translation-tool manager (Phase 1).
@@ -69,17 +70,17 @@ export function buildTranslationToolsState(
   return buildToolsState({ installed, activeId }, { sizeBytes, diskFreeBytes: freeBytes, diskDrive: drive })
 }
 
-/** Free bytes on the drive holding `dirPath` (mirrors the Whisper model store). */
+/**
+ * Free bytes on the drive holding `dirPath` (mirrors the Whisper model store).
+ *
+ * REQ-0548 — the implementation moved to `main/lib/disk-space.ts` so the
+ * burn-in pre-check shares it. This wrapper preserves THIS caller's original
+ * contract exactly: an unknown result reads as `0`, which is what the download
+ * UI has always displayed.
+ */
 function getDiskFree(dirPath: string): { freeBytes: number; drive: string } {
-  const { root } = parse(dirPath)
-  const drive = root || 'C:\\'
-  const statPath = existsSync(dirPath) ? dirPath : existsSync(drive) ? drive : '.'
-  try {
-    const stats = statfsSync(statPath)
-    return { freeBytes: stats.bavail * stats.bsize, drive }
-  } catch {
-    return { freeBytes: 0, drive }
-  }
+  const { freeBytes, drive } = readDiskFree(dirPath)
+  return { freeBytes: freeBytes ?? 0, drive }
 }
 
 export { TRANSLATION_TOOLS }
