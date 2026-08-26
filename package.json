@@ -17,6 +17,7 @@
     "verify:outline-ring": "node scripts/verify-outline-ring/index.mjs",
     "verify:ring-paint": "node scripts/verify-ring-paint/index.mjs",
     "verify:cli-smoke": "node scripts/cli-smoke.mjs",
+    "verify:cli-stability": "node scripts/verify-cli-stability/index.mjs",
     "verify:mcp-smoke": "node scripts/mcp-smoke.mjs",
     "verify:translate-packaged": "node scripts/verify-translate-packaged.mjs",
     "verify:stack-emphasis": "node scripts/verify-stack-emphasis/index.mjs",

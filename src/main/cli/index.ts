@@ -212,6 +212,36 @@ export async function maybeRunCli(): Promise<boolean> {
   // never a silent GUI window). Headless: no GPU stack, no window. Must precede
   // `app.whenReady()`.
   app.disableHardwareAcceleration()
+  /*
+   * ★ REQ-0553 — and ALSO the switch, which is not the same thing.
+   *
+   * `disableHardwareAcceleration()` turns off GPU rasterisation, but Chromium
+   * still LAUNCHES a GPU process. A CLI command ends with `app.exit()`, a hard
+   * exit that skips the graceful shutdown — and when the command is quick
+   * enough to finish while that GPU process is still coming up, the browser
+   * process faults on the way out with 0xC0000005.
+   *
+   * Measured, 200 launches per case:
+   *
+   *   read_subtitle (fastest)   11/200  = 1 in 18
+   *   --help                     4/200  = 1 in 50
+   *   burn --nope                1/200  = 1 in 200
+   *   tools list (slowest)       0/200  — it takes long enough that GPU
+   *                                       start-up has finished by exit time
+   *   read_subtitle + this fix   0/200
+   *
+   * The ordering is the tell: the FASTER the command, the likelier the crash.
+   * That is a start-up/exit race, not steady-state work.
+   *
+   * The output was never wrong — stdout carried the complete, valid JSON and
+   * files were already written. What the crash replaced was the EXIT CODE, so
+   * a script checking `$?` saw failure after a successful run.
+   *
+   * Only `disable-gpu` is set, because only `disable-gpu` was measured. This
+   * runs after the "user args ⇒ CLI invocation" decision above, so the GUI
+   * never reaches it.
+   */
+  app.commandLine.appendSwitch('disable-gpu')
   await app.whenReady()
 
   const head = tokens[0]
