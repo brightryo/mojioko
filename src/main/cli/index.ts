@@ -31,6 +31,7 @@ import { runStatusCommand } from './commands/status'
 import { runExportFrameCommand } from './commands/export-frame'
 import { runProbeCommand } from './commands/probe'
 import { runReadSubtitleCommand } from './commands/read-subtitle'
+import { runEditCuesCommand } from './commands/edit-cues'
 import { runEditSubtitleCommand } from './commands/edit-subtitle'
 import { runConvertCommand } from './commands/convert'
 import { runPresetCommand } from './commands/preset'
@@ -149,6 +150,9 @@ async function route(ctx: CliContext, command: string, args: ReturnType<typeof p
     case 'edit_subtitle':
     case 'edit-subtitle':
       return runEditSubtitleCommand(ctx, args)
+    case 'edit_cues':
+    case 'edit-cues':
+      return runEditCuesCommand(ctx, args)
     case 'convert':
       return runConvertCommand(ctx, args)
     case 'preset':

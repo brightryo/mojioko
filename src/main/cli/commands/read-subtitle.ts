@@ -20,6 +20,8 @@ import { optString, type ParsedArgs } from '../args'
 import { CliError, emitSuccess, type CliContext, type CliWarning } from '../output'
 import { detectFormat } from '../subtitle-io'
 import { summarizeSubtitleStyle, type SubtitleStyleSummary } from '../subtitle-style'
+import type { EmphasisSpan } from '../../../shared/emphasis'
+import type { WordSpan } from '../../../shared/types'
 
 export interface ReadCue {
   index: number
@@ -40,6 +42,17 @@ export interface ReadCue {
   cueNumber?: number
   /** Present only with `--with-style` on `.mojioko` input. */
   style?: SubtitleStyleSummary
+  /**
+   * REQ-0554 §1-2 — the emphasised character ranges, so what `edit_cues` can
+   * write can also be read. Rides with `--with-style` (small, and needed in
+   * order to write the style back).
+   */
+  emphasisSpans?: EmphasisSpan[]
+  /**
+   * REQ-0554 §1-2 — per-word karaoke timings, behind `--with-words` because a
+   * cue can carry hundreds and most callers never need them.
+   */
+  words?: WordSpan[]
 }
 
 export interface ReadCuesResult {
@@ -63,6 +76,7 @@ export function readCues(
   subPath: string,
   formatOverride?: string,
   style?: { autoLineBreak: boolean },
+  opts?: { withWords?: boolean },
 ): ReadCuesResult {
   const fmt = detectFormat(subPath, formatOverride)
   if (!fmt) throw new CliError('UNSUPPORTED_FORMAT', `字幕フォーマット不明: ${subPath}`, '.mojioko / .srt を指定してください。')
@@ -81,6 +95,19 @@ export function readCues(
         id: e.id,
         cueNumber: e.cueNumber,
         ...(style ? { style: summarizeSubtitleStyle(e, style.autoLineBreak) } : {}),
+        /*
+         * REQ-0554 §1-2 — read/write symmetry: `edit_cues` can WRITE
+         * `emphasisSpans`, so `read_subtitle` must be able to show them.
+         * Without this an agent cannot see which words are currently
+         * emphasised, and therefore cannot patch them without guessing.
+         *
+         * Carried with `--with-style` rather than behind its own flag because
+         * it is small and it is exactly what you need in order to write the
+         * style back. `words` is the opposite — potentially hundreds of
+         * entries per cue — so it has its own flag below.
+         */
+        ...(style ? { emphasisSpans: e.emphasisSpans ?? [] } : {}),
+        ...(opts?.withWords ? { words: e.words ?? [] } : {}),
       }))
     const result: ReadCuesResult = { format: 'mojioko', cues }
     if (style) {
@@ -103,11 +130,12 @@ export async function runReadSubtitleCommand(ctx: CliContext, args: ParsedArgs):
   if (!existsSync(input)) throw new CliError('INPUT_NOT_FOUND', `字幕が見つかりません: ${input}`, 'パスを確認してください。')
 
   const withStyle = args.opts['with-style'] === true
+  const withWords = args.opts['with-words'] === true
   // Settings are only needed for `autoLineBreak`, which is a project-level flag
   // rather than a cue field; skip the read entirely when style was not asked for.
   const styleOpts = withStyle ? { autoLineBreak: (await loadSettings()).autoLineBreak ?? true } : undefined
 
-  const { format, cues, styleVaries } = readCues(input, optString(args.opts, 'format'), styleOpts)
+  const { format, cues, styleVaries } = readCues(input, optString(args.opts, 'format'), styleOpts, { withWords })
 
   const warnings: CliWarning[] = []
   if (withStyle && format === 'srt') {

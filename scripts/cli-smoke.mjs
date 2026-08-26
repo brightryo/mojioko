@@ -1496,6 +1496,136 @@ try {
     log('NOTE: status.ready=false — skipping transcribe/burn loop. Blockers:')
     for (const b of st.json?.data?.blockers || []) log(`  - ${b.what}: ${b.command}`)
   }
+
+  /*
+   * ★ REQ-0554 §3-2 — the edit_cues ROUND TRIP: write, read it back, SEE it.
+   *
+   * Before this REQ, keyword emphasis could be switched on headlessly but the
+   * WORDS could not be chosen from anywhere except the GUI, so `--emphasis on`
+   * produced `EMPHASIS_NO_SPANS` and a picture identical to emphasis off. The
+   * gate therefore has to end in pixels: "the file now says so" would have been
+   * satisfied by the broken build too.
+   *
+   * The negative control is the pre-REQ state reproduced through an INPUT: the
+   * same cue, emphasis on, spans EMPTY. Same code, same command — only the
+   * patch differs.
+   */
+  {
+    const clip = join(work, 'ec.mp4')
+    makeSolidClip(clip, '640x360', 'navy', 3)
+    const srt = join(work, 'ec.srt')
+    writeFileSync(srt, ['1', '00:00:00,100 --> 00:00:02,500', 'AAAA BBBB', ''].join(CRLF), 'utf-8')
+    const proj = join(work, 'ec.mojioko')
+    const conv = cli(['convert', srt, '-o', proj, '--video', clip], 60000)
+    check('REQ-0554 fixture: convert produced a .mojioko', conv.code === 0, conv.stderr?.slice(-200))
+
+    if (conv.code === 0) {
+      const editsPath = join(work, 'ec-edits.json')
+      // Emphasise "BBBB" — offsets 5..9 of "AAAA BBBB".
+      const spans = [{ start: 5, end: 9, text: 'BBBB' }]
+      const stylePatch = {
+        fontSizePx: 80,
+        emphasis: { enabled: true, color: '#FF2E88', scalePercent: 200 },
+        karaoke: { enabled: false },
+      }
+      writeFileSync(editsPath, JSON.stringify([
+        { select: { index: 0 }, style: stylePatch, emphasisSpans: spans },
+      ]), 'utf-8')
+
+      const ed = cli(['edit_cues', proj, '-o', proj, '--edits-file', editsPath], 60000)
+      check('REQ-0554 edit_cues applied the patch', ed.code === 0 && ed.json?.data?.applied === 1,
+        `code=${ed.code} applied=${ed.json?.data?.applied} ${ed.stderr?.slice(-160)}`)
+
+      // --- read it back: the same values, in the same shape ---
+      const rd = cli(['read_subtitle', proj, '--with-style'], 60000)
+      const cue0 = rd.json?.data?.cues?.[0]
+      // ★ The spans must EXIST before anything is measured. An empty set would
+      // make every comparison below trivially true — the trap this gate is
+      // named after (EMPHASIS_NO_SPANS).
+      check('REQ-0554 §3-2 read_subtitle returns the spans that were written',
+        Array.isArray(cue0?.emphasisSpans) && cue0.emphasisSpans.length === 1
+        && cue0.emphasisSpans[0].start === 5 && cue0.emphasisSpans[0].end === 9
+        && cue0.emphasisSpans[0].text === 'BBBB',
+        JSON.stringify(cue0?.emphasisSpans))
+      check('REQ-0554 §3-2 read_subtitle returns the style that was written',
+        cue0?.style?.fontSizePx === 80
+        && cue0?.style?.emphasis?.enabled === true
+        && cue0?.style?.emphasis?.scalePercent === 200
+        && cue0?.style?.emphasis?.color === '#FF2E88',
+        JSON.stringify(cue0?.style?.emphasis))
+
+      // --- and now the picture ---
+      const frameOf = (project, tag) => {
+        const png = join(work, `ec-${tag}.png`)
+        const r = cli(['export_frame', clip, project, '-o', png, '--time', '1.0'], 90000)
+        return { code: r.code, stats: existsSync(png) ? inkStats(png) : null, png }
+      }
+      const withSpans = frameOf(proj, 'with')
+
+      // NEGATIVE CONTROL: identical patch, spans removed. This is exactly what
+      // a caller could express before edit_cues existed.
+      const ctlProj = join(work, 'ec-ctl.mojioko')
+      cli(['convert', srt, '-o', ctlProj, '--video', clip], 60000)
+      const ctlEdits = join(work, 'ec-ctl-edits.json')
+      writeFileSync(ctlEdits, JSON.stringify([
+        { select: { index: 0 }, style: stylePatch, emphasisSpans: [] },
+      ]), 'utf-8')
+      const ctlEd = cli(['edit_cues', ctlProj, '-o', ctlProj, '--edits-file', ctlEdits], 60000)
+      const noSpans = frameOf(ctlProj, 'ctl')
+
+      /*
+       * The control has to differ in ONE thing. If its style patch had failed to
+       * apply, the cue would still be at the default 60 px and every "bigger"
+       * comparison below would pass for the wrong reason — the classic way a
+       * negative control quietly stops controlling anything.
+       */
+      const ctlRead = cli(['read_subtitle', ctlProj, '--with-style'], 60000)
+      const ctlCue = ctlRead.json?.data?.cues?.[0]
+      check('REQ-0554 §3-3 NEGATIVE CONTROL differs in exactly one input (spans), not in style',
+        ctlEd.code === 0 && ctlCue?.style?.fontSizePx === 80
+        && ctlCue?.style?.emphasis?.enabled === true
+        && ctlCue?.style?.emphasis?.scalePercent === 200
+        && (ctlCue?.emphasisSpans?.length ?? 0) === 0,
+        `code=${ctlEd.code} size=${ctlCue?.style?.fontSizePx} emph=${JSON.stringify(ctlCue?.style?.emphasis)} spans=${ctlCue?.emphasisSpans?.length}`)
+
+      if (withSpans.stats && noSpans.stats) {
+        // The emphasised word is drawn at 200 %, so the cue's ink box is WIDER
+        // and there is more ink. Geometry, not colour, is the primary signal:
+        // it cannot be produced by anything else in this fixture.
+        check('★ REQ-0554 §3-2 the emphasised cue is visibly bigger than the same cue without spans',
+          withSpans.stats.w > noSpans.stats.w * 1.1 && withSpans.stats.ink > noSpans.stats.ink * 1.1,
+          `withSpans w=${withSpans.stats.w} ink=${withSpans.stats.ink} | noSpans w=${noSpans.stats.w} ink=${noSpans.stats.ink}`)
+
+        // …and the emphasis COLOUR is actually on screen.
+        const pink = countColor(withSpans.png, [0xFF, 0x2E, 0x88], 40)
+        const pinkCtl = countColor(noSpans.png, [0xFF, 0x2E, 0x88], 40)
+        check('★ REQ-0554 §3-2 the emphasis colour appears in the frame (and not in the control)',
+          pink > 100 && pinkCtl < pink / 10,
+          `pink=${pink} pinkControl=${pinkCtl}`)
+      } else {
+        check('REQ-0554 §3-2 both frames were exported', false,
+          `with=${withSpans.code} ctl=${noSpans.code}`)
+      }
+
+      // --- reject_all leaves the file untouched, byte for byte ---
+      const beforeHash = sha256(proj)
+      const badEdits = join(work, 'ec-bad.json')
+      writeFileSync(badEdits, JSON.stringify([
+        { select: { index: 0 }, style: { fontSizePx: 40 } },
+        { select: { index: 0 }, style: { nonsenseField: 1 } },
+      ]), 'utf-8')
+      const rejected = cli(['edit_cues', proj, '-o', proj, '--edits-file', badEdits], 60000)
+      check('★ REQ-0554 §2-3 reject_all: one bad edit writes NOTHING',
+        rejected.code !== 0 && sha256(proj) === beforeHash,
+        `code=${rejected.code} hashUnchanged=${sha256(proj) === beforeHash}`)
+
+      const applyValid = cli(['edit_cues', proj, '-o', proj, '--edits-file', badEdits, '--on-error', 'apply_valid'], 60000)
+      check('REQ-0554 §2-3 apply_valid applies the good edit and reports the bad one',
+        applyValid.code === 0 && applyValid.json?.data?.applied === 1 && applyValid.json?.data?.failed === 1,
+        `applied=${applyValid.json?.data?.applied} failed=${applyValid.json?.data?.failed}`)
+    }
+  }
+
 } finally {
   try { rmSync(work, { recursive: true, force: true }) } catch { /* best-effort */ }
 }

@@ -296,6 +296,7 @@ const COMMANDS: CommandDoc[] = [
       { flag: '--format', type: 'enum', values: ['mojioko', 'srt'], desc: '既定: 拡張子' },
       // REQ-0500 §1 — off by default: the 4-field shape is the existing contract.
       { flag: '--with-style', type: 'boolean', default: 'false', desc: 'cue ごとの解決済みスタイルと id/cueNumber も返す（.mojioko のみ）' },
+      { flag: '--with-words', type: 'boolean', default: 'false', desc: 'cue ごとの単語タイミングも返す（大きくなるため既定 off）' },
     ],
     examples: ['mojioko read_subtitle out.mojioko', 'mojioko read_subtitle out.mojioko --with-style'],
     errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE'],
@@ -312,6 +313,24 @@ const COMMANDS: CommandDoc[] = [
       OVERWRITE,
     ],
     examples: ['mojioko edit_subtitle out.mojioko -o out.mojioko --index 3 --text "正しいテキスト"'],
+    errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'OUTPUT_WRITE_FAILED'],
+  },
+  {
+    name: 'edit_cues',
+    summary: 'cue 単位でスタイル・時刻・強調範囲などをまとめて更新（.mojioko）',
+    usage: "mojioko edit_cues <in.mojioko> -o <out> --edits '[...]'",
+    positionals: [{ name: 'subtitle', required: true, desc: '.mojioko（SRT はスタイルを持たないため非対応）' }],
+    optionSpecs: [
+      OUT_REQ,
+      { flag: '--edits', type: 'string', required: false, desc: '編集の JSON 配列（--edits-file と排他）' },
+      { flag: '--edits-file', type: 'path', required: false, desc: '編集 JSON のファイル（大きい patch 向け）' },
+      { flag: '--on-error', type: 'string', required: false, desc: 'reject_all（既定・1件でも不正なら何も書かない）/ apply_valid' },
+      OVERWRITE,
+    ],
+    examples: [
+      `mojioko edit_cues p.mojioko -o p.mojioko --edits '[{"select":{"index":0},"style":{"fontSizePx":96}}]'`,
+      `mojioko edit_cues p.mojioko -o p.mojioko --edits '[{"select":{"id":"c-7"},"style":{"emphasis":{"enabled":true}},"emphasisSpans":[{"start":5,"end":7,"text":"重要"}]}]'`,
+    ],
     errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'OUTPUT_WRITE_FAILED'],
   },
   {

@@ -394,6 +394,61 @@ try {
   check(`no exception (${e.message})`, false)
 } finally {
   try { holder.kill() } catch { /* already gone */ }
+  /*
+   * REQ-0554 \u00a73-2 \u2014 `edit_cues` over MCP.
+   *
+   * The pixels are proved on the CLI side (`cli-smoke`), because both surfaces
+   * call the same command function. What has to be proved HERE is the part the
+   * CLI cannot: that the tool is reachable through the JSON-RPC schema, that a
+   * nested style patch survives the schema's `additionalProperties: false`, and
+   * that the round trip closes through `read_subtitle`.
+   */
+  {
+    const ecSrt = join(work, 'ec.srt')
+    writeFileSync(ecSrt, '1\n00:00:00,100 --> 00:00:02,500\nAAAA BBBB\n', 'utf-8')
+    const ecProj = join(work, 'ec.mojioko')
+    const cv = parseContent(await rpc('tools/call', { name: 'convert', arguments: { input: ecSrt, out: ecProj } }))
+    check('REQ-0554 MCP convert produced a .mojioko', cv?.ok === true && existsSync(ecProj), JSON.stringify(cv?.error))
+
+    const ec = parseContent(await rpc('tools/call', {
+      name: 'edit_cues',
+      arguments: {
+        input: ecProj,
+        out: ecProj,
+        overwrite: true,
+        edits: [{
+          select: { index: 0 },
+          style: {
+            fontSizePx: 80,
+            emphasis: { enabled: true, color: '#FF2E88', scalePercent: 200 },
+          },
+          emphasisSpans: [{ start: 5, end: 9, text: 'BBBB' }],
+        }],
+      },
+    }))
+    check('REQ-0554 MCP edit_cues applied a nested style patch + spans',
+      ec?.ok === true && ec?.data?.applied === 1, JSON.stringify(ec?.error ?? ec?.data))
+
+    const rb = parseContent(await rpc('tools/call', {
+      name: 'read_subtitle', arguments: { input: ecProj, with_style: true },
+    }))
+    const c0 = rb?.data?.cues?.[0]
+    check('\u2605 REQ-0554 MCP round trip: read_subtitle reads back what edit_cues wrote',
+      c0?.style?.fontSizePx === 80 && c0?.style?.emphasis?.enabled === true
+      && (c0?.emphasisSpans?.length ?? 0) === 1 && c0.emphasisSpans[0].text === 'BBBB',
+      JSON.stringify({ size: c0?.style?.fontSizePx, spans: c0?.emphasisSpans }))
+
+    // The schema rejects what the validator rejects \u2014 an unknown style field must
+    // not reach the file as a silently-ignored key.
+    const bad = parseContent(await rpc('tools/call', {
+      name: 'edit_cues',
+      arguments: { input: ecProj, out: ecProj, overwrite: true,
+        edits: [{ select: { index: 0 }, style: { fontSizePixels: 10 } }] },
+    }))
+    check('REQ-0554 MCP edit_cues rejects an unknown style field', bad?.ok === false,
+      JSON.stringify(bad?.data ?? bad?.error))
+  }
+
   child.stdin.end() // closes stdin → server exits (proves clean shutdown)
   await sleep(500)
   try { child.kill() } catch { /* already gone */ }

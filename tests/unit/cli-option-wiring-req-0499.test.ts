@@ -59,6 +59,8 @@ const COMMAND_SOURCES: Readonly<Record<string, readonly string[]>> = {
   probe: ['cli/commands/probe.ts'],
   read_subtitle: ['cli/commands/read-subtitle.ts'],
   edit_subtitle: ['cli/commands/edit-subtitle.ts', OVERWRITE],
+  // REQ-0554 — bulk per-cue patch.
+  edit_cues: ['cli/commands/edit-cues.ts', OVERWRITE],
   convert: ['cli/commands/convert.ts', OVERWRITE],
   // `preset save` layers the ordinary style flags on top of the captured cue,
   // so it reads them through the shared style-override parser.

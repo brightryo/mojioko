@@ -18,6 +18,11 @@
 
 /** Long options that consume the following token as their value. */
 const VALUE_OPTS: ReadonlySet<string> = new Set([
+  // REQ-0554 — edit_cues. Without these the flag parses as a bare boolean and
+  // `optString` yields '' , which surfaced as "Unexpected end of JSON input".
+  'edits',
+  'edits-file',
+  'on-error',
   'out',
   'model',
   'device',

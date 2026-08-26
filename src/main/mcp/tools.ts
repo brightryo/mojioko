@@ -22,6 +22,7 @@ import { runRunCommand } from '../cli/commands/run'
 import { runExportFrameCommand } from '../cli/commands/export-frame'
 import { runProbeCommand } from '../cli/commands/probe'
 import { runReadSubtitleCommand } from '../cli/commands/read-subtitle'
+import { runEditCuesCommand } from '../cli/commands/edit-cues'
 import { runEditSubtitleCommand } from '../cli/commands/edit-subtitle'
 import { runConvertCommand } from '../cli/commands/convert'
 import { runToolsCommand } from '../cli/commands/tools'
@@ -349,11 +350,12 @@ export const TOOLS: ToolSpec[] = [
         input: { type: 'string', description: '.mojioko または .srt の絶対パス' },
         format: FORMAT_PROP,
         with_style: { type: 'boolean', description: 'cue ごとの解決済みスタイルと id/cueNumber も返す（.mojioko のみ）。styleVaries=true なら cue ごとに異なる＝一括上書きは既存の作り込みを潰す（REQ-0500）' },
+        with_words: { type: 'boolean', description: 'cue ごとの単語タイミング（カラオケ）も返す。大きくなるため既定 off（REQ-0554）' },
       },
       additionalProperties: false,
     },
     async: false,
-    build: (i) => ({ fn: runReadSubtitleCommand, args: toArgs([str(i.input)], { 'with-style': boolTrue(i.with_style), format: str(i.format) }) }),
+    build: (i) => ({ fn: runReadSubtitleCommand, args: toArgs([str(i.input)], { 'with-style': boolTrue(i.with_style), 'with-words': boolTrue(i.with_words), format: str(i.format) }) }),
   },
   {
     name: 'edit_subtitle',
@@ -372,6 +374,150 @@ export const TOOLS: ToolSpec[] = [
     },
     async: false,
     build: (i) => ({ fn: runEditSubtitleCommand, args: toArgs([str(i.input)], { out: str(i.out), index: numStr(i.index), text: typeof i.text === 'string' ? i.text : undefined, overwrite: boolTrue(i.overwrite) }) }),
+  },
+  {
+    name: 'edit_cues',
+    description: 'cue 単位でスタイル・時刻・強調範囲などをまとめて更新（.mojioko）。read_subtitle --with_style と同じ形の patch を渡す＝読めた形でそのまま書ける。キーワード強調の対象語（emphasisSpans）はこのツールでのみ指定できる（REQ-0554）。',
+    inputSchema: {
+      type: 'object',
+      // `edits` OR `edits_file` — the pair is checked by the command, which
+      // rejects "both" rather than silently preferring one (REQ-0554).
+      required: ['input'],
+      properties: {
+        input: { type: 'string', description: '.mojioko の絶対パス（SRT はスタイルを持たないため非対応）' },
+        out: { type: 'string', description: '出力パス（既定＝input に上書き）' },
+        overwrite: { type: 'boolean', description: '既存出力を上書き（input と同一パスは常に可）' },
+        on_error: {
+          type: 'string',
+          enum: ['reject_all', 'apply_valid'],
+          description: '既定 reject_all＝1件でも不正なら何も書かない。apply_valid は有効分のみ適用し failed/problems を返す',
+        },
+        edits_file: {
+          type: 'string',
+          description: '編集 JSON を書いたファイルのパス（edits と排他。両方指定は USAGE エラー）',
+        },
+        edits: {
+          type: 'array',
+          minItems: 1,
+          description: '編集の配列。1 要素が「対象 cue の指定＋変更したいフィールド」',
+          items: {
+            type: 'object',
+            required: ['select'],
+            properties: {
+              select: {
+                type: 'object',
+                description: '対象 cue。id が最も安全（index は削除で動く）',
+                properties: {
+                  id: { type: 'string', description: 'cue の id（read_subtitle --with_style で得られる）' },
+                  index: { type: 'integer', description: '非削除 cue の 0 始まり番号' },
+                  ids: { type: 'array', items: { type: 'string' }, description: '複数 cue にまとめて適用' },
+                },
+                additionalProperties: false,
+              },
+              text: { type: 'string' },
+              startSec: { type: 'number' },
+              endSec: { type: 'number' },
+              isDeleted: { type: 'boolean', description: '出力対象から外す（行は残る）' },
+              emphasisSpans: {
+                type: 'array',
+                description: '強調する文字範囲。start/end は text の code unit オフセット、text はアンカー文字列',
+                items: {
+                  type: 'object',
+                  required: ['start', 'end', 'text'],
+                  properties: {
+                    start: { type: 'integer' },
+                    end: { type: 'integer' },
+                    text: { type: 'string' },
+                  },
+                  additionalProperties: false,
+                },
+              },
+              style: {
+                type: 'object',
+                description: 'read_subtitle --with_style の style と同じ形（全フィールド任意）。入れ子は与えたキーだけ更新',
+                properties: {
+                  fontId: { type: 'string' },
+                  fontSizePx: { type: 'number' },
+                  textColorHex: { type: 'string' },
+                  textAlphaPercent: { type: 'number' },
+                  outlineColorHex: { type: 'string' },
+                  outlineThicknessPx: { type: 'number' },
+                  outlineAlphaPercent: { type: 'number' },
+                  rotationDeg: { type: 'number' },
+                  casing: { type: 'string', enum: ['none', 'uppercase'] },
+                  lineSpacingPercent: { type: 'number' },
+                  layer: { type: 'number', description: '重なり順（大きいほど前面）' },
+                  shadow: {
+                    type: 'object',
+                    properties: { depthPx: { type: 'number' }, color: { type: 'string' }, alphaPercent: { type: 'number' } },
+                    additionalProperties: false,
+                  },
+                  position: {
+                    type: 'object',
+                    description: 'posX/posY はピン留め。片方だけの指定は USAGE エラー、両方 null で解除',
+                    properties: {
+                      horizontal: { type: 'string', enum: ['left', 'center', 'right'] },
+                      vertical: { type: 'string', enum: ['top', 'center', 'bottom'] },
+                      verticalMarginPx: { type: 'number' },
+                      posX: { type: ['number', 'null'] },
+                      posY: { type: ['number', 'null'] },
+                    },
+                    additionalProperties: false,
+                  },
+                  karaoke: {
+                    type: 'object',
+                    properties: { enabled: { type: 'boolean' }, style: { type: 'string', enum: ['sweep', 'switch'] }, highlightColor: { type: 'string' } },
+                    additionalProperties: false,
+                  },
+                  emphasis: {
+                    type: 'object',
+                    properties: { enabled: { type: 'boolean' }, color: { type: 'string' }, scalePercent: { type: 'number' } },
+                    additionalProperties: false,
+                  },
+                  animation: {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['none', 'fade', 'pop', 'scale', 'blur'] },
+                      inEnabled: { type: 'boolean' },
+                      outEnabled: { type: 'boolean' },
+                      durationSec: { type: 'number' },
+                      startScalePercent: { type: 'number' },
+                      blurPx: { type: 'number' },
+                    },
+                    additionalProperties: false,
+                  },
+                  background: {
+                    type: 'object',
+                    properties: { enabled: { type: 'boolean' }, color: { type: 'string', enum: ['black', 'white'] }, opacityPercent: { type: 'number' } },
+                    additionalProperties: false,
+                  },
+                },
+                additionalProperties: false,
+              },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+      additionalProperties: false,
+    },
+    async: false,
+    /*
+     * The edits ride as one JSON string. The tool runs the CLI command function
+     * IN-PROCESS (see `build` above for the pattern), so there is no
+     * command-line length limit to worry about here — a human with a large
+     * patch uses `--edits-file` instead.
+     */
+    build: (i) => ({
+      fn: runEditCuesCommand,
+      args: toArgs([str(i.input)], {
+        out: str(i.out),
+        edits: Array.isArray(i.edits) ? JSON.stringify(i.edits) : undefined,
+        'edits-file': str(i.edits_file),
+        'on-error': str(i.on_error),
+        overwrite: boolTrue(i.overwrite),
+      }),
+    }),
   },
   {
     name: 'convert',
