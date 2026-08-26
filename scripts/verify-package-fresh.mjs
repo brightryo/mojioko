@@ -74,8 +74,14 @@ function bundlesUnder(dir, prefix = '') {
     const full = join(dir, name)
     const rel = prefix ? `${prefix}/${name}` : name
     if (statSync(full).isDirectory()) {
-      // `out/renderer/{fonts,bin,icons}` are copied assets, not build output;
-      // they are large and unchanged by a code edit, so skip them.
+      // Copied assets, not build output: large, and unchanged by a code edit.
+      //
+      // REQ-0547 — since that REQ only `fonts` is actually published (`bin` and
+      // `icons` were 441 MB that no renderer code ever fetched). The other two
+      // are kept in this skip list deliberately: if a future change starts
+      // copying them again, this gate should still ignore them rather than
+      // start hashing 440 MB of ffmpeg. The gate that CATCHES the re-copy is
+      // `tests/unit/renderer-assets-req-0547.test.ts`.
       if (/^renderer\/(fonts|bin|icons)$/.test(rel)) continue
       found.push(...bundlesUnder(full, rel))
     } else if (/\.(js|css|html)$/i.test(name)) {
