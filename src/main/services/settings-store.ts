@@ -14,6 +14,7 @@ import {
 } from '../ipc/settings-shape'
 import { detectOsLanguage } from '../lib/os-language'
 import log from '../lib/logger'
+import { writeFileAtomic } from '../lib/atomic-write'
 
 // REQ-20260615-065 S-4 — re-export so existing callers that imported
 // the migration from settings-store keep working without a path
@@ -194,7 +195,9 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
   await fs.mkdir(dirname(settingsPath), { recursive: true })
   await fs.mkdir(getModelsDir(), { recursive: true })
   await fs.mkdir(getAppDataPath(), { recursive: true })
-  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8')
+  // REQ-0545 §1 — atomic, for the same reason the project file is: a partial
+  // write here loses every preference the user has set.
+  await writeFileAtomic(settingsPath, JSON.stringify(settings, null, 2))
 }
 
 /** `YYYYMMDD-HHMMSS` in local time — the name is for a human reading a folder. */

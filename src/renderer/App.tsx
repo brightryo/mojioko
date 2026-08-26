@@ -34,6 +34,8 @@ import { useTranslationLoadStore } from '@/stores/translation-load-store'
 import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts'
 import { toast } from 'sonner'
 import { saveCurrentProject } from '@/services/project-file'
+import i18n from './i18n'
+import { createSettingsSaveReporter } from '@/lib/settings-save-failure'
 import type { AppSettings } from '../shared/types'
 import type { SettingsQuarantineNotice } from '../main/ipc/settings-shape'
 
@@ -71,6 +73,18 @@ function useSuppressTabFocus(): void {
     return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [])
 }
+
+/**
+ * REQ-0545 §2 — one reporter for the whole app.
+ *
+ * The suppression rule lives in `lib/settings-save-failure.ts` where a test can
+ * reach it; this only supplies how to notify.  `i18n.t` rather than a captured
+ * `t`, because the debounced save is registered once with `[]` deps and a
+ * captured `t` would be the one from first render.
+ */
+const settingsSaveReporter = createSettingsSaveReporter((reason) => {
+  toast.error(i18n.t('common:error.settingsSaveFailed', { reason }))
+})
 
 function AppInner() {
   useSuppressTabFocus()
@@ -287,7 +301,28 @@ function AppInner() {
           // the whole remembered table rather than keep main's copy.
           animationMemory: s.animationMemory
         }
-        saveSettings(settings).catch(() => { /* ignore IPC failures */ })
+        /*
+         * ★ REQ-0545 §2 (RES-0543 A1) — a failed settings save is no longer
+         * silent.
+         *
+         * This used to be `.catch(() => {})`.  When the write failed — a full
+         * disk, a permission problem, a file another program is holding — the
+         * user's change simply did not persist, and nothing anywhere said so;
+         * they found out on the next launch, if at all.
+         *
+         * Both failure shapes are handled: a rejected promise (IPC unreachable)
+         * and an `ok: false` reply (main caught it and reported).  The reason
+         * string is shown, because "settings could not be saved" without a
+         * cause leaves the user with nothing to act on.
+         */
+        void saveSettings(settings)
+          .then((res) => {
+            if (res.ok) { settingsSaveReporter.succeeded(); return }
+            settingsSaveReporter.failed(res.error?.message ?? res.error?.code ?? '')
+          })
+          .catch((err: unknown) => {
+            settingsSaveReporter.failed(err instanceof Error ? err.message : String(err))
+          })
       }, SETTINGS_DEBOUNCE_MS)
     }
     const unsub = useSettingsStore.subscribe(save)

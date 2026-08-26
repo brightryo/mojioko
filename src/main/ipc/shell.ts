@@ -6,6 +6,7 @@ import { Channels } from '../../shared/ipc-channels'
 import { ALLOWED_EXTERNAL_URLS } from '../../shared/app-info'
 import { getModelsDir, getResourcesPath, getTranslationToolsDir } from '../lib/paths'
 import log from '../lib/logger'
+import { writeFileAtomic } from '../lib/atomic-write'
 
 /** Resolved home directory — computed once at module load time. */
 const HOME_DIR = homedir()
@@ -82,7 +83,9 @@ export function registerShellHandlers(): void {
       log.warn(`[shell] shellWriteTextFile blocked: ${err}`)
       throw new Error(err)
     }
-    await fsp.writeFile(filePath, content, 'utf-8')
+    // REQ-0545 §1 — atomic: temp sibling -> fsync -> rename.  A crash or a full
+    // disk part-way through can no longer truncate an existing project file.
+    await writeFileAtomic(filePath, content)
   })
 
   /**

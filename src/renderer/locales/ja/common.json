@@ -51,7 +51,8 @@
     "close": "閉じる"
   },
   "error": {
-    "unknown": "不明なエラーが発生しました"
+    "unknown": "不明なエラーが発生しました",
+    "settingsSaveFailed": "設定を保存できませんでした（{{reason}}）。ディスクの空き容量や、他のプログラムがファイルを開いていないかご確認ください。"
   },
   "shortcuts": {
     "scopeGlobal": "グローバル",

@@ -40,6 +40,22 @@ vi.mock('fs', () => ({
     mkdir: async () => undefined,
     rename: async () => undefined,
     unlink: async () => undefined,
+    /*
+     * REQ-0545 — `saveSettings` now writes through `writeFileAtomic`
+     * (temp -> fsync -> rename) instead of a bare `writeFile`, so the mock
+     * needs the handle API too.
+     *
+     * This mock is deliberately PATH-AGNOSTIC — it models one settings file as
+     * `disk.content` — so the temp write lands in the same slot and the
+     * no-op `rename` is already correct. What this file asserts (call ordering
+     * and that no update is lost) is unchanged by the write mechanism.
+     */
+    readdir: async () => [],
+    open: async () => ({
+      writeFile: async (data: string) => { disk.content = data },
+      sync: async () => undefined,
+      close: async () => undefined,
+    }),
   },
 }))
 
