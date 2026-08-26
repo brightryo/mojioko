@@ -114,5 +114,12 @@
     "editionNsis": "GitHub (Free)",
     "available": "Available",
     "notAvailable": "Not available"
+  },
+  "quarantine": {
+    "title": "Your settings file was set aside",
+    "bodyForeign": "settings.json was not in this app's format. It has been moved aside rather than overwritten, and MOJIOKO started from its defaults.",
+    "bodyUnreadable": "settings.json could not be read. It has been moved aside rather than overwritten, and MOJIOKO started from its defaults.",
+    "savedTo": "Moved to",
+    "hint": "If this is unexpected, an older version of MOJIOKO may be using the same settings folder. It rewrites the file each time it runs, so this message can appear on every launch. The file that was set aside has not been deleted."
   }
 }

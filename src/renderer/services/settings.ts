@@ -1,6 +1,6 @@
-import type { AppSettings, IpcResult } from '../../shared/types'
+import type { AppSettings, IpcResult, SettingsLoadResult } from '../../shared/types'
 
-export async function loadSettings(): Promise<IpcResult<AppSettings>> {
+export async function loadSettings(): Promise<IpcResult<SettingsLoadResult>> {
   return window.electronAPI.settingsLoad()
 }
 

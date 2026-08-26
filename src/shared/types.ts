@@ -950,4 +950,17 @@ export interface ModelsState {
 
 export type IpcOk<T> = { ok: true; data: T }
 export type IpcErr = { ok: false; error: { code: string; message: string } }
+/**
+ * REQ-0542 — what `settings:load` returns.
+ *
+ * `quarantine` describes THIS LAUNCH (a settings.json we could not use was
+ * moved aside), not a saved preference, which is why it rides alongside the
+ * settings rather than inside them — a field in `AppSettings` would need a
+ * merge rule and would be written back to disk forever.
+ */
+export interface SettingsLoadResult {
+  settings: AppSettings
+  quarantine: import('../main/ipc/settings-shape').SettingsQuarantineNotice | null
+}
+
 export type IpcResult<T> = IpcOk<T> | IpcErr

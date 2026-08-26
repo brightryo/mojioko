@@ -1,15 +1,18 @@
 import { ipcMain } from 'electron'
 import { Channels } from '../../shared/ipc-channels'
-import { loadSettings, mutateSettings } from '../services/settings-store'
+import { loadSettings, mutateSettings, takeSettingsQuarantineNotice } from '../services/settings-store'
 import { mergeSettingsForSave } from './settings-merge'
-import type { AppSettings } from '../../shared/types'
+import type { AppSettings, SettingsLoadResult } from '../../shared/types'
 import log from '../lib/logger'
 
 export function registerSettingsHandlers(): void {
-  ipcMain.handle(Channels.settingsLoad, async (): Promise<{ ok: true; data: AppSettings } | { ok: false; error: { code: string; message: string } }> => {
+  ipcMain.handle(Channels.settingsLoad, async (): Promise<{ ok: true; data: SettingsLoadResult } | { ok: false; error: { code: string; message: string } }> => {
     try {
-      const data = await loadSettings()
-      return { ok: true, data }
+      const settings = await loadSettings()
+      // REQ-0542 — taking it here (rather than on a channel of its own) is what
+      // makes "shown once" mean once: the renderer asks for settings exactly
+      // once at startup, and the notice is cleared as it leaves main.
+      return { ok: true, data: { settings, quarantine: takeSettingsQuarantineNotice() } }
     } catch (err: unknown) {
       const e = err as Error
       log.error('[ipc/settings] load error', err)

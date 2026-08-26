@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
+import type { VideoInfo, AppSettings, SettingsLoadResult, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
 import type { GpuToolState } from '../shared/gpu-tool'
 import type { TranslationToolId, TranslationToolsState } from '../shared/translation-tools'
@@ -92,7 +92,7 @@ declare global {
       burninStart: (opts: BurninStartRequest) => Promise<IpcResult<{ channelId: string }>>
       burninCancel: (channelId: string) => Promise<void>
 
-      settingsLoad: () => Promise<IpcResult<AppSettings>>
+      settingsLoad: () => Promise<IpcResult<SettingsLoadResult>>
       settingsSave: (settings: AppSettings) => Promise<IpcResult<null>>
 
       shellOpenPath: (path: string) => Promise<void>

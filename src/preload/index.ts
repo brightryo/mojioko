@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { Channels } from '../shared/ipc-channels'
-import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
+import type { VideoInfo, AppSettings, SettingsLoadResult, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
 import type { GpuToolState } from '../shared/gpu-tool'
 import type { TranslationToolId, TranslationToolsState } from '../shared/translation-tools'
@@ -157,7 +157,7 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.burninCancel, channelId),
 
   // Settings
-  settingsLoad: (): Promise<IpcResult<AppSettings>> =>
+  settingsLoad: (): Promise<IpcResult<SettingsLoadResult>> =>
     ipcRenderer.invoke(Channels.settingsLoad),
   settingsSave: (settings: AppSettings): Promise<IpcResult<null>> =>
     ipcRenderer.invoke(Channels.settingsSave, settings),

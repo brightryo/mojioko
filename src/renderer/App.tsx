@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { SETTINGS_DEBOUNCE_MS } from '../shared/constants'
 import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -16,6 +16,7 @@ import { FontLicensesDialog } from '@/components/font-licenses/font-licenses-dia
 import { EulaDialog } from '@/components/eula-dialog/eula-dialog'
 import { StoreUpsellDialog } from '@/components/store-upsell-dialog/store-upsell-dialog'
 import { ProjectOpenController } from '@/components/project-open/project-open-controller'
+import { SettingsQuarantineDialog } from '@/components/settings-quarantine-dialog/settings-quarantine-dialog'
 // REQ-0414 — developer live-token editor.  Guarded by import.meta.env.DEV at
 // the mount site below so it is tree-shaken out of `electron-vite build`
 // (end-user) bundles and never exposed to users.
@@ -34,6 +35,7 @@ import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts'
 import { toast } from 'sonner'
 import { saveCurrentProject } from '@/services/project-file'
 import type { AppSettings } from '../shared/types'
+import type { SettingsQuarantineNotice } from '../main/ipc/settings-shape'
 
 const PAGE_VARIANTS = {
   initial: { opacity: 0, x: 8 },
@@ -114,15 +116,24 @@ function AppInner() {
   // was only shown in the pre-0185 breadcrumb (retired).  Static
   // APP_VERSION import at the top covers the About dialog.
 
+  // REQ-0542 — set once, by the settings load below, when main had to move an
+  // unusable settings.json aside.  Local state rather than a store: it is one
+  // dialog with a lifetime of one launch, and nothing else reads it.
+  const [quarantineNotice, setQuarantineNotice] = useState<SettingsQuarantineNotice | null>(null)
+
   // Load settings from main process on mount; hydrate stores
   useEffect(() => {
     loadSettings().then((result) => {
       if (!result.ok) return
-      const s = result.data
+      const s = result.data.settings
       useSettingsStore.getState().hydrate(s)
       if (s.language !== i18n.language) {
         void i18n.changeLanguage(s.language)
       }
+      // REQ-0542 — main moved an unusable settings.json aside.  Shown after the
+      // language is applied so the dialog is in the user's language, not the
+      // default one.
+      if (result.data.quarantine) setQuarantineNotice(result.data.quarantine)
     }).catch(() => { /* IPC unavailable in dev outside Electron */ })
 
     // REQ-0245 — hydrate the download-active mirror + subscribe to
@@ -347,6 +358,10 @@ function AppInner() {
         </motion.div>
       </AnimatePresence>
 
+      <SettingsQuarantineDialog
+        notice={quarantineNotice}
+        onDismiss={() => setQuarantineNotice(null)}
+      />
       <AboutDialog />
       <SettingsDialog />
       <DonationDialog />
