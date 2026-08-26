@@ -911,6 +911,15 @@ export interface AppSettings {
   animationMemory?: import('./animation-memory').AnimationMemory
 
   /**
+   * REQ-0551 — AI integration consent.
+   *
+   * Renderer-owned (`incoming-wins`), so it MUST be sent on every save.
+   * Absent in every settings.json written before this REQ, which is exactly
+   * the "already set up, never told" case the retroactive notice handles.
+   */
+  aiIntegration?: import('./ai-consent').AiIntegrationConsent
+
+  /**
    * REQ-0458 §3 — metadata about the most recently exported `.mcpb` MCP bundle
    * (app version + launch-spec revision + when).  The AI連携 tab compares its
    * `launchSpecRevision` against the current one to tell the user whether a

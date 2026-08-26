@@ -2,6 +2,9 @@ import { useState, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Sparkles, Copy, Download, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { AiConsentDialog } from '@/components/ai-consent-dialog/ai-consent-dialog'
+import { useSettingsStore } from '@/stores/settings-store'
+import { needsAiConsentGate, needsAiRetroactiveNotice } from '../../../shared/ai-consent'
 import { toast } from '@/lib/toast'
 import { saveFileDialog, shellShowInFolder } from '@/services/dialog'
 import type { McpLaunchSpec } from '../../../shared/mcp'
@@ -36,9 +39,41 @@ export function AiIntegrationTab() {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [spec, setSpec] = useState<McpLaunchSpec | null>(null)
 
+  /*
+   * ★ REQ-0551 — the consent gate.
+   *
+   * Every action on this tab that hands connection details to an assistant goes
+   * through `runGated`, so "which buttons are gated" has ONE answer. The tab
+   * has no enable switch: exporting the bundle and copying a config ARE the
+   * enabling acts, and gating only the export would leave the two copy buttons
+   * as an unguarded way to reach exactly the same place.
+   */
+  const consent = useSettingsStore((st) => st.aiIntegration)
+  const acceptAiConsent = useSettingsStore((st) => st.acceptAiConsent)
+  const markAiNoticeSeen = useSettingsStore((st) => st.markAiNoticeSeen)
+  const [dialog, setDialog] = useState<null | { mode: 'gate' | 'notice'; run?: () => void }>(null)
+
   useEffect(() => {
     void window.electronAPI.getMcpLaunchSpec().then(setSpec).catch(() => setSpec(null))
   }, [])
+
+  // REQ-0551 §1-4 — someone who set this up before the gate existed is told
+  // once, when they next open this tab. Their setup is NOT revoked; the notice
+  // says so. `lastExport` is the evidence that they are already configured.
+  useEffect(() => {
+    if (!spec) return
+    if (!needsAiRetroactiveNotice(consent, Boolean(spec.lastExport))) return
+    setDialog({ mode: 'notice' })
+  }, [spec, consent])
+
+  /** Run `action`, asking first if the user has never agreed. */
+  const runGated = (action: () => void): void => {
+    if (needsAiConsentGate(consent)) {
+      setDialog({ mode: 'gate', run: action })
+      return
+    }
+    action()
+  }
 
   const isDev = spec != null && !spec.isPackaged
 
@@ -105,7 +140,7 @@ export function AiIntegrationTab() {
             1,
             t('ai.step1'),
             <div className="space-y-2">
-              <Button variant="secondary" size="sm" onClick={handleExport} className="gap-1.5">
+              <Button variant="secondary" size="sm" onClick={() => runGated(() => { void handleExport() })} className="gap-1.5">
                 <Download className="h-3.5 w-3.5" />
                 {t('ai.exportButton')}
               </Button>
@@ -163,14 +198,14 @@ export function AiIntegrationTab() {
           <div className="px-3 pb-3 space-y-3">
             <div className="space-y-1.5">
               <p className="text-caption text-fg-muted leading-relaxed">{t('ai.configDesc')}</p>
-              <Button variant="ghost" size="sm" disabled={!spec} onClick={() => spec && copy(desktopConfig(spec))} className="gap-1.5">
+              <Button variant="ghost" size="sm" disabled={!spec} onClick={() => runGated(() => { if (spec) void copy(desktopConfig(spec)) })} className="gap-1.5">
                 <Copy className="h-3.5 w-3.5" />
                 {t('ai.copyConfigButton')}
               </Button>
             </div>
             <div className="space-y-1.5">
               <p className="text-caption text-fg-muted leading-relaxed">{t('ai.codeDesc')}</p>
-              <Button variant="ghost" size="sm" disabled={!spec} onClick={() => spec && copy(claudeCodeCommand(spec))} className="gap-1.5">
+              <Button variant="ghost" size="sm" disabled={!spec} onClick={() => runGated(() => { if (spec) void copy(claudeCodeCommand(spec)) })} className="gap-1.5">
                 <Copy className="h-3.5 w-3.5" />
                 {t('ai.copyCodeButton')}
               </Button>
@@ -181,6 +216,27 @@ export function AiIntegrationTab() {
 
       <p className="text-caption text-fg-muted leading-relaxed">{t('ai.clientsNote')}</p>
       <p className="text-caption text-fg-muted">{t('ai.cliRef')}</p>
+      {/* REQ-0551 — the same text in both modes; see the component. */}
+      <AiConsentDialog
+        open={dialog !== null}
+        mode={dialog?.mode ?? 'gate'}
+        onAccept={() => {
+          const pending = dialog
+          setDialog(null)
+          acceptAiConsent()
+          // The action the user was trying to take, resumed. A gate that made
+          // them click twice would be a gate people learn to dismiss.
+          pending?.run?.()
+        }}
+        onDismiss={() => {
+          const wasNotice = dialog?.mode === 'notice'
+          setDialog(null)
+          // Dismissing the retroactive notice is not agreement, but it IS
+          // "we told them" — recording it stops the nag without pretending
+          // they consented (the gate still applies to future actions).
+          if (wasNotice) markAiNoticeSeen()
+        }}
+      />
     </div>
   )
 }

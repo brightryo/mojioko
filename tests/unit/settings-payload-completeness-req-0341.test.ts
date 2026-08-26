@@ -68,6 +68,14 @@ describe('REQ-0341 §3-2 — the settings save payload matches the merge rules',
     expect(keys).toContain('stylePresets')
   })
 
+  it('★ aiIntegration specifically — REQ-0551, same pairing', () => {
+    // Dropping it would not "keep the previous consent": `merged` starts from
+    // `{ ...incoming }`, so the record would vanish and a user who already
+    // agreed would be asked again on their next action.
+    expect(rules.aiIntegration).toBe('incoming-wins')
+    expect(keys).toContain('aiIntegration')
+  })
+
   it('★ animationMemory specifically — REQ-0540, same pairing', () => {
     // Omitting it would not "keep the previous table": `merged` starts from
     // `{ ...incoming }`, so every remembered value would be wiped on the next

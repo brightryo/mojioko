@@ -12,6 +12,7 @@ import {
   rememberAnimationParams, sanitizeAnimationMemory, type AnimationMemory,
 } from '../../shared/animation-memory'
 import type { AnimationUiValue } from '../../shared/cue-animation'
+import { sanitizeAiConsent, type AiIntegrationConsent } from '../../shared/ai-consent'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 
 interface SettingsStore {
@@ -105,6 +106,11 @@ interface SettingsStore {
    * which is what makes an upgraded install behave exactly as it did.
    */
   animationMemory: AnimationMemory
+  /**
+   * REQ-0551 — AI integration consent (accepted / notice-shown timestamps).
+   * Empty object until the user meets the gate; see `shared/ai-consent.ts`.
+   */
+  aiIntegration: AiIntegrationConsent
 
   setLanguage: (lang: string) => void
   setTheme: (t: AppTheme) => void
@@ -166,8 +172,13 @@ interface SettingsStore {
    */
   rememberAnimation: (value: AnimationUiValue) => void
 
+  /** REQ-0551 — the user pressed "I understand, enable it". */
+  acceptAiConsent: () => void
+  /** REQ-0551 — the one-time retroactive notice was shown. */
+  markAiNoticeSeen: () => void
+
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'translationAutoEnabled' | 'translationTargetLang' | 'playbackTimeDetailed' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'defaultImageDir' | 'defaultTextDir' | 'defaultSrtDir' | 'stylePresets' | 'animationMemory'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'translationAutoEnabled' | 'translationTargetLang' | 'playbackTimeDetailed' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'defaultImageDir' | 'defaultTextDir' | 'defaultSrtDir' | 'stylePresets' | 'animationMemory' | 'aiIntegration'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -211,6 +222,8 @@ export const useSettingsStore = create<SettingsStore>()(
       stylePresets: [],
       // REQ-0540 — nothing remembered yet: every type seeds from the fixed table.
       animationMemory: {},
+      // REQ-0551 — nothing agreed and nothing shown yet.
+      aiIntegration: {},
 
       setLanguage: (lang) => set({ language: lang }),
       setTheme: (t) => set({ theme: t }),
@@ -266,6 +279,11 @@ export const useSettingsStore = create<SettingsStore>()(
 
       rememberAnimation: (value) =>
         set((s) => ({ animationMemory: rememberAnimationParams(s.animationMemory, value) })),
+
+      acceptAiConsent: () =>
+        set((s) => ({ aiIntegration: { ...s.aiIntegration, consentAcceptedAtMs: Date.now() } })),
+      markAiNoticeSeen: () =>
+        set((s) => ({ aiIntegration: { ...s.aiIntegration, noticeSeenAtMs: Date.now() } })),
 
       resetStep3Settings: () =>
         set({
@@ -422,7 +440,10 @@ export const useSettingsStore = create<SettingsStore>()(
           // REQ-0540 — absent in every settings.json written before this REQ,
           // and `sanitizeAnimationMemory` turns that into `{}` = "nothing
           // remembered" = the pre-REQ behaviour, with no migration.
-          animationMemory: sanitizeAnimationMemory(s.animationMemory)
+          animationMemory: sanitizeAnimationMemory(s.animationMemory),
+          // REQ-0551 — absent in every pre-REQ settings.json, which is the
+          // "already set up, never told" case the retroactive notice covers.
+          aiIntegration: sanitizeAiConsent(s.aiIntegration)
         })
       }
     }),
@@ -462,7 +483,8 @@ export const useSettingsStore = create<SettingsStore>()(
         stylePresets: state.stylePresets,
         // REQ-0540 — same dual persistence as stylePresets: localStorage here,
         // settings.json via App.tsx's debounced save.
-        animationMemory: state.animationMemory
+        animationMemory: state.animationMemory,
+        aiIntegration: state.aiIntegration
       })
     }
   )

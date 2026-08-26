@@ -115,6 +115,10 @@ export const SETTINGS_MERGE_RULES: { readonly [K in keyof AppSettings]-?: MergeR
   // are the only writer, so the payload is authoritative and must be sent on
   // every save (an omitted key would drop the whole table, not keep it).
   animationMemory: 'incoming-wins',
+  // REQ-0551: AI-integration consent. Renderer-owned; the same send-every-save
+  // obligation as the two above (an omitted key would drop the consent record
+  // and re-prompt a user who already agreed).
+  aiIntegration: 'incoming-wins',
 
   // --- main-owned, renderer sends a null sentinel each save ----------------
   activeModelId: 'incoming-else-existing',

@@ -85,6 +85,8 @@ function makeRendererPayload(): AppSettings {
     stylePresets: [],
     // REQ-0540 — the per-type animation memory joined the payload.
     animationMemory: {},
+    // REQ-0551 — the AI-integration consent record joined the payload.
+    aiIntegration: {},
   }
 }
 

@@ -316,7 +316,10 @@ function AppInner() {
           // REQ-0540 — renderer-owned (`incoming-wins`), so the same
           // send-every-save obligation as stylePresets: omitting it would drop
           // the whole remembered table rather than keep main's copy.
-          animationMemory: s.animationMemory
+          animationMemory: s.animationMemory,
+          // REQ-0551 — renderer-owned (`incoming-wins`): omitting it would drop
+          // the consent record and re-prompt someone who already agreed.
+          aiIntegration: s.aiIntegration
         }
         /*
          * ★ REQ-0545 §2 (RES-0543 A1) — a failed settings save is no longer

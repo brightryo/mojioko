@@ -35,7 +35,19 @@
     "lastExport": "Last export: v{{version}} (launch spec rev {{rev}}) — {{date}}",
     "neverExported": "No bundle has been exported yet.",
     "reexportNeeded": "The launch method changed (now rev {{rev}}). Re-export the bundle and re-install it in Claude Desktop.",
-    "reinstallNote": "Re-install needed only when the launch method (command / args / env) or the app's install location changes. Tool additions, changes and fixes apply with an app update alone."
+    "reinstallNote": "Re-install needed only when the launch method (command / args / env) or the app's install location changes. Tool additions, changes and fixes apply with an app update alone.",
+    "consent": {
+      "title": "With AI integration, some information leaves this PC",
+      "lead": "MOJIOKO's own processing still happens entirely on this PC. What changes — only when an AI assistant drives it — is that the information below reaches your AI provider. Please read this before enabling it.",
+      "staysLocalLabel": "Stays on this PC",
+      "staysLocal": "Your video and audio files themselves. Transcription, translation and burn-in still run only on this PC, as before.",
+      "leavesLabel": "Sent to your AI provider",
+      "leaves": "Whatever the assistant reads and writes through the tools: the full subtitle text, file paths, information about the video (duration, resolution and so on), and the tools' replies.",
+      "provider": "These go to the provider of the assistant you use (Anthropic, if you use Claude). What happens to them there is governed by that provider's terms and privacy policy.",
+      "alreadyExported": "The same applies to any connection file (.mcpb) or configuration you have already exported. Your current setup keeps working.",
+      "acceptGate": "I understand — continue",
+      "acceptNotice": "I understand"
+    }
   },
   "translation": {
     "hint": "Auto-translate cues in the inspector (preview only — never written to the subtitles). Get the translation tool from STEP 1 → Translation tool.",

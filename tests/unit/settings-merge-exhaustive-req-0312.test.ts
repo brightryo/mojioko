@@ -80,6 +80,9 @@ describe('REQ-0312 §1 — the rule table pins every field s classification', ()
     // renderer-owned, and App.tsx must send it every save or the whole table
     // disappears from disk rather than surviving as main's copy.
     animationMemory: 'incoming-wins',
+    // REQ-0551 — AI-integration consent. Renderer-owned; same send-every-save
+    // pairing (dropping it would re-prompt a user who already agreed).
+    aiIntegration: 'incoming-wins',
     activeModelId: 'incoming-else-existing',
     translationToolActiveId: 'incoming-else-existing',
     lastInputDir: 'incoming-else-existing',
