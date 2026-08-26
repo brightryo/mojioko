@@ -36,6 +36,7 @@ import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
+import { unsavedTracker } from '@/lib/unsaved-changes'
 import { usePreviewMixStore } from '@/stores/preview-mix-store'
 import { pickAndParseProjectFile, parseProjectFileAtPath } from '@/services/project-file'
 import { openVideoDialog, fileExists } from '@/services/dialog'
@@ -256,6 +257,9 @@ export function ProjectOpenController() {
     ui.setVideoCurrentTimeSec(0)
     ui.setVideoSeekRequest(null)
 
+    // REQ-0546 — the document now matches the file it came from, so the quit
+    // guard must not treat the hydration above as user edits.
+    unsavedTracker.reset()
     setState({ kind: 'idle' })
     toast.success(t('project.open.toastSuccess'))
     // REQ-0195 §1 — route by data-shape rather than by a saved "screen"

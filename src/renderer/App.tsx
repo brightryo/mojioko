@@ -17,12 +17,15 @@ import { EulaDialog } from '@/components/eula-dialog/eula-dialog'
 import { StoreUpsellDialog } from '@/components/store-upsell-dialog/store-upsell-dialog'
 import { ProjectOpenController } from '@/components/project-open/project-open-controller'
 import { SettingsQuarantineDialog } from '@/components/settings-quarantine-dialog/settings-quarantine-dialog'
+import { QuitConfirm } from '@/components/quit-confirm/quit-confirm'
 // REQ-0414 — developer live-token editor.  Guarded by import.meta.env.DEV at
 // the mount site below so it is tree-shaken out of `electron-vite build`
 // (end-user) bundles and never exposed to users.
 import { DevTokenEditor } from '@/components/dev-token-editor/dev-token-editor'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useProjectStore } from '@/stores/project-store'
+import { unsavedTracker } from '@/lib/unsaved-changes'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { loadSettings, saveSettings } from '@/services/settings'
 import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
@@ -150,6 +153,19 @@ function AppInner() {
       if (result.data.quarantine) setQuarantineNotice(result.data.quarantine)
     }).catch(() => { /* IPC unavailable in dev outside Electron */ })
 
+    /*
+     * REQ-0546 — mark the document dirty on any project-store mutation.
+     *
+     * A SUBSCRIPTION rather than a flag set inside each action: Zustand
+     * notifies on every `set`, so no mutation can slip past, and the tracker
+     * never has to stay in sync with the store's ~20 actions. That is what
+     * makes "zero false negatives" a property of the wiring instead of a
+     * promise someone has to keep.
+     */
+    const unsubscribeDirty = useProjectStore.subscribe(() => {
+      unsavedTracker.noteChange()
+    })
+
     // REQ-0245 — hydrate the download-active mirror + subscribe to
     // change broadcasts.  Fire-and-forget; the store falls back to
     // an empty array if boot IPC fails, and per-DL broadcasts still
@@ -160,6 +176,7 @@ function AppInner() {
     // inspector can gate auto-translate on the enabled-tool status from launch
     // (the STEP 1 manager also keeps it fresh once mounted).
     void useTranslationToolStore.getState().refresh()
+    return unsubscribeDirty
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // REQ-088 #4 — resolve the MSIX/NSIS tier once at app boot.  Downstream
@@ -393,6 +410,7 @@ function AppInner() {
         </motion.div>
       </AnimatePresence>
 
+      <QuitConfirm />
       <SettingsQuarantineDialog
         notice={quarantineNotice}
         onDismiss={() => setQuarantineNotice(null)}

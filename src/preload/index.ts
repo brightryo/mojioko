@@ -183,6 +183,11 @@ const electronAPI = {
   shellReadTextFile: (filePath: string): Promise<string> =>
     ipcRenderer.invoke(Channels.shellReadTextFile, filePath),
 
+  // REQ-0546 — the renderer's answer to a close request: 'discard' lets the
+  // quit proceed, 'cancel' keeps the app open.
+  sendCloseDecision: (decision: 'discard' | 'cancel'): Promise<void> =>
+    ipcRenderer.invoke(Channels.appCloseDecision, decision),
+
   // Streaming event subscriptions
   subscribeToChannel: (channelId: string, cb: (payload: unknown) => void): (() => void) => {
     const handler = (_: Electron.IpcRendererEvent, payload: unknown) => cb(payload)

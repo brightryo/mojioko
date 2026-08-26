@@ -60,6 +60,65 @@ function resolveWindowIconPath(): string {
   return join(getResourcesPath(), 'icons', 'icon.ico')
 }
 
+
+/**
+ * ★ REQ-0546 (RES-0543 F2) — do not let the window close over unsaved work.
+ *
+ * ## The paths this covers
+ *
+ * The × button, the taskbar close, Alt+F4 and the menu's 終了 all end up in one
+ * of two events: the window's `close`, or `app.quit()` → `before-quit`. Both
+ * are guarded, and both consult the SAME renderer answer.
+ *
+ * ## Why `before-quit` is guarded too, not just `close`
+ *
+ * The menu's 終了 calls `app.quit()`, and the existing `before-quit` listener
+ * terminates the Whisper and translation sidecars. Guarding only the window's
+ * `close` would let that listener run first, so a user who chose 終了 and then
+ * pressed キャンセル would be left in a live app with dead sidecars. Blocking at
+ * `before-quit` means the teardown is only ever reached on the pass where the
+ * quit is really happening.
+ *
+ * ## What it cannot cover
+ *
+ * An OS shutdown / sign-out (`session-end` on Windows) does not honour
+ * `preventDefault`, and neither does a crash or a kill. Those are the province
+ * of autosave (RES-0543 F2's larger half), which this REQ does not implement.
+ *
+ * ## The renderer decides
+ *
+ * main has no idea whether the document is dirty, so it asks. The renderer
+ * answers `discard` immediately when there is nothing to lose, so the ordinary
+ * "close an untouched app" path is one IPC round-trip and no dialog.
+ */
+let quitApproved = false
+let closeDecisionPending = false
+
+/** True once the user (or the renderer, on its behalf) has agreed to lose work. */
+export function isQuitApproved(): boolean {
+  return quitApproved
+}
+
+function requestCloseDecision(win: BrowserWindow): void {
+  // One outstanding question at a time: hammering the × must not stack up
+  // dialogs, and the renderer only tracks one.
+  if (closeDecisionPending) return
+  closeDecisionPending = true
+  win.webContents.send(Channels.appCloseRequested)
+}
+
+/**
+ * Guard shared by `close` and `before-quit`.  Returns true when the caller
+ * should block.
+ */
+function shouldBlockExit(win: BrowserWindow | null): boolean {
+  if (quitApproved) return false
+  // A window that is gone or whose renderer has crashed can never answer, and
+  // an app that cannot be quit is worse than one that loses a draft.
+  if (!win || win.isDestroyed() || win.webContents.isCrashed()) return false
+  return true
+}
+
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     // useContentSize treats width/height as the renderer's *content area*
@@ -154,6 +213,17 @@ function createWindow(): BrowserWindow {
   const menu = buildMenu(win)
   Menu.setApplicationMenu(menu)
   mainWin = win
+
+  /*
+   * REQ-0546 — ask before closing.  `preventDefault` cancels this attempt; the
+   * renderer's answer either re-runs the close with `quitApproved` set, or
+   * leaves the app exactly as it was.
+   */
+  win.on('close', (event) => {
+    if (!shouldBlockExit(win)) return
+    event.preventDefault()
+    requestCloseDecision(win)
+  })
 
   return win
 }
@@ -385,10 +455,37 @@ if (isCliInvocation()) {
   }
 }
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  // REQ-0546 — block BEFORE the teardown below, not after: the menu's 終了 goes
+  // through here, and killing the sidecars for a quit the user then cancels
+  // would leave a live app that can no longer transcribe.
+  const win = BrowserWindow.getAllWindows()[0] ?? null
+  if (shouldBlockExit(win)) {
+    event.preventDefault()
+    requestCloseDecision(win as BrowserWindow)
+    return
+  }
   log.info('[main] before-quit: terminating sidecar')
   terminateSidecar()
   terminateTranslationSidecar()
+})
+
+/**
+ * REQ-0546 — the renderer's verdict.
+ *
+ * `discard` marks the exit approved and re-issues the close, which now falls
+ * straight through both guards. `cancel` simply clears the pending flag; the
+ * app was never closing, because the original attempt was already prevented.
+ */
+ipcMain.handle(Channels.appCloseDecision, (_event, decision: 'discard' | 'cancel') => {
+  closeDecisionPending = false
+  if (decision !== 'discard') {
+    log.info('[main] close cancelled by the user')
+    return
+  }
+  quitApproved = true
+  log.info('[main] close approved — quitting')
+  app.quit()
 })
 
 app.on('web-contents-created', (_event, contents) => {

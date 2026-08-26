@@ -170,5 +170,13 @@
       "title": "Line spacing does not scale in the output",
       "detail": "On {{count}} multi-line cue(s) with a scaling animation, the glyphs scale but the gap between the lines does not. The preview shows it differently."
     }
+  },
+  "quitConfirm": {
+    "title": "You have unsaved changes",
+    "desc": "If you quit without saving, these edits will be lost.",
+    "cancel": "Cancel",
+    "discard": "Quit without saving",
+    "saveAndQuit": "Save and quit",
+    "saving": "Saving…"
   }
 }

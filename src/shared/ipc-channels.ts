@@ -161,6 +161,11 @@ export const Channels = {
    * bulk-edit selector).  Pure read, no side effects.
    */
   appIsMsix: 'app:isMsix',
+  // REQ-0546 — quit guard.  main asks the renderer whether there is unsaved
+  // work; the renderer answers after showing its confirmation (or immediately,
+  // when there is nothing to lose).
+  appCloseRequested: 'app:closeRequested',
+  appCloseDecision: 'app:closeDecision',
   appGetCliPath: 'app:getCliPath',
   appGetMcpLaunchSpec: 'app:getMcpLaunchSpec',
   appExportMcpBundle: 'app:exportMcpBundle',

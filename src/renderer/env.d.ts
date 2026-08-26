@@ -94,6 +94,7 @@ declare global {
 
       settingsLoad: () => Promise<IpcResult<SettingsLoadResult>>
       settingsSave: (settings: AppSettings) => Promise<IpcResult<null>>
+      sendCloseDecision: (decision: 'discard' | 'cancel') => Promise<void>
 
       shellOpenPath: (path: string) => Promise<void>
       shellShowInFolder: (path: string) => Promise<void>

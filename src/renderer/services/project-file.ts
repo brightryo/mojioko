@@ -11,6 +11,7 @@ import { FOLDER_SETTINGS } from '../../shared/folder-settings'
 import { APP_VERSION } from '../../shared/app-info'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { unsavedTracker } from '@/lib/unsaved-changes'
 import {
   buildProjectFile,
   serializeProjectFile,
@@ -99,6 +100,10 @@ export async function saveCurrentProject(): Promise<SaveResult> {
   } catch (err) {
     return { ok: false, reason: 'io-error', message: String(err) }
   }
+  // REQ-0546 — what is in memory is now on disk.  Marked HERE rather than at
+  // the call sites so every route to a successful save clears the flag; a
+  // caller that forgot would reintroduce a spurious quit prompt.
+  unsavedTracker.markSaved()
   return { ok: true, path: targetPath }
 }
 
