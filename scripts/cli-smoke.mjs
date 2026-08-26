@@ -1252,6 +1252,29 @@ try {
       const mk = (id, startSec, endSec, text) => ({
         ...proto, id, startSec, endSec, text,
         fontSizePx: 40, isDeleted: false, isEdited: false,
+        /*
+         * ★ REQ-0544 §2 — no animation, DECLARED.
+         *
+         * These cues test frame selection and still/burn agreement, not
+         * animation; whatever the cue's opacity is at time T, both sides must
+         * report it. But `proto` inherits `animationType` from the dev
+         * machine's `transcriptionDefaults`, so on a machine defaulting to a
+         * 1 s blur the cue at t=2.5 is mid-entrance and BOTH sides measure
+         * white=0 — which the relative comparison reads as total disagreement
+         * (`rel=1.000`) and fails. Measured: perturbing the machine default to
+         * blur/1 s turns "§3-1 still == burn at edited t=2.5s" red while
+         * nothing about the code under test changed.
+         *
+         * Pinning `none` keeps these cues fully opaque for their whole life, so
+         * the comparison measures what it is named after.
+         */
+        animationType: 'none',
+        animationInEnabled: true,
+        animationOutEnabled: true,
+        animationDurationSec: 0.4,
+        animationStartScalePercent: 70,
+        animationBlurPx: 30,
+        fadeDurationSec: 0,
         original: { ...(proto.original ?? proto), startSec, endSec, text },
         // `words` from the SRT prototype describe different text; drop them so
         // karaoke cannot reject the cue for a reason unrelated to this gate.
@@ -1398,6 +1421,33 @@ try {
       const d = {
         ...proto, id: 'cue-d', startSec: 1, endSec: 5, text: 'DDDD',
         fontSizePx: 40, isDeleted: false, isEdited: false, fadeDurationSec: 1,
+        /*
+         * ★ REQ-0544 — DECLARE the animation instead of inheriting it.
+         *
+         * `proto` comes from `convert`, which stamps `animationFieldsForNewCue`
+         * from the DEV MACHINE's `settings.json` → `transcriptionDefaults`.  On a
+         * machine whose saved default is "pop, 0.4 s, no exit" — the owner's —
+         * every cue built here carries `animationType: 'pop'`, and
+         * `resolveAnimation` then IGNORES `fadeDurationSec` entirely (that field
+         * is only the legacy migration path, consulted when `animationType` is
+         * absent).  So the 1 s fade this case is named after never existed: at
+         * edited t=0.5 the 0.4 s pop had already settled and the caption was
+         * fully opaque.  Measured: white 477 at t=0.5 against a 176 reference,
+         * i.e. the exact inversion the assertion reports.
+         *
+         * CLAUDE.md §18 — the fixture's properties are STATED, not inherited.
+         * These six fields are the whole animation input, so the case now means
+         * the same thing on every machine regardless of what the user saved.
+         * Deleting them entirely (letting `fadeDurationSec` migrate) produces
+         * byte-identical stills — measured — but leaves the case one settings
+         * change away from silently testing something else again.
+         */
+        animationType: 'fade',
+        animationInEnabled: true,
+        animationOutEnabled: true,
+        animationDurationSec: 1,
+        animationStartScalePercent: 70,
+        animationBlurPx: 30,
         original: { ...(proto.original ?? proto), startSec: 1, endSec: 5, text: 'DDDD' },
         words: undefined,
       }
