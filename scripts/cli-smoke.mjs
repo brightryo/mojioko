@@ -1626,6 +1626,93 @@ try {
     }
   }
 
+
+  /*
+   * ★ REQ-0555 §3-2 — structural operations: count, ORDER and ids.
+   *
+   * A cue that exists but sits in the wrong place is the failure mode here, and
+   * a count check alone cannot see it — so every assertion below reads the
+   * order back and compares the whole sequence, not the length.
+   */
+  {
+    const srt = join(work, 'st.srt')
+    writeFileSync(srt, ['1', '00:00:01,000 --> 00:00:03,000', 'first', '',
+                        '2', '00:00:09,000 --> 00:00:11,000', 'third', ''].join(CRLF), 'utf-8')
+    const proj = join(work, 'st.mojioko')
+    const conv = cli(['convert', srt, '-o', proj], 60000)
+    check('REQ-0555 fixture: convert produced a .mojioko', conv.code === 0, conv.stderr?.slice(-200))
+
+    const texts = (p) => {
+      const r = cli(['read_subtitle', p], 60000)
+      return (r.json?.data?.cues ?? []).map((c) => c.text)
+    }
+    const ids = (p) => {
+      const r = cli(['read_subtitle', p], 60000)
+      return (r.json?.data?.cues ?? []).map((c) => c.id)
+    }
+
+    if (conv.code === 0) {
+      // --- add: a cue with a MIDDLE start time must land in the middle ---
+      const add = cli(['add_cue', proj, '-o', proj, '--start', '5.0', '--end', '7.0', '--text', 'second'], 60000)
+      check('REQ-0555 add_cue succeeded', add.code === 0 && add.json?.data?.cueCount === 3,
+        `code=${add.code} count=${add.json?.data?.cueCount}`)
+      check('★ REQ-0555 §2-1 the added cue is in TIME order, not appended',
+        JSON.stringify(texts(proj)) === JSON.stringify(['first', 'second', 'third']),
+        JSON.stringify(texts(proj)))
+      check('REQ-0555 add_cue reports the index it actually landed at',
+        add.json?.data?.index === 1, `index=${add.json?.data?.index}`)
+
+      // --- duplicate: immediately after its source, with a NEW id ---
+      const beforeIds = ids(proj)
+      const dup = cli(['duplicate_cue', proj, '-o', proj, '--index', '0'], 60000)
+      const afterIds = ids(proj)
+      check('REQ-0555 duplicate_cue succeeded', dup.code === 0 && dup.json?.data?.cueCount === 4,
+        `code=${dup.code} count=${dup.json?.data?.cueCount}`)
+      check('★ REQ-0555 §2-2 the duplicate sits immediately after its source',
+        JSON.stringify(texts(proj)) === JSON.stringify(['first', 'first', 'second', 'third']),
+        JSON.stringify(texts(proj)))
+      check('★ REQ-0555 §2-2 the duplicate has a NEW id and all ids stay unique',
+        afterIds.length === beforeIds.length + 1
+        && new Set(afterIds).size === afterIds.length
+        && !beforeIds.includes(dup.json?.data?.id),
+        `newId=${dup.json?.data?.id} unique=${new Set(afterIds).size}/${afterIds.length}`)
+
+      // --- reset: restores the source text after an edit ---
+      const edited = cli(['edit_cues', proj, '-o', proj, '--edits',
+        JSON.stringify([{ select: { index: 0 }, text: 'EDITED' }])], 60000)
+      check('REQ-0555 reset fixture: the cue was edited first',
+        edited.code === 0 && texts(proj)[0] === 'EDITED', JSON.stringify(texts(proj)))
+      const reset = cli(['reset_cue', proj, '-o', proj, '--index', '0'], 60000)
+      check('★ REQ-0555 §2-3 reset_cue restores the original text',
+        reset.code === 0 && reset.json?.data?.changed === true && texts(proj)[0] === 'first',
+        `code=${reset.code} changed=${reset.json?.data?.changed} texts=${JSON.stringify(texts(proj))}`)
+
+      /*
+       * The GUI round trip (§3-2) is asserted in `cue-structure-req-0555.test.ts`
+       * instead, where `buildProjectFile` — the GUI's actual save builder — can
+       * be called directly.
+       *
+       * It is deliberately NOT done with `convert` here: converting
+       * .mojioko → .mojioko re-mints every cue id (t-0, t-1, \u2026), so the check
+       * would compare renumbered ids and fail for a reason that has nothing to
+       * do with structural editing. That re-minting is pre-existing `convert`
+       * behaviour, not something REQ-0555 changed — see RES-0555 §9.
+       */
+
+      // --- negative control: same command, one input perturbed ---
+      // An add whose start time is LATER than every cue must append; if the
+      // middle-insert assertion above passed for some reason other than the
+      // ordering rule, this would produce the same order and give it away.
+      const ctl = cli(['add_cue', proj, '-o', join(work, 'st-ctl.mojioko'),
+        '--start', '99.0', '--end', '99.5', '--text', 'LAST'], 60000)
+      const ctlTexts = texts(join(work, 'st-ctl.mojioko'))
+      check('★ REQ-0555 §3-3 NEGATIVE CONTROL: a later start appends instead of inserting',
+        ctl.code === 0 && ctlTexts[ctlTexts.length - 1] === 'LAST'
+        && ctlTexts.indexOf('LAST') !== 1,
+        `code=${ctl.code} texts=${JSON.stringify(ctlTexts)}`)
+    }
+  }
+
 } finally {
   try { rmSync(work, { recursive: true, force: true }) } catch { /* best-effort */ }
 }

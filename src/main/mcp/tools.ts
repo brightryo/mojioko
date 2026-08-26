@@ -23,6 +23,7 @@ import { runExportFrameCommand } from '../cli/commands/export-frame'
 import { runProbeCommand } from '../cli/commands/probe'
 import { runReadSubtitleCommand } from '../cli/commands/read-subtitle'
 import { runEditCuesCommand } from '../cli/commands/edit-cues'
+import { runAddCueCommand, runDuplicateCueCommand, runResetCueCommand } from '../cli/commands/structure-cue'
 import { runEditSubtitleCommand } from '../cli/commands/edit-subtitle'
 import { runConvertCommand } from '../cli/commands/convert'
 import { runToolsCommand } from '../cli/commands/tools'
@@ -516,6 +517,80 @@ export const TOOLS: ToolSpec[] = [
         'edits-file': str(i.edits_file),
         'on-error': str(i.on_error),
         overwrite: boolTrue(i.overwrite),
+      }),
+    }),
+  },
+  {
+    name: 'add_cue',
+    description: 'cue を新規追加（.mojioko）。挿入位置も既定スタイルも GUI の「行を追加」と同じロジックを通る（REQ-0555）。',
+    inputSchema: {
+      type: 'object',
+      required: ['input', 'out', 'start', 'end'],
+      properties: {
+        input: { type: 'string', description: '入力 .mojioko' },
+        out: { type: 'string', description: '出力パス' },
+        start: { type: 'number', description: '開始秒' },
+        end: { type: 'number', description: '終了秒（start より後）' },
+        text: { type: 'string', description: '本文（既定は空）' },
+        overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false。入力と同一パスは常に可）' },
+      },
+      additionalProperties: false,
+    },
+    async: false,
+    build: (i) => ({
+      fn: runAddCueCommand,
+      args: toArgs([str(i.input)], {
+        out: str(i.out),
+        start: numStr(i.start),
+        end: numStr(i.end),
+        text: typeof i.text === 'string' ? i.text : undefined,
+        overwrite: boolTrue(i.overwrite),
+      }),
+    }),
+  },
+  {
+    name: 'duplicate_cue',
+    description: 'cue を複製する（.mojioko）。スタイル・単語タイミング込みで、元の直後に挿入（GUI の複製と同じ・REQ-0555）。',
+    inputSchema: {
+      type: 'object',
+      required: ['input', 'out'],
+      properties: {
+        input: { type: 'string', description: '入力 .mojioko' },
+        out: { type: 'string', description: '出力パス' },
+        index: { type: 'integer', description: '対象 cue 番号（read_subtitle の index・id と排他）' },
+        id: { type: 'string', description: '対象 cue の id（index と排他）' },
+        overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false。入力と同一パスは常に可）' },
+      },
+      additionalProperties: false,
+    },
+    async: false,
+    build: (i) => ({
+      fn: runDuplicateCueCommand,
+      args: toArgs([str(i.input)], {
+        out: str(i.out), index: numStr(i.index), id: str(i.id), overwrite: boolTrue(i.overwrite),
+      }),
+    }),
+  },
+  {
+    name: 'reset_cue',
+    description: 'cue を文字起こし直後の状態へ戻す（.mojioko）。GUI の「行のリセット」と同じ（REQ-0555）。',
+    inputSchema: {
+      type: 'object',
+      required: ['input', 'out'],
+      properties: {
+        input: { type: 'string', description: '入力 .mojioko' },
+        out: { type: 'string', description: '出力パス' },
+        index: { type: 'integer', description: '対象 cue 番号（read_subtitle の index・id と排他）' },
+        id: { type: 'string', description: '対象 cue の id（index と排他）' },
+        overwrite: { type: 'boolean', description: '既存出力を上書き（既定 false。入力と同一パスは常に可）' },
+      },
+      additionalProperties: false,
+    },
+    async: false,
+    build: (i) => ({
+      fn: runResetCueCommand,
+      args: toArgs([str(i.input)], {
+        out: str(i.out), index: numStr(i.index), id: str(i.id), overwrite: boolTrue(i.overwrite),
       }),
     }),
   },

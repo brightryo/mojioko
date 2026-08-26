@@ -11,6 +11,10 @@ export const CLI_COMMANDS: ReadonlySet<string> = new Set([
   'export_frame', 'export-frame', 'probe', 'read_subtitle', 'read-subtitle',
   'edit_subtitle', 'edit-subtitle', 'convert',
   'edit_cues', 'edit-cues', // REQ-0554 — bulk per-cue patch
+  // REQ-0555 — structural cue operations
+  'add_cue', 'add-cue',
+  'duplicate_cue', 'duplicate-cue',
+  'reset_cue', 'reset-cue',
   'preset',
   'export-mcpb', 'export_mcpb', // REQ-0467 §2 — headless .mcpb export
 ])

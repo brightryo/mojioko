@@ -13,6 +13,7 @@ import {
 } from '../../shared/emphasis'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { buildDuplicateEntry } from '@/lib/duplicate-entry'
+import { buildResetPatch } from '@/lib/cue-structure'
 import { resolveLayer, findFreeLayerAbove } from '../../shared/cue-placement'
 
 /**
@@ -192,31 +193,10 @@ export function resetRow(
   const snapshot = { ...entry }
   const affectsTime =
     original.startSec !== entry.startSec || original.endSec !== entry.endSec
-  const resetPatch = {
-    ...original,
-    fontId: original.fontId,
-    // REQ-20260615-018 B: posX / posY are optional and the entry creation
-    // paths (fixtures.makeEntry, step1 transcription, step2 add-row) only
-    // call makeEntryLayoutDefaults() which does NOT seed posX/posY at all.
-    // So `original` from those rows has no posX/posY keys, the `...original`
-    // spread does not carry the keys, and `updateEntry({...e, ...patch})`
-    // preserves the live entry's drag-pinned posX/posY — Reset would leave
-    // the row pinned despite clearing every other field.  Same fix pattern
-    // as the `fontId: original.fontId` line above (REQ-022 step 7).
-    posX: original.posX,
-    posY: original.posY,
-    // REQ-0392: same optional-field pattern as posX/posY above — `original` from
-    // rows created via makeEntryLayoutDefaults() has no `layer` key, so a bare
-    // `...original` spread would leave the live entry's z-order in place on
-    // Reset.  Restore it explicitly (undefined ⇒ resolveLayer 0 = default).
-    layer: original.layer,
-    // REQ-20260613-016: deep-copy subtitleBackground out of `original` so
-    // subsequent edits to the live entry's background don't retroactively
-    // mutate the reset target.
-    subtitleBackground: { ...original.subtitleBackground },
-    isEdited: false,
-    isDeleted: false
-  }
+  // REQ-0555 §2 — the patch itself now lives in `cue-structure.ts` so the CLI's
+  // `reset_cue` restores exactly what this button restores, including the four
+  // explicit optional-field lines that were each their own bug.
+  const resetPatch = buildResetPatch(entry)
   pushHistory({
     label: labels.reset,
     undo: () => {

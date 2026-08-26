@@ -48,6 +48,9 @@ const TOOL_TO_COMMAND: Readonly<Record<string, string>> = {
   edit_subtitle: 'edit_subtitle',
   // REQ-0554 — the bulk cue patch. Same name on both sides.
   edit_cues: 'edit_cues',
+  add_cue: 'add_cue',
+  duplicate_cue: 'duplicate_cue',
+  reset_cue: 'reset_cue',
   convert: 'convert',
   // `tools_download` / `tools_use` are verb-split facades over the single
   // `tools` command, so their option sets are deliberately narrower than

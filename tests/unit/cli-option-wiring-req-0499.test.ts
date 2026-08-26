@@ -61,6 +61,10 @@ const COMMAND_SOURCES: Readonly<Record<string, readonly string[]>> = {
   edit_subtitle: ['cli/commands/edit-subtitle.ts', OVERWRITE],
   // REQ-0554 — bulk per-cue patch.
   edit_cues: ['cli/commands/edit-cues.ts', OVERWRITE],
+  // REQ-0555 — the three structural commands share one file.
+  add_cue: ['cli/commands/structure-cue.ts', OVERWRITE],
+  duplicate_cue: ['cli/commands/structure-cue.ts', OVERWRITE],
+  reset_cue: ['cli/commands/structure-cue.ts', OVERWRITE],
   convert: ['cli/commands/convert.ts', OVERWRITE],
   // `preset save` layers the ordinary style flags on top of the captured cue,
   // so it reads them through the shared style-override parser.

@@ -43,6 +43,7 @@ import type { SubtitleEntry } from '../../shared/types'
 import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
 import { formatSrtTime } from '../../shared/srt-time'
 import { styleFieldsFromDefaults } from '@/lib/style-defaults-to-entry'
+import { buildNewCue, computeAddInsertion as sharedComputeAddInsertion } from '@/lib/cue-structure'
 import { NEW_ROW_DURATION_SEC, ENABLE_VIDEO_PREVIEW } from '../../shared/constants'
 import { VideoPreviewPanel } from '@/components/video-preview/video-preview-panel'
 import { AudioPreviewPanel } from '@/components/audio-preview/audio-preview-panel'
@@ -748,23 +749,11 @@ export default function Step2Route(_: Step2RouteProps) {
    * `visiblePos` is the 1-indexed position the user will SEE in the table —
    * used for the success toast.
    */
+  // REQ-0555 §2 — the rule itself moved to `cue-structure.ts` so the CLI's
+  // `add_cue` inserts where this does.  Kept as a thin wrapper because the
+  // surrounding code reads better closing over `entries`.
   function computeAddInsertion(newStartSec: number): { fullIdx: number; visiblePos: number } {
-    const active = entries.filter((e) => !e.isDeleted)
-    const afterActiveIdx = active.findIndex((e) => e.startSec > newStartSec)
-
-    if (afterActiveIdx === -1) {
-      // No active row has a later startSec — append AFTER the last active row.
-      if (active.length === 0) {
-        return { fullIdx: entries.length, visiblePos: 1 }
-      }
-      const lastActiveId = active[active.length - 1].id
-      const lastActiveFullIdx = entries.findIndex((e) => e.id === lastActiveId)
-      return { fullIdx: lastActiveFullIdx + 1, visiblePos: active.length + 1 }
-    }
-
-    // Place BEFORE the first active row whose startSec exceeds the new value.
-    const pivotFullIdx = entries.findIndex((e) => e.id === active[afterActiveIdx].id)
-    return { fullIdx: pivotFullIdx, visiblePos: afterActiveIdx + 1 }
+    return sharedComputeAddInsertion(entries, newStartSec)
   }
 
   function handleEditorConfirm(rawStartSec: number, rawEndSec: number) {
@@ -803,27 +792,6 @@ export default function Step2Route(_: Step2RouteProps) {
       // Position is decided HERE, from the chosen startSec — not from any
       // stale value snapshotted when the dialog opened.
       const { fullIdx: idx, visiblePos } = computeAddInsertion(startSec)
-      const base = {
-        startSec,
-        endSec,
-        text: '',
-        fadeDurationSec: settingsFadeDurationSec,
-        ...animationFieldsForNewCue(defaults, animationMemory),
-        // REQ-20260613-016 / v1.2.2 機能A: seed per-row layout + background
-        // defaults at creation time.  Same pattern as the transcription
-        // segment mapping in step1.tsx.
-        ...makeEntryLayoutDefaults(),
-        // REQ-0335 §2 — this used to list four style fields by hand (size /
-        // colour / outline colour / outline width), so a row added here lost
-        // shadow, casing, rotation, line spacing, opacity, emphasis, karaoke
-        // and the offsets: it looked different from a transcribed row under
-        // the very same settings.  Now it is the SAME exhaustively-typed
-        // projection step1.tsx seeds transcribed rows with.
-        ...styleFieldsFromDefaults(defaults, {
-          videoWidthPx: video?.widthPx,
-          videoHeightPx: video?.heightPx,
-        }),
-      }
       // REQ-079 #2: collision-resistant id.  Date.now() alone collides
       // when two rows are added within the same millisecond — both rows
       // then share a key in the layout's `trackOf` map, with the later
@@ -833,15 +801,18 @@ export default function Step2Route(_: Step2RouteProps) {
       const id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
         ? `new-${crypto.randomUUID()}`
         : `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      const newEntry: SubtitleEntry = {
+      // REQ-0555 §2 — the field seeding moved to `cue-structure.ts` so a cue the
+      // CLI adds starts life with exactly these fields.
+      const newEntry: SubtitleEntry = buildNewCue({
         id,
-        ...base,
-        isDeleted: false,
-        isEdited: true,
-        // Deep-copy subtitleBackground so the live entry and original
-        // snapshot do not share object identity.
-        original: { ...base, subtitleBackground: { ...base.subtitleBackground } }
-      }
+        startSec,
+        endSec,
+        fadeDurationSec: settingsFadeDurationSec,
+        defaults,
+        animationMemory,
+        videoWidthPx: video?.widthPx,
+        videoHeightPx: video?.heightPx,
+      })
       pushHistory({
         label: t('history.addRow'),
         undo: () => {

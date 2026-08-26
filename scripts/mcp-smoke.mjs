@@ -449,6 +449,56 @@ try {
       JSON.stringify(bad?.data ?? bad?.error))
   }
 
+  /*
+   * REQ-0555 §2 — the structural tools over MCP.
+   *
+   * The ordering semantics are proved on the CLI side (both surfaces call the
+   * same command function). What is proved HERE is that the tools are reachable
+   * through JSON-RPC and that the order they produce survives the transport —
+   * a cue that exists but sits in the wrong place is the failure mode, so this
+   * reads the sequence back rather than the count.
+   */
+  {
+    const stSrt = join(work, 'st.srt')
+    writeFileSync(stSrt, '1\n00:00:01,000 --> 00:00:03,000\nfirst\n\n2\n00:00:09,000 --> 00:00:11,000\nthird\n', 'utf-8')
+    const stProj = join(work, 'st.mojioko')
+    await rpc('tools/call', { name: 'convert', arguments: { input: stSrt, out: stProj } })
+
+    const textsOf = async () => {
+      const r = parseContent(await rpc('tools/call', { name: 'read_subtitle', arguments: { input: stProj } }))
+      return (r?.data?.cues ?? []).map((c) => c.text)
+    }
+
+    const added = parseContent(await rpc('tools/call', {
+      name: 'add_cue',
+      arguments: { input: stProj, out: stProj, overwrite: true, start: 5, end: 7, text: 'second' },
+    }))
+    check('★ REQ-0555 MCP add_cue inserts in time order', added?.ok === true
+      && JSON.stringify(await textsOf()) === JSON.stringify(['first', 'second', 'third']),
+      JSON.stringify(await textsOf()))
+
+    const duped = parseContent(await rpc('tools/call', {
+      name: 'duplicate_cue',
+      arguments: { input: stProj, out: stProj, overwrite: true, index: 0 },
+    }))
+    check('★ REQ-0555 MCP duplicate_cue inserts right after its source', duped?.ok === true
+      && JSON.stringify(await textsOf()) === JSON.stringify(['first', 'first', 'second', 'third']),
+      JSON.stringify(await textsOf()))
+
+    await rpc('tools/call', {
+      name: 'edit_cues',
+      arguments: { input: stProj, out: stProj, overwrite: true,
+        edits: [{ select: { index: 0 }, text: 'EDITED' }] },
+    })
+    const reset = parseContent(await rpc('tools/call', {
+      name: 'reset_cue',
+      arguments: { input: stProj, out: stProj, overwrite: true, index: 0 },
+    }))
+    check('★ REQ-0555 MCP reset_cue restores the original text',
+      reset?.ok === true && reset?.data?.changed === true && (await textsOf())[0] === 'first',
+      JSON.stringify(await textsOf()))
+  }
+
   child.stdin.end() // closes stdin → server exits (proves clean shutdown)
   await sleep(500)
   try { child.kill() } catch { /* already gone */ }

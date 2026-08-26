@@ -4,10 +4,22 @@
  * Replace ONE cue's text by its (non-deleted) index, closing the "read →
  * correct a misrecognition → re-burn" loop with `read_subtitle` (C8).  For a
  * `.mojioko` input the full project (per-cue styles) is preserved and only the
- * cue's `text` changes; stale `words` are dropped so karaoke falls back to the
- * equal split instead of sweeping wrong timings.
+ * cue's `text` changes.
+ *
+ * ## REQ-0555 §1 — `words` are no longer discarded here
+ *
+ * This command used to delete the cue's per-word timings on a text change
+ * (`words: undefined` + `WORD_TIMINGS_DISCARDED`).  REQ-0554 added `edit_cues`,
+ * which KEEPS them and lets `areWordsValidForText` judge — so restoring the text
+ * restores the karaoke — and the GUI behaves that way too.  Two commands
+ * answering "I changed the text" differently is a trap for an agent that uses
+ * both, and the owner chose the non-destructive answer (RES-0554 §6).
+ *
+ * The text edit now goes through the SAME `applyCueEdit` / `collectCueEditWarnings`
+ * that `edit_cues` uses, so the two cannot drift again.
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { applyCueEdit, collectCueEditWarnings } from '../../../shared/cue-edit'
 import { parseProjectFile, serializeProjectFile } from '../../../shared/project-file'
 import { parseSrt } from '../../../renderer/lib/srt-parse'
 import { formatSrtTime } from '../../../shared/srt-time'
@@ -36,12 +48,11 @@ export async function runEditSubtitleCommand(ctx: CliContext, args: ParsedArgs):
 
   const raw = readFileSync(input, 'utf-8')
 
-  // REQ-0500 §3-3 — replacing the text DISCARDS the cue's per-word timings, so
-  // karaoke silently degrades from real speech timing to an even split.  The
-  // behaviour is deliberate (stale timings swept against new text look worse),
-  // but it used to happen with no signal at all — and `read_subtitle` advertises
-  // `hasWords: true` right before, so an agent fixing one typo had every reason
-  // to think nothing else changed.  Warn instead of surprising the caller.
+  // REQ-0500 §3-3 — a text change can leave the cue's per-word timings no longer
+  // spelling its text, so karaoke silently degrades from real speech timing to
+  // an even split.  `read_subtitle` advertises `hasWords: true` right before, so
+  // an agent fixing one typo has every reason to think nothing else changed.
+  // Warn instead of surprising the caller.  (REQ-0555 §1: warn, do not delete.)
   const warnings: CliWarning[] = []
 
   try {
@@ -54,22 +65,10 @@ export async function runEditSubtitleCommand(ctx: CliContext, args: ParsedArgs):
       if (index >= visible.length) throw new CliError('USAGE', `--index ${index} は範囲外（cue 数 ${visible.length}）。`, 'read_subtitle で番号を確認。')
       const pos = visible[index].i
       const entry = project.editing.subtitles[pos]
-      // Drop stale word timings so karaoke re-derives (equal split) instead of
-      // sweeping the OLD word timings against the NEW text.
-      const hadWords = Array.isArray(entry.words) && entry.words.length > 0
-      if (hadWords) {
-        warnings.push({
-          code: 'WORD_TIMINGS_DISCARDED',
-          message: 'テキスト差し替えにより、この cue の単語タイミングを破棄しました（カラオケは均等割りになります）。',
-          detail: {
-            index,
-            wordCount: entry.words?.length ?? 0,
-            reason: '古い単語タイミングを新しいテキストに当てると発話とズレるため。',
-            remedy: '実発話タイミングが必要な場合は、この cue を再度文字起こししてください。',
-          },
-        })
-      }
-      project.editing.subtitles[pos] = { ...entry, text: newText, words: undefined, isEdited: true }
+      // ONE implementation of "what a text change means" (REQ-0555 §1).
+      const { entry: edited, changed } = applyCueEdit(entry, { select: { id: entry.id }, text: newText })
+      collectCueEditWarnings(entry, edited, changed, true, warnings)
+      project.editing.subtitles[pos] = edited
 
       if (outFmt === 'mojioko') {
         writeFileSync(out, serializeProjectFile(project), 'utf-8')
@@ -101,9 +100,18 @@ export async function runEditSubtitleCommand(ctx: CliContext, args: ParsedArgs):
       format: outFmt,
       editedIndex: index,
       newText,
-      // Explicit rather than inferable from `warnings[]` alone, so a caller can
-      // branch on it without string-matching a warning code.
-      wordTimingsDiscarded: warnings.some((w) => w.code === 'WORD_TIMINGS_DISCARDED'),
+      /*
+       * REQ-0555 §1 — this replaced `wordTimingsDiscarded`.
+       *
+       * The old key is GONE rather than kept as an always-false alias, because
+       * it answered a question that no longer has a true answer: nothing is
+       * discarded now. A caller that branched on it got `true` when the timings
+       * were destroyed; leaving it behind reading `false` forever would be a
+       * quieter lie than removing it. The retirement is recorded in the spec's
+       * stable-code table and pinned by a test that fails if the old code is
+       * ever emitted again.
+       */
+      wordTimingsInvalidated: warnings.some((w) => w.code === 'WORD_TIMINGS_INVALIDATED'),
     },
     warnings,
   )

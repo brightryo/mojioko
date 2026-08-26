@@ -47,6 +47,10 @@ const VALUE_OPTS: ReadonlySet<string> = new Set([
   'at',
   'index',
   'text',
+  // REQ-0555 — add_cue / duplicate_cue / reset_cue.
+  'start',
+  'end',
+  'id',
   'video',
   'encoder',
   'audio',
