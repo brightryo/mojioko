@@ -631,6 +631,11 @@ export function TranscriptionDrawer({
                   {/* REQ-0485 §2 — font list dropped here (lives in Settings ▸
                       Fonts); the default-font dropdown + a pointer note stay. */}
                   <FontPicker showFontList={false} />
+                  {/* REQ-0539 §2-1 — keyword emphasis is hidden here: keywords
+                      are picked per word in the inspector, and nothing has been
+                      transcribed yet at this point, so the default has nothing
+                      to apply to.  Hidden only — the saved values are untouched
+                      and still reach ASS generation. */}
                   <DefaultStyleControls
                     defaults={styleDefaults}
                     onUpdateDefaults={setStyleDefaults}
@@ -638,6 +643,7 @@ export function TranscriptionDrawer({
                     onSetAutoLineBreak={setAutoLineBreak}
                     fadeDurationSec={fadeDurationSec}
                     isMsix={isMsix}
+                    showKeywordEmphasis={false}
                   />
                 </div>
               </TabsContent>

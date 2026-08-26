@@ -102,6 +102,20 @@ interface DefaultStyleControlsProps {
    * from REQ-0286 §0.
    */
   isMsix: boolean
+  /**
+   * REQ-0539 §2-1 — show the keyword-emphasis row (Switch + colour + size %).
+   *
+   * The drawer's タブ2 passes `false`: keywords are chosen per WORD in the
+   * inspector, and at the point this panel is shown no transcription exists
+   * yet, so a default that cannot be pointed at anything is noise.
+   *
+   * Hidden, not deleted, and **the stored defaults are untouched** —
+   * `keywordEmphasisEnabled` / `emphasisColorHex` / `emphasisScalePercent`
+   * keep whatever the user already saved and still reach ASS generation.
+   * Defaults to `true` so this component's own behaviour is unchanged for any
+   * other caller (REQ-0485's `showFontList` pattern).
+   */
+  showKeywordEmphasis?: boolean
 }
 
 /**
@@ -132,6 +146,7 @@ export function DefaultStyleControls({
   onSetAutoLineBreak,
   fadeDurationSec,
   isMsix,
+  showKeywordEmphasis = true,
 }: DefaultStyleControlsProps) {
   const { t } = useTranslation(['step1', 'step2', 'common'])
   const showKaraokeUi = canUseKaraokeInTier(isMsix)
@@ -149,7 +164,7 @@ export function DefaultStyleControls({
     animationBlurPx: defaults.animationBlurPx,
     fadeDurationSec,
   })
-  const showEmphasisUi = canUseKeywordEmphasisInTier(isMsix)
+  const showEmphasisUi = showKeywordEmphasis && canUseKeywordEmphasisInTier(isMsix)
   // REQ-0298 §4-1 — segButton removed; H/V rows use the shared
   // SegmentGroup component from `@/components/subtitle-table/segment-group`
   // so the settings tab matches the inspector's pill styling.
@@ -325,28 +340,6 @@ export function DefaultStyleControls({
         />
       </SettingsStyleRow>
 
-      {/* REQ-0325 §2 — the fade slider is replaced by the full animation
-          control, and it is bound to `defaults` (TranscriptionDefaults)
-          rather than straight to the settings store.  Two reasons:
-          (a) after RES-0324 folded fade into the animation UI, a lone fade
-              slider could no longer express the default a new cue would get;
-          (b) every other row here is bound to `defaults`, and the settings-
-              store binding was the asymmetry REQ-0322 §3-6 reported. */}
-      {/* REQ-0337 §1-4 — this is the surface the owner singled out: the
-          table must not overrule a value the user SAVED here, but changing
-          the TYPE here must re-seed exactly as it does in the inspector.
-          Both hold because this renders the same `AnimationControls` and
-          writes through the same `animationEntryFields`; the table is only
-          ever consulted by the control's own type-change handler. */}
-      <AnimationControls
-        value={animationUiValue(defaultsAnimation)}
-        onChange={(patch) =>
-          onUpdateDefaults(animationEntryFields(animationUiValue(defaultsAnimation), patch))
-        }
-        includeBlur={ANIMATION_BLUR_ENABLED}
-        surface="settings"
-      />
-
       {/* ── Layout section header ── */}
       <div className="pt-2 mt-2 border-t border-line/60">
         <p className="text-caption font-medium uppercase tracking-wider text-fg-primary mb-1 px-2">
@@ -430,6 +423,45 @@ export function DefaultStyleControls({
             />
           </div>
         </SettingsStyleRow>
+      </div>
+
+      {/* ── Animation section ──
+          REQ-0539 §2-2 — BELOW the layout group, matching the inspector's
+          section order (字幕 → レイアウト → アニメーション).  It used to sit
+          between 回転 and the layout header, which is the one ordering
+          difference the owner called out.
+
+          It gets its own header for the same reason the inspector gives it
+          one: the layout group above is a bordered section, so four
+          unlabelled rows following it would read as part of レイアウト.  The
+          heading reuses the inspector's existing key — no new item, no new
+          string.
+
+          REQ-0325 §2 — the fade slider is replaced by the full animation
+          control, and it is bound to `defaults` (TranscriptionDefaults)
+          rather than straight to the settings store.  Two reasons:
+          (a) after RES-0324 folded fade into the animation UI, a lone fade
+              slider could no longer express the default a new cue would get;
+          (b) every other row here is bound to `defaults`, and the settings-
+              store binding was the asymmetry REQ-0322 §3-6 reported.
+          REQ-0337 §1-4 — this is the surface the owner singled out: the
+          table must not overrule a value the user SAVED here, but changing
+          the TYPE here must re-seed exactly as it does in the inspector.
+          Both hold because this renders the same `AnimationControls` and
+          writes through the same `animationEntryFields`; the table is only
+          ever consulted by the control's own type-change handler. */}
+      <div className="pt-2 mt-2 border-t border-line/60">
+        <p className="text-caption font-medium uppercase tracking-wider text-fg-primary mb-1 px-2">
+          {t('step2:timeline.inspector.animationSection')}
+        </p>
+        <AnimationControls
+          value={animationUiValue(defaultsAnimation)}
+          onChange={(patch) =>
+            onUpdateDefaults(animationEntryFields(animationUiValue(defaultsAnimation), patch))
+          }
+          includeBlur={ANIMATION_BLUR_ENABLED}
+          surface="settings"
+        />
       </div>
 
       {/* Auto line break — separate section per the pre-REQ-0295
