@@ -17,12 +17,13 @@ import {
   ANIMATION_STRENGTH_SCALE_MIN,
   ANIMATION_STRENGTH_SCALE_STEP,
   SELECTABLE_ANIMATION_TYPES,
-  animationFieldsForTypeChange,
   coerceAnimationType,
   startScalePercentToStrength,
   strengthToStartScalePercent,
   type AnimationUiValue,
 } from '../../../shared/cue-animation'
+import { animationSeedForType } from '../../../shared/animation-memory'
+import { useSettingsStore } from '@/stores/settings-store'
 
 /**
  * REQ-0324 §1 / REQ-0331 §1 — the animation controls, shared verbatim by
@@ -142,6 +143,29 @@ export function AnimationControls({
   // cannot individually drift from the surface they are rendered into.
   const columns = styleRowColumns(surface)
 
+  /*
+   * ★ REQ-0540 — "the last values you used", per type.
+   *
+   * This component is the ONE place all three editing surfaces render, so
+   * both halves of the feature live here: picking a type seeds from the
+   * memory, and committing a parameter records it.
+   *
+   * Putting it here rather than plumbing it through the three surfaces is
+   * also what makes the exclusion list structural.  Opening a project,
+   * applying a style preset, undo/redo, tier substitution and new-cue
+   * stamping all write animation fields — and none of them mount this
+   * component, so none of them can reach the writer.  A version that hung the
+   * write off `onChange` in each surface would have to re-argue that for every
+   * caller, forever.
+   */
+  const animationMemory = useSettingsStore((st) => st.animationMemory)
+  const rememberAnimation = useSettingsStore((st) => st.rememberAnimation)
+  /** Commit an edit AND remember it — every parameter row goes through here. */
+  const commitAndRemember = (patch: Partial<AnimationUiValue>) => {
+    onChange(patch)
+    rememberAnimation({ ...value, ...patch })
+  }
+
   // Draft held as an integer step index for the same reason
   // `FadeDurationSlider` does it: floating-point seconds make the native
   // range thumb drift off the step boundaries mid-drag.
@@ -199,16 +223,16 @@ export function AnimationControls({
 
   const commitDuration = () => {
     const next = stepToSeconds(draft)
-    if (next !== value.durationSec) onChange({ durationSec: next })
+    if (next !== value.durationSec) commitAndRemember({ durationSec: next })
   }
   const commitScale = () => {
     scaleInteracting.current = false
     const next = strengthToStartScalePercent(scaleStrengthDraft)
-    if (next !== value.startScalePercent) onChange({ startScalePercent: next })
+    if (next !== value.startScalePercent) commitAndRemember({ startScalePercent: next })
   }
   const commitBlur = () => {
     blurInteracting.current = false
-    if (blurDraft !== value.blurPx) onChange({ blurPx: blurDraft })
+    if (blurDraft !== value.blurPx) commitAndRemember({ blurPx: blurDraft })
   }
 
   /**
@@ -231,7 +255,8 @@ export function AnimationControls({
   const handleTypeChange = (raw: string) => {
     const type = coerceAnimationType(raw)
     if (type === value.type) return
-    const seed = animationFieldsForTypeChange(type)
+    // REQ-0540 — what you last used for this type, else the fixed table.
+    const seed = animationSeedForType(type, animationMemory)
     // The three local drafts mirror the committed value, so they have to
     // move with it — otherwise the sliders keep showing the old type's
     // numbers until the next prop round-trip.
@@ -272,7 +297,7 @@ export function AnimationControls({
             <span className="text-caption2 text-fg-tertiary truncate">{t('styleCell.animationIn')}</span>
             <Switch
               checked={value.inEnabled}
-              onCheckedChange={(v) => onChange({ inEnabled: v })}
+              onCheckedChange={(v) => commitAndRemember({ inEnabled: v })}
               disabled={rowDisabled}
               aria-label={t('styleCell.animationIn')}
             />
@@ -281,7 +306,7 @@ export function AnimationControls({
             <span className="text-caption2 text-fg-tertiary truncate">{t('styleCell.animationOut')}</span>
             <Switch
               checked={value.outEnabled}
-              onCheckedChange={(v) => onChange({ outEnabled: v })}
+              onCheckedChange={(v) => commitAndRemember({ outEnabled: v })}
               disabled={rowDisabled}
               aria-label={t('styleCell.animationOut')}
             />

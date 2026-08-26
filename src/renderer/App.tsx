@@ -270,7 +270,11 @@ function AppInner() {
           // REQ-0335 §3-6 — renderer-owned (`incoming-wins`), so it MUST be
           // sent on every save: omitting it would make main keep the
           // previous list and a deletion would never reach disk.
-          stylePresets: s.stylePresets
+          stylePresets: s.stylePresets,
+          // REQ-0540 — renderer-owned (`incoming-wins`), so the same
+          // send-every-save obligation as stylePresets: omitting it would drop
+          // the whole remembered table rather than keep main's copy.
+          animationMemory: s.animationMemory
         }
         saveSettings(settings).catch(() => { /* ignore IPC failures */ })
       }, SETTINGS_DEBOUNCE_MS)

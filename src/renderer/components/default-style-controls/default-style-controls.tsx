@@ -8,6 +8,7 @@ import { LINE_SPACING_DEFAULT_PERCENT } from '../../../shared/line-spacing'
 import { AnimationControls } from '@/components/animation-controls/animation-controls'
 import {
   resolveAnimation, ANIMATION_BLUR_ENABLED, animationEntryFields, animationUiValue,
+  resolveDefaultAnimationParams, type AnimationMemory,
 } from '../../../shared/cue-animation'
 import { OpacityPercentSlider } from '@/components/subtitle-table/opacity-percent-slider'
 import { clampOpacityPercent } from '../../../shared/alpha'
@@ -116,6 +117,16 @@ interface DefaultStyleControlsProps {
    * other caller (REQ-0485's `showFontList` pattern).
    */
   showKeywordEmphasis?: boolean
+  /**
+   * REQ-0540 — the app-wide "last values you used" table.
+   *
+   * The animation rows DISPLAY this rather than holding a fourth independent
+   * copy of the numbers, so a duration tuned in the inspector shows up here
+   * too (the REQ's 「真実は1つ」).  Optional, and every read falls back to the
+   * saved `defaults` and then to the fixed table, which is what makes the
+   * first launch after the upgrade look identical.
+   */
+  animationMemory?: AnimationMemory
 }
 
 /**
@@ -147,6 +158,7 @@ export function DefaultStyleControls({
   fadeDurationSec,
   isMsix,
   showKeywordEmphasis = true,
+  animationMemory,
 }: DefaultStyleControlsProps) {
   const { t } = useTranslation(['step1', 'step2', 'common'])
   const showKaraokeUi = canUseKaraokeInTier(isMsix)
@@ -164,6 +176,29 @@ export function DefaultStyleControls({
     animationBlurPx: defaults.animationBlurPx,
     fadeDurationSec,
   })
+  // REQ-0540 — the TYPE is the defaults' own choice (it decides what new cues
+  // get); the PARAMETERS come from the memory first.  `resolveDefaultAnimationParams`
+  // is the same resolution `animationFieldsForNewCue` uses, so what this panel
+  // shows and what a new cue receives cannot disagree.
+  const defaultsAnimationUi = {
+    ...animationUiValue(defaultsAnimation),
+    ...(() => {
+      const p = resolveDefaultAnimationParams(defaultsAnimation.type, {
+        animationInEnabled: defaults.animationInEnabled,
+        animationOutEnabled: defaults.animationOutEnabled,
+        animationDurationSec: defaults.animationDurationSec,
+        animationStartScalePercent: defaults.animationStartScalePercent,
+        animationBlurPx: defaults.animationBlurPx,
+      }, animationMemory)
+      return {
+        inEnabled: p.inEnabled,
+        outEnabled: p.outEnabled,
+        durationSec: p.durationSec,
+        startScalePercent: p.startScalePercent,
+        blurPx: p.blurPx,
+      }
+    })(),
+  }
   const showEmphasisUi = showKeywordEmphasis && canUseKeywordEmphasisInTier(isMsix)
   // REQ-0298 §4-1 — segButton removed; H/V rows use the shared
   // SegmentGroup component from `@/components/subtitle-table/segment-group`
@@ -455,10 +490,8 @@ export function DefaultStyleControls({
           {t('step2:timeline.inspector.animationSection')}
         </p>
         <AnimationControls
-          value={animationUiValue(defaultsAnimation)}
-          onChange={(patch) =>
-            onUpdateDefaults(animationEntryFields(animationUiValue(defaultsAnimation), patch))
-          }
+          value={defaultsAnimationUi}
+          onChange={(patch) => onUpdateDefaults(animationEntryFields(defaultsAnimationUi, patch))}
           includeBlur={ANIMATION_BLUR_ENABLED}
           surface="settings"
         />

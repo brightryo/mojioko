@@ -59,6 +59,9 @@ export default function Step1Route(_: Step1RouteProps) {
   // copy regardless of subsequent settings edits.
   const setProjectDefaults = useProjectStore((s) => s.setDefaults)
   const transcriptionDefaults = useSettingsStore((s) => s.transcriptionDefaults)
+  // REQ-0540 — a new cue gets the SAME parameters タブ2 displays: the memory
+  // first, then the saved defaults, then the fixed table.
+  const animationMemory = useSettingsStore((s) => s.animationMemory)
   // REQ-20260615-050 — fade duration is the only style field that lives
   // outside `transcriptionDefaults` (it shares the settings-store slot
   // with the General-tab slider that drives all three surfaces).  Read
@@ -385,7 +388,7 @@ export default function Step1Route(_: Step1RouteProps) {
           outlineColorHex: runDefaults.outlineColorHex,
           outlineThicknessPx: runDefaults.outlineThicknessPx,
           fadeDurationSec: settingsFadeDurationSec,
-        ...animationFieldsForNewCue(transcriptionDefaults),
+        ...animationFieldsForNewCue(transcriptionDefaults, animationMemory),
         },
         advanced: transcriptionAdvanced,
         // REQ-0207 — pass the drawer's checkbox through.  The service
@@ -529,7 +532,7 @@ export default function Step1Route(_: Step1RouteProps) {
         endSec: seg.endSec,
         text: seg.text,
         fadeDurationSec: settingsFadeDurationSec,
-        ...animationFieldsForNewCue(transcriptionDefaults),
+        ...animationFieldsForNewCue(transcriptionDefaults, animationMemory),
         fontId: runFontId,
         // REQ-0285 — attach per-word timestamps captured by the sidecar.
         // `undefined` (rather than `[]`) when the segment carried no

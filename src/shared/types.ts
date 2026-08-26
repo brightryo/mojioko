@@ -897,6 +897,20 @@ export interface AppSettings {
   stylePresets?: StylePreset[]
 
   /**
+   * REQ-0540 — the last animation parameters the user chose, per type.
+   *
+   * Renderer-owned (`incoming-wins`), so it MUST be sent on every save. Absent
+   * in every settings.json written before this REQ, which is exactly the
+   * fallback path `shared/animation-memory.ts` documents: no memory → the fixed
+   * `ANIMATION_TYPE_DEFAULTS` table → behaviour identical to before.
+   *
+   * Only `AnimationControls`' commit handlers write it. See
+   * `shared/animation-memory.ts` for the list of paths that must not, and why
+   * none of them can.
+   */
+  animationMemory?: import('./animation-memory').AnimationMemory
+
+  /**
    * REQ-0458 §3 — metadata about the most recently exported `.mcpb` MCP bundle
    * (app version + launch-spec revision + when).  The AI連携 tab compares its
    * `launchSpecRevision` against the current one to tell the user whether a

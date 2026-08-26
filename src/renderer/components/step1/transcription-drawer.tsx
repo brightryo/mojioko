@@ -199,6 +199,9 @@ export function TranscriptionDrawer({
   const autoLineBreak = useSettingsStore((s) => s.autoLineBreak)
   const setAutoLineBreak = useSettingsStore((s) => s.setAutoLineBreak)
   const fadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
+  // REQ-0540 — タブ2's animation rows display the app-wide "last values you
+  // used" table, so a duration tuned in the inspector shows up here too.
+  const animationMemory = useSettingsStore((s) => s.animationMemory)
   const isAudioOnly = useIsAudioOnly()
 
   // REQ-0210 — word-level transcription is an MSIX-only (paid tier)
@@ -644,6 +647,7 @@ export function TranscriptionDrawer({
                     fadeDurationSec={fadeDurationSec}
                     isMsix={isMsix}
                     showKeywordEmphasis={false}
+                    animationMemory={animationMemory}
                   />
                 </div>
               </TabsContent>

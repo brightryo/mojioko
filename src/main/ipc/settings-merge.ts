@@ -111,6 +111,10 @@ export const SETTINGS_MERGE_RULES: { readonly [K in keyof AppSettings]-?: MergeR
   // authoritative — and it MUST be sent on every save, otherwise a delete
   // could not round-trip to disk.
   stylePresets: 'incoming-wins',
+  // REQ-0540: same shape as stylePresets — the renderer's animation controls
+  // are the only writer, so the payload is authoritative and must be sent on
+  // every save (an omitted key would drop the whole table, not keep it).
+  animationMemory: 'incoming-wins',
 
   // --- main-owned, renderer sends a null sentinel each save ----------------
   activeModelId: 'incoming-else-existing',

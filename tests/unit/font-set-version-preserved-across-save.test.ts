@@ -83,6 +83,8 @@ function makeRendererPayload(): AppSettings {
     translationTargetLang: 'en',
     playbackTimeDetailed: false,
     stylePresets: [],
+    // REQ-0540 — the per-type animation memory joined the payload.
+    animationMemory: {},
   }
 }
 

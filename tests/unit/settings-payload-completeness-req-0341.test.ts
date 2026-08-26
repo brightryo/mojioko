@@ -68,6 +68,14 @@ describe('REQ-0341 §3-2 — the settings save payload matches the merge rules',
     expect(keys).toContain('stylePresets')
   })
 
+  it('★ animationMemory specifically — REQ-0540, same pairing', () => {
+    // Omitting it would not "keep the previous table": `merged` starts from
+    // `{ ...incoming }`, so every remembered value would be wiped on the next
+    // save the user triggers by changing anything at all.
+    expect(rules.animationMemory).toBe('incoming-wins')
+    expect(keys).toContain('animationMemory')
+  })
+
   it('the two main-owned `presence-wins` keys stay absent (REQ-0279 / REQ-0315)', () => {
     // The other direction of the same contract, restated here so both halves
     // live together rather than only in the fontSetInstalledVersion test.

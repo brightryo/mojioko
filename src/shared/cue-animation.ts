@@ -945,6 +945,75 @@ export function animationKeyframes(
 }
 
 /**
+ * REQ-0540 — the parameters remembered for one animation type.
+ *
+ * The TYPES live here rather than in `animation-memory.ts` (which holds the
+ * operations and the full rationale) for one reason: `resolveDefaultAnimationParams`
+ * below needs them, and it belongs here beside the table it falls back to.
+ * Pointing this module at `animation-memory.ts` instead would make the two
+ * import each other.
+ *
+ * `startScalePercent` is the STORED start scale, not the displayed 「強さ」
+ * (REQ-0337 §2-3) — what is on disk means what it means everywhere else.
+ */
+export interface AnimationParamsMemory {
+  inEnabled: boolean
+  outEnabled: boolean
+  durationSec: number
+  startScalePercent: number
+  blurPx: number
+}
+
+/** Type -> the last parameters the user chose for it.  Absent = never tuned. */
+export type AnimationMemory = Partial<Record<AnimationType, AnimationParamsMemory>>
+
+/**
+ * ★ REQ-0540 — what a STORED DEFAULT resolves to, for the two surfaces that
+ * answer "what do new cues get": タブ2's animation rows and
+ * `animationFieldsForNewCue`.
+ *
+ * ## The fallback order, and why it is this way round
+ *
+ *   1. **the memory** — so an edit made in the inspector or the bulk-edit bar
+ *      shows up in タブ2.  That is the REQ's 「真実は1つ」: タブ2 displays the
+ *      memory rather than carrying a fourth independent copy of the numbers.
+ *   2. **the stored `TranscriptionDefaults`** — what タブ2 saved before this
+ *      REQ existed.  Consulting it second is what makes the first launch after
+ *      the upgrade look **identical**: there is no memory yet, so every value
+ *      comes from here, exactly as it did.
+ *   3. **`ANIMATION_TYPE_DEFAULTS`** — for a field neither carries, i.e. a
+ *      settings file written before that field existed.  Same three constants
+ *      this function replaced, in the same order.
+ *
+ * The TYPE is deliberately not resolved here: which type new cues get is a
+ * separate choice that lives in `TranscriptionDefaults.animationType`, and the
+ * memory says nothing about it.  Only the parameters come from the memory.
+ */
+export function resolveDefaultAnimationParams(
+  type: AnimationType,
+  defaults: {
+    animationInEnabled?: boolean
+    animationOutEnabled?: boolean
+    animationDurationSec?: number
+    animationStartScalePercent?: number
+    animationBlurPx?: number
+  },
+  memory?: AnimationMemory,
+): AnimationParamsMemory {
+  const remembered = memory?.[type]
+  if (remembered) return remembered
+  return {
+    // Absent means enabled, matching `resolveAnimation`: a default that picked
+    // a type but never touched the switches animates at both ends.
+    inEnabled: defaults.animationInEnabled !== false,
+    outEnabled: defaults.animationOutEnabled !== false,
+    durationSec: defaults.animationDurationSec ?? ANIMATION_TYPE_DEFAULTS[type].durationSec,
+    startScalePercent: defaults.animationStartScalePercent ?? defaultStartScalePercent(type),
+    blurPx: defaults.animationBlurPx ?? BLUR_MAX_PX,
+  }
+}
+
+/**
  * REQ-0325 §2 — the animation fields to stamp onto a NEW cue, taken from
  * `TranscriptionDefaults`.
  *
@@ -974,7 +1043,7 @@ export function animationFieldsForNewCue(defaults: {
   animationDurationSec?: number
   animationStartScalePercent?: number
   animationBlurPx?: number
-}): {
+}, memory?: AnimationMemory): {
   animationType?: AnimationType
   animationInEnabled?: boolean
   animationOutEnabled?: boolean
@@ -983,15 +1052,20 @@ export function animationFieldsForNewCue(defaults: {
   animationBlurPx?: number
 } {
   if (defaults.animationType === undefined) return {}
-  const table = ANIMATION_TYPE_DEFAULTS[defaults.animationType]
+  // REQ-0540 — the parameters come from `resolveDefaultAnimationParams`, which
+  // is the SAME resolution タブ2 displays: memory → saved defaults → table.  A
+  // new cue therefore gets exactly what the defaults panel says it will, even
+  // after the user tuned this type from the inspector.  With no memory (a
+  // settings file predating REQ-0540) the second step supplies every value and
+  // the result is byte-identical to before.
+  const params = resolveDefaultAnimationParams(defaults.animationType, defaults, memory)
   return {
     animationType: defaults.animationType,
-    animationInEnabled: defaults.animationInEnabled !== false,
-    animationOutEnabled: defaults.animationOutEnabled !== false,
-    animationDurationSec: defaults.animationDurationSec ?? table.durationSec,
-    animationStartScalePercent: defaults.animationStartScalePercent
-      ?? defaultStartScalePercent(defaults.animationType),
-    animationBlurPx: defaults.animationBlurPx ?? BLUR_MAX_PX,
+    animationInEnabled: params.inEnabled,
+    animationOutEnabled: params.outEnabled,
+    animationDurationSec: params.durationSec,
+    animationStartScalePercent: params.startScalePercent,
+    animationBlurPx: params.blurPx,
   }
 }
 

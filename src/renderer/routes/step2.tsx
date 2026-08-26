@@ -193,6 +193,9 @@ export default function Step2Route(_: Step2RouteProps) {
   const addEntry = useProjectStore((s) => s.addEntry)
   const updateEntry = useProjectStore((s) => s.updateEntry)
   const defaults = useProjectStore((s) => s.defaults)
+  // REQ-0540 — a new cue gets the SAME parameters タブ2 displays: the memory
+  // first, then the saved defaults, then the fixed table.
+  const animationMemory = useSettingsStore((s) => s.animationMemory)
   const video = useProjectStore((s) => s.video)
   const isAudioOnly = useIsAudioOnly()
   const pushHistory = useHistoryStore((s) => s.push)
@@ -805,7 +808,7 @@ export default function Step2Route(_: Step2RouteProps) {
         endSec,
         text: '',
         fadeDurationSec: settingsFadeDurationSec,
-        ...animationFieldsForNewCue(defaults),
+        ...animationFieldsForNewCue(defaults, animationMemory),
         // REQ-20260613-016 / v1.2.2 機能A: seed per-row layout + background
         // defaults at creation time.  Same pattern as the transcription
         // segment mapping in step1.tsx.
@@ -1118,7 +1121,7 @@ export default function Step2Route(_: Step2RouteProps) {
         endSec: cue.endSec,
         text: cue.text,
         fadeDurationSec: settingsFadeDurationSec,
-        ...animationFieldsForNewCue(defaults),
+        ...animationFieldsForNewCue(defaults, animationMemory),
         ...layoutDefaults,
         ...importStyleFields,
       }

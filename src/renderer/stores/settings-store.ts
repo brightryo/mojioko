@@ -8,6 +8,10 @@ import { DEFAULT_FONT_ID, isFontId, type FontId } from '../../shared/fonts'
 import { clampLineSpacingPercent } from '../../shared/line-spacing'
 import { DEFAULT_TRANSLATION_TARGET, coerceTranslationTarget } from '../../shared/translation'
 import { STYLE_PRESET_MAX, validatePresetName, type StylePreset } from '../../shared/style-preset'
+import {
+  rememberAnimationParams, sanitizeAnimationMemory, type AnimationMemory,
+} from '../../shared/animation-memory'
+import type { AnimationUiValue } from '../../shared/cue-animation'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 
 interface SettingsStore {
@@ -95,6 +99,12 @@ interface SettingsStore {
    * this array never contains.
    */
   stylePresets: StylePreset[]
+  /**
+   * REQ-0540 — the last animation parameters the user chose, per type.  Empty
+   * until they tune one; every read falls back to `ANIMATION_TYPE_DEFAULTS`,
+   * which is what makes an upgraded install behave exactly as it did.
+   */
+  animationMemory: AnimationMemory
 
   setLanguage: (lang: string) => void
   setTheme: (t: AppTheme) => void
@@ -146,8 +156,18 @@ interface SettingsStore {
    */
   resetStep3Settings: () => void
 
+  /**
+   * REQ-0540 — record the parameters now in use for `value.type`.
+   *
+   * The ONLY writer is `AnimationControls`' commit handlers.  Opening a
+   * project, applying a preset, undo/redo and new-cue stamping must never
+   * reach this — see `shared/animation-memory.ts` for the full list and why
+   * none of them can.
+   */
+  rememberAnimation: (value: AnimationUiValue) => void
+
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'translationAutoEnabled' | 'translationTargetLang' | 'playbackTimeDetailed' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'defaultImageDir' | 'defaultTextDir' | 'defaultSrtDir' | 'stylePresets'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'translationAutoEnabled' | 'translationTargetLang' | 'playbackTimeDetailed' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'defaultImageDir' | 'defaultTextDir' | 'defaultSrtDir' | 'stylePresets' | 'animationMemory'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -189,6 +209,8 @@ export const useSettingsStore = create<SettingsStore>()(
       // REQ-0335 §3 — no built-in presets ship in v1.3.6 (the owner will
       // author their contents later); the mechanism starts empty.
       stylePresets: [],
+      // REQ-0540 — nothing remembered yet: every type seeds from the fixed table.
+      animationMemory: {},
 
       setLanguage: (lang) => set({ language: lang }),
       setTheme: (t) => set({ theme: t }),
@@ -241,6 +263,9 @@ export const useSettingsStore = create<SettingsStore>()(
       },
       deleteStylePreset: (id) =>
         set((s) => ({ stylePresets: s.stylePresets.filter((p) => p.id !== id) })),
+
+      rememberAnimation: (value) =>
+        set((s) => ({ animationMemory: rememberAnimationParams(s.animationMemory, value) })),
 
       resetStep3Settings: () =>
         set({
@@ -393,7 +418,11 @@ export const useSettingsStore = create<SettingsStore>()(
                     typeof p.style === 'object',
                 )
                 .slice(0, STYLE_PRESET_MAX)
-            : []
+            : [],
+          // REQ-0540 — absent in every settings.json written before this REQ,
+          // and `sanitizeAnimationMemory` turns that into `{}` = "nothing
+          // remembered" = the pre-REQ behaviour, with no migration.
+          animationMemory: sanitizeAnimationMemory(s.animationMemory)
         })
       }
     }),
@@ -430,7 +459,10 @@ export const useSettingsStore = create<SettingsStore>()(
         // (here) and settings.json (via App.tsx's debounced save + the
         // `incoming-wins` merge rule).  Same dual persistence every other
         // renderer-owned setting already has.
-        stylePresets: state.stylePresets
+        stylePresets: state.stylePresets,
+        // REQ-0540 — same dual persistence as stylePresets: localStorage here,
+        // settings.json via App.tsx's debounced save.
+        animationMemory: state.animationMemory
       })
     }
   )

@@ -76,6 +76,10 @@ describe('REQ-0312 §1 — the rule table pins every field s classification', ()
     // REQ-0335 §3-6 — renderer-owned style presets.  `incoming-wins` AND
     // App.tsx always sends the key, so a deletion round-trips to disk.
     stylePresets: 'incoming-wins',
+    // REQ-0540 — the per-type animation memory.  Same pairing as stylePresets:
+    // renderer-owned, and App.tsx must send it every save or the whole table
+    // disappears from disk rather than surviving as main's copy.
+    animationMemory: 'incoming-wins',
     activeModelId: 'incoming-else-existing',
     translationToolActiveId: 'incoming-else-existing',
     lastInputDir: 'incoming-else-existing',
