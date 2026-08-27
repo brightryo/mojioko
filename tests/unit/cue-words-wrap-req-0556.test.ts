@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyCueEdit, collectCueEditWarnings, validateCueEdits } from '../../src/shared/cue-edit'
 import { wrapCueText } from '../../src/shared/cue-wrap'
+import { WIDTH_AFFECTING_PATHS, needsLineBreakRecheck } from '../../src/shared/cue-edit'
 import { applyAutoLineBreakCore, type LineBreakMetrics } from '../../src/shared/line-break-core'
 import {
   clampEmphasisScalePercent,
@@ -319,5 +320,98 @@ describe('REQ-0556 §2 — one implementation, reached by both callers', () => {
     expect(src).toContain('wrapCueText')
     expect(src).not.toContain('mapRangesAcrossBreakCollapse')
     expect(src).not.toContain('applyAutoLineBreakCore')
+  })
+})
+
+/**
+ * ★ REQ-0563 — tell the agent its line breaks may have gone stale.
+ *
+ * Observed for real: an agent set emphasis at 145–160%, and the `\`N positions
+ * computed at transcription time no longer fitted the enlarged glyphs, so the
+ * burn split words mid-token. One `wrap:'pack'` fixed it, but nothing had said
+ * so — and an agent cannot look at the output and notice.
+ *
+ * The risk with any hint is that it fires so often it stops being read
+ * (REQ-0502). These tests are mostly about the cases where it must STAY QUIET.
+ */
+describe('REQ-0563 §1 — the stale-line-break hint', () => {
+  const multi = (over: Partial<SubtitleEntry> = {}) =>
+    cue({ text: '一行目\\N二行目', ...over })
+  const single = (over: Partial<SubtitleEntry> = {}) =>
+    cue({ text: '一行だけ', ...over })
+
+  describe('fires when a width-affecting field changed on a multi-line cue', () => {
+    it('★ text', () => {
+      expect(needsLineBreakRecheck(['text'], multi(), false)).toBe(true)
+    })
+    it('★ font size', () => {
+      expect(needsLineBreakRecheck(['style.fontSizePx'], multi(), false)).toBe(true)
+    })
+    it('★ emphasis turned ON', () => {
+      expect(needsLineBreakRecheck(['style.emphasis.enabled'],
+        multi({ keywordEmphasisEnabled: true }), false)).toBe(true)
+    })
+    it('★ emphasis scale changed — the case actually observed', () => {
+      expect(needsLineBreakRecheck(['style.emphasis.scalePercent'],
+        multi({ keywordEmphasisEnabled: true }), false)).toBe(true)
+    })
+    it('★ emphasis spans changed while emphasis is on', () => {
+      expect(needsLineBreakRecheck(['emphasisSpans'],
+        multi({ keywordEmphasisEnabled: true }), false)).toBe(true)
+    })
+  })
+
+  describe('stays quiet otherwise', () => {
+    it('★ a colour-only change cannot alter width', () => {
+      expect(needsLineBreakRecheck(['style.textColorHex'], multi(), false)).toBe(false)
+    })
+    it('★ a timing-only change cannot alter width', () => {
+      expect(needsLineBreakRecheck(['startSec', 'endSec'], multi(), false)).toBe(false)
+    })
+    it('★ the caller already re-wrapped in the same call', () => {
+      // Suggesting the fix someone just applied is noise.
+      expect(needsLineBreakRecheck(['text'], multi(), true)).toBe(false)
+    })
+    it('★ a SINGLE-line cue has no stored breaks to go stale', () => {
+      expect(needsLineBreakRecheck(['text', 'style.fontSizePx'], single(), false)).toBe(false)
+    })
+    it('★ spans changed but emphasis is OFF — nothing is drawn bigger', () => {
+      // That combination has its own warning (EMPHASIS_SPANS_WITHOUT_ENABLE);
+      // it does not change any width.
+      expect(needsLineBreakRecheck(['emphasisSpans'],
+        multi({ keywordEmphasisEnabled: false }), false)).toBe(false)
+    })
+    it('emphasis scale changed while emphasis is OFF', () => {
+      expect(needsLineBreakRecheck(['style.emphasis.scalePercent'],
+        multi({ keywordEmphasisEnabled: false }), false)).toBe(false)
+    })
+    it('nothing changed at all', () => {
+      expect(needsLineBreakRecheck([], multi(), false)).toBe(false)
+    })
+  })
+
+  it('★ negative control: without the multi-line guard, a plain cue would fire', () => {
+    /*
+     * The three conditions are ANDed, and each one suppresses a real case. This
+     * shows the single-line guard is load-bearing rather than decorative: the
+     * same change on a cue WITH breaks does fire.
+     */
+    expect(needsLineBreakRecheck(['text'], single(), false)).toBe(false)
+    expect(needsLineBreakRecheck(['text'], multi(), false)).toBe(true)
+  })
+
+  it('the width-affecting list is the one the warning reports from', () => {
+    // The detail names which of the caller's changes triggered the hint; a
+    // second hand-written list would drift from the predicate.
+    expect([...WIDTH_AFFECTING_PATHS].sort()).toEqual(
+      ['emphasisSpans', 'style.emphasis.enabled', 'style.emphasis.scalePercent',
+        'style.fontSizePx', 'text'].sort(),
+    )
+  })
+
+  it('★ the command emits it, gated on the wrap requested in the same edit', () => {
+    const src = readFileSync(join(__dirname, '../../src/main/cli/commands/edit-cues.ts'), 'utf8')
+    expect(src).toContain('LINE_BREAKS_MAY_BE_STALE')
+    expect(src).toContain('needsLineBreakRecheck(changed, final, Boolean(edit.wrap))')
   })
 })

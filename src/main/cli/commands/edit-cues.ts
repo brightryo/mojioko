@@ -21,8 +21,10 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { parseProjectFile, serializeProjectFile } from '../../../shared/project-file'
 import {
+  WIDTH_AFFECTING_PATHS,
   applyCueEdit,
   collectCueEditWarnings,
+  needsLineBreakRecheck,
   resolveSelection,
   validateCueEdits,
   type CueEdit,
@@ -44,6 +46,17 @@ import type { SubtitleEntry } from '../../../shared/types'
  * fallback, and the assumption is REPORTED rather than silent.
  */
 const DEFAULT_WRAP_WIDTH_PX = 1920
+
+/**
+ * Append a warning unless its code is already present.
+ *
+ * Same rule the per-cue warnings follow: fifty cues with one problem is one
+ * fact, not fifty lines for an agent to read (REQ-0554).
+ */
+function pushOnce(warnings: CliWarning[], notice: CliWarning): void {
+  if (warnings.some((w) => w.code === notice.code)) return
+  warnings.push(notice)
+}
 
 /** What happened to one selected cue. */
 interface CueOutcome {
@@ -190,6 +203,28 @@ export async function runEditCuesCommand(ctx: CliContext, args: ParsedArgs): Pro
       else unchanged++
       outcomes.push({ id: final.id, index: visibleIndexOf(entries, pos), changed })
       collectCueEditWarnings(before, final, changed, isPaid, warnings)
+
+      /*
+       * ★ REQ-0563 — point at the next move, not just the last one.
+       *
+       * Emitted HERE rather than inside `collectCueEditWarnings` because the
+       * condition includes "the caller did not already re-wrap", and `wrap` is
+       * a property of the EDIT, which that function never sees. The judgement
+       * itself is `needsLineBreakRecheck` in `shared/cue-edit.ts`, so it stays
+       * testable without files or fonts.
+       */
+      if (needsLineBreakRecheck(changed, final, Boolean(edit.wrap))) {
+        pushOnce(warnings, {
+          code: 'LINE_BREAKS_MAY_BE_STALE',
+          message: 'この cue には手動の改行（\\N）が入っていますが、今回の変更で文字の幅が変わった可能性があります（改行位置は自動では再計算されません）。',
+          detail: {
+            cueId: final.id,
+            changed: changed.filter((c) => WIDTH_AFFECTING_PATHS.includes(c)),
+            reason: '改行位置は保存時の幅で計算されたままなので、拡大やテキスト変更のあとは語の途中で折れることがあります。',
+            remedy: '幅が変わった場合は wrap:"pack"（敷き詰め・既存の改行を捨てて詰め直す）または wrap:"overflow"（はみ出した行だけ折り直す）を同じ edit_cues で指定すると、改行を再計算できます。',
+          },
+        })
+      }
     }
   }
 

@@ -510,6 +510,73 @@ export function validateCueEdits(raw: unknown): { edits: CueEdit[]; problems: Cu
 }
 
 /**
+ * ★ REQ-0563 — did this edit make the cue's stored line breaks stale?
+ *
+ * ## The observation this comes from
+ *
+ * An agent set keyword emphasis at 145–160% on a transcribed project. The `\N`
+ * positions had been computed at transcription time, at the ORIGINAL glyph
+ * sizes, so the enlarged words no longer fitted the lines they were wrapped
+ * into and the burn split words mid-token (「ぐ/らい」). One
+ * `wrap:'pack'` fixed it — but nothing had told the agent that this was the
+ * next move, and an agent cannot look at the picture and notice.
+ *
+ * `edit_cues` was already honest about what it did. This is the other half:
+ * saying what to do about it.
+ *
+ * ## Why the conditions are narrow
+ *
+ * A hint that fires on every edit is a hint nobody reads (REQ-0502's rule about
+ * always-firing warnings). All three must hold:
+ *
+ *   1. something that changes RENDERED WIDTH actually changed,
+ *   2. the cue has manual breaks to go stale — a single-line cue has none, and
+ *   3. the caller did not already re-wrap in the same call, which is exactly
+ *      the fix being suggested.
+ *
+ * `emphasisSpans` counts only when emphasis is ENABLED: spans with emphasis off
+ * are not drawn at all, so they cannot change any width. (That combination has
+ * its own warning already — `EMPHASIS_SPANS_WITHOUT_ENABLE`.) Likewise
+ * `emphasis.enabled` counts only when it is turning ON: switching it off makes
+ * glyphs smaller, which leaves the breaks merely conservative rather than
+ * broken.
+ */
+/**
+ * The patch paths that can change how WIDE the rendered text is.
+ *
+ * One list, used both to decide whether to hint and to tell the caller which of
+ * their changes triggered it — a second copy for the message would be a second
+ * thing to update when a width-affecting field is added.
+ */
+export const WIDTH_AFFECTING_PATHS: readonly string[] = [
+  'text',
+  'style.fontSizePx',
+  'style.emphasis.enabled',
+  'style.emphasis.scalePercent',
+  'emphasisSpans',
+]
+
+export function needsLineBreakRecheck(
+  changed: readonly string[],
+  after: SubtitleEntry,
+  wrapRequested: boolean,
+): boolean {
+  if (wrapRequested) return false
+  // No manual breaks ⇒ nothing stored to go stale; the burn wraps as it likes.
+  if (!after.text.includes('\\N')) return false
+
+  const emphasisOn = after.keywordEmphasisEnabled === true
+  const touched = (path: string): boolean => changed.includes(path)
+
+  if (touched('text')) return true
+  if (touched('style.fontSizePx')) return true
+  if (emphasisOn && touched('style.emphasis.scalePercent')) return true
+  if (emphasisOn && touched('style.emphasis.enabled')) return true
+  if (emphasisOn && touched('emphasisSpans')) return true
+  return false
+}
+
+/**
  * REQ-0554 §1-3 — say so when a patch stores something that will not show.
  *
  * These follow `no-op-warnings.ts`'s流儀: the write succeeds (the value is what
