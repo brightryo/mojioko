@@ -132,9 +132,10 @@ export function AiIntegrationTab() {
       {/*
         ★ REQ-0559 §1-2 — the boundary, stated permanently.
 
-        This slot used to read 「処理はすべてこの PC の中で完結します。」 — which is
-        false for this tab specifically, and sat a few pixels away from a dialog
-        saying the opposite. The owner found it in the packaged build.
+        This slot used to claim that all processing finishes on this PC and
+        nothing leaves it — false for this tab specifically, and sitting a few
+        pixels from a dialog saying the opposite. The owner found it in the
+        packaged build. (Not quoted verbatim: see the note in `mcp/mcpb.ts`.)
 
         It renders the CONSENT DIALOG'S OWN STRINGS rather than a second summary
         written to match. Two copies of a privacy boundary is two things to keep

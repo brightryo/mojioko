@@ -135,15 +135,22 @@ export function buildMcpbManifest(
     // REQ-0458 §1 — version encodes app + launch-spec revision (`1.4.0+lsr.1`).
     version: mcpManifestVersion(APP_VERSION),
     /*
-     * ★ REQ-0559 §1-3 — this used to end 「処理はすべてこの PC 内で完結します。」
+     * ★ REQ-0559 §1-3 — this used to end with a sentence claiming that all
+     * processing finishes on this PC and nothing leaves it.
      *
-     * Claude Desktop shows this description on its install screen, which makes
-     * it the single worst place in the product for that sentence: the user is
-     * reading it at the exact moment they connect MOJIOKO to a remote
-     * assistant, and it tells them nothing will leave. The subtitle text, file
-     * paths and video metadata will.
+     * Claude Desktop shows this description on its install screen, which made
+     * it the single worst place in the product for that claim: the user read it
+     * at the exact moment they connected MOJIOKO to a remote assistant, and it
+     * told them nothing would leave. The subtitle text, file paths and video
+     * metadata do.
      *
      * Kept to the same boundary the consent dialog draws, in the same terms.
+     *
+     * The retired sentence is deliberately NOT quoted verbatim here. main is
+     * bundled without minification, so a comment containing it would ship
+     * inside app.asar — and then the simplest possible audit of a released
+     * package ("grep it for the false claim") would hit this comment and report
+     * a problem that does not exist. The exact wording lives in RES-0559 §2-1.
      */
     description:
       'ローカル動画字幕ツール MOJIOKO を AI から操作します（文字起こし・翻訳・字幕焼き込み）。'
