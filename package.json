@@ -42,7 +42,8 @@
     "measure:timeline": "playwright test --config playwright.measure.config.ts tests/measure/timeline-geometry.measure.ts",
     "measure:rotation-edges": "node scripts/measure-rotation-edges/index.mjs",
     "measure:list": "playwright test --config playwright.measure.config.ts tests/measure/list-virtualization.measure.ts",
-    "verify:cut-anim-parity": "node scripts/verify-cut-anim-parity/index.mjs"
+    "verify:cut-anim-parity": "node scripts/verify-cut-anim-parity/index.mjs",
+    "shots": "node scripts/shots/index.mjs"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.0.4",
