@@ -59,6 +59,74 @@ const ONLY = (arg('only', '') || '').split(',').filter(Boolean)
 const WIN = { width: 1600, height: 900 }
 
 /**
+ * ★ REQ-0565 §1 — the look the site shows, declared HERE and nowhere else.
+ *
+ * ## Why this exists
+ *
+ * `convert` seeds a new project from the machine's `transcriptionDefaults`,
+ * so the first run of this tool published seven screenshots with every
+ * subtitle tilted 15° — because that is what this developer's settings.json
+ * happened to hold that day. The product looked like a tool for slanted
+ * captions. Nothing was wrong with the app; the pipeline was reading the
+ * environment and calling it a design.
+ *
+ * That is the same fault CLAUDE.md §18 records for cli-smoke (REQ-0516): an
+ * assertion — or here, an artefact — that assumes machine state. The cure is
+ * the same. Do not read the environment: state the intent.
+ *
+ * ## The rule
+ *
+ * EVERY field that can move a pixel is listed. A field left out is a field the
+ * settings can still reach, and it will be missed exactly when someone's
+ * settings differ from today's. If you add a visual field to the app, add it
+ * here too.
+ *
+ * The look itself is deliberately the plain one: bottom-centre, horizontal,
+ * white on a black outline. What a first-time user should picture.
+ */
+const SITE_STYLE = {
+  /*
+   * Font ids are WEIGHT-specific: there is no bare `noto-sans-jp`. Setting one
+   * silently loaded nothing and the captions vanished from the preview
+   * entirely — the shot still "succeeded", it just had no subtitle in it.
+   * SemiBold is what the app's own defaults use for captions.
+   */
+  fontId: 'noto-sans-jp-semibold',
+  fontSizePx: 120,
+  textColorHex: '#FFFFFF',
+  textAlphaPercent: 100,
+  outlineColorHex: '#000000',
+  outlineThicknessPx: 8,
+  outlineAlphaPercent: 100,
+  shadow: { depthPx: 0, color: '#000000', alphaPercent: 100 },
+  rotationDeg: 0,
+  casing: 'none',
+  lineSpacingPercent: 0,
+  layer: 0,
+  position: {
+    horizontal: 'center',
+    vertical: 'bottom',
+    verticalMarginPx: 60,
+    // Unpin: a dragged position stored in the fixture would override the
+    // alignment above and put the caption somewhere arbitrary.
+    posX: null,
+    posY: null,
+  },
+  karaoke: { enabled: false, style: 'sweep', highlightColor: '#B4FF39' },
+  emphasis: { enabled: false, color: '#3FD585', scalePercent: 150 },
+  /*
+   * Animations off. A still captured mid fade-in or mid pop shows a
+   * half-transparent or half-scaled caption — which reads as a rendering bug
+   * rather than as an animation, because a screenshot has no time axis.
+   */
+  animation: {
+    type: 'none', inEnabled: false, outEnabled: false,
+    durationSec: 0.3, startScalePercent: 60, blurPx: 0,
+  },
+  background: { enabled: false, color: 'black', opacityPercent: 50 },
+}
+
+/**
  * The set. `video: null` means the shot shows no footage (a settings screen),
  * so it needs no assignment.
  *
@@ -101,8 +169,10 @@ const SHOTS = [
         edits: [{
           select: { index: focusIndex },
           style: {
-            fontSizePx: 96,
+            // On top of SITE_STYLE, which already pinned rotation to 0.
+            fontSizePx: 110,
             emphasis: { enabled: true, color: '#3FD585', scalePercent: 150 },
+            karaoke: { enabled: true, style: 'sweep', highlightColor: '#B4FF39' },
           },
           emphasisSpans: [{ start: 0, end: word.length, text: word }],
           // Re-wrap at the new size, exactly as REQ-0563's hint advises.
@@ -214,6 +284,23 @@ async function takeShot(shot, work) {
 
     cues = JSON.parse(fs.readFileSync(projPath, 'utf-8')).editing.subtitles
 
+    /*
+     * ★ REQ-0565 §1 — overwrite the inherited look with the declared one.
+     *
+     * `convert` seeded these cues from the machine's transcriptionDefaults, so
+     * until this runs they carry whatever this developer's settings say. One
+     * `edit_cues` call over every id replaces the whole visual surface with
+     * SITE_STYLE. Written through --edits-file rather than --edits because the
+     * id list for a 180-cue project is far too long for a command line.
+     */
+    const styleFile = path.join(work, shot.id + '-style.json')
+    fs.writeFileSync(styleFile, JSON.stringify([
+      { select: { ids: cues.map((c) => c.id) }, style: SITE_STYLE },
+    ]), 'utf-8')
+    const styled = cli(['edit_cues', projPath, '-o', projPath, '--edits-file', styleFile])
+    if (styled.code !== 0) throw new Error(`site-style edit_cues failed for ${shot.id} (exit ${styled.code})`)
+    cues = JSON.parse(fs.readFileSync(projPath, 'utf-8')).editing.subtitles
+
     if (shot.prep) {
       const prepared = shot.prep(cues)
       if (prepared) {
@@ -304,7 +391,34 @@ async function takeShot(shot, work) {
 
     fs.mkdirSync(OUT_DIR, { recursive: true })
     await w.screenshot({ path: outPath })
-    return outPath
+
+    /*
+     * ★ REQ-0565 §2-2 — record what was ACTUALLY applied.
+     *
+     * "The captions look straight" is a judgement about a picture. This writes
+     * the numbers the app rendered from, so the check is a comparison rather
+     * than an opinion — and so the settings-independence control (§1-3) has
+     * something exact to compare.
+     */
+    const shown = cues[typeof focusIndex === 'number' ? focusIndex : 0]
+    return {
+      path: outPath,
+      style: shown
+        ? {
+            rotation: shown.rotation ?? 0,
+            fontSizePx: shown.fontSizePx,
+            fontId: shown.fontId ?? null,
+            outlineThicknessPx: shown.outlineThicknessPx,
+            lineSpacingPercent: shown.lineSpacingPercent ?? 0,
+            horizontalPosition: shown.horizontalPosition,
+            verticalPosition: shown.verticalPosition,
+            verticalMarginPx: shown.verticalMarginPx,
+            karaokeEnabled: shown.karaokeEnabled === true,
+            keywordEmphasisEnabled: shown.keywordEmphasisEnabled === true,
+            animationType: shown.animationType ?? 'none',
+          }
+        : null,
+    }
   } finally {
     await app.close().catch(() => {})
   }
@@ -321,18 +435,26 @@ if (!fs.existsSync(path.join(REPO, 'out', 'main', 'index.js'))) {
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'mojioko-shots-'))
 const wanted = ONLY.length > 0 ? SHOTS.filter((s) => ONLY.includes(s.id)) : SHOTS
 let failed = 0
+const manifest = []
 
 log(`shots: ${wanted.length} shot(s) -> ${OUT_DIR}\n`)
 for (const shot of wanted) {
   const label = `${shot.id}${shot.video ? ` [${shot.video}]` : ' [no video]'}`
   try {
-    const p = await takeShot(shot, work)
-    log(`  OK    ${label}  ${path.basename(p)}`)
+    const r = await takeShot(shot, work)
+    manifest.push({ id: shot.id, video: shot.video, style: r.style })
+    const rot = r.style ? `rot=${r.style.rotation}` : 'no cue'
+    log(`  OK    ${label}  ${path.basename(r.path)}  ${rot}`)
   } catch (e) {
     failed++
     log(`  FAIL  ${label}  ${e instanceof Error ? e.message : String(e)}`)
   }
 }
+fs.writeFileSync(path.join(OUT_DIR, 'shots-manifest.json'),
+  JSON.stringify({ siteStyle: SITE_STYLE, shots: manifest }, null, 2), 'utf-8')
+log(`
+manifest: ${path.join(OUT_DIR, 'shots-manifest.json')}`)
+
 try { fs.rmSync(work, { recursive: true, force: true }) } catch { /* best effort */ }
 
 log(`\n${failed === 0 ? 'ALL SHOTS TAKEN' : `${failed} shot(s) failed`}`)

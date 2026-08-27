@@ -269,9 +269,25 @@ export function applyCueEdit(entry: SubtitleEntry, edit: CueEdit): ApplyResult {
   const changed: string[] = []
 
   const set = (path: string, field: string, value: unknown): void => {
+    /*
+     * ★ REQ-0565 — `null` means "clear this optional field", and clearing has
+     * to store `undefined`, not `null`.
+     *
+     * Only `posX`/`posY` accept null today: both null is the documented way to
+     * remove a drag-pin. REQ-0554 stored the null literally, and every render
+     * path asks `posX !== undefined` to decide whether a cue is pinned — which
+     * `null` satisfies. So "unpin" produced a cue pinned at (null, null), and
+     * the caption was laid out at no coordinates and simply never appeared.
+     *
+     * It went unnoticed because the REQ-0554 test asserted the input was
+     * ACCEPTED, and the smoke never rendered an unpinned cue. It surfaced when
+     * the screenshot pipeline unpinned every cue for a clean look and the
+     * captions vanished from all seven shots.
+     */
+    const stored = value === null ? undefined : value
     const current = (next as unknown as Record<string, unknown>)[field]
-    if (sameValue(current, value)) return
-    ;(next as unknown as Record<string, unknown>)[field] = value
+    if (sameValue(current, stored)) return
+    ;(next as unknown as Record<string, unknown>)[field] = stored
     changed.push(path)
   }
 

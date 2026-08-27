@@ -405,3 +405,69 @@ describe('REQ-0554 §1-3 — warnings for combinations that store but do not sho
     expect(out.filter((w) => w.code === 'BACKGROUND_NEEDS_OUTLINE')).toHaveLength(1)
   })
 })
+
+/**
+ * ★ REQ-0565 — unpinning must actually unpin.
+ *
+ * REQ-0554 accepted `{posX: null, posY: null}` as the documented way to remove
+ * a drag-pin, and this file's own test proved the input was ACCEPTED. It never
+ * asked what got STORED, and what got stored was `null`.
+ *
+ * Every placement path in the app decides "is this cue pinned?" with
+ * `posX !== undefined`. `null` passes that test. So the documented unpin
+ * produced a cue pinned at (null, null), which is laid out at no coordinates —
+ * the caption silently disappeared from the render.
+ *
+ * The screenshot pipeline found it by unpinning every cue for a clean look and
+ * ending up with seven screenshots that had no subtitles in them.
+ */
+describe('REQ-0565 — clearing an optional field stores undefined, not null', () => {
+  /** The predicate every placement path uses (cue-placement, line-spacing, stack-offsets). */
+  const isPinned = (e: SubtitleEntry): boolean => e.posX !== undefined && e.posY !== undefined
+
+  it('★ unpinning leaves the cue genuinely UNPINNED', () => {
+    const pinned = cue({ posX: 500, posY: 300 })
+    expect(isPinned(pinned), 'fixture must start pinned').toBe(true)
+
+    const { entry } = applyCueEdit(pinned, {
+      select: { id: 'c-1' },
+      style: { position: { posX: null, posY: null } },
+    })
+
+    expect(entry.posX).toBeUndefined()
+    expect(entry.posY).toBeUndefined()
+    // The assertion that actually matters: what the renderer concludes.
+    expect(isPinned(entry), 'an unpinned cue must not read as pinned').toBe(false)
+  })
+
+  it('★ negative control: storing the null literally would read as PINNED', () => {
+    // This is the pre-fix behaviour, reproduced inline — no `git checkout`.
+    const asNull = { ...cue(), posX: null, posY: null } as unknown as SubtitleEntry
+    expect(isPinned(asNull), 'null must be why the bug happened').toBe(true)
+  })
+
+  it('unpinning is reported as a change', () => {
+    const { changed } = applyCueEdit(cue({ posX: 1, posY: 2 }), {
+      select: { id: 'c-1' },
+      style: { position: { posX: null, posY: null } },
+    })
+    expect(changed).toContain('style.position.posX')
+  })
+
+  it('unpinning an already-unpinned cue is a no-op', () => {
+    const { changed } = applyCueEdit(cue(), {
+      select: { id: 'c-1' },
+      style: { position: { posX: null, posY: null } },
+    })
+    expect(changed).toEqual([])
+  })
+
+  it('a real coordinate still pins', () => {
+    const { entry } = applyCueEdit(cue(), {
+      select: { id: 'c-1' },
+      style: { position: { posX: 120, posY: 340 } },
+    })
+    expect(isPinned(entry)).toBe(true)
+    expect([entry.posX, entry.posY]).toEqual([120, 340])
+  })
+})
