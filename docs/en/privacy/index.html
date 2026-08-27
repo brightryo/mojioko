@@ -44,6 +44,12 @@
       <p>
         The App does <strong>not send, upload, or collect</strong> your video files, audio, generated subtitles, edits, or any other personal data to any external server.
       </p>
+      <p class="note">
+        Note: if <strong>you choose to enable</strong> the AI integration (MCP) added in v1.4.0, the
+        information an AI assistant reads and writes &mdash; subtitle text, file paths, and the
+        video&rsquo;s details &mdash; is sent to that assistant&rsquo;s provider. <strong>The video and
+        audio files themselves still never leave this PC.</strong> See <a href="#ai-mcp">2.5</a>.
+      </p>
       <p>
         The App contains <strong>no telemetry, no analytics, and no crash reporting</strong>. There are no advertising SDKs, no tracking SDKs, and no third-party analytics tools embedded in the App.
       </p>
@@ -83,6 +89,27 @@
       </p>
       <p>
         To check for a new release, please open the distribution page (GitHub Pages) from the Help menu and review it in your browser.
+      </p>
+
+      <h3 id="ai-mcp">2.5 AI Integration (MCP) &mdash; added in v1.4.0</h3>
+      <p>
+        Since v1.4.0, an AI assistant such as Claude can drive the App over an MCP
+        connection. <strong>This is off unless you turn it on.</strong> Every time you export
+        the connection file or copy a configuration, the App asks you to confirm first, and
+        nothing happens unless you accept.
+      </p>
+      <p>
+        The assistant runs on its provider&rsquo;s servers, so when you enable this, the
+        following applies:
+      </p>
+      <ul>
+        <li><strong>Stays on this PC:</strong> the video and audio files themselves. Transcription, translation and burn-in still run entirely on this computer, exactly as before.</li>
+        <li><strong>Sent to your AI provider:</strong> the information the assistant reads and writes through the tools &mdash; the full subtitle text, file paths, the video&rsquo;s details (duration, resolution and so on), and the tools&rsquo; replies.</li>
+      </ul>
+      <p>
+        The recipient is the provider of the AI assistant you use (Anthropic, if you use
+        Claude). What happens to the data after that is governed by that provider&rsquo;s terms
+        and privacy policy. The App itself never sends data to any server of its own.
       </p>
 
       <h2>3. Feedback Form (Google Forms)</h2>

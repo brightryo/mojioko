@@ -41,6 +41,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { createHash } from 'node:crypto'
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const ELECTRON = path.join(REPO, 'node_modules', 'electron', 'dist', 'electron.exe')
@@ -52,8 +53,19 @@ function arg(name, fallback) {
 }
 const VIDEO_DIR = arg('videos', String.raw`C:\Users\MyPC\Videos\GamePlay`)
 const SRT_DIR = arg('srt', String.raw`C:\Users\MyPC\Videos\SRT`)
-const OUT_DIR = arg('out', path.join(REPO, 'dev-docs', 'shots'))
 const ONLY = (arg('only', '') || '').split(',').filter(Boolean)
+
+/**
+ * ★ REQ-0567 §1 — which language PAGE this set is for.
+ *
+ * Sets the app's UI language and picks the SRT. The one exception is the
+ * translation shot, whose whole point is showing the OTHER language — so the
+ * ja page gets an English caption there and the en page gets a Japanese one
+ * (REQ-0566 §2's rule, applied in both directions).
+ */
+const PAGE_LANG = arg('lang', 'ja') === 'en' ? 'en' : 'ja'
+const OTHER_LANG = PAGE_LANG === 'ja' ? 'en' : 'ja'
+const OUT_DIR = arg('out', path.join(REPO, 'dev-docs', 'shots', ...(PAGE_LANG === 'en' ? ['en'] : [])))
 
 /** Window size for every shot: one size keeps the set visually consistent. */
 const WIN = { width: 1600, height: 900 }
@@ -152,7 +164,6 @@ const SHOTS = [
   {
     id: 's1-step1',
     video: 'Game01',
-    lang: 'ja',
     start: 'step1',
     caption: 'STEP1 — 入力ファイルと文字起こし設定',
     stage: async (w) => {
@@ -169,7 +180,6 @@ const SHOTS = [
   {
     id: 's2-step2-emphasis',
     video: 'Game02',
-    lang: 'ja',
     start: 'step2',
     caption: 'STEP2 — キーワード強調と cue 別スタイル',
     /*
@@ -185,20 +195,35 @@ const SHOTS = [
      * fixed. So the cue and the span are stated outright, and the assertion
      * below fails loudly if the SRT ever changes underneath them.
      */
+    /*
+     * The span is CHOSEN per language, not computed — and it picks the same
+     * thing in both: the greeting at the END of the line, leaving the address
+     * ("はい、みなさん" / "Hey everyone,") in plain white. A mechanical
+     * rule cannot do that without a tokeniser, and a fixed screenshot set does
+     * not need one.
+     */
     emphasis: {
-      cueIndex: 0,
-      // 「はい、みなさんこんばんはー」 → emphasise the greeting itself.
-      expectText: 'はい、みなさんこんばんはー',
-      start: 7,
-      end: 13,
-      word: 'こんばんはー',
+      ja: {
+        cueIndex: 0,
+        expectText: 'はい、みなさんこんばんはー',
+        start: 7,
+        end: 13,
+        word: 'こんばんはー',
+      },
+      en: {
+        cueIndex: 0,
+        expectText: 'Hey everyone, good evening!',
+        start: 14,
+        end: 27,
+        word: 'good evening!',
+      },
     },
     prep: (cues, shot) => {
-      const { cueIndex, expectText, start, end, word } = shot.emphasis
+      const { cueIndex, expectText, start, end, word } = shot.emphasis[PAGE_LANG]
       const cue = cues[cueIndex]
       if (!cue || cue.text !== expectText) {
         throw new Error(
-          `s2 emphasis is pinned to cue ${cueIndex} = "${expectText}", but the SRT now has ` +
+          `s2 emphasis (${PAGE_LANG}) is pinned to cue ${cueIndex} = "${expectText}", but the SRT now has ` +
           `"${cue ? cue.text : '(missing)'}". Re-pick the span rather than letting the ` +
           'highlight land on whatever happens to be there.',
         )
@@ -236,7 +261,6 @@ const SHOTS = [
   {
     id: 's3-timeline',
     video: 'Game03',
-    lang: 'ja',
     start: 'step2',
     caption: 'STEP2 — タイムラインで表示タイミングを調整',
     focus: 2,
@@ -247,7 +271,6 @@ const SHOTS = [
   {
     id: 's4-list',
     video: 'Game04',
-    lang: 'ja',
     start: 'step2',
     caption: 'STEP2 — 一覧で字幕をまとめて編集',
     focus: 2,
@@ -258,8 +281,8 @@ const SHOTS = [
   {
     id: 's5-translate',
     video: 'Game05',
-    lang: 'ja',
-    srtLang: 'en',
+    /** The translation shot: it deliberately shows the OTHER language. */
+    translationShot: true,
     start: 'step2',
     caption: '翻訳した字幕（英語 SRT を読み込んだ状態）',
     focus: 2,
@@ -267,7 +290,6 @@ const SHOTS = [
   {
     id: 's6-burn',
     video: 'Game06',
-    lang: 'ja',
     start: 'step2',
     caption: 'STEP3 — 焼き込み設定',
     focus: 2,
@@ -275,7 +297,6 @@ const SHOTS = [
   {
     id: 's9-inspector',
     video: 'Game08',
-    lang: 'ja',
     start: 'step2',
     caption: '多彩な字幕編集（インスペクタ）',
     focus: 2,
@@ -304,7 +325,6 @@ const SHOTS = [
   {
     id: 's8-position',
     video: 'Game07',
-    lang: 'ja',
     start: 'step2',
     caption: '見たままの位置決め（WYSIWYG）',
     focus: 2,
@@ -328,7 +348,6 @@ const SHOTS = [
   {
     id: 's7-ai',
     video: null,
-    lang: 'ja',
     start: 'step2',
     caption: '設定 ▸ AI 連携（MCP）',
     stage: async (w) => {
@@ -374,7 +393,8 @@ async function takeShot(shot, work) {
 
   if (shot.video) {
     const video = path.join(VIDEO_DIR, shot.video + '.mp4')
-    const srt = path.join(SRT_DIR, `${shot.video}_${shot.srtLang ?? 'ja'}.srt`)
+    const srtLang = shot.translationShot ? OTHER_LANG : PAGE_LANG
+    const srt = path.join(SRT_DIR, `${shot.video}_${srtLang}.srt`)
     for (const p of [video, srt]) {
       if (!fs.existsSync(p)) throw new Error(`missing material: ${p}`)
     }
@@ -433,7 +453,20 @@ async function takeShot(shot, work) {
     await app.evaluate(({ BrowserWindow }, size) => {
       BrowserWindow.getAllWindows()[0].setContentSize(size.width, size.height)
     }, WIN)
-    await w.evaluate((lng) => window.__mojioko_test.i18n.changeLanguage(lng), shot.lang)
+    /*
+     * UI language. This goes through the live i18n instance, NOT through
+     * settings.json — the app persists the user's choice, but `changeLanguage`
+     * on the exposed instance only affects this window. Verified by hashing
+     * settings.json before and after a full run (RES-0567 §1-2).
+     */
+    await w.evaluate(async (lng) => {
+      await window.__mojioko_test.i18n.changeLanguage(lng)
+      // The language pill reads settings.language, not i18n — without this the
+      // corner of an English screenshot still says 「日本語」. This DOES persist
+      // (App.tsx saves on any settings change), which is why the run is
+      // wrapped in a settings.json backup/restore below.
+      window.__mojioko_test.settings.setState({ language: lng })
+    }, PAGE_LANG)
 
     if (shot.video) {
       const video = path.join(VIDEO_DIR, shot.video + '.mp4')
@@ -542,6 +575,19 @@ if (!fs.existsSync(path.join(REPO, 'out', 'main', 'index.js'))) {
   process.exit(2)
 }
 
+/*
+ * ★ REQ-0567 §1-1 — settings.json is borrowed, not spent.
+ *
+ * Matching the language pill means writing `settings.language`, and the app
+ * persists any settings change. A screenshot tool must not leave the user's
+ * settings altered, so the file is captured here and put back in the `finally`
+ * below — then hashed, because "we restored it" is a claim and the hash is
+ * evidence.
+ */
+const SETTINGS_PATH = path.join(process.env.APPDATA ?? '', 'MOJIOKO', 'settings.json')
+const settingsBefore = fs.existsSync(SETTINGS_PATH) ? fs.readFileSync(SETTINGS_PATH) : null
+const sha = (b) => createHash('sha256').update(b).digest('hex')
+
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'mojioko-shots-'))
 const wanted = ONLY.length > 0 ? SHOTS.filter((s) => ONLY.includes(s.id)) : SHOTS
 let failed = 0
@@ -566,6 +612,14 @@ log(`
 manifest: ${path.join(OUT_DIR, 'shots-manifest.json')}`)
 
 try { fs.rmSync(work, { recursive: true, force: true }) } catch { /* best effort */ }
+
+if (settingsBefore) {
+  fs.writeFileSync(SETTINGS_PATH, settingsBefore)
+  const after = fs.readFileSync(SETTINGS_PATH)
+  const restored = after.equals(settingsBefore)
+  log(`settings.json ${restored ? 'restored, byte-identical' : 'RESTORE FAILED'}  sha256=${sha(after).slice(0, 16)}`)
+  if (!restored) failed++
+}
 
 log(`\n${failed === 0 ? 'ALL SHOTS TAKEN' : `${failed} shot(s) failed`}`)
 process.exit(failed === 0 ? 0 : 1)

@@ -23,6 +23,7 @@ async function maybeSeedFromUrl(): Promise<void> {
     { useHistoryStore },
     { useInstalledFontsStore },
     { useAppEnvStore },
+    { useSettingsStore },
     { sampleVideoInfo, sampleEntries }
   ] = await Promise.all([
     import('./stores/project-store'),
@@ -30,6 +31,7 @@ async function maybeSeedFromUrl(): Promise<void> {
     import('./stores/history-store'),
     import('./stores/installed-fonts-store'),
     import('./stores/app-env-store'),
+    import('./stores/settings-store'),
     import('./lib/fixtures')
   ])
   useProjectStore.setState({
@@ -58,6 +60,15 @@ async function maybeSeedFromUrl(): Promise<void> {
       history: useHistoryStore,
       installedFonts: useInstalledFontsStore,
       appEnv: useAppEnvStore,
+      /*
+       * REQ-0567 — the language PILL reads `settings.language`, not the live
+       * i18n instance, so an English screenshot taken by calling
+       * `i18n.changeLanguage` alone still showed 「日本語」 in the corner.
+       * Exposed so the screenshot tool can match the two. Changing it does
+       * persist (App.tsx saves on any settings change), which is why the tool
+       * backs settings.json up and restores it.
+       */
+      settings: useSettingsStore,
       // REQ-0487 — expose the i18n instance so a gate can measure the font
       // popover in BOTH locales (the rare-kanji chip label is far longer in
       // English, so a JA-measured width can regress in EN).
