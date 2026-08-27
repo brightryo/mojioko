@@ -86,19 +86,28 @@ const WIN = { width: 1600, height: 900 }
  */
 const SITE_STYLE = {
   /*
-   * Font ids are WEIGHT-specific: there is no bare `noto-sans-jp`. Setting one
-   * silently loaded nothing and the captions vanished from the preview
-   * entirely — the shot still "succeeded", it just had no subtitle in it.
-   * SemiBold is what the app's own defaults use for captions.
+   * Weight first: a thin caption over busy gameplay reads as washed out, and a
+   * screenshot is the only impression a visitor gets. Bold, not Black — Black
+   * at this size starts closing up the counters of small kana.
    */
-  fontId: 'noto-sans-jp-semibold',
-  fontSizePx: 120,
+  fontId: 'noto-sans-jp-bold',
+  /*
+   * 150px on a 1080p frame. Large enough to dominate the still; small enough
+   * that the longest cue in these SRTs still wraps to three lines rather than
+   * filling the frame (the wrap below re-flows at exactly this size).
+   */
+  fontSizePx: 150,
   textColorHex: '#FFFFFF',
   textAlphaPercent: 100,
+  /*
+   * Thick outline plus a real shadow. Both are doing the same job — separating
+   * white text from bright sky, snow and HUD — and neither is enough alone on
+   * this footage.
+   */
   outlineColorHex: '#000000',
-  outlineThicknessPx: 8,
+  outlineThicknessPx: 10,
   outlineAlphaPercent: 100,
-  shadow: { depthPx: 0, color: '#000000', alphaPercent: 100 },
+  shadow: { depthPx: 8, color: '#000000', alphaPercent: 100 },
   rotationDeg: 0,
   casing: 'none',
   lineSpacingPercent: 0,
@@ -107,13 +116,19 @@ const SITE_STYLE = {
     horizontal: 'center',
     vertical: 'bottom',
     verticalMarginPx: 60,
-    // Unpin: a dragged position stored in the fixture would override the
-    // alignment above and put the caption somewhere arbitrary.
+    // Unpin. Storing a coordinate here would override the alignment above.
     posX: null,
     posY: null,
   },
-  karaoke: { enabled: false, style: 'sweep', highlightColor: '#B4FF39' },
-  emphasis: { enabled: false, color: '#3FD585', scalePercent: 150 },
+  /*
+   * Colour comes from the karaoke sweep rather than from the body text: the
+   * caption stays legible white, and the sung part carries the accent. That
+   * also means every shot demonstrates a real feature instead of just being
+   * tinted. #B4FF39 is the app's own default highlight, so the screenshots
+   * match what a new user sees.
+   */
+  karaoke: { enabled: true, style: 'sweep', highlightColor: '#B4FF39' },
+  emphasis: { enabled: false, color: '#FFD400', scalePercent: 150 },
   /*
    * Animations off. A still captured mid fade-in or mid pop shows a
    * half-transparent or half-scaled caption — which reads as a rendering bug
@@ -169,10 +184,11 @@ const SHOTS = [
         edits: [{
           select: { index: focusIndex },
           style: {
-            // On top of SITE_STYLE, which already pinned rotation to 0.
-            fontSizePx: 110,
-            emphasis: { enabled: true, color: '#3FD585', scalePercent: 150 },
-            karaoke: { enabled: true, style: 'sweep', highlightColor: '#B4FF39' },
+            // On top of SITE_STYLE, which already pinned rotation to 0 and set
+            // the base look. Yellow reads as "highlighted" and stays distinct
+            // from the yellow-green karaoke sweep behind it.
+            fontSizePx: 160,
+            emphasis: { enabled: true, color: '#FFD400', scalePercent: 150 },
           },
           emphasisSpans: [{ start: 0, end: word.length, text: word }],
           // Re-wrap at the new size, exactly as REQ-0563's hint advises.
@@ -295,7 +311,14 @@ async function takeShot(shot, work) {
      */
     const styleFile = path.join(work, shot.id + '-style.json')
     fs.writeFileSync(styleFile, JSON.stringify([
-      { select: { ids: cues.map((c) => c.id) }, style: SITE_STYLE },
+      {
+        select: { ids: cues.map((c) => c.id) },
+        style: SITE_STYLE,
+        // The stored `\N` was computed by `convert` at the MACHINE's font
+        // size. At 150px those breaks overflow, so re-flow them here — which
+        // is exactly what REQ-0563's LINE_BREAKS_MAY_BE_STALE hint advises.
+        wrap: 'pack',
+      },
     ]), 'utf-8')
     const styled = cli(['edit_cues', projPath, '-o', projPath, '--edits-file', styleFile])
     if (styled.code !== 0) throw new Error(`site-style edit_cues failed for ${shot.id} (exit ${styled.code})`)
