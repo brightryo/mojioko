@@ -1,6 +1,11 @@
 // REQ-0455 — MUST be the FIRST import: installs the stdout guard before any
 // other main-process module can write a stray byte to stdout in `mojioko mcp`.
 import './mcp/early-guard'
+// ★ REQ-0557 — MUST stay this early too: applies `--disable-gpu` for headless
+// launches before the ~40 imports below give Chromium time to start the GPU
+// process. Applied late (REQ-0553) it only halved the 0xC0000005 exits; the
+// timing is the fix, not the switch. GUI launches never reach it.
+import './early-gpu'
 import { app, BrowserWindow, ipcMain, Menu } from 'electron'
 import { join } from 'path'
 import { release } from 'os'

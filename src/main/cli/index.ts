@@ -14,10 +14,9 @@
  * through untouched.
  */
 import { app } from 'electron'
-import { resolve } from 'node:path'
-import { existsSync } from 'node:fs'
 import { APP_VERSION } from '../../shared/app-info'
-import { CLI_COMMANDS, HELP_TOKENS, classifyProjectOpen, secondInstanceProjectFile } from './launch-classify'
+import { CLI_COMMANDS, HELP_TOKENS } from './launch-classify'
+import { extractProjectFile, userCliArgs } from './launch-args'
 import { parseArgs } from './args'
 import { CliError, emitDebug, emitFailure, type CliContext } from './output'
 import { printHelp } from './help'
@@ -44,42 +43,6 @@ import { installStdoutGuard } from '../mcp/stdout-guard'
 // `launch-classify.ts` (electron-free) so the dispatch decision is unit-testable.
 const COMMANDS = CLI_COMMANDS
 
-/** REQ-0459 §1 — the `.mojioko` to open (file-association launch), or null (CLI). */
-function extractProjectFile(tokens: string[]): string | null {
-  return classifyProjectOpen(tokens, existsSync)
-}
-
-/**
- * Extract the user-supplied CLI args, stripping the launcher prefix.
- *
- *   packaged:  MOJIOKO.exe tools --json     → argv = [exe, 'tools', '--json']
- *   dev:       electron . tools --json      → argv = [electron, '.', 'tools', …]
- *   dev:       electron out/main/index.js … → argv = [electron, '…index.js', …]
- *
- * We drop argv[0] (the exe) always, and in dev also drop a leading app-path /
- * script token (`.`, a `*.js`/`*.cjs` path, or the resolved app path). Any
- * remaining tokens are the user's CLI args. Empty ⇒ a plain GUI launch.
- */
-/** True when `arg` is the app-dir/entry token that the launcher prepends in dev. */
-function isAppDirArg(arg: string, appPath: string): boolean {
-  if (arg === '.' || arg.endsWith('.js') || arg.endsWith('.cjs')) return true
-  // REQ-0452 — path-normalized compare (not exact string): the dev .mcpb bundle
-  // passes `app.getAppPath()`, but slash style / case can differ across
-  // launchers; resolve() normalizes so the token is still recognized + dropped.
-  try {
-    return resolve(arg).toLowerCase() === resolve(appPath).toLowerCase()
-  } catch {
-    return false
-  }
-}
-
-function userCliArgs(): string[] {
-  let rest = process.argv.slice(1)
-  if (!app.isPackaged && rest.length > 0 && isAppDirArg(rest[0], app.getAppPath())) {
-    rest = rest.slice(1)
-  }
-  return rest
-}
 
 /**
  * REQ-0499 §1 — apply the unknown-option policy for this invocation.
@@ -175,40 +138,18 @@ async function route(ctx: CliContext, command: string, args: ReturnType<typeof p
   }
 }
 
-/**
- * REQ-0454 §1 / REQ-0459 §1 — synchronous check: is this a CLI/MCP invocation?
- * The caller routes BEFORE any single-instance-lock / window logic, so
- * `mojioko mcp` (and every CLI command) never contends with the GUI's lock.
- *
- * REQ-0459: a lone existing `.mojioko` path (a double-click / file association)
- * is NOT a CLI invocation — it is a GUI launch that opens that project.
+/*
+ * REQ-0557 §1-2 — the launch-shape helpers moved to `launch-args.ts`, a module
+ * light enough for `main/early-gpu.ts` to import at the top of startup. They are
+ * re-exported here because `main/index.ts` and the tests already import them
+ * from this module, and because a second copy of "is this a CLI run?" is exactly
+ * what REQ-0557 forbids.
  */
-export function isCliInvocation(): boolean {
-  const tokens = userCliArgs()
-  if (tokens.length === 0) return false
-  if (extractProjectFile(tokens) !== null) return false
-  return true
-}
-
-/** REQ-0459 §1/§4 — the `.mojioko` path this launch should open, or null. */
-export function projectFileToOpen(): string | null {
-  return extractProjectFile(userCliArgs())
-}
-
-/**
- * REQ-0459 §3 / REQ-0484 — the `.mojioko` path from a SECOND-instance launch's
- * argv (the `second-instance` event hands us the new process's full argv).
- *
- * REQ-0484: the delivered argv is NOT clean — Electron prepends Chromium switches
- * (observed: `--allow-file-access-from-files`) and, in dev, the entry-script
- * token, before the double-clicked path.  The old head-only `extractProjectFile`
- * therefore saw a leading `-`switch and returned null, so a warm-start
- * double-click silently no-opped (the window only got focus).  Scan past the
- * launcher noise instead (a second-instance only ever fires for a GUI launch).
- */
-export function projectFileFromSecondInstance(argv: string[]): string | null {
-  return secondInstanceProjectFile(argv.slice(1), existsSync)
-}
+export {
+  isCliInvocation,
+  projectFileToOpen,
+  projectFileFromSecondInstance,
+} from './launch-args'
 
 export async function maybeRunCli(): Promise<boolean> {
   const tokens = userCliArgs()
@@ -227,35 +168,21 @@ export async function maybeRunCli(): Promise<boolean> {
   // `app.whenReady()`.
   app.disableHardwareAcceleration()
   /*
-   * ★ REQ-0553 — and ALSO the switch, which is not the same thing.
+   * ★ REQ-0553 / REQ-0557 — the `--disable-gpu` SWITCH is no longer set here.
    *
-   * `disableHardwareAcceleration()` turns off GPU rasterisation, but Chromium
-   * still LAUNCHES a GPU process. A CLI command ends with `app.exit()`, a hard
-   * exit that skips the graceful shutdown — and when the command is quick
-   * enough to finish while that GPU process is still coming up, the browser
-   * process faults on the way out with 0xC0000005.
+   * `disableHardwareAcceleration()` (above) turns off GPU rasterisation but
+   * Chromium still LAUNCHES a GPU process, and a fast command reaching
+   * `app.exit()` mid-launch took the browser process down with it (0xC0000005).
+   * REQ-0553 added the switch at this point and measured 16/800 → 4/800; a real
+   * `--disable-gpu` flag measured 0/200. The gap was timing: by the time this
+   * line runs, main has already executed every import in `index.ts`.
    *
-   * Measured, 200 launches per case:
-   *
-   *   read_subtitle (fastest)   11/200  = 1 in 18
-   *   --help                     4/200  = 1 in 50
-   *   burn --nope                1/200  = 1 in 200
-   *   tools list (slowest)       0/200  — it takes long enough that GPU
-   *                                       start-up has finished by exit time
-   *   read_subtitle + this fix   0/200
-   *
-   * The ordering is the tell: the FASTER the command, the likelier the crash.
-   * That is a start-up/exit race, not steady-state work.
-   *
-   * The output was never wrong — stdout carried the complete, valid JSON and
-   * files were already written. What the crash replaced was the EXIT CODE, so
-   * a script checking `$?` saw failure after a successful run.
-   *
-   * Only `disable-gpu` is set, because only `disable-gpu` was measured. This
-   * runs after the "user args ⇒ CLI invocation" decision above, so the GUI
-   * never reaches it.
+   * REQ-0557 moved the switch into `main/early-gpu.ts`, imported at the very
+   * top of the entry file. Setting it again here would be dead weight that
+   * reads like a second safeguard, so it is gone — `early-gpu.ts` gates on the
+   * SAME `isCliInvocation()` this function does, so there is no population it
+   * could miss that this line would have caught.
    */
-  app.commandLine.appendSwitch('disable-gpu')
   await app.whenReady()
 
   const head = tokens[0]
