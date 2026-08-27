@@ -160,6 +160,37 @@ const SITE_STYLE = {
  * `prep` receives the `.mojioko` path and may run further CLI commands on it.
  * `stage` runs in the page after the project is loaded.
  */
+/**
+ * ★ REQ-0567 §1 — UI labels the staging clicks, per page language.
+ *
+ * Kept in one table because a shot that silently fails to open its popover
+ * still writes a PNG — it just shows the screen underneath. The staging below
+ * asserts the click landed rather than trusting it.
+ */
+const UI = {
+  ja: { device: '処理デバイス', presets: 'スタイルプリセット', exportText: 'テキスト出力' },
+  en: { device: 'Processing Device', presets: 'Style presets', exportText: 'Text' },
+}
+
+/**
+ * Click a control by its label and fail loudly if it is not there.
+ *
+ * Tries visible text first, then `aria-label` — several of these controls are
+ * icon-only buttons whose label exists only for assistive tech. Failing loudly
+ * matters more than usual here: a missed click still writes a PNG, it just
+ * shows the screen underneath, and that PNG looks perfectly fine.
+ */
+async function clickLabel(w, label, what) {
+  for (const loc of [w.locator(`text=${label}`).first(), w.locator(`[aria-label="${label}"]`).first()]) {
+    if (await loc.count() > 0) {
+      await loc.click()
+      await w.waitForTimeout(900)
+      return
+    }
+  }
+  throw new Error(`${what}: no control labelled "${label}" (tried text and aria-label)`)
+}
+
 const SHOTS = [
   {
     id: 's1-step1',
@@ -346,6 +377,38 @@ const SHOTS = [
     }),
   },
   {
+    id: 's10-gpu',
+    video: 'Game01',
+    start: 'step1',
+    caption: 'GPU アクセラレーション（処理デバイスの選択）',
+    /*
+     * Same video and same moment as s1 — STEP 1 shows no frames at all, so
+     * there is no "second scene" here, only a second panel opened. REQ-0567 §1-2
+     * allows exactly that.
+     */
+    stage: async (w) => { await clickLabel(w, UI[PAGE_LANG].device, 's10-gpu') },
+  },
+  {
+    id: 's11-preset',
+    video: 'Game02',
+    start: 'step2',
+    caption: '字幕スタイルのプリセット',
+    // Same video AND same playhead as s2 (cue 0) — one scene, different UI.
+    focus: 'prep',
+    emphasis: { ja: null, en: null },
+    prep: () => ({ focusIndex: 0, edits: [] }),
+    stage: async (w) => { await clickLabel(w, UI[PAGE_LANG].presets, 's11-preset') },
+  },
+  {
+    id: 's12-export',
+    video: 'Game03',
+    start: 'step2',
+    caption: 'テキスト・SRT で書き出し',
+    // Same video and playhead as s3.
+    focus: 2,
+    stage: async (w) => { await clickLabel(w, UI[PAGE_LANG].exportText, 's12-export') },
+  },
+  {
     id: 's7-ai',
     video: null,
     start: 'step2',
@@ -373,15 +436,29 @@ function cli(args, timeoutMs = 180_000) {
   return { code: r.status, json }
 }
 
-/** ★ REQ-0564 §1-4 — no video may serve two shots. */
-function assertOneVideoPerShot() {
-  const used = SHOTS.map((s) => s.video).filter(Boolean)
-  const dupes = used.filter((v, i) => used.indexOf(v) !== i)
-  if (dupes.length > 0) {
-    throw new Error(
-      `§1-4 violated: ${[...new Set(dupes)].join(', ')} assigned to more than one shot. ` +
-      'The footage is static, so two shots of one video read as two shots of the same scene.',
-    )
+/**
+ * ★ REQ-0564 §1-4, as amended by REQ-0567 §1-2 — one video = one SCENE.
+ *
+ * The footage is static gameplay, so two shots of the same video at DIFFERENT
+ * moments read as two shots of the same thing. Two shots at the SAME moment
+ * with a different panel open do not — they are one scene photographed twice,
+ * which is what a UI tour actually wants.
+ *
+ * So the check is on (video, focus), not on video alone.
+ */
+function assertOneScenePerVideo() {
+  const seen = new Map()
+  for (const s of SHOTS) {
+    if (!s.video) continue
+    const scene = `${s.video}@${String(s.focus ?? 'none')}`
+    const clash = [...seen.entries()].find(([k, id]) => k.startsWith(s.video + '@') && k !== scene && id !== s.id)
+    if (clash) {
+      throw new Error(
+        `§1-2 violated: ${s.id} uses ${s.video} at a DIFFERENT moment than ${clash[1]} ` +
+        `(${scene} vs ${clash[0]}). Same video is fine, but only at the same playback position.`,
+      )
+    }
+    seen.set(scene, s.id)
   }
 }
 
@@ -568,7 +645,7 @@ async function takeShot(shot, work) {
 }
 
 // --- main ------------------------------------------------------------------
-assertOneVideoPerShot()
+assertOneScenePerVideo()
 
 if (!fs.existsSync(path.join(REPO, 'out', 'main', 'index.js'))) {
   console.error('shots: out/ missing — run `npm run build` first')
