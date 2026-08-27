@@ -21,6 +21,14 @@ release/
 # .appx / loose-file expansion / signing 中間物が入るため絶対に追跡しない。
 dist-appx/
 
+# REQ-0558 §2-5 — 旧成果物の STALE 隔離先。
+#
+# REQ-0549 で `dist/` の中に隔離したところ、`build:win` の `rimraf out dist` が
+# 隔離ごと消した。そこで隔離先を `dist/` の外に出したが、**外に出した瞬間に
+# 上の 2 行の網からも外れる**。数百 MB の .exe / .appx / app.asar が置かれる
+# 場所なので、追跡対象になり得る状態のまま放置しない。
+dist-archive/
+
 # Python sidecar ビルド
 python-sidecar/dist/
 python-sidecar/build/
