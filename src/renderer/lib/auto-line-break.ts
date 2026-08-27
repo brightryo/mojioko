@@ -15,7 +15,7 @@ import type { EmphasisRange } from '../../shared/emphasis'
 // headless burn/transcribe path produces byte-identical `\N`.  This module is
 // now the renderer-side wrapper that resolves font metrics from the renderer's
 // `font-metrics` singleton cache and delegates.
-import { applyAutoLineBreakCore } from '../../shared/line-break-core'
+import { applyAutoLineBreakCore, type LineBreakMetrics } from '../../shared/line-break-core'
 
 /**
  * Insert ASS \N line breaks into `text` wherever a line would exceed the
@@ -49,6 +49,26 @@ import { applyAutoLineBreakCore } from '../../shared/line-break-core'
  *                           libass will actually render for that row.
  * @returns                  Text with \N inserted at overflow boundaries.
  */
+/**
+ * REQ-0556 §2 — the renderer's `LineBreakMetrics`, as a named thing.
+ *
+ * This is the four-field object `applyAutoLineBreak` has always assembled from
+ * the renderer's font caches; naming it lets `shared/cue-wrap.ts` take metrics
+ * as a parameter, so the GUI and the CLI can run the SAME wrap code with each
+ * surface supplying its own loader (the CLI's is `font-metrics-node.ts`).
+ */
+export function rendererLineBreakMetrics(fontId?: FontId): LineBreakMetrics {
+  const font = fontId !== undefined ? getSubtitleFontFor(fontId) : getSubtitleFont()
+  const libassScale = fontId !== undefined ? getLibassScaleFor(fontId) : getLibassScale()
+  const effectiveFontId = fontId ?? getActiveFontId()
+  return {
+    font,
+    libassScale,
+    cmap: getCmapCoverageFor(effectiveFontId),
+    tofu: getTofuSubstituteFor(effectiveFontId),
+  }
+}
+
 export function applyAutoLineBreak(
   text: string,
   fontSizePx: number,

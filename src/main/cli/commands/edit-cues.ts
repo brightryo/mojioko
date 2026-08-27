@@ -28,11 +28,22 @@ import {
   type CueEdit,
 } from '../../../shared/cue-edit'
 import { resolveTier } from '../../lib/tier'
+import { canUseKeywordEmphasisInTier } from '../../../shared/emphasis'
+import { wrapCueText } from '../../../shared/cue-wrap'
+import { getLineBreakMetrics } from '../../services/font-metrics-node'
+import { ASS_MARGIN_LR_PX } from '../../../shared/constants'
 import { optString, type ParsedArgs } from '../args'
 import { CliError, emitSuccess, type CliContext, type CliWarning } from '../output'
 import { assertWritable } from '../overwrite'
 import { detectFormat } from '../subtitle-io'
 import type { SubtitleEntry } from '../../../shared/types'
+
+/**
+ * Width assumed when the project has no recorded resolution (an SRT-converted
+ * `.mojioko` may have no `source`). 1920 matches `headless-layout`'s own
+ * fallback, and the assumption is REPORTED rather than silent.
+ */
+const DEFAULT_WRAP_WIDTH_PX = 1920
 
 /** What happened to one selected cue. */
 interface CueOutcome {
@@ -136,15 +147,49 @@ export async function runEditCuesCommand(ctx: CliContext, args: ParsedArgs): Pro
   let applied = 0
   let unchanged = 0
 
+  /*
+   * REQ-0556 §2 — the wrap runs HERE rather than inside `applyCueEdit`, because
+   * it is the one part of a patch that is not a pure function of the cue: it
+   * needs the output width and the font's real metrics. Keeping `applyCueEdit`
+   * pure is what lets the whole patch semantics be unit-tested without fonts.
+   */
+  const videoWidthPx = project.source?.resolution?.width ?? DEFAULT_WRAP_WIDTH_PX
+  if (project.source?.resolution?.width === undefined && resolved.some((r) => r.edit.wrap)) {
+    warnings.push({
+      code: 'WRAP_ASSUMED_WIDTH',
+      message: `この字幕には動画の解像度が記録されていないため、幅 ${DEFAULT_WRAP_WIDTH_PX}px と仮定して折り返しました。`,
+      detail: { assumedWidthPx: DEFAULT_WRAP_WIDTH_PX,
+        reason: 'SRT から変換した .mojioko には source が無いことがあります。',
+        remedy: '実際の幅で折り返すには convert --video で動画を指定してください。' },
+    })
+  }
+
   for (const { edit, positions } of resolved) {
     for (const pos of positions) {
       const before = entries[pos]
       const { entry, changed } = applyCueEdit(before, edit)
-      entries[pos] = entry
+      let final = entry
+      if (edit.wrap) {
+        // Applied to the ALREADY-PATCHED cue, so a patch that changes the font
+        // size and re-wraps in one call measures at the new size.
+        const wrapped = wrapCueText(final, edit.wrap, {
+          videoWidthPx,
+          marginLrPx: ASS_MARGIN_LR_PX,
+          metrics: getLineBreakMetrics(final.fontId),
+          // The same predicate the burn uses, so the wrap measures the glyph
+          // sizes that will actually be rendered.
+          emphasisTierAllowed: canUseKeywordEmphasisInTier(!isPaid),
+        })
+        if (wrapped !== final.text) {
+          final = { ...final, text: wrapped, isEdited: true }
+          changed.push('wrap')
+        }
+      }
+      entries[pos] = final
       if (changed.length > 0) applied++
       else unchanged++
-      outcomes.push({ id: entry.id, index: visibleIndexOf(entries, pos), changed })
-      collectCueEditWarnings(before, entry, changed, isPaid, warnings)
+      outcomes.push({ id: final.id, index: visibleIndexOf(entries, pos), changed })
+      collectCueEditWarnings(before, final, changed, isPaid, warnings)
     }
   }
 

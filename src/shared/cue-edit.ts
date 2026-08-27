@@ -89,6 +89,42 @@ export interface CueEdit {
   isDeleted?: boolean
   style?: CueStylePatch
   emphasisSpans?: CueEmphasisSpanInput[]
+  /**
+   * REQ-0556 §1 — per-word karaoke timings, the write side of
+   * `read_subtitle --with-words`.
+   *
+   * Stored as given, even when they do not spell the cue's text. That is the
+   * existing defensive rule, not laxness: `areWordsValidForText` decides at
+   * render time whether karaoke sweeps by real timing or by an even split, so
+   * keeping mismatched timings costs a fallback and losing them costs a
+   * re-transcription (REQ-0288 / REQ-0555 §1). The caller is told with
+   * `KARAOKE_NO_WORD_TIMING`.
+   *
+   * When `text` and `words` are patched together, the words are judged against
+   * the NEW text — the state the cue ends in is the only one worth validating.
+   */
+  words?: CueWordInput[]
+  /**
+   * REQ-0556 §2 — re-wrap this cue's text after the rest of the patch is
+   * applied.
+   *
+   * `pack` = 敷き詰め改行 (discard manual breaks, re-fill), `overflow` =
+   * はみ出し改行 (keep manual breaks, break only what overflows). Applied LAST
+   * on purpose: a patch that enlarges the font and re-wraps in one call must
+   * measure at the NEW size, which is exactly the case where a caller would
+   * otherwise leave stale breaks behind.
+   *
+   * Needs the video width and font metrics, so `applyCueEdit` does not perform
+   * it — the command layer does, via `shared/cue-wrap.ts`.
+   */
+  wrap?: 'pack' | 'overflow'
+}
+
+/** One word's timing, as accepted by the API. */
+export interface CueWordInput {
+  text: string
+  startSec: number
+  endSec: number
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +310,18 @@ export function applyCueEdit(entry: SubtitleEntry, edit: CueEdit): ApplyResult {
     }
   }
 
+  // REQ-0556 §1 — word timings. Written verbatim; validity is judged at render
+  // time, and `collectCueEditWarnings` reports a mismatch against the cue's
+  // FINAL text (which may have been changed by this same patch).
+  if (edit.words !== undefined) {
+    const before = JSON.stringify(entry.words ?? [])
+    const after = JSON.stringify(edit.words)
+    if (before !== after) {
+      next.words = edit.words.map((w) => ({ text: w.text, startSec: w.startSec, endSec: w.endSec }))
+      changed.push('words')
+    }
+  }
+
   // Mark as edited only when something really moved, so a no-op patch does not
   // flip the row's "edited" badge in the GUI.
   if (changed.length > 0) next.isEdited = true
@@ -292,8 +340,9 @@ export interface CueEditProblem {
   remedy?: string
 }
 
-const TOP_KEYS = new Set(['select', 'text', 'startSec', 'endSec', 'isDeleted', 'style', 'emphasisSpans'])
+const TOP_KEYS = new Set(['select', 'text', 'startSec', 'endSec', 'isDeleted', 'style', 'emphasisSpans', 'words', 'wrap'])
 const SPAN_KEYS = new Set(['start', 'end', 'text'])
+const WORD_KEYS = new Set(['text', 'startSec', 'endSec'])
 
 /** Every key the style patch accepts, derived from the ONE table. */
 function styleKeysFor(group: string | null): Set<string> {
@@ -418,6 +467,42 @@ export function validateCueEdits(raw: unknown): { edits: CueEdit[]; problems: Cu
       }
     }
 
+    // --- words (REQ-0556 §1) ---
+    if ('words' in e) {
+      const words = e.words
+      if (!Array.isArray(words)) {
+        bad('words は配列です。', 'read_subtitle --with-words と同じ形（text / startSec / endSec）です。')
+      } else {
+        words.forEach((w, i) => {
+          if (!w || typeof w !== 'object' || Array.isArray(w)) { bad(`words[${i}] はオブジェクトです。`); return }
+          const o = w as Record<string, unknown>
+          for (const k of Object.keys(o)) {
+            if (!WORD_KEYS.has(k)) bad(`未知のフィールド "words[${i}].${k}" です。`,
+              `使用できるのは ${[...WORD_KEYS].join(' / ')} です。`)
+          }
+          if (typeof o.text !== 'string') bad(`words[${i}].text は文字列です。`)
+          if (typeof o.startSec !== 'number' || !Number.isFinite(o.startSec)) bad(`words[${i}].startSec は数値です。`)
+          if (typeof o.endSec !== 'number' || !Number.isFinite(o.endSec)) bad(`words[${i}].endSec は数値です。`)
+          /*
+           * A zero-length or reversed word cannot be swept: libass's `\kf`
+           * consumes a duration, and a non-positive one makes the highlight
+           * jump rather than travel. Rejected here rather than stored, because
+           * unlike a text mismatch there is no sensible fallback to degrade to.
+           */
+          if (typeof o.startSec === 'number' && typeof o.endSec === 'number' && o.endSec <= o.startSec) {
+            bad(`words[${i}] は endSec > startSec である必要があります。`)
+          }
+        })
+      }
+    }
+
+    // --- wrap (REQ-0556 §2) ---
+    if ('wrap' in e && e.wrap !== undefined) {
+      if (e.wrap !== 'pack' && e.wrap !== 'overflow') {
+        bad('wrap は "pack"（敷き詰め）か "overflow"（はみ出し）です。')
+      }
+    }
+
     if (problems.every((p) => p.editIndex !== editIndex)) edits.push(e as unknown as CueEdit)
   })
 
@@ -453,13 +538,30 @@ export function collectCueEditWarnings(
         remedy: 'style.emphasis.enabled を true にしてください。' })
   }
 
-  // Karaoke on, but no usable per-word timing → it falls back to an even split.
-  if (after.karaokeEnabled === true && !areWordsValidForText(after.words, after.text)) {
+  /*
+   * Karaoke has no usable per-word timing → it falls back to an even split.
+   *
+   * Fires either when karaoke is ON, or — REQ-0556 §1 — when the caller
+   * explicitly WROTE `words` that do not spell the cue's final text. The second
+   * case matters even with karaoke off: the caller just supplied timings and is
+   * entitled to know they will not be used as given, rather than discovering it
+   * when they later switch karaoke on.
+   */
+  const wroteWords = changed.includes('words')
+  if ((after.karaokeEnabled === true || wroteWords) && !areWordsValidForText(after.words, after.text)) {
     push('KARAOKE_NO_WORD_TIMING',
-      'カラオケが有効ですが、この cue には有効な単語タイミングがありません（均等割りになります）。',
+      wroteWords
+        ? '指定された単語タイミングがこの cue のテキストを綴っていません（保存はしましたが、カラオケは均等割りになります）。'
+        : 'カラオケが有効ですが、この cue には有効な単語タイミングがありません（均等割りになります）。',
       { cueId: after.id, hasWords: Array.isArray(after.words) && after.words.length > 0,
-        reason: '保存されている単語タイミングが現在のテキストを綴っていません。',
-        remedy: '実発話タイミングが必要な場合は再度文字起こししてください。' })
+        karaokeEnabled: after.karaokeEnabled === true,
+        // Which of the two situations this is, so a caller can branch without
+        // reading Japanese prose.
+        source: wroteWords ? 'patch' : 'stored',
+        reason: '単語タイミングを連結したものが、現在のテキストと一致していません。',
+        remedy: wroteWords
+          ? 'words[].text の連結が text と一致するようにしてください（空白・改行は無視されます）。'
+          : '実発話タイミングが必要な場合は再度文字起こししてください。' })
   }
 
   // Background on with a zero outline → under BorderStyle=3 the box collapses

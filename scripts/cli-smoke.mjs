@@ -1713,6 +1713,152 @@ try {
     }
   }
 
+
+  /*
+   * ★ REQ-0556 §3-1 - WORD TIMINGS, IN REAL PIXELS.
+   *
+   * `edit_cues` can now write per-word karaoke timings. "The file contains the
+   * words" is not the claim being made - the claim is that libass SWEEPS BY
+   * THEM. So this burns a frame mid-cue and compares against the SAME cue with
+   * no words at all, which is the even split the renderer falls back to.
+   *
+   * The timings are deliberately LOPSIDED (first word takes 90% of the cue) so
+   * the two answers cannot coincide: at t=1.5s of a 0..2s cue an even split has
+   * finished the first word and is halfway through the second, while the real
+   * timing is still inside the first. Symmetric timings would make the gate
+   * green whether or not the words were used.
+   */
+  {
+    const clip = join(work, 'kw.mp4')
+    makeSolidClip(clip, '640x360', 'navy', 3)
+    const srt = join(work, 'kw.srt')
+    writeFileSync(srt, ['1', '00:00:00,000 --> 00:00:02,000', 'AAAA BBBB', ''].join(CRLF), 'utf-8')
+    const proj = join(work, 'kw.mojioko')
+    const conv = cli(['convert', srt, '-o', proj, '--video', clip], 60000)
+    check('REQ-0556 fixture: convert produced a .mojioko', conv.code === 0)
+
+    if (conv.code === 0) {
+      const HL = [0xff, 0x00, 0xff]   // magenta highlight: absent from a navy clip
+      const style = {
+        fontSizePx: 90,
+        karaoke: { enabled: true, style: 'sweep', highlightColor: '#FF00FF' },
+      }
+      // Even-split control FIRST: same cue, same style, NO words.
+      const ctlProj = join(work, 'kw-ctl.mojioko')
+      cli(['convert', srt, '-o', ctlProj, '--video', clip], 60000)
+      const ctlEd = cli(['edit_cues', ctlProj, '-o', ctlProj, '--edits',
+        JSON.stringify([{ select: { index: 0 }, style }])], 60000)
+
+      // The real timings: "AAAA" occupies almost the whole cue.
+      const words = [
+        { text: 'AAAA', startSec: 0.0, endSec: 1.8 },
+        { text: 'BBBB', startSec: 1.8, endSec: 2.0 },
+      ]
+      const ed = cli(['edit_cues', proj, '-o', proj, '--edits',
+        JSON.stringify([{ select: { index: 0 }, style, words }])], 60000)
+      check('REQ-0556 §1 edit_cues wrote the word timings',
+        ed.code === 0 && (ed.json?.data?.cues?.[0]?.changed ?? []).includes('words'),
+        `code=${ed.code} changed=${JSON.stringify(ed.json?.data?.cues?.[0]?.changed)}`)
+
+      /*
+       * ★ The empty-set trap: assert the words are REALLY THERE, and really
+       * spell the text, before any pixel is measured. If they were absent or
+       * mismatched the renderer would silently use the even split - and the
+       * comparison below would be measuring the control against itself.
+       */
+      const rd = cli(['read_subtitle', proj, '--with-words'], 60000)
+      const gotWords = rd.json?.data?.cues?.[0]?.words
+      check('★ REQ-0556 §1 read_subtitle --with-words returns exactly what was written',
+        Array.isArray(gotWords) && gotWords.length === 2
+        && gotWords[0].text === 'AAAA' && Math.abs(gotWords[0].endSec - 1.8) < 1e-6
+        && gotWords[1].text === 'BBBB',
+        JSON.stringify(gotWords))
+      check('REQ-0556 §1 no KARAOKE_NO_WORD_TIMING warning (the words spell the text)',
+        !(ed.json?.warnings ?? []).some((w) => w.code === 'KARAOKE_NO_WORD_TIMING'),
+        JSON.stringify((ed.json?.warnings ?? []).map((w) => w.code)))
+
+      // Mid-cue frame from each project.
+      const withPng = join(work, 'kw-words.png')
+      const ctlPng = join(work, 'kw-even.png')
+      const fw = cli(['export_frame', clip, proj, '-o', withPng, '--time', '1.5'], 90000)
+      const fc = cli(['export_frame', clip, ctlProj, '-o', ctlPng, '--time', '1.5'], 90000)
+      const hlWords = existsSync(withPng) ? countColor(withPng, HL, 40) : -1
+      const hlEven = existsSync(ctlPng) ? countColor(ctlPng, HL, 40) : -1
+
+      check('REQ-0556 §3-3 control applied the same style (differs only in words)',
+        ctlEd.code === 0 && fw.code === 0 && fc.code === 0,
+        `ctlEdit=${ctlEd.code} frameWords=${fw.code} frameEven=${fc.code}`)
+      // Both must actually be sweeping: a frame with no highlight at all would
+      // make "they differ" meaningless.
+      check('REQ-0556 §1 both frames show a partial sweep (gate is not vacuous)',
+        hlWords > 100 && hlEven > 100, `words=${hlWords} even=${hlEven}`)
+      check('★ REQ-0556 §3-1 the written timings CHANGE the sweep position at t=1.5s',
+        hlWords > 0 && hlEven > 0 && hlEven > hlWords * 1.15,
+        `evenSplit=${hlEven} realTiming=${hlWords} (even split should be further along)`)
+    }
+  }
+
+
+  /*
+   * ★ REQ-0556 §2 - the wrap operations, through the CLI.
+   *
+   * The GUI equivalence is pinned in `cue-words-wrap-req-0556.test.ts` (both
+   * surfaces call `wrapCueText`, and the test reconstructs the old GUI
+   * composition to prove it). What this adds is the part unit tests cannot
+   * reach: the REAL font metrics loaded off disk inside Electron, which is
+   * where REQ-0537 found headless silently running on the character-class
+   * estimate instead.
+   */
+  {
+    const clip = join(work, 'wr.mp4')
+    makeSolidClip(clip, '640x360', 'navy', 3)
+    const srt = join(work, 'wr.srt')
+    const LONG = 'これはとても長い日本語の字幕であり折り返しが必要なはずです'
+    writeFileSync(srt, ['1', '00:00:00,500 --> 00:00:02,500', LONG, ''].join(CRLF), 'utf-8')
+    const proj = join(work, 'wr.mojioko')
+    const conv = cli(['convert', srt, '-o', proj, '--video', clip], 60000)
+    check('REQ-0556 §2 fixture: convert produced a .mojioko', conv.code === 0)
+
+    if (conv.code === 0) {
+      const textOf = (p) => cli(['read_subtitle', p], 60000).json?.data?.cues?.[0]?.text ?? ''
+      const before = textOf(proj)
+
+      // NEGATIVE CONTROL first: the identical patch WITHOUT `wrap` must not
+      // touch the text. Same command, same cue - one field removed.
+      const ctl = join(work, 'wr-ctl.mojioko')
+      cli(['convert', srt, '-o', ctl, '--video', clip], 60000)
+      const ctlEd = cli(['edit_cues', ctl, '-o', ctl, '--edits',
+        JSON.stringify([{ select: { index: 0 }, style: { fontSizePx: 150 } }])], 60000)
+      check('★ REQ-0556 §3-3 NEGATIVE CONTROL: the same patch without `wrap` leaves the text alone',
+        ctlEd.code === 0 && textOf(ctl) === before,
+        `code=${ctlEd.code} text=${JSON.stringify(textOf(ctl))}`)
+
+      const ed = cli(['edit_cues', proj, '-o', proj, '--edits',
+        JSON.stringify([{ select: { index: 0 }, style: { fontSizePx: 150 }, wrap: 'pack' }])], 60000)
+      const after = textOf(proj)
+      check('★ REQ-0556 §2 wrap:pack inserts breaks measured with REAL font metrics',
+        ed.code === 0 && after.includes('\\N') && !before.includes('\\N')
+        && (ed.json?.data?.cues?.[0]?.changed ?? []).includes('wrap'),
+        `code=${ed.code} after=${JSON.stringify(after)}`)
+
+      // overflow KEEPS what pack just produced (nothing overflows any more),
+      // which is also the idempotence check.
+      const again = cli(['edit_cues', proj, '-o', proj, '--edits',
+        JSON.stringify([{ select: { index: 0 }, wrap: 'overflow' }])], 60000)
+      check('REQ-0556 §2 wrap:overflow keeps the existing breaks (idempotent)',
+        again.code === 0 && textOf(proj) === after,
+        `changed=${JSON.stringify(again.json?.data?.cues?.[0]?.changed)}`)
+
+      // pack on the already-wrapped text at a SMALL size collapses it back to
+      // one line - proving pack really discards the breaks rather than adding.
+      const packed = cli(['edit_cues', proj, '-o', proj, '--edits',
+        JSON.stringify([{ select: { index: 0 }, style: { fontSizePx: 20 }, wrap: 'pack' }])], 60000)
+      check('★ REQ-0556 §2 wrap:pack DISCARDS existing breaks when they are no longer needed',
+        packed.code === 0 && !textOf(proj).includes('\\N'),
+        `text=${JSON.stringify(textOf(proj))}`)
+    }
+  }
+
 } finally {
   try { rmSync(work, { recursive: true, force: true }) } catch { /* best-effort */ }
 }

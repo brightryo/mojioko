@@ -3,17 +3,14 @@ import type { SubtitleEntry } from '../../shared/types'
 import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
-import { applyAutoLineBreak } from '@/lib/auto-line-break'
 import { loadSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { isFontId } from '../../shared/fonts'
-import {
-  resolveEmphasisRanges,
-  mapRangesAcrossBreakCollapse,
-  clampEmphasisScalePercent,
-} from '../../shared/emphasis'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { buildDuplicateEntry } from '@/lib/duplicate-entry'
 import { buildResetPatch } from '@/lib/cue-structure'
+import { rendererLineBreakMetrics } from '@/lib/auto-line-break'
+import { wrapCueText } from '../../shared/cue-wrap'
+import { ASS_MARGIN_LR_PX } from '@/lib/tokens'
 import { resolveLayer, findFreeLayerAbove } from '../../shared/cue-placement'
 
 /**
@@ -281,34 +278,21 @@ async function wrapRow(
   if (isFontId(latest.fontId)) {
     await loadSubtitleFontFor(latest.fontId).catch(() => null)
   }
-  // Only difference between the two modes: pack pre-strips so the wrap
-  // core sees a single long line; overflow passes the text through with
-  // existing `\N` intact (applyAutoLineBreak then splits on `\N` and
-  // measures each segment independently — see auto-line-break.ts:51).
-  const input = mode === 'pack' ? latest.text.replace(/\\N/g, '') : latest.text
-  // REQ-0306 §2 / REQ-0307 — feed the row's keyword emphasis into the break
-  // finder so a cue whose emphasised characters are enlarged actually wraps
-  // (pre-REQ-0306 the width was measured at base size and the wrap button
-  // reported "no change").  The spans are anchored against `latest.text`, so
-  // in "pack" mode — where `input` has had every `\N` deleted — the ranges are
-  // shifted onto the packed coordinates rather than left to drift.
-  const emphasis = latest.keywordEmphasisEnabled === true
-    ? {
-        ranges: mode === 'pack'
-          ? mapRangesAcrossBreakCollapse(latest.text, resolveEmphasisRanges(latest), 0)
-          : resolveEmphasisRanges(latest),
-        scale: clampEmphasisScalePercent(latest.emphasisScalePercent) / 100,
-      }
-    : undefined
-  const rewrapped = applyAutoLineBreak(
-    input,
-    latest.fontSizePx,
-    latest.outlineThicknessPx,
+  /*
+   * REQ-0556 §2 — the mode difference (pack pre-strips `\N` and re-anchors the
+   * emphasis ranges onto the collapsed text; overflow passes them through) now
+   * lives in `shared/cue-wrap.ts`, so the CLI's wrap produces the same result
+   * as this button rather than a careful re-derivation of it.
+   *
+   * `font` above is still awaited for its side effect: it warms the metrics
+   * cache that `rendererLineBreakMetrics` then reads.
+   */
+  void font
+  const rewrapped = wrapCueText(latest, mode, {
     videoWidthPx,
-    font,
-    latest.fontId,
-    emphasis
-  )
+    marginLrPx: ASS_MARGIN_LR_PX,
+    metrics: rendererLineBreakMetrics(latest.fontId),
+  })
   if (rewrapped === latest.text) {
     toast.info(labels.noChangeToast)
     return

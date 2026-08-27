@@ -317,7 +317,7 @@ const COMMANDS: CommandDoc[] = [
   },
   {
     name: 'edit_cues',
-    summary: 'cue 単位でスタイル・時刻・強調範囲などをまとめて更新（.mojioko）',
+    summary: 'cue 単位でスタイル・時刻・強調範囲・単語タイミング・折り返しをまとめて更新（.mojioko）',
     usage: "mojioko edit_cues <in.mojioko> -o <out> --edits '[...]'",
     positionals: [{ name: 'subtitle', required: true, desc: '.mojioko（SRT はスタイルを持たないため非対応）' }],
     optionSpecs: [
@@ -330,6 +330,7 @@ const COMMANDS: CommandDoc[] = [
     examples: [
       `mojioko edit_cues p.mojioko -o p.mojioko --edits '[{"select":{"index":0},"style":{"fontSizePx":96}}]'`,
       `mojioko edit_cues p.mojioko -o p.mojioko --edits '[{"select":{"id":"c-7"},"style":{"emphasis":{"enabled":true}},"emphasisSpans":[{"start":5,"end":7,"text":"重要"}]}]'`,
+      `mojioko edit_cues p.mojioko -o p.mojioko --edits '[{"select":{"index":0},"style":{"fontSizePx":120},"wrap":"pack"}]'`,
     ],
     errorCodes: ['INPUT_NOT_FOUND', 'UNSUPPORTED_FORMAT', 'USAGE', 'OUTPUT_WRITE_FAILED'],
   },

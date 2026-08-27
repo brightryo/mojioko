@@ -497,6 +497,66 @@ try {
     check('★ REQ-0555 MCP reset_cue restores the original text',
       reset?.ok === true && reset?.data?.changed === true && (await textsOf())[0] === 'first',
       JSON.stringify(await textsOf()))
+
+    /*
+     * REQ-0556 §1/§2 over MCP. The rendering consequences are proved in real
+     * pixels on the CLI side (same command function); what is proved here is
+     * that the nested `words` array and the `wrap` enum survive the JSON-RPC
+     * schema, and that the round trip closes through `read_subtitle`.
+     */
+    const w = parseContent(await rpc('tools/call', {
+      name: 'edit_cues',
+      arguments: {
+        input: stProj, out: stProj, overwrite: true,
+        edits: [{
+          select: { index: 0 },
+          text: 'AAAA BBBB',
+          words: [
+            { text: 'AAAA', startSec: 1.0, endSec: 2.0 },
+            { text: 'BBBB', startSec: 2.0, endSec: 3.0 },
+          ],
+        }],
+      },
+    }))
+    check('★ REQ-0556 MCP edit_cues accepts word timings', w?.ok === true
+      && (w?.data?.cues?.[0]?.changed ?? []).includes('words'),
+      JSON.stringify(w?.error ?? w?.data?.cues?.[0]?.changed))
+
+    const rw = parseContent(await rpc('tools/call', {
+      name: 'read_subtitle', arguments: { input: stProj, with_words: true },
+    }))
+    const gotW = rw?.data?.cues?.[0]?.words
+    check('★ REQ-0556 MCP round trip: with_words reads back what was written',
+      Array.isArray(gotW) && gotW.length === 2 && gotW[0].text === 'AAAA' && gotW[1].endSec === 3.0,
+      JSON.stringify(gotW))
+
+    const badW = parseContent(await rpc('tools/call', {
+      name: 'edit_cues',
+      arguments: { input: stProj, out: stProj, overwrite: true,
+        edits: [{ select: { index: 0 }, words: [{ text: 'x', startSec: 1, endSec: 1 }] }] },
+    }))
+    check('REQ-0556 MCP a zero-length word is rejected', badW?.ok === false,
+      JSON.stringify(badW?.data ?? badW?.error))
+
+    const wrapped = parseContent(await rpc('tools/call', {
+      name: 'edit_cues',
+      arguments: { input: stProj, out: stProj, overwrite: true,
+        // Long enough to actually overflow: a short cue would legitimately come
+        // back unwrapped and the check would fail for the wrong reason.
+        edits: [{ select: { index: 0 }, text: 'これはとても長い日本語の字幕であり折り返しが必要なはずです',
+          style: { fontSizePx: 150 }, wrap: 'pack' }] },
+    }))
+    check('★ REQ-0556 MCP wrap runs and reports itself in `changed`',
+      wrapped?.ok === true && (wrapped?.data?.cues?.[0]?.changed ?? []).includes('wrap'),
+      JSON.stringify(wrapped?.error ?? wrapped?.data?.cues?.[0]?.changed))
+
+    const badWrap = parseContent(await rpc('tools/call', {
+      name: 'edit_cues',
+      arguments: { input: stProj, out: stProj, overwrite: true,
+        edits: [{ select: { index: 0 }, wrap: 'squeeze' }] },
+    }))
+    check('REQ-0556 MCP an unknown wrap mode is rejected', badWrap?.ok === false,
+      JSON.stringify(badWrap?.data ?? badWrap?.error))
   }
 
   child.stdin.end() // closes stdin → server exits (proves clean shutdown)

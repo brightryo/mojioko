@@ -433,6 +433,25 @@ export const TOOLS: ToolSpec[] = [
                   additionalProperties: false,
                 },
               },
+              words: {
+                type: 'array',
+                description: 'カラオケの単語タイミング（read_subtitle の with_words と同じ形）。テキストを綴らない場合も保存し KARAOKE_NO_WORD_TIMING で警告する（REQ-0556）',
+                items: {
+                  type: 'object',
+                  required: ['text', 'startSec', 'endSec'],
+                  properties: {
+                    text: { type: 'string' },
+                    startSec: { type: 'number' },
+                    endSec: { type: 'number' },
+                  },
+                  additionalProperties: false,
+                },
+              },
+              wrap: {
+                type: 'string',
+                enum: ['pack', 'overflow'],
+                description: 'パッチ適用後に自動折り返しを実行する。pack=敷き詰め（既存の \\N を捨てて詰め直す）/ overflow=はみ出し（既存の \\N を保ち、溢れた行だけ折る）。GUI の折り返しボタンと同じ結果（REQ-0556）',
+              },
               style: {
                 type: 'object',
                 description: 'read_subtitle --with_style の style と同じ形（全フィールド任意）。入れ子は与えたキーだけ更新',
