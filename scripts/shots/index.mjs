@@ -172,26 +172,60 @@ const SHOTS = [
     lang: 'ja',
     start: 'step2',
     caption: 'STEP2 — キーワード強調と cue 別スタイル',
-    // The emphasis is set through the REAL edit_cues API — the same call an
-    // agent makes, and the feature this release is about.
-    prep: (cues) => {
-      // A cue long enough that an emphasised word reads clearly in the preview.
-      const focusIndex = cues.findIndex((c) => (c.text || '').length >= 8)
-      if (focusIndex === -1) return null
-      const word = (cues[focusIndex].text || '').slice(0, 4)
+    /*
+     * ★ REQ-0566 §1 — the emphasised span is CHOSEN, not computed.
+     *
+     * It used to be `text.slice(0, 4)` of the first long cue, which on this
+     * SRT produced 「はい、み」 — not a word, just the first four characters,
+     * cut in the middle of 「みなさん」. As a demonstration of "highlight the
+     * word that matters" it demonstrated the opposite.
+     *
+     * A mechanical rule cannot pick a meaningful word without a tokeniser, and
+     * a screenshot set does not need one: there are seven shots and they are
+     * fixed. So the cue and the span are stated outright, and the assertion
+     * below fails loudly if the SRT ever changes underneath them.
+     */
+    emphasis: {
+      cueIndex: 0,
+      // 「はい、みなさんこんばんはー」 → emphasise the greeting itself.
+      expectText: 'はい、みなさんこんばんはー',
+      start: 7,
+      end: 13,
+      word: 'こんばんはー',
+    },
+    prep: (cues, shot) => {
+      const { cueIndex, expectText, start, end, word } = shot.emphasis
+      const cue = cues[cueIndex]
+      if (!cue || cue.text !== expectText) {
+        throw new Error(
+          `s2 emphasis is pinned to cue ${cueIndex} = "${expectText}", but the SRT now has ` +
+          `"${cue ? cue.text : '(missing)'}". Re-pick the span rather than letting the ` +
+          'highlight land on whatever happens to be there.',
+        )
+      }
+      if (cue.text.slice(start, end) !== word) {
+        throw new Error(`s2 emphasis offsets ${start}..${end} no longer spell "${word}".`)
+      }
       return {
-        focusIndex,
+        focusIndex: cueIndex,
         edits: [{
-          select: { index: focusIndex },
+          select: { index: cueIndex },
           style: {
-            // On top of SITE_STYLE, which already pinned rotation to 0 and set
-            // the base look. Yellow reads as "highlighted" and stays distinct
-            // from the yellow-green karaoke sweep behind it.
+            // On top of SITE_STYLE, which already pinned rotation to 0.
             fontSizePx: 160,
             emphasis: { enabled: true, color: '#FFD400', scalePercent: 150 },
+            /*
+             * ★ Karaoke OFF for this shot only (REQ-0566 §1-2).
+             *
+             * The sweep fills from the START of the line and the emphasis was
+             * also at the start, so two accent colours advanced from the same
+             * edge and neither could be read. This shot's job is to show
+             * keyword emphasis; the other five all carry the karaoke sweep, so
+             * nothing is lost by letting emphasis stand alone here.
+             */
+            karaoke: { enabled: false, style: 'sweep', highlightColor: '#B4FF39' },
           },
-          emphasisSpans: [{ start: 0, end: word.length, text: word }],
-          // Re-wrap at the new size, exactly as REQ-0563's hint advises.
+          emphasisSpans: [{ start, end, text: word }],
           wrap: 'pack',
         }],
       }
@@ -237,6 +271,59 @@ const SHOTS = [
     start: 'step2',
     caption: 'STEP3 — 焼き込み設定',
     focus: 2,
+  },
+  {
+    id: 's9-inspector',
+    video: 'Game08',
+    lang: 'ja',
+    start: 'step2',
+    caption: '多彩な字幕編集（インスペクタ）',
+    focus: 2,
+    /*
+     * ★ REQ-0566 §2 — the ja page used s2 TWICE (new-features and
+     * "flexible editing"), which reads as one screenshot padded out. This is
+     * the editing shot: same screen, deliberately different styling — a
+     * background box and a coloured body — so the two pictures are making
+     * different points instead of repeating one.
+     */
+    prep: () => ({
+      focusIndex: 2,
+      edits: [{
+        select: { index: 2 },
+        style: {
+          textColorHex: '#FFE9A8',
+          background: { enabled: true, color: 'black', opacityPercent: 60 },
+          // BorderStyle=3 needs a non-zero outline or the box collapses onto
+          // the glyphs (REQ-0340) — edit_cues warns about exactly this.
+          outlineThicknessPx: 6,
+        },
+        wrap: 'pack',
+      }],
+    }),
+  },
+  {
+    id: 's8-position',
+    video: 'Game07',
+    lang: 'ja',
+    start: 'step2',
+    caption: '見たままの位置決め（WYSIWYG）',
+    focus: 2,
+    /*
+     * ★ REQ-0566 §2 — the ja page's positioning section had an ENGLISH-subtitle
+     * shot in it (Game05/en, shot for the translation story). This is its own
+     * ja shot, and it earns its place by showing something the other six do
+     * not: the caption placed at the TOP. That is the point of the section —
+     * where you put it is where it burns — and it is visibly different from
+     * the bottom-centre default the rest of the set uses.
+     */
+    prep: () => ({
+      focusIndex: 2,
+      edits: [{
+        select: { index: 2 },
+        style: { position: { horizontal: 'center', vertical: 'top', verticalMarginPx: 60 } },
+        wrap: 'pack',
+      }],
+    }),
   },
   {
     id: 's7-ai',
@@ -325,7 +412,7 @@ async function takeShot(shot, work) {
     cues = JSON.parse(fs.readFileSync(projPath, 'utf-8')).editing.subtitles
 
     if (shot.prep) {
-      const prepared = shot.prep(cues)
+      const prepared = shot.prep(cues, shot)
       if (prepared) {
         const ed = cli(['edit_cues', projPath, '-o', projPath, '--edits', JSON.stringify(prepared.edits)])
         if (ed.code !== 0) throw new Error(`edit_cues failed for ${shot.id} (exit ${ed.code})`)
