@@ -9,7 +9,8 @@
   },
   "ai": {
     "title": "AI連携（MCP）",
-    "lead": "MOJIOKO は MCP 接続で、AI から自動で使えます。\n文字起こし・翻訳・字幕の焼き込みを、Claude に頼むだけで実行できます。\n処理はすべてこの PC の中で完結します。",
+    "lead": "MOJIOKO は MCP 接続で、AI から自動で使えます。\n文字起こし・翻訳・字幕の焼き込みを、Claude に頼むだけで実行できます。",
+    "privacyTitle": "この機能を使うと、一部の情報がこの PC の外に出ます",
     "desktopTitle": "Claude Desktop で使う",
     "step1": "「MCP 拡張を書き出す」を押して mojioko.mcpb を保存する。",
     "exportButton": "MCP 拡張を書き出す",

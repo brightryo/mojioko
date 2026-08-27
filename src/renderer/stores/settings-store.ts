@@ -175,7 +175,6 @@ interface SettingsStore {
   /** REQ-0551 — the user pressed "I understand, enable it". */
   acceptAiConsent: () => void
   /** REQ-0551 — the one-time retroactive notice was shown. */
-  markAiNoticeSeen: () => void
 
   /** Hydrate from loaded AppSettings (overwrites local state). */
   hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'translationAutoEnabled' | 'translationTargetLang' | 'playbackTimeDetailed' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'defaultImageDir' | 'defaultTextDir' | 'defaultSrtDir' | 'stylePresets' | 'animationMemory' | 'aiIntegration'>) => void
@@ -282,8 +281,6 @@ export const useSettingsStore = create<SettingsStore>()(
 
       acceptAiConsent: () =>
         set((s) => ({ aiIntegration: { ...s.aiIntegration, consentAcceptedAtMs: Date.now() } })),
-      markAiNoticeSeen: () =>
-        set((s) => ({ aiIntegration: { ...s.aiIntegration, noticeSeenAtMs: Date.now() } })),
 
       resetStep3Settings: () =>
         set({

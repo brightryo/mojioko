@@ -134,8 +134,21 @@ export function buildMcpbManifest(
     display_name: 'MOJIOKO',
     // REQ-0458 §1 — version encodes app + launch-spec revision (`1.4.0+lsr.1`).
     version: mcpManifestVersion(APP_VERSION),
+    /*
+     * ★ REQ-0559 §1-3 — this used to end 「処理はすべてこの PC 内で完結します。」
+     *
+     * Claude Desktop shows this description on its install screen, which makes
+     * it the single worst place in the product for that sentence: the user is
+     * reading it at the exact moment they connect MOJIOKO to a remote
+     * assistant, and it tells them nothing will leave. The subtitle text, file
+     * paths and video metadata will.
+     *
+     * Kept to the same boundary the consent dialog draws, in the same terms.
+     */
     description:
-      'ローカル動画字幕ツール MOJIOKO を AI から操作します（文字起こし・翻訳・字幕焼き込み）。処理はすべてこの PC 内で完結します。',
+      'ローカル動画字幕ツール MOJIOKO を AI から操作します（文字起こし・翻訳・字幕焼き込み）。'
+      + '動画・音声ファイルと処理はこの PC から出ませんが、AI がツールで読み書きする情報'
+      + '（字幕テキスト・ファイルのパス・動画の情報）は AI 提供者に送信されます。',
     // REQ-0483 — display-only author name.  Correct casing is `BrightRyo`
     // (Claude Desktop shows "作成者 <name>").  This is NOT the MSIX package
     // identifier `brightryo.MOJIOKO` (store-registered, must stay lowercase).

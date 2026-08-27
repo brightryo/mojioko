@@ -4,7 +4,6 @@ import { Sparkles, Copy, Download, ChevronDown, ChevronRight, AlertTriangle } fr
 import { Button } from '@/components/ui/button'
 import { AiConsentDialog } from '@/components/ai-consent-dialog/ai-consent-dialog'
 import { useSettingsStore } from '@/stores/settings-store'
-import { needsAiConsentGate, needsAiRetroactiveNotice } from '../../../shared/ai-consent'
 import { toast } from '@/lib/toast'
 import { saveFileDialog, shellShowInFolder } from '@/services/dialog'
 import type { McpLaunchSpec } from '../../../shared/mcp'
@@ -48,31 +47,29 @@ export function AiIntegrationTab() {
    * enabling acts, and gating only the export would leave the two copy buttons
    * as an unguarded way to reach exactly the same place.
    */
-  const consent = useSettingsStore((st) => st.aiIntegration)
   const acceptAiConsent = useSettingsStore((st) => st.acceptAiConsent)
-  const markAiNoticeSeen = useSettingsStore((st) => st.markAiNoticeSeen)
-  const [dialog, setDialog] = useState<null | { mode: 'gate' | 'notice'; run?: () => void }>(null)
+  const [dialog, setDialog] = useState<null | { run?: () => void }>(null)
 
   useEffect(() => {
     void window.electronAPI.getMcpLaunchSpec().then(setSpec).catch(() => setSpec(null))
   }, [])
 
-  // REQ-0551 §1-4 — someone who set this up before the gate existed is told
-  // once, when they next open this tab. Their setup is NOT revoked; the notice
-  // says so. `lastExport` is the evidence that they are already configured.
-  useEffect(() => {
-    if (!spec) return
-    if (!needsAiRetroactiveNotice(consent, Boolean(spec.lastExport))) return
-    setDialog({ mode: 'notice' })
-  }, [spec, consent])
-
-  /** Run `action`, asking first if the user has never agreed. */
+  /**
+   * ★ REQ-0559 §2 — ask EVERY time, not just the first.
+   *
+   * The gate used to consult `hasAiConsent` and let a returning user straight
+   * through. These three actions (export the bundle, copy the Desktop config,
+   * copy the Code command) are rare and deliberate, so the cost of asking again
+   * is one extra click on an action nobody performs often — and the benefit is
+   * that the boundary is re-read at the moment it applies, instead of once,
+   * months ago, by a user who has since forgotten.
+   *
+   * The acceptance is still RECORDED (`acceptAiConsent`), it just no longer
+   * decides whether to show this. Every gated action goes through here, so
+   * "which buttons are gated" still has one answer.
+   */
   const runGated = (action: () => void): void => {
-    if (needsAiConsentGate(consent)) {
-      setDialog({ mode: 'gate', run: action })
-      return
-    }
-    action()
+    setDialog({ run: action })
   }
 
   const isDev = spec != null && !spec.isPackaged
@@ -131,6 +128,31 @@ export function AiIntegrationTab() {
         <p className="text-body font-medium text-fg-primary">{t('ai.title')}</p>
       </div>
       <p className="text-body-sm text-fg-secondary leading-relaxed whitespace-pre-line">{t('ai.lead')}</p>
+
+      {/*
+        ★ REQ-0559 §1-2 — the boundary, stated permanently.
+
+        This slot used to read 「処理はすべてこの PC の中で完結します。」 — which is
+        false for this tab specifically, and sat a few pixels away from a dialog
+        saying the opposite. The owner found it in the packaged build.
+
+        It renders the CONSENT DIALOG'S OWN STRINGS rather than a second summary
+        written to match. Two copies of a privacy boundary is two things to keep
+        in sync, and the one that drifts is the one nobody is looking at. Here
+        they cannot drift: editing the dialog edits this.
+      */}
+      <div className="rounded-md border border-line p-3 space-y-2">
+        <p className="text-caption font-medium text-fg-primary">{t('ai.privacyTitle')}</p>
+        <div>
+          <p className="text-caption text-fg-secondary">{t('ai.consent.staysLocalLabel')}</p>
+          <p className="text-body-sm text-fg-primary">{t('ai.consent.staysLocal')}</p>
+        </div>
+        <div>
+          <p className="text-caption text-warning-faint">{t('ai.consent.leavesLabel')}</p>
+          <p className="text-body-sm text-fg-primary">{t('ai.consent.leaves')}</p>
+        </div>
+        <p className="text-body-sm text-fg-secondary">{t('ai.consent.provider')}</p>
+      </div>
 
       {/* Claude Desktop — drag-and-drop primary flow */}
       <div className="rounded-md border border-line p-3 space-y-3">
@@ -216,10 +238,8 @@ export function AiIntegrationTab() {
 
       <p className="text-caption text-fg-muted leading-relaxed">{t('ai.clientsNote')}</p>
       <p className="text-caption text-fg-muted">{t('ai.cliRef')}</p>
-      {/* REQ-0551 — the same text in both modes; see the component. */}
       <AiConsentDialog
         open={dialog !== null}
-        mode={dialog?.mode ?? 'gate'}
         onAccept={() => {
           const pending = dialog
           setDialog(null)
@@ -229,12 +249,9 @@ export function AiIntegrationTab() {
           pending?.run?.()
         }}
         onDismiss={() => {
-          const wasNotice = dialog?.mode === 'notice'
+          // Cancel does nothing else: the pending action is dropped with the
+          // dialog state, so nothing is exported or copied.
           setDialog(null)
-          // Dismissing the retroactive notice is not agreement, but it IS
-          // "we told them" — recording it stops the nag without pretending
-          // they consented (the gate still applies to future actions).
-          if (wasNotice) markAiNoticeSeen()
         }}
       />
     </div>

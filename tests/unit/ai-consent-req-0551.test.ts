@@ -1,12 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import {
-  hasAiConsent,
-  needsAiConsentGate,
-  needsAiRetroactiveNotice,
-  sanitizeAiConsent,
-} from '../../src/shared/ai-consent'
+import { hasAiConsent, sanitizeAiConsent } from '../../src/shared/ai-consent'
 import { SETTINGS_MERGE_RULES } from '../../src/main/ipc/settings-merge'
 
 /**
@@ -22,42 +17,56 @@ import { SETTINGS_MERGE_RULES } from '../../src/main/ipc/settings-merge'
 
 const read = (p: string) => readFileSync(resolve(__dirname, '../../', p), 'utf-8')
 
-describe('REQ-0551 §1-2 — the gate', () => {
-  it('★ a user who has never agreed is gated', () => {
-    expect(needsAiConsentGate(undefined)).toBe(true)
-    expect(needsAiConsentGate({})).toBe(true)
+describe('REQ-0559 §2 — the gate fires EVERY time', () => {
+  const tab = read('src/renderer/components/settings-dialog/ai-integration-tab.tsx')
+
+  it('★ the gate no longer consults the stored consent', () => {
+    /*
+     * REQ-0551 asked once and let a returning user straight through. REQ-0559
+     * asks every time: these actions are rare and deliberate, so the cost is
+     * one click on something nobody does often, and the boundary gets re-read
+     * at the moment it applies rather than once, months ago.
+     *
+     * Pinned at the source because the decision IS the absence of a condition
+     * — there is no predicate left to call in a unit test.
+     */
+    const body = tab.slice(tab.indexOf('const runGated'), tab.indexOf('const isDev'))
+    expect(body).toContain('setDialog({ run: action })')
+    expect(body).not.toContain('hasAiConsent')
+    expect(body).not.toContain('needsAiConsentGate')
+    // No early return that would skip the dialog for an already-consented user.
+    expect(body).not.toMatch(/return\s*$/m)
   })
 
-  it('★ once agreed, never gated again', () => {
-    const agreed = { consentAcceptedAtMs: 1_700_000_000_000 }
-    expect(hasAiConsent(agreed)).toBe(true)
-    expect(needsAiConsentGate(agreed)).toBe(false)
+  it('★ the acceptance is still RECORDED, it just does not gate', () => {
+    // "Did this user ever agree" stays answerable; it no longer decides whether
+    // to ask.
+    expect(tab).toContain('acceptAiConsent()')
+    expect(hasAiConsent({ consentAcceptedAtMs: 1_700_000_000_000 })).toBe(true)
+    expect(hasAiConsent({})).toBe(false)
+    expect(hasAiConsent(undefined)).toBe(false)
   })
 
-  it('having merely SEEN the notice is not agreement', () => {
-    // Dismissing an informational dialog must not be recorded as consent.
-    const seen = { noticeSeenAtMs: 1_700_000_000_000 }
-    expect(hasAiConsent(seen)).toBe(false)
-    expect(needsAiConsentGate(seen)).toBe(true)
-  })
-})
-
-describe('REQ-0551 §1-4 — the one-time retroactive notice', () => {
-  it('★ an already-configured user with no record is told, once', () => {
-    expect(needsAiRetroactiveNotice({}, true)).toBe(true)
-    // …and not again after it has been shown.
-    expect(needsAiRetroactiveNotice({ noticeSeenAtMs: 1 }, true)).toBe(false)
-  })
-
-  it('a user who already agreed is not told again', () => {
-    expect(needsAiRetroactiveNotice({ consentAcceptedAtMs: 1 }, true)).toBe(false)
+  it('★ the retroactive-notice path is gone, not left dormant', () => {
+    /*
+     * REQ-0559 §2-2: do not silently keep code that can no longer fire. With
+     * every-time asking, an already-configured user meets the full dialog the
+     * next time they act — same text, better moment than a popup for opening a
+     * tab — so the second mode had nothing left to do.
+     */
+    expect(tab).not.toContain('needsAiRetroactiveNotice')
+    expect(tab).not.toContain('markAiNoticeSeen')
+    expect(tab).not.toContain("mode: 'notice'")
+    const dialog = read('src/renderer/components/ai-consent-dialog/ai-consent-dialog.tsx')
+    expect(dialog).not.toContain("'gate' | 'notice'")
+    expect(read('src/shared/ai-consent.ts')).not.toContain('noticeSeenAtMs?')
+    expect(read('src/renderer/stores/settings-store.ts')).not.toContain('markAiNoticeSeen')
   })
 
-  it('★ a fresh user sees nothing merely for opening the tab', () => {
-    // They will meet the gate when they act. A dialog that fires for a tab you
-    // clicked reads as noise, and noise is what teaches people to dismiss.
-    expect(needsAiRetroactiveNotice({}, false)).toBe(false)
-    expect(needsAiRetroactiveNotice(undefined, false)).toBe(false)
+  it('an old settings.json carrying the retired key still loads', () => {
+    // The key is simply dropped — not a crash, and not mistaken for consent.
+    expect(sanitizeAiConsent({ consentAcceptedAtMs: 5, noticeSeenAtMs: 6 }))
+      .toEqual({ consentAcceptedAtMs: 5 })
   })
 })
 
@@ -65,7 +74,7 @@ describe('REQ-0551 — reading the record off disk', () => {
   it('absent or malformed means "not agreed, not told"', () => {
     for (const bad of [undefined, null, 'yes', 42, [], {}]) {
       expect(sanitizeAiConsent(bad)).toEqual({})
-      expect(needsAiConsentGate(sanitizeAiConsent(bad))).toBe(true)
+      expect(hasAiConsent(sanitizeAiConsent(bad))).toBe(false)
     }
   })
 
@@ -77,8 +86,8 @@ describe('REQ-0551 — reading the record off disk', () => {
   })
 
   it('a valid record survives', () => {
-    expect(sanitizeAiConsent({ consentAcceptedAtMs: 5, noticeSeenAtMs: 6, junk: 1 }))
-      .toEqual({ consentAcceptedAtMs: 5, noticeSeenAtMs: 6 })
+    expect(sanitizeAiConsent({ consentAcceptedAtMs: 5, junk: 1 }))
+      .toEqual({ consentAcceptedAtMs: 5 })
   })
 })
 
@@ -91,8 +100,8 @@ describe('REQ-0551 §2 — persistence follows the existing rules', () => {
   })
 
   it('a settings.json without the key still hydrates (no migration)', () => {
-    // The store sanitizes, so an old file lands on `{}` = the retroactive
-    // notice path, not a crash and not silent consent.
+    // The store sanitizes, so an old file lands on `{}` — not a crash, and not
+    // silent consent.
     expect(read('src/renderer/stores/settings-store.ts'))
       .toContain('aiIntegration: sanitizeAiConsent(s.aiIntegration)')
   })
@@ -123,8 +132,8 @@ describe('REQ-0551 §1-2 / §1-5 — what is gated, and what is not touched', ()
   })
 
   it('★ cancelling changes nothing', () => {
-    // `onDismiss` records the notice as seen but never calls `acceptAiConsent`,
-    // and never runs the pending action.
+    // `onDismiss` never calls `acceptAiConsent` and never runs the pending
+    // action — the pending action is dropped with the dialog state.
     const dismiss = tab.slice(tab.indexOf('onDismiss={'), tab.indexOf('onDismiss={') + 500)
     expect(dismiss).not.toContain('acceptAiConsent()')
     expect(dismiss).not.toContain('pending?.run')
@@ -145,5 +154,106 @@ describe('REQ-0551 §1-2 / §1-5 — what is gated, and what is not touched', ()
         expect(s, `${loc} is missing ai.consent.${key}`).toContain(`"${key}"`)
       }
     }
+  })
+})
+
+/**
+ * ★ REQ-0559 §1 / §3-1 — the false claim must not come back.
+ *
+ * The AI tab shipped with 「処理はすべてこの PC の中で完結します。」 sitting a few
+ * pixels from a dialog that says the opposite, and the `.mcpb` manifest carried
+ * the same sentence into Claude Desktop's install screen — the one place a user
+ * reads it while connecting MOJIOKO to a remote assistant. The owner found it in
+ * the packaged build, not a test, which is why this guard exists.
+ *
+ * The claim is TRUE elsewhere (transcription, translation and burn-in really do
+ * run locally), so this checks the AI-integration surfaces specifically rather
+ * than banning the phrase from the product.
+ */
+describe('REQ-0559 §1 — no "everything stays on this PC" claim on AI surfaces', () => {
+  /** Files that describe AI integration, in either language. */
+  const AI_SURFACES = [
+    'src/main/mcp/mcpb.ts',
+    'src/renderer/components/settings-dialog/ai-integration-tab.tsx',
+    'src/renderer/components/ai-consent-dialog/ai-consent-dialog.tsx',
+  ]
+
+  /*
+   * Phrasings of the UNQUALIFIED claim, in both languages.
+   *
+   * Deliberately NOT 'すべてこの PC' on its own: the consent dialog says
+   * 「MOJIOKO の処理そのものは、これまでどおりすべてこの PC で行われます。ただし…」,
+   * which is accurate — the processing really is local, and the sentence goes on
+   * to say what is not. Banning the fragment would ban the correct wording along
+   * with the wrong one.
+   */
+  const CLAIMS = [
+    'この PC の中で完結',
+    'この PC 内で完結',
+    'このPCで完結',
+    'Everything runs locally',
+    'everything stays on this PC',
+  ]
+
+  /*
+   * Comments are stripped before source checks: this REQ's code comments QUOTE
+   * the retired sentence to explain why it went, and a guard that punished
+   * documenting the fix would push the next person to delete the explanation.
+   */
+  const stripComments = (src: string): string =>
+    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  const aiStrings = (file: 'ja' | 'en'): string => {
+    const all = JSON.parse(read(`src/renderer/locales/${file}/settings.json`)) as Record<string, unknown>
+    return JSON.stringify((all as { ai?: unknown }).ai ?? {})
+  }
+
+  it('★ the AI settings strings make no such claim (ja + en)', () => {
+    for (const lang of ['ja', 'en'] as const) {
+      const blob = aiStrings(lang)
+      for (const claim of CLAIMS) {
+        expect(blob, `${lang} ai.* must not claim "${claim}"`).not.toContain(claim)
+      }
+    }
+  })
+
+  it('★ the .mcpb manifest description makes no such claim', () => {
+    // This one is shown by Claude Desktop at install time.
+    const src = stripComments(read('src/main/mcp/mcpb.ts'))
+    // The MANIFEST's description, not the `McpbToolInfo` interface field of the
+    // same name — slice from the manifest literal.
+    const manifest = src.slice(src.indexOf("manifest_version:"))
+    const desc = manifest.slice(manifest.indexOf('description:'), manifest.indexOf('author:'))
+    for (const claim of CLAIMS) {
+      expect(desc, `manifest description must not claim "${claim}"`).not.toContain(claim)
+    }
+    // …and it must still say where the data DOES go.
+    expect(desc).toContain('AI 提供者に送信されます')
+  })
+
+  it('★ no AI-integration source file carries the claim', () => {
+    for (const f of AI_SURFACES) {
+      const src = stripComments(read(f))
+      for (const claim of CLAIMS) {
+        expect(src, `${f} must not claim "${claim}"`).not.toContain(claim)
+      }
+    }
+  })
+
+  it('the boundary is stated PERMANENTLY on the tab, not only in the dialog', () => {
+    // REQ-0559 §1-2: readable any time without triggering anything. It renders
+    // the dialog's own strings, so the two cannot drift apart.
+    const tab = read('src/renderer/components/settings-dialog/ai-integration-tab.tsx')
+    const beforeDialog = tab.slice(0, tab.indexOf('<AiConsentDialog'))
+    expect(beforeDialog).toContain("t('ai.consent.staysLocal')")
+    expect(beforeDialog).toContain("t('ai.consent.leaves')")
+    expect(beforeDialog).toContain("t('ai.privacyTitle')")
+  })
+
+  it('the claim IS still allowed where it is true (transcription / burn-in)', () => {
+    // Whisper and the burn really do run locally with no network. Banning the
+    // sentence product-wide would delete a true and useful statement.
+    const step1 = JSON.parse(read('src/renderer/locales/ja/step1.json')) as { footer: { privacyNote: string } }
+    expect(step1.footer.privacyNote).toContain('完結')
   })
 })

@@ -13,17 +13,20 @@ import {
  * REQ-0551 — what changes, and what does not, when an AI assistant drives
  * MOJIOKO.
  *
- * ## Two modes, one text
+ * ## One mode (REQ-0559 §2)
  *
- * - `gate`: shown before an action that hands connection details to an
- *   assistant. Accepting proceeds; cancelling does nothing at all.
- * - `notice`: shown once to someone who set this up before the gate existed.
- *   Their setup keeps working — the buttons say so — because revoking a
- *   working configuration to make a point would be its own harm.
+ * Shown before every action that hands connection details to an assistant.
+ * Accepting proceeds; cancelling does nothing at all.
  *
- * The body is the SAME text in both modes. A user who was told after the fact
- * deserves the same information as one asked in advance, and maintaining two
- * versions of a privacy explanation is how they drift apart.
+ * There used to be a second `notice` mode, shown once to someone who had set
+ * this up before the gate existed. REQ-0559 made the gate fire EVERY time, so
+ * that user now meets the full dialog the next time they export or copy — a
+ * better moment than a popup for merely opening a tab, and the same text. A
+ * mode that only differed by a weaker button label was two things to maintain
+ * for one fact.
+ *
+ * The same body is also rendered permanently on the AI tab, from these same
+ * strings, so it can be re-read without triggering anything.
  *
  * ## What the copy has to get right
  *
@@ -36,12 +39,10 @@ import {
  */
 export function AiConsentDialog({
   open,
-  mode,
   onAccept,
   onDismiss,
 }: {
   open: boolean
-  mode: 'gate' | 'notice'
   onAccept: () => void
   onDismiss: () => void
 }) {
@@ -64,22 +65,14 @@ export function AiConsentDialog({
             <p className="text-body-sm text-fg-primary">{t('ai.consent.leaves')}</p>
           </div>
           <p className="text-body-sm text-fg-secondary">{t('ai.consent.provider')}</p>
-          {/* Only meaningful in `notice` mode: the bundle they already exported
-              keeps working, and pretending otherwise would be misleading. */}
-          {mode === 'notice' && (
-            <p className="text-body-sm text-fg-secondary">{t('ai.consent.alreadyExported')}</p>
-          )}
+          {/* A bundle already exported keeps working; saying so avoids implying
+              that cancelling here revokes an existing setup. */}
+          <p className="text-body-sm text-fg-secondary">{t('ai.consent.alreadyExported')}</p>
         </div>
 
         <DialogFooter>
-          {mode === 'gate' ? (
-            <>
-              <Button variant="ghost" onClick={onDismiss}>{t('common:action.cancel')}</Button>
-              <Button variant="primary" onClick={onAccept}>{t('ai.consent.acceptGate')}</Button>
-            </>
-          ) : (
-            <Button variant="primary" onClick={onAccept}>{t('ai.consent.acceptNotice')}</Button>
-          )}
+          <Button variant="ghost" onClick={onDismiss}>{t('common:action.cancel')}</Button>
+          <Button variant="primary" onClick={onAccept}>{t('ai.consent.acceptGate')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

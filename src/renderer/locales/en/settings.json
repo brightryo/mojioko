@@ -9,7 +9,8 @@
   },
   "ai": {
     "title": "AI integration (MCP)",
-    "lead": "MOJIOKO connects to AI via MCP, so an assistant can drive it for you.\nJust ask Claude to transcribe, translate, or burn subtitles into a video.\nEverything runs locally on this PC.",
+    "lead": "MOJIOKO connects to AI via MCP, so an assistant can drive it for you.\nJust ask Claude to transcribe, translate, or burn subtitles into a video.",
+    "privacyTitle": "Using this feature sends some information off this PC",
     "desktopTitle": "Use with Claude Desktop",
     "step1": "Click \"Export MCP extension\" and save mojioko.mcpb.",
     "exportButton": "Export MCP extension",
