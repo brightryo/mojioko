@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { AiConsentDialog } from '@/components/ai-consent-dialog/ai-consent-dialog'
 import { useSettingsStore } from '@/stores/settings-store'
 import { toast } from '@/lib/toast'
-import { saveFileDialog, shellShowInFolder } from '@/services/dialog'
+import { saveFileDialog } from '@/services/dialog'
 import type { McpLaunchSpec } from '../../../shared/mcp'
 
 /**
@@ -90,7 +90,18 @@ export function AiIntegrationTab() {
       } else {
         toast.success(t('ai.exportToast'))
       }
-      void shellShowInFolder(result.path)
+      /*
+       * ★ REQ-0561 — no Explorer window here.
+       *
+       * This used to call `shellShowInFolder(result.path)`, from the days when
+       * the next step was dragging the file onto Claude Desktop. It is not any
+       * more: Claude Desktop's 拡張機能をインストール opens its own file picker,
+       * so Explorer is never used, and the user chose the save location one
+       * dialog ago — they know where it is.
+       *
+       * Success is still reported twice over: the toast above, and the
+       * bundle-status block refreshed below.
+       */
       // REQ-0458 §3 — refresh so the bundle-status block reflects this export.
       void window.electronAPI.getMcpLaunchSpec().then(setSpec).catch(() => {})
     } catch {

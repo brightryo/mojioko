@@ -257,3 +257,54 @@ describe('REQ-0559 §1 — no "everything stays on this PC" claim on AI surfaces
     expect(step1.footer.privacyNote).toContain('完結')
   })
 })
+
+/**
+ * ★ REQ-0561 — exporting the bundle must not open an Explorer window.
+ *
+ * The auto-open dated from the drag-and-drop era. Claude Desktop's
+ * 拡張機能をインストール opens its own file picker now, so Explorer is never
+ * part of the flow — and the user picked the save location one dialog earlier.
+ *
+ * Checked at the source because the alternative is mounting the tab with a
+ * mocked `window.electronAPI` and a fake save dialog, which would test the
+ * harness more than the behaviour. What matters is a single line's absence,
+ * and that the two real success signals are still there.
+ */
+describe('REQ-0561 — no Explorer window after a .mcpb export', () => {
+  const tab = read('src/renderer/components/settings-dialog/ai-integration-tab.tsx')
+  const stripComments = (src: string): string =>
+    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+  const code = stripComments(tab)
+
+  it('★ the export path opens no folder', () => {
+    expect(code).not.toContain('shellShowInFolder')
+    expect(code).not.toContain('shellOpenPath')
+  })
+
+  it('★ …and the success feedback is still there', () => {
+    // Removing the window must not quietly remove the confirmation with it:
+    // the toast, and the bundle-status block's refresh.
+    const handler = code.slice(code.indexOf('const handleExport'), code.indexOf('const copy'))
+    expect(handler).toContain("toast.success(t('ai.exportToast'))")
+    expect(handler).toContain('getMcpLaunchSpec().then(setSpec)')
+    // The dev / broken-bundle warnings survive too.
+    expect(handler).toContain("t('ai.devExportToast')")
+    expect(handler).toContain("t('ai.proxyMissing')")
+  })
+
+  it('★ the user-initiated "open folder" buttons elsewhere are untouched', () => {
+    /*
+     * REQ-0561 §1-3: only the AUTOMATIC open goes. Every other call site is a
+     * button the user pressed asking for exactly this, and deleting those would
+     * be a different (unrequested) change.
+     */
+    for (const [file, needle] of [
+      ['src/renderer/components/step2/burnin-drawer.tsx', 'shellShowInFolder(completedPath)'],
+      ['src/renderer/components/step2/burnin-drawer.tsx', 'shellOpenPath(completedPath)'],
+      ['src/renderer/components/video-preview/video-preview-panel.tsx', 'shellShowInFolder(video.path)'],
+      ['src/renderer/components/audio-preview/audio-preview-panel.tsx', 'shellShowInFolder(video.path)'],
+    ] as const) {
+      expect(read(file), `${file} must keep ${needle}`).toContain(needle)
+    }
+  })
+})
