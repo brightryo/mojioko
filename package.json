@@ -44,7 +44,8 @@
     "measure:list": "playwright test --config playwright.measure.config.ts tests/measure/list-virtualization.measure.ts",
     "verify:cut-anim-parity": "node scripts/verify-cut-anim-parity/index.mjs",
     "shots": "node scripts/shots/index.mjs",
-    "store-assets": "node scripts/store-assets/index.mjs"
+    "store-assets": "node scripts/store-assets/index.mjs",
+    "unpack:appx": "node scripts/unpack-appx.mjs"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.0.4",
