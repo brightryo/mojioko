@@ -83,21 +83,16 @@ const PICKS = [
   { id: 's7-ai', ja: 'AI 連携（MCP）', en: 'AI integration (MCP)' },
 ]
 
-/**
- * ★ REQ-0568 §2-4 — the only prose in the artwork.
+/*
+ * ★ REQ-0576 — the tagline is gone, and so is the constant that held it.
  *
- * Deliberately says nothing about where processing happens. The site's
- * "everything on your PC" family of claims is exactly what RES-0559 had to
- * qualify once MCP shipped, and a static image cannot carry the footnote that
- * makes such a claim true. So the tagline is about the OUTPUT, which is a
- * claim the app keeps unconditionally.
- *
- * ja is REQ-0568 §2-4's own suggested wording; en is its plain equivalent.
+ * REQ-0568 §2-4 chose the wording carefully (it deliberately said nothing
+ * about where processing happens). It is removed rather than left unused
+ * because Partner Center asks for hero art WITHOUT the product title, and a
+ * dangling TAGLINE would read as an invitation to put words back on the
+ * picture. The caption band on the four screenshots is unaffected — that is a
+ * different field with different rules.
  */
-const TAGLINE = {
-  ja: '動画に、伝わる字幕を。',
-  en: 'Subtitles that get your video across.',
-}
 
 // --- helpers ---------------------------------------------------------------
 const log = (m) => process.stdout.write(m + '\n')
@@ -133,7 +128,7 @@ const FONT_CSS = `
  * and `deviceScaleFactor` is how the 4K hero is produced — same layout, twice
  * the raster, rather than an upscale of the 1080p output.
  */
-async function render(browser, html, { width, height, scale = 1, out }) {
+async function render(browser, html, { width, height, scale = 1, out, noText = false }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mojioko-store-'))
   const doc = path.join(dir, 'compose.html')
   fs.writeFileSync(doc, html, 'utf-8')
@@ -148,6 +143,28 @@ async function render(browser, html, { width, height, scale = 1, out }) {
       [...document.images].map((i) => (i.complete ? null : i.decode().catch(() => null))),
     ))
     await page.waitForTimeout(250)
+
+    /*
+     * ★ REQ-0576 §1-4 — prove there is no text, on the page that is about to
+     * be photographed.
+     *
+     * Checked at render time rather than by grepping this file, because the
+     * thing that must be true is about the ARTWORK: any route by which a
+     * character reaches the canvas — a wordmark, a stray alt text made
+     * visible, a future "just a small label" — shows up in `innerText` and
+     * fails here. A source-level assert would only catch the spellings
+     * somebody thought to forbid.
+     */
+    if (noText) {
+      const text = (await page.evaluate(() => document.body.innerText || '')).trim()
+      if (text !== '') {
+        throw new Error(
+          `hero art must contain no text (Partner Center: do not include the product title), ` +
+          `but the page renders: ${JSON.stringify(text.slice(0, 120))}`,
+        )
+      }
+    }
+
     fs.mkdirSync(path.dirname(out), { recursive: true })
     await page.screenshot({ path: out })
   } finally {
@@ -182,49 +199,52 @@ html,body{margin:0;padding:0;background:#0b0d10}
 
 // --- 2. super hero art -----------------------------------------------------
 /**
- * ★ REQ-0568 §2-2 — laid out for a canvas that will be cropped and overdrawn.
+ * ★ REQ-0576 — NO TEXT. Not the wordmark, not a tagline, not the logo.
  *
- * Two hard constraints drive every number below:
- *   - the top and bottom edges may be cropped, so everything that matters sits
- *     in the vertical middle (content spans y 275..740 of 1080);
- *   - the system may lay text or a gradient over the bottom third, so NOTHING
- *     below y=720 is anything but background — including the burned-in caption
- *     inside the still, which lands around y=667.
+ * Partner Center's 16:9 Super hero art field says not to include the product
+ * title, because the Store draws the title (and often a gradient) over the
+ * image itself. The first version of this artwork carried the "M" mark, the
+ * MOJIOKO wordmark and a tagline, all of which would have collided with what
+ * the Store paints on top.
  *
- * The still on the right is a real `export_frame` render of the very cue the
- * first screenshot shows, at video resolution, so the artwork is showing the
- * product's actual output rather than an illustration of it.
+ * So the picture is now one thing: a real `export_frame` render of the cue the
+ * first screenshot shows, at video resolution, on the brand's dark field.
+ *
+ * ## Why not full-bleed
+ *
+ * Filling the canvas with the game frame was the other option and it loses on
+ * one point: the burned caption would then sit where any 16:9 frame puts it,
+ * near the bottom, which is the third the Store may overdraw. Insetting the
+ * still lets the caption land at y≈680 while the still itself still reads as
+ * the subject. The caption is allowed to be there — it is an example of the
+ * product's OUTPUT, not the product's name — but it has to stay clear of the
+ * overlay band, and inset geometry is what buys that.
+ *
+ * ## The numbers
+ *
+ * Still 1067x600 (16:9), left 427, top 158 — horizontally centred, sitting a
+ * little above centre so its caption (≈87% down the frame) lands at y≈680,
+ * comfortably above the 720 line. Content spans y 158..758, so a symmetric
+ * crop of ~150px top and bottom keeps all of it.
  */
 function heroHtml(framePng) {
   const W = STORE.width, H = STORE.height
+  const sw = 1067, sh = 600
   return `<!doctype html><meta charset="utf-8"><style>
-${FONT_CSS}
 html,body{margin:0;padding:0}
 .art{width:${W}px;height:${H}px;position:relative;overflow:hidden;background:#0b0d10}
-/* Content, not chrome — DESIGN_SYSTEM allows gradients here. Kept to a single
-   soft accent glow behind the still so the dark field is not flat. */
+/* Content, not chrome — DESIGN_SYSTEM allows gradients here. One soft accent
+   glow so the dark field is not flat. It carries the brand now that the
+   wordmark is gone. */
 .glow{position:absolute;inset:0;
-  background:radial-gradient(1100px 620px at 68% 42%, rgba(63,213,133,.20), rgba(63,213,133,0) 70%)}
-.left{position:absolute;left:132px;top:275px;width:760px}
-.left img{width:104px;height:104px;display:block;margin-bottom:26px}
-.wordmark{font-family:'MJ';font-weight:900;font-size:126px;line-height:1;color:#fff;
-  letter-spacing:.045em;margin:0}
-.tagline{font-family:'MJ';font-weight:500;font-size:42px;line-height:1.45;color:#aab2be;
-  margin:30px 0 0;max-width:720px}
-.rule{width:96px;height:6px;background:#3fd585;border-radius:3px;margin:36px 0 0}
+  background:radial-gradient(1200px 700px at 50% 40%, rgba(63,213,133,.22), rgba(63,213,133,0) 70%)}
 /* Radius 10 = the design system's lg. Border, not a shadow. */
-.still{position:absolute;left:980px;top:275px;width:820px;height:461px;
+.still{position:absolute;left:${Math.round((W - sw) / 2)}px;top:158px;width:${sw}px;height:${sh}px;
   border:1px solid #2a2f38;border-radius:10px;overflow:hidden;background:#000}
 .still img{width:100%;height:100%;object-fit:cover;display:block}
 </style>
 <div class="art">
   <div class="glow"></div>
-  <div class="left">
-    <img src="${fileUrl(ICON)}" alt="">
-    <p class="wordmark">MOJIOKO</p>
-    <p class="tagline">${TAGLINE[LANG]}</p>
-    <div class="rule"></div>
-  </div>
   <div class="still"><img src="${fileUrl(framePng)}" alt=""></div>
 </div>`
 }
@@ -286,6 +306,48 @@ async function countColour(browser, png, hex, tol = 18) {
   }
 }
 
+/**
+ * Mean RGB of a patch near the glow's centre and of the far corner it does not
+ * reach. See the call site for why the accent is measured this way.
+ */
+async function measureGlow(browser, png) {
+  const src = 'data:image/png;base64,' + fs.readFileSync(png).toString('base64')
+  const ctx = await browser.newContext({ viewport: { width: 64, height: 64 } })
+  const page = await ctx.newPage()
+  try {
+    const r = await page.evaluate(async ({ src }) => {
+      const img = new Image()
+      img.src = src
+      await img.decode()
+      const c = document.createElement('canvas')
+      c.width = img.naturalWidth; c.height = img.naturalHeight
+      const x = c.getContext('2d')
+      x.drawImage(img, 0, 0)
+      const d = x.getImageData(0, 0, c.width, c.height).data
+      // Fractions of the image, so this holds at 1080p and at 4K.
+      const mean = (fx0, fx1, fy0, fy1) => {
+        let r = 0, g = 0, b = 0, n = 0
+        for (let y = Math.round(fy0 * c.height); y < Math.round(fy1 * c.height); y++) {
+          for (let X = Math.round(fx0 * c.width); X < Math.round(fx1 * c.width); X++) {
+            const i = (y * c.width + X) * 4
+            r += d[i]; g += d[i + 1]; b += d[i + 2]; n++
+          }
+        }
+        return [Math.round(r / n), Math.round(g / n), Math.round(b / n)]
+      }
+      // Above the still (glow is centred at 50%/40%) and the top-left corner.
+      return { near: mean(0.36, 0.63, 0.037, 0.139), corner: mean(0.01, 0.083, 0.018, 0.111) }
+    }, { src })
+    return {
+      ...r,
+      lift: r.near[1] - r.corner[1],
+      greenBias: (r.near[1] - r.near[2]) - (r.corner[1] - r.corner[2]),
+    }
+  } finally {
+    await ctx.close()
+  }
+}
+
 // --- main ------------------------------------------------------------------
 const manifestPath = path.join(SHOT_DIR, 'shots-manifest.json')
 if (!fs.existsSync(manifestPath)) {
@@ -325,8 +387,8 @@ try {
     const frame = exportHeroFrame(manifest, work)
     for (const scale of [1, 2]) {
       const out = path.join(OUT_DIR, `hero-16x9-${STORE.width * scale}x${STORE.height * scale}.png`)
-      await render(browser, heroHtml(frame), { width: STORE.width, height: STORE.height, scale, out })
-      made.push({ file: out, caption: `MOJIOKO / ${TAGLINE[LANG]}` })
+      await render(browser, heroHtml(frame), { width: STORE.width, height: STORE.height, scale, out, noText: true })
+      made.push({ file: out, caption: '(no text — REQ-0576)' })
       log(`  OK    ${path.basename(out)}`)
     }
     /*
@@ -340,18 +402,49 @@ try {
      * for, and the difference is real rather than a fudged tolerance: the
      * still is a frame of VIDEO, so libass paints #FF2E88 and the video's
      * limited range (0->16, 255->235) brings it back at 16 + v*219/255.
-     * The accent below never leaves CSS, so it is checked at its exact value.
      *
      * REQ-0571 changed this colour from yellow, and this gate is how that was
      * noticed rather than shipped: it went red on the first run afterwards.
      */
     const emph = await countColour(browser, hero, '#EB3885')
-    const accent = await countColour(browser, hero, '#3FD585')
-    log(`\n  hero pixels: emphasis (burned #FF2E88, measured at #EB3885) = ${emph}, accent #3FD585 = ${accent}`)
+    /*
+     * ★ REQ-0576 — the accent is now a GLOW, so it is measured as one.
+     *
+     * This used to count exact #3FD585 pixels, which worked because the art
+     * carried a solid accent rule. That rule is gone with the rest of the
+     * chrome, and the check went red — correctly. Deleting it was the wrong
+     * response: with no wordmark and no logo, the glow is the ONLY thing
+     * making this MOJIOKO's picture rather than a screenshot of a game, so it
+     * is worth more scrutiny now, not less.
+     *
+     * A blended gradient has no exact value to count, so the test is a
+     * comparison instead: a patch near the glow's centre against the far
+     * corner, which the gradient does not reach. The glow must (a) actually
+     * lift the image there, and (b) lift GREEN more than BLUE — otherwise it
+     * is some neutral haze rather than the brand accent.
+     */
+    const glow = await measureGlow(browser, hero)
+    log(`\n  hero pixels: emphasis (burned #FF2E88, measured at #EB3885) = ${emph}`)
+    log(`  hero glow:   near=${JSON.stringify(glow.near)} corner=${JSON.stringify(glow.corner)}` +
+        ` lift=${glow.lift} greenBias=${glow.greenBias}`)
     if (emph < 500) { failed++; log('  FAIL  hero still has no emphasised caption') }
     else log('  PASS  hero still carries the burned emphasis')
-    if (accent < 500) { failed++; log('  FAIL  hero has no accent mark') }
-    else log('  PASS  hero carries the brand accent')
+    if (glow.lift < 6 || glow.greenBias <= 0) {
+      failed++
+      log('  FAIL  hero has no green accent glow')
+    } else log('  PASS  hero carries the brand accent as a glow')
+
+    /*
+     * ★ REQ-0576 §1-3 — ja and en are ALLOWED to be identical, and are not.
+     *
+     * With the wordmark and tagline gone the artwork draws no words, so the
+     * REQ notes the two languages may now share one image. They still differ,
+     * on purpose: the still is an `export_frame` of that language's own
+     * project, so the burned caption is Japanese on the ja listing and English
+     * on the en one. That text is the product's OUTPUT, not its title — the
+     * thing Partner Center asks to keep out — and a listing showing captions
+     * in the reader's language is worth more than a shared file.
+     */
   } catch (e) {
     failed++
     log(`  FAIL  hero art  ${e instanceof Error ? e.message : String(e)}`)
@@ -380,7 +473,7 @@ for (const m of made) {
 }
 
 fs.writeFileSync(path.join(OUT_DIR, 'store-assets-manifest.json'), JSON.stringify({
-  lang: LANG, caption: CAPTION, tagline: TAGLINE[LANG],
+  lang: LANG, caption: CAPTION,
   files: made.map((m) => ({ file: path.basename(m.file), text: m.caption, ...pngInfo(m.file) })),
 }, null, 2), 'utf-8')
 

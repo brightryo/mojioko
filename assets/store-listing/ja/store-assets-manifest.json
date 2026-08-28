@@ -1,7 +1,6 @@
 {
   "lang": "ja",
   "caption": true,
-  "tagline": "動画に、伝わる字幕を。",
   "files": [
     {
       "file": "01-s2-step2-emphasis.png",
@@ -41,21 +40,21 @@
     },
     {
       "file": "hero-16x9-1920x1080.png",
-      "text": "MOJIOKO / 動画に、伝わる字幕を。",
+      "text": "(no text — REQ-0576)",
       "ok": true,
       "width": 1920,
       "height": 1080,
       "colorType": 2,
-      "bytes": 935664
+      "bytes": 1350867
     },
     {
       "file": "hero-16x9-3840x2160.png",
-      "text": "MOJIOKO / 動画に、伝わる字幕を。",
+      "text": "(no text — REQ-0576)",
       "ok": true,
       "width": 3840,
       "height": 2160,
       "colorType": 2,
-      "bytes": 3045123
+      "bytes": 4100950
     }
   ]
 }

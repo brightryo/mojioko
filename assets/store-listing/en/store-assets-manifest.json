@@ -1,7 +1,6 @@
 {
   "lang": "en",
   "caption": true,
-  "tagline": "Subtitles that get your video across.",
   "files": [
     {
       "file": "01-s2-step2-emphasis.png",
@@ -41,21 +40,21 @@
     },
     {
       "file": "hero-16x9-1920x1080.png",
-      "text": "MOJIOKO / Subtitles that get your video across.",
+      "text": "(no text — REQ-0576)",
       "ok": true,
       "width": 1920,
       "height": 1080,
       "colorType": 2,
-      "bytes": 921459
+      "bytes": 1320555
     },
     {
       "file": "hero-16x9-3840x2160.png",
-      "text": "MOJIOKO / Subtitles that get your video across.",
+      "text": "(no text — REQ-0576)",
       "ok": true,
       "width": 3840,
       "height": 2160,
       "colorType": 2,
-      "bytes": 2991630
+      "bytes": 4003303
     }
   ]
 }
