@@ -336,16 +336,18 @@ try {
      */
     const hero = path.join(OUT_DIR, `hero-16x9-${STORE.width}x${STORE.height}.png`)
     /*
-     * The emphasis is measured at #E8C500, not at the #FFD400 the style asks
+     * The emphasis is measured at #EB3885, not at the #FF2E88 the style asks
      * for, and the difference is real rather than a fudged tolerance: the
-     * still is a frame of VIDEO, so libass paints #FFD400 and the video's
-     * limited (16-235) range brings it back as ~(232,197,0). Measured, not
-     * assumed — a histogram of the caption area peaks there with 6041 px.
+     * still is a frame of VIDEO, so libass paints #FF2E88 and the video's
+     * limited range (0->16, 255->235) brings it back at 16 + v*219/255.
      * The accent below never leaves CSS, so it is checked at its exact value.
+     *
+     * REQ-0571 changed this colour from yellow, and this gate is how that was
+     * noticed rather than shipped: it went red on the first run afterwards.
      */
-    const emph = await countColour(browser, hero, '#E8C500')
+    const emph = await countColour(browser, hero, '#EB3885')
     const accent = await countColour(browser, hero, '#3FD585')
-    log(`\n  hero pixels: emphasis (burned #FFD400, measured at #E8C500) = ${emph}, accent #3FD585 = ${accent}`)
+    log(`\n  hero pixels: emphasis (burned #FF2E88, measured at #EB3885) = ${emph}, accent #3FD585 = ${accent}`)
     if (emph < 500) { failed++; log('  FAIL  hero still has no emphasised caption') }
     else log('  PASS  hero still carries the burned emphasis')
     if (accent < 500) { failed++; log('  FAIL  hero has no accent mark') }

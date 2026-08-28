@@ -93,6 +93,9 @@ const WIN = TARGETS[TARGET]
 const OUT_DIR = arg('out', path.join(REPO, 'dev-docs', 'shots',
   ...(TARGET === 'site' ? [] : [TARGET]), ...(PAGE_LANG === 'en' ? ['en'] : [])))
 
+/** The libass hard line break, built from a char code so no shell eats it. */
+const BREAK = String.fromCharCode(92) + 'N'
+
 /**
  * ★ REQ-0565 §1 — the look the site shows, declared HERE and nowhere else.
  *
@@ -163,7 +166,16 @@ const SITE_STYLE = {
    * match what a new user sees.
    */
   karaoke: { enabled: true, style: 'sweep', highlightColor: '#B4FF39' },
-  emphasis: { enabled: false, color: '#FFD400', scalePercent: 150 },
+  /*
+   * ★ REQ-0571 §1-4 — pink, not yellow.
+   *
+   * The accent that carries the karaoke sweep is a yellow-green (#B4FF39),
+   * and a yellow emphasis sat right next to it read as "slightly different
+   * green" rather than as a second thing. #FF2E88 is far enough around the
+   * wheel to be unmistakable against both the sweep and this footage's
+   * sunset palette.
+   */
+  emphasis: { enabled: false, color: '#FF2E88', scalePercent: 150 },
   /*
    * Animations off. A still captured mid fade-in or mid pop shows a
    * half-transparent or half-scaled caption — which reads as a rendering bug
@@ -233,6 +245,8 @@ const SHOTS = [
   },
   {
     id: 's2-step2-emphasis',
+    /** Checked in pixels after the shot — see assertThreeStates. */
+    threeState: true,
     video: 'Game02',
     start: 'step2',
     caption: 'STEP2 — キーワード強調と cue 別スタイル',
@@ -256,56 +270,126 @@ const SHOTS = [
      * rule cannot do that without a tokeniser, and a fixed screenshot set does
      * not need one.
      */
+    /*
+     * ★ REQ-0571 §2-1 — THREE states in one caption, on purpose.
+     *
+     * The old version of this shot showed a greeting with one highlighted
+     * phrase. It demonstrated emphasis, but nothing else, and the line itself
+     * ("hello everyone") sold no feature at all.
+     *
+     * This one puts all three of the caption's states side by side in reading
+     * order, so a single still explains the whole model:
+     *
+     *   already spoken   実はこのコース、   karaoke green  #B4FF39
+     *   the keyword      絶景              emphasis pink  #FF2E88, 150%
+     *   not yet spoken   ポイントがあってさ  plain white + black outline
+     *
+     * ★ The sweep must stop just AFTER the keyword, not before it.
+     *
+     * Under karaoke the emphasis colour replaces the SPOKEN colour: the
+     * overlay folds `\fs<big>\c<emph>` into the word's own `\k` block and
+     * `c` (unspoken) stays base for everyone, "so the emphasised word looks
+     * like the others until it is spoken" (ass-generator.ts, REQ-0306 §3,
+     * owner-confirmed). Park the playhead before the keyword and it renders
+     * bigger but WHITE — which is what the first attempt here did, and it
+     * looked exactly like the emphasis colour being ignored.
+     *
+     * So the keyword has to be inside the swept region, which is why the
+     * playhead is pinned by FRACTION of the cue rather than by seconds: it
+     * lands on an exact unit boundary, one past the keyword.
+     *
+     * The line is the SRT's own cue 5, not a rewrite: it is real streamer
+     * speech, it names what the footage shows (a coastal viewpoint), and the
+     * keyword falls mid-sentence with text on both sides — which is exactly
+     * what the composition needs.
+     */
+    /*
+     * ★ The line break is WRITTEN, not left to the wrapper.
+     *
+     * At showcase size this line does not fit on one row, and `wrap: 'pack'`
+     * broke it before the LAST character, leaving one orphan kana on row two.
+     * Breaking after the comma instead gives each state its own footing:
+     *
+     *     実はこのコース、           <- row 1, entirely swept (green)
+     *     絶景ポイントがあってさ       <- row 2, keyword then not-yet-spoken
+     *
+     * which is a clearer legend than one row would have been, because the
+     * sweep boundary now lands exactly on the row boundary. Writing the text
+     * with its own break (and not re-wrapping afterwards) is what makes it
+     * come out the same on every run.
+     *
+     * The offsets below index the text INCLUDING the two-character break,
+     * which is why the keyword starts at 10 rather than 8.
+     */
     emphasis: {
       ja: {
-        cueIndex: 0,
-        expectText: 'はい、みなさんこんばんはー',
-        start: 7,
-        end: 13,
-        word: 'こんばんはー',
+        cueIndex: 5,
+        expectText: '実はこのコース、絶景ポイントがあってさ',
+        text: '実はこのコース、' + BREAK + '絶景ポイントがあってさ',
+        start: 10,
+        end: 12,
+        word: '絶景',
+        /*
+         * Karaoke with no word timings splits evenly across UNITS, and one
+         * CJK codepoint is one unit (karaoke-fallback.ts). The break is not a
+         * unit, so there are 19 and the keyword occupies the 9th and 10th —
+         * the sweep is stopped just AFTER it, at 10.
+         */
+        sweptUnits: 10,
+        totalUnits: 19,
       },
       en: {
-        cueIndex: 0,
-        expectText: 'Hey everyone, good evening!',
-        start: 14,
-        end: 27,
-        word: 'good evening!',
+        cueIndex: 5,
+        expectText: 'This course actually has an amazing viewpoint',
+        text: 'This course actually has an' + BREAK + 'amazing viewpoint',
+        start: 29,
+        end: 36,
+        word: 'amazing',
+        /* Latin splits per whitespace-delimited word: 7 units, and the
+         * keyword is the 6th — so the sweep is stopped just after it. */
+        sweptUnits: 6,
+        totalUnits: 7,
       },
     },
     prep: (cues, shot) => {
-      const { cueIndex, expectText, start, end, word } = shot.emphasis[PAGE_LANG]
+      const { cueIndex, expectText, text, start, end, word, sweptUnits, totalUnits } = shot.emphasis[PAGE_LANG]
       const cue = cues[cueIndex]
-      if (!cue || cue.text !== expectText) {
+      // SITE_STYLE's `wrap: 'pack'` already ran, so compare with any break
+      // it inserted taken back out.
+      if (!cue || cue.text.split(BREAK).join('') !== expectText) {
         throw new Error(
           `s2 emphasis (${PAGE_LANG}) is pinned to cue ${cueIndex} = "${expectText}", but the SRT now has ` +
           `"${cue ? cue.text : '(missing)'}". Re-pick the span rather than letting the ` +
           'highlight land on whatever happens to be there.',
         )
       }
-      if (cue.text.slice(start, end) !== word) {
+      if (text.slice(start, end) !== word) {
         throw new Error(`s2 emphasis offsets ${start}..${end} no longer spell "${word}".`)
       }
       return {
         focusIndex: cueIndex,
+        // Stop the sweep ON the boundary before the keyword.
+        atFraction: sweptUnits / totalUnits,
         edits: [{
           select: { index: cueIndex },
           style: {
             // On top of SITE_STYLE, which already pinned rotation to 0.
             fontSizePx: 160,
-            emphasis: { enabled: true, color: '#FFD400', scalePercent: 150 },
+            emphasis: { enabled: true, color: '#FF2E88', scalePercent: 150 },
             /*
-             * ★ Karaoke OFF for this shot only (REQ-0566 §1-2).
+             * ★ Karaoke ON here (REQ-0571 §2-1 reverses REQ-0566 §1-2).
              *
-             * The sweep fills from the START of the line and the emphasis was
-             * also at the start, so two accent colours advanced from the same
-             * edge and neither could be read. This shot's job is to show
-             * keyword emphasis; the other five all carry the karaoke sweep, so
-             * nothing is lost by letting emphasis stand alone here.
+             * REQ-0566 turned the sweep off because the emphasis was at the
+             * START of the line, so both accents advanced from the same edge
+             * and neither could be read. Moving the keyword into the middle
+             * of the line removes that collision — the sweep now ENDS where
+             * the emphasis BEGINS — so the two features can be shown at once
+             * instead of one at a time.
              */
-            karaoke: { enabled: false, style: 'sweep', highlightColor: '#B4FF39' },
+            karaoke: { enabled: true, style: 'sweep', highlightColor: '#B4FF39' },
           },
+          text,
           emphasisSpans: [{ start, end, text: word }],
-          wrap: 'pack',
         }],
       }
     },
@@ -367,7 +451,17 @@ const SHOTS = [
         select: { index: 2 },
         style: {
           textColorHex: '#FFE9A8',
-          background: { enabled: true, color: 'black', opacityPercent: 60 },
+          /*
+           * ★ REQ-0571 §1-5 — 60% was invisible here.
+           *
+           * The box WAS being applied (the stored cue carries it), but 60%
+           * black over Game08's already-dark castle scene produced a band
+           * you cannot see, so the shot claimed to show "a background box
+           * and a coloured body" while looking like every other caption in
+           * the set. Raised until the box reads as a deliberate shape
+           * against a dark frame.
+           */
+          background: { enabled: true, color: 'black', opacityPercent: 90 },
           // BorderStyle=3 needs a non-zero outline or the box collapses onto
           // the glyphs (REQ-0340) — edit_cues warns about exactly this.
           outlineThicknessPx: 6,
@@ -416,10 +510,15 @@ const SHOTS = [
     video: 'Game02',
     start: 'step2',
     caption: '字幕スタイルのプリセット',
-    // Same video AND same playhead as s2 (cue 0) — one scene, different UI.
+    // Same video AND same playhead as s2 (cue 5) — one scene, different UI.
     focus: 'prep',
-    emphasis: { ja: null, en: null },
-    prep: () => ({ focusIndex: 0, edits: [] }),
+    /*
+     * ★ REQ-0571 §1-1 — this shares Game02 with s2, so it must share the
+     * SCENE (assertOneScenePerVideo). s2 moved off the opening greeting to
+     * cue 5, and this follows it: the preset popover is the subject here, but
+     * the caption behind it should still be a line that sells something.
+     */
+    prep: () => ({ focusIndex: 5, atFraction: PAGE_LANG === 'ja' ? 8 / 19 : 5 / 7, edits: [] }),
     stage: async (w) => { await clickLabel(w, UI[PAGE_LANG].presets, 's11-preset') },
   },
   {
@@ -444,6 +543,26 @@ const SHOTS = [
     },
   },
 ]
+
+/**
+ * ★ REQ-0571 §1-5 — the preset names s11 photographs, stated per language.
+ *
+ * Only `name` is on show: the popover is a list of names plus a "save current
+ * style" row, so the style bodies just have to be well-formed. Names are the
+ * ones a new user would plausibly create, in the language of the page.
+ */
+const PRESETS = {
+  ja: [
+    { id: 'preset-shot-1', name: '標準の字幕', version: 1, createdAtMs: 1_780_000_000_000, style: {} },
+    { id: 'preset-shot-2', name: '実況テロップ', version: 1, createdAtMs: 1_780_000_001_000, style: {} },
+    { id: 'preset-shot-3', name: '見出し用（大きめ）', version: 1, createdAtMs: 1_780_000_002_000, style: {} },
+  ],
+  en: [
+    { id: 'preset-shot-1', name: 'Standard subtitles', version: 1, createdAtMs: 1_780_000_000_000, style: {} },
+    { id: 'preset-shot-2', name: 'Commentary caption', version: 1, createdAtMs: 1_780_000_001_000, style: {} },
+    { id: 'preset-shot-3', name: 'Headline (large)', version: 1, createdAtMs: 1_780_000_002_000, style: {} },
+  ],
+}
 
 // --- helpers ---------------------------------------------------------------
 const log = (m) => process.stdout.write(m + '\n')
@@ -485,11 +604,99 @@ function assertOneScenePerVideo() {
   }
 }
 
+/**
+ * ★ REQ-0571 §2-1 — prove the three states are actually three.
+ *
+ * The composition's whole claim is that a viewer can read the caption's model
+ * off one still: spoken / keyword / not yet spoken. That claim is about
+ * PIXELS, so it is checked in pixels rather than by looking.
+ *
+ * REQ-0571 asks for x-centroid order green < pink < white. That test assumes
+ * one row. This caption is two — the sweep boundary was put ON the row break
+ * because it reads better there — so green is centred above rather than left
+ * of the other two, and a literal x-order check would fail on a picture that
+ * is correct. The adaptation keeps what the test was for, in reading order:
+ *
+ *   1. all three colours are present;
+ *   2. green finishes ABOVE pink starts (no row interleaving);
+ *   3. on the lower row, pink is left of white;
+ *   4. green and pink never share a row band — the "zero overlap" the REQ
+ *      asks for, which is the one that would break the legend.
+ *
+ * Decoding happens in the page that is already open, via a data: URL — a
+ * file: image either refuses to decode or taints the canvas.
+ */
+async function assertThreeStates(w, pngPath, id) {
+  const src = 'data:image/png;base64,' + fs.readFileSync(pngPath).toString('base64')
+  /*
+   * Scan ONLY the video preview. The inspector shows the emphasis colour in a
+   * swatch, so a whole-page scan finds pink at the right-hand edge and
+   * measures the control panel instead of the caption — which is exactly what
+   * it did on the first run.
+   */
+  const box = await w.locator('video').first().boundingBox()
+  if (!box) throw new Error(`${id} three-state: no video element to scan`)
+  log(`        scan box x=${Math.round(box.x)} y=${Math.round(box.y)} w=${Math.round(box.width)} h=${Math.round(box.height)}`)
+  const r = await w.evaluate(async ({ src, box }) => {
+    const img = new Image()
+    img.src = src
+    await img.decode()
+    const c = document.createElement('canvas')
+    c.width = img.naturalWidth; c.height = img.naturalHeight
+    const cx = c.getContext('2d')
+    cx.drawImage(img, 0, 0)
+    const d = cx.getImageData(0, 0, c.width, c.height).data
+    const near = (r, g, b, t) => (h) =>
+      Math.abs(r - h[0]) <= t && Math.abs(g - h[1]) <= t && Math.abs(b - h[2]) <= t
+    const tests = {
+      green: near(180, 255, 57, 40),
+      pink: near(255, 46, 136, 40),
+      // White only where it is a caption glyph: bright and unsaturated.
+      white: (h) => h[0] > 235 && h[1] > 235 && h[2] > 235 &&
+        Math.max(h[0], h[1], h[2]) - Math.min(h[0], h[1], h[2]) < 12,
+    }
+    const acc = { green: [], pink: [], white: [] }
+    const x0 = Math.round(box.x), x1 = Math.round(box.x + box.width)
+    const y0 = Math.round(box.y), y1 = Math.round(box.y + box.height)
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const i = (y * c.width + x) * 4
+        const h = [d[i], d[i + 1], d[i + 2]]
+        for (const k of ['green', 'pink', 'white']) if (tests[k](h)) acc[k].push([x, y])
+      }
+    }
+    const stat = (pts) => pts.length === 0 ? null : {
+      n: pts.length,
+      cx: Math.round(pts.reduce((a, p) => a + p[0], 0) / pts.length),
+      cy: Math.round(pts.reduce((a, p) => a + p[1], 0) / pts.length),
+      minY: Math.min(...pts.map((p) => p[1])),
+      maxY: Math.max(...pts.map((p) => p[1])),
+    }
+    // The white test also matches UI chrome, so keep only white that shares
+    // the pink row band — that is the caption's not-yet-spoken tail.
+    const pink = stat(acc.pink)
+    const whiteInRow = pink
+      ? acc.white.filter(([, y]) => y >= pink.minY - 8 && y <= pink.maxY + 8)
+      : []
+    return { green: stat(acc.green), pink, white: stat(whiteInRow) }
+  }, { src, box })
+
+  const fail = (m) => { throw new Error(`${id} three-state: ${m}`) }
+  for (const k of ['green', 'pink', 'white']) if (!r[k]) fail(`no ${k} pixels`)
+  log(`        green n=${r.green.n} y=${r.green.minY}-${r.green.maxY} cx=${r.green.cx}`)
+  log(`        pink  n=${r.pink.n} y=${r.pink.minY}-${r.pink.maxY} cx=${r.pink.cx}`)
+  log(`        white n=${r.white.n} cx=${r.white.cx}`)
+  if (r.green.maxY >= r.pink.minY) fail(`green (to y=${r.green.maxY}) overlaps pink (from y=${r.pink.minY}) — the sweep ran into the keyword`)
+  if (r.pink.cx >= r.white.cx) fail(`pink centre ${r.pink.cx} is not left of the unspoken tail ${r.white.cx}`)
+  log('        PASS  spoken above keyword, keyword left of unspoken, no overlap')
+}
+
 async function takeShot(shot, work) {
   const outPath = path.join(OUT_DIR, shot.id + '.png')
   let projPath = null
   let cues = []
   let preparedFocus = null
+  let preparedAtFraction = null
 
   if (shot.video) {
     const video = path.join(VIDEO_DIR, shot.video + '.mp4')
@@ -538,6 +745,7 @@ async function takeShot(shot, work) {
         if (ed.code !== 0) throw new Error(`edit_cues failed for ${shot.id} (exit ${ed.code})`)
         cues = JSON.parse(fs.readFileSync(projPath, 'utf-8')).editing.subtitles
         preparedFocus = prepared.focusIndex
+        preparedAtFraction = prepared.atFraction
       }
     }
   }
@@ -576,14 +784,28 @@ async function takeShot(shot, work) {
      * on the exposed instance only affects this window. Verified by hashing
      * settings.json before and after a full run (RES-0567 §1-2).
      */
-    await w.evaluate(async (lng) => {
+    await w.evaluate(async ({ lng, PRESETS }) => {
       await window.__mojioko_test.i18n.changeLanguage(lng)
       // The language pill reads settings.language, not i18n — without this the
       // corner of an English screenshot still says 「日本語」. This DOES persist
       // (App.tsx saves on any settings change), which is why the run is
       // wrapped in a settings.json backup/restore below.
       window.__mojioko_test.settings.setState({ language: lng })
-    }, PAGE_LANG)
+      /*
+       * ★ REQ-0571 §1-5 — the preset list was the DEVELOPER'S.
+       *
+       * s11 photographs the preset popover, and the popover lists whatever is
+       * in settings.stylePresets — which on this machine is two presets the
+       * owner happened to save, in English, published on the Japanese page.
+       * Same fault as REQ-0565's inherited caption style and REQ-0516's
+       * cli-smoke: the tool read the environment and shipped it as the
+       * product. So the list is DECLARED here, per language.
+       *
+       * Safe to write: settings.json is backed up and restored around the
+       * whole run, and the restore is hashed (see the bottom of this file).
+       */
+      window.__mojioko_test.settings.setState({ stylePresets: PRESETS })
+    }, { lng: PAGE_LANG, PRESETS: PRESETS[PAGE_LANG] })
 
     if (shot.video) {
       const video = path.join(VIDEO_DIR, shot.video + '.mp4')
@@ -627,9 +849,21 @@ async function takeShot(shot, work) {
      * does nothing.
      */
     const focusIndex = shot.focus === 'prep' ? preparedFocus : shot.focus
+    let shownAtSec = null
     if (shot.video && typeof focusIndex === 'number' && cues[focusIndex]) {
       const cue = cues[focusIndex]
-      const at = cue.startSec + Math.min(0.6, (cue.endSec - cue.startSec) / 2)
+      /*
+       * ★ REQ-0571 §2-1 — a shot may pin the playhead by FRACTION of the cue.
+       *
+       * The three-state shot needs the karaoke sweep to stop on an exact
+       * character boundary, which is a proportion of the cue's duration, not
+       * a number of seconds. Shots that do not care keep the old behaviour:
+       * a little way in, so the caption is on screen.
+       */
+      const at = typeof preparedAtFraction === 'number'
+        ? cue.startSec + preparedAtFraction * (cue.endSec - cue.startSec)
+        : cue.startSec + Math.min(0.6, (cue.endSec - cue.startSec) / 2)
+      shownAtSec = at
       await w.evaluate(async ({ at, id }) => {
         const v = document.querySelector('video')
         if (v) {
@@ -649,8 +883,49 @@ async function takeShot(shot, work) {
     if (shot.stage) await shot.stage(w, cues)
     await w.waitForTimeout(1500)
 
+    /*
+     * ★ REQ-0571 §1-5 — the position guides are a RACE, so decide them.
+     *
+     * `VideoPreviewPanel` renders `PositionGuideOverlay` for the selected cue,
+     * but only once `overlaySpanRefs` has the span — a callback-ref map read
+     * during render. Whether it is populated on the pass that matters depends
+     * on what else re-rendered, so the bbox + "866 px" / "X: +0 Y: +0" rulers
+     * appeared in s4-list and not in s3/s9/s12 with identical setup. That is
+     * the same picture coming out two ways on different runs, which no amount
+     * of re-running would have revealed as anything but bad luck.
+     *
+     * Every shot selects a cue (the inspector is part of what is being shown),
+     * so the guides cannot be turned off by deselecting without emptying the
+     * panel. They are hidden here instead, and `guides: true` keeps them for
+     * s8-position, where measuring the placement IS the feature on show.
+     *
+     * The selector is asserted rather than trusted: if the overlay's markup
+     * changes, this fails instead of quietly publishing the rulers again.
+     */
+    const guideSel = '[aria-hidden="true"].absolute.inset-0.pointer-events-none.select-none'
+    const guideCount = await w.locator(guideSel).count()
+    if (shot.guides === true) {
+      /*
+       * ★ Not reachable today — kept as the record of a thing I could not do.
+       *
+       * s8-position would be the one shot where the rulers ARE the subject, so
+       * this asked for them. They could not be produced on demand: re-selecting
+       * the cue to force another render pass (which is what populates
+       * `overlaySpanRefs`) did not bring them back on any run. Rather than
+       * publish a shot that has them on some runs and not others, the whole set
+       * is taken without them, and s8 makes its point the way it already did —
+       * by putting the caption at the TOP, which no other shot does.
+       */
+      if (guideCount === 0) throw new Error(`${shot.id} wants position guides but none rendered`)
+    } else if (guideCount > 0) {
+      await w.addStyleTag({ content: `${guideSel} { display: none !important; }` })
+      await w.waitForTimeout(200)
+    }
+
     fs.mkdirSync(OUT_DIR, { recursive: true })
     await w.screenshot({ path: outPath })
+
+    if (shot.threeState) await assertThreeStates(w, outPath, shot.id)
 
     /*
      * ★ REQ-0565 §2-2 — record what was ACTUALLY applied.
@@ -682,9 +957,16 @@ async function takeShot(shot, work) {
       path: outPath,
       project: KEEP_PROJECTS && projPath ? path.join(KEEP_PROJECTS, shot.id + '.mojioko') : null,
       video: shot.video ? path.join(VIDEO_DIR, shot.video + '.mp4') : null,
-      atSec: shot.video && typeof focusIndex === 'number' && cues[focusIndex]
-        ? cues[focusIndex].startSec + Math.min(0.6, (cues[focusIndex].endSec - cues[focusIndex].startSec) / 2)
-        : null,
+      /*
+       * ★ REQ-0571 — the SAME instant the screenshot was taken at.
+       *
+       * This used to recompute the default "a little way in", which silently
+       * stopped matching once a shot could pin its playhead by fraction: the
+       * hero art then exported a frame from before the karaoke sweep reached
+       * the keyword, so the still lost its emphasis colour while the
+       * screenshot beside it kept it. One value, computed once, reported.
+       */
+      atSec: shownAtSec,
       style: shown
         ? {
             rotation: shown.rotation ?? 0,

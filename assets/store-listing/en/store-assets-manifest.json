@@ -10,7 +10,7 @@
       "width": 1920,
       "height": 1080,
       "colorType": 2,
-      "bytes": 526005
+      "bytes": 521575
     },
     {
       "file": "02-s9-inspector.png",
@@ -19,7 +19,7 @@
       "width": 1920,
       "height": 1080,
       "colorType": 2,
-      "bytes": 576352
+      "bytes": 564479
     },
     {
       "file": "03-s3-timeline.png",
@@ -28,7 +28,7 @@
       "width": 1920,
       "height": 1080,
       "colorType": 2,
-      "bytes": 601701
+      "bytes": 601700
     },
     {
       "file": "04-s7-ai.png",
@@ -46,7 +46,7 @@
       "width": 1920,
       "height": 1080,
       "colorType": 2,
-      "bytes": 939704
+      "bytes": 921459
     },
     {
       "file": "hero-16x9-3840x2160.png",
@@ -55,7 +55,7 @@
       "width": 3840,
       "height": 2160,
       "colorType": 2,
-      "bytes": 3065312
+      "bytes": 2991630
     }
   ]
 }
