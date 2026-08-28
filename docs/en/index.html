@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MOJIOKO - Auto-Subtitle Tool for Videos (Free &amp; Paid Editions)</title>
-  <meta name="description" content="MOJIOKO is a desktop application that transcribes the audio of your finished video with AI and burns subtitles into it. Your video is never uploaded — all processing runs on your own PC. Choose the free edition on GitHub or the paid edition on the Microsoft Store (one-time purchase).">
+  <!-- REQ-0569 §1-1: "all processing runs on your own PC" was replaced. Since
+       v1.4.0's AI integration sends subtitle text and file paths to the user's
+       AI provider, "all processing" needs a qualifier that a meta description
+       has no room for — so it now names the two processes that are local
+       unconditionally, in the pillar card's own audited wording. -->
+  <meta name="description" content="MOJIOKO is a desktop application that transcribes the audio of your finished video with AI and burns subtitles into it. Your video is never uploaded, and transcription and subtitle burn-in both run on your own PC. Choose the free edition on GitHub or the paid edition on the Microsoft Store (one-time purchase).">
   <link rel="icon" type="image/png" href="../images/icon.png">
   <!-- REQ-0370 §3-1: Poppins for the MOJIOKO wordmark (nav brand + hero H1).
        preconnect + font-display: swap so the wordmark paints in the fallback
@@ -69,6 +74,11 @@
             <li>All core features are free: transcription, editing, subtitle text export, and subtitle video export.</li>
             <li>Includes one font family, Noto Sans JP. Weights are selectable across 9 steps, Thin to Black.</li>
           </ul>
+          <!-- REQ-0569 §1-2: sits BEFORE the button on purpose — the button
+               carries `margin-top: auto` to bottom-align across both cards,
+               so a note placed after it would knock the two buttons out of
+               line with each other. -->
+          <p class="version-card-note">Installer approx. 243 MB</p>
           <a href="https://github.com/brightryo/mojioko/releases/download/v1.4.0/MOJIOKO.Setup.1.4.0.exe" class="version-card-btn">
             Download
           </a>

@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Privacy Policy - MOJIOKO</title>
-  <meta name="description" content="MOJIOKO's privacy policy. Your videos, audio, and subtitles are never sent to any server &mdash; all processing happens locally on your PC. No telemetry, no analytics.">
+  <!-- REQ-0569 §1-1: this said user data "including subtitles" is never sent
+       and that ALL processing is local. Both stopped being true for the
+       subtitle text once v1.4.0's AI integration shipped (see 2.5), and this
+       page is the one place the claim must be exact. Narrowed to the video
+       and audio, which never leave under any setting. -->
+  <meta name="description" content="MOJIOKO's privacy policy. Your video and audio files are never sent to any server, and transcription and subtitle burn-in both run locally on your PC. No telemetry, no analytics. See 2.5 for what AI integration sends.">
   <link rel="icon" type="image/png" href="../../images/icon.png">
   <link rel="stylesheet" href="../../assets/style.css">
 </head>

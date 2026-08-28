@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MOJIOKO - 文字起こし字幕動画作成ツール（無料版・有料版）</title>
-  <meta name="description" content="MOJIOKO は、編集を終えた動画の音声を AI で文字起こしし、字幕を付けて書き出すデスクトップアプリです。動画を外部にアップロードせず、すべての処理をあなたの PC で行います。GitHub の無料版と、Microsoft Store の有料版（買い切り）から選べます。">
+  <!-- REQ-0569 §1-1: "すべての処理をあなたの PC で行います" was replaced. Since
+       v1.4.0's AI integration sends subtitle text and file paths to the user's
+       AI provider, "all processing" needs a qualifier that a meta description
+       has no room for — so it now names the two processes that are local
+       unconditionally, in the pillar card's own audited wording. -->
+  <meta name="description" content="MOJIOKO は、編集を終えた動画の音声を AI で文字起こしし、字幕を付けて書き出すデスクトップアプリです。動画を外部にアップロードせず、文字起こしも字幕の焼き込みもあなたの PC の中で処理します。GitHub の無料版と、Microsoft Store の有料版（買い切り）から選べます。">
   <link rel="icon" type="image/png" href="images/icon.png">
   <!-- REQ-0370 §3-1: Poppins for the MOJIOKO wordmark (nav brand + hero H1).
        preconnect + font-display: swap so the wordmark paints in the fallback
@@ -68,6 +73,11 @@
             <li>基本機能がすべて利用できます。文字起こし・編集・字幕テキスト出力・字幕動画出力を無料で利用できます。</li>
             <li>字幕フォントは Noto Sans JP の1種類です。ウェイト（太さ）は Thin から Black まで9段階から選べます。</li>
           </ul>
+          <!-- REQ-0569 §1-2: sits BEFORE the button on purpose — the button
+               carries `margin-top: auto` to bottom-align across both cards,
+               so a note placed after it would knock the two buttons out of
+               line with each other. -->
+          <p class="version-card-note">インストーラ約 243MB</p>
           <a href="https://github.com/brightryo/mojioko/releases/download/v1.4.0/MOJIOKO.Setup.1.4.0.exe" class="version-card-btn">
             ダウンロード
           </a>

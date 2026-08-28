@@ -282,6 +282,18 @@ body {
   margin-top: auto;
 }
 
+/* REQ-0569 §1-2 — installer size, shown under the free edition's feature
+   list. `margin-top: auto` above the button still does the bottom-aligning,
+   so this note sits in the flow above it and the two cards' buttons stay on
+   the same line. Muted and small: it is a fact to check before clicking, not
+   a selling point. */
+.version-card-note {
+  margin: 0 0 10px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
 .version-card-btn:hover {
   background: var(--accent-hover);
   transform: translateY(-2px);
