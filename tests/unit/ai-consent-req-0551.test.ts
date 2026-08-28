@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { hasAiConsent, sanitizeAiConsent } from '../../src/shared/ai-consent'
 import { SETTINGS_MERGE_RULES } from '../../src/main/ipc/settings-merge'
@@ -250,11 +250,129 @@ describe('REQ-0559 §1 — no "everything stays on this PC" claim on AI surfaces
     expect(beforeDialog).toContain("t('ai.privacyTitle')")
   })
 
-  it('the claim IS still allowed where it is true (transcription / burn-in)', () => {
-    // Whisper and the burn really do run locally with no network. Banning the
-    // sentence product-wide would delete a true and useful statement.
-    const step1 = JSON.parse(read('src/renderer/locales/ja/step1.json')) as { footer: { privacyNote: string } }
-    expect(step1.footer.privacyNote).toContain('完結')
+  /**
+   * ★ REQ-0572 §1-2 — this test used to PIN the sentence it should have caught.
+   *
+   * It asserted that STEP1's footer bar still contained 「完結」, on the reasoning
+   * that the claim is true for transcription and burn-in. But the bar is not
+   * scoped to those: it sits under a screen that also configures the
+   * translation tool, in an app that now has AI integration, and it says
+   * "everything". So the guard was not merely blind to the bar — it held the
+   * bar in place, and REQ-0559's exact-string list (`このPCで完結`) matched it
+   * without anyone noticing the assertion below was pointing the other way.
+   *
+   * Replaced with the scoped statement the bar now makes.
+   */
+  it('the STEP1 bar names WHICH processing is local, not "everything"', () => {
+    for (const lang of ['ja', 'en'] as const) {
+      const step1 = JSON.parse(read(`src/renderer/locales/${lang}/step1.json`)) as {
+        footer: { privacyNote: string }
+      }
+      const note = step1.footer.privacyNote
+      // It still says the work happens here…
+      expect(note, `${lang} bar must still say where processing happens`).toMatch(
+        lang === 'ja' ? /この PC/ : /on this PC/,
+      )
+      // …but names the span rather than claiming all of it.
+      expect(note, `${lang} bar must name transcription`).toMatch(
+        lang === 'ja' ? /文字起こし/ : /Transcription/,
+      )
+      expect(note, `${lang} bar must not claim everything`).not.toMatch(
+        lang === 'ja' ? /すべて|全て|完結/ : /\ball processing\b/i,
+      )
+    }
+  })
+})
+
+/**
+ * ★ REQ-0572 §1-2 — catch the SHAPE of the claim, not one spelling of it.
+ *
+ * REQ-0559's guard listed sentences verbatim (`この PC の中で完結`,
+ * `everything stays on this PC`). STEP1's footer said 「すべての処理はこのPCで
+ * 完結します」 — same claim, different words — and sailed through, then shipped
+ * in every published screenshot until REQ-0571 read one.
+ *
+ * So this sweeps EVERY i18n string in both languages for the co-occurrence of a
+ * totality word and a locality word, and requires each hit to be on an explicit
+ * allow-list with a reason. A new unqualified claim fails by default; a correct
+ * one costs one line here. That is the right way round — the previous default
+ * was "allowed unless someone predicted the exact phrasing".
+ */
+describe('REQ-0572 §1-2 — every "all processing is local" claim is accounted for', () => {
+  const TOTALITY = { ja: /すべて|全て|一切|完結/, en: /\ball\b|\bentirely\b|\bonly\b|\bnever\b|\bno (data|audio)\b/i }
+  const LOCALITY = {
+    ja: /この\s?PC|あなたの\s?PC|ローカル|端末内|外部に/,
+    en: /on (this|your) (PC|computer)|local|external|outside/i,
+  }
+
+  /**
+   * Keys allowed to carry the shape, each with why it is accurate.
+   *
+   * The bar is: the sentence must either NAME what is local (so it cannot be
+   * read as covering AI integration), or carry its own qualifier.
+   */
+  const ALLOWED: Record<string, string> = {
+    'settings:ai.consent.lead':
+      'says the app processing is local, then immediately states what is not — the RES-0559 confirmed wording',
+    'settings:ai.consent.staysLocal':
+      'names exactly which things stay: the video and audio files, transcription, translation, burn-in',
+    'step1:whisperModel.descriptionLong':
+      'scoped to the transcription tool it describes ("文字起こしの処理は" / "Transcription happens")',
+    'step1:translationTool.descriptionLong':
+      'scoped to translation ("翻訳はすべて" / "every translation runs")',
+    'step2:toast.srtImportAllOutOfDuration':
+      'not a privacy claim — "all subtitles were outside the video duration"',
+  }
+
+  it('★ no i18n string makes an unscoped locality claim', () => {
+    const found: string[] = []
+    for (const lang of ['ja', 'en'] as const) {
+      const dir = `src/renderer/locales/${lang}`
+      for (const file of readdirSync(dir)) {
+        if (!file.endsWith('.json')) continue
+        const ns = file.replace('.json', '')
+        const walk = (o: unknown, p: string): void => {
+          if (typeof o === 'string') {
+            if (TOTALITY[lang].test(o) && LOCALITY[lang].test(o)) found.push(`${ns}:${p}`)
+            return
+          }
+          if (o && typeof o === 'object') {
+            for (const [k, v] of Object.entries(o)) walk(v, p ? `${p}.${k}` : k)
+          }
+        }
+        walk(JSON.parse(read(`${dir}/${file}`)), '')
+      }
+    }
+    const unexplained = [...new Set(found)].filter((k) => !(k in ALLOWED))
+    expect(
+      unexplained,
+      `New locality claim(s) with no entry in ALLOWED. Either scope the sentence ` +
+      `(name WHAT is local) or add it with a reason: ${unexplained.join(', ')}`,
+    ).toEqual([])
+  })
+
+  it('the allow-list has no dead entries', () => {
+    // A stale allow-list is how a guard stops discriminating. If a key is
+    // rewritten or removed, its excuse must go too.
+    const live: string[] = []
+    for (const lang of ['ja', 'en'] as const) {
+      const dir = `src/renderer/locales/${lang}`
+      for (const file of readdirSync(dir)) {
+        if (!file.endsWith('.json')) continue
+        const ns = file.replace('.json', '')
+        const walk = (o: unknown, p: string): void => {
+          if (typeof o === 'string') {
+            if (TOTALITY[lang].test(o) && LOCALITY[lang].test(o)) live.push(`${ns}:${p}`)
+            return
+          }
+          if (o && typeof o === 'object') {
+            for (const [k, v] of Object.entries(o)) walk(v, p ? `${p}.${k}` : k)
+          }
+        }
+        walk(JSON.parse(read(`${dir}/${file}`)), '')
+      }
+    }
+    expect(Object.keys(ALLOWED).filter((k) => !live.includes(k))).toEqual([])
   })
 })
 

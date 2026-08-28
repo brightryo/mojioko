@@ -287,6 +287,18 @@ body {
    so this note sits in the flow above it and the two cards' buttons stay on
    the same line. Muted and small: it is a fact to check before clicking, not
    a selling point. */
+/* REQ-0572 §2-2 — caption under a feature image. Used by the translation
+   section, where the screenshot deliberately shows the OTHER language's
+   subtitles: without a line saying so, a reader on the Japanese page just
+   sees English captions and reads it as a mistake (which is exactly what
+   REQ-0566 caught the first time). */
+.feature-caption {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
 .version-card-note {
   margin: 0 0 10px;
   text-align: center;

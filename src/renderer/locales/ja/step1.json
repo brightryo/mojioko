@@ -58,7 +58,7 @@
   "whisperModel": {
     "label": "文字起こしツール",
     "tooltip": "音声を文字に変換するエンジンです。モデルサイズが大きいほど精度が上がります。",
-    "descriptionLong": "文字起こしツールは、音声を文字に変換します。OpenAI が開発した Whisper モデルを使います。すべての処理はあなたの PC の中だけで行われ、データが外部に送信されることはありません。使用したいモデルをダウンロードし、「使用する」を押して選択してください。",
+    "descriptionLong": "文字起こしツールは、音声を文字に変換します。OpenAI が開発した Whisper モデルを使います。文字起こしの処理はあなたの PC の中だけで行われ、音声が外部に送信されることはありません。使用したいモデルをダウンロードし、「使用する」を押して選択してください。",
     "descLargeV3Turbo": "高速・軽量。ダウンロードサイズは large-v3 の約半分。",
     "descLargeV3": "高精度・推奨。動作には高いスペックが必要。",
     "recommended": "推奨",
@@ -173,7 +173,7 @@
   "footer": {
     "modelStatus": "Whisper: {{model}} · 使用中",
     "modelNotDownloaded": "Whisper: モデル未選択",
-    "privacyNote": "すべての処理はこのPCで完結します"
+    "privacyNote": "文字起こしから焼き込みまで、この PC で処理します"
   },
   "action": {
     "startTranscription": "文字起こしを始める",
