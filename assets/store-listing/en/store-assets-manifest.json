@@ -1,0 +1,61 @@
+{
+  "lang": "en",
+  "caption": true,
+  "tagline": "Subtitles that get your video across.",
+  "files": [
+    {
+      "file": "01-s2-step2-emphasis.png",
+      "text": "Keyword emphasis, and styling per subtitle",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 526005
+    },
+    {
+      "file": "02-s9-inspector.png",
+      "text": "Flexible subtitle editing",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 576352
+    },
+    {
+      "file": "03-s3-timeline.png",
+      "text": "Adjust timing on the timeline",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 601701
+    },
+    {
+      "file": "04-s7-ai.png",
+      "text": "AI integration (MCP)",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 161314
+    },
+    {
+      "file": "hero-16x9-1920x1080.png",
+      "text": "MOJIOKO / Subtitles that get your video across.",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 939704
+    },
+    {
+      "file": "hero-16x9-3840x2160.png",
+      "text": "MOJIOKO / Subtitles that get your video across.",
+      "ok": true,
+      "width": 3840,
+      "height": 2160,
+      "colorType": 2,
+      "bytes": 3065312
+    }
+  ]
+}

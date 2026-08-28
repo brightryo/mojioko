@@ -42,6 +42,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
+import { TARGETS } from '../store-assets/layout.mjs'
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const ELECTRON = path.join(REPO, 'node_modules', 'electron', 'dist', 'electron.exe')
@@ -54,6 +55,8 @@ function arg(name, fallback) {
 const VIDEO_DIR = arg('videos', String.raw`C:\Users\MyPC\Videos\GamePlay`)
 const SRT_DIR = arg('srt', String.raw`C:\Users\MyPC\Videos\SRT`)
 const ONLY = (arg('only', '') || '').split(',').filter(Boolean)
+/** REQ-0568 §2-3 — where to leave the prepared .mojioko files, if anywhere. */
+const KEEP_PROJECTS = arg('keep-projects', '')
 
 /**
  * ★ REQ-0567 §1 — which language PAGE this set is for.
@@ -65,10 +68,30 @@ const ONLY = (arg('only', '') || '').split(',').filter(Boolean)
  */
 const PAGE_LANG = arg('lang', 'ja') === 'en' ? 'en' : 'ja'
 const OTHER_LANG = PAGE_LANG === 'ja' ? 'en' : 'ja'
-const OUT_DIR = arg('out', path.join(REPO, 'dev-docs', 'shots', ...(PAGE_LANG === 'en' ? ['en'] : [])))
 
-/** Window size for every shot: one size keeps the set visually consistent. */
-const WIN = { width: 1600, height: 900 }
+/**
+ * ★ REQ-0568 §1-1 — what these shots are FOR, which is what sets their size.
+ *
+ * `site` is the download page (1600x900). `store` and `store-full` are the
+ * Microsoft Store listing, which requires exactly 1920x1080; the difference
+ * between them is whether a caption band will be composited above the app
+ * later. See `scripts/store-assets/layout.mjs` for why the banded variant is
+ * captured shorter instead of being scaled down afterwards.
+ *
+ * The display this runs on is 1920x1080 at scaleFactor 1, so a 1920-wide
+ * window extends past the work area — Chromium still rasterises the full
+ * content size, and the capture comes back at exactly the requested pixels
+ * (verified: contentSize [1920,1080] -> PNG 1920x1080). Nothing is resampled.
+ */
+const TARGET = arg('target', 'site')
+if (!TARGETS[TARGET]) {
+  console.error(`shots: unknown --target ${TARGET} (expected ${Object.keys(TARGETS).join(' | ')})`)
+  process.exit(2)
+}
+const WIN = TARGETS[TARGET]
+
+const OUT_DIR = arg('out', path.join(REPO, 'dev-docs', 'shots',
+  ...(TARGET === 'site' ? [] : [TARGET]), ...(PAGE_LANG === 'en' ? ['en'] : [])))
 
 /**
  * ★ REQ-0565 §1 — the look the site shows, declared HERE and nowhere else.
@@ -527,9 +550,26 @@ async function takeShot(shot, work) {
     const index = path.join(REPO, 'out/renderer/index.html').split(path.sep).join('/')
     await w.goto(`file:///${index}?seed=demo&start=${shot.start}`)
     await w.waitForFunction(() => Boolean(window.__mojioko_test))
-    await app.evaluate(({ BrowserWindow }, size) => {
-      BrowserWindow.getAllWindows()[0].setContentSize(size.width, size.height)
+    /*
+     * ★ REQ-0568 §1-1 — ask for the size, then CHECK it.
+     *
+     * The store requires exactly 1920x1080, and a window can silently come
+     * back smaller (a minimum size, a maximised state, the work area). A shot
+     * that is 1920x1032 still writes a perfectly good-looking PNG that the
+     * Store then rejects, so the mismatch is raised here rather than found by
+     * Partner Center.
+     */
+    const got = await app.evaluate(({ BrowserWindow }, size) => {
+      const win = BrowserWindow.getAllWindows()[0]
+      win.setResizable(true)
+      win.setMinimumSize(1, 1)
+      win.unmaximize()
+      win.setContentSize(size.width, size.height)
+      return win.getContentSize()
     }, WIN)
+    if (got[0] !== WIN.width || got[1] !== WIN.height) {
+      throw new Error(`window is ${got[0]}x${got[1]}, wanted ${WIN.width}x${WIN.height}`)
+    }
     /*
      * UI language. This goes through the live i18n instance, NOT through
      * settings.json — the app persists the user's choice, but `changeLanguage`
@@ -621,8 +661,30 @@ async function takeShot(shot, work) {
      * something exact to compare.
      */
     const shown = cues[typeof focusIndex === 'number' ? focusIndex : 0]
+
+    /*
+     * ★ REQ-0568 §2-3 — hand the prepared project to whoever wants a frame.
+     *
+     * The hero art needs a full-resolution still of a styled subtitle. The
+     * alternative was to upscale the little preview panel out of the PNG
+     * above, or to re-implement convert -> edit_cues -> emphasis somewhere
+     * else; the first is blurry and the second is a second prep that would
+     * drift from this one. Copying the project out lets `export_frame` render
+     * the very cue this shot is showing, at video resolution, from the SAME
+     * preparation.
+     */
+    if (KEEP_PROJECTS && projPath) {
+      fs.mkdirSync(KEEP_PROJECTS, { recursive: true })
+      fs.copyFileSync(projPath, path.join(KEEP_PROJECTS, shot.id + '.mojioko'))
+    }
+
     return {
       path: outPath,
+      project: KEEP_PROJECTS && projPath ? path.join(KEEP_PROJECTS, shot.id + '.mojioko') : null,
+      video: shot.video ? path.join(VIDEO_DIR, shot.video + '.mp4') : null,
+      atSec: shot.video && typeof focusIndex === 'number' && cues[focusIndex]
+        ? cues[focusIndex].startSec + Math.min(0.6, (cues[focusIndex].endSec - cues[focusIndex].startSec) / 2)
+        : null,
       style: shown
         ? {
             rotation: shown.rotation ?? 0,
@@ -675,7 +737,10 @@ for (const shot of wanted) {
   const label = `${shot.id}${shot.video ? ` [${shot.video}]` : ' [no video]'}`
   try {
     const r = await takeShot(shot, work)
-    manifest.push({ id: shot.id, video: shot.video, style: r.style })
+    manifest.push({
+      id: shot.id, video: shot.video, style: r.style,
+      project: r.project, videoPath: r.video, atSec: r.atSec,
+    })
     const rot = r.style ? `rot=${r.style.rotation}` : 'no cue'
     log(`  OK    ${label}  ${path.basename(r.path)}  ${rot}`)
   } catch (e) {

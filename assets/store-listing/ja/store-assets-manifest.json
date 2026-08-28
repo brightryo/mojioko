@@ -1,0 +1,61 @@
+{
+  "lang": "ja",
+  "caption": true,
+  "tagline": "動画に、伝わる字幕を。",
+  "files": [
+    {
+      "file": "01-s2-step2-emphasis.png",
+      "text": "キーワード強調と、字幕1行ごとのスタイル",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 549097
+    },
+    {
+      "file": "02-s9-inspector.png",
+      "text": "多彩な字幕編集",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 601725
+    },
+    {
+      "file": "03-s3-timeline.png",
+      "text": "タイムラインで表示タイミングを調整",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 628133
+    },
+    {
+      "file": "04-s7-ai.png",
+      "text": "AI 連携（MCP）",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 201829
+    },
+    {
+      "file": "hero-16x9-1920x1080.png",
+      "text": "MOJIOKO / 動画に、伝わる字幕を。",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 946085
+    },
+    {
+      "file": "hero-16x9-3840x2160.png",
+      "text": "MOJIOKO / 動画に、伝わる字幕を。",
+      "ok": true,
+      "width": 3840,
+      "height": 2160,
+      "colorType": 2,
+      "bytes": 3094241
+    }
+  ]
+}
