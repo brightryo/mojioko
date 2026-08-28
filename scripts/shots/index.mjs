@@ -226,30 +226,25 @@ async function clickLabel(w, label, what) {
   throw new Error(`${what}: no control labelled "${label}" (tried text and aria-label)`)
 }
 
-const SHOTS = [
-  {
-    id: 's1-step1',
-    video: 'Game01',
-    start: 'step1',
-    caption: 'STEP1 — 入力ファイルと文字起こし設定',
-    stage: async (w) => {
-      // The accordions start collapsed, which screenshots as three thin rows
-      // and a lot of empty dark space. Open the transcription-tool section so
-      // the shot actually shows the model choice it is captioned as showing.
-      const row = w.locator('text=文字起こしツール').first()
-      if (await row.count() > 0) {
-        await row.click().catch(() => {})
-        await w.waitForTimeout(900)
-      }
-    },
-  },
-  {
-    id: 's2-step2-emphasis',
-    /** Checked in pixels after the shot — see assertThreeStates. */
-    threeState: true,
+/**
+ * ★ REQ-0573 §1 — one SCENE, defined once, spread into every shot that shows it.
+ *
+ * s2 and s11 are the same video at the same instant with a different panel
+ * open. They were built independently, and only s2 carried the per-cue edits
+ * (160px, the emphasis spans, the written line break). So s11 rendered the
+ * same line at 150px with emphasis off and `pack` wrapping it — which put the
+ * final kana alone on row two. Two shots of one moment that did not look like
+ * one moment.
+ *
+ * The owner's read was that s11 applied a preset; the mechanism was duller —
+ * s11's prep simply returned no edits, so it inherited SITE_STYLE and nothing
+ * else. Either way the fix is the same and it is structural: the scene is one
+ * object, and a shot cannot express a different subtitle state without
+ * editing the scene every other shot shares.
+ */
+const SCENE_GAME02_EMPHASIS = {
     video: 'Game02',
     start: 'step2',
-    caption: 'STEP2 — キーワード強調と cue 別スタイル',
     /*
      * ★ REQ-0566 §1 — the emphasised span is CHOSEN, not computed.
      *
@@ -395,6 +390,31 @@ const SHOTS = [
     },
     /** Sit on the emphasised cue: the point of the shot is to SEE it. */
     focus: 'prep',
+}
+
+const SHOTS = [
+  {
+    id: 's1-step1',
+    video: 'Game01',
+    start: 'step1',
+    caption: 'STEP1 — 入力ファイルと文字起こし設定',
+    stage: async (w) => {
+      // The accordions start collapsed, which screenshots as three thin rows
+      // and a lot of empty dark space. Open the transcription-tool section so
+      // the shot actually shows the model choice it is captioned as showing.
+      const row = w.locator('text=文字起こしツール').first()
+      if (await row.count() > 0) {
+        await row.click().catch(() => {})
+        await w.waitForTimeout(900)
+      }
+    },
+  },
+  {
+    id: 's2-step2-emphasis',
+    /** Checked in pixels after the shot — see assertThreeStates. */
+    threeState: true,
+    caption: 'STEP2 — キーワード強調と cue 別スタイル',
+    ...SCENE_GAME02_EMPHASIS,
   },
   {
     id: 's3-timeline',
@@ -507,18 +527,17 @@ const SHOTS = [
   },
   {
     id: 's11-preset',
-    video: 'Game02',
-    start: 'step2',
     caption: '字幕スタイルのプリセット',
-    // Same video AND same playhead as s2 (cue 5) — one scene, different UI.
-    focus: 'prep',
     /*
-     * ★ REQ-0571 §1-1 — this shares Game02 with s2, so it must share the
-     * SCENE (assertOneScenePerVideo). s2 moved off the opening greeting to
-     * cue 5, and this follows it: the preset popover is the subject here, but
-     * the caption behind it should still be a line that sells something.
+     * ★ REQ-0573 §1-2 — the SAME scene as s2, and no preset is applied.
+     *
+     * Only the popover is the subject: seeing the "apply a preset" list open
+     * is what makes the section's point. Applying one would change the caption
+     * underneath, which is exactly the difference this REQ removes — so the
+     * subtitle stays byte-for-byte the picture s2 shows, and `assertSharedScenesMatch`
+     * fails the run if it ever stops being.
      */
-    prep: () => ({ focusIndex: 5, atFraction: PAGE_LANG === 'ja' ? 8 / 19 : 5 / 7, edits: [] }),
+    ...SCENE_GAME02_EMPHASIS,
     stage: async (w) => { await clickLabel(w, UI[PAGE_LANG].presets, 's11-preset') },
   },
   {
@@ -588,6 +607,96 @@ function cli(args, timeoutMs = 180_000) {
  *
  * So the check is on (video, focus), not on video alone.
  */
+/** The scene a shot photographs: one video at one instant. */
+function sceneKey(shot) {
+  return shot.video ? `${shot.video}@${String(shot.focus ?? 'none')}` : null
+}
+
+/**
+ * ★ REQ-0573 §1-4 — shots of one scene must be one picture.
+ *
+ * `assertOneScenePerVideo` already stopped two shots using the same video at
+ * DIFFERENT moments. It could not see the failure this REQ is about: s2 and
+ * s11 named the same moment and still rendered different subtitles, because
+ * only one of them carried the per-cue edits. The declaration agreed; the
+ * pixels did not.
+ *
+ * So this compares the pixels. For every scene with more than one shot, the
+ * preview rectangle — the video and the caption drawn over it — must be
+ * IDENTICAL. Everything outside it is free: that is where the panel, popover
+ * or accordion each shot exists to show actually lives.
+ *
+ * One differing pixel fails. There is no tolerance to tune, because there is
+ * no legitimate reason for the same frame at the same instant with the same
+ * cue to differ at all — and a tolerance is how "slightly different" becomes
+ * "nobody looked".
+ */
+async function assertSharedScenesMatch(entries) {
+  const groups = new Map()
+  for (const e of entries) {
+    if (!e.scene || !e.previewBox || !e.path) continue
+    if (!groups.has(e.scene)) groups.set(e.scene, [])
+    groups.get(e.scene).push(e)
+  }
+  const shared = [...groups.entries()].filter(([, v]) => v.length > 1)
+  if (shared.length === 0) {
+    log('shared scenes: none to compare')
+    return 0
+  }
+
+  const { chromium } = await import('playwright')
+  const browser = await chromium.launch()
+  let failed = 0
+  try {
+    const page = await (await browser.newContext()).newPage()
+    for (const [scene, shots] of shared) {
+      const [ref, ...rest] = shots
+      for (const other of rest) {
+        const box = ref.previewBox
+        // A different preview rectangle is itself a mismatch — the caption
+        // could match pixel-for-pixel inside two boxes of different size and
+        // still be a different picture on the page.
+        const ob = other.previewBox
+        if (Math.round(box.x) !== Math.round(ob.x) || Math.round(box.y) !== Math.round(ob.y) ||
+            Math.round(box.width) !== Math.round(ob.width) || Math.round(box.height) !== Math.round(ob.height)) {
+          log(`  FAIL  ${scene}: ${ref.id} and ${other.id} have different preview rects`)
+          failed++
+          continue
+        }
+        const diff = await page.evaluate(async ({ a, b, box }) => {
+          const load = async (src) => {
+            const img = new Image(); img.src = src; await img.decode()
+            const c = document.createElement('canvas')
+            c.width = Math.round(box.width); c.height = Math.round(box.height)
+            c.getContext('2d').drawImage(img, Math.round(box.x), Math.round(box.y),
+              c.width, c.height, 0, 0, c.width, c.height)
+            return c.getContext('2d').getImageData(0, 0, c.width, c.height).data
+          }
+          const [da, db] = [await load(a), await load(b)]
+          let n = 0
+          for (let i = 0; i < da.length; i += 4) {
+            if (da[i] !== db[i] || da[i + 1] !== db[i + 1] || da[i + 2] !== db[i + 2]) n++
+          }
+          return n
+        }, {
+          a: 'data:image/png;base64,' + fs.readFileSync(ref.path).toString('base64'),
+          b: 'data:image/png;base64,' + fs.readFileSync(other.path).toString('base64'),
+          box,
+        })
+        if (diff === 0) {
+          log(`  OK    ${scene}: ${ref.id} == ${other.id} (preview identical)`)
+        } else {
+          log(`  FAIL  ${scene}: ${ref.id} vs ${other.id} — ${diff} preview pixel(s) differ`)
+          failed++
+        }
+      }
+    }
+  } finally {
+    await browser.close()
+  }
+  return failed
+}
+
 function assertOneScenePerVideo() {
   const seen = new Map()
   for (const s of SHOTS) {
@@ -697,6 +806,7 @@ async function takeShot(shot, work) {
   let cues = []
   let preparedFocus = null
   let preparedAtFraction = null
+  let previewBox = null
 
   if (shot.video) {
     const video = path.join(VIDEO_DIR, shot.video + '.mp4')
@@ -927,6 +1037,10 @@ async function takeShot(shot, work) {
 
     if (shot.threeState) await assertThreeStates(w, outPath, shot.id)
 
+    // ★ REQ-0573 §1-4 — the preview rectangle, so shots that share a scene can
+    // be compared over exactly the same pixels.
+    previewBox = await w.locator('video').first().boundingBox().catch(() => null)
+
     /*
      * ★ REQ-0565 §2-2 — record what was ACTUALLY applied.
      *
@@ -967,6 +1081,7 @@ async function takeShot(shot, work) {
        * screenshot beside it kept it. One value, computed once, reported.
        */
       atSec: shownAtSec,
+      previewBox,
       style: shown
         ? {
             rotation: shown.rotation ?? 0,
@@ -1022,6 +1137,7 @@ for (const shot of wanted) {
     manifest.push({
       id: shot.id, video: shot.video, style: r.style,
       project: r.project, videoPath: r.video, atSec: r.atSec,
+      scene: sceneKey(shot), previewBox: r.previewBox, path: r.path,
     })
     const rot = r.style ? `rot=${r.style.rotation}` : 'no cue'
     log(`  OK    ${label}  ${path.basename(r.path)}  ${rot}`)
@@ -1030,6 +1146,13 @@ for (const shot of wanted) {
     log(`  FAIL  ${label}  ${e instanceof Error ? e.message : String(e)}`)
   }
 }
+if (ONLY.length === 0) {
+  log(String.fromCharCode(10) + 'shared-scene check (REQ-0573 §1-4):')
+  failed += await assertSharedScenesMatch(manifest)
+} else {
+  log(String.fromCharCode(10) + 'shared-scene check skipped (--only run lacks a full scene)')
+}
+
 fs.writeFileSync(path.join(OUT_DIR, 'shots-manifest.json'),
   JSON.stringify({ siteStyle: SITE_STYLE, shots: manifest }, null, 2), 'utf-8')
 log(`
