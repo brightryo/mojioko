@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>プライバシーポリシー - MOJIOKO</title>
-  <meta name="description" content="MOJIOKO のプライバシーポリシー。動画・音声・字幕などのユーザーデータは外部に送信されず、すべてローカル PC 内で処理されます。テレメトリ・解析は行いません。">
+  <!-- REQ-0569 §1-1: this said user data "including subtitles" is never sent
+       and that ALL processing is local. Both stopped being true for the
+       subtitle text once v1.4.0's AI integration shipped (see 2.5), and this
+       page is the one place the claim must be exact. Narrowed to the video
+       and audio, which never leave under any setting. -->
+  <meta name="description" content="MOJIOKO のプライバシーポリシー。動画・音声ファイルそのものは外部に送信されず、文字起こしも字幕の焼き込みもローカル PC 内で処理されます。テレメトリ・解析は行いません。AI 連携を有効にした場合の送信内容は 2.5 をご覧ください。">
   <link rel="icon" type="image/png" href="../images/icon.png">
   <link rel="stylesheet" href="../assets/style.css">
 </head>
@@ -43,6 +48,12 @@
       </p>
       <p>
         本アプリは、ユーザーの動画ファイル、音声、生成された字幕、編集内容、その他の個人データを<strong>外部のサーバーに送信・アップロード・収集しません</strong>。
+      </p>
+      <p class="note">
+        ※ v1.4.0 で追加した「AI 連携（MCP）」を<strong>ユーザーが有効にした場合に限り</strong>、
+        AI アシスタントが読み書きする情報（字幕テキスト・ファイルのパス・動画の情報）が
+        そのアシスタントの提供者に送信されます。<strong>動画・音声ファイルそのものは、この場合も
+        この PC から出ません。</strong>詳細は <a href="#ai-mcp">2.5</a> をご覧ください。
       </p>
       <p>
         本アプリは、利用状況の追跡・解析（テレメトリ／アナリティクス／クラッシュレポート）を<strong>一切行いません</strong>。広告 SDK、トラッキング SDK、第三者の解析ツールは組み込まれていません。
@@ -83,6 +94,25 @@
       </p>
       <p>
         新しいバージョンの公開状況は、ヘルプメニューから配布ページ（GitHub Pages）をブラウザで開いて確認してください。
+      </p>
+
+      <h3 id="ai-mcp">2.5 AI 連携（MCP）— v1.4.0 で追加</h3>
+      <p>
+        v1.4.0 から、Claude などの AI アシスタントが MCP 接続を通じて本アプリを操作できます。
+        <strong>この機能は既定では使われません。</strong>接続用ファイルの書き出しや設定のコピーを
+        行うたびに確認ダイアログが表示され、同意した場合にのみ実行されます。
+      </p>
+      <p>
+        AI アシスタントは提供者のサーバー上で動作するため、有効にした場合は次の情報がその提供者に渡ります。
+      </p>
+      <ul>
+        <li><strong>この PC から出ないもの</strong>：動画・音声ファイルそのもの。文字起こし・翻訳・焼き込みの処理も、これまでどおりこの PC 上だけで実行されます。</li>
+        <li><strong>AI 提供者に送られるもの</strong>：AI がツールを通じて読み書きする情報 ― 字幕テキストの全文、ファイルのパス、動画の情報（長さ・解像度など）、そしてツールからの応答です。</li>
+      </ul>
+      <p>
+        送信先は、お使いの AI アシスタントの提供者（Claude をお使いの場合は Anthropic）です。
+        その先での取り扱いは、その提供者の規約とプライバシーポリシーに従います。
+        本アプリ自体が独自のサーバーへデータを送ることはありません。
       </p>
 
       <h2>3. フィードバックフォーム（Google Forms）について</h2>

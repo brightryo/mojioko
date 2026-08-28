@@ -6,7 +6,8 @@ import {
   type SnapKind,
 } from './timeline-snap'
 import { chooseRulerStepSec } from './timeline-layout'
-import { roundToCs } from './entry-edits'
+import { roundToCs, cueCeilingSec } from './entry-edits'
+import { MIN_LAYER, resolveLayer } from '../../shared/cue-placement'
 import {
   origToEdited,
   editedToOrig,
@@ -21,6 +22,99 @@ export type DragKind = 'resize-start' | 'resize-end' | 'move'
  * 3 px click-vs-drag threshold in `Block`'s body button).
  */
 export const MOVE_DRAG_NOOP_THRESHOLD_PX = 3
+
+/**
+ * The dead-zone (px) a body 'move' drag must leave before the clip begins
+ * following the cursor.  Below it the gesture is still ambiguous (a click, or
+ * jitter).  Kept a touch above `MOVE_DRAG_NOOP_THRESHOLD_PX`.
+ *
+ * (REQ-0466 §1 removed `DragAxis` / `decideDragAxis` / `computeLayerDrag` — the
+ * REQ-0399 axis-lock model, dead since REQ-0403's 2D drag and REQ-0462's 1:1
+ * cursor follow.  The name is kept to avoid churn; there is no axis lock now,
+ * this is simply the move-start threshold.)
+ */
+export const AXIS_LOCK_THRESHOLD_PX = 4
+
+export interface LayerDragVisual {
+  /**
+   * Band-relative top (px) for the FLOATING dragged block — it follows the
+   * cursor 1:1, clamped to stay within the rendered rows so the clip never
+   * flies off the track area (REQ-0402 §2).
+   */
+  blockTopPx: number
+  /** The row (top = 0) the clip will snap to when released. */
+  targetRowIndex: number
+  /** The z-order layer that target row represents. */
+  targetLayer: number
+}
+
+/**
+ * REQ-0402 §2 — resolve a vertical (layer-axis) drag into the floating block's
+ * follow position AND the track it will snap to.  Unlike `computeLayerDrag`
+ * (which just returns a layer), this keeps the block gliding under the cursor
+ * (`blockTopPx = baseTop + dyPx`, clamped to the rows) and derives the snap
+ * target by rounding that position to the nearest row — so the clip follows the
+ * cursor smoothly and snaps to a track on release rather than hopping discretely.
+ *
+ * The reference frame is the RENDERED rows 0..`maxRow` (bottom-anchored: row 0 =
+ * top = layer `maxRow`, row `maxRow` = bottom = layer 0), matching
+ * `layoutEntries` (REQ-0402 §1).  `trackHeightPx` = `TRACK_HEIGHT_PX`,
+ * `blockPadPx` = `BLOCK_VERTICAL_PAD_PX`.  The target layer is therefore clamped
+ * to `[0, maxRow]` — a single drag reaches at most the one spare track above the
+ * current max (raising it again reveals the next spare).
+ */
+export function computeLayerDragVisual(
+  baseLayer: number,
+  dyPx: number,
+  maxRow: number,
+  trackHeightPx: number,
+  blockPadPx: number,
+): LayerDragVisual {
+  const h = trackHeightPx
+  const baseLayerClamped = Math.max(MIN_LAYER, Math.min(maxRow, baseLayer))
+  const baseRowIndex = maxRow - baseLayerClamped
+  const baseTopPx = baseRowIndex * h + blockPadPx
+  const minTop = blockPadPx
+  const maxTop = maxRow * h + blockPadPx
+  const blockTopPx = Math.max(minTop, Math.min(maxTop, baseTopPx + dyPx))
+  const targetRowIndex = Math.max(0, Math.min(maxRow, Math.round((blockTopPx - blockPadPx) / h)))
+  const targetLayer = maxRow - targetRowIndex
+  return { blockTopPx, targetRowIndex, targetLayer }
+}
+
+export interface MoveCommit {
+  /** The pre-drag entry — `undo` restores this (both time and layer). */
+  before: SubtitleEntry
+  /** The post-drag entry: the final (live-committed) time plus the pending layer. */
+  after: SubtitleEntry
+}
+
+/**
+ * REQ-0403 — build the SINGLE undo step for a 2D clip move.  A move drag writes
+ * time to the store live but keeps the layer pending (the block floats), so on
+ * release the two axes must be committed together and reverted together.
+ *
+ * `before` is the pre-drag snapshot; `finalTimeEntry` is the entry as it stands
+ * in the store after the live time writes (its layer is still the pre-drag
+ * value); `pendingLayer` is where the vertical drag landed.  Returns `null` when
+ * NOTHING moved (so the caller pushes no history and skips the re-sort), else a
+ * `{before, after}` pair where `after` carries the final time AND the pending
+ * layer — so one history op restores both whether the user moved in X, Y or both.
+ */
+export function buildMoveCommit(
+  before: SubtitleEntry,
+  finalTimeEntry: SubtitleEntry,
+  pendingLayer: number,
+): MoveCommit | null {
+  const timeChanged =
+    finalTimeEntry.startSec !== before.startSec || finalTimeEntry.endSec !== before.endSec
+  const layerChanged = pendingLayer !== resolveLayer(before)
+  if (!timeChanged && !layerChanged) return null
+  return {
+    before,
+    after: { ...finalTimeEntry, layer: pendingLayer },
+  }
+}
 
 /**
  * Pure-function form of the drag-patch computation.
@@ -84,10 +178,19 @@ export interface DragPatchInputs {
 }
 
 export interface DragPatchOutput {
-  /** Final Original-axis start time to write into the entry. */
+  /** Final (SNAPPED, when `snapEnabled`) Original-axis start time. */
   startSec: number
-  /** Final Original-axis end time to write into the entry. */
+  /** Final (SNAPPED, when `snapEnabled`) Original-axis end time. */
   endSec: number
+  /**
+   * REQ-0462 — the RAW (pre-snap, clamped, cs-rounded) Original-axis times, i.e.
+   * the cursor position with NO snap/adsorption applied.  A `move` drag writes
+   * THESE live so the clip follows the pointer 1:1, and applies `startSec` /
+   * `endSec` (snapped) only on release.  With `snapEnabled === false` these equal
+   * `startSec` / `endSec`.  Resize kinds ignore them (they keep snapping live).
+   */
+  rawStartSec: number
+  rawEndSec: number
   /**
    * REQ-0201 — Edited-axis time of the snap target that won, or null.
    * The caller multiplies this by `pixelsPerSec` directly to place the
@@ -137,15 +240,15 @@ export function computeDragPatch(input: DragPatchInputs): DragPatchOutput {
   const editedTotalSec = isFinite(dur) && dur > 0
     ? editedDuration(dur, cuts)
     : Number.MAX_VALUE
-  const editedMaxEnd = isFinite(editedTotalSec) && editedTotalSec > 0
-    ? Math.floor(editedTotalSec * 100) / 100
-    : Number.MAX_VALUE
+  // REQ-0528 §2-2 — this centisecond-floor rule now has ONE definition,
+  // `cueCeilingSec`, shared with the 「時間を調整」 dialog's clamp so the two
+  // edit routes cannot disagree about where the video ends.  Byte-identical to
+  // the expression it replaces.
+  const editedMaxEnd = cueCeilingSec(editedTotalSec)
   // Defensive Original-axis ceiling — used as a final clamp so
   // origToEdited/editedToOrig round-trip drift cannot push entry.endSec
   // above the video's physical length.
-  const origMaxEnd = isFinite(dur) && dur > 0
-    ? Math.floor(dur * 100) / 100
-    : Number.MAX_VALUE
+  const origMaxEnd = cueCeilingSec(dur)
 
   // Snapshot translated to the Edited axis so we can add the Edited-seconds
   // delta directly.  editedToOrig round-trips back to Original for the
@@ -238,9 +341,19 @@ export function computeDragPatch(input: DragPatchInputs): DragPatchOutput {
   if (finalEnd > origMaxEnd) finalEnd = origMaxEnd
   if (finalStart < 0) finalStart = 0
 
+  // REQ-0462 — the raw (pre-snap) Original-axis times, run through the SAME
+  // conversion / rounding / clamp as the final values so the live 1:1-follow
+  // write and the on-release snapped write differ by the snap step alone.
+  let rawStart = roundToCs(editedToOrig(rawStartEdited, cuts))
+  let rawEnd = roundToCs(editedToOrig(rawEndEdited, cuts))
+  if (rawEnd > origMaxEnd) rawEnd = origMaxEnd
+  if (rawStart < 0) rawStart = 0
+
   return {
     startSec: finalStart,
     endSec: finalEnd,
+    rawStartSec: rawStart,
+    rawEndSec: rawEnd,
     guideTimeSec,
     guideKind,
     isNoop,

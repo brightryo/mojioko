@@ -23,7 +23,8 @@ export type TranscriptionEventCallback = (event: TranscriptionEvent) => void
 // tests can import it without also loading `electron`.  Re-export here
 // so any other main-side importer of this module keeps working.
 export { buildTranscribePayload } from './transcribe-payload'
-import { buildTranscribePayload as _buildTranscribePayload } from './transcribe-payload'
+import { buildTranscribePayload as _buildTranscribePayload, applyTranscriptionTierGate } from './transcribe-payload'
+import { resolveTier } from '../lib/tier'
 
 let sidecarProcess: ChildProcess | null = null
 let pendingCallback: TranscriptionEventCallback | null = null
@@ -215,7 +216,29 @@ export async function transcribe(
     }
     const videoPath = norm.path
 
-    const payload = _buildTranscribePayload(request, videoPath)
+    /**
+     * REQ-0508 §2-5 — the word-subtitle tier gate, moved onto the path every
+     * caller takes.
+     *
+     * It was applied at ONE place, `ipc/transcription.ts`, so the CLI — which
+     * calls this function directly — bypassed it structurally. Nothing leaks
+     * today only because the CLI has no `--word-subtitle` flag to set; the
+     * moment one is added it would arrive ungated by default. That is the same
+     * shape as the font hole this REQ exists to close, and the same fix: one
+     * function, applied where the work actually happens.
+     *
+     * **Behaviour is unchanged.** For GUI requests the IPC call already gated
+     * them and the gate is idempotent; for CLI requests `wordSubtitle` is never
+     * set, and `buildTranscribePayload` treats `false` and `undefined`
+     * identically (the REQ-0207 off-path byte-identity contract, pinned in
+     * `transcribe-payload.test.ts`). The IPC call site is deliberately LEFT in
+     * place — it strips the flag before the request is logged there.
+     *
+     * Scope note: this moves WHERE the existing gate runs. What the gate does
+     * — and word timestamps themselves, which REQ-0285 made unconditional for
+     * every tier — is untouched, per REQ-0508's "leave word-subtitle alone".
+     */
+    const payload = _buildTranscribePayload(applyTranscriptionTierGate(request, resolveTier().isPaid), videoPath)
 
     proc.stdin!.write(JSON.stringify(payload) + '\n', 'utf-8', (err) => {
       if (err) {

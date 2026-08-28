@@ -1,0 +1,60 @@
+{
+  "lang": "ja",
+  "caption": true,
+  "files": [
+    {
+      "file": "01-s2-step2-emphasis.png",
+      "text": "キーワード強調と、字幕1行ごとのスタイル",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 546907
+    },
+    {
+      "file": "02-s9-inspector.png",
+      "text": "多彩な字幕編集",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 592976
+    },
+    {
+      "file": "03-s3-timeline.png",
+      "text": "タイムラインで表示タイミングを調整",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 628131
+    },
+    {
+      "file": "04-s7-ai.png",
+      "text": "AI 連携（MCP）",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 201829
+    },
+    {
+      "file": "hero-16x9-1920x1080.png",
+      "text": "(no text — REQ-0576)",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 1350867
+    },
+    {
+      "file": "hero-16x9-3840x2160.png",
+      "text": "(no text — REQ-0576)",
+      "ok": true,
+      "width": 3840,
+      "height": 2160,
+      "colorType": 2,
+      "bytes": 4100950
+    }
+  ]
+}

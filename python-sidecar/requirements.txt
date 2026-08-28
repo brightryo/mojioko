@@ -1,6 +1,12 @@
-# REQ-20260615-065 S-1 — faster-whisper 1.2.1.  The 1.0.3 → 1.2.1
+# REQ-20260615-065 S-1 -- faster-whisper 1.2.1.  The 1.0.3 -> 1.2.1
 # bump pulls in ctranslate2 4.8, av 17, onnxruntime 1.27 transitively;
 # no further direct pins are needed (Phase 0 RES dependency table).
-# The 1.0.3-era `requests` runtime-import hack is no longer needed —
+# The 1.0.3-era `requests` runtime-import hack is no longer needed --
 # faster_whisper 1.2.1's metadata declares it correctly.
 faster-whisper==1.2.1
+
+# REQ-0410 -- MADLAD-400 translation prototype needs SentencePiece for the
+# `spiece.model` tokenizer (CTranslate2 is already pulled in via faster-whisper).
+# REQ-0411 -- keep this file ASCII-only: a cp932/locale-encoded pip (ja Windows)
+# raises UnicodeDecodeError on any non-ASCII byte, blocking `pip install`.
+sentencepiece==0.2.0

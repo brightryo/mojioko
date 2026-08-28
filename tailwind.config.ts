@@ -9,26 +9,20 @@ const config: Config = {
       colors: {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
-        card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))'
-        },
-        popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))'
-        },
+        // REQ-0416 — shadcn semantic surfaces kept for primitive compat, but
+        // their unused `-foreground` sub-keys were dropped (app code uses the
+        // `fg-*` scale; see lever-A unification).
+        card: 'hsl(var(--card))',
+        popover: 'hsl(var(--popover))',
         primary: {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',
           hover:  'hsl(var(--primary-hover))',
           active: 'hsl(var(--primary-active))',
-          soft:   'hsl(var(--primary-soft))',
-          faint:  'hsl(var(--primary-faint))'
+          soft:   'hsl(var(--primary-soft))'
+          // REQ-0416 — `faint` removed (single use migrated to `soft`).
         },
-        secondary: {
-          DEFAULT: 'hsl(var(--secondary))',
-          foreground: 'hsl(var(--secondary-foreground))'
-        },
+        secondary: 'hsl(var(--secondary))',
         muted: {
           DEFAULT: 'hsl(var(--muted))',
           foreground: 'hsl(var(--muted-foreground))'
@@ -77,22 +71,34 @@ const config: Config = {
           tertiary:  'hsl(var(--text-tertiary))',
           muted:     'hsl(var(--text-muted))',
           disabled:  'hsl(var(--text-disabled))',
-          faint:     'hsl(var(--text-faint))',
+          // REQ-0416 — `faint` removed (2 uses migrated to `disabled`).
           inverse:   'hsl(var(--text-inverse))'
         },
         line: {
           DEFAULT: 'hsl(var(--border-default))',
-          strong:  'hsl(var(--border-strong))',
-          subtle:  'hsl(var(--border-subtle))'
+          strong:  'hsl(var(--border-strong))'
+          // REQ-0416 — `subtle` removed (was unused).
         },
         row: {
           edited:  'hsl(var(--row-edited))',
+          // REQ-0526 — pre-composed weights of `edited`.  Full colours (not
+          // HSL triplets), because the alpha lives in a var so the DEV token
+          // editor can move it live; that also means `/opacity` modifiers do
+          // not apply to these four, which is intended — the weight is the
+          // token.  All of them resolve through --row-edited.
+          'edited-fill':       'var(--row-edited-fill)',
+          'edited-fill-hover': 'var(--row-edited-fill-hover)',
+          'edited-frame':      'var(--row-edited-frame)',
+          'edited-row-tint':   'var(--row-edited-row-tint)',
           error:   'hsl(var(--row-error))',
           playing: 'hsl(var(--row-playing))'
         },
         playhead:       'hsl(var(--playhead))',
         'trim-overlay': 'hsl(var(--trim-overlay))',
-        'cursor-active': 'hsl(var(--cursor-active))'
+        'cursor-active': 'hsl(var(--cursor-active))',
+        // REQ-0413 — recessed timeline clips-lane well (was inline
+        // `bg-[hsl(0_0%_10%)]` in timeline-view.tsx).
+        'timeline-well': 'hsl(var(--timeline-well))'
       },
       borderRadius: {
         // REQ-0177 Phase A — flattened radius scale.  DaVinci Resolve
@@ -160,16 +166,31 @@ const config: Config = {
         //
         // heading  20 → 16   – screen H1 ("編集", "文字起こし")
         // display  24 → 20   – About / Splash hero
-        micro:        ['10px', { lineHeight: '14px' }],
-        label:        ['12px', { lineHeight: '16px' }],
-        caption:      ['12px', { lineHeight: '16px' }],
-        'body-sm':    ['13px', { lineHeight: '18px' }],
-        callout:      ['13px', { lineHeight: '18px' }],
-        body:         ['15px', { lineHeight: '22px' }],
-        headline:     ['15px', { lineHeight: '22px' }],
-        title:        ['16px', { lineHeight: '24px' }],
-        heading:      ['16px', { lineHeight: '22px' }],  // was 20/28
-        display:      ['20px', { lineHeight: '28px' }]   // was 24/32
+        //
+        // REQ-0414 — each step's px is now the FALLBACK of a `--fs-<name>`
+        // CSS variable so the developer live-token editor can override the
+        // whole type scale at runtime (set `--fs-*` on :root).  The vars
+        // are intentionally NOT declared in globals.css, so the fallback
+        // (= the exact pre-0414 px) is what renders — a pure value-preserving
+        // refactor with no visual change.  Line heights stay static (the
+        // editor tunes size, not leading).
+        // REQ-0416 — scale collapsed 10 → 6.  The removed names were
+        // same-px/same-line-height duplicates whose only differentiator was a
+        // call-site weight class (which is untouched), so the merge is
+        // value-preserving: label→caption, callout→body-sm, headline→body,
+        // heading→title (heading's line-height 22→24 was the only 1-step change,
+        // on 2 sites).
+        // REQ-0419 — bake the dev-editor's tuned sizes as the shipped
+        // fallbacks (overrides REQ-0418's micro 11 / caption 12 / body-sm 13).
+        // caption + body-sm now 14 (dense tiers grow — owner-approved, verified
+        // on real machine).  --fs-* stays undeclared → fallback = shipped value
+        // (dev editor can still override at runtime).
+        micro:        ['var(--fs-micro, 12px)',    { lineHeight: '16px' }],
+        caption:      ['var(--fs-caption, 14px)',  { lineHeight: '18px' }],
+        'body-sm':    ['var(--fs-body-sm, 14px)',  { lineHeight: '20px' }],
+        body:         ['var(--fs-body, 16px)',     { lineHeight: '24px' }],
+        title:        ['var(--fs-title, 18px)',    { lineHeight: '26px' }],
+        display:      ['var(--fs-display, 24px)',  { lineHeight: '32px' }]
       },
       // REQ-0142 — indeterminate progress bar used in the transcription
       // drawer while the sidecar is in its pre-Whisper prep region

@@ -66,7 +66,7 @@ beforeEach(() => {
 describe('REQ-0244 downloadFont cancel settles the outer promise', () => {
   it('cancel() causes await run.promise to reject (the batch-cancel-restore fix)', async () => {
     const { downloadFont } = await import('../../src/renderer/services/font')
-    const run = downloadFont('Delius', () => {})
+    const run = downloadFont('dela-gothic-one', () => {})
 
     // Wait for the async IIFE to reach the subscribe step.  A single
     // microtask flush isn't enough because the initial invoke is
@@ -102,7 +102,7 @@ describe('REQ-0244 downloadFont cancel settles the outer promise', () => {
     // service sets a `cancelled` flag; the async IIFE checks it after
     // the invoke and throws.
     const { downloadFont } = await import('../../src/renderer/services/font')
-    const run = downloadFont('Delius', () => {})
+    const run = downloadFont('dela-gothic-one', () => {})
 
     // Cancel immediately, before the invoke resolves.
     run.cancel()

@@ -6,7 +6,13 @@ import { DEFAULT_LANGUAGE } from '../../shared/app-info'
 import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX, OUTLINE_THICKNESS_MAX_PX, SHADOW_DEPTH_MAX_PX, TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
 import { DEFAULT_FONT_ID, isFontId, type FontId } from '../../shared/fonts'
 import { clampLineSpacingPercent } from '../../shared/line-spacing'
+import { DEFAULT_TRANSLATION_TARGET, coerceTranslationTarget } from '../../shared/translation'
 import { STYLE_PRESET_MAX, validatePresetName, type StylePreset } from '../../shared/style-preset'
+import {
+  rememberAnimationParams, sanitizeAnimationMemory, type AnimationMemory,
+} from '../../shared/animation-memory'
+import type { AnimationUiValue } from '../../shared/cue-animation'
+import { sanitizeAiConsent, type AiIntegrationConsent } from '../../shared/ai-consent'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 
 interface SettingsStore {
@@ -18,6 +24,16 @@ interface SettingsStore {
   transcriptionDefaults: TranscriptionDefaults
   transcriptionAdvanced: TranscriptionAdvancedParams
   autoLineBreak: boolean
+  /**
+   * REQ-0426 — 「翻訳」設定タブ.  `translationAutoEnabled`: inspector auto-
+   * translates on cue selection.  `translationTargetLang`: MADLAD target code
+   * (`<2xx>`) it translates into.  Both are freely editable even when no
+   * translation tool is downloaded (the gating lives in the inspector).
+   */
+  translationAutoEnabled: boolean
+  translationTargetLang: string
+  /** REQ-0443 §1 — preview timecode verbosity (false = simple M:SS, default). */
+  playbackTimeDetailed: boolean
   /** REQ-0311 §4 / REQ-0315 §2 — karaoke display style (see shared/karaoke-style). */
   encoder: EncoderSetting
   audioMode: AudioMode
@@ -52,6 +68,14 @@ interface SettingsStore {
    */
   defaultProjectDir: string | null
   /**
+   * REQ-0518 — three more folder rows (画像保存 / テキスト保存 / SRT入力).
+   * Same shape and rules as the three above; the per-row OS fallback lives in
+   * `shared/folder-settings.ts` and is applied by the main-side dialog handler.
+   */
+  defaultImageDir: string | null
+  defaultTextDir: string | null
+  defaultSrtDir: string | null
+  /**
    * REQ-0208 — "user has clicked the Store review CTA in the export-
    * complete dialog at least once".  One-shot boolean: flips false → true
    * the first time the button is pressed and never flips back.  Used by
@@ -76,6 +100,17 @@ interface SettingsStore {
    * this array never contains.
    */
   stylePresets: StylePreset[]
+  /**
+   * REQ-0540 — the last animation parameters the user chose, per type.  Empty
+   * until they tune one; every read falls back to `ANIMATION_TYPE_DEFAULTS`,
+   * which is what makes an upgraded install behave exactly as it did.
+   */
+  animationMemory: AnimationMemory
+  /**
+   * REQ-0551 — AI integration consent (accepted / notice-shown timestamps).
+   * Empty object until the user meets the gate; see `shared/ai-consent.ts`.
+   */
+  aiIntegration: AiIntegrationConsent
 
   setLanguage: (lang: string) => void
   setTheme: (t: AppTheme) => void
@@ -84,6 +119,10 @@ interface SettingsStore {
   setTranscriptionAdvanced: (patch: Partial<TranscriptionAdvancedParams>) => void
   resetTranscriptionAdvanced: () => void
   setAutoLineBreak: (v: boolean) => void
+  /** REQ-0426 — 「翻訳」設定タブ setters. */
+  setTranslationAutoEnabled: (v: boolean) => void
+  setTranslationTargetLang: (v: string) => void
+  setPlaybackTimeDetailed: (v: boolean) => void
   setEncoder: (e: EncoderSetting) => void
   setAudioMode: (m: AudioMode) => void
   setDefaultAudioTrackIndex: (i: number) => void
@@ -93,6 +132,9 @@ interface SettingsStore {
   setDefaultInputDir: (path: string | null) => void
   setDefaultOutputDir: (path: string | null) => void
   setDefaultProjectDir: (path: string | null) => void
+  setDefaultImageDir: (path: string | null) => void
+  setDefaultTextDir: (path: string | null) => void
+  setDefaultSrtDir: (path: string | null) => void
   /**
    * REQ-0208 — one-way setter for the Store review CTA.  Only flips to
    * true (idempotent on repeat calls); there is no path back to false.
@@ -120,8 +162,22 @@ interface SettingsStore {
    */
   resetStep3Settings: () => void
 
+  /**
+   * REQ-0540 — record the parameters now in use for `value.type`.
+   *
+   * The ONLY writer is `AnimationControls`' commit handlers.  Opening a
+   * project, applying a preset, undo/redo and new-cue stamping must never
+   * reach this — see `shared/animation-memory.ts` for the full list and why
+   * none of them can.
+   */
+  rememberAnimation: (value: AnimationUiValue) => void
+
+  /** REQ-0551 — the user pressed "I understand, enable it". */
+  acceptAiConsent: () => void
+  /** REQ-0551 — the one-time retroactive notice was shown. */
+
   /** Hydrate from loaded AppSettings (overwrites local state). */
-  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'stylePresets'>) => void
+  hydrate: (s: Pick<AppSettings, 'language' | 'theme' | 'baseColor' | 'transcriptionDefaults' | 'transcriptionAdvanced' | 'autoLineBreak' | 'translationAutoEnabled' | 'translationTargetLang' | 'playbackTimeDetailed' | 'encoder' | 'audioMode' | 'defaultAudioTrackIndex' | 'fadeDurationSec' | 'activeFontId' | 'defaultInputDir' | 'defaultOutputDir' | 'defaultProjectDir' | 'defaultImageDir' | 'defaultTextDir' | 'defaultSrtDir' | 'stylePresets' | 'animationMemory' | 'aiIntegration'>) => void
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -139,6 +195,12 @@ export const useSettingsStore = create<SettingsStore>()(
       },
       transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS },
       autoLineBreak: true,
+      // REQ-0426 — auto-translate off by default; target defaults to English
+      // (the previously-fixed target), so nothing changes until the user opts in.
+      translationAutoEnabled: false,
+      translationTargetLang: DEFAULT_TRANSLATION_TARGET,
+      // REQ-0443 §1 — timecode starts simple (M:SS); click toggles to detailed.
+      playbackTimeDetailed: false,
       encoder: BURNIN_DEFAULTS.encoder,
       audioMode: BURNIN_DEFAULTS.audioMode,
       defaultAudioTrackIndex: BURNIN_DEFAULTS.defaultAudioTrackIndex,
@@ -148,12 +210,19 @@ export const useSettingsStore = create<SettingsStore>()(
       defaultInputDir: null,
       defaultOutputDir: null,
       defaultProjectDir: null,
+      defaultImageDir: null,
+      defaultTextDir: null,
+      defaultSrtDir: null,
       // REQ-0208 — user has not yet clicked the Store review CTA.  Once
       // true, stays true across sessions via the persist middleware.
       hasClickedStoreReview: false,
       // REQ-0335 §3 — no built-in presets ship in v1.3.6 (the owner will
       // author their contents later); the mechanism starts empty.
       stylePresets: [],
+      // REQ-0540 — nothing remembered yet: every type seeds from the fixed table.
+      animationMemory: {},
+      // REQ-0551 — nothing agreed and nothing shown yet.
+      aiIntegration: {},
 
       setLanguage: (lang) => set({ language: lang }),
       setTheme: (t) => set({ theme: t }),
@@ -165,6 +234,9 @@ export const useSettingsStore = create<SettingsStore>()(
       resetTranscriptionAdvanced: () =>
         set({ transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS } }),
       setAutoLineBreak: (v) => set({ autoLineBreak: v }),
+      setTranslationAutoEnabled: (v) => set({ translationAutoEnabled: v }),
+      setTranslationTargetLang: (v) => set({ translationTargetLang: v }),
+      setPlaybackTimeDetailed: (v) => set({ playbackTimeDetailed: v }),
       setEncoder: (e) => set({ encoder: e }),
       setAudioMode: (m) => set({ audioMode: m }),
       setDefaultAudioTrackIndex: (i) => set({ defaultAudioTrackIndex: i }),
@@ -174,6 +246,9 @@ export const useSettingsStore = create<SettingsStore>()(
       setDefaultInputDir: (path) => set({ defaultInputDir: path }),
       setDefaultOutputDir: (path) => set({ defaultOutputDir: path }),
       setDefaultProjectDir: (path) => set({ defaultProjectDir: path }),
+      setDefaultImageDir: (path) => set({ defaultImageDir: path }),
+      setDefaultTextDir: (path) => set({ defaultTextDir: path }),
+      setDefaultSrtDir: (path) => set({ defaultSrtDir: path }),
       markStoreReviewClicked: () => set({ hasClickedStoreReview: true }),
 
       addStylePreset: (preset) => {
@@ -200,6 +275,12 @@ export const useSettingsStore = create<SettingsStore>()(
       },
       deleteStylePreset: (id) =>
         set((s) => ({ stylePresets: s.stylePresets.filter((p) => p.id !== id) })),
+
+      rememberAnimation: (value) =>
+        set((s) => ({ animationMemory: rememberAnimationParams(s.animationMemory, value) })),
+
+      acceptAiConsent: () =>
+        set((s) => ({ aiIntegration: { ...s.aiIntegration, consentAcceptedAtMs: Date.now() } })),
 
       resetStep3Settings: () =>
         set({
@@ -309,6 +390,11 @@ export const useSettingsStore = create<SettingsStore>()(
           },
           transcriptionAdvanced: { ...TRANSCRIPTION_DEFAULTS, ...ta },
           autoLineBreak: s.autoLineBreak ?? true,
+          // REQ-0426 — optional in AppSettings; absent ≡ off / default target.
+          translationAutoEnabled: s.translationAutoEnabled ?? false,
+          translationTargetLang: coerceTranslationTarget(s.translationTargetLang),
+          // REQ-0443 §1 — optional in AppSettings; absent ≡ simple.
+          playbackTimeDetailed: s.playbackTimeDetailed ?? false,
           // Step 3 session-only state — ALWAYS reset to defaults regardless
           // of what settings.json contains.
           audioMode: BURNIN_DEFAULTS.audioMode,
@@ -326,6 +412,9 @@ export const useSettingsStore = create<SettingsStore>()(
           // REQ-0194 — optional for backward compat with settings.json files
           // that predate the project-save feature.  Same fallback semantics.
           defaultProjectDir: typeof s.defaultProjectDir === 'string' ? s.defaultProjectDir : null,
+          defaultImageDir: typeof s.defaultImageDir === 'string' ? s.defaultImageDir : null,
+          defaultTextDir: typeof s.defaultTextDir === 'string' ? s.defaultTextDir : null,
+          defaultSrtDir: typeof s.defaultSrtDir === 'string' ? s.defaultSrtDir : null,
           // REQ-0335 §3 — presets from settings.json.  Only the envelope is
           // validated here (id / name / style object); individual style
           // fields are NOT clamped, because a preset written by a NEWER
@@ -344,7 +433,14 @@ export const useSettingsStore = create<SettingsStore>()(
                     typeof p.style === 'object',
                 )
                 .slice(0, STYLE_PRESET_MAX)
-            : []
+            : [],
+          // REQ-0540 — absent in every settings.json written before this REQ,
+          // and `sanitizeAnimationMemory` turns that into `{}` = "nothing
+          // remembered" = the pre-REQ behaviour, with no migration.
+          animationMemory: sanitizeAnimationMemory(s.animationMemory),
+          // REQ-0551 — absent in every pre-REQ settings.json, which is the
+          // "already set up, never told" case the retroactive notice covers.
+          aiIntegration: sanitizeAiConsent(s.aiIntegration)
         })
       }
     }),
@@ -360,6 +456,12 @@ export const useSettingsStore = create<SettingsStore>()(
         transcriptionDefaults: state.transcriptionDefaults,
         transcriptionAdvanced: state.transcriptionAdvanced,
         autoLineBreak: state.autoLineBreak,
+        // REQ-0426 — dual persistence (localStorage here + settings.json via
+        // App.tsx save + `incoming-wins` merge), same as other renderer-owned settings.
+        translationAutoEnabled: state.translationAutoEnabled,
+        translationTargetLang: state.translationTargetLang,
+        // REQ-0443 §1 — dual persistence (localStorage + settings.json).
+        playbackTimeDetailed: state.playbackTimeDetailed,
         encoder: state.encoder,
         defaultAudioTrackIndex: state.defaultAudioTrackIndex,
         fadeDurationSec: state.fadeDurationSec,
@@ -375,7 +477,11 @@ export const useSettingsStore = create<SettingsStore>()(
         // (here) and settings.json (via App.tsx's debounced save + the
         // `incoming-wins` merge rule).  Same dual persistence every other
         // renderer-owned setting already has.
-        stylePresets: state.stylePresets
+        stylePresets: state.stylePresets,
+        // REQ-0540 — same dual persistence as stylePresets: localStorage here,
+        // settings.json via App.tsx's debounced save.
+        animationMemory: state.animationMemory,
+        aiIntegration: state.aiIntegration
       })
     }
   )

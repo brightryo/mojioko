@@ -141,7 +141,8 @@ export function NumberStepperInput({
         aria-label={ariaLabel}
         className={cn(
           widthClass,
-          'h-7 rounded border bg-surface-0 px-1.5 text-center text-body text-fg-primary',
+          // REQ-0421 (step2) — overlay reassignment: number input body → body-sm.
+          'h-7 rounded border bg-surface-0 px-1.5 text-center text-body-sm text-fg-primary',
           'focus:outline-none focus-visible:ring-1',
           '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
           'disabled:opacity-40 disabled:cursor-not-allowed',

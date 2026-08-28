@@ -136,10 +136,10 @@ interface StyleRowProps {
   help?: string
   /**
    * `'inspector'` — the pre-REQ-0298 inspector label look
-   * (`text-callout font-semibold text-fg-secondary`).  Used in the
+   * (`text-body-sm font-semibold text-fg-secondary`).  Used in the
    * inspector + bulk-edit + settings default-style so all three
    * surfaces read as siblings.  `'settings'` — the pre-REQ-0296
-   * `text-body text-muted-foreground` look; kept as an escape hatch
+   * `text-body text-fg-secondary` look; kept as an escape hatch
    * in case the inspector look ever needs to differ in a specific
    * surface.  Default: `'inspector'`.
    */
@@ -259,8 +259,8 @@ export function StyleRow({
   const labelClass = cn(
     'truncate',
     labelVariant === 'inspector'
-      ? 'text-callout font-semibold text-fg-secondary'
-      : 'text-body text-muted-foreground',
+      ? 'text-body-sm font-semibold text-fg-secondary'
+      : 'text-body text-fg-secondary',
   )
   const rowClass = cn(
     'flex items-center gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-accent/40 transition-colors duration-150',
@@ -277,7 +277,7 @@ export function StyleRow({
       {help !== undefined && (
         <Tooltip delayDuration={200}>
           <TooltipTrigger asChild>
-            <span className="inline-flex cursor-help text-muted-foreground/60 hover:text-muted-foreground transition-colors duration-150">
+            <span className="inline-flex cursor-help text-fg-secondary/60 hover:text-fg-secondary transition-colors duration-150">
               <HelpCircle className="h-3.5 w-3.5" />
             </span>
           </TooltipTrigger>
@@ -297,7 +297,7 @@ export function StyleRow({
     <div className={rowClass} title={title}>
       {labelBlock}
       {SHOW_DASHED_FILLER && (
-        <div className="flex-1 border-t border-dashed border-border min-w-[16px]" />
+        <div className="flex-1 border-t border-dashed border-line min-w-[16px]" />
       )}
       <div className={controlColClass} {...controlProps}>{children}</div>
     </div>

@@ -12,18 +12,18 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { getFontMeta, isFontId, resolveRenderableFontId, type FontId } from '../../../shared/fonts'
 import { useInstalledFontIds } from '@/lib/use-installed-fonts'
 import { useAppEnvStore } from '@/stores/app-env-store'
-import { canSelectFontInTier } from '@/lib/font-tier'
+import { canSelectFontInTier } from '../../../shared/font-tier'
 import { bumpRenderCount } from '@/lib/perf-counter'
 import { pinnedAnchorTransform } from '@/lib/preview-coords'
+import { paintBackgroundLayer } from '@/lib/bg-layer'
 import { paintOutlineLayers } from '@/lib/outline-ring'
 // REQ-0311 §4 / REQ-0315 §2 — karaoke display style (adopted; default sweep).
 import { sweepWordTimings } from '../../../shared/karaoke-sweep'
 import { resolveKaraokeStyle, KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
-import { resolveAnimation, isAnimationInert } from '../../../shared/cue-animation'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
-import { buildFallbackKaraokeUnits } from '../../../shared/karaoke-fallback'
-import { resolveKaraokeTiming } from '../../../shared/karaoke-timing'
-import { computeKaraokeBreaks, splitWordsAtHardBreaks } from '../../../shared/karaoke-ass'
+import { computeKaraokeBreaks } from '../../../shared/karaoke-ass'
+import { resolveKaraokeUnits } from '../../../shared/karaoke-units'
+import { trimCueTextLineEdges, trimLineEdgePieces, trimPiecesByBreaks } from '../../../shared/display-line-trim'
 // REQ-0332 — line spacing.  Same module the ASS writer reads.
 import {
   estimateCueHeightAssPx,
@@ -31,6 +31,7 @@ import {
   lineLeadingCorrectionAssPx,
   resolveLineSpacingPercent,
 } from '../../../shared/line-spacing'
+import { resolveLayer } from '../../../shared/cue-placement'
 import {
   canUseKeywordEmphasisInTier,
   resolveEmphasisRanges,
@@ -156,6 +157,18 @@ export interface SubtitleOverlayProps {
    */
   initialOpacity?: number
   initialAnimTransform?: string
+  /**
+   * REQ-0478 §1 — LIST-preview layout only.  When true (and the cue is not
+   * pinned) the outer positioned span is NOT stretched `left:margin/right:margin`
+   * to fill the container; instead it is anchored flush-left (`left:0`, no
+   * `right`) so it shrink-wraps to the text's own width.  `text-align` then
+   * aligns the cue's LINES relative to each other (a centred multi-line cue's
+   * lines centre against its own longest line) rather than centring the whole
+   * block in the container.  The video preview / burn-in leave this false so the
+   * caption still anchors against the real video frame.  Never affects the ASS
+   * output or the canvas ring (which measures the live DOM either way).
+   */
+  fitBlockLeft?: boolean
 }
 
 /**
@@ -253,6 +266,7 @@ export function SubtitleOverlay({
   outerSpanRef,
   initialOpacity,
   initialAnimTransform,
+  fitBlockLeft,
 }: SubtitleOverlayProps) {
   bumpRenderCount('SubtitleOverlay')
   const activeFontId = useSettingsStore((s) => s.activeFontId)
@@ -417,7 +431,13 @@ export function SubtitleOverlay({
       vStyle = { top: `${marginVPx + stackOffset - leadingCorrectionPx}px` }
       transform = undefined
     }
-    hStyle = { left: `${marginHPx}px`, right: `${marginHPx}px`, textAlign }
+    // REQ-0478 §1 — LIST preview: anchor flush-left and shrink-wrap (no `right`)
+    // so `text-align` aligns the cue's own lines against each other and the
+    // whole block sits at the container's left edge, constant across rows.  The
+    // video preview / burn-in keep the stretched `left/right` frame anchoring.
+    hStyle = fitBlockLeft
+      ? { left: '0px', textAlign }
+      : { left: `${marginHPx}px`, right: `${marginHPx}px`, textAlign }
   }
 
   // CSS background approximation for the subtitle preview — entry's own
@@ -425,11 +445,11 @@ export function SubtitleOverlay({
   const bg = entry.subtitleBackground
   const bgEnabled = bg.enabled
   const bgOpacity = bgEnabled ? (bg.opacityPercent / 100) : 0
-  const bgColor   = bgEnabled
-    ? (bg.color === 'white'
-        ? `rgba(255, 255, 255, ${bgOpacity})`
-        : `rgba(0, 0, 0, ${bgOpacity})`)
-    : undefined
+  // REQ-0535 — the OPAQUE colour.  The alpha is applied once, as the background
+  // canvas element's opacity, so overlapping line rectangles composite once
+  // (`bg-layer.ts`).  Baking it into an `rgba()` fill would put the alpha back
+  // on every rectangle and bring the stripe back.
+  const bgColorOpaque = bg.color === 'white' ? 'rgb(255, 255, 255)' : 'rgb(0, 0, 0)'
 
   // Outline is suppressed while the background panel is enabled — same rule as
   // libass (an opaque panel makes the outline visually redundant).
@@ -443,11 +463,13 @@ export function SubtitleOverlay({
   // of pinned-anchor / centre-translate offsets.  When `rotation ===
   // undefined` OR `0` no extra transform is added.
   const rotationDeg = entry.rotation ?? 0
-  // REQ-0323 §1-3 — does this cue's animation change `scale`?  Only then
-  // does the transform origin need to move off its historical value.
-  const animSpecForOrigin = resolveAnimation(entry)
-  const animScales = !isAnimationInert(animSpecForOrigin)
-    && (animSpecForOrigin.type === 'scale' || animSpecForOrigin.type === 'pop')
+  // REQ-0514 — there is no longer an "is this cue scaling?" branch here.  The
+  // transform origin is the cue's `\an` anchor UNCONDITIONALLY (see the
+  // `transformOrigin` docblock below): one rule, one value, applying to the
+  // rotation and the animation alike, because libass anchors both at that same
+  // point.  The old `animScales` predicate existed only to keep a
+  // scale-animated cue off the rotation's `center center`, and a per-cue
+  // *conditional* origin is precisely how the two ended up disagreeing.
   if (rotationDeg !== 0) {
     const rotateFrag = `rotate(${rotationDeg}deg)`
     transform = transform ? `${transform} ${rotateFrag}` : rotateFrag
@@ -541,7 +563,12 @@ export function SubtitleOverlay({
   // is never mutated.
   const cmapCoverage = getCmapCoverageFor(resolvedFontId)
   const tofuSubstitute = getTofuSubstituteFor(resolvedFontId)
-  const rawText = entry.text.replace(/\\N/g, '\n')
+  // REQ-0516 §1 — drop each display LINE's outer whitespace, because libass
+  // does (measured: leading/trailing spaces on either line of a two-line cue
+  // produce byte-identical ink).  CSS `white-space: pre` would otherwise show
+  // an indent the exported video never has.  `entry.text` is untouched — this
+  // is the drawing only.  See `shared/display-line-trim.ts`.
+  const rawText = trimCueTextLineEdges(entry.text).replace(/\\N/g, '\n')
   const renderedText = cmapCoverage !== null && tofuSubstitute !== null
     ? substituteMissingGlyphs(rawText, cmapCoverage, tofuSubstitute)
     : rawText
@@ -564,23 +591,11 @@ export function SubtitleOverlay({
   // text-only predicate) left a cue whose times had been dragged rendering
   // from word timestamps that no longer fell inside its own window — the
   // preview lit nothing, or stopped part-way, and the burn matched it.
-  const karaokeUsesRealWords = resolveKaraokeTiming(entry).mode === 'words'
-  // REQ-0308 §1 — `splitWordsAtHardBreaks` gives every `\N` in the cue text a
-  // unit boundary to attach to.  Without it a break landing mid-word (the norm
-  // for Japanese, where REQ-0303 does NOT protect word boundaries) was silently
-  // dropped by `computeKaraokeBreaks` and this overlay rendered FEWER lines
-  // than `entry.text` contains — the cue overflowed the frame while the editor
-  // and the table showed the wrapped text.  The ass-generator applies the same
-  // split, so preview and burn-in stay in agreement.  A no-op (same array
-  // reference) for cues whose breaks already sit on unit boundaries.
-  const karaokeWords: readonly WordSpan[] = karaokeGateOn
-    ? splitWordsAtHardBreaks(
-        entry.text,
-        karaokeUsesRealWords
-          ? entry.words!
-          : buildFallbackKaraokeUnits(entry.text, entry.startSec, entry.endSec),
-      )
-    : []
+  // REQ-0515 — the whole pipeline (timing source → the cue text's own
+  // characters → a unit boundary at every `\N`) is `resolveKaraokeUnits`,
+  // shared with the ASS writer, so the preview cannot spell a cue differently
+  // from the burn.
+  const karaokeWords: readonly WordSpan[] = resolveKaraokeUnits(entry, karaokeGateOn)
   const karaokeActive = karaokeWords.length > 0
   // REQ-0311 §4 / REQ-0322 §3 — sweep (`\kf`) vs switch (`\k`), resolved
   // PER CUE with the settings value as the default.  Timings come from the
@@ -614,12 +629,29 @@ export function SubtitleOverlay({
   // codepoint to a font-native placeholder — matches the plain
   // render and the burn-in tofu-substitution in
   // `services/burnin.ts`.
-  const karaokeWordsRendered = karaokeActive && cmapCoverage !== null && tofuSubstitute !== null
+  const karaokeWordsSubstituted = karaokeActive && cmapCoverage !== null && tofuSubstitute !== null
     ? karaokeWords.map((w) => {
         const substituted = substituteMissingGlyphs(w.text, cmapCoverage, tofuSubstitute)
         return substituted === w.text ? w : { ...w, text: substituted }
       })
     : karaokeWords
+  // REQ-0516 §1 — same line-edge rule as the plain path, applied across the
+  // units of each line.  This SUBSUMES the REQ-0294 strip that used to live
+  // inline at the render site (`brokenHere ? text.replace(/^\s+/,'') : text`):
+  // that handled only "a unit right after a break", and the two would have
+  // been separate rules that happen to agree on one case.  Trimming here —
+  // after substitution, on resolved units — moves no character index, so
+  // timings, `karaokeBreaks` and the emphasis ranges are all untouched.
+  const karaokeWordsRendered = karaokeActive
+    ? (() => {
+        const trimmed = trimPiecesByBreaks(
+          karaokeWordsSubstituted.map((w) => w.text),
+          (i) => karaokeBreaks.has(i),
+        )
+        return karaokeWordsSubstituted.map((w, i) =>
+          trimmed[i] === w.text ? w : { ...w, text: trimmed[i] })
+      })()
+    : karaokeWordsSubstituted
   const karaokeHighlightColorResolved = entry.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR
   // REQ-0293 §2 — base (unspoken) colour is ALWAYS `textColorHex`.
   // The pre-REQ-0293 per-cue `karaokeBaseColor` override was removed;
@@ -660,7 +692,35 @@ export function SubtitleOverlay({
   // emphasised / plain runs (+ `\N` breaks) so each run gets its own colour +
   // size.  When karaoke is ON, emphasis rides on the karaoke word spans below.
   const emphasisRenderActive = !karaokeActive && emphasisActive
-  const emphasisTokens = emphasisRenderActive ? tokenizeEmphasis(entry.text, emphasisRanges) : []
+  const emphasisTokensRaw = emphasisRenderActive ? tokenizeEmphasis(entry.text, emphasisRanges) : []
+  // REQ-0516 §1 — the third render path gets the same line-edge rule.  The
+  // tokens are already resolved against `entry.text`, so trimming their text
+  // moves no emphasis index; `break` tokens mark the line boundaries.
+  const emphasisTokens = (() => {
+    const out = [...emphasisTokensRaw]
+    // Collect each line's text-token positions, then hand that line's strings
+    // to the shared trimmer and write them back in place.  A `break` token is
+    // the line boundary and carries no text of its own.
+    let line: number[] = []
+    const flushLine = (): void => {
+      if (line.length === 0) return
+      const trimmed = trimLineEdgePieces(line.map((i) => {
+        const t = out[i]
+        return t.kind === 'break' ? '' : t.text
+      }))
+      line.forEach((i, n) => {
+        const t = out[i]
+        if (t.kind !== 'break' && t.text !== trimmed[n]) out[i] = { ...t, text: trimmed[n] }
+      })
+      line = []
+    }
+    for (let i = 0; i < out.length; i++) {
+      if (out[i].kind === 'break') flushLine()
+      else line.push(i)
+    }
+    flushLine()
+    return out
+  })()
 
   // REQ-20260615-039 — always wrap the visible text in this inline span so
   // the parent's position-guide measurement is consistent across layouts.
@@ -716,13 +776,23 @@ export function SubtitleOverlay({
   //
   // The 2 px `borderRadius` is gone for the same reason: libass' box has
   // square corners.
+  // REQ-0535 — the PADDING and `box-decoration-break` stay; the
+  // `background-color` does not.  The padding is what makes each line fragment's
+  // client rect the size of the box libass draws, and `paintBackgroundLayer`
+  // reads those rects — so the geometry above is still the single authority for
+  // the background's shape.  What changed is only WHO paints it: CSS painted one
+  // box per fragment and composited each separately, so a translucent
+  // background was blended twice wherever two lines overlapped (always, by
+  // `2 × bord`) and the overlap read as a darker stripe.  The canvas layer
+  // paints the same rectangles opaque, merges them, and applies the alpha ONCE
+  // as the canvas element's opacity — the same trick `paintOutlineLayers`
+  // already uses for `\3a`.
   const bgBoxVisible = bgEnabled && outlinePx > 0
   const textWrapperStyle: React.CSSProperties = bgBoxVisible
     ? {
         position:                 'relative',
         zIndex:                   1,
         display:                  'inline',
-        backgroundColor:          bgColor,
         padding:                  `${outlinePx}px`,
         boxDecorationBreak:       'clone',
         WebkitBoxDecorationBreak: 'clone',
@@ -741,6 +811,7 @@ export function SubtitleOverlay({
   const outerElRef = useRef<HTMLSpanElement | null>(null)
   const ringCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const shadowCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const bgCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const measureCtxRef = useRef<CanvasRenderingContext2D | null>(null)
 
   function setOuterRef(el: HTMLSpanElement | null) {
@@ -791,6 +862,19 @@ export function SubtitleOverlay({
       dpr: window.devicePixelRatio || 1,
     })
 
+    // REQ-0535 — the background, painted from the SAME live fragment rects the
+    // ring measurement uses, in the same effect so it can never be a frame
+    // behind the text it backs.
+    const bgCanvas = bgCanvasRef.current
+    if (bgCanvas) {
+      paintBackgroundLayer({
+        outer,
+        bgCanvas,
+        colorOpaque: bgColorOpaque,
+        opacity01: bgBoxVisible ? bgOpacity : 0,
+        dpr: window.devicePixelRatio || 1,
+      })
+    }
   })
 
   return (
@@ -814,6 +898,11 @@ export function SubtitleOverlay({
       style={{
         ...vStyle,
         ...hStyle,
+        // REQ-0392 — z-order: CSS z-index mirrors the ASS Dialogue Layer column
+        // (higher = in front).  Overlays with equal z-index fall back to DOM
+        // paint order (later on top), matching libass' same-layer tie-break, so
+        // preview and burn agree.  Default 0 = today's behaviour.
+        zIndex: resolveLayer(entry),
         fontFamily: `'${fontMeta.cssFontFamily}'`,
         fontWeight: fontMeta.weight,
         // REQ-0323 §1-3 — animation transform layer.
@@ -878,27 +967,61 @@ export function SubtitleOverlay({
         // React-owned base (pinned anchor / centre-translate / rotation).
         // Animation first so it acts in the element's own frame before the
         // layout offsets move it into place.
-        transform: `var(--cue-anim-transform) ${transform ?? ''}`.trim(),
-        // Rotation keeps its pre-REQ-0323 `center center` origin so rotated
-        // cues render exactly as before.  Otherwise, when a SCALING
-        // animation is active, scale about the cue's alignment anchor —
-        // libass scales `\fscx\fscy` about the `\an` anchor, so matching it
-        // is the parity-correct choice (a 50%/50% origin would drift a
-        // left- or right-aligned cue sideways as it grew).
-        // Known limitation: a cue with BOTH rotation and a scale animation
-        // gets the rotation origin; the two want different anchors and one
-        // property has to win.
-        transformOrigin: rotationDeg !== 0
-          ? 'center center'
-          : animScales
-            ? `${
-                entry.horizontalPosition === 'left' ? '0%'
-                : entry.horizontalPosition === 'right' ? '100%' : '50%'
-              } ${
-                entry.verticalPosition === 'top' ? '0%'
-                : entry.verticalPosition === 'bottom' ? '100%' : '50%'
-              }`
-            : undefined,
+        // ★ REQ-0514 — THE ANIMATION LAYER GOES LAST, AND THE ORIGIN IS THE
+        // `\an` ANCHOR.  Both halves are load-bearing; changing either one
+        // reintroduces the drift this REQ removed.
+        //
+        // ## Why last
+        //
+        // A CSS transform list is applied right-to-left, so `A B` means "B,
+        // then A" — and EVERY function in the list acts about the single
+        // `transform-origin`.  With the animation FIRST (the pre-REQ-0514
+        // order) the layout translate sat *inside* the scale, so the scale
+        // multiplied the anchor correction too:
+        //
+        //     p ↦ o + S·( D·R·(p − o) )        ← anchor shift D is scaled
+        //
+        // A cue pinned by a drag carries `translate(-50%, -50%)` as D, so at
+        // S = 0.7 its own centre landed 0.15·w to the RIGHT and 0.15·h BELOW
+        // the pinned point, and slid back as it grew.  That is exactly the
+        // owner's report (REQ-0514: dragged to 463/263, shrinks rightward),
+        // and it measured 0.516 cue-widths off centre in
+        // `scripts/verify-scale-origin` before this line changed.  Putting the
+        // animation LAST leaves the anchor shift outside the scale:
+        //
+        //     p ↦ o + R·S·(p − o) + d          ← D is a constant offset now
+        //
+        // whose fixed point is `o` — independent of S, of the pin, and of the
+        // drag.
+        //
+        // ## Why the `\an` anchor
+        //
+        // libass anchors the SCALED text box by the cue's `\an`, so `\fscx` is
+        // effectively applied about that anchor point; and `\frz` rotates about
+        // the same point (no `\org` is ever emitted — verified on real output).
+        // Both were measured in real burned pixels: a left/top cue's scale
+        // fixed point sits at its `\pos`, and so does its rotation origin.
+        // Pointing `transform-origin` at that anchor therefore makes ONE
+        // property serve both, and makes the preview reproduce the burn for
+        // every alignment — including the rotated off-centre cues the old
+        // unconditional `center center` got wrong.
+        //
+        // Consequence to know about: for a CENTRE/CENTRE cue — the owner's
+        // configuration, and what the drag path produces — this IS
+        // `center center`, so it scales from its own centre and its rotation is
+        // unchanged.  For an off-centre alignment the rotation pivot moves from
+        // the box centre to the alignment corner: a visible change, and the
+        // correct one, because that is where libass has always pivoted.
+        //
+        // Gated by `npm run verify:scale-origin` (real pixels, both engines).
+        transform: `${transform ?? ''} var(--cue-anim-transform)`.trim(),
+        transformOrigin: `${
+          entry.horizontalPosition === 'left' ? '0%'
+          : entry.horizontalPosition === 'right' ? '100%' : '50%'
+        } ${
+          entry.verticalPosition === 'top' ? '0%'
+          : entry.verticalPosition === 'bottom' ? '100%' : '50%'
+        }`,
         // REQ-0277 §1 — CSS `text-transform: uppercase` handles Latin
         // case-mapping natively; CJK code points have no case and pass
         // through unchanged.  Matches ass-generator's `.toUpperCase()`
@@ -923,8 +1046,23 @@ export function SubtitleOverlay({
           wrapper's z-index.  `width`/`height` start at 0 and are sized by the
           layout effect; a cue with neither effect leaves them at 0 and paints
           nothing. */}
+      {/* REQ-0535 — the cue background, FIRST in DOM so it sits under the
+          shadow, the ring and the text. */}
+      <canvas
+        ref={bgCanvasRef}
+        // REQ-0535 — layers are identified by NAME, not by their index among
+        // the overlay's canvases.  `verify:outline-ring` asserted "exactly two
+        // canvases" and broke the moment this third one appeared; a name is
+        // what lets a harness ask for the layer it actually means.
+        data-mojioko-layer="background"
+        aria-hidden="true"
+        width={0}
+        height={0}
+        className="absolute pointer-events-none"
+      />
       <canvas
         ref={shadowCanvasRef}
+        data-mojioko-layer="shadow"
         aria-hidden="true"
         width={0}
         height={0}
@@ -932,6 +1070,7 @@ export function SubtitleOverlay({
       />
       <canvas
         ref={ringCanvasRef}
+        data-mojioko-layer="ring"
         aria-hidden="true"
         width={0}
         height={0}
@@ -970,7 +1109,12 @@ export function SubtitleOverlay({
               path change. */}
           {karaokeWordsRendered.map((w, i) => {
             const brokenHere = karaokeBreaks.has(i)
-            const wordText = brokenHere ? w.text.replace(/^\s+/, '') : w.text
+            // REQ-0516 §1 — the leading-whitespace strip that used to be here
+            // (REQ-0294, `brokenHere ? replace(/^\s+/,'') : text`) moved into
+            // `karaokeWordsRendered`, where the general line-edge rule lives.
+            // Keeping a second, narrower copy at the render site is how the two
+            // would drift.
+            const wordText = w.text
             // REQ-0306 §3 (Option A) / REQ-0307 §4 — emphasised karaoke text
             // grows AND, when spoken, lights up in the emphasis colour.  A
             // span may cover only part of a word, so the word is split into
@@ -1061,7 +1205,10 @@ export function SubtitleOverlay({
               : 'opacity-0 group-hover:opacity-60')
           }
           style={{
-            color: '#ffffff',
+            // REQ-0413 — icon colour centralised (globals.css --affordance-fg).
+            // The drop shadows stay inline: they are effect values, outside
+            // this REQ's colour / font-size tokenisation scope.
+            color: 'var(--affordance-fg)',
             textShadow: '0 0 6px rgba(0,0,0,0.85), 0 0 2px rgba(0,0,0,0.85)',
             filter: 'drop-shadow(0 0 4px rgba(0,0,0,0.85))',
           }}

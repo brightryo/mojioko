@@ -272,6 +272,6 @@ function isWide(cp: number): boolean {
   )
 }
 
-export function clearOverflowCache(): void {
-  // Phase 5: clear opentype.js font cache here if needed
-}
+// REQ-0466 §2 — `clearOverflowCache` removed: it was an empty stub ("Phase 5:
+// clear ... if needed") with no callers.  There is no separate overflow cache
+// to clear; the opentype.js Font cache lives in `font-metrics.ts`.

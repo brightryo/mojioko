@@ -148,10 +148,24 @@ describe('REQ-0335 §2 — Step 2 add-row seeds the same style as transcription'
 
   it('step2.tsx routes BOTH entry-creation sites through the shared projection', () => {
     const src = stripComments(readFileSync(STEP2_PATH, 'utf8'))
-    const calls = src.match(/styleFieldsFromDefaults\(/g) ?? []
-    // 2 call sites (add-row dialog + SRT import); the import statement uses
-    // no parenthesis so it is not counted.
-    expect(calls.length).toBe(2)
+    /*
+     * REQ-0555 §2 — still two sites, but they now reach the projection two
+     * different ways, so counting one spelling alone would miss half of it:
+     *
+     *   - add-row dialog → `buildNewCue`, which calls the projection. It moved
+     *     to `cue-structure.ts` so the CLI's `add_cue` seeds a cue identically.
+     *   - SRT import → still calls it directly, ON PURPOSE: the projection is
+     *     hoisted OUT of the per-cue loop, and `buildNewCue` would run it once
+     *     per cue, undoing a hoist that exists because that path is measured at
+     *     10,000 cues (REQ-0346 §1-2).
+     *
+     * What must stay true is that neither site hand-lists style fields — which
+     * is what the next test checks, and what REQ-0335 was about.
+     */
+    const direct = src.match(/styleFieldsFromDefaults\(/g) ?? []
+    const viaBuilder = src.match(/buildNewCue\(/g) ?? []
+    expect(direct.length + viaBuilder.length).toBe(2)
+    expect(viaBuilder.length, 'the add-row site must use the shared builder').toBe(1)
   })
 
   it('step2.tsx no longer hand-lists style fields from defaults', () => {

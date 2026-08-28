@@ -18,8 +18,25 @@ export const TIMELINE_PPS_DEFAULT = 50
 /** Maximum number of recent colors kept in memory. */
 const MAX_RECENT_COLORS = 5
 
+/** Tabs of the settings dialog, in display order. */
+export type SettingsDialogTab = 'general' | 'fonts' | 'translation' | 'shortcuts' | 'cli' | 'ai'
+
 interface UiStore {
   isSettingsDialogOpen: boolean
+  /**
+   * REQ-0510 §2-4 — which tab the settings dialog shows.
+   *
+   * The dialog used to be uncontrolled (`Tabs defaultValue="general"`), which
+   * was fine while nothing needed to point at a specific tab. The
+   * font-substitution toast does: its remedy is "download the font", and the
+   * download button is on the Fonts tab, so landing the user on General makes
+   * them hunt for the fix they were just offered.
+   *
+   * `setSettingsDialogOpen(true)` resets this to `'general'` so the plain
+   * "open settings" path behaves exactly as it did when the dialog remounted
+   * with its default each time.
+   */
+  settingsDialogTab: SettingsDialogTab
   isAboutDialogOpen: boolean
   isDonationDialogOpen: boolean
   isFontLicensesDialogOpen: boolean
@@ -192,13 +209,14 @@ interface UiStore {
   step2OuterLayout: { 'step2-pane-left': number; 'step2-pane-right': number }
   step2LeftLayout:  { 'step2-pane-preview': number; 'step2-pane-bottom': number }
 
-  /**
-   * REQ-20260614-001 補遺⑧ — タイムラインツールバーの 2 行目（トリミング +
-   * 吸着）の表示状態。Row 1 右端の「ツール」ボタンで toggle する。session-
-   * only（ページ遷移をまたいでも保持されるが、アプリ再起動でリセット）。
-   * デフォルト `false`（折り畳み）。
+  /*
+   * REQ-0519 — `step2TimelineToolsExpanded` (REQ-20260614-001 補遺⑧) was
+   * removed here.  It gated the timeline toolbar's second row (trim + snap)
+   * behind a "Tools" toggle; both controls are now always visible in row 1,
+   * so there is no open/closed state left to hold.  It was session-only —
+   * never written to `settings.json` — so nothing persisted needs migrating
+   * and `settings-merge`'s exhaustiveness test is untouched by its removal.
    */
-  step2TimelineToolsExpanded: boolean
 
   /**
    * REQ-20260615-064 A — set to `true` by STEP 1 right before it
@@ -214,6 +232,9 @@ interface UiStore {
   lastTranscriptionWasEmpty: boolean
 
   setSettingsDialogOpen: (open: boolean) => void
+  setSettingsDialogTab: (tab: SettingsDialogTab) => void
+  /** Open the settings dialog directly on `tab` (REQ-0510). */
+  openSettingsDialogAt: (tab: SettingsDialogTab) => void
   setAboutDialogOpen: (open: boolean) => void
   setDonationDialogOpen: (open: boolean) => void
   setFontLicensesDialogOpen: (open: boolean) => void
@@ -254,7 +275,6 @@ interface UiStore {
   clearPendingCut: () => void
   setStep2OuterLayout: (layout: { 'step2-pane-left': number; 'step2-pane-right': number }) => void
   setStep2LeftLayout:  (layout: { 'step2-pane-preview': number; 'step2-pane-bottom': number }) => void
-  toggleStep2TimelineTools: () => void
   /** REQ-20260615-064 A — see `lastTranscriptionWasEmpty` above. */
   setLastTranscriptionWasEmpty: (v: boolean) => void
 }
@@ -290,10 +310,16 @@ export const useUiStore = create<UiStore>((set) => ({
   // the session.
   step2OuterLayout: { 'step2-pane-left': 70, 'step2-pane-right': 30 },
   step2LeftLayout:  { 'step2-pane-preview': 50, 'step2-pane-bottom': 50 },
-  step2TimelineToolsExpanded: false,
   lastTranscriptionWasEmpty: false,
+  settingsDialogTab: 'general',
 
-  setSettingsDialogOpen: (open) => set({ isSettingsDialogOpen: open }),
+  setSettingsDialogOpen: (open) => set(
+    // Resetting the tab on OPEN preserves the pre-REQ-0510 behaviour: the
+    // dialog content unmounts when closed, so it always came back on General.
+    open ? { isSettingsDialogOpen: true, settingsDialogTab: 'general' } : { isSettingsDialogOpen: false },
+  ),
+  setSettingsDialogTab: (tab) => set({ settingsDialogTab: tab }),
+  openSettingsDialogAt: (tab) => set({ isSettingsDialogOpen: true, settingsDialogTab: tab }),
   setAboutDialogOpen: (open) => set({ isAboutDialogOpen: open }),
   setDonationDialogOpen: (open) => set({ isDonationDialogOpen: open }),
   setFontLicensesDialogOpen: (open) => set({ isFontLicensesDialogOpen: open }),
@@ -394,8 +420,6 @@ export const useUiStore = create<UiStore>((set) => ({
   clearPendingCut: () => set({ pendingCutInSec: null, pendingCutOutSec: null }),
   setStep2OuterLayout: (layout) => set({ step2OuterLayout: layout }),
   setStep2LeftLayout:  (layout) => set({ step2LeftLayout: layout }),
-  toggleStep2TimelineTools: () =>
-    set((s) => ({ step2TimelineToolsExpanded: !s.step2TimelineToolsExpanded })),
   setLastTranscriptionWasEmpty: (v) => set({ lastTranscriptionWasEmpty: v }),
 }))
 

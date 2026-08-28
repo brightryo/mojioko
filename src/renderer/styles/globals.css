@@ -66,13 +66,23 @@
      * mist/taupe) keep their pre-0177 numbers so the "Resolve base" is
      * still scoped to data-base=neutral only.
      */
-    --neutral-1:  0 0% 13%;    /* 11 % → 13 % (REQ-0178) — surface-0 = bg-base  */
-    --neutral-2:  0 0% 16%;    /* 14 % → 16 % (REQ-0178) — surface-1 = card / panel */
-    --neutral-3:  0 0% 15%;    /* 13 % → 15 % (REQ-0178) — popover */
-    --neutral-4:  0 0% 18%;    /* 17 % → 18 % (REQ-0178) — surface-2 = elevated / muted */
-    --neutral-5:  0 0% 21%;    /* 20 % → 21 % (REQ-0178) */
-    --neutral-6:  0 0% 25%;    /* 24 % → 25 % (REQ-0178) — surface-3 = scroll thumb (kept; border broken out below) */
-    --neutral-7:  0 0% 28%;    /* unchanged — surface-4 (inverse); text-faint keeps sub-visible tint */
+    /* REQ-0418 — v2 contrast overhaul.  The default DARK ramp moves from
+     * zero-hue grey to a cool 220° blue-grey and the surface/text steps are
+     * retuned to the target resolved values (課題①②: grey-on-grey / low
+     * contrast / not vivid).  Retuning the ramp (not the semantic tokens)
+     * keeps the three-layer indirection intact, so :root.light and the
+     * per-base palettes (which redefine --neutral-N) are untouched.  Mapping:
+     *   n1→surface-0  n2→surface-1  n4→surface-2  n6→surface-3  n7→surface-4
+     *   n8→text-disabled n9→text-muted n10→text-tertiary n11→text-secondary
+     *   n12→text-primary.  n3/n5 are unused by any token (popover now aliases
+     *   surface-1) — interpolated to keep the ramp monotonic. */
+    --neutral-1:  220 14% 9%;    /* surface-0 = bg-base */
+    --neutral-2:  220 12% 13%;   /* surface-1 = card / panel */
+    --neutral-3:  220 11% 15%;   /* interpolated (unused; was popover) */
+    --neutral-4:  220 11% 17%;   /* surface-2 = elevated / muted */
+    --neutral-5:  220 10% 19%;   /* interpolated (unused) */
+    --neutral-6:  220 10% 21%;   /* surface-3 = scroll thumb */
+    --neutral-7:  220 10% 26%;   /* surface-4 (inverse) */
 
     /*
      * REQ-0179 s1 — bumped neutral-8..11 to hit WCAG contrast tiers
@@ -92,11 +102,20 @@
      * (L 96) → 14.72:1, and primary→secondary→muted deltas remain
      * ~7 → 5 → 3 ratio steps so the hierarchy is visually obvious.
      */
-    --neutral-8:  0 0% 42%;    /* 32 % → 42 % (REQ-0179) — text-disabled at ~3:1 */
-    --neutral-9:  0 0% 54%;    /* 45 % → 54 % (REQ-0179) — text-muted at 4.66:1 AA */
-    --neutral-10: 0 0% 63%;    /* 55 % → 63 % (REQ-0179) — text-tertiary at 6.20:1 */
-    --neutral-11: 0 0% 72%;    /* 64 % → 72 % (REQ-0179) — text-secondary at 8.07:1 AAA */
-    --neutral-12: 0 0% 96%;    /* neutral-100 — text-primary, ratio 14.72:1 */
+    --neutral-8:  220 8% 38%;    /* text-disabled */
+    --neutral-9:  220 9% 48%;    /* text-muted */
+    --neutral-10: 220 10% 60%;   /* text-tertiary */
+    /* REQ-0421 — updated dev-editor export: text-primary / text-secondary
+       move to a PURE grey (hue 0, sat 0) so the top of the ramp reads as
+       neutral white rather than the faint cool 220° cast REQ-0418 gave it.
+       text-secondary also lifts L 74 → 78.  n8..n10 (muted/tertiary/disabled)
+       keep their 220° cool cast per the export (unchanged).  Applied via the
+       ramp — NOT a flat --text-* literal in :root — so :root.light (which
+       redefines --neutral-11/-12 to 0 0% 32% / 0 0% 9%) is untouched.  Side
+       effect (accepted, same as REQ-0418's ramp retune): --surface-inverse-0/-1
+       track n12/n11, so the secondary-button slab loses its faint blue tint. */
+    --neutral-11: 0 0% 78%;      /* text-secondary — REQ-0421 (was 220 12% 74%) */
+    --neutral-12: 0 0% 96%;      /* text-primary   — REQ-0421 (was 220 20% 96%) */
 
     /* Background scale (shadcn semantic — kept for primitive compat)
      *
@@ -104,14 +123,21 @@
      * (`:root[data-base="X"]`) live AFTER this var block — they only
      * redefine `--neutral-N`, so the semantic tokens below auto-pick
      * up the chosen scale.  See the bottom of the @layer base block. */
-    --background: var(--neutral-1);
-    --card:       var(--neutral-2);
-    --popover:    var(--neutral-3);
+    /* REQ-0417 — shadcn semantic surfaces are now ALIASES of the mojioko
+       --surface-* / --text-* tokens, so those tokens are the single source of
+       truth (the dev token editor tunes surface-1 and every shadcn primitive
+       follows).  Values are unchanged: --card was var(--neutral-2) = --surface-1,
+       --background was var(--neutral-1) = --surface-0, etc.  --popover (formerly
+       var(--neutral-3)) folds to --surface-1 per REQ-0416; it has no remaining
+       consumer so the 15→16 % shift is inert. */
+    --background: var(--surface-0);
+    --card:       var(--surface-1);
+    --popover:    var(--surface-1);
 
     /* Foreground (semantic = step 12, highest-contrast text) */
-    --foreground:         var(--neutral-12);
-    --card-foreground:    var(--neutral-12);
-    --popover-foreground: var(--neutral-12);
+    --foreground:         var(--text-primary);
+    /* REQ-0416 — --card-foreground / --popover-foreground removed (unused;
+       app text uses the --text-* scale). --card / --popover kept for shadcn. */
 
     /* Primary action: desaturated professional green.
        REQ-0177 Phase A — the pre-0177 emerald (green-500 = #22c55e,
@@ -125,12 +151,13 @@
        REQ-071 Phase 3.7 note (retained): --primary-foreground stays
        on the darkest neutral so the checkmark / play-button icon
        reads as clean dark-on-green rather than dark-forest-on-green. */
-    --primary: 152 42% 47%;      /* was 142.1 70.6% 45.3% */
-    --primary-foreground: var(--neutral-1); /* darkest neutral, near-black on light + on green */
+    --primary: 148 64% 54%;      /* REQ-0418 v2 — vivid green (was 152 42% 47%) */
+    --primary-foreground: 150 52% 9%; /* REQ-0418 — dark green-tinted, on the primary green (light theme overrides to white) */
 
-    /* Secondary mapped to base surface */
-    --secondary: var(--neutral-4);
-    --secondary-foreground: var(--neutral-12);
+    /* Secondary mapped to base surface — REQ-0417 alias of --surface-2
+       (was var(--neutral-4) = --surface-2, value unchanged). */
+    --secondary: var(--surface-2);
+    /* REQ-0416 — --secondary-foreground removed (unused). */
 
     /* Muted: zinc-800 bg, zinc-400 fg.  REQ-067 phase A: foreground lifted
        from zinc-500 (#71717a, contrast 4.04:1 against the app background —
@@ -139,15 +166,17 @@
        ColorPicker hint, font-licenses body, audio-preview error, etc.) read
        this single variable and inherit the improved readability without
        requiring per-site edits. */
-    --muted: var(--neutral-4);
-    --muted-foreground: var(--neutral-11);
+    /* REQ-0417 — alias mojioko tokens (values unchanged: neutral-4 = --surface-2,
+       neutral-11 = --text-secondary). */
+    --muted: var(--surface-2);
+    --muted-foreground: var(--text-secondary);
 
-    /* Accent: same as secondary for shadcn compat */
-    --accent: var(--neutral-4);
-    --accent-foreground: var(--neutral-12);
+    /* Accent: same as secondary for shadcn compat — REQ-0417 aliases. */
+    --accent: var(--surface-2);
+    --accent-foreground: var(--text-primary);
 
     /* Destructive: red-500 */
-    --destructive: 0 72.2% 50.6%;
+    --destructive: 0 82% 69%;    /* REQ-0418 v2 (was 0 72.2% 50.6%) */
     --destructive-foreground: 0 0% 98%;
 
     /* Borders and inputs */
@@ -174,9 +203,13 @@
      * reads): L 43 % → 22 % (1.37:1 vs surface-0).  Recedes on the
      * base surface, doesn't shout.
      */
-    --border: 0 0% 22%;              /* was L 43 % — REQ-0187 Resolve line */
-    --input:  var(--neutral-1);
-    --ring:   152 42% 47%;           /* REQ-0177 — track --primary */
+    /* REQ-0417 — single source: --border aliases --border-default (both were
+       0 0% 22%), --input aliases --surface-0 (was var(--neutral-1) = --surface-0),
+       --ring aliases --primary (was the literal 152 42% 47% = --primary).  The
+       :root.light override of --input (pure white) still wins in light mode. */
+    --border: var(--border-default);
+    --input:  var(--surface-0);
+    --ring:   var(--primary);        /* REQ-0177 — track --primary */
 
     /*
      * Multi-row selection (bulk-edit) — distinct from the green focused-row
@@ -224,14 +257,20 @@
      * Used for advisory notes that are NOT errors: "this option
      * disables that one", "value is unusual but not invalid", etc.
      * Step 3's "outline disabled while background is on" note is the
-     * first consumer; the per-row "edited" amber tint in Step 2 is a
-     * candidate for migration in the future light-theme branch.
+     * first consumer.
+     *
+     * REQ-0525 — the per-row "edited" amber tint that used to be listed
+     * here as a migration candidate is GONE: it moved to --row-edited
+     * (blue) along with the timeline clip and the inspector badge.  The
+     * warning family now means only "warning" — overlap, vertical
+     * overflow, over-duration, trim chips, cut markers, advisory notes.
+     * Do not point an "edited"/"modified" surface back at it.
      *
      * Dark : amber-500 ≈ #f59e0b
      * Light: amber-600-ish (deeper for contrast against light bg)
      *        will be defined when the light theme block is added.
      */
-    --warning: 38 92% 50%;
+    --warning: 38 92% 60%;       /* REQ-0418 v2 (was 38 92% 50%) */
     --warning-foreground: 0 0% 9%;
 
     /* -------------------------------------------------------------------
@@ -260,7 +299,10 @@
      *   --border-subtle   zinc-900   barely-there rule (between rows)
      *
      * State row tints (consumed with /xx alpha at the call-site):
-     *   --row-edited   amber-400   modified-from-original row tint
+     *   --row-edited   blue        modified-from-original tint.  REQ-0524
+     *                              moved it off amber-400, REQ-0525 off
+     *                              yellow entirely — "edited" is a state,
+     *                              not a warning.  See below.
      *   --row-error    red-500     overflow / error row tint
      *   --row-playing  sky-500     playback-follower (kept for residual
      *                              use after 補遺⑬ retired the row tint;
@@ -291,7 +333,7 @@
     --text-tertiary:  var(--neutral-10);
     --text-muted:     var(--neutral-9);
     --text-disabled:  var(--neutral-8);
-    --text-faint:     var(--neutral-7);
+    /* REQ-0416 — --text-faint removed (2 uses migrated to --text-disabled). */
     --text-inverse:   var(--neutral-1);
 
     /*
@@ -316,39 +358,144 @@
      * remain accented via --primary (>7:1) so accessibility is
      * preserved where it actually matters.
      */
-    --border-default: 0 0% 22%;      /* REQ-0187 — was 43 % */
-    --border-strong:  0 0% 32%;      /* REQ-0187 — was 54 %; input frames */
-    --border-subtle:  0 0% 15%;      /* REQ-0187 — was 18 %; near-invisible */
+    --border-default: 220 10% 24%;   /* REQ-0418 v2 — cool line (was 0 0% 22%) */
+    --border-strong:  220 10% 34%;   /* REQ-0418 v2 — input frames (was 0 0% 32%) */
+    /* REQ-0421 — re-added per the dev-editor export.  Currently INERT: no
+       tailwind utility maps to it (the `line.subtle` mapping stays removed since
+       REQ-0416) and nothing consumes `var(--border-subtle)`, so this has no
+       visual effect.  NOTE the export value is near-white (96% L) — if a future
+       call site consumes it, it would render as a BRIGHT line on the dark
+       surfaces; revisit the value then. */
+    --border-subtle:  225 20% 96%;
 
-    /* Action accent variants (green family) — REQ-0177: track the
-       toned-down --primary above.  Same relative L ladder as before
-       (hover -9, active -18, soft +11, faint +26) but at the new
-       H 152 / S 42 % base so the whole ladder feels one shade cooler
-       and less shouty. */
-    --primary-hover:  152 44% 38%;       /* was 142 76% 36% */
-    --primary-active: 152 46% 29%;       /* was 142 72% 29% */
-    --primary-soft:   152 40% 58%;       /* was 142 71% 58% */
-    --primary-faint:  152 38% 73%;       /* was 141 79% 73% */
+    /* Action accent variants (green family) — REQ-0418 v2: retuned to the
+       vivid --primary 148 64% 54% base.  hover/active step down in L for
+       press states; soft is a muted dark-green surface tint. */
+    --primary-hover:  148 58% 46%;       /* REQ-0418 (was 152 44% 38%) */
+    --primary-active: 148 60% 42%;       /* REQ-0418 (was 152 46% 29%) */
+    --primary-soft:   148 42% 34%;       /* REQ-0418 (was 152 40% 58%) */
+    /* REQ-0416 — --primary-faint removed (1 use migrated to --primary-soft). */
 
     /* Destructive variants (red family) */
     --destructive-hover: 0 72% 51%;      /* red-600  #dc2626 */
     --destructive-soft:  0 91% 71%;      /* red-400  #f87171 */
 
     /* Warning variants (amber family) */
-    --warning-soft:       43 96% 56%;    /* amber-400 #fbbf24 — same hue as --row-edited */
+    --warning-soft:       43 96% 56%;    /* amber-400 #fbbf24 */
     --warning-faint:      46 97% 65%;    /* amber-300 #fcd34d */
     --warning-very-faint: 48 96% 89%;    /* amber-100 #fef3c7 */
 
-    /* Info accent (single-use blue) — REQ-0177 desaturated */
-    --info: 213 45% 62%;                 /* was 213 94% 68% */
+    /* Info accent (single-use blue) — REQ-0418 v2 */
+    --info: 210 84% 65%;                 /* was 213 45% 62% */
 
-    --row-edited:  43 96% 56%;           /* amber-400 */
+    /* The "edited" (編集済み) state colour, and the SINGLE source for it —
+       the timeline clip, the inspector badge and the list row tint all read
+       this one token (REQ-0525 §1-3; before that the latter two borrowed the
+       warning family).
+       ┌ REQ-0524: amber-400 (43 96% 56%, = --warning-soft) → 50 100% 60%.
+       │  The amber composited to a brown-beige over the near-black clips lane
+       │  (measured rgb(60,50,27)); the owner read it as "beige, not yellow".
+       └ REQ-0525: yellow → BLUE.  Not a tuning change — a semantic one.
+          "Edited" is not a warning, and dressing it in the warning family's
+          hue kept implying something was wrong with the cue.  Blue also frees
+          the amber family to mean only "warning" (overlap, vertical overflow,
+          trim, cut markers), which is what --warning-soft still does; its
+          value is deliberately unchanged.
+       ┌ REQ-0527: settled on a DARKER, CYAN-ward blue, chosen by the owner on a
+       │  running screen with the REQ-0526 dev token editor rather than picked
+       │  from a palette.  #00648c — hue 236 → 197, and L 54 % → 27 %, i.e. half
+       │  the lightness.  The fill weight drops with it (70 % → 30 %, below), so
+       │  the clip reads as a tinted lane rather than a saturated slab.
+       └ ROUND-TRIP, measured (REQ-0527 asked): the triplet does NOT return
+          #00648c exactly.  #00648c is rgb(0,100,140) = hsl(197.143, 100 %,
+          27.451 %); rounding that to the integer triplet CSS carries here and
+          converting back gives rgb(0,99,138) = #00638a — 1 unit of green and 2
+          of blue low, ΔE00 ≈ 0.5, i.e. below a just-noticeable difference.  The
+          drift is the dev editor's colour input quantising to whole HSL units,
+          not a transcription error, and every surface moves together because
+          they all resolve through this one token.  Left as authored: matching
+          the hex exactly would need fractional percentages that the editor
+          cannot round-trip either, and would make the pasted block stop
+          matching what the owner saw. */
+    --row-edited:  197 100% 27%;          /* #00648c as picked; renders #00638a */
+
+    /* REQ-0526 — the four weights the edited colour is used at, lifted out of
+       the Tailwind class strings (`bg-row-edited/70` &c.) and named here.
+       Two reasons, in order of importance:
+
+         1. They are not independent of each other or of the hue.  Judging
+            "is this the right blue" means moving the colour AND the weights
+            together on a running screen, and an alpha baked into a utility
+            class cannot move at runtime.  These vars are what the DEV token
+            editor (Ctrl+Shift+D) binds its sliders to.
+         2. 70 / 85 / 1 / 0.10 were magic numbers spread across two
+            components.  CLAUDE.md §3-3 says they belong in a token.
+
+       Each composed colour still resolves THROUGH --row-edited, so the
+       single-source property REQ-0525 established is intact: change the hue
+       and all four surfaces move together.  Pinned by
+       tests/e2e/edited-colour-unified-req-0525.spec.ts, which compares the
+       rendered RGB triples.
+
+       REQ-0527 — the owner's settled weights, from the same session that picked
+       the hue above.  fill 0.70 → 0.30; frame and row tint unchanged.
+
+       ★ fill and fill-hover are DELIBERATELY EQUAL at 0.30, which means an
+       edited clip does not change colour under the cursor.  This is the owner's
+       choice off the live panel, recorded here so it is not "tidied" back to a
+       gap by someone reading it as a copy-paste slip.  Hover feedback on an
+       edited clip therefore comes only from the cursor and the frame; if that
+       turns out to be too little, raise hover ALONE in a follow-up. */
+    --row-edited-fill-alpha:       0.3;   /* timeline clip body            */
+    --row-edited-fill-hover-alpha: 0.3;   /* …under the cursor — same, ★    */
+    --row-edited-frame-alpha:      1;     /* clip 1px frame — full, so two
+                                             touching edited clips show a
+                                             seam against their own fill    */
+    --row-edited-row-alpha:        0.10;  /* list-view row tint            */
+
+    --row-edited-fill:       hsl(var(--row-edited) / var(--row-edited-fill-alpha));
+    --row-edited-fill-hover: hsl(var(--row-edited) / var(--row-edited-fill-hover-alpha));
+    --row-edited-frame:      hsl(var(--row-edited) / var(--row-edited-frame-alpha));
+    --row-edited-row-tint:   hsl(var(--row-edited) / var(--row-edited-row-alpha));
+
     --row-error:   0 84% 60%;            /* red-500 */
     --row-playing: 199 89% 48%;          /* sky-500 — kept for legend / inspector */
 
     --playhead:      0 84% 60%;          /* red-500 — kept vivid for playhead legibility */
     --trim-overlay: 38 92% 50%;          /* amber-500 */
-    --cursor-active: 152 42% 47%;        /* REQ-0177 — track --primary (was green-500) */
+    --cursor-active: var(--primary);     /* REQ-0418 — alias --primary so it tracks the accent */
+
+    /* -------------------------------------------------------------------
+     * REQ-0413 — WYSIWYG preview-overlay chrome.  Extracted verbatim from
+     * inline literals in position-guide-overlay.tsx, subtitle-overlay.tsx,
+     * color-picker.tsx and timeline-view.tsx so every overlay colour /
+     * font-size is centrally managed.  Values are kept EXACTLY as authored
+     * (pure reference swap, no visual change).
+     *
+     * These are deliberately theme-INDEPENDENT — they render over the video
+     * preview / colour swatches, not over app chrome — so they get NO
+     * `:root.light` override and stay identical in both themes (matching the
+     * pre-0413 hardcoded behaviour; a future light theme can add overrides).
+     *
+     * The guide green is green-500 (pre-REQ-0177 emerald), intentionally kept
+     * bright as a high-visibility OBS-style measurement guide, distinct from
+     * the toned-down UI accent (--primary).  Full rgba values (incl. alpha)
+     * are stored directly so the extraction is bit-exact — an HSL triplet
+     * would round green-500 off by ~1 rgb step. */
+    --guide-line:            rgba(34, 197, 94, 0.85);  /* position-guide rulers */
+    --guide-box:             rgba(34, 197, 94, 0.85);  /* position-guide bbox border */
+    --guide-label-bg:        rgba(15, 23, 42, 0.85);   /* distance-label pill bg */
+    --guide-label-fg:        #ffffff;                  /* distance-label pill text */
+    --guide-label-font-size: 11px;                     /* distance / offset label size */
+    --guide-offset-bg:       rgba(34, 197, 94, 0.95);  /* X/Y offset badge bg */
+    --guide-offset-fg:       #062314;                  /* X/Y offset badge text */
+    --affordance-fg:         #ffffff;                  /* drag-move icon over subtitle preview */
+    --swatch-preview-bg:     #404040;                  /* ColorPicker pair-swatch backdrop */
+
+    /* Timeline "well" — the clips lane sits ~3 pp darker than surface-0 so it
+     * reads as a recessed well (Resolve convention).  HSL triplet (mapped to
+     * `bg-timeline-well` in tailwind.config.ts).  Theme-independent for now. */
+    --timeline-well: 0 0% 10%;
 
     /* shadcn radius — REQ-0177 dropped 8 px → 3 px to match the
        flat / squared-off Resolve panel feel.  The Tailwind

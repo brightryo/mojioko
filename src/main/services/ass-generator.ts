@@ -1,8 +1,10 @@
 import type { SubtitleEntry, VideoInfo, BurninPosition, SubtitleBackground, WordSpan } from '../../shared/types'
 import { ASS_MARGIN_LR_PX, SHADOW_DEPTH_MAX_PX } from '../../shared/constants'
 import { getFontMeta, isFontId } from '../../shared/fonts'
+import { resolveFontIdForTier } from '../../shared/font-tier'
 import { canUseKaraokeInTier, KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../shared/karaoke-gate'
-import { buildKaraokeAssText, computeKaraokeBreaks, splitWordsAtHardBreaks } from '../../shared/karaoke-ass'
+import { buildKaraokeAssText, computeKaraokeBreaks } from '../../shared/karaoke-ass'
+import { resolveKaraokeUnits } from '../../shared/karaoke-units'
 // REQ-0311 §4 / REQ-0315 §2 — the sweep emitter.
 import { buildKaraokeSweepAssText, buildSweepGapBlock } from '../../shared/karaoke-sweep'
 import type { KaraokeStyle } from '../../shared/karaoke-style'
@@ -14,18 +16,26 @@ import { expandCueToEvents } from '../../shared/cue-events'
 // the same expressions; this file only transcribes the result into ASS.
 import {
   ASS_HARD_BREAK,
+  cueBlockOrigin,
   cueLineAnchors,
+  rotatePointClockwise,
   estimateCueHeightAssPx,
   formatAssCoord,
   lineHeightsAssPx,
   maxFontSizeInLineBodyAssPx,
   resolveLineSpacingPercent,
 } from '../../shared/line-spacing'
+import {
+  bgRectsToAssDrawing,
+  cueBgRects,
+  type BgLine,
+} from '../../shared/bg-box-geometry'
+import { measureLineWidthPx, type LineBreakMetrics } from '../../shared/line-break-core'
+import { getLineBreakMetrics, getFontMetricsFailure } from './font-metrics-node'
 import { computeFixedStackOffsets } from '../../shared/stack-offsets'
+import { computeCuePlacement, resolveLayer } from '../../shared/cue-placement'
 import { groupByTimeOverlap } from '../../shared/simultaneous-groups'
 import { buildAnimationTags } from '../../shared/cue-animation-ass'
-import { buildFallbackKaraokeUnits } from '../../shared/karaoke-fallback'
-import { resolveKaraokeTiming } from '../../shared/karaoke-timing'
 import { assAlphaValue, isFullyOpaque, OPACITY_MAX_PERCENT } from '../../shared/alpha'
 import {
   canUseKeywordEmphasisInTier,
@@ -283,6 +293,59 @@ export function generateAss(
    * `tests/unit/ass-karaoke-style-required-req-0344.test.ts` pins the arity.
    */
   karaokeStyle: KaraokeStyle,
+  /**
+   * REQ-0391 (positioning-redesign Phase 1b) — **all-`\pos` is now the
+   * unconditional production default (`true`).**
+   *
+   * MOJIOKO is the single positioning authority: EVERY unpinned cue
+   * self-positions via per-line `\pos` (routed through `computeCuePlacement`),
+   * and there is NO runtime auto-stacking — overlapping cues render where they
+   * are authored (WYSIWYG), matching the preview.  `verticalMarginPx = 0` is
+   * honoured literally (the old MarginV-column path let a 0 fall back to the
+   * Style default of 40px).
+   *
+   * `false` selects the **historical libass-MarginV reference** (only split /
+   * animated-overlap cues self-position, others emit a MarginV column and libass
+   * places + auto-stacks them).  It is retained solely so `verify:pos-parity`
+   * can burn the pre-Phase-1b placement as the ground-truth the all-`\pos`
+   * output is measured against (Phase 1a proved they match at Δ0 for a single
+   * cue).  **No production caller passes `false`** — the seam is unconditional in
+   * the app (REQ §1 "無条件化").
+   *
+   * A DEFAULT is the correct shape here (unlike `assFontName` / `isMsix` /
+   * `karaokeStyle`): the default IS the production behaviour, and forgetting the
+   * argument yields it.  Because the default sits after the seven required
+   * params, `generateAss.length` stays 7 and the arity pins (REQ-0340 /
+   * REQ-0344) are unaffected.
+   */
+  forceSelfPositionAll: boolean = true,
+  /**
+   * REQ-0456 — horizontal margin in ASS px used for BOTH the Style MarginL /
+   * MarginR columns AND the self-positioned anchor edge.  Defaults to
+   * `ASS_MARGIN_LR_PX`, so every existing caller (and the baseline byte-identity
+   * tests) is unchanged; `mojioko burn --margin-x` threads a different value so
+   * the headless wrap budget and the libass render margin stay consistent.
+   * Sits after `forceSelfPositionAll` (both defaulted) so `generateAss.length`
+   * stays 7 and the REQ-0340 / REQ-0344 arity pins are unaffected.
+   */
+  marginLrPx: number = ASS_MARGIN_LR_PX,
+  /**
+   * REQ-0535 — how to obtain font metrics for a cue's background box width.
+   *
+   * Defaults to the production loader.  A default is safe here only because of
+   * what the caller does with a FAILED load: `getLineBreakMetrics` degrades to
+   * `{ font: null }` (its path resolution needs the Electron `app` global, so
+   * any non-Electron host gets that), and the writer then keeps libass's old
+   * box rather than sizing a rectangle from the character-class estimate.  So a
+   * caller that forgets this argument gets the pre-REQ-0535 rendering, not a
+   * plausible-looking wrong one.
+   *
+   * The gate passes a resolver that parses the real TTF off disk — without it,
+   * `verify:bg-box-parity` would silently be measuring the fallback path
+   * instead of the fix.  Sits after the other defaulted params so
+   * `generateAss.length` stays 7 and the REQ-0340 / REQ-0344 arity pins hold.
+   */
+  metricsFor: (fontId: string | undefined) => LineBreakMetrics = getLineBreakMetrics,
 ): string {
   // `burnin` / `subtitleBackground` are vestigial (see JSDoc above).  Reference
   // them once so `noUnusedParameters` stays quiet without disabling lint.
@@ -313,10 +376,17 @@ export function generateAss(
   const styles = [
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BorderStyle, Outline, Alignment, MarginL, MarginR, MarginV',
-    `Style: Default,${assFontName},100,&H00FFFFFF,&H00000000,1,3,${DEFAULT_ALIGNMENT},${ASS_MARGIN_LR_PX},${ASS_MARGIN_LR_PX},${DEFAULT_MARGIN_V}`,
-    `Style: WithBox,${assFontName},100,&H00FFFFFF,&H00000000,3,3,${DEFAULT_ALIGNMENT},${ASS_MARGIN_LR_PX},${ASS_MARGIN_LR_PX},${DEFAULT_MARGIN_V}`,
+    `Style: Default,${assFontName},100,&H00FFFFFF,&H00000000,1,3,${DEFAULT_ALIGNMENT},${marginLrPx},${marginLrPx},${DEFAULT_MARGIN_V}`,
+    `Style: WithBox,${assFontName},100,&H00FFFFFF,&H00000000,3,3,${DEFAULT_ALIGNMENT},${marginLrPx},${marginLrPx},${DEFAULT_MARGIN_V}`,
     ''
   ].join('\n')
+
+  /**
+   * REQ-0537 — cues that fell back to the old per-line box, reported at the end.
+   * Collected rather than logged inline so one burn produces one message
+   * instead of one per cue.
+   */
+  const bgFallbackReasons: string[] = []
 
   const activeEntries = entries.filter((e) => !e.isDeleted)
 
@@ -329,7 +399,52 @@ export function generateAss(
   const renders: CueRender[] = [
     ...activeEntries.map((e) => {
       const rowBgEnabled = e.subtitleBackground.enabled
-      const styleName = rowBgEnabled ? 'WithBox' : 'Default'
+      // REQ-0535 — a background cue draws its OWN background (one rectangle per
+      // display line, seams sealed) instead of letting libass paint a
+      // `BorderStyle=3` box per line.  libass composites those boxes
+      // separately, so wherever two lines' boxes overlap — which is ALWAYS, by
+      // `2 × bord`, even at the default 0 % line spacing — a translucent
+      // background was blended twice and read as a darker stripe.
+      //
+      // Drawing it ourselves needs the text's WIDTH, which needs real font
+      // metrics.  When they cannot be loaded the fallback is deliberately the
+      // OLD libass box, not a guessed width: the character-class estimate
+      // `getLineBreakMetrics` degrades to is fine for choosing a line break but
+      // would size a visible rectangle wrongly.  A stripe is a much smaller
+      // defect than a background that does not fit its text.
+      //
+      // `outlineThicknessPx > 0` is part of the condition because at 0 libass
+      // draws NO box at all — under `BorderStyle=3` the box IS the glyph outline
+      // grown by `\bord`, so at 0 it collapses onto the glyph and hides beneath
+      // it (measured in REQ-0340; the CLI still warns `BACKGROUND_BOX_NOT_DRAWN`
+      // about it, and the preview already suppresses its own box the same way).
+      // Drawing the rectangle ourselves would silently start showing a
+      // background where one has never appeared — a user-visible change this
+      // REQ was not asked to make, and one that would contradict the warning.
+      const bgMetrics: LineBreakMetrics | null = rowBgEnabled ? metricsFor(e.fontId) : null
+      const canDrawOwnBg = rowBgEnabled && e.outlineThicknessPx > 0 && bgMetrics?.font != null
+      const styleName = rowBgEnabled && !canDrawOwnBg ? 'WithBox' : 'Default'
+      // REQ-0537 §1-4 — say so when the fallback fires.
+      //
+      // REQ-0535 shipped this fallback SILENT, and it then fired for every cue
+      // in the real app while `verify:bg-box-parity` stayed green (the gate
+      // injects its own metrics, so it could never take this branch). A stripe
+      // the user reports and the writer knows about, but never mentions, is the
+      // worst of both. Anything that lands here is a bug to chase, not a normal
+      // operating mode, so it is a warning.
+      if (rowBgEnabled && !canDrawOwnBg && e.outlineThicknessPx > 0) {
+        // The REASON, not just the fact: "no metrics" was the whole of what
+        // REQ-0535 could have told anyone, and it is not enough to act on.
+        let why = 'no usable font metrics'
+        try {
+          const f = getFontMetricsFailure(e.fontId)
+          if (f) why = `${f.reason} at ${f.path}${f.detail ? ' — ' + f.detail : ''}`
+        } catch { /* diagnostics must never break a burn */ }
+        bgFallbackReasons.push(
+          `cue ${e.id}: fontId=${String(e.fontId)} — ${why}; ` +
+          'falling back to the pre-REQ-0535 per-line BorderStyle=3 box (the seam will be visible)',
+        )
+      }
 
       // REQ-0323 §1 — entrance / exit animation.  The curve is NOT derived
       // here: `shared/cue-animation.ts` owns it and the preview rAF loop
@@ -349,7 +464,17 @@ export function generateAss(
       // the default would just bloat the ASS file without changing the
       // rendered result.  isFontId is defensive against stale entries
       // (e.g. fontId from a settings file that referenced a removed font).
-      const rowAssFontName = isFontId(e.fontId) ? getFontMeta(e.fontId).assFontName : assFontName
+      //
+      // REQ-0508 §1 — **font tier enforcement, call site 3 of 4** (the
+      // backstop).  Both production callers already substituted before they
+      // got here, and `resolveFontIdForTier` is idempotent, so this changes
+      // nothing for them.  It exists because this function — not those two
+      // callers — is what a future path will reach for when it needs an ASS
+      // file, and a gate that only lives in the callers is a gate that the
+      // next caller has to remember.  Cheap: the tier flag is already a
+      // parameter (`isMsix`), so no new argument and no new dependency.
+      const rowFontId = isFontId(e.fontId) ? resolveFontIdForTier(isMsix, e.fontId) : undefined
+      const rowAssFontName = rowFontId ? getFontMeta(rowFontId).assFontName : assFontName
       const fontTag = rowAssFontName !== assFontName ? `\\fn${rowAssFontName}` : ''
 
       // Per-row alignment — REQ-20260613-016 Phase 2 §A.  Always emit
@@ -409,22 +534,12 @@ export function generateAss(
       // its correspondence with the audio, so it drops to the equal split —
       // which spans exactly this cue's own window and therefore colours every
       // character between its start and its end.
-      const karaokeUsesRealWords = resolveKaraokeTiming(e).mode === 'words'
-      // REQ-0308 §1 — split any unit a `\N` falls inside so every hard break
-      // has a unit boundary to attach to.  A mid-word break (the norm for
-      // Japanese — REQ-0303 protects Latin word boundaries only) was otherwise
-      // dropped by `computeKaraokeBreaks`, burning in fewer lines than the cue
-      // text contains.  subtitle-overlay applies the identical split so the
-      // preview matches.  No-op for cues whose breaks already sit on
-      // boundaries, keeping existing output byte-identical.
-      const karaokeWords: readonly WordSpan[] = karaokeGateOn
-        ? splitWordsAtHardBreaks(
-            e.text,
-            karaokeUsesRealWords
-              ? e.words!
-              : buildFallbackKaraokeUnits(e.text, e.startSec, e.endSec),
-          )
-        : []
+      // REQ-0515 — the whole pipeline (timing source → the cue text's own
+      // characters → a unit boundary at every `\N`) is now `resolveKaraokeUnits`,
+      // shared with subtitle-overlay.  It used to be this expression, written
+      // out here and again in the preview; REQ-0515's whitespace fix would have
+      // had to be added to both.
+      const karaokeWords: readonly WordSpan[] = resolveKaraokeUnits(e, karaokeGateOn)
       const karaokeActive = karaokeWords.length > 0
       const fillTag = karaokeActive
         ? `\\c${hexToAss(e.karaokeHighlightColor ?? KARAOKE_DEFAULT_HIGHLIGHT_COLOR)}`
@@ -467,7 +582,12 @@ export function generateAss(
       const emphasisColorHex = e.emphasisColorHex ?? EMPHASIS_DEFAULT_COLOR
 
       const outlineTag = `\\3c${hexToAss(e.outlineColorHex)}`
-      const bordTag    = `\\bord${e.outlineThicknessPx}`
+      // REQ-0535 — with the background drawn by us, the glyphs carry no border
+      // at all.  That is not a change in appearance: under `BorderStyle=3` the
+      // "border" WAS the box, so the glyphs never had a visible outline while a
+      // background was on (REQ-0096).  `\bord` keeps its meaning as the box's
+      // padding — it is what `cueBgRects` inflates each line's text box by.
+      const bordTag    = canDrawOwnBg ? '\\bord0' : `\\bord${e.outlineThicknessPx}`
 
       // REQ-0310 §2 — per-cue opacity for the text fill and the outline.
       //
@@ -571,15 +691,24 @@ export function generateAss(
       // the bg color/alpha AFTER the per-row outline `\3c` so libass's
       // last-write-wins behavior overrides the outline color for the box
       // paint.  \shad0 ensures no shadow leaks regardless of style header.
+      // REQ-0535 — only the libass-box FALLBACK still needs these.  When the
+      // cue draws its own background the box tags would paint a second,
+      // per-line box on top of it — the very thing being removed — so they are
+      // omitted and `\shad0` is carried by the fallback branch alone.
       let bgFillTag  = ''
       let bgAlphaTag = ''
       let bgShadTag  = ''
+      const bgColorAss = e.subtitleBackground.color === 'white' ? '00FFFFFF' : '000000'
+      const bgAlphaAss = opacityToAssAlpha(e.subtitleBackground.opacityPercent)
       if (rowBgEnabled) {
-        const bgColor = e.subtitleBackground.color === 'white' ? '00FFFFFF' : '000000'
-        const bgAlpha = opacityToAssAlpha(e.subtitleBackground.opacityPercent)
-        bgFillTag  = `\\3c&H${bgColor}&`
-        bgAlphaTag = `\\3a&H${bgAlpha}&`
-        bgShadTag  = '\\shad0'
+        // `\shad0` stays on BOTH paths: a background cue never wants a drop
+        // shadow, and saying so explicitly is what made it independent of the
+        // Style header in the first place (REQ-0096).
+        bgShadTag = '\\shad0'
+        if (!canDrawOwnBg) {
+          bgFillTag  = `\\3c&H${bgColorAss}&`
+          bgAlphaTag = `\\3a&H${bgAlphaAss}&`
+        }
       }
 
       // REQ-0332 §3 — the override block is now built through a function
@@ -837,15 +966,57 @@ export function generateAss(
       // intent unambiguous to anyone reading the ASS file directly.
       const marginVCol = isPinned ? 0 : e.verticalMarginPx
 
+      // REQ-0535 — everything the background drawing needs, EXCEPT the anchors,
+      // which pass 2 resolves.  Widths come from `measureLineWidthPx`, the same
+      // accumulation the line breaker budgets against, so a line the breaker
+      // judged to fit cannot measure wider here.  Heights come from
+      // `maxFontSizeInLineBodyAssPx` — the emphasis-aware authority the line
+      // PITCH already uses (REQ-0350) — read off the emitted body, so a `\fs`
+      // run cannot be taller than the box behind it.
+      const bgPlan: CueBgPlan | null = canDrawOwnBg && bgMetrics
+        ? (() => {
+            const emph = emphasisActive
+              ? { ranges: emphasisRanges, scale: clampEmphasisScalePercent(e.emphasisScalePercent) / 100 }
+              : undefined
+            // The cue's own hard breaks are the authority on how many display
+            // lines there are — the same split `lineBodies` is built from.  A
+            // missing body degrades that line's height to the cue's base size
+            // (`maxFontSizeInLineBodyAssPx('')` returns it) rather than
+            // dropping the plan: `canDrawOwnBg` has already decided the text
+            // tags, so returning null here would leave the cue with NO
+            // background at all.
+            const plain = (e.casing === 'uppercase' ? e.text.toUpperCase() : e.text).split(ASS_HARD_BREAK)
+            let offset = 0
+            const lines = plain.map((lineText, i) => {
+              const at = offset
+              offset += lineText.length + ASS_HARD_BREAK.length
+              return {
+                textWidthPx: measureLineWidthPx(lineText, e.fontSizePx, bgMetrics, emph, at),
+                fontSizePx: maxFontSizeInLineBodyAssPx(lineBodies[i] ?? '', e.fontSizePx),
+              }
+            })
+            return {
+              lines,
+              outlinePx: e.outlineThicknessPx,
+              horizontal: e.horizontalPosition,
+              vertical: e.verticalPosition,
+              colorAss: bgColorAss,
+              alphaAss: bgAlphaAss,
+            }
+          })()
+        : null
+
       return {
         entry: e, styleName, buildStyleTag, ownPosTag: posTag,
-        lineBodies, splitLineBodies, marginVCol, isPinned,
+        lineBodies, splitLineBodies, marginVCol, isPinned, bgPlan,
       }
     }),
   ]
 
   // REQ-0332 §3 — decide, ACROSS cues, which ones position themselves.
-  const selfPositioned = resolveSelfPositionedCues(renders, video, isMsix)
+  // REQ-0389 — `forceSelfPositionAll` (shadow, off in production) makes EVERY
+  // unpinned cue self-position, which is the all-`\pos` runtime Phase 1b adopts.
+  const selfPositioned = resolveSelfPositionedCues(renders, video, isMsix, forceSelfPositionAll, marginLrPx)
 
   const events = [
     '[Events]',
@@ -856,24 +1027,123 @@ export function generateAss(
       // axis for line spacing, time axis for slide).  `lineStyleTags`
       // undefined ⇒ the lines are re-joined and ONE event comes back, which
       // is byte-identical to the pre-REQ-0327 output.
-      return expandCueToEvents({
+      const textEvents = expandCueToEvents({
         startSec: r.entry.startSec,
         endSec: r.entry.endSec,
         marginV: placement === undefined ? r.marginVCol : 0,
         styleTag: r.buildStyleTag(r.ownPosTag),
         lineBodies: placement === undefined ? r.lineBodies : r.splitLineBodies,
-        lineStyleTags: placement?.map((a) =>
-          r.buildStyleTag(`\\pos(${formatAssCoord(a.x)},${formatAssCoord(a.y)})`),
-        ),
+        // REQ-0538 — each line's anchor is ROTATED about the cue's origin
+        // before it is emitted.  `\frz` then spins the line about its moved
+        // anchor, and the two compose into a rigid rotation of the whole block.
+        //
+        // Without this the anchors stayed stacked vertically and every line
+        // merely spun in place, so the block sheared: the preview (one element,
+        // one CSS `rotate`) and the background (one shape, turned as a unit)
+        // both rotated rigidly while the text did not.  At 15 degrees that left
+        // line 2 about `pitch × sin θ` = 15.5 px away from its own background
+        // and the end of the line hung outside the box (measured: 0 stray ink
+        // pixels at 0° and 5°, 1623 at 15°, 1125 at 30°).
+        //
+        // At rotation 0 this is the identity, so an upright cue does not move.
+        lineStyleTags: placement?.anchors.map((a) => {
+          const p = rotatePointClockwise(a, placement.origin, r.entry.rotation ?? 0)
+          return r.buildStyleTag(`\\pos(${formatAssCoord(p.x)},${formatAssCoord(p.y)})`)
+        }),
       }).map((piece) =>
-        `Dialogue: 0,${formatAssTime(piece.startSec)},${formatAssTime(piece.endSec)},` +
+        // REQ-0392/0396 — ASS Dialogue Layer column = the cue's stored z-order
+        // (`resolveLayer`; higher = drawn on top).  Default 0 → `Dialogue: 0,`
+        // so the baseline stays byte-identical.  There is NO auto-separation
+        // (REQ-0396): cues sharing a layer keep it; within one layer libass
+        // paints later Dialogues on top (the emission-order tie-break).
+        `Dialogue: ${resolveLayer(r.entry)},${formatAssTime(piece.startSec)},${formatAssTime(piece.endSec)},` +
         `${r.styleName},0,0,${piece.marginV},,{${piece.styleTag}}${piece.body}`
       )
+
+      // REQ-0535 — the background, emitted BEFORE the text so that within the
+      // cue's own layer libass paints the text on top (the emission-order
+      // tie-break above).  One event per display line, carrying the same
+      // `\an` / `\pos` / animation tags as the line it backs, so a fade, blur
+      // or scale moves the two together.
+      //
+      // The rectangles are disjoint by construction (`sealVerticalSeams`), and
+      // THAT is the fix: the old `BorderStyle=3` boxes overlapped by `2 × bord`
+      // and libass blended each separately, so a translucent background was
+      // painted twice in the overlap and read as a darker stripe.
+      const bgEvents = r.bgPlan && placement
+        ? (() => {
+            const plan = r.bgPlan
+            const lines: BgLine[] = placement.anchors.map((a, i) => ({
+              anchorX: a.x,
+              anchorY: a.y,
+              textWidthPx: plan.lines[i]?.textWidthPx ?? 0,
+              fontSizePx: plan.lines[i]?.fontSizePx ?? r.entry.fontSizePx,
+            }))
+            const rects = cueBgRects(lines, plan.horizontal, plan.vertical, plan.outlinePx)
+            // ONE event for the whole cue's background.  Every rectangle is
+            // written relative to a single anchor, which is what keeps the
+            // seams between them exact — see `bgRectsToAssDrawing`.  It also
+            // means the background composites once and transforms as one
+            // object; a cue-wide background scaling as a unit is the right
+            // reading of a cue-wide animation anyway.
+            // REQ-0538 — the cue's own origin, NOT line 0's anchor.  `\frz`
+            // turns this event about its `\pos`, so naming the block origin is
+            // what makes the background turn about the same point the text now
+            // does.  The rectangles are written relative to it, so at rotation
+            // 0 the shape lands exactly where it always did.
+            const a = placement.origin
+            // `\bord0\shad0` — the shape IS the background; an outline on it
+            // would be a second, differently-shaped layer around every line.
+            const tag = r.buildStyleTag(`\\pos(${formatAssCoord(a.x)},${formatAssCoord(a.y)})`)
+              + `\\bord0\\shad0\\1c&H${plan.colorAss}&\\1a&H${plan.alphaAss}&\\p1`
+            return [
+              `Dialogue: ${resolveLayer(r.entry)},${formatAssTime(r.entry.startSec)},` +
+              `${formatAssTime(r.entry.endSec)},${r.styleName},0,0,0,,` +
+              `{${tag}}${bgRectsToAssDrawing(rects, a.x, a.y, plan.horizontal, plan.vertical)}`,
+            ]
+          })()
+        : []
+
+      return [...bgEvents, ...textEvents]
     }),
     ''
   ].join('\n')
 
+  if (bgFallbackReasons.length > 0) warnBgFallback(bgFallbackReasons)
+
   return [scriptInfo, styles, events].join('\n')
+}
+
+/**
+ * REQ-0537 §1-4 — report a background fallback somewhere a human will see it.
+ *
+ * `electron-log` when it is reachable (the app and the CLI both run in Electron
+ * main, and that puts the line in the log FILE the owner can send), plain
+ * `console.warn` otherwise — the gates and unit tests bundle this module for
+ * plain node, where requiring electron-log would throw.
+ *
+ * Wrapped in try/catch because this is a diagnostic: a logger that cannot load
+ * must never be the reason a burn fails.
+ */
+function warnBgFallback(reasons: readonly string[]): void {
+  const message = `[ass-generator] REQ-0535 background drawing UNAVAILABLE for ${reasons.length} cue(s):\n  ` +
+    reasons.join('\n  ')
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const log = require('electron-log') as { warn: (m: string) => void }
+    log.warn(message)
+  } catch {
+    console.warn(message)
+  }
+}
+
+/**
+ * REQ-0538 — a self-positioned cue's per-line anchors PLUS the single point the
+ * whole cue rotates about.
+ */
+interface CuePlacementResult {
+  anchors: { x: number; y: number }[]
+  origin: { x: number; y: number }
 }
 
 /** What `generateAss` needs to remember about a cue between its two passes. */
@@ -890,6 +1160,23 @@ interface CueRender {
   splitLineBodies: string[]
   marginVCol: number
   isPinned: boolean
+  /** REQ-0535 — set when this cue draws its own background; null otherwise. */
+  bgPlan: CueBgPlan | null
+}
+
+/**
+ * REQ-0535 — everything the background drawing needs except the per-line
+ * anchors, which only pass 2 knows.
+ */
+interface CueBgPlan {
+  lines: { textWidthPx: number; fontSizePx: number }[]
+  outlinePx: number
+  horizontal: 'left' | 'center' | 'right'
+  vertical: 'top' | 'center' | 'bottom'
+  /** ASS colour body, e.g. `000000`. */
+  colorAss: string
+  /** ASS alpha body, e.g. `66`. */
+  alphaAss: string
 }
 
 /**
@@ -929,8 +1216,15 @@ function resolveSelfPositionedCues(
   renders: readonly CueRender[],
   video: VideoInfo,
   isMsix: boolean,
-): Map<string, { x: number; y: number }[]> {
-  const out = new Map<string, { x: number; y: number }[]>()
+  // REQ-0389 shadow — when true, every unpinned cue is added to the
+  // self-positioning set (all-`\pos`), and its anchors are resolved through
+  // `computeCuePlacement` rather than `cueLineAnchors`.  Off in production.
+  forceSelfPositionAll: boolean,
+  // REQ-0456 — horizontal margin for the anchor edge (matches the Style
+  // MarginL/MarginR); defaults to ASS_MARGIN_LR_PX at the call site.
+  marginLrPx: number,
+): Map<string, CuePlacementResult> {
+  const out = new Map<string, CuePlacementResult>()
 
   const needsSplit = (r: CueRender): boolean =>
     r.lineBodies.length > 1 && resolveLineSpacingPercent(r.entry) !== 0
@@ -966,24 +1260,42 @@ function resolveSelfPositionedCues(
     for (const i of group) selfIds.add(unpinned[i].entry.id)
   }
 
+  // REQ-0389 shadow — force every unpinned cue onto the `\pos` path.  Pinned
+  // rows already emit their own `\pos` via `ownPosTag`, so they need nothing
+  // here.  This is the all-`\pos` runtime Phase 1b will make unconditional.
+  if (forceSelfPositionAll) for (const r of unpinned) selfIds.add(r.entry.id)
+
   if (selfIds.size === 0) return out
 
-  // Stack offsets are computed over ALL unpinned rows, sorted by startSec as
-  // `computeFixedStackOffsets` requires.  Ties keep the array order, which is
-  // the ASS Dialogue order — the same tie-break the preview relies on.
-  const stacked = unpinned
-    .map((r) => r.entry)
-    .map((entry, i) => ({ entry, i }))
-    .sort((a, b) => a.entry.startSec - b.entry.startSec || a.i - b.i)
-    .map((x) => x.entry)
-  // REQ-0376 §A — feed the emphasis-aware height so the stack gap matches the
-  // taller box libass reserves for a keyword-emphasised cue.  The tier gate is
-  // the same one the emit path uses, so a free-tier cue (emphasis rendered off)
-  // measures at its base size and nothing shifts.
-  const emphasisTierAllowed = canUseKeywordEmphasisInTier(isMsix)
-  const offsets = computeFixedStackOffsets(stacked, (e) =>
-    estimateCueHeightAssPx(e, cueMaxRenderedFontAssPx(e, emphasisTierAllowed)),
-  )
+  // REQ-0391 — all-`\pos` (production default) is WYSIWYG: there is NO
+  // auto-stacking, so every cue keeps its own MarginV-derived anchor and
+  // overlapping cues overlap (matching the preview).  `computeFixedStackOffsets`
+  // is consulted ONLY for the historical reference path
+  // (`forceSelfPositionAll === false`, verify:pos-parity) — and stays available
+  // for the Phase 4 migration — never for live positioning.  An empty map makes
+  // every `offsets.get(id) ?? 0` below resolve to 0.
+  //
+  // REQ-0466 §1 — this is the SOLE remaining caller of `computeFixedStackOffsets`
+  // and it is the ground-truth reference the verify:overlap-parity gate diffs the
+  // production all-`\pos` render against.  It is therefore deliberately NOT
+  // removed: deleting it would leave that gate without its stacked baseline.
+  const offsets = forceSelfPositionAll
+    ? new Map<string, number>()
+    : (() => {
+        // Stack offsets over ALL unpinned rows, sorted by startSec as
+        // `computeFixedStackOffsets` requires.  Ties keep the array order (= the
+        // ASS Dialogue order), the same tie-break the preview relies on.
+        const stacked = unpinned
+          .map((r) => r.entry)
+          .map((entry, i) => ({ entry, i }))
+          .sort((a, b) => a.entry.startSec - b.entry.startSec || a.i - b.i)
+          .map((x) => x.entry)
+        // REQ-0376 §A — emphasis-aware height so the stack gap matches the
+        // taller box libass reserves for a keyword-emphasised cue.
+        const emphasisTierAllowed = canUseKeywordEmphasisInTier(isMsix)
+        return computeFixedStackOffsets(stacked, (e) =>
+          estimateCueHeightAssPx(e, cueMaxRenderedFontAssPx(e, emphasisTierAllowed)))
+      })()
 
   for (const r of renders) {
     if (!selfIds.has(r.entry.id)) continue
@@ -995,7 +1307,7 @@ function resolveSelfPositionedCues(
     // anchors position.
     const lineMaxFontSizes = r.splitLineBodies.map((body) =>
       maxFontSizeInLineBodyAssPx(body, e.fontSizePx))
-    out.set(e.id, cueLineAnchors({
+    const anchorInput = {
       lineHeightsPx: lineHeightsAssPx(lineMaxFontSizes, resolveLineSpacingPercent(e)),
       horizontalPosition: e.horizontalPosition,
       verticalPosition: e.verticalPosition,
@@ -1003,10 +1315,23 @@ function resolveSelfPositionedCues(
       centerOffsetPx: offset,
       playResX: video.widthPx,
       playResY: video.heightPx,
-      marginLrPx: ASS_MARGIN_LR_PX,
+      marginLrPx,
       posX: e.posX,
       posY: e.posY,
-    }))
+    }
+    // REQ-0389 — the shadow all-`\pos` path resolves anchors through the single
+    // positioning authority `computeCuePlacement`; the established split /
+    // animated path keeps calling `cueLineAnchors` directly.  The two return
+    // identical anchor values (computeCuePlacement wraps cueLineAnchors), so no
+    // existing (non-forced) output changes — `computeCuePlacement` runs only
+    // when the gate forces it.
+    const anchors = forceSelfPositionAll
+      ? computeCuePlacement({ ...anchorInput, outlineThicknessPx: e.outlineThicknessPx })
+        .lines.map((l) => ({ x: l.anchorX, y: l.anchorY }))
+      : cueLineAnchors(anchorInput)
+    // REQ-0538 — the origin the whole cue turns about, kept with the anchors so
+    // the text and the background cannot pick different ones.
+    out.set(e.id, { anchors, origin: cueBlockOrigin(anchorInput) })
   }
   return out
 }

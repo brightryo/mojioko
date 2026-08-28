@@ -23,7 +23,6 @@ const esbuild = require('esbuild')
 const { chromium } = require('playwright')
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
-const REPO = path.resolve(HERE, '..', '..')
 const OUT = path.join(HERE, '.dump.cjs')
 const DIR = path.join(tmpdir(), `mojioko-framestep-${process.pid}`)
 mkdirSync(DIR, { recursive: true })
@@ -35,6 +34,10 @@ if (spawnSync('ffmpeg', ['-version'], { encoding: 'utf8' }).status !== 0) {
 esbuild.buildSync({
   entryPoints: [path.join(HERE, 'dump-entry.ts')],
   bundle: true, outfile: OUT, format: 'cjs', platform: 'node', logLevel: 'silent',
+  // REQ-0537 — harmless here today (this entry does not reach `ass-generator`),
+  // but every node harness gets the same alias so the next one that grows an
+  // import into main does not fail on the electron shim.
+  alias: { electron: path.join(HERE, '..', 'electron-stub.ts') },
 })
 const { frameStepSec } = require(OUT)
 

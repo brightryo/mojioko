@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { SETTINGS_DEBOUNCE_MS } from '../shared/constants'
 import { MemoryRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -16,18 +16,31 @@ import { FontLicensesDialog } from '@/components/font-licenses/font-licenses-dia
 import { EulaDialog } from '@/components/eula-dialog/eula-dialog'
 import { StoreUpsellDialog } from '@/components/store-upsell-dialog/store-upsell-dialog'
 import { ProjectOpenController } from '@/components/project-open/project-open-controller'
+import { SettingsQuarantineDialog } from '@/components/settings-quarantine-dialog/settings-quarantine-dialog'
+import { QuitConfirm } from '@/components/quit-confirm/quit-confirm'
+// REQ-0414 — developer live-token editor.  Guarded by import.meta.env.DEV at
+// the mount site below so it is tree-shaken out of `electron-vite build`
+// (end-user) bundles and never exposed to users.
+import { DevTokenEditor } from '@/components/dev-token-editor/dev-token-editor'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { useProjectStore } from '@/stores/project-store'
+import { unsavedTracker } from '@/lib/unsaved-changes'
 import { useAppEnvStore } from '@/stores/app-env-store'
 import { loadSettings, saveSettings } from '@/services/settings'
 import { setActiveSubtitleFont, loadSubtitleFontFor } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { refreshInstalledFonts, getInstalledFontIds } from '@/stores/installed-fonts-store'
 import { initDownloadActiveStore } from '@/services/download-active'
+import { useTranslationToolStore } from '@/stores/translation-tool-store'
+import { useTranslationLoadStore } from '@/stores/translation-load-store'
 import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts'
 import { toast } from 'sonner'
 import { saveCurrentProject } from '@/services/project-file'
+import i18n from './i18n'
+import { createSettingsSaveReporter } from '@/lib/settings-save-failure'
 import type { AppSettings } from '../shared/types'
+import type { SettingsQuarantineNotice } from '../main/ipc/settings-shape'
 
 const PAGE_VARIANTS = {
   initial: { opacity: 0, x: 8 },
@@ -63,6 +76,18 @@ function useSuppressTabFocus(): void {
     return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [])
 }
+
+/**
+ * REQ-0545 §2 — one reporter for the whole app.
+ *
+ * The suppression rule lives in `lib/settings-save-failure.ts` where a test can
+ * reach it; this only supplies how to notify.  `i18n.t` rather than a captured
+ * `t`, because the debounced save is registered once with `[]` deps and a
+ * captured `t` would be the one from first render.
+ */
+const settingsSaveReporter = createSettingsSaveReporter((reason) => {
+  toast.error(i18n.t('common:error.settingsSaveFailed', { reason }))
+})
 
 function AppInner() {
   useSuppressTabFocus()
@@ -108,22 +133,50 @@ function AppInner() {
   // was only shown in the pre-0185 breadcrumb (retired).  Static
   // APP_VERSION import at the top covers the About dialog.
 
+  // REQ-0542 — set once, by the settings load below, when main had to move an
+  // unusable settings.json aside.  Local state rather than a store: it is one
+  // dialog with a lifetime of one launch, and nothing else reads it.
+  const [quarantineNotice, setQuarantineNotice] = useState<SettingsQuarantineNotice | null>(null)
+
   // Load settings from main process on mount; hydrate stores
   useEffect(() => {
     loadSettings().then((result) => {
       if (!result.ok) return
-      const s = result.data
+      const s = result.data.settings
       useSettingsStore.getState().hydrate(s)
       if (s.language !== i18n.language) {
         void i18n.changeLanguage(s.language)
       }
+      // REQ-0542 — main moved an unusable settings.json aside.  Shown after the
+      // language is applied so the dialog is in the user's language, not the
+      // default one.
+      if (result.data.quarantine) setQuarantineNotice(result.data.quarantine)
     }).catch(() => { /* IPC unavailable in dev outside Electron */ })
+
+    /*
+     * REQ-0546 — mark the document dirty on any project-store mutation.
+     *
+     * A SUBSCRIPTION rather than a flag set inside each action: Zustand
+     * notifies on every `set`, so no mutation can slip past, and the tracker
+     * never has to stay in sync with the store's ~20 actions. That is what
+     * makes "zero false negatives" a property of the wiring instead of a
+     * promise someone has to keep.
+     */
+    const unsubscribeDirty = useProjectStore.subscribe(() => {
+      unsavedTracker.noteChange()
+    })
 
     // REQ-0245 — hydrate the download-active mirror + subscribe to
     // change broadcasts.  Fire-and-forget; the store falls back to
     // an empty array if boot IPC fails, and per-DL broadcasts still
     // repopulate it on the next acquire/release.
     void initDownloadActiveStore()
+
+    // REQ-0426 — prime the shared translation-tools cache so the STEP 2
+    // inspector can gate auto-translate on the enabled-tool status from launch
+    // (the STEP 1 manager also keeps it fresh once mounted).
+    void useTranslationToolStore.getState().refresh()
+    return unsubscribeDirty
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // REQ-088 #4 — resolve the MSIX/NSIS tier once at app boot.  Downstream
@@ -136,6 +189,20 @@ function AppInner() {
       .then((value) => useAppEnvStore.getState().setIsMsix(value))
       .catch(() => useAppEnvStore.getState().setIsMsix(false))
   }, [])
+
+  // REQ-0426 — preload the MADLAD model when 自動翻訳 is enabled and an active
+  // (enabled) translation tool exists, so the first inspector translation is
+  // warm.  Turning 自動翻訳 OFF resets the load state (the sidecar stays
+  // resident; the next enable re-warms if needed).
+  const translationAutoEnabled = useSettingsStore((s) => s.translationAutoEnabled)
+  const translationActiveReady = useTranslationToolStore((s) => s.state?.activeId != null)
+  useEffect(() => {
+    if (translationAutoEnabled && translationActiveReady) {
+      void useTranslationLoadStore.getState().preload()
+    } else {
+      useTranslationLoadStore.getState().reset()
+    }
+  }, [translationAutoEnabled, translationActiveReady])
 
   // Mirror activeFontId into font-metrics so the no-arg legacy callers
   // (loadSubtitleFont, getLibassScale, etc.) target the currently selected
@@ -204,6 +271,12 @@ function AppInner() {
           transcriptionDefaults: s.transcriptionDefaults,
           transcriptionAdvanced: s.transcriptionAdvanced,
           autoLineBreak: s.autoLineBreak,
+          // REQ-0426 — renderer-owned (`incoming-wins`), so MUST be sent every
+          // save for the value to round-trip to settings.json.
+          translationAutoEnabled: s.translationAutoEnabled,
+          translationTargetLang: s.translationTargetLang,
+          // REQ-0443 §1 — renderer-owned (`incoming-wins`); sent every save.
+          playbackTimeDetailed: s.playbackTimeDetailed,
           encoder: s.encoder,
           defaultAudioTrackIndex: s.defaultAudioTrackIndex,
           fadeDurationSec: s.fadeDurationSec,
@@ -229,12 +302,47 @@ function AppInner() {
           // folders above (a null must propagate to disk so a manual
           // "clear" round-trips).
           defaultProjectDir: s.defaultProjectDir,
+          // REQ-0518 — the three new folder rows follow the SAME include-always
+          // contract: `presence-wins` keeps main's value when the key is
+          // absent, so omitting them here would make the settings dialog unable
+          // to change (or clear) them at all.
+          defaultImageDir: s.defaultImageDir,
+          defaultTextDir: s.defaultTextDir,
+          defaultSrtDir: s.defaultSrtDir,
           // REQ-0335 §3-6 — renderer-owned (`incoming-wins`), so it MUST be
           // sent on every save: omitting it would make main keep the
           // previous list and a deletion would never reach disk.
-          stylePresets: s.stylePresets
+          stylePresets: s.stylePresets,
+          // REQ-0540 — renderer-owned (`incoming-wins`), so the same
+          // send-every-save obligation as stylePresets: omitting it would drop
+          // the whole remembered table rather than keep main's copy.
+          animationMemory: s.animationMemory,
+          // REQ-0551 — renderer-owned (`incoming-wins`): omitting it would drop
+          // the consent record and re-prompt someone who already agreed.
+          aiIntegration: s.aiIntegration
         }
-        saveSettings(settings).catch(() => { /* ignore IPC failures */ })
+        /*
+         * ★ REQ-0545 §2 (RES-0543 A1) — a failed settings save is no longer
+         * silent.
+         *
+         * This used to be `.catch(() => {})`.  When the write failed — a full
+         * disk, a permission problem, a file another program is holding — the
+         * user's change simply did not persist, and nothing anywhere said so;
+         * they found out on the next launch, if at all.
+         *
+         * Both failure shapes are handled: a rejected promise (IPC unreachable)
+         * and an `ok: false` reply (main caught it and reported).  The reason
+         * string is shown, because "settings could not be saved" without a
+         * cause leaves the user with nothing to act on.
+         */
+        void saveSettings(settings)
+          .then((res) => {
+            if (res.ok) { settingsSaveReporter.succeeded(); return }
+            settingsSaveReporter.failed(res.error?.message ?? res.error?.code ?? '')
+          })
+          .catch((err: unknown) => {
+            settingsSaveReporter.failed(err instanceof Error ? err.message : String(err))
+          })
       }, SETTINGS_DEBOUNCE_MS)
     }
     const unsub = useSettingsStore.subscribe(save)
@@ -305,6 +413,11 @@ function AppInner() {
         </motion.div>
       </AnimatePresence>
 
+      <QuitConfirm />
+      <SettingsQuarantineDialog
+        notice={quarantineNotice}
+        onDismiss={() => setQuarantineNotice(null)}
+      />
       <AboutDialog />
       <SettingsDialog />
       <DonationDialog />
@@ -316,6 +429,11 @@ function AppInner() {
           → navigate).  Mounted at the App level so the menu event
           subscription outlives every route change. */}
       <ProjectOpenController />
+
+      {/* REQ-0414 — DEV-only live token editor (Ctrl+Shift+D).  The
+          `import.meta.env.DEV` constant folds to `false` in production, so
+          Rollup drops both this branch and the import above. */}
+      {import.meta.env.DEV && <DevTokenEditor />}
 
       <Toaster
         position="bottom-center"

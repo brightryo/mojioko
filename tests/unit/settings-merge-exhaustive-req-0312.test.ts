@@ -65,19 +65,39 @@ describe('REQ-0312 §1 — the rule table pins every field s classification', ()
     transcriptionDefaults: 'incoming-wins',
     transcriptionAdvanced: 'incoming-wins',
     autoLineBreak: 'incoming-wins',
+    // REQ-0426 — 「翻訳」設定タブ.  Renderer-owned; App.tsx sends both every save.
+    translationAutoEnabled: 'incoming-wins',
+    translationTargetLang: 'incoming-wins',
+    // REQ-0443 §1 — preview timecode verbosity; renderer-owned, sent every save.
+    playbackTimeDetailed: 'incoming-wins',
     encoder: 'incoming-wins',
     defaultAudioTrackIndex: 'incoming-wins',
     fadeDurationSec: 'incoming-wins',
     // REQ-0335 §3-6 — renderer-owned style presets.  `incoming-wins` AND
     // App.tsx always sends the key, so a deletion round-trips to disk.
     stylePresets: 'incoming-wins',
+    // REQ-0540 — the per-type animation memory.  Same pairing as stylePresets:
+    // renderer-owned, and App.tsx must send it every save or the whole table
+    // disappears from disk rather than surviving as main's copy.
+    animationMemory: 'incoming-wins',
+    // REQ-0551 — AI-integration consent. Renderer-owned; same send-every-save
+    // pairing (dropping it would re-prompt a user who already agreed).
+    aiIntegration: 'incoming-wins',
     activeModelId: 'incoming-else-existing',
+    translationToolActiveId: 'incoming-else-existing',
     lastInputDir: 'incoming-else-existing',
     lastOutputDir: 'incoming-else-existing',
     activeAccelerator: 'incoming-else-existing',
+    lastMcpExport: 'incoming-else-existing',
     defaultInputDir: 'presence-wins',
     defaultOutputDir: 'presence-wins',
     defaultProjectDir: 'presence-wins',
+    // REQ-0518 — three more folder rows.  `presence-wins` like the three above:
+    // a folder the user picked must survive a save from a surface that does not
+    // know the key.
+    defaultImageDir: 'presence-wins',
+    defaultTextDir: 'presence-wins',
+    defaultSrtDir: 'presence-wins',
     fontSetInstalledVersion: 'presence-wins',
     activeFontId: 'presence-wins',
     burnin: 'session-only',
@@ -136,6 +156,23 @@ describe('REQ-0312 §1 — each rule kind behaves as its name claims', () => {
     expect('theme' in merged).toBe(false)
   })
 
+  it('REQ-0426: translation settings round-trip via incoming-wins', () => {
+    // The renderer payload (Settings dialog) is authoritative for both.
+    const merged = mergeSettingsForSave(
+      base({ translationAutoEnabled: true, translationTargetLang: 'ja' }),
+      base({ translationAutoEnabled: false, translationTargetLang: 'en' }),
+    )
+    expect(merged.translationAutoEnabled).toBe(true)
+    expect(merged.translationTargetLang).toBe('ja')
+    // A `false` toggle must survive (incoming-wins takes the payload verbatim,
+    // so it is NOT collapsed to the existing `false`/`true`).
+    const off = mergeSettingsForSave(
+      base({ translationAutoEnabled: false }),
+      base({ translationAutoEnabled: true }),
+    )
+    expect(off.translationAutoEnabled).toBe(false)
+  })
+
   it('incoming-else-existing: falls back only when the payload is nullish', () => {
     expect(
       mergeSettingsForSave(base({ activeModelId: null }), base({ activeModelId: 'large-v3' }))
@@ -163,7 +200,7 @@ describe('REQ-0312 §1 — each rule kind behaves as its name claims', () => {
 
   it('session-only: stripped even when the payload carries a value', () => {
     const merged = mergeSettingsForSave(
-      base({ audioMode: 'mix', subtitleBackground: { enabled: true, color: 'black', opacityPercent: 50 } }),
+      base({ audioMode: 'simple', subtitleBackground: { enabled: true, color: 'black', opacityPercent: 50 } }),
       base(),
     )
     expect(merged.audioMode).toBeUndefined()

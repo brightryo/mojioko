@@ -3,9 +3,13 @@ import { extendTailwindMerge } from 'tailwind-merge'
 
 /**
  * tailwind-merge instance teaching the merger about MOJIOKO's custom
- * font-size tokens (`text-display`, `text-heading`, `text-title`,
- * `text-headline`, `text-body`, `text-body-sm`, `text-callout`,
- * `text-caption`, `text-label`, `text-micro`).
+ * font-size tokens (`text-display`, `text-title`, `text-body`,
+ * `text-body-sm`, `text-caption`, `text-micro`).
+ *
+ * REQ-0416 — the scale was collapsed 10→6 (label→caption, callout→body-sm,
+ * headline→body, heading→title; all same px + line-height, so no visual
+ * change). This list must stay in sync with `theme.fontSize` in
+ * tailwind.config.ts.
  *
  * **Why this matters (Phase 3.8 incident).**  tailwind-merge's default
  * config only recognises the built-in Tailwind font-size names (`xs`,
@@ -16,7 +20,7 @@ import { extendTailwindMerge } from 'tailwind-merge'
  * one in the string won.  Result: every primary Button silently lost
  * `text-fg-inverse` because cva concatenated `variant.primary` BEFORE
  * `size.md`, so `text-body` overrode `text-fg-inverse` and the rendered
- * colour became `rgb(250, 250, 250)` (inherited `text-foreground`).
+ * colour became `rgb(250, 250, 250)` (inherited `text-fg-primary`).
  *
  * Registering the custom names under the `font-size` group restores the
  * correct classification: `text-body` is a font-size, `text-fg-inverse` is
@@ -29,14 +33,10 @@ const twMerge = extendTailwindMerge({
         {
           text: [
             'display',
-            'heading',
             'title',
-            'headline',
             'body',
             'body-sm',
-            'callout',
             'caption',
-            'label',
             'micro'
           ]
         }

@@ -1,13 +1,5 @@
 import type { SubtitleEntry } from '../../shared/types'
-
-/**
- * Floating-point tolerance (seconds) when comparing one block's end to the
- * next block's start.  Whisper output frequently has `A.endSec === B.startSec`
- * (contiguous segments); we treat exact contact — and contact within this
- * tolerance — as non-overlapping so the two blocks share a track.  A genuine
- * overlap of more than this tolerance still forces a new track.
- */
-const TIME_EPS_SEC = 1e-3
+import { resolveLayer, MIN_LAYER, MAX_LAYER } from '../../shared/cue-placement'
 
 /**
  * REQ-088 #2: minimum amount of track-time each block is treated as
@@ -30,175 +22,141 @@ export const LAYOUT_MIN_BLOCK_SEC = 0.05
 
 export interface TimelinePlacement {
   entry: SubtitleEntry
-  /** 0-based track index. Higher = lower visually. */
+  /**
+   * 0-based track/row index, top → bottom.  REQ-0402: rows are CONTIGUOUS layer
+   * values (no gaps), so `trackIndex = maxRow − resolveLayer(entry)` — row 0 is
+   * the top (highest layer shown), the last row is layer 0 (bottom).  Read the
+   * row's LAYER value from `TimelineLayout.trackLayers`.
+   */
   trackIndex: number
 }
 
 export interface TimelineLayout {
   placements: TimelinePlacement[]
-  /** Total number of tracks needed (always ≥ 1 when entries is non-empty). */
+  /** Total number of rows (= `maxRow + 1`, contiguous 0..maxRow; ≥ 2 when non-empty). */
   trackCount: number
+  /**
+   * REQ-0402 — the `layer` value for each row, indexed by `trackIndex`
+   * (row 0 = top = highest layer shown = `maxRow`; last = bottom = 0).  Rows are
+   * CONTIGUOUS: `trackLayers` is `[maxRow, maxRow−1, …, 1, 0]`, so the gutter
+   * numbering never skips a layer even when no cue occupies it.
+   */
+  trackLayers: number[]
   /** Total horizontal duration (seconds) the timeline should span. */
   totalSec: number
 }
 
 /**
- * Per-entry time overrides used by the greedy track allocator (REQ-20260613-002).
+ * REQ-0402 — the top row index of the timeline: `min(MAX_LAYER, maxOccupied + 1)`.
+ * Rows run contiguously from 0 (bottom) up to this value (top), so there is
+ * always ONE empty spare track above the highest occupied layer to drag a clip
+ * into (and it grows/shrinks as the max occupied layer changes), while never
+ * exceeding the z-order cap of 50.  Returns 0 for an empty timeline.
  *
- * Background: dragging a clip in the timeline mutates `entry.startSec` /
- * `entry.endSec` on every pointermove tick.  If the greedy sort relies on
- * the live values, the sort order between the dragged clip and another
- * clip at the same time can flip the moment one diverges — greedy then
- * reassigns the lower track to whichever now sorts earlier, and the
- * rendered blocks visually swap rows even though React's `key={id}`
- * reconciliation kept each Block bound to its own entry.  The user
- * perceives this as "the wrong clip moved."
- *
- * By supplying `greedyTimes` for the dragged entry (= its snapshot
- * startSec / endSec at drag-start), the sort key and the interval-fit
- * check both see the PRE-DRAG values, so the dragged clip stays in its
- * starting greedy slot and keeps its trackIndex stable through the
- * entire drag.  The block's *visual* leftPx / widthPx still derive from
- * the live entry values in the caller, so the block follows the cursor
- * laterally — only the vertical row stays pinned.
- *
- * Empty or omitted → identity behaviour (= legacy single-arg call sites
- * are byte-identical).
+ * Shared with the vertical-drag handler (`timeline-view.tsx`) so the drag clamps
+ * a clip to exactly the same rows the layout renders.
  */
-export interface TimelineLayoutOverrides {
-  /** id → times to use for greedy sort + interval check */
-  greedyTimes?: ReadonlyMap<string, { startSec: number; endSec: number }>
+export function timelineMaxRow(entries: readonly SubtitleEntry[]): number {
+  if (entries.length === 0) return 0
+  let maxOccupied = MIN_LAYER
+  for (const e of entries) {
+    const l = resolveLayer(e)
+    if (l > maxOccupied) maxOccupied = l
+  }
+  maxOccupied = Math.min(MAX_LAYER, Math.max(MIN_LAYER, maxOccupied))
+  return Math.min(MAX_LAYER, maxOccupied + 1)
 }
 
 /**
- * Stable tiebreaker for entries that share `startSec`.
+ * Lay entries out into timeline rows where **row = the stored z-order layer**
+ * (REQ-0394 introduced row=z-order; REQ-0396 made the row the stored `layer`
+ * itself; REQ-0402 made the rows CONTIGUOUS).
  *
- * REQ-20260615-031: the tiebreaker used to be `a.id < b.id ? -1 : ...`
- * (alphabetical on id).  That bit the duplicate-row flow:
- * `runDuplicateRow` mints the new id as `'dup-' + crypto.randomUUID()`
- * and inserts it immediately AFTER the original in the entries array,
- * but `dup-…` often sorts BEFORE the original id (e.g. when the
- * original is a UUID starting with a hex digit > 'd', or a fixture id
- * like `e-001`).  The greedy allocator then assigned track 0 to the
- * duplicate, pushing the original onto track 1 — visually swapping
- * the rows.
+ * Rows run 0..`maxRow` where `maxRow = timelineMaxRow(entries)` (= the highest
+ * occupied layer + one spare, capped at 50).  They are contiguous — EVERY layer
+ * in that range gets a row, even one no cue occupies — so the gutter numbering
+ * never skips (the REQ-0399 "1 → 3 with no track 2" jump is gone) and there is
+ * always a spare track above to drag a clip into.  A cue's `trackIndex` is
+ * `maxRow − resolveLayer(entry)`: the TOP row (trackIndex 0) is the highest
+ * layer shown (front); the BOTTOM row is layer 0 (back).  Cues that share a
+ * layer share a row (and overlap on it if they also overlap in time — the user
+ * separates them by changing a layer).  `trackLayers` gives the layer per row.
  *
- * Fix: return 0 on tie.  `Array.prototype.sort` is stable since ES2019,
- * so the sort preserves the input order.  The input array always has
- * a duplicate inserted at `originalIdx + 1` (see runDuplicateRow), so
- * original keeps track 0 and the duplicate spills onto track 1.
- *
- * Cross-render determinism (the reason the alphabetical tiebreaker
- * existed) is unaffected because `useProjectStore.entries` is itself
- * stable across renders: `updateEntry` does not reorder, `addEntry`
- * inserts at a fixed index, and `sortByStartSec` is a stable sort.
- *
- * `greedyTimes` (REQ-20260613-002): when supplied, the override startSec
- * is used for the primary sort key in place of the live `entry.startSec`.
- * Keeps the dragged entry pinned to its starting sort position even as
- * its live startSec diverges from neighbouring clips during a drag.
- */
-function compareForLayout(
-  a: SubtitleEntry,
-  b: SubtitleEntry,
-  greedyTimes?: ReadonlyMap<string, { startSec: number; endSec: number }>
-): number {
-  const aStart = greedyTimes?.get(a.id)?.startSec ?? a.startSec
-  const bStart = greedyTimes?.get(b.id)?.startSec ?? b.startSec
-  if (aStart !== bStart) return aStart - bStart
-  return 0
-}
-
-/**
- * Greedy interval graph coloring: assign each entry to the first track whose
- * last block has already ended.  Spawn a new track only when no existing
- * track fits.
- *
- * Inputs are not mutated.  Entries are read in `startSec` ascending order
- * (with `id` tiebreak); the returned `placements` array preserves the input
- * entry order so callers can render rows by their input position without
- * re-sorting.
- *
- * Deleted rows are passed through to the caller; the caller decides whether
- * to filter them out before invoking.  This keeps the function pure and
- * lets the "Deleted" filter still produce a visual layout.
- *
- * `minBlockSec` (REQ-088 #2) lets the caller reserve a minimum amount of
- * track-time per block so very-short blocks (Whisper sometimes emits
- * 0.02-s segments) don't sit beside another block on the same track and
- * visually overlap at min-render-width.  Default is 0 = legacy
- * boundary-only behaviour (unit tests rely on this).
+ * Inputs are not mutated; `placements` preserves input entry order so the caller
+ * renders each Block by its own id without re-sorting.  Deleted rows are passed
+ * through (the caller filters).  Rows depend only on `layer`, not time, so
+ * `minBlockSec` (REQ-088 #2) no longer affects row assignment and is kept only
+ * for call-site signature compatibility.  (REQ-0466 §1 removed the vestigial
+ * `greedyTimes` drag-pin override, which the layer-based rows had made a no-op.)
  */
 export function layoutEntries(
   entries: readonly SubtitleEntry[],
   fallbackDurationSec: number,
   minBlockSec: number = 0,
-  overrides?: TimelineLayoutOverrides,
+  /**
+   * REQ-0528 §2-3 — the video's real duration, when one is loaded.  When
+   * finite and positive it FIXES the timeline's length; otherwise the length
+   * falls back to spanning the entries (audio-only / no video yet).
+   */
+  hardDurationSec?: number,
 ): TimelineLayout {
   if (entries.length === 0) {
-    return { placements: [], trackCount: 0, totalSec: Math.max(1, fallbackDurationSec) }
+    return { placements: [], trackCount: 0, trackLayers: [], totalSec: Math.max(1, fallbackDurationSec) }
   }
 
-  const greedyTimes = overrides?.greedyTimes
-  // REQ-20260613-002: when an entry has a greedy-time override, the
-  // sort key AND the interval-fit check both use those override values
-  // (= snapshot times for a dragged entry).  Live values are preserved
-  // on the entry itself so the caller's `editedBlockPositions` still
-  // renders the block at its live position; only the trackIndex gets
-  // pinned.
-  function timesFor(e: SubtitleEntry): { startSec: number; endSec: number } {
-    const o = greedyTimes?.get(e.id)
-    if (o !== undefined) return o
-    return { startSec: e.startSec, endSec: e.endSec }
-  }
+  // REQ-0402 — rows are CONTIGUOUS layer values 0..maxRow (bottom→top), no gaps.
+  // `trackIndex = maxRow − layer` places a cue on its layer's row; the extra
+  // spare row at `maxRow` (= highest occupied + 1) is what a clip is dragged
+  // into to raise its z-order.  Legacy layers above the cap clamp onto the top.
+  //
+  // Because rows depend only on `layer` (not on time), a horizontal drag never
+  // changes a cue's row — so the old `greedyTimes` drag row-pinning was removed
+  // (REQ-0466 §1).  `minBlockSec` is retained only for call-site signature
+  // compatibility.
+  void minBlockSec
+  const maxRow = timelineMaxRow(entries)
+  const rowCount = maxRow + 1
+  // Top → bottom: [maxRow, maxRow−1, …, 1, 0].
+  const trackLayers = Array.from({ length: rowCount }, (_, i) => maxRow - i)
 
-  const sorted = [...entries].sort((a, b) => compareForLayout(a, b, greedyTimes))
-  // trackEndSec[i] = effective endSec of the most recent block placed on
-  // track i, where "effective" means max(actualEnd, start + minBlockSec).
-  // Reserving `minBlockSec` past actualEnd is what stops the rendered
-  // min-width of a 0.02-s block from overlapping the next block on the
-  // same track (REQ-088 #2).
-  const trackEndSec: number[] = []
-  const trackOf = new Map<string, number>()
+  const placements: TimelinePlacement[] = entries.map((e) => {
+    const layer = Math.min(maxRow, Math.max(MIN_LAYER, resolveLayer(e)))
+    return { entry: e, trackIndex: maxRow - layer }
+  })
 
-  for (const e of sorted) {
-    const t = timesFor(e)
-    const effectiveEnd = t.endSec > t.startSec + minBlockSec
-      ? t.endSec
-      : t.startSec + minBlockSec
-    let assigned = -1
-    for (let i = 0; i < trackEndSec.length; i++) {
-      if (trackEndSec[i] <= t.startSec + TIME_EPS_SEC) {
-        assigned = i
-        break
-      }
-    }
-    if (assigned === -1) {
-      assigned = trackEndSec.length
-      trackEndSec.push(effectiveEnd)
-    } else {
-      trackEndSec[assigned] = effectiveEnd
-    }
-    trackOf.set(e.id, assigned)
-  }
-
-  const placements: TimelinePlacement[] = entries.map((e) => ({
-    entry: e,
-    trackIndex: trackOf.get(e.id) ?? 0
-  }))
-
-  // totalSec is sourced from the LIVE entry endSecs, never the
-  // greedy-time overrides — the visible timeline width must always
-  // accommodate the rightmost block as the user sees it (a drag that
-  // pushes a clip past the previous timeline end should extend the
-  // ruler, not let the block escape it).
+  /*
+   * REQ-0528 §2-3 — the timeline is the VIDEO's axis, so when a video is
+   * loaded its duration fixes the length outright.
+   *
+   * It used to be `max(fallbackDurationSec, maxEntryEnd)` — "always accommodate
+   * the rightmost block" — which is why the owner saw the timeline stretch to
+   * 16 s on a 7 s video: one over-long cue dragged the whole ruler out past the
+   * end of the footage, inventing timeline that has no video under it.
+   *
+   * With §2's clamp in place no GUI edit can produce such a cue any more, so in
+   * normal use this changes nothing.  It still matters for the cues REQ-0528
+   * §2-5 deliberately does NOT rewrite — legacy projects, and projects relinked
+   * to a shorter video.  Such a cue now sits past the right edge and is not
+   * reachable in the timeline; it stays fully visible and editable in the LIST
+   * view, carries the 時間超過 badge there, and confirming the 「時間を調整」
+   * dialog on it now pulls it into range.  Stranding it on an imaginary
+   * extension of the video was not better — it was just less obvious.
+   *
+   * Without a usable duration (audio-only, or no video yet) there is no video
+   * axis to honour, so the old entry-spanning behaviour is kept.
+   */
   const maxEntryEnd = entries.reduce((m, e) => (e.endSec > m ? e.endSec : m), 0)
-  const totalSec = Math.max(fallbackDurationSec, maxEntryEnd)
+  const hasHardDuration =
+    hardDurationSec !== undefined && isFinite(hardDurationSec) && hardDurationSec > 0
+  const totalSec = hasHardDuration
+    ? (hardDurationSec as number)
+    : Math.max(fallbackDurationSec, maxEntryEnd)
 
   return {
     placements,
-    trackCount: trackEndSec.length,
-    totalSec
+    trackCount: rowCount,
+    trackLayers,
+    totalSec,
   }
 }
 

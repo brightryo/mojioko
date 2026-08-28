@@ -12,6 +12,19 @@ files:
   - out/**/*
   - "!out/**/*.map"
 
+# REQ-0463 — the MCP clean-stdout proxy (out/main/mcp-proxy.js) is launched via
+# ELECTRON_RUN_AS_NODE=1 as a PLAIN Node entry point.  A script inside app.asar
+# cannot be executed that way (the archive is not a real directory the runtime
+# can hand to Node), so unpack the proxy AND the shared chunk it require()s
+# (out/main/chunks/, currently the pure-Node mcp-log logger).  Unpacked files
+# land at app.asar.unpacked/<same path>; getMcpLaunchSpec() (via
+# resolveMcpProxyPath) points the packaged launch there.  MUST stay in sync with
+# electron-builder-appx.yml / -appx-store.yml and MCP_PROXY_REL_PATH (pinned by
+# tests/unit/mcp-proxy-unpack-req-0463.test.ts).
+asarUnpack:
+  - "out/main/mcp-proxy.js"
+  - "out/main/chunks/**"
+
 extraResources:
   # ffmpeg/ffprobe are shipped as the LGPL **shared** build, so the surrounding
   # av*.dll / sw*.dll runtime libraries must travel with the .exe — otherwise
@@ -75,6 +88,18 @@ extraResources:
     to: icons
     filter:
       - "icon.ico"
+
+# REQ-0459 §2 — associate `.mojioko` with the app so a double-click opens the
+# project.  NSIS registers this at install time and REMOVES it on uninstall
+# (electron-builder wires both). The dispatcher (cli/index.ts) treats a lone
+# existing `.mojioko` path as a GUI launch, not a CLI command. The extension
+# icon reuses the app icon (build/icon.ico) per the REQ.
+fileAssociations:
+  - ext: mojioko
+    name: MOJIOKO Project
+    description: MOJIOKO subtitle project
+    icon: build/icon.ico
+    role: Editor
 
 win:
   target:

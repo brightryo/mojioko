@@ -1,0 +1,307 @@
+/**
+ * REQ-0389 (positioning-redesign Phase 1a) — `computeCuePlacement`.
+ *
+ * The single positioning authority spec'd in
+ * `dev-docs/specs/positioning-redesign.md`: given a cue's *intent* it returns a
+ * **neutral-space** placement (video/ASS px + `\an` numpad + a detection box +
+ * a z-order layer).  The ASS writer turns each line's `{anchorX, anchorY}` into
+ * `\pos(...)` via `formatAssCoord`; the preview turns it into CSS px via
+ * `× scale`.  **This function emits neither `\pos` strings nor CSS** — only
+ * neutral numbers (spec decision F, §4).
+ *
+ * ## Relationship to `cueLineAnchors`
+ *
+ * The per-line anchor arithmetic is NOT re-derived here — it is `cueLineAnchors`
+ * (`line-spacing.ts`), which REQ-0332 validated byte-for-byte against libass.
+ * `computeCuePlacement` *wraps* it and adds the two things the neutral contract
+ * needs that a bare anchor list does not carry: the `\an` numpad each line is
+ * anchored by, and the collision box for overlap detection (spec §8 / decision
+ * D).  Wrapping — rather than reimplementing — is what makes the Phase 1a exit
+ * criterion "the pure function reproduces existing placement *by value*"
+ * (spec §10-6.1) true by construction: the anchors ARE `cueLineAnchors`'.
+ *
+ * ## Shadow status (Phase 1a)
+ *
+ * Per REQ-0389 §1 this function is NOT connected to the production render path.
+ * It is exercised only by `verify:pos-parity` (through `generateAss`'s
+ * default-off `forceSelfPositionAll` seam) and by its own unit tests.  Phase 1b
+ * is where the runtime switches to it.
+ */
+
+import { cueLineAnchors, type CueLineAnchorInput } from './line-spacing'
+
+/**
+ * The libass numpad alignment (1–9) an alignment pair maps to.
+ *
+ *   top    : left=7 center=8 right=9
+ *   center : left=4 center=5 right=6   (REQ-0140)
+ *   bottom : left=1 center=2 right=3
+ *
+ * A THIRD copy of the mapping already living in `ass-generator.ts:getAlignment`
+ * and `preview-coords.ts:getAlignmentNumpad`.  It is inlined here (not imported)
+ * so the shared module pulls in neither the main-process nor the renderer file;
+ * the redesign's Phase 1b/2 work consolidates the three onto this one once the
+ * runtime is wired to `computeCuePlacement` (until then the shared copy must not
+ * change the runtime, so it cannot own the mapping yet).
+ */
+/**
+ * REQ-0392 — a cue's z-order, `undefined` ≡ 0.  Single reader of the additive
+ * `layer` field (mirrors `resolveLineSpacingPercent`), so the ASS Dialogue Layer
+ * column and the preview's CSS z-index can never disagree about the default.
+ */
+export function resolveLayer(entry: { layer?: number }): number {
+  return typeof entry.layer === 'number' && Number.isFinite(entry.layer) ? entry.layer : 0
+}
+
+/**
+ * REQ-0397 §1 — the smallest layer the z-order UI is allowed to assign.  The
+ * timeline is bottom-anchored (layer 0 = the backmost / bottom-most track), so
+ * there is no row to represent a negative layer; "send to back" therefore floors
+ * at 0 and negative layers are never generated.  (Projects saved before this
+ * clamp may still carry a legacy negative layer — the layout / ASS paths stay
+ * tolerant of that; this floor only governs what the UI newly writes.)
+ */
+export const MIN_LAYER = 0
+
+/**
+ * REQ-0398 §2 — the largest layer the z-order UI is allowed to assign.  Layers
+ * are also mirrored 1:1 onto the preview overlay's CSS `z-index`
+ * (`subtitle-overlay.tsx`), so an unbounded layer produced an unbounded z-index
+ * that could climb above the app's own chrome (drawers, dialogs).  The preview
+ * is now isolated into its own stacking context (§1) so that leak is contained
+ * regardless, but the layer range is still capped at a sane [0, 50] so a user
+ * cannot mint arbitrarily many tracks.  "Bring to front" stops at 50 and
+ * duplicating a layer-50 cue is blocked (`duplicateRow`, §3).
+ */
+export const MAX_LAYER = 50
+
+/**
+ * The layer "bring to front" assigns: one above the current maximum among
+ * `layers`, clamped to `[MIN_LAYER + 1, MAX_LAYER]` (a fresh front is always
+ * ≥ 1 and never exceeds the cap — REQ-0398 §2).  `layers` are the resolved
+ * layer values of every cue in the project.
+ */
+export function bringToFrontLayer(layers: readonly number[]): number {
+  return Math.min(MAX_LAYER, Math.max(MIN_LAYER, ...layers) + 1)
+}
+
+/**
+ * The layer "send to back" assigns: one below the current minimum among
+ * `layers`, floored at `MIN_LAYER` so it never descends into negatives
+ * (REQ-0397 §1).  An all-layer-0 project therefore resolves to 0 — a no-op the
+ * caller detects by comparing against the cue's current layer.
+ */
+export function sendToBackLayer(layers: readonly number[]): number {
+  return Math.max(MIN_LAYER, Math.min(...layers) - 1)
+}
+
+/**
+ * REQ-0528 §1-2 — do two cues share any frame?
+ *
+ * ## The interval convention, and why touching endpoints do NOT overlap
+ *
+ * `[startSec, endSec)` — END EXCLUSIVE, the codebase-wide rule stated in
+ * `simultaneous-groups.ts` ("a cue starting exactly when another ends does NOT
+ * share a frame with it") and already implied by the two predicates that
+ * predate this one, both of which use a strict `<`:
+ *
+ *   - `entry-warnings.ts`      `entry.startSec < prevActiveEndSec`
+ *   - `simultaneous-groups.ts` `item.startSec < groupEnd`
+ *
+ * So a cue ending at 3.000 and one starting at 3.000 are adjacent, not
+ * overlapping, and the duplicate of the first may sit on the same layer as the
+ * second.  That is the right call for subtitles: back-to-back cues are the
+ * normal case, and treating them as colliding would push almost every
+ * duplicate a layer higher than it needs to be.
+ *
+ * ## Why this is a NEW function rather than a reuse of the badge's predicate
+ *
+ * REQ-0528 asked to reuse the 時間重複 badge's detection.  It cannot be reused
+ * as-is, and pretending otherwise would have been the actual drift risk:
+ * `computeEntryWarnings`'s `overlap` is not a pairwise interval test at all.
+ * It compares each entry against a single running scalar — the end of the
+ * immediately preceding non-deleted entry IN ARRAY ORDER — and it never reads
+ * `layer`.  It cannot answer "is layer 4 free between 3 s and 6 s".
+ *
+ * What is shared instead is the CONVENTION: this is the one place that spells
+ * the half-open rule out, and the two older call sites are named above so the
+ * three can be reconciled deliberately rather than drifting apart unnoticed.
+ * See RES-0528 §1-2 for the full reasoning.
+ */
+export function cueTimesOverlap(
+  a: { startSec: number; endSec: number },
+  b: { startSec: number; endSec: number },
+): boolean {
+  return a.startSec < b.endSec && b.startSec < a.endSec
+}
+
+/** The minimal shape {@link findFreeLayerAbove} needs off a cue. */
+export interface LayerOccupant {
+  id: string
+  startSec: number
+  endSec: number
+  layer?: number
+  isDeleted?: boolean
+}
+
+/**
+ * REQ-0528 §1-2 — the lowest layer at or above `fromLayer` on which `cue`'s
+ * time span collides with nothing, or `null` when every layer up to
+ * {@link MAX_LAYER} is occupied.
+ *
+ * Before this existed, duplicating always wrote `source.layer + 1` without
+ * looking at what was already there (`duplicate-entry.ts`), so duplicating the
+ * same layer-0 cue twice put both copies on layer 1, stacked on top of each
+ * other.  That is the bug REQ-0528 §1 reports.
+ *
+ * Deleted cues do not occupy a layer: they are not rendered and not burned, and
+ * `warningsMap` skips them for the same reason.  `cue.id` is excluded so a cue
+ * never collides with itself.
+ *
+ * Returning `null` rather than clamping to MAX_LAYER is deliberate — clamping
+ * would silently reintroduce exactly the stacking this function exists to
+ * prevent.  The caller turns `null` into the existing "can't duplicate" toast.
+ */
+export function findFreeLayerAbove(
+  cue: LayerOccupant,
+  fromLayer: number,
+  occupants: readonly LayerOccupant[],
+): number | null {
+  const start = Math.max(MIN_LAYER, fromLayer)
+  const blocking = occupants.filter(
+    (o) => o.id !== cue.id && !o.isDeleted && cueTimesOverlap(cue, o),
+  )
+  for (let layer = start; layer <= MAX_LAYER; layer++) {
+    if (!blocking.some((o) => resolveLayer(o) === layer)) return layer
+  }
+  return null
+}
+
+export function alignmentNumpad(
+  horizontalPosition: 'left' | 'center' | 'right',
+  verticalPosition: 'top' | 'center' | 'bottom',
+): number {
+  if (verticalPosition === 'bottom') {
+    return horizontalPosition === 'left' ? 1 : horizontalPosition === 'center' ? 2 : 3
+  }
+  if (verticalPosition === 'center') {
+    return horizontalPosition === 'left' ? 4 : horizontalPosition === 'center' ? 5 : 6
+  }
+  return horizontalPosition === 'left' ? 7 : horizontalPosition === 'center' ? 8 : 9
+}
+
+/**
+ * Neutral-space input to the single positioning authority.
+ *
+ * It is `CueLineAnchorInput` (the validated anchor math) plus the two fields the
+ * neutral contract adds: `outlineThicknessPx` (so the detection box can include
+ * the same `fix_collisions` padding `estimateCueHeightAssPx` reserves) and an
+ * optional `layer` (z-order, meaningful from Phase 2 — carried through as 0
+ * today).
+ */
+export interface CuePlacementInput extends CueLineAnchorInput {
+  /** Outline half-width in ASS px; pads the detection box top & bottom. */
+  outlineThicknessPx: number
+  /** z-order layer (spec decision E).  Phase 1a always 0. */
+  layer?: number
+}
+
+/** One display line's neutral placement. */
+export interface CuePlacementLine {
+  /** Anchor x in ASS/video px, UNROUNDED (ASS side applies `formatAssCoord`). */
+  anchorX: number
+  /** Anchor y in ASS/video px, UNROUNDED. */
+  anchorY: number
+  /** libass numpad (1–9) this line is anchored by — same for every line. */
+  an: number
+}
+
+/**
+ * A cue's vertical ink band, ASS px.  `left`/`right` are the *usable content*
+ * bounds, not a measured text width — see the box docblock in
+ * `computeCuePlacement`.
+ */
+export interface CuePlacementBox {
+  top: number
+  bottom: number
+  left: number
+  right: number
+}
+
+/** The neutral-space placement of a whole cue. */
+export interface CuePlacement {
+  lines: CuePlacementLine[]
+  box: CuePlacementBox
+  layer: number
+}
+
+/**
+ * Resolve a cue's intent into its neutral-space placement.
+ *
+ * `lines[i].{anchorX, anchorY}` are exactly `cueLineAnchors(input)[i]` — same
+ * values, so anything comparing the two (the Phase 1a value-inclusion test)
+ * finds them identical.  `an` is the cue's single alignment, replicated per line
+ * (a multi-line cue anchors every line by the same `\an`, which is what the ASS
+ * self-position path already does).
+ *
+ * ### The detection box
+ *
+ * The VERTICAL extent is exact: each line spans its own height around the point
+ * its `\an` names (top edge for 7/8/9, bottom for 1/2/3, middle for 4/5/6), and
+ * the band is padded by `outlineThicknessPx` top and bottom — the same
+ * `fix_collisions` padding `estimateCueHeightAssPx` reserves.  The HORIZONTAL
+ * extent is the *usable content width* `[marginLrPx, playResX − marginLrPx]`
+ * (or the pinned x): a conservative bound, because line-anchor math deliberately
+ * measures no text (event-splitting.md §4).  Precise horizontal overlap needs
+ * the overflow-calculator's glyph advances and is Phase 2 / decision D work; the
+ * conservative band never yields a false NEGATIVE (only, possibly, a false
+ * positive), which is the safe direction for a non-blocking "cues overlap"
+ * warning.  Phase 1a's pixel gate does not read this box.
+ */
+export function computeCuePlacement(input: CuePlacementInput): CuePlacement {
+  const anchors = cueLineAnchors(input)
+  const an = alignmentNumpad(input.horizontalPosition, input.verticalPosition)
+
+  const lines: CuePlacementLine[] = anchors.map((a) => ({
+    anchorX: a.x,
+    anchorY: a.y,
+    an,
+  }))
+
+  // Vertical band: each line's box sits around the edge its `\an` names.
+  let top = Number.POSITIVE_INFINITY
+  let bottom = Number.NEGATIVE_INFINITY
+  for (let i = 0; i < anchors.length; i++) {
+    const h = input.lineHeightsPx[i] ?? 0
+    const y = anchors[i].y
+    let lineTop: number
+    let lineBottom: number
+    if (input.verticalPosition === 'top') {
+      // `\an7/8/9` — anchor is the line's TOP edge.
+      lineTop = y
+      lineBottom = y + h
+    } else if (input.verticalPosition === 'center') {
+      // `\an4/5/6` — anchor is the line's MIDDLE.
+      lineTop = y - h / 2
+      lineBottom = y + h / 2
+    } else {
+      // `\an1/2/3` — anchor is the line's BOTTOM edge.
+      lineTop = y - h
+      lineBottom = y
+    }
+    if (lineTop < top) top = lineTop
+    if (lineBottom > bottom) bottom = lineBottom
+  }
+  top -= input.outlineThicknessPx
+  bottom += input.outlineThicknessPx
+
+  const pinned = input.posX !== undefined && input.posY !== undefined
+  const left = pinned ? (input.posX as number) : input.marginLrPx
+  const right = pinned ? (input.posX as number) : input.playResX - input.marginLrPx
+
+  return {
+    lines,
+    box: { top, bottom, left, right },
+    layer: input.layer ?? 0,
+  }
+}

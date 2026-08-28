@@ -7,7 +7,7 @@ import {
   getFontMeta,
   type FontId,
 } from '../../src/shared/fonts'
-import { canDownloadFontInTier } from '../../src/renderer/lib/font-tier'
+import { canDownloadFontInTier } from '../../src/shared/font-tier'
 
 /**
  * REQ-0353 §1-2 / §1-4 — the two properties that let `FONT_SET_VERSION` stay

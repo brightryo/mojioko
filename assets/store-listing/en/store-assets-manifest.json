@@ -1,0 +1,60 @@
+{
+  "lang": "en",
+  "caption": true,
+  "files": [
+    {
+      "file": "01-s2-step2-emphasis.png",
+      "text": "Keyword emphasis, and styling per subtitle",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 521575
+    },
+    {
+      "file": "02-s9-inspector.png",
+      "text": "Flexible subtitle editing",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 564479
+    },
+    {
+      "file": "03-s3-timeline.png",
+      "text": "Adjust timing on the timeline",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 601700
+    },
+    {
+      "file": "04-s7-ai.png",
+      "text": "AI integration (MCP)",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 161314
+    },
+    {
+      "file": "hero-16x9-1920x1080.png",
+      "text": "(no text — REQ-0576)",
+      "ok": true,
+      "width": 1920,
+      "height": 1080,
+      "colorType": 2,
+      "bytes": 1320555
+    },
+    {
+      "file": "hero-16x9-3840x2160.png",
+      "text": "(no text — REQ-0576)",
+      "ok": true,
+      "width": 3840,
+      "height": 2160,
+      "colorType": 2,
+      "bytes": 4003303
+    }
+  ]
+}

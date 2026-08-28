@@ -2,6 +2,7 @@
   "app": {
     "name": "MOJIOKO"
   },
+  "optional": "オプション",
   "nav": {
     "back": "戻る",
     "continue": "次へ",
@@ -50,7 +51,9 @@
     "close": "閉じる"
   },
   "error": {
-    "unknown": "不明なエラーが発生しました"
+    "unknown": "不明なエラーが発生しました",
+    "settingsSaveFailed": "設定を保存できませんでした（{{reason}}）。ディスクの空き容量や、他のプログラムがファイルを開いていないかご確認ください。",
+    "diskFull": "ディスクの空き容量が足りません（{{drive}}：空き {{free}} GB／少なくとも {{required}} GB 必要）。出力先を空き容量のあるドライブに変えるか、不要なファイルを削除してください。"
   },
   "shortcuts": {
     "scopeGlobal": "グローバル",
@@ -90,6 +93,10 @@
     "cancel": "キャンセル",
     "headingText": "フォントカラー選択",
     "headingOutline": "アウトラインカラー選択"
+  },
+  "fontLang": {
+    "japaneseAria": "日本語フォント",
+    "latinAria": "ラテン文字フォント"
   },
   "fontLicenses": {
     "title": "フォントライセンス",
@@ -147,5 +154,30 @@
       "discardConfirmOk": "OK",
       "toastSuccess": "プロジェクトを開きました"
     }
+  },
+  "fontSubstitution": {
+    "tier": {
+      "title": "有料版のフォントのため置換しました",
+      "action": "有料版について"
+    },
+    "missing": {
+      "title": "フォントファイルが見つかりません",
+      "action": "フォント設定を開く"
+    },
+    "detail": "{{pairs}}（{{count}} 件の字幕）"
+  },
+  "renderNotice": {
+    "linePitch": {
+      "title": "行間は出力で拡大縮小しません",
+      "detail": "拡大縮小するアニメーションの複数行字幕（{{count}} 件）は、文字は拡大縮小しますが行と行の間隔は変わりません。プレビューとは見え方が異なります。"
+    }
+  },
+  "quitConfirm": {
+    "title": "保存していない編集があります",
+    "desc": "保存せずに終了すると、この編集内容は失われます。",
+    "cancel": "キャンセル",
+    "discard": "保存せずに終了",
+    "saveAndQuit": "保存して終了",
+    "saving": "保存中…"
   }
 }

@@ -6,18 +6,24 @@
     "bulkHeading": "Bulk edit",
     "bulkHelp": "Applies the changes you make here to every subtitle you have checked in the list. Use the list view to pick the targets.",
     "emptyTitle": "No subtitle selected",
-    "emptyHint": "Click a row in the list or a block in the timeline below"
+    "emptyHint": "Click a row in the list or a block in the timeline below",
+    "cueId": "Subtitle ID: {{n}}"
   },
   "table": {
-    "colIndex": "#",
-    "colTime": "Time",
-    "colSize": "Size",
-    "colStyle": "Style",
-    "colText": "Text",
-    "colState": "State",
-    "colActions": "",
     "fadeTooltip": "Fade",
-    "selectAllAria": "Select all visible rows"
+    "selectAllAria": "Select all visible rows",
+    "help": {
+      "button": "How to use",
+      "title": "Using the list",
+      "bulk": {
+        "title": "Bulk editing",
+        "body": "Tick the checkboxes on the left to select several rows and the Inspector switches to Bulk edit, letting you change text colour, size, outline, shadow and more for all of them at once. To undo, use the Undo button in the toolbar (Ctrl+Z). Each setting you change is one step, so a single undo reverts every selected row (change colour and size and that is two undos). Selection is separate from undo — undoing does not clear your selection."
+      },
+      "preview": {
+        "title": "Which settings the list shows",
+        "body": "The subtitle text shown in the list reflects your Inspector settings. Applied: font, text colour and opacity, outline colour and thickness, shadow, uppercasing, the background box and the keyword-emphasis colour. Not applied: font size, emphasis scale, rotation, karaoke, animation, and position and margins. Font size is scaled down to fit the column, and a line too long even then is cut off with an ellipsis. Check the preview and the exported video for the final look."
+      }
+    }
   },
   "rowFont": {
     "defaultPrefix": "Default:",
@@ -50,6 +56,7 @@
   },
   "badge": {
     "overflow": "Overflow",
+    "verticalOverflow": "Too tall",
     "overlap": "Overlap",
     "overDuration": "Over duration",
     "exceedsDuration": "Over duration",
@@ -137,6 +144,7 @@
     "transcriptionNoSpeech": "No speech was detected.  You can add subtitles manually with \"Add.\"",
     "rowAdded": "Added at position {{index}}",
     "rowDuplicated": "Row duplicated",
+    "rowDuplicateMaxLayer": "Can't duplicate: this would exceed the maximum layer (50). Duplicate from a lower layer instead.",
     "rowDeleted": "Deleted",
     "rowRestored": "Restored",
     "rowReset": "Reset",
@@ -153,6 +161,7 @@
     "srtImportEmpty": "No subtitles were found in the file",
     "srtImportReadFailed": "Failed to read the SRT file: {{error}}",
     "srtImportParseFailed": "Could not parse the SRT: {{error}}",
+    "timeClampedToDuration": "Time was beyond the video duration, so it was clamped to fit",
     "srtImportAllOutOfDuration": "All subtitles were outside the video duration ({{count}} skipped)"
   },
   "tooltip": {
@@ -175,10 +184,16 @@
     "marginV": "Margin",
     "lineSpacing": "Line spacing",
     "lineSpacingHint": "Gap between the lines of a multi-line caption, as a percentage of the font size. 0% is the default.",
+    "zOrder": "Z-order",
     "offset": "Offset",
     "offsetX": "X offset",
     "offsetY": "Y offset",
     "offsetResetTitle": "Reset position",
+    "position": "Position (X/Y)",
+    "positionX": "X position (px)",
+    "positionY": "Y position (px)",
+    "positionHint": "Absolute position in video pixels. Entering a value pins the caption at that coordinate. Use \"Reset position\" to return to the aligned position.",
+    "positionResetTitle": "Reset position (unpin)",
     "bgEnabled": "Background",
     "bgColor": "BG color",
     "bgOpacity": "Opacity",
@@ -245,7 +260,10 @@
     "editLayout": "Change layout",
     "editMargin": "Change margin",
     "editLineSpacing": "Change line spacing",
+    "editZOrder": "Change z-order",
+    "moveClip": "Move clip",
     "editOffset": "Change offset",
+    "editPosition": "Change position",
     "editBackground": "Change background",
     "editCasing": "Change casing",
     "editShadow": "Change shadow",
@@ -279,7 +297,18 @@
     "overflowWrap": "Overflow wrap",
     "overflowWrapHelp": "Overflow wrap — keep manual breaks and only fold the parts that overflow the display width",
     "overflowWrapNoChange": "No rows were overflowing",
+    "translate": {
+      "button": "Translate",
+      "needTool": "Download / enable a translation tool to use this",
+      "running": "Translating…",
+      "progress": "{{done}} / {{total}}",
+      "cancel": "Cancel",
+      "done": "Translated {{count}} rows",
+      "failed": "Translation failed",
+      "nothing": "No translatable rows"
+    },
     "history": {
+      "translate": "Bulk translate ({{count}} rows)",
       "size": "Bulk size change ({{count}} rows)",
       "textColor": "Bulk text color change ({{count}} rows)",
       "outlineColor": "Bulk outline color change ({{count}} rows)",
@@ -309,6 +338,7 @@
     "pause": "Pause",
     "error": "Failed to load file",
     "showInFolder": "Show in Folder",
+    "timecodeToggle": "Click to toggle simple / detailed (milliseconds · frame) time",
     "exportFrame": {
       "iconLabel": "Save current frame as image",
       "title": "Save current frame as image",
@@ -348,11 +378,18 @@
     "margin": "Vertical margin (px)",
     "marginShort": "Margin",
     "marginDisabledCenter": "Vertical margin is not used when the row is centered.",
+    "marginDisabledPinned": "Vertical margin is not used while the position is pinned (X/Y).",
     "left": "Left",
     "center": "Center",
     "right": "Right",
     "top": "Top",
     "bottom": "Bottom"
+  },
+  "subtitleZOrder": {
+    "front": "Front",
+    "back": "Back",
+    "bringToFront": "Bring this caption to the front",
+    "sendToBack": "Send this caption to the back"
   },
   "background": {
     "title": "Subtitle background",
@@ -379,29 +416,26 @@
       "zoomSlider": "Zoom level",
       "zoomLevel": "{{pps}} px/s",
       "snap": "Snap",
-      "snapHelp": "Snap to neighbouring subtitle edges and ruler ticks",
-      "tools": "Tools",
-      "toolsTooltipExpand": "Show trim and snap tools",
-      "toolsTooltipCollapse": "Hide trim and snap tools"
+      "snapHelp": "Snap to neighbouring subtitle edges and ruler ticks"
     },
     "help": {
       "button": "How to use",
       "title": "Timeline tips",
+      "scope": {
+        "title": "What MOJIOKO can and cannot do",
+        "body": "MOJIOKO adds subtitles to a video you have already finished editing — it does not edit the video itself. You can only work inside the original video's running time, and you cannot join another video or add audio or images. Concatenate several clips into one, and mix in music, sound effects or graphics, in a video editor first, then load the result here. Note that subtitles sharing a row and overlapping in time also overlap on screen, which can make them hard to read."
+      },
       "trim": {
         "title": "Trimming",
-        "body": "Set In and Out around the range you want to remove, then press Trim. The selected span is removed from the video and the rest of the timeline ripples forward to fill the gap. Press Clear to drop pending In / Out points before you commit."
+        "body": "In and Out are placed at the playhead position when you press them. Once both are set, Run becomes available and removes that span from the video itself, rippling the rest forward to fill the gap (with only one point set, Run stays disabled). Placing Out at or before In is refused as you set it. Before you commit, press the same button again or use the clear button beside them. Afterwards, click the scissor marker left on the timeline to undo the trim — with nested trims the outermost goes first, and removing it reveals the marker inside it."
       },
-      "scissor": {
-        "title": "Undo a cut with the scissor marker",
-        "body": "Each cut leaves a scissor marker at its position. Click the marker to undo that cut. When cuts are nested, only the outermost is clickable — remove it first, the next layer becomes clickable on the following render."
+      "snap": {
+        "title": "Snap",
+        "body": "With Snap on, dragging a subtitle edge lines it up with nearby subtitle edges and ruler ticks. Turn it off to place edges freely."
       },
-      "zoom": {
-        "title": "Zoom and snap",
-        "body": "Use Zoom out / Zoom in and the slider to scale the timeline. Toggle Snap to make subtitle edges and the playhead lock to nearby block ends and ruler ticks."
-      },
-      "singleRow": {
-        "title": "Keep subtitles in a single row",
-        "body": "When subtitles overlap in time, the timeline stacks them into a second row (and beyond). However, the preview only shows the first row, and the rendered video stacks the rest on top of it — so the preview and the final burn-in look different. Adjust your subtitle timings so they fit on a single timeline row without overlap whenever possible."
+      "layers": {
+        "title": "Rows are stacking order",
+        "body": "A timeline row is the subtitle's stacking order. The bottom row sits furthest back and higher rows draw in front. Rows do not appear on their own when subtitles overlap in time — drag a block up or down to change its row, or use Stacking order in the inspector. Subtitles that share a row and overlap in time overlap on it; move one to another row to separate them."
       }
     },
     "block": {
@@ -414,6 +448,7 @@
     },
     "inspector": {
       "textLabel": "Text",
+      "resetTextToTranscription": "Reset to transcription",
       "adjustTime": "Adjust time",
       "delete": "Delete",
       "restore": "Restore",
@@ -422,7 +457,27 @@
       "layoutSection": "Layout",
       "backgroundSection": "Background",
       "backgroundSectionHelp": "Enabling the background disables the outline color.",
-      "animationSection": "Animation"
+      "animationSection": "Animation",
+      "translate": {
+        "label": "Translation",
+        "labelWithMs": "Translation ({{ms}}ms)",
+        "expand": "Show full text",
+        "edit": "Edit",
+        "copy": "Copy",
+        "overwrite": "Overwrite",
+        "copied": "Copied",
+        "copyFailed": "Copy failed",
+        "overwritten": "Overwrote the subtitle with the translation",
+        "loading": "Translating…",
+        "error": "Translation failed",
+        "noActiveTool": "Enable a translation tool",
+        "toolNotReady": "Download / enable a translation tool",
+        "preloading": "Loading model…",
+        "depsMissing": "The translation sidecar is missing a dependency. Run:",
+        "cached": "cached",
+        "warmTime": "{{ms}}ms",
+        "coldTime": "{{ms}}ms (incl. first load)"
+      }
     },
     "nav": {
       "first": "Jump to start",

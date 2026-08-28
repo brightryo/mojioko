@@ -26,19 +26,23 @@ function AdvancedParamRow({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-accent/40 transition-colors duration-150">
-      <div className="flex items-center gap-1.5 shrink-0">
+    // REQ-0425 — dropped the `-mx-2` bleed (it made every row 16px wider than
+    // the container → horizontal scrollbar in the 640px drawer tab).  `min-w-0`
+    // lets the row shrink to the tab width; the dashed leader line (flex-1,
+    // min-w-[16px]) absorbs the slack so label + input still fit on one line.
+    <div className="flex items-center gap-2 rounded-md px-2 py-1.5 min-w-0 hover:bg-accent/40 transition-colors duration-150">
+      <div className="flex items-center gap-1.5 shrink-0 min-w-0">
         <span
           className={cn(
             'text-body transition-colors duration-150',
-            changed ? 'text-[hsl(var(--warning))]' : 'text-muted-foreground'
+            changed ? 'text-[hsl(var(--warning))]' : 'text-fg-secondary'
           )}
         >
           {label}
         </span>
         <Tooltip delayDuration={200}>
           <TooltipTrigger asChild>
-            <span className="inline-flex cursor-help text-muted-foreground/60 hover:text-muted-foreground transition-colors duration-150">
+            <span className="inline-flex cursor-help text-fg-secondary/60 hover:text-fg-secondary transition-colors duration-150">
               <HelpCircle className="h-3.5 w-3.5" />
             </span>
           </TooltipTrigger>
@@ -47,7 +51,7 @@ function AdvancedParamRow({
           </TooltipContent>
         </Tooltip>
       </div>
-      <div className="flex-1 border-t border-dashed border-border min-w-[16px]" />
+      <div className="flex-1 border-t border-dashed border-line min-w-[16px]" />
       <div className="shrink-0">{children}</div>
     </div>
   )
@@ -92,12 +96,13 @@ export function WhisperAdvancedControls({
 
   function numberInputClass(modified: boolean): string {
     return cn(
-      'w-20 h-7 rounded-md border bg-input px-2 text-center text-body',
+      // REQ-0421 — overlay reassignment: number inputs body → body-sm.
+      'w-20 h-7 rounded-md border bg-input px-2 text-center text-body-sm',
       'focus:outline-none focus-visible:ring-2 tabular-nums',
       '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
       modified
         ? 'border-[hsl(var(--warning)/0.6)] text-[hsl(var(--warning))] focus-visible:ring-[hsl(var(--warning)/0.3)]'
-        : 'border-border text-foreground focus-visible:ring-ring/30'
+        : 'border-line text-fg-primary focus-visible:ring-primary/30'
     )
   }
 
@@ -105,7 +110,9 @@ export function WhisperAdvancedControls({
     <div className="space-y-5">
       {/* ── VAD ─────────────────────────────────────────────────────── */}
       <div className="space-y-0.5">
-        <p className="text-label font-medium uppercase tracking-wider text-foreground mb-2">
+        {/* REQ-0424 — 音声検出（VAD）見出しを title に（認識設定と同レベルに揃える。
+            REQ-0421 で認識設定だけ title 化し VAD を caption 据え置きにした不揃いの是正）。 */}
+        <p className="text-title font-medium uppercase tracking-wider text-fg-primary mb-2">
           {t('advanced.vad')}
         </p>
         <AdvancedParamRow
@@ -123,7 +130,7 @@ export function WhisperAdvancedControls({
                 'text-body-sm transition-colors duration-150',
                 transcriptionAdvanced.vadFilter !== TRANSCRIPTION_DEFAULTS.vadFilter
                   ? 'text-[hsl(var(--warning))]'
-                  : 'text-muted-foreground'
+                  : 'text-fg-secondary'
               )}
             >
               {transcriptionAdvanced.vadFilter ? t('advanced.enabled') : t('advanced.disabled')}
@@ -185,7 +192,7 @@ export function WhisperAdvancedControls({
                 transcriptionAdvanced.minSpeechDurationMs !== TRANSCRIPTION_DEFAULTS.minSpeechDurationMs
               )}
             />
-            <span className="text-caption text-muted-foreground/60">ms</span>
+            <span className="text-caption text-fg-secondary/60">ms</span>
           </div>
         </AdvancedParamRow>
 
@@ -214,14 +221,17 @@ export function WhisperAdvancedControls({
                 transcriptionAdvanced.minSilenceDurationMs !== TRANSCRIPTION_DEFAULTS.minSilenceDurationMs
               )}
             />
-            <span className="text-caption text-muted-foreground/60">ms</span>
+            <span className="text-caption text-fg-secondary/60">ms</span>
           </div>
         </AdvancedParamRow>
       </div>
 
       {/* ── Recognition ─────────────────────────────────────────────── */}
       <div className="space-y-0.5">
-        <p className="text-label font-medium uppercase tracking-wider text-foreground mb-2">
+        {/* REQ-0421 — overlay reassignment: 認識設定 caption → title.
+            REQ-0424 — the sibling VAD header (above) is now also title, so the
+            two Whisper-settings section headers match. */}
+        <p className="text-title font-medium uppercase tracking-wider text-fg-primary mb-2">
           {t('advanced.recognition')}
         </p>
         <AdvancedParamRow
@@ -259,10 +269,11 @@ export function WhisperAdvancedControls({
           >
             <SelectTrigger
               className={cn(
-                'w-36 h-7 text-body border bg-input',
+                // REQ-0421 — overlay reassignment: language select (自動検出) body → body-sm.
+                'w-36 h-7 text-body-sm border bg-input',
                 transcriptionAdvanced.language !== TRANSCRIPTION_DEFAULTS.language
                   ? 'border-[hsl(var(--warning)/0.6)] text-[hsl(var(--warning))]'
-                  : 'border-border text-foreground'
+                  : 'border-line text-fg-primary'
               )}
             >
               <SelectValue />
@@ -293,7 +304,7 @@ export function WhisperAdvancedControls({
             variant="ghost"
             size="sm"
             onClick={onReset}
-            className="h-7 text-body-sm text-muted-foreground hover:text-foreground gap-1.5 flex-shrink-0"
+            className="h-7 text-body-sm text-fg-secondary hover:text-fg-primary gap-1.5 flex-shrink-0"
           >
             <RotateCcw className="h-3 w-3" />
             {t('advanced.resetToDefaults')}

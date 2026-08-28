@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AccordionCollapse } from '@/components/ui/accordion-collapse'
+import {
+  ManagedModelCard,
+  ManagedModelCardSkeleton,
+  ManagedModelDiskFooter,
+} from '@/components/ui/managed-model-card'
 import {
   Sparkles,
   Download,
-  Trash2,
   Check,
   Circle,
-  Target,
-  Database,
-  HardDrive,
-  FolderOpen,
   AlertTriangle,
   ChevronUp,
   ChevronDown,
@@ -389,7 +389,11 @@ export function WhisperModelManager({
         className="flex items-center gap-2 w-full cursor-pointer select-none hover:opacity-90 transition-opacity duration-150"
       >
         <Sparkles className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-        <span className="text-headline font-semibold text-fg-secondary uppercase tracking-wider">
+        {/* REQ-0425 — dropped `uppercase` so the mixed-case label renders as
+            authored ("Whisperモデル", not "WHISPERモデル"). Applied to all three
+            STEP1 section headers (below) so JA is unchanged for the Japanese-only
+            ones and EN stays consistent (no forced ALL-CAPS on one header only). */}
+        <span className="text-body font-semibold text-fg-secondary tracking-wider">
           {t('whisperModel.label')}
         </span>
         {/* Stop propagation so tooltip interaction doesn't toggle accordion */}
@@ -435,15 +439,7 @@ export function WhisperModelManager({
       </div>
 
       {/* ---- Accordion Content ---- */}
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
+      <AccordionCollapse open={isOpen}>
             <div className="space-y-3 pt-3">
               {/* Long description */}
               <p className="text-body-sm text-fg-muted leading-relaxed">
@@ -457,25 +453,50 @@ export function WhisperModelManager({
                   the pair centred within the section card. */}
               <div className="grid grid-cols-2 gap-3 mx-auto max-w-[38rem]">
                 {state
-                  ? state.models.map((model) => (
-                      <ModelCard
-                        key={model.id}
-                        model={model}
-                        // REQ-0245 — derive isDownloading from the
-                        // store-mirrored slot map (or optimistic
-                        // pending), NOT from a shared local id that
-                        // clobbers on a second concurrent DL.
-                        isDownloading={activeModelKeys.has(model.id) || pendingIds.has(model.id)}
-                        downloadPercent={progress.get(model.id)?.percent ?? 0}
-                        downloadFile={progress.get(model.id)?.file ?? ''}
-                        onInstall={() => handleInstallClick(model)}
-                        onActivate={() => handleActivate(model)}
-                        onUninstall={() => handleUninstallClick(model)}
-                        onCancelDownload={() => handleCancelDownload(model.id)}
-                        t={t}
-                      />
-                    ))
-                  : [0, 1].map((i) => <ModelCardSkeleton key={i} />)}
+                  ? state.models.map((model) => {
+                      // REQ-0408 — the card is now the shared presentational
+                      // `ManagedModelCard`; map the Whisper model status onto its
+                      // three-state prop.  Behaviour is unchanged.
+                      const cardState =
+                        model.status === 'active'
+                          ? 'active'
+                          : model.status === 'installed'
+                            ? 'downloaded'
+                            : 'not-downloaded'
+                      return (
+                        <ManagedModelCard
+                          key={model.id}
+                          title={model.displayName}
+                          sizeLabel={formatBytes(model.expectedSizeBytes)}
+                          description={t(DESC_KEY[model.id] ?? 'whisperModel.descMedium')}
+                          state={cardState}
+                          recommended={model.id === 'large-v3'}
+                          // REQ-0245 — derive isDownloading from the store-mirrored
+                          // slot map (or optimistic pending), NOT a shared local id.
+                          isDownloading={activeModelKeys.has(model.id) || pendingIds.has(model.id)}
+                          downloadPercent={progress.get(model.id)?.percent ?? 0}
+                          downloadFile={progress.get(model.id)?.file ?? ''}
+                          onDownload={() => handleInstallClick(model)}
+                          onSelect={() => handleActivate(model)}
+                          onDelete={() => handleUninstallClick(model)}
+                          onCancel={() => handleCancelDownload(model.id)}
+                          labels={{
+                            download: t('model.install'),
+                            downloading: t('model.downloading'),
+                            cancel: t('model.cancelDownload'),
+                            useThis: t('model.useThis'),
+                            // REQ-0434 — active model button 「選択中」→「使用中」
+                            // (unify with the translation tool card).
+                            selected: t('model.active'),
+                            installedBadge: t('model.installed'),
+                            activeBadge: t('model.active'),
+                            recommended: t('whisperModel.recommended'),
+                            deleteTitle: t('model.uninstall_confirm_title'),
+                          }}
+                        />
+                      )
+                    })
+                  : [0, 1].map((i) => <ManagedModelCardSkeleton key={i} />)}
               </div>
 
               {/* REQ-20260615-065 S-5 — standing note explaining that
@@ -506,45 +527,20 @@ export function WhisperModelManager({
                   card the grid keeps its 38rem width (card occupies
                   one column of two) and this row keeps 38rem too.  See
                   RES-0206 §2 for the full rationale. */}
-              <div className="rounded-lg border border-line px-4 py-2.5 flex items-center justify-between mx-auto max-w-[38rem]">
-                <div className="flex items-center gap-5 text-body-sm">
-                  <span className="flex items-center gap-1.5 text-fg-tertiary">
-                    <Database className="h-3.5 w-3.5 flex-shrink-0" />
-                    {t('model.totalUsed')}: {state ? formatBytes(state.totalUsedBytes) : '—'}
-                  </span>
-                  <span className={cn('flex items-center gap-1.5', diskWarnColor)}>
-                    <HardDrive className="h-3.5 w-3.5 flex-shrink-0" />
-                    {state?.diskDrive ?? 'C:\\'} {t('model.diskFree')}:{' '}
-                    {state && state.diskFreeBytes > 0 ? formatBytes(state.diskFreeBytes) : '—'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  {state && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-caption text-fg-muted hover:text-fg-secondary"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openModelsFolder().catch(() => {})
-                      }}
-                    >
-                      <FolderOpen className="h-3 w-3 mr-1" />
-                      {t('model.openFolder')}
-                    </Button>
-                  )}
-                  {/* REQ-20260615-079 — the "ローカルのみ・通信なし"
-                      badge was retired here.  It contradicted itself
-                      during model downloads (we ARE talking to HF in
-                      that moment) and the footer privacyNote in
-                      step1.tsx covers the local-only commitment for
-                      the whole route. */}
-                </div>
-              </div>
+              <ManagedModelDiskFooter
+                totalUsedBytes={state ? state.totalUsedBytes : null}
+                diskDrive={state?.diskDrive ?? 'C:\\'}
+                diskFreeBytes={state?.diskFreeBytes ?? 0}
+                diskWarnColor={diskWarnColor}
+                onOpenFolder={() => { openModelsFolder().catch(() => {}) }}
+                labels={{
+                  totalUsed: t('model.totalUsed'),
+                  diskFree: t('model.diskFree'),
+                  openFolder: t('model.openFolder'),
+                }}
+              />
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </AccordionCollapse>
 
       {/* ---- Dialogs ---- */}
       {dialog?.kind === 'disk-full' && (
@@ -688,165 +684,3 @@ function InstallInfoRow({
   )
 }
 
-// ---------------------------------------------------------------------------
-// ModelCard
-// ---------------------------------------------------------------------------
-
-interface ModelCardProps {
-  model: ModelInfo
-  isDownloading: boolean
-  downloadPercent: number
-  downloadFile: string
-  onInstall: () => void
-  onActivate: () => void
-  onUninstall: () => void
-  onCancelDownload: () => void
-  t: ReturnType<typeof useTranslation<'step1'>>['t']
-}
-
-function ModelCard({
-  model,
-  isDownloading,
-  downloadPercent,
-  downloadFile,
-  onInstall,
-  onActivate,
-  onUninstall,
-  onCancelDownload,
-  t
-}: ModelCardProps) {
-  const isActive = model.status === 'active'
-  const isInstalled = model.status === 'installed' || isActive
-
-  return (
-    <div
-      className={cn(
-        // REQ-0182 chrome — dropped rounded-xl to rounded-md so the
-        // model picker cards read as consistent-density chrome with
-        // the tighter tokens introduced in REQ-0177 Phase A (radius
-        // scale halved).  The active-state subtle green tint is
-        // preserved (this is a picker choice, not a drawer selection
-        // — cf. the REQ-0182 drawer commit for the "border only" case).
-        'rounded-md border p-4 flex flex-col gap-3 transition-colors duration-150',
-        isActive ? 'border-primary bg-primary/5' : 'border-line bg-surface-0'
-      )}
-    >
-      {/* Top: name + status badge */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-headline font-semibold text-fg-primary leading-tight">
-            {model.displayName}
-          </p>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <p className={cn('text-body-sm', isActive ? 'text-primary-hover' : 'text-fg-disabled')}>
-              {formatBytes(model.expectedSizeBytes)}
-            </p>
-            {/* REQ-20260615-066 — "Recommended" / "推奨" chip moves
-                from turbo to large-v3.  Real-world Japanese
-                transcriptions on turbo had more spurious errors
-                than the synthetic Phase-0 benchmark suggested, so
-                the user-facing recommendation lands on large-v3.
-                turbo stays available as a fast-path option but
-                without the badge.  Same placement as before (next
-                to the size readout, out of the Active / Installed
-                badge corner). */}
-            {model.id === 'large-v3' && (
-              <span className="flex-shrink-0 inline-flex items-center text-caption font-medium px-1.5 py-0.5 rounded-full bg-primary/15 text-primary-hover whitespace-nowrap">
-                {t('whisperModel.recommended')}
-              </span>
-            )}
-          </div>
-        </div>
-        {isInstalled && (
-          <span
-            className={cn(
-              'flex-shrink-0 flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
-              // REQ-071 Phase 3.7-A: green-950 -> zinc-950 on the green
-              // active branch — same hue-collision fix.
-              isActive ? 'bg-primary text-fg-inverse' : 'bg-row-selected/15 text-info'
-            )}
-          >
-            <Check className="h-2.5 w-2.5" />
-            {isActive ? t('model.active') : t('model.installed')}
-          </span>
-        )}
-      </div>
-
-      {/* Description */}
-      <p className="text-body-sm text-fg-muted leading-relaxed flex-1">
-        {t(DESC_KEY[model.id] ?? 'whisperModel.descMedium')}
-      </p>
-
-      {/* Action area */}
-      {isDownloading ? (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-caption text-fg-muted">
-            <span className="truncate mr-2">{downloadFile || t('model.downloading')}</span>
-            <span className="tabular-nums flex-shrink-0">{downloadPercent}%</span>
-          </div>
-          <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all duration-300 rounded-full"
-              style={{ width: `${downloadPercent}%` }}
-            />
-          </div>
-          <Button variant="ghost" size="sm" className="w-full h-7 text-caption" onClick={onCancelDownload}>
-            {t('model.cancelDownload')}
-          </Button>
-        </div>
-      ) : model.status === 'not-installed' ? (
-        <Button variant="secondary" size="sm" className="w-full" onClick={onInstall}>
-          <Download className="h-3.5 w-3.5 mr-1.5" />
-          {t('model.install')}
-        </Button>
-      ) : isActive ? (
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex-1 text-primary-hover cursor-default hover:text-primary-hover hover:bg-transparent"
-            disabled
-          >
-            <Check className="h-3.5 w-3.5 mr-1.5" />
-            {t('model.selected')}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-fg-disabled hover:text-destructive-soft"
-            onClick={onUninstall}
-            title={t('model.uninstall_confirm_title')}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      ) : (
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" className="flex-1" onClick={onActivate}>
-            <Target className="h-3.5 w-3.5 mr-1.5" />
-            {t('model.useThis')}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-fg-disabled hover:text-destructive-soft"
-            onClick={onUninstall}
-            title={t('model.uninstall_confirm_title')}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ModelCardSkeleton() {
-  return (
-    <div className="rounded-xl border border-line bg-surface-0 p-4 space-y-3 animate-pulse">
-      <div className="h-4 w-16 bg-surface-2 rounded" />
-      <div className="h-3 w-full bg-surface-2 rounded" />
-      <div className="h-8 w-full bg-surface-2 rounded-md" />
-    </div>
-  )
-}

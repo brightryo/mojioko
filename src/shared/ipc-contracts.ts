@@ -1,5 +1,6 @@
-import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams, WordSpan } from './types'
+import type { SubtitleEntry, VideoInfo, AppSettings, BurninPosition, SubtitleBackground, H264Encoder, EncoderSetting, EncodeQuality, AudioMode, OutputContainer, ModelsState, TranscriptionAdvancedParams, WordSpan } from './types'
 import type { FontId } from './fonts'
+import type { RenderNotice } from './render-notice'
 import type { KaraokeStyle } from './karaoke-style'
 import type { Cut } from './cuts'
 export type { ModelsState }
@@ -98,6 +99,34 @@ export interface BurninStartRequest {
    * the preview swept.  Optional + explicit re-construction = silent drop.
    */
   karaokeStyle?: KaraokeStyle
+  /**
+   * REQ-0456 — horizontal margin (ASS px) for BOTH the Style MarginL/MarginR
+   * and the self-positioned anchor edge.  Optional; omitted ⇒ the ASS writer's
+   * `ASS_MARGIN_LR_PX` default (byte-identical to every pre-REQ-0456 caller).
+   * The headless `mojioko burn --margin-x` threads a value here so the wrap
+   * budget and the libass render margin stay consistent.
+   */
+  marginLrPx?: number
+  /**
+   * REQ-0460 — output resolution scaling folded into the SINGLE burn encode.
+   *
+   * When set, `startBurnin` prepends a `scale=…:force_original_aspect_ratio=
+   * decrease,pad=…,setsar=1` filter in front of the `subtitles=` filter so the
+   * source is fit+padded into `w×h` and the ASS burned at PlayRes = `w×h` in ONE
+   * cq-quality pass.  This replaces the old CLI two-pass approach (a separate
+   * `h264_mf` pre-scale with no rate control that collapsed the bitrate before
+   * the burn even ran — the REQ-0460 defect).  Optional; absent ⇒ the source is
+   * encoded at its native resolution exactly as the GUI does.  `video.widthPx/
+   * heightPx` must already equal `w×h` (the caller sets them to the target) so
+   * the ASS PlayRes and the scaled frame agree.
+   */
+  scaleTo?: { w: number; h: number }
+  /**
+   * REQ-0460 — explicit encode-quality override (`--crf` / `--bitrate` /
+   * `--quality`).  Forwarded verbatim to `buildEncoderArgs`.  Optional; omitted
+   * ⇒ the encoder's constant-quality default (matches the GUI).
+   */
+  quality?: EncodeQuality
 }
 
 /**
@@ -109,8 +138,36 @@ export interface BurninStartRequest {
 export interface ExportFrameRequest {
   inputPath: string
   outputPath: string
+  /**
+   * The instant to capture, **on the EDITED axis** — i.e. a position in the
+   * video a burn would produce, not an offset into `inputPath`.
+   *
+   * REQ-0531 §1-3 fixed the axis here. It used to be the source axis, which
+   * made `--time 6` on a project with 2s of cuts before that point return the
+   * frame that appears at 4s in the burn: an image of a moment the output does
+   * not contain, from the feature whose entire job is previewing the output.
+   * Every OTHER number MOJIOKO shows (seekbar, timeline ruler, time inputs,
+   * exported SRT, the burn itself) was already on this axis; the still was the
+   * last surface that was not.
+   *
+   * With `cuts` empty the two axes are the same number, so nothing changes for
+   * the overwhelming majority of projects (REQ-0531 §2-4).
+   */
   timeSec: number
   video: VideoInfo
+  /**
+   * REQ-0531 §2-1 — the project's cut list, same shape and meaning as
+   * `BurninStartRequest.cuts`. Absent / empty means "no trimming", which is the
+   * pre-REQ-0531 behaviour byte-for-byte.
+   *
+   * Consumed for two things, both delegated to `shared/cuts.ts` so this path
+   * shares its arithmetic with the burn rather than re-deriving it:
+   *   - `editedToOrig(timeSec, cuts)` picks which source frame to extract;
+   *   - `translateEntriesToEditedAxis` decides which cues survive and moves
+   *     their times (and karaoke word timings) onto the edited axis, so the
+   *     libass clock at `timeSec` resolves the same phase the burn resolves.
+   */
+  cuts?: Cut[]
   /** PNG (lossless, default) or JPG (mjpeg, high quality). */
   format: 'png' | 'jpg'
   includeSubtitles: boolean
@@ -123,6 +180,19 @@ export interface ExportFrameRequest {
   // REQ-20260615-050 — same per-entry consolidation as BurninStartRequest.
   subtitleBackground?: SubtitleBackground
   fontId?: FontId
+  /**
+   * REQ-0468 — resolution scaling, mirroring `BurninStartRequest.scaleTo`.  When
+   * set, the extracted source frame is scale+padded into this target canvas and
+   * the ASS is burned at PlayRes = target (so `video` here carries the TARGET
+   * dims).  Absent → the source frame is used as-is.  This is what makes a
+   * `--resolution` / `--preset` export_frame preview match the burn.
+   */
+  scaleTo?: { w: number; h: number }
+  /**
+   * REQ-0468 — ASS MarginL/R (from `--margin-x`), passed to the ass-generator so
+   * the still's horizontal margin matches the burn.  Defaults to `ASS_MARGIN_LR_PX`.
+   */
+  marginLrPx?: number
   /**
    * REQ-0344 §2-2 — fallback karaoke style for cues that carry no
    * `entry.karaokeStyle` of their own.
@@ -143,6 +213,16 @@ export interface ExportFrameRequest {
 export interface ExportFrameResult {
   outputPath: string
   sizeBytes: number
+  /**
+   * REQ-0510 §1 / REQ-0517 §2 — non-fatal notices about this export. OPTIONAL
+   * and additive: pre-REQ-0510 callers ignore it.
+   *
+   * The GUI had no way to learn any of this. The judgements happen in the main
+   * process and only reached the CLI's `warnings[]`; the GUI rendered a still
+   * in Noto while the inspector still said "Anton" and said nothing about it.
+   * REQ-0517 widened the field from font-only to every `RenderNotice`.
+   */
+  renderNotices?: RenderNotice[]
 }
 
 export interface EncoderDetectionResult {
@@ -176,7 +256,9 @@ export interface BuildInfo {
 export type { WordSpan } from './types'
 
 export type TranscriptionEvent =
-  | { event: 'started'; totalDurationSec: number }
+  // REQ-0457 A3 — `language` is faster-whisper's detected language (optional;
+  // absent on pre-REQ-0457 sidecars / bundled exes).
+  | { event: 'started'; totalDurationSec: number; language?: string | null }
   /**
    * REQ-0285 — segment gained an optional `words` array.  Always
    * populated (possibly empty) when the sidecar is Post-REQ-0285;
@@ -236,8 +318,50 @@ export type TranscriptionEvent =
 
 export type BurninEvent =
   | { event: 'progress'; percent: number; currentTimeMs: number }
-  | { event: 'completed'; outputPath: string; sizeMB: number }
-  | { event: 'failed'; error: string }
+  /**
+   * REQ-0460 — `completed` gained the measured output video bitrate and the
+   * CONCRETE encoder that ffmpeg actually used (e.g. `h264_nvenc`), so a
+   * headless caller can verify quality instead of guessing from `sizeMB`.  Both
+   * are OPTIONAL and additive: the GUI ignores them and any pre-REQ-0460 caller
+   * keeps working.  `videoBitrateKbps` is ffprobe's stream bitrate, falling back
+   * to a size/duration estimate; `resolvedEncoder` is the output of
+   * `getBestEncoder` (never the requested `'auto'`).
+   */
+  | {
+      event: 'completed'
+      outputPath: string
+      sizeMB: number
+      videoBitrateKbps?: number
+      resolvedEncoder?: H264Encoder
+      /**
+       * REQ-0510 §1 / REQ-0517 §2 — non-fatal notices about this render, on
+       * the event that already carries its outcome. Attached to `completed`
+       * rather than streamed as its own event so a caller cannot receive it
+       * without also receiving the result it describes.
+       *
+       * Was `fontNotices?: FontSubstitutionNotice[]`, whose `code` is a
+       * two-member union — so font substitution was the only thing the GUI
+       * could ever be told (RES-0516 §3-5). It is now the SAME `RenderNotice`
+       * the CLI and MCP already return in `warnings[]`, so a warning is
+       * written once and both surfaces get it. Which of them the GUI actually
+       * toasts is a separate, deliberately narrow decision — see
+       * `renderer/lib/render-notice-toast.ts`.
+       */
+      renderNotices?: RenderNotice[]
+    }
+  /**
+   * REQ-0548 — `errorCode` is OPTIONAL and additive, following the pattern the
+   * model-download event already uses: the renderer picks a localized message
+   * instead of parsing `error`.  `diskFull` is emitted by the pre-flight check
+   * BEFORE ffmpeg starts and carries the numbers that message needs.  `error`
+   * stays as the fallback and the log breadcrumb.
+   */
+  | {
+      event: 'failed'
+      error: string
+      errorCode?: 'diskFull'
+      disk?: { requiredBytes: number; freeBytes: number; drive: string }
+    }
 
 /**
  * REQ-20260615-081 — IPC contract for model download.  The `failed`
@@ -259,7 +383,19 @@ export type BurninEvent =
  * main process feeding a v1.3.2+ renderer).
  */
 export type DownloadModelEvent =
-  | { event: 'progress'; file: string; fileIndex: number; totalFiles: number; percent: number }
+  | {
+      event: 'progress'
+      file: string
+      fileIndex: number
+      totalFiles: number
+      percent: number
+      // REQ-0409 — optional throughput/ETA figures (translation-tool download
+      // fills these; the Whisper model download omits them, so its card is
+      // unchanged).
+      bytesPerSec?: number
+      receivedBytes?: number
+      totalBytes?: number
+    }
   | { event: 'completed' }
   | { event: 'failed'; error: string; errorCode?: 'network' | 'fatal' | 'aborted' }
 
@@ -280,7 +416,7 @@ export type { DownloadGpuToolEvent, GpuToolState } from './gpu-tool'
  * snapshot IPC.  `DownloadKind` and the busy-error code stay for
  * the (rare) same-target duplicate rejection path.
  */
-export type DownloadKind = 'model' | 'gpu-tool' | 'font'
+export type DownloadKind = 'model' | 'gpu-tool' | 'font' | 'translation-tool'
 
 export interface ActiveDownloadInfo {
   kind: DownloadKind

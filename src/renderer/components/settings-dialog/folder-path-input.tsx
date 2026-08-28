@@ -1,3 +1,4 @@
+import type { OsFolder } from '../../../shared/folder-settings'
 import { useTranslation } from 'react-i18next'
 import { Folder, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -11,23 +12,30 @@ interface FolderPathInputProps {
   placeholder: string
   /** Full label for the picker's aria (used as the folder dialog's title indirectly). */
   ariaLabel: string
+  /**
+   * REQ-0518 — the OS folder THIS row falls back to, so the [参照…] picker
+   * opens where the row's placeholder says it will.  Before, every picker
+   * opened in Videos regardless of the row.
+   */
+  fallbackOsFolder: OsFolder
 }
 
 /**
  * REQ-0121 — path display + [参照…] + [クリア] used by Settings > General
  * for the user-preferred default input / output folders.  Clearing sets
  * the value back to `null`, at which point the main-side dialog handler
- * falls through to `app.getPath('videos')` per REQ.
+ * falls through to the row's own OS folder per REQ-0518
+ * (`app.getPath('videos' | 'documents' | 'pictures')`).
  *
  * The dialog handler validates the path on use (`fs.existsSync`); this
  * component intentionally does NOT check the path at display time so a
  * temporarily-disconnected drive is not silently forgotten.
  */
-export function FolderPathInput({ value, onChange, placeholder, ariaLabel }: FolderPathInputProps) {
+export function FolderPathInput({ value, onChange, placeholder, ariaLabel, fallbackOsFolder }: FolderPathInputProps) {
   const { t } = useTranslation('settings')
 
   async function handleBrowse() {
-    const picked = await openDirectoryDialog(value ?? undefined)
+    const picked = await openDirectoryDialog(value ?? undefined, fallbackOsFolder)
     if (picked) onChange(picked)
   }
 

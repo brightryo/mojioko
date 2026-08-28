@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { computeDragPatch, type DragPatchInputs } from '../../src/renderer/lib/timeline-drag'
+import {
+  computeDragPatch,
+  computeLayerDragVisual,
+  buildMoveCommit,
+  type DragPatchInputs,
+} from '../../src/renderer/lib/timeline-drag'
 import type { SubtitleEntry } from '../../src/shared/types'
 import { makeEntryLayoutDefaults } from '../../src/shared/burnin-defaults'
 import { origToEdited, type CutList } from '../../src/shared/cuts'
@@ -570,5 +575,178 @@ describe('computeDragPatch — REQ-0201 Edited-axis translation with cuts', () =
       // cs precision — the roundToCs pass can drift by up to one cs.
       expect(editedEnd).toBeCloseTo(expected, 2)
     }
+  })
+})
+
+// REQ-0466 §1 — the `decideDragAxis` / `computeLayerDrag` (REQ-0399 axis-lock)
+// suites were removed with the functions; the 2D drag (REQ-0403) and 1:1 cursor
+// follow (REQ-0462) never used them.  `computeLayerDragVisual` (below) is the
+// live vertical-drag helper.
+
+/**
+ * REQ-0402 — cursor-following vertical drag.  `computeLayerDragVisual` returns
+ * the floating block's follow position AND the track it snaps to, in the
+ * rendered 0..maxRow frame (row 0 = top = layer maxRow; row maxRow = bottom =
+ * layer 0).  H = TRACK_HEIGHT_PX (88), PAD = BLOCK_VERTICAL_PAD_PX (12).
+ */
+describe('computeLayerDragVisual — REQ-0402', () => {
+  const H = 88
+  const PAD = 12
+
+  it('no travel keeps the clip on its own row/layer', () => {
+    // A single layer-0 clip: maxRow 1 (one spare above). base row index 1.
+    const v = computeLayerDragVisual(0, 0, 1, H, PAD)
+    expect(v.blockTopPx).toBe(1 * H + PAD) // 100
+    expect(v.targetRowIndex).toBe(1)
+    expect(v.targetLayer).toBe(0)
+  })
+
+  it('the block follows the cursor 1:1 (blockTopPx = baseTop + dy)', () => {
+    const v = computeLayerDragVisual(0, -30, 1, H, PAD)
+    expect(v.blockTopPx).toBe(1 * H + PAD - 30) // 70 — glides, not a discrete hop
+  })
+
+  it('dragging up ~one row snaps to the spare track above (layer +1)', () => {
+    const v = computeLayerDragVisual(0, -H, 1, H, PAD)
+    expect(v.targetRowIndex).toBe(0)
+    expect(v.targetLayer).toBe(1)
+  })
+
+  it('rounds to the nearest row for the snap target', () => {
+    expect(computeLayerDragVisual(0, -H * 0.4, 1, H, PAD).targetLayer).toBe(0) // <½ up
+    expect(computeLayerDragVisual(0, -H * 0.6, 1, H, PAD).targetLayer).toBe(1) // >½ up
+  })
+
+  it('clamps the follow position AND the target to the rendered rows (0..maxRow)', () => {
+    // Drag far up on a clip at layer 2 (maxRow 3): can't go past the top spare.
+    const up = computeLayerDragVisual(2, -10 * H, 3, H, PAD)
+    expect(up.blockTopPx).toBe(PAD) // pinned to the top row
+    expect(up.targetRowIndex).toBe(0)
+    expect(up.targetLayer).toBe(3) // the spare — one above the max, never higher
+    // Drag far down: pinned to the bottom row (layer 0).
+    const down = computeLayerDragVisual(2, 10 * H, 3, H, PAD)
+    expect(down.blockTopPx).toBe(3 * H + PAD)
+    expect(down.targetRowIndex).toBe(3)
+    expect(down.targetLayer).toBe(0)
+  })
+
+  it('a mid drag on a taller stack lands on the expected intermediate layer', () => {
+    // clips at 0,1,2 → maxRow 3. Drag the layer-2 clip (row 1) down one row.
+    const v = computeLayerDragVisual(2, H, 3, H, PAD)
+    expect(v.targetRowIndex).toBe(2)
+    expect(v.targetLayer).toBe(1)
+  })
+})
+
+/**
+ * REQ-0403 — a 2D move commits time AND layer in ONE undo step.  `buildMoveCommit`
+ * builds that step's before/after pair (time is live-committed, layer is
+ * pending), so a single history op restores both axes.  These pin the three
+ * cases the REQ calls out: time-only, layer-only, both — plus the no-op.
+ */
+describe('buildMoveCommit — REQ-0403 single-undo for 2D move', () => {
+  const withLayer = (id: string, s: number, e: number, layer?: number): SubtitleEntry =>
+    layer === undefined ? entry(id, s, e) : { ...entry(id, s, e), layer }
+
+  it('no movement → null (no history pushed, no re-sort)', () => {
+    const before = withLayer('a', 0, 1, 0)
+    const final = withLayer('a', 0, 1, 0)
+    expect(buildMoveCommit(before, final, 0)).toBeNull()
+  })
+
+  it('time only → after carries the new time, layer unchanged', () => {
+    const before = withLayer('a', 0, 1, 0)
+    const final = withLayer('a', 2, 3, 0) // time moved live
+    const commit = buildMoveCommit(before, final, 0) // pending layer == before
+    expect(commit).not.toBeNull()
+    expect(commit!.after.startSec).toBe(2)
+    expect(commit!.after.endSec).toBe(3)
+    expect(commit!.after.layer).toBe(0)
+    expect(commit!.before).toBe(before) // undo restores the pre-drag entry
+  })
+
+  it('layer only → after carries the new layer, time unchanged', () => {
+    const before = withLayer('a', 0, 1, 0)
+    const final = withLayer('a', 0, 1, 0) // time untouched
+    const commit = buildMoveCommit(before, final, 3) // pending layer moved
+    expect(commit).not.toBeNull()
+    expect(commit!.after.layer).toBe(3)
+    expect(commit!.after.startSec).toBe(0)
+    expect(commit!.after.endSec).toBe(1)
+  })
+
+  it('★ both axes → ONE commit carries the new time AND the new layer', () => {
+    const before = withLayer('a', 0, 1, 0)
+    const final = withLayer('a', 2, 3, 0) // time moved live (layer still 0 in store)
+    const commit = buildMoveCommit(before, final, 5) // pending layer moved to 5
+    expect(commit).not.toBeNull()
+    expect(commit!.after.startSec).toBe(2)
+    expect(commit!.after.endSec).toBe(3)
+    expect(commit!.after.layer).toBe(5) // single undo reverts BOTH from this pair
+    expect(commit!.before.startSec).toBe(0)
+    expect(commit!.before.endSec).toBe(1)
+  })
+
+  it('layer change detected through resolveLayer (undefined ≡ 0)', () => {
+    const before = entry('a', 0, 1) // no layer → resolveLayer 0
+    const final = entry('a', 0, 1)
+    expect(buildMoveCommit(before, final, 0)).toBeNull() // 0 == 0 → no change
+    expect(buildMoveCommit(before, final, 1)).not.toBeNull() // 1 != 0 → change
+  })
+})
+
+/**
+ * REQ-0462 — a 'move' drag must follow the cursor 1:1 and apply snap only on
+ * release.  `computeDragPatch` therefore returns BOTH the snapped time
+ * (`startSec`/`endSec`, applied on pointerup) AND the raw cursor time
+ * (`rawStartSec`/`rawEndSec`, written live so the clip sticks to the pointer).
+ * The snapped output is unchanged (the 46 tests above still pin it); these pin
+ * the new raw fields and the "guide shows, block follows raw" split.
+ */
+describe('computeDragPatch — REQ-0462 raw (1:1-follow) vs snapped (on-release)', () => {
+  it('snap ON near a grid line: startSec snaps to grid, rawStartSec follows the cursor', () => {
+    // snapshot start=5, drag +1.1 s → raw start 6.1, inside the 0.24 s window of
+    // grid line 6 (step 2 at pps 50), so the SNAPPED time pulls to 6 while the
+    // RAW time stays at the cursor (6.1).
+    const patch = computeDragPatch(baseInput({
+      snapshot: { startSec: 5, endSec: 10 },
+      kind: 'move',
+      dxPx: 1.1 * PPS,
+      liveEntries: [],
+    }))
+    expect(patch.startSec).toBe(6)          // snapped — applied on release
+    expect(patch.endSec).toBe(11)
+    expect(patch.rawStartSec).toBeCloseTo(6.1, 6)  // raw — written live, follows cursor
+    expect(patch.rawEndSec).toBeCloseTo(11.1, 6)
+    expect(patch.guideKind).toBe('grid')    // guide still shows where it will land
+    expect(patch.rawStartSec).not.toBe(patch.startSec) // the two genuinely differ
+  })
+
+  it('snap OFF: raw equals snapped (nothing to adsorb to)', () => {
+    const patch = computeDragPatch(baseInput({
+      snapshot: { startSec: 5, endSec: 10 },
+      kind: 'move',
+      dxPx: 1.1 * PPS,
+      snapEnabled: false,
+      liveEntries: [],
+    }))
+    expect(patch.rawStartSec).toBe(patch.startSec)
+    expect(patch.rawEndSec).toBe(patch.endSec)
+    expect(patch.startSec).toBeCloseTo(6.1, 6)
+    expect(patch.guideKind).toBeNull()
+  })
+
+  it('raw times are clamped/cs-rounded the same as the snapped times', () => {
+    // Drag far past the tail: both raw and snapped end clamp to the video floor.
+    const patch = computeDragPatch(baseInput({
+      snapshot: { startSec: 55, endSec: 60 },
+      kind: 'move',
+      dxPx: 100 * PPS,       // way past the end
+      snapEnabled: false,
+      liveEntries: [],
+    }))
+    expect(patch.rawEndSec).toBeLessThanOrEqual(DUR)
+    expect(patch.rawStartSec).toBeGreaterThanOrEqual(0)
+    expect(patch.rawEndSec).toBe(patch.endSec)
   })
 })

@@ -3,6 +3,7 @@ import { readFileSync } from 'fs'
 import path from 'path'
 import { generateAss } from '../../src/main/services/ass-generator'
 import { FONT_REGISTRY, DEFAULT_FONT_ID, getFontMeta } from '../../src/shared/fonts'
+import { KARAOKE_STYLE_DEFAULT } from '../../src/shared/karaoke-style'
 import type { SubtitleEntry, VideoInfo, BurninPosition } from '../../src/shared/types'
 
 /**
@@ -72,7 +73,7 @@ describe('REQ-0340 §3 — assFontName has no default', () => {
   })
 
   it('emits exactly the family it was given, in both Style rows', () => {
-    const ass = generateAss([makeEntry()], video, burnin, undefined, 'MOJIOKO Test Family')
+    const ass = generateAss([makeEntry()], video, burnin, undefined, 'MOJIOKO Test Family', false, KARAOKE_STYLE_DEFAULT)
     expect(ass).toContain('Style: Default,MOJIOKO Test Family,')
     expect(ass).toContain('Style: WithBox,MOJIOKO Test Family,')
   })

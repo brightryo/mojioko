@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickTranscriptionTrack } from '../../src/renderer/routes/step1-track-pick'
+import { pickTranscriptionTrack } from '../../src/shared/track-pick'
 
 /**
  * REQ-0121 — audio-track fallback ladder for STEP 1.

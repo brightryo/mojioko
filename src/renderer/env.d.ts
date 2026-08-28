@@ -1,8 +1,10 @@
 /// <reference types="vite/client" />
 
-import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
+import type { VideoInfo, AppSettings, SettingsLoadResult, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
 import type { GpuToolState } from '../shared/gpu-tool'
+import type { TranslationToolId, TranslationToolsState } from '../shared/translation-tools'
+import type { TranslateResult } from '../shared/translation'
 import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult, ActiveDownloadInfo } from '../shared/ipc-contracts'
 
 type IpcOk<T> = { ok: true; data: T }
@@ -17,6 +19,9 @@ declare global {
       getBuildInfo: () => Promise<BuildInfo>
       detectEncoders: () => Promise<EncoderDetectionResult>
       isMsix: () => Promise<boolean>
+      getCliPath: () => Promise<string>
+      getMcpLaunchSpec: () => Promise<import('../shared/mcp').McpLaunchSpec>
+      exportMcpBundle: (targetPath: string) => Promise<import('../shared/mcp').McpExportResult>
       // REQ-0258 — read the MOJIOKO EULA text for the current UI language.
       readEula: (lang: 'ja' | 'en') => Promise<IpcResult<string>>
       menuSetLanguage: (lang: string) => void
@@ -26,10 +31,12 @@ declare global {
       saveFileDialog: (
         defaultName: string,
         defaultDir?: string,
-        filters?: { name: string; extensions: string[] }[]
+        filters?: { name: string; extensions: string[] }[],
+        // REQ-0518 — OS folder to fall back to; supplied by the caller's row.
+        fallbackOsFolder?: string,
       ) => Promise<string | null>
       // REQ-0121 — folder picker used by Settings > General.
-      openDirectoryDialog: (defaultDir?: string) => Promise<string | null>
+      openDirectoryDialog: (defaultDir?: string, fallbackOsFolder?: string) => Promise<string | null>
       // REQ-0194 — `.mojioko` project file open dialog.
       openProjectDialog: (defaultDir?: string) => Promise<string | null>
       // REQ-0223 — `.srt` file open dialog for the step2 import flow.
@@ -48,6 +55,17 @@ declare global {
       transcriptionListModels: () => Promise<IpcResult<ModelsState>>
       transcriptionUninstallModel: (modelId: WhisperModelId) => Promise<IpcResult<ModelsState>>
       transcriptionSetActiveModel: (modelId: WhisperModelId) => Promise<IpcResult<ModelsState>>
+      translationToolList: () => Promise<IpcResult<TranslationToolsState>>
+      translationToolDownload: (toolId: TranslationToolId) => Promise<IpcResult<{ channelId: string }>>
+      translationToolDownloadCancel: (channelId: string) => Promise<void>
+      translationToolUninstall: (toolId: TranslationToolId) => Promise<IpcResult<TranslationToolsState>>
+      translationToolSetActive: (toolId: TranslationToolId | null) => Promise<IpcResult<TranslationToolsState>>
+      translationTranslate: (text: string, target: string) => Promise<IpcResult<TranslateResult>>
+      translationTranslateBatch: (
+        texts: string[],
+        target: string,
+      ) => Promise<IpcResult<{ texts: string[]; loadMs: number; translateMs: number }>>
+      translationPreload: () => Promise<IpcResult<{ loadMs: number }>>
 
       fontList: () => Promise<IpcResult<FontsState>>
       fontDownload: (fontId: FontId) => Promise<IpcResult<{ channelId: string }>>
@@ -74,13 +92,15 @@ declare global {
       burninStart: (opts: BurninStartRequest) => Promise<IpcResult<{ channelId: string }>>
       burninCancel: (channelId: string) => Promise<void>
 
-      settingsLoad: () => Promise<IpcResult<AppSettings>>
+      settingsLoad: () => Promise<IpcResult<SettingsLoadResult>>
       settingsSave: (settings: AppSettings) => Promise<IpcResult<null>>
+      sendCloseDecision: (decision: 'discard' | 'cancel') => Promise<void>
 
       shellOpenPath: (path: string) => Promise<void>
       shellShowInFolder: (path: string) => Promise<void>
       shellOpenExternal: (url: string) => Promise<void>
       shellOpenModelsFolder: () => Promise<void>
+      shellOpenTranslationToolsFolder: () => Promise<void>
       shellOpenThirdPartyLicensesFolder: () => Promise<void>
       shellWriteTextFile: (filePath: string, content: string) => Promise<void>
       shellFileExists: (filePath: string) => Promise<boolean>

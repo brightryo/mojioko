@@ -4,6 +4,7 @@ import type { Cut } from '../../shared/cuts'
 import { sanitizeCuts } from '../../shared/cuts'
 import { sampleDefaults } from '@/lib/fixtures'
 import { isEditedFromOriginal } from '@/lib/entry-edits'
+import { assignCueNumbers, nextCueNumber } from '../../shared/cue-number'
 
 export type VideoLoadingState = 'idle' | 'loading' | 'loaded' | 'error'
 
@@ -122,7 +123,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   setVideo: (v) => set({ video: v }),
   setVideoLoadingState: (s) => set({ videoLoadingState: s }),
   setSelectedTrackIndex: (i) => set({ selectedTrackIndex: i }),
-  setEntries: (entries) => set({ entries }),
+  // REQ-0400 — every creation path (transcription, SRT import, project load)
+  // and undo/redo funnels through setEntries, so assigning stable display
+  // numbers here back-fills any entry that arrives without one (legacy files,
+  // fixtures) exactly once, in array order.  Already-numbered entries keep
+  // their number and object identity.
+  setEntries: (entries) => set({ entries: assignCueNumbers(entries) }),
   /**
    * Merge `patch` into the entry, then **recompute `isEdited`** from the
    * merged entry's values vs `entry.original` (see {@link isEditedFromOriginal}).
@@ -181,9 +187,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }
     }),
   addEntry: (entry, atIndex) =>
-    set((s) => ({
-      entries: [...s.entries.slice(0, atIndex), entry, ...s.entries.slice(atIndex)]
-    })),
+    set((s) => {
+      // REQ-0400 — mint a fresh display number for a cue that arrives without
+      // one (add-row, duplicate).  Based on the live max, so it is monotonic
+      // and a duplicate is always distinguishable from its source.  Redo of an
+      // add recomputes deterministically from the same state.
+      const withNumber =
+        typeof entry.cueNumber === 'number'
+          ? entry
+          : { ...entry, cueNumber: nextCueNumber(s.entries) }
+      return {
+        entries: [...s.entries.slice(0, atIndex), withNumber, ...s.entries.slice(atIndex)]
+      }
+    }),
   sortByStartSec: () =>
     set((s) => ({
       // Spec-guaranteed stable sort (ES2019+) — equal-startSec entries keep

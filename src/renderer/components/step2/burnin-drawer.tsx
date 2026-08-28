@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { formatGb } from '../../../shared/burn-disk'
 import { useTranslation } from 'react-i18next'
 import {
   Play,
@@ -17,11 +18,13 @@ import {
   Check
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { showRenderNoticeToasts } from '@/lib/render-notice-toast'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { formatElapsed } from '@/lib/format-elapsed'
 import { useProjectStore } from '@/stores/project-store'
+import { FOLDER_SETTINGS } from '../../../shared/folder-settings'
 import { useSettingsStore } from '@/stores/settings-store'
 import { startBurnin } from '@/services/burnin'
 import { detectEncoders, resolveEffectiveEncoder, ENCODER_LABELS } from '@/services/encoder'
@@ -242,7 +245,13 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
     const pad = (n: number) => String(n).padStart(2, '0')
     const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
     const defaultName = `${stem}_subtitled_${ts}.${outExt}`
-    const targetPath = await saveFileDialog(defaultName, defaultOutputDir ?? undefined)
+    const targetPath = await saveFileDialog(
+      defaultName,
+      defaultOutputDir ?? undefined,
+      undefined,
+      // REQ-0518 — explicit, so no call site relies on the handler's default.
+      FOLDER_SETTINGS.videoOutput.osFolder,
+    )
     if (!targetPath) return
 
     const exists = await fileExists(targetPath).catch(() => false)
@@ -303,6 +312,12 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
         onOpenChange(false)
         setCompletionOpen(true)
         toast.success(t('success.title'))
+        // REQ-0510 §2-1 / REQ-0517 §2 — if the render decided something the
+        // project does not show, say so HERE: this is the moment a file exists
+        // that differs from what the inspector displays. Silent until then by
+        // design (no toast from the live preview), and silent for the notices
+        // the allowlist in `render-notice-toast.ts` deliberately withholds.
+        showRenderNoticeToasts(evt.renderNotices, t)
       } else if (evt.event === 'failed') {
         const errMsg = evt.error
         setErrorMessage(errMsg)
@@ -315,6 +330,15 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
         if (errMsg === 'Cancelled') {
           setRenderState('idle')
           setProgress(0)
+        } else if (evt.errorCode === 'diskFull' && evt.disk) {
+          // REQ-0548 — the pre-flight refused before ffmpeg started. Say which
+          // drive and by how much, so the user has something to act on; the raw
+          // ffmpeg tail never did.
+          toast.error(t('error.diskFull', {
+            drive: evt.disk.drive,
+            free: formatGb(evt.disk.freeBytes),
+            required: formatGb(evt.disk.requiredBytes),
+          }))
         } else {
           toast.error(t('error.renderFailed', { reason: errMsg }))
         }
@@ -419,7 +443,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
                 <div className="py-3 space-y-2">
                   <div className="flex items-center gap-1.5">
                     <Music className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-                    <Label>{t('audio.label')}</Label>
+                    <Label className="text-title">{t('audio.label')}</Label>
                   </div>
                   <div className="flex flex-col gap-2">
                     {/*
@@ -502,7 +526,7 @@ export function BurninDrawer({ open, onOpenChange }: BurninDrawerProps) {
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-6 py-6 space-y-3">
                 <div className="flex items-center gap-2 text-destructive">
                   <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                  <p className="text-headline font-semibold">{t('error.title')}</p>
+                  <p className="text-body font-semibold">{t('error.title')}</p>
                 </div>
                 {errorMessage && (
                   <p className="text-body-sm text-fg-tertiary break-all font-mono selectable">
@@ -822,7 +846,7 @@ function OutputFormatCard({
     <div className="py-3 space-y-2">
       <div className="flex items-center gap-1.5">
         <FileVideo className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-        <Label>
+        <Label className="text-title">
           {inputExt
             ? t('outputFormat.labelWithInput', { ext: inputExt })
             : t('outputFormat.label')}
@@ -864,7 +888,7 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   // 7-row summary reads as a compact reference table.
   return (
     <div className="flex items-center justify-between py-1">
-      <span className="text-callout font-semibold text-fg-tertiary">{label}</span>
+      <span className="text-body-sm font-semibold text-fg-tertiary">{label}</span>
       <span className="text-body-sm text-fg-primary font-mono tabular-nums">{value}</span>
     </div>
   )

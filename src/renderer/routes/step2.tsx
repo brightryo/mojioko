@@ -15,7 +15,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { TimeEditorDialog } from '@/components/time-editor-dialog/time-editor-dialog'
 import { ExportFrameButton } from '@/components/step2/export-frame-button'
 import { BurninDrawer } from '@/components/step2/burnin-drawer'
+import { clampCueTimesToDuration } from '@/lib/entry-edits'
 import { useProjectStore } from '@/stores/project-store'
+import { FOLDER_SETTINGS } from '../../shared/folder-settings'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore, type TableFilter } from '@/stores/ui-store'
@@ -24,7 +26,11 @@ import { cn } from '@/lib/utils'
 import { saveFileDialog, writeTextFile, openSrtDialog, readTextFile } from '@/services/dialog'
 import { parseSrt } from '@/lib/srt-parse'
 import { computeOverflowSync } from '@/lib/overflow-calculator'
-import { resolveEmphasisRanges, clampEmphasisScalePercent } from '../../shared/emphasis'
+import { resolveEmphasisRanges, clampEmphasisScalePercent, cueMaxRenderedFontAssPx } from '../../shared/emphasis'
+// REQ-0456 — vertical overflow badge: the cue's stacked line height (same model
+// the ASS writer + headless guard use) vs the video height.
+import { estimateCueHeightAssPx } from '../../shared/line-spacing'
+import { ASS_MARGIN_LR_PX } from '@/lib/tokens'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { computeEntryWarnings, hasAnyError, hasAnyWarning, type EntryWarnings } from '@/lib/entry-warnings'
@@ -37,6 +43,7 @@ import type { SubtitleEntry } from '../../shared/types'
 import { makeEntryLayoutDefaults } from '../../shared/burnin-defaults'
 import { formatSrtTime } from '../../shared/srt-time'
 import { styleFieldsFromDefaults } from '@/lib/style-defaults-to-entry'
+import { buildNewCue, computeAddInsertion as sharedComputeAddInsertion } from '@/lib/cue-structure'
 import { NEW_ROW_DURATION_SEC, ENABLE_VIDEO_PREVIEW } from '../../shared/constants'
 import { VideoPreviewPanel } from '@/components/video-preview/video-preview-panel'
 import { AudioPreviewPanel } from '@/components/audio-preview/audio-preview-panel'
@@ -187,6 +194,9 @@ export default function Step2Route(_: Step2RouteProps) {
   const addEntry = useProjectStore((s) => s.addEntry)
   const updateEntry = useProjectStore((s) => s.updateEntry)
   const defaults = useProjectStore((s) => s.defaults)
+  // REQ-0540 — a new cue gets the SAME parameters タブ2 displays: the memory
+  // first, then the saved defaults, then the fixed table.
+  const animationMemory = useSettingsStore((s) => s.animationMemory)
   const video = useProjectStore((s) => s.video)
   const isAudioOnly = useIsAudioOnly()
   const pushHistory = useHistoryStore((s) => s.push)
@@ -259,9 +269,11 @@ export default function Step2Route(_: Step2RouteProps) {
    *
    * `cancellable` is honest rather than decorative: it goes false once the
    * import reaches the commit, because from that point the work is a single
-   * synchronous React render that nothing can interrupt.  See the RES — the
-   * dominant cost at 10,000 cues is `computeFixedStackOffsets`, an O(N²) pass
-   * in the video preview panel, measured at ~4.3 s of a ~4.5 s commit.
+   * synchronous React render that nothing can interrupt.  (Historically the
+   * dominant 10k-cue cost was `computeFixedStackOffsets`, an O(N²) pass; the
+   * preview stopped calling it in REQ-0391 and REQ-0465 §1 made it O(N×C), so
+   * the commit render is now the timeline/list render, addressed by REQ-0465
+   * §2/§3 virtualization + memoisation.)
    */
   const [srtImportProgress, setSrtImportProgress] = useState<{
     done: number
@@ -365,7 +377,12 @@ export default function Step2Route(_: Step2RouteProps) {
   // built via the add-row dialog seeds `fadeDurationSec` from here.
   const settingsFadeDurationSec = useSettingsStore((s) => s.fadeDurationSec)
   // REQ-0121 — applied to the text / SRT save dialogs below.
-  const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
+  // REQ-0518 — STEP2's three dialogs each have their own row now; 動画出力
+  // フォルダ is left to the burn drawer, which is the only thing that writes a
+  // video.  (`defaultOutputDir` was read here for all three and is now unused,
+  // which is how we know every one of them moved.)
+  const defaultTextDir = useSettingsStore((s) => s.defaultTextDir)
+  const defaultSrtDir = useSettingsStore((s) => s.defaultSrtDir)
   const [subtitleFont, setSubtitleFont] = useState<SubtitleFont | null>(getSubtitleFont)
 
   // Re-load the opentype.js Font whenever the active font selection changes.
@@ -439,6 +456,24 @@ export default function Step2Route(_: Step2RouteProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, videoWidthPx, subtitleFont, isAudioOnly, fontCacheVersion])
 
+  // REQ-0456 — vertical overflow map: a cue whose stacked line height exceeds
+  // the frame (video height minus a symmetric safe margin).  Uses the same
+  // `estimateCueHeightAssPx` the ASS writer / headless `--overflow` guard use;
+  // `cueMaxRenderedFontAssPx(e, true)` makes it emphasis-aware (only inflates a
+  // cue that actually has keyword emphasis on).
+  const videoHeightPx = video?.heightPx ?? 1080
+  const verticalOverflowMap = useMemo(() => {
+    const set = new Set<string>()
+    if (isAudioOnly) return set
+    const budget = videoHeightPx - 2 * ASS_MARGIN_LR_PX
+    if (budget <= 0) return set
+    for (const e of entries) {
+      if (e.isDeleted) continue
+      if (estimateCueHeightAssPx(e, cueMaxRenderedFontAssPx(e, true)) > budget) set.add(e.id)
+    }
+    return set
+  }, [entries, videoHeightPx, isAudioOnly])
+
   const videoDurationSec = isAudioOnly ? Infinity : (video?.durationSec ?? Infinity)
 
   /**
@@ -452,11 +487,11 @@ export default function Step2Route(_: Step2RouteProps) {
     for (const e of entries) {
       if (e.isDeleted) continue
       const isOverflow = overflowMap.has(e.id)
-      map.set(e.id, computeEntryWarnings(e, prevEnd, videoDurationSec, isOverflow))
+      map.set(e.id, computeEntryWarnings(e, prevEnd, videoDurationSec, isOverflow, verticalOverflowMap.has(e.id)))
       prevEnd = e.endSec
     }
     return map
-  }), [entries, overflowMap, videoDurationSec])
+  }), [entries, overflowMap, verticalOverflowMap, videoDurationSec])
 
   // Currently-visible entries under the active filter — drives Ctrl+A's
   // target list and the bulk-selection pruning effect below.
@@ -525,40 +560,37 @@ export default function Step2Route(_: Step2RouteProps) {
     for (const e of entries) map.set(e.id, effectiveEntryState(e, cuts))
     return map
   }, [entries, cuts])
-  const allCount      = entries.length
-  const readyCount    = entries.filter((e) => {
-    const s = effectiveStates.get(e.id)
-    return s !== undefined && !s.effectivelyDeleted
-  }).length
-  const deletedCount  = entries.filter((e) => {
-    const s = effectiveStates.get(e.id)
-    return s !== undefined && s.effectivelyDeleted
-  }).length
-  const editedCount   = entries.filter((e) => {
-    const s = effectiveStates.get(e.id)
-    return s !== undefined && s.wasEdited
-  }).length
-  // REQ-121 — split the legacy single "warnings" count into errors and
-  // warnings.  The "Issues" tab (was: Warnings) shows the union; the
-  // continue-to-Step-3 button gates only on errors.  Both counts
-  // ignore `effectivelyDeleted` rows because:
-  //   - the source `warningsMap` already skips manually-deleted rows
-  //     (= `entry.isDeleted` is filtered out at construction time)
-  //   - trim-deleted rows (`status === 'trimDeleted'`) never reach the
-  //     SRT / burnin pipeline either, so flagging them as "blocking
-  //     export" would be misleading
-  const errorCount    = entries.filter((e) => {
-    const s = effectiveStates.get(e.id)
-    if (s === undefined || s.effectivelyDeleted) return false
-    const w = warningsMap.get(e.id)
-    return w !== undefined && hasAnyError(w)
-  }).length
-  const warningCount  = entries.filter((e) => {
-    const s = effectiveStates.get(e.id)
-    if (s === undefined || s.effectivelyDeleted) return false
-    const w = warningsMap.get(e.id)
-    return w !== undefined && (hasAnyError(w) || hasAnyWarning(w))
-  }).length
+  const allCount = entries.length
+  // REQ-0465 §3 — the five tab counts used to be five separate
+  // `entries.filter().length` walks that re-ran on EVERY render (5 × O(N),
+  // and the timeline recomputes the same shapes too).  Fold them into ONE
+  // memoised pass over `entries`, recomputed only when the inputs change.
+  // The per-count predicates are unchanged, so the badges read identically.
+  //   - errors/warnings (REQ-121): the "問題あり" tab shows the union; the
+  //     continue-to-Step-3 button gates only on errors.  Both ignore
+  //     `effectivelyDeleted` rows (warningsMap already skips manual deletes;
+  //     trim-deleted rows never reach the SRT / burn pipeline).
+  const { readyCount, deletedCount, editedCount, errorCount, warningCount } = useMemo(() => {
+    let ready = 0, deleted = 0, edited = 0, error = 0, warning = 0
+    for (const e of entries) {
+      const s = effectiveStates.get(e.id)
+      if (s === undefined) continue
+      // Each predicate is a verbatim transcription of the five original
+      // filters — note 編集済み counts wasEdited rows REGARDLESS of deletion,
+      // while error/warning (like the originals) skip effectivelyDeleted rows.
+      if (s.effectivelyDeleted) deleted++
+      else ready++
+      if (s.wasEdited) edited++
+      if (!s.effectivelyDeleted) {
+        const w = warningsMap.get(e.id)
+        if (w !== undefined) {
+          if (hasAnyError(w)) error++
+          if (hasAnyError(w) || hasAnyWarning(w)) warning++
+        }
+      }
+    }
+    return { readyCount: ready, deletedCount: deleted, editedCount: edited, errorCount: error, warningCount: warning }
+  }, [entries, effectiveStates, warningsMap])
 
   // REQ-103 tab order + REQ-121 rename: すべて・出力対象・削除・編集済み・
   // 問題あり.  The two destination tabs come first (left-to-right "where
@@ -717,53 +749,49 @@ export default function Step2Route(_: Step2RouteProps) {
    * `visiblePos` is the 1-indexed position the user will SEE in the table —
    * used for the success toast.
    */
+  // REQ-0555 §2 — the rule itself moved to `cue-structure.ts` so the CLI's
+  // `add_cue` inserts where this does.  Kept as a thin wrapper because the
+  // surrounding code reads better closing over `entries`.
   function computeAddInsertion(newStartSec: number): { fullIdx: number; visiblePos: number } {
-    const active = entries.filter((e) => !e.isDeleted)
-    const afterActiveIdx = active.findIndex((e) => e.startSec > newStartSec)
-
-    if (afterActiveIdx === -1) {
-      // No active row has a later startSec — append AFTER the last active row.
-      if (active.length === 0) {
-        return { fullIdx: entries.length, visiblePos: 1 }
-      }
-      const lastActiveId = active[active.length - 1].id
-      const lastActiveFullIdx = entries.findIndex((e) => e.id === lastActiveId)
-      return { fullIdx: lastActiveFullIdx + 1, visiblePos: active.length + 1 }
-    }
-
-    // Place BEFORE the first active row whose startSec exceeds the new value.
-    const pivotFullIdx = entries.findIndex((e) => e.id === active[afterActiveIdx].id)
-    return { fullIdx: pivotFullIdx, visiblePos: afterActiveIdx + 1 }
+    return sharedComputeAddInsertion(entries, newStartSec)
   }
 
-  function handleEditorConfirm(startSec: number, endSec: number) {
+  function handleEditorConfirm(rawStartSec: number, rawEndSec: number) {
     if (!editor.open) return
+
+    /*
+     * REQ-0528 §2 — the ONE clamp for this route, and the route that was
+     * actually leaking.
+     *
+     * The owner reported stretching a cue to 16 s on a 7 s video.  The timeline
+     * drag AND right-edge resize have always clamped (both go through
+     * `computeDragPatch`), and SRT import rejects out-of-range cues outright —
+     * the 「時間を調整」 dialog was the hole: it is handed `videoDurationSec`
+     * for its scrubber but never bounded its own output, so the stepper and the
+     * typed timecode field could write any value.
+     *
+     * Clamped HERE rather than inside the dialog: this is the single function
+     * both dialog modes (add / edit) commit through, so one clamp covers both,
+     * and it sits on the store side of the boundary where the value is actually
+     * persisted.  `cueCeilingSec` is shared with the drag path so the two edit
+     * routes agree on where the video ends (§2-2).
+     *
+     * Audio-only mode passes `Infinity`, so this is a no-op there — matching
+     * how the `overDuration` badge is already suppressed for audio.
+     */
+    const clamp = clampCueTimesToDuration(rawStartSec, rawEndSec, videoDurationSec)
+    const startSec = clamp.startSec
+    const endSec = clamp.endSec
+    if (clamp.clamped) {
+      // Told, not silently applied: the user typed a number and got a
+      // different one, which they must be able to see.
+      toast.info(t('toast.timeClampedToDuration'))
+    }
 
     if (editor.mode === 'add') {
       // Position is decided HERE, from the chosen startSec — not from any
       // stale value snapshotted when the dialog opened.
       const { fullIdx: idx, visiblePos } = computeAddInsertion(startSec)
-      const base = {
-        startSec,
-        endSec,
-        text: '',
-        fadeDurationSec: settingsFadeDurationSec,
-        ...animationFieldsForNewCue(defaults),
-        // REQ-20260613-016 / v1.2.2 機能A: seed per-row layout + background
-        // defaults at creation time.  Same pattern as the transcription
-        // segment mapping in step1.tsx.
-        ...makeEntryLayoutDefaults(),
-        // REQ-0335 §2 — this used to list four style fields by hand (size /
-        // colour / outline colour / outline width), so a row added here lost
-        // shadow, casing, rotation, line spacing, opacity, emphasis, karaoke
-        // and the offsets: it looked different from a transcribed row under
-        // the very same settings.  Now it is the SAME exhaustively-typed
-        // projection step1.tsx seeds transcribed rows with.
-        ...styleFieldsFromDefaults(defaults, {
-          videoWidthPx: video?.widthPx,
-          videoHeightPx: video?.heightPx,
-        }),
-      }
       // REQ-079 #2: collision-resistant id.  Date.now() alone collides
       // when two rows are added within the same millisecond — both rows
       // then share a key in the layout's `trackOf` map, with the later
@@ -773,15 +801,18 @@ export default function Step2Route(_: Step2RouteProps) {
       const id = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
         ? `new-${crypto.randomUUID()}`
         : `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      const newEntry: SubtitleEntry = {
+      // REQ-0555 §2 — the field seeding moved to `cue-structure.ts` so a cue the
+      // CLI adds starts life with exactly these fields.
+      const newEntry: SubtitleEntry = buildNewCue({
         id,
-        ...base,
-        isDeleted: false,
-        isEdited: true,
-        // Deep-copy subtitleBackground so the live entry and original
-        // snapshot do not share object identity.
-        original: { ...base, subtitleBackground: { ...base.subtitleBackground } }
-      }
+        startSec,
+        endSec,
+        fadeDurationSec: settingsFadeDurationSec,
+        defaults,
+        animationMemory,
+        videoWidthPx: video?.widthPx,
+        videoHeightPx: video?.heightPx,
+      })
       pushHistory({
         label: t('history.addRow'),
         undo: () => {
@@ -882,11 +913,12 @@ export default function Step2Route(_: Step2RouteProps) {
     const stem = video?.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'transcript'
     const savePath = await saveFileDialog(
       `${stem}_transcript.txt`,
-      defaultOutputDir ?? undefined,
+      defaultTextDir ?? undefined,
       [
         { name: 'Text File', extensions: ['txt'] },
         { name: 'All Files', extensions: ['*'] }
-      ]
+      ],
+      FOLDER_SETTINGS.text.osFolder,
     )
     if (!savePath) return
     const content = getOutputEntries()
@@ -901,11 +933,17 @@ export default function Step2Route(_: Step2RouteProps) {
     const stem = video?.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'subtitles'
     const savePath = await saveFileDialog(
       `${stem}_subtitles.srt`,
-      defaultOutputDir ?? undefined,
+      // REQ-0518 — an SRT export is a text-shaped save, so it follows
+      // テキスト保存フォルダ rather than 動画出力フォルダ.  The REQ named the
+      // three new rows but not this dialog; leaving it on the video folder
+      // while its sibling text export moved would be the "fixed one, left the
+      // rest" state §2-4 forbids.  Flagged for the owner in RES-0518 §2-2.
+      defaultTextDir ?? undefined,
       [
         { name: 'SRT Subtitle', extensions: ['srt'] },
         { name: 'All Files', extensions: ['*'] }
-      ]
+      ],
+      FOLDER_SETTINGS.text.osFolder,
     )
     if (!savePath) return
     const content = buildSrtContent(getOutputEntries())
@@ -949,7 +987,7 @@ export default function Step2Route(_: Step2RouteProps) {
     // Phase 1 — pick a file.  Cancel = quiet no-op, existing store
     // untouched.  We do NOT toast a "cancelled" message because the
     // user's intent is unambiguous when the picker dismisses.
-    const srtPath = await openSrtDialog(defaultOutputDir ?? undefined)
+    const srtPath = await openSrtDialog(defaultSrtDir ?? undefined)
     if (!srtPath) return
 
     // From here on the user waits, so show the modal.  It is opened BEFORE
@@ -1054,7 +1092,7 @@ export default function Step2Route(_: Step2RouteProps) {
         endSec: cue.endSec,
         text: cue.text,
         fadeDurationSec: settingsFadeDurationSec,
-        ...animationFieldsForNewCue(defaults),
+        ...animationFieldsForNewCue(defaults, animationMemory),
         ...layoutDefaults,
         ...importStyleFields,
       }
@@ -1198,12 +1236,12 @@ export default function Step2Route(_: Step2RouteProps) {
   const footerCenter = (
     /* REQ-067 phase B: zinc-500 → zinc-300 so the per-step counts
        (edited / warnings / deleted) stay readable at a glance.  The
-       inner "selected" span keeps its `text-foreground` accent so the
+       inner "selected" span keeps its `text-fg-primary` accent so the
        active-selection callout still wins visual priority. */
     <span className="text-body-sm text-fg-secondary">
       {selectedRowIds.size > 0 && (
         <>
-          <span className="text-foreground">
+          <span className="text-fg-primary">
             {t('footer.selected', { count: selectedRowIds.size })}
           </span>
           {' · '}
@@ -1341,11 +1379,24 @@ export default function Step2Route(_: Step2RouteProps) {
       <div className="flex-shrink-0 px-3 py-2 border-b border-line">
         {/* REQ-20260615-051 A — bulk-mode heading gets a `?` HelpIcon
             explaining what the list-view checkboxes target.  The single
-            inspector heading keeps its plain label. */}
-        <h2 className="text-callout font-semibold text-fg-secondary flex items-center gap-1.5">
-          <span>{inspectorHeading}</span>
-          {isBulkMode && <HelpIcon content={t('inspector.bulkHelp')} />}
-        </h2>
+            inspector heading keeps its plain label.
+            REQ-0404 — the cue display number ("字幕ID") sits at the RIGHT END of
+            this title row (「インスペクタ」 と同じ行), so the panel reads as "the
+            inspector for cue N".  Shown only in single-cue mode (a real
+            selected entry); bulk / empty modes have no single cue.  `justify-
+            between` right-aligns it regardless of audio-only. */}
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-title font-semibold text-fg-secondary flex items-center gap-1.5">
+            <span>{inspectorHeading}</span>
+            {isBulkMode && <HelpIcon content={t('inspector.bulkHelp')} />}
+          </h2>
+          {!isBulkMode && selectedEntry !== null && (
+            // REQ-0421 (step2) — overlay reassignment: 字幕ID caption → body-sm.
+            <span className="text-body-sm font-mono tabular-nums text-fg-muted select-none whitespace-nowrap">
+              {t('inspector.cueId', { n: selectedEntry.cueNumber ?? '—' })}
+            </span>
+          )}
+        </div>
       </div>
       <div
         ref={inspectorScrollRef}
@@ -1380,7 +1431,9 @@ export default function Step2Route(_: Step2RouteProps) {
               type="button"
               onClick={() => setTableFilter(key)}
               className={cn(
-                'h-7 px-3 rounded-md text-body-sm font-medium transition-colors duration-150',
+                // REQ-0443 §2 — filter tab (すべて·N など) body-sm → caption
+                // (caption == body-sm == 14px today; semantic unification).
+                'h-7 px-3 rounded-md text-caption font-medium transition-colors duration-150',
                 tableFilter === key
                   ? 'bg-surface-2 text-fg-primary'
                   : 'text-fg-muted hover:text-fg-secondary'

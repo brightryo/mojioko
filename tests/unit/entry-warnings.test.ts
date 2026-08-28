@@ -14,6 +14,7 @@ const NONE: EntryWarnings = {
   emptyText: false,
   invalidSize: false,
   overflow: false,
+  verticalOverflow: false,
 }
 
 // ---------------------------------------------------------------------------
@@ -30,8 +31,17 @@ describe('REQ-121: isError', () => {
     expect(isError({ ...NONE, timeInvalid: true })).toBe(true)
   })
 
-  it('overDuration (out-of-range times) → error', () => {
-    expect(isError({ ...NONE, overDuration: true })).toBe(true)
+  /*
+   * REQ-0530 — overDuration moved error → warning.  The REQ-121 classification
+   * grouped it with timeInvalid / invalidSize as "physically un-renderable"
+   * (RES-20260601-120 §3.1); REQ-0529 measured that claim and refuted it — the
+   * in-video portion of such a cue really is drawn.  Being an error also meant
+   * `errorCount` disabled the 動画出力 button, so the project could not be
+   * burned at all.  The assertion is INVERTED rather than deleted, so the
+   * change is visible in the diff of the file that pinned the old rule.
+   */
+  it('overDuration is NOT an error — REQ-0530 (was, until it was measured)', () => {
+    expect(isError({ ...NONE, overDuration: true })).toBe(false)
   })
 
   it('invalidSize (fontSizePx ≤ 0) → error', () => {
@@ -76,8 +86,8 @@ describe('REQ-121: isWarning', () => {
     expect(isWarning({ ...NONE, timeInvalid: true })).toBe(false)
   })
 
-  it('overDuration is NOT a warning (error)', () => {
-    expect(isWarning({ ...NONE, overDuration: true })).toBe(false)
+  it('overDuration IS a warning — REQ-0530 (the row ships, truncated)', () => {
+    expect(isWarning({ ...NONE, overDuration: true })).toBe(true)
   })
 
   it('invalidSize is NOT a warning (error)', () => {
@@ -85,10 +95,16 @@ describe('REQ-121: isWarning', () => {
   })
 })
 
-describe('REQ-121: error / warning partition over all six flags', () => {
+describe('REQ-121: error / warning partition over every flag', () => {
   it('every flag falls in exactly one of {error, warning}', () => {
     // Concrete enumeration: set each flag in isolation and confirm
     // the partition.
+    //
+    // REQ-0530 — `verticalOverflow` added to the list.  It has been a warning
+    // since REQ-0456 but was never enumerated here, so the "partition covers
+    // everything" claim had a hole; a flag classified in neither predicate
+    // would have gone unnoticed.  Counts move 3/3 → 2/5 with overDuration's
+    // reclassification plus this addition.
     type Field = keyof EntryWarnings
     const fields: Field[] = [
       'timeInvalid',
@@ -97,6 +113,7 @@ describe('REQ-121: error / warning partition over all six flags', () => {
       'emptyText',
       'overlap',
       'overflow',
+      'verticalOverflow',
     ]
     let errors = 0
     let warnings = 0
@@ -109,8 +126,12 @@ describe('REQ-121: error / warning partition over all six flags', () => {
       if (inError) errors++
       if (inWarning) warnings++
     }
-    expect(errors).toBe(3)
-    expect(warnings).toBe(3)
+    // REQ-0530: errors = timeInvalid, invalidSize.
+    expect(errors).toBe(2)
+    // emptyText, overlap, overflow, verticalOverflow, overDuration.
+    expect(warnings).toBe(5)
+    // …and together they still account for every field enumerated.
+    expect(errors + warnings).toBe(fields.length)
   })
 
   it('a row with BOTH an error and a warning falls in both predicates', () => {
@@ -132,8 +153,11 @@ describe('REQ-121: hasAnyError / hasAnyWarning aliases', () => {
     expect(hasAnyWarning({ ...NONE, emptyText: true })).toBe(true)
     expect(hasAnyWarning({ ...NONE, overlap: true })).toBe(true)
     expect(hasAnyWarning({ ...NONE, overflow: true })).toBe(true)
+    // REQ-0456 — vertical overflow is a warning (row still ships).
+    expect(hasAnyWarning({ ...NONE, verticalOverflow: true })).toBe(true)
     expect(hasAnyWarning({ ...NONE, timeInvalid: true })).toBe(false)
-    expect(hasAnyWarning({ ...NONE, overDuration: true })).toBe(false)
+    // REQ-0530 — now a warning (see the isError/isWarning blocks above).
+    expect(hasAnyWarning({ ...NONE, overDuration: true })).toBe(true)
     expect(hasAnyWarning({ ...NONE, invalidSize: true })).toBe(false)
   })
 })

@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MOJIOKO - Auto-Subtitle Tool for Videos (Free &amp; Paid Editions)</title>
-  <meta name="description" content="MOJIOKO is a desktop application that transcribes the audio of your finished video with AI and burns subtitles into it. Your video is never uploaded — all processing runs on your own PC. Choose the free edition on GitHub or the paid edition on the Microsoft Store (one-time purchase).">
+  <!-- REQ-0569 §1-1: "all processing runs on your own PC" was replaced. Since
+       v1.4.0's AI integration sends subtitle text and file paths to the user's
+       AI provider, "all processing" needs a qualifier that a meta description
+       has no room for — so it now names the two processes that are local
+       unconditionally, in the pillar card's own audited wording. -->
+  <meta name="description" content="MOJIOKO is a desktop application that transcribes the audio of your finished video with AI and burns subtitles into it. Your video is never uploaded, and transcription and subtitle burn-in both run on your own PC. Choose the free edition on GitHub or the paid edition on the Microsoft Store (one-time purchase).">
   <link rel="icon" type="image/png" href="../images/icon.png">
   <!-- REQ-0370 §3-1: Poppins for the MOJIOKO wordmark (nav brand + hero H1).
        preconnect + font-display: swap so the wordmark paints in the fallback
@@ -69,7 +74,12 @@
             <li>All core features are free: transcription, editing, subtitle text export, and subtitle video export.</li>
             <li>Includes one font family, Noto Sans JP. Weights are selectable across 9 steps, Thin to Black.</li>
           </ul>
-          <a href="https://github.com/brightryo/mojioko/releases/download/v1.3.6/MOJIOKO.Setup.1.3.6.exe" class="version-card-btn">
+          <!-- REQ-0569 §1-2: sits BEFORE the button on purpose — the button
+               carries `margin-top: auto` to bottom-align across both cards,
+               so a note placed after it would knock the two buttons out of
+               line with each other. -->
+          <p class="version-card-note">Installer approx. 243 MB</p>
+          <a href="https://github.com/brightryo/mojioko/releases/download/v1.4.0/MOJIOKO.Setup.1.4.0.exe" class="version-card-btn">
             Download
           </a>
         </div>
@@ -195,7 +205,8 @@
         <div class="pillar-card">
           <h3>Your video is never uploaded</h3>
           <p>Transcription and subtitle burn-in both happen entirely on your own PC.</p>
-          <span class="pillar-note">Note: the app connects to the internet only to download AI models and additional fonts.</span>
+          <span class="pillar-note">Note: the app connects to the internet only to download AI models and additional fonts.
+            If you enable AI integration (v1.4.0), subtitle text and file paths are sent to your AI assistant's provider — the video itself is not. <a href="../privacy/#ai-mcp">Details</a></span>
         </div>
         <div class="pillar-card">
           <h3>Not a subscription</h3>
@@ -223,13 +234,55 @@
              page (see RES-0364 for the full check of this claim).
            * the burn-in copy no longer implies MOJIOKO finishes the edit
          ============================================================ -->
+    <!-- ============================================================
+         What's new in v1.4.0 (REQ-0567 §2-1) — mirrors the ja page.
+         ★ ACCURACY: the AI card keeps its qualifier. Enabling MCP sends
+         subtitle text, file paths and video metadata to the assistant's
+         provider; the video itself still never leaves. Wording is the one
+         fixed in RES-0559 — keep it aligned with the in-app consent dialog.
+         ============================================================ -->
+    <section class="features whats-new">
+      <h2>What's new in v1.4.0</h2>
+
+      <div class="feature-item">
+        <div>
+          <img src="../images/v140/en/s2-step2-emphasis.png" alt="Keyword emphasis and per-subtitle styling" class="feature-image" loading="lazy">
+        </div>
+        <div class="feature-content">
+          <h3>Keyword emphasis, and styling per subtitle</h3>
+          <p>Make the words that matter stand out in their own colour and size. Font, size, colour, outline, shadow, rotation, line spacing and the background box can all differ from one subtitle to the next.</p>
+        </div>
+      </div>
+
+      <div class="feature-item">
+        <div>
+          <img src="../images/v140/en/s7-ai.png" alt="The AI integration (MCP) tab in Settings" class="feature-image" loading="lazy">
+        </div>
+        <div class="feature-content">
+          <h3>AI integration (MCP)</h3>
+          <p>Ask an assistant like Claude to "add subtitles to this video" and it runs the whole job — transcription through burn-in. It can do the subtitle editing for you too.</p>
+          <p class="feature-note">Note: turning this on means the information the assistant reads and writes — subtitle text, file paths, and the video's details — is sent to your AI assistant's provider. <strong>The video and audio files themselves stay on this PC.</strong> You are asked to confirm every time. <a href="../privacy/#ai-mcp">Details</a></p>
+        </div>
+      </div>
+
+      <div class="feature-item">
+        <div>
+          <img src="../images/v140/en/s8-position.png" alt="A subtitle placed at the top of the frame" class="feature-image" loading="lazy">
+        </div>
+        <div class="feature-content">
+          <h3>What you see is what you burn</h3>
+          <p>Drag a subtitle in the preview and that is exactly where it lands in the exported video. MOJIOKO also asks before closing with unsaved work, and settings are now written in a way that cannot be left half-finished.</p>
+        </div>
+      </div>
+    </section>
+
     <section class="features">
       <h2>Main features</h2>
 
       <!-- Feature 1: High-accuracy automatic transcription -->
       <div class="feature-item">
         <div>
-          <img src="../images/e1.png" alt="High-accuracy automatic transcription screen" class="feature-image" loading="lazy">
+          <img src="../images/v140/en/s1-step1.png" alt="High-accuracy automatic transcription screen" class="feature-image" loading="lazy">
         </div>
         <div class="feature-content">
           <h3>High-accuracy automatic transcription</h3>
@@ -242,8 +295,8 @@
       <!-- Feature 1.5: GPU Acceleration (added in REQ-0227) -->
       <div class="feature-item reverse">
         <div>
-          <img src="../images/e-gpu.png" alt="GPU acceleration settings" class="feature-image" loading="lazy"
-               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>GPU acceleration screen<br>(images/e-gpu.png)</div>';">
+          <img src="../images/v140/en/s10-gpu.png" alt="GPU acceleration settings" class="feature-image" loading="lazy"
+               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>GPU acceleration screen<br>(images/v140/en/s10-gpu.png)</div>';">
         </div>
         <div class="feature-content">
           <h3>GPU acceleration</h3>
@@ -261,23 +314,23 @@
         </div>
         <div class="feature-grid">
           <div class="feature-grid-cell">
-            <img src="../images/e2.png" alt="Editing subtitle text and appearance" class="feature-image" loading="lazy">
+            <img src="../images/v140/en/s9-inspector.png" alt="Editing subtitle text and appearance" class="feature-image" loading="lazy">
             <h4>Edit text and appearance freely</h4>
             <p>Fix the transcribed text, and adjust the font, size, color, and outline color/thickness.</p>
           </div>
           <div class="feature-grid-cell">
-            <img src="../images/e3.png" alt="Adjusting subtitle timing on the timeline" class="feature-image" loading="lazy">
+            <img src="../images/v140/en/s3-timeline.png" alt="Adjusting subtitle timing on the timeline" class="feature-image" loading="lazy">
             <h4>Adjust timing on the timeline</h4>
             <p>Drag to change how long each subtitle stays on screen.</p>
           </div>
           <div class="feature-grid-cell">
-            <img src="../images/e4.png" alt="List view for reviewing and editing subtitles" class="feature-image" loading="lazy">
+            <img src="../images/v140/en/s4-list.png" alt="List view for reviewing and editing subtitles" class="feature-image" loading="lazy">
             <h4>Review and edit in a list view</h4>
             <p>See all subtitles at once and edit them in bulk. It stays quick even with thousands of subtitles.</p>
           </div>
           <div class="feature-grid-cell">
-            <img src="../images/e-preset.png" alt="Saving and applying a subtitle style preset" class="feature-image" loading="lazy"
-                 onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Style presets screen<br>(images/e-preset.png)</div>';">
+            <img src="../images/v140/en/s11-preset.png" alt="Saving and applying a subtitle style preset" class="feature-image" loading="lazy"
+                 onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>Style presets screen<br>(images/v140/en/s11-preset.png)</div>';">
             <h4>Reuse a look with style presets</h4>
             <p>Save a look you have built and apply it to other subtitles in one click.</p>
           </div>
@@ -288,7 +341,7 @@
       <!-- Feature 3: Export as text or SRT -->
       <div class="feature-item reverse">
         <div>
-          <img src="../images/e6.png" alt="Exporting subtitles as text or SRT" class="feature-image" loading="lazy">
+          <img src="../images/v140/en/s12-export.png" alt="Exporting subtitles as text or SRT" class="feature-image" loading="lazy">
         </div>
         <div class="feature-content">
           <h3>Export as text or SRT</h3>
@@ -299,10 +352,27 @@
         </div>
       </div>
 
+      <!-- Feature 4: Multilingual subtitles (translation) — REQ-0572 §2-2 -->
+      <div class="feature-item">
+        <div>
+          <!-- ★ Mirror of the JA page: this shot carries JAPANESE subtitles on
+               the English page, because the section is about translating INTO
+               another language. The caption says so. -->
+          <img src="../images/v140/en/s5-translate.png" alt="Subtitles translated from English into Japanese" class="feature-image" loading="lazy">
+          <p class="feature-caption">Above: English subtitles translated into Japanese</p>
+        </div>
+        <div class="feature-content">
+          <h3>Multilingual subtitles (translation)</h3>
+          <p>Download the optional MADLAD-400 translation AI, developed by Google, and translate your finished subtitles into another language in one click or in bulk. Many languages are covered, including Japanese and English in both directions.</p>
+          <p>Translation runs on this PC. No subtitle text is sent anywhere in order to translate it, and a GPU makes it faster still.</p>
+          <p class="feature-hint"><span class="feature-hint-label">💡 Note</span>The translation tool is an optional download. Skip it and nothing is installed — the app stays the same size.</p>
+        </div>
+      </div>
+
       <!-- Feature 4: Burn in subtitles and export video -->
       <div class="feature-item">
         <div>
-          <img src="../images/e7.png" alt="Burning subtitles into video for export" class="feature-image" loading="lazy">
+          <img src="../images/v140/en/s6-burn.png" alt="Burning subtitles into video for export" class="feature-image" loading="lazy">
         </div>
         <div class="feature-content">
           <h3>Burn in subtitles and export video</h3>

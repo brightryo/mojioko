@@ -6,26 +6,31 @@ import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore, isAnyOverlayOpen } from '@/stores/ui-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { usePreviewMixStore } from '@/stores/preview-mix-store'
-import { useAppEnvStore } from '@/stores/app-env-store'
 import { useCutSkip } from '@/hooks/use-cut-skip'
 import { cn } from '@/lib/utils'
 import { shortcutHint } from '@/lib/shortcut-hint'
 import { shellShowInFolder } from '@/services/dialog'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
-import { SubtitleOverlay, estimateOverlayHeightPx } from '@/components/subtitle-overlay/subtitle-overlay'
+import { SubtitleOverlay } from '@/components/subtitle-overlay/subtitle-overlay'
 import { PositionGuideOverlay } from '@/components/subtitle-overlay/position-guide-overlay'
 import { loadSubtitleFont } from '@/lib/font-metrics'
 import { ensureFontLoaded } from '@/lib/font-registry'
 import { KARAOKE_DEFAULT_HIGHLIGHT_COLOR } from '../../../shared/karaoke-gate'
 import { hexWithOpacity } from '../../../shared/alpha'
-import { findActiveEntryId, findActiveEntryIds, computeFixedStackOffsets } from '@/lib/active-entry'
+import { findActiveEntryId, findActiveEntryIds } from '@/lib/active-entry'
 import {
   previewPxToAss,
   getAnchorAssPosition,
   clampAssPosition,
 } from '@/lib/preview-coords'
-import { editedDuration, editedToOrig, effectiveEntryState, origToEdited } from '../../../shared/cuts'
+import {
+  editedDuration,
+  editedToOrig,
+  effectiveEntryState,
+  origToEdited,
+  translateEntriesToEditedAxis,
+} from '../../../shared/cuts'
 import { resolveCueAnimState } from '../../../shared/cue-animation'
 import { formatTimecode } from '../../../shared/timecode'
 import { applyCueAnimationPaint, cueAnimOpacityCss, cueAnimTransformCss } from '@/lib/cue-anim-paint'
@@ -128,14 +133,19 @@ export function VideoPreviewPanel() {
   // REQ-20260613-016 Phase 4: the global "字幕レイアウト" + "文字背景"
   // panels that previously lived in this component were retired — each
   // SubtitleEntry now carries its own per-row layout / background, edited
-  // from the Style column in SubtitleTable (機能A).  Only `activeFontId`
-  // is still consumed here to feed estimateOverlayHeightPx via the stack
-  // memo below; the global burnin / subtitleBackground store slices were
-  // dropped from settings-store in the same phase.
+  // from the Style column in SubtitleTable (機能A).  `activeFontId` is still
+  // consumed here to pre-load the subtitle font (ensureFontLoaded below); the
+  // global burnin / subtitleBackground store slices were dropped from
+  // settings-store in the same phase.
+  //
+  // REQ-0391 — the emphasis-aware stack-height memo that also read `activeFontId`
+  // / `isMsix` is gone: all-`\pos` is WYSIWYG with no runtime auto-stacking, so
+  // the preview no longer computes stack offsets (see the overlay map below).
   const activeFontId       = useSettingsStore((s) => s.activeFontId)
-  // REQ-0376 §A — tier flag for the emphasis-aware stack height (mirrors
-  // subtitle-overlay's `isMsix ?? false`; null pre-boot renders as free tier).
-  const isMsix = useAppEnvStore((s) => s.isMsix) ?? false
+  // REQ-0443 §1 — preview timecode verbosity (simple M:SS ↔ detailed
+  // M:SS.mmm (fF)), persisted in AppSettings.  Toggled by clicking the readout.
+  const playbackTimeDetailed = useSettingsStore((s) => s.playbackTimeDetailed)
+  const setPlaybackTimeDetailed = useSettingsStore((s) => s.setPlaybackTimeDetailed)
   // REQ-20260615-050 — fade duration is now per-entry; no global slice
   // is read here.  The rAF loop below pulls `entry.fadeDurationSec`
   // from each active SubtitleEntry.
@@ -336,7 +346,11 @@ export function VideoPreviewPanel() {
         // REQ-0323 §1 / REQ-0378 — mount-time paint uses the same shared
         // decision as the rAF loop AND the render-time seed, so the first
         // frame after mount is already correct instead of flashing settled.
-        const { anim, inRange } = resolveCueAnimState(entry, t, isPaused)
+        // REQ-0532 §1 — `entry` is edited-axis (see `sortedActiveEntries`), so
+        // the clock has to be too.  Identity without cuts.
+        const { anim, inRange } = resolveCueAnimState(
+          entry, origToEdited(t, cutsRef.current), isPaused,
+        )
         // REQ-0339 §2 — write the WHOLE animation state, not just opacity.
         // This callback fires during the commit phase, i.e. before the browser
         // paints the cue's first frame; the rAF loop only gets to run
@@ -378,11 +392,55 @@ export function VideoPreviewPanel() {
    * the memo, and the preview stays stuck on the pre-cut set until an
    * unrelated re-render.
    */
+  /*
+   * REQ-0532 §1 — and then TRANSLATED onto the EDITED axis, the axis the burn
+   * renders on.
+   *
+   * The visibility filter above already agreed with the burn about WHICH cues
+   * exist. What it could not fix is *where in its own life* a surviving cue is
+   * at the playhead: `ffmpeg-burnin` clamps a cue's head/tail to the cut and
+   * moves the result with `origToEdited`, so a cue whose entrance a cut ate
+   * restarts that entrance at the cut boundary. The preview measured animation
+   * phase from the RAW `startSec` against a RAW playhead, so it had already
+   * spent the entrance during frames the burn removed and painted the settled
+   * state — the owner's report: "preview does not animate, the output does".
+   *
+   * Same fold as the burn and the still export (REQ-0531 §2-2), so the three
+   * cannot disagree; it also moves `words`, which fixes the karaoke sweep on
+   * the same axis for free (RES-0532 §1-5).
+   *
+   * COST: this is a `useMemo` over [entries, cuts] — NOT per frame. The rAF
+   * loop reads the already-translated cues out of `activeEntryMapRef` and only
+   * maps its own clock (`origToEdited`, O(cuts) with an empty-list fast exit).
+   * With `cuts = []` the fold returns its input array by reference, so a
+   * project without trimming allocates nothing new and behaves identically.
+   */
   const sortedActiveEntries = useMemo(() => {
-    return entries
-      .filter((e) => !effectiveEntryState(e, cuts).effectivelyDeleted)
+    const visible = entries.filter((e) => !effectiveEntryState(e, cuts).effectivelyDeleted)
+    // `visible` is already a fresh array, and the fold returns it by reference
+    // when there are no cuts, so the in-place sort is safe either way.
+    return translateEntriesToEditedAxis(visible, cuts).entries
       .sort((a, b) => a.startSec - b.startSec)
   }, [entries, cuts])
+
+  /**
+   * REQ-0532 §1 — the playhead on the EDITED axis.
+   *
+   * `currentTime` is `<video>.currentTime`, i.e. the source axis, because the
+   * element plays the untrimmed file. Every comparison against a cue's times
+   * has to happen on the cue's axis, and as of this REQ that is the edited one.
+   * Identity when `cuts` is empty.
+   */
+  const editedCurrentTime = useMemo(() => origToEdited(currentTime, cuts), [currentTime, cuts])
+
+  /*
+   * The cut list for the imperative writers (the rAF loop and the mount-time
+   * callback ref). They read `<video>.currentTime` directly — outside React's
+   * render — so they need the cuts without taking them as an effect dependency,
+   * which would tear down and re-spawn the rAF on every cut edit.
+   */
+  const cutsRef = useRef(cuts)
+  useEffect(() => { cutsRef.current = cuts }, [cuts])
 
   /**
    * REQ-080 #1 + REQ-20260613-004: source of truth for the overlay — EVERY
@@ -418,7 +476,8 @@ export function VideoPreviewPanel() {
    * the last-played subtitle after EOF).
    */
   const overlayEntries = useMemo<SubtitleEntry[]>(() => {
-    const ids = findActiveEntryIds(sortedActiveEntries, currentTime)
+    // REQ-0532 §1 — edited-axis clock against edited-axis cues.
+    const ids = findActiveEntryIds(sortedActiveEntries, editedCurrentTime)
     if (ids.length === 0) return []
     if (ids.length === 1) {
       // Fast path for the overwhelmingly-common single-active case.
@@ -430,7 +489,7 @@ export function VideoPreviewPanel() {
     // that order without a per-id O(N) lookup.
     const idSet = new Set(ids)
     return sortedActiveEntries.filter((e) => idSet.has(e.id))
-  }, [currentTime, sortedActiveEntries])
+  }, [editedCurrentTime, sortedActiveEntries])
 
   // REQ-20260615-049 — sync the active-entry table read by the rAF fade
   // loop.  Kept in a ref so the loop never lists `overlayEntries` as a
@@ -477,7 +536,17 @@ export function VideoPreviewPanel() {
     const PREVIEW_MIX_DRIFT_THRESHOLD_SEC = 0.30
     const tick = () => {
       const v = videoRef.current
-      const t = v?.currentTime ?? 0
+      /*
+       * REQ-0532 §1 — mapped ONCE per frame, then used for both the animation
+       * phase and the karaoke word comparisons below. The cues in
+       * `activeEntryMapRef` are edited-axis and so are the
+       * `data-karaoke-word-start-sec` attributes rendered from them, so a raw
+       * `<video>.currentTime` would be comparing across two axes.
+       *
+       * `origToEdited` walks the cut list; with the usual empty list it exits
+       * on the first iteration, so the per-frame cost is unchanged in practice.
+       */
+      const t = origToEdited(v?.currentTime ?? 0, cutsRef.current)
       // REQ-0195 §2 — when the video is paused the user is inspecting a
       // still frame for editing purposes; snap the fade ramp to "no
       // fade" so a caption sitting exactly on its startSec (owner's
@@ -674,23 +743,16 @@ export function VideoPreviewPanel() {
     ? videoContainerWidth / videoWidthPx
     : 1
 
-  const stackOffsetsByEntryId = useMemo(() => {
-    if (videoWidthPx <= 0 || videoContainerWidth <= 0) {
-      return new Map<string, number>()
-    }
-    return measureSync('vpp.stackOffsets', () => computeFixedStackOffsets(
-      sortedActiveEntries,
-      (entry) => estimateOverlayHeightPx(
-        entry,
-        activeFontId,
-        videoWidthPx,
-        videoContainerWidth,
-        // REQ-0376 §A — tier gate for emphasis-aware height; matches the emit
-        // path so preview and burn-in reserve the same box for an emphasised cue.
-        isMsix,
-      ),
-    ))
-  }, [sortedActiveEntries, activeFontId, videoWidthPx, videoContainerWidth, isMsix])
+  // REQ-0391 (positioning-redesign Phase 1b) — runtime auto-stacking is GONE.
+  // MOJIOKO is the single positioning authority (all-`\pos`) and it is WYSIWYG:
+  // every cue renders at its own authored position and overlapping cues overlap,
+  // exactly as the burn-in now does.  The preview therefore no longer computes
+  // `computeFixedStackOffsets` for live positioning; `stackOffsetPx` is 0 for
+  // every overlay.  (`computeFixedStackOffsets` / `estimateOverlayHeightPx`
+  // remain in the codebase for the Phase 4 migration and the verify:pos-parity
+  // reference path.)  z-order is unchanged: `overlayEntries` DOM paint order
+  // equals the ASS Dialogue emission order, so a later / duplicated cue paints
+  // on top in both preview and burn.
 
   // Load the subtitle font on mount and refresh whenever the active font
   // changes so the preview reflects the new metrics without requiring a
@@ -1005,7 +1067,10 @@ export function VideoPreviewPanel() {
     const active = document.activeElement
     const isEditingSubtitle = active?.tagName.toLowerCase() === 'textarea'
     if (!isEditingSubtitle) {
-      const newId = findActiveEntryId(sortedActiveEntries, time)
+      // REQ-0532 §1 — `sortedActiveEntries` is edited-axis; `time` is the raw
+      // element clock.  Without this the "currently playing" row marker points
+      // at the wrong cue for the whole stretch after a cut.
+      const newId = findActiveEntryId(sortedActiveEntries, origToEdited(time, cuts))
       // Only update when a subtitle is actively playing (newId !== null).
       // During gap time between subtitles, retain the previous focus instead
       // of clearing it — prevents the row highlight from flickering off/on
@@ -1225,8 +1290,9 @@ export function VideoPreviewPanel() {
   //   4. Warning / approximate-preview note
   // Outer chrome (rounded border + bg) retired because the resizable
   // pane itself provides the visual boundary.
+  // REQ-0532 §1 — `editedCurrentTime` is memoised near `sortedActiveEntries`
+  // now (the overlay path needs it too); only the total is local to the render.
   const editedTotalSec = editedDuration(duration, cuts)
-  const editedCurrentTime = origToEdited(currentTime, cuts)
 
   return (
     // REQ-0184 — outer container adds `overflow-hidden` so the
@@ -1262,7 +1328,7 @@ export function VideoPreviewPanel() {
           }
         }}
         className={cn(
-          'grid items-center gap-2 px-3 py-1.5 border-b border-border/50 flex-shrink-0 min-w-0',
+          'grid items-center gap-2 px-3 py-1.5 border-b border-line/50 flex-shrink-0 min-w-0',
           // Three-column grid: title left, filename+folder center,
           // chevron right.  Center column is `min-w-0` so long file
           // names truncate within their allotted middle band without
@@ -1280,7 +1346,7 @@ export function VideoPreviewPanel() {
         {/* Column 2 — filename + folder icon, centred as a pair */}
         <div className="flex items-center justify-center gap-1.5 min-w-0">
           <span
-            className="min-w-0 truncate text-body-sm text-foreground/80"
+            className="min-w-0 truncate text-body-sm text-fg-primary/80"
             title={video.path}
           >
             {filename}
@@ -1295,8 +1361,8 @@ export function VideoPreviewPanel() {
             }}
             title={t('videoPreview.showInFolder')}
             className={cn(
-              'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
-              'hover:text-foreground focus:outline-none focus-visible:text-foreground',
+              'flex-shrink-0 rounded p-0.5 text-fg-secondary transition-colors duration-150',
+              'hover:text-fg-primary focus:outline-none focus-visible:text-fg-primary',
             )}
             aria-label={t('videoPreview.showInFolder')}
           >
@@ -1350,11 +1416,19 @@ export function VideoPreviewPanel() {
         className="flex-1 min-h-0 flex items-center justify-center p-2 bg-surface-0"
       >
         {hasError ? (
-          <span className="px-6 text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
+          <span className="px-6 text-body-sm text-fg-secondary">{t('videoPreview.error')}</span>
         ) : videoFrameW > 0 && videoFrameH > 0 ? (
           <div
             ref={videoContainerRef}
-            className="relative bg-input rounded overflow-hidden"
+            // REQ-0398 §1 — `isolate` (isolation: isolate) confines the subtitle
+            // overlays to their OWN stacking context.  Each cue's CSS `z-index`
+            // mirrors its z-order `layer` (subtitle-overlay.tsx), so without this
+            // a high layer produced a high z-index that competed with the app's
+            // chrome and could paint the subtitle ABOVE a drawer's scrim or the
+            // export-result dialog.  Isolated, the whole preview participates in
+            // the parent stacking order as a single unit (z-auto), so no cue
+            // z-index — however large — can rise above the surrounding UI.
+            className="relative bg-input rounded overflow-hidden isolate"
             style={{
               width: `${videoFrameW}px`,
               height: `${videoFrameH}px`,
@@ -1411,7 +1485,7 @@ export function VideoPreviewPanel() {
               />
             )}
             {videoContainerWidth > 0 && overlayEntries.map((entry) => {
-              const offset = stackOffsetsByEntryId.get(entry.id) ?? 0
+              const offset = 0 // REQ-0391 — no runtime auto-stacking (WYSIWYG)
               const isSelected = entry.id === selectedEntryId
               const isDragging = entry.id === draggingEntryId
               // REQ-0378 — seed the overlay's animation custom properties from
@@ -1421,8 +1495,9 @@ export function VideoPreviewPanel() {
               // same shared decision the mount ref / rAF use, sampled from the
               // React-visible `currentTime` (the imperative writer refines it to
               // the live clock every frame afterwards).
+              // REQ-0532 §1 — edited-axis clock, matching the edited-axis cue.
               const { anim: initAnim, inRange: initInRange } = resolveCueAnimState(
-                entry, currentTime, videoRef.current?.paused ?? true,
+                entry, editedCurrentTime, videoRef.current?.paused ?? true,
               )
               return (
                 <SubtitleOverlay
@@ -1470,14 +1545,14 @@ export function VideoPreviewPanel() {
 
       {/* Seekbar — REQ-20260614-001 §3: moved from the right column to
           DIRECTLY below the video frame. */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border/50 flex-shrink-0">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-line/50 flex-shrink-0">
         <button
           type="button"
           onClick={togglePlay}
           disabled={hasError || duration === 0}
           className={cn(
             'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full',
-            'bg-secondary text-foreground transition-all duration-150',
+            'bg-surface-2 text-fg-primary transition-all duration-150',
             'hover:bg-accent active:scale-95',
             'focus:outline-none focus-visible:outline-none',
             'disabled:cursor-not-allowed disabled:opacity-40'
@@ -1507,15 +1582,22 @@ export function VideoPreviewPanel() {
           }}
           className="flex-1 h-1.5 cursor-pointer disabled:cursor-default disabled:opacity-40"
         />
-        <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-muted-foreground">
-          {/* REQ-0382 §A — frame-precision timecode: M:SS.mmm (f‹frame in second›). */}
-          {formatTimecode(editedCurrentTime, video.fps)}&nbsp;/&nbsp;{formatTimecode(editedTotalSec, video.fps)}
-        </span>
+        <button
+          type="button"
+          onClick={() => setPlaybackTimeDetailed(!playbackTimeDetailed)}
+          title={t('videoPreview.timecodeToggle')}
+          aria-label={t('videoPreview.timecodeToggle')}
+          className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-fg-secondary hover:text-fg-primary cursor-pointer transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+        >
+          {/* REQ-0382 §A / REQ-0443 §1 — click toggles simple (M:SS) ↔ detailed
+              (M:SS.mmm (fF)); the choice is persisted in AppSettings. */}
+          {formatTimecode(editedCurrentTime, video.fps, playbackTimeDetailed)}&nbsp;/&nbsp;{formatTimecode(editedTotalSec, video.fps, playbackTimeDetailed)}
+        </button>
       </div>
 
       {/* Warning / approximate-preview note — REQ-20260614-001 §3:
           relocated below the seekbar. */}
-      <p className="px-3 py-1 text-caption text-muted-foreground flex-shrink-0">
+      <p className="px-3 py-1 text-caption text-fg-secondary flex-shrink-0">
         {t('subtitleLayout.previewNote')}
       </p>
       </div>{/* REQ-0186 §1 — close media-stack collapse wrapper */}

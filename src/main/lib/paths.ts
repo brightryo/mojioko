@@ -10,10 +10,25 @@ import {
   getCurrentProcessContext,
 } from './msix'
 
-const isDev = !app.isPackaged
+/**
+ * ★ REQ-0537 — a FUNCTION, not a module-level constant.
+ *
+ * This used to be `const isDev = !app.isPackaged`, evaluated the moment the
+ * module was imported. That single line forced every consumer that wanted to
+ * stay importable outside Electron to reach for a lazy `require('../lib/paths')`
+ * instead of a normal import — and a runtime relative `require` does not
+ * resolve inside electron-vite's single-file main bundle. It threw
+ * `Cannot find module '../lib/paths'` in the real app, `font-metrics-node`
+ * swallowed it as "no metrics", and REQ-0535's background silently reverted to
+ * the old per-line box for every cue.
+ *
+ * Deferring the read to call time makes this module import-safe everywhere, so
+ * consumers can import it statically and the bundler can see them.
+ */
+const isDev = (): boolean => !app.isPackaged
 
 export function getResourcesPath(): string {
-  return isDev ? join(app.getAppPath(), 'resources') : process.resourcesPath
+  return isDev() ? join(app.getAppPath(), 'resources') : process.resourcesPath
 }
 
 /**
@@ -35,7 +50,7 @@ export function getResourcesPath(): string {
  */
 export function getEulaPath(lang: 'ja' | 'en'): string {
   const filename = `license_${lang}.txt`
-  return isDev
+  return isDev()
     ? join(app.getAppPath(), 'build', filename)
     : join(getResourcesPath(), 'eula', filename)
 }
@@ -45,14 +60,8 @@ export function getBinPath(...segments: string[]): string {
   return join(getResourcesPath(), 'bin', 'ffmpeg', name)
 }
 
-/**
- * Legacy single-font directory — kept for callers that still pass the
- * default Noto subdir to libass.  New code should resolve a font's
- * directory via `getFontResolveDir(meta)` instead.
- */
-export function getFontsDir(): string {
-  return join(getResourcesPath(), 'fonts', 'Noto_Sans_JP', 'static')
-}
+// REQ-0466 §2 — `getFontsDir` (legacy single-Noto-subdir helper) removed: it had
+// no callers.  A font's directory is resolved via `getFontResolveDir(meta)`.
 
 /** Root of the bundled fonts tree, shipped via electron-builder extraResources. */
 export function getFontsBundledRoot(): string {
@@ -92,6 +101,19 @@ export function getFontResolveDir(meta: FontMeta): string {
     return join(getFontsBundledRoot(), sub)
   }
   return getFontUserDir(meta.id)
+}
+
+/**
+ * The absolute path of the TTF itself.
+ *
+ * REQ-0509 — exists so "does this font exist?" and "copy this font" cannot
+ * disagree. Both burn-in and frame export stage a font by copying exactly this
+ * path, and the availability probe that decides whether to substitute checks
+ * exactly this path. Two hand-rolled `join(dir, meta.fileName)` expressions
+ * would work today and drift the day a font gains a subdirectory.
+ */
+export function getFontFilePath(meta: FontMeta): string {
+  return join(getFontResolveDir(meta), meta.fileName)
 }
 
 /**
@@ -166,6 +188,27 @@ export function getModelsDir(): string {
     }
   }
   return join(getAppDataPath(), 'models')
+}
+
+/**
+ * REQ-0405 — physical directory for downloaded translation tools
+ * (`%APPDATA%/MOJIOKO/translation-tools/`), mirroring {@link getModelsDir}'s
+ * MSIX-virtualization handling so `shell.openPath` sees the real path.
+ */
+export function getTranslationToolsDir(): string {
+  const ctx = getCurrentProcessContext()
+  if (isPackagedAsMsix(ctx)) {
+    const pfn = getMsixPackageFamilyName(ctx.execPath)
+    if (pfn) {
+      return buildMsixVirtualizedAppDataPath(
+        app.getPath('home'),
+        pfn,
+        APP_DATA_FOLDER,
+        'translation-tools'
+      )
+    }
+  }
+  return join(getAppDataPath(), 'translation-tools')
 }
 
 /**
@@ -310,9 +353,16 @@ export function isPreviewMixFilename(name: string): boolean {
 }
 
 export function getPythonSidecarPath(): string {
-  return isDev
+  return isDev()
     ? join(app.getAppPath(), 'python-sidecar', 'main.py')
     : join(process.resourcesPath, 'python-sidecar', 'main.py')
+}
+
+/** REQ-0410 — path to the MADLAD translation sidecar script (prototype). */
+export function getTranslateSidecarPath(): string {
+  return isDev()
+    ? join(app.getAppPath(), 'python-sidecar', 'translate.py')
+    : join(process.resourcesPath, 'python-sidecar', 'translate.py')
 }
 
 /**
@@ -326,7 +376,7 @@ export function getPythonSidecarPath(): string {
  * clear error message.
  */
 export function getTranscriberExePath(): string | null {
-  if (isDev) return null
+  if (isDev()) return null
   const exe = process.platform === 'win32'
     ? join(process.resourcesPath, 'bin', 'transcriber', 'mojioko-transcriber.exe')
     : join(process.resourcesPath, 'bin', 'transcriber', 'mojioko-transcriber')
@@ -334,23 +384,37 @@ export function getTranscriberExePath(): string | null {
 }
 
 /**
- * Returns the path to the Python executable to use for the transcription sidecar.
+ * Returns the path to a raw **Python interpreter** for running the sidecar
+ * scripts directly.  This is the DEV path only.
  *
- * Dev:  .venv in the project root (created by `py -3.11 -m venv .venv`)
- * Prod: bundled Python runtime under resources/python/ (TODO: populate in electron-builder.yml)
+ * Dev:  .venv in the project root (created by `py -3.11 -m venv .venv`).
+ * Packaged: MOJIOKO does NOT bundle a standalone Python interpreter.  The
+ *   sidecars ship as a PyInstaller bundle instead — resolve them via
+ *   {@link getTranscriberExePath} (transcription: no-arg; translation:
+ *   `translate` subcommand — REQ-0494).  This function therefore returns null
+ *   in packaged builds (there is no `resources/python/`), and callers MUST
+ *   prefer the bundled exe first (see `transcription-sidecar.resolveSidecarSpawn`
+ *   / `translation-sidecar.pickTranslateSpawn`).
+ *
+ * ⚠️ Any new feature that spawns Python MUST go through the bundled-exe path,
+ * not this interpreter — a packaged build has no interpreter here, so relying
+ * on it alone breaks in production (that was the REQ-0493 `PYTHON_MISSING`
+ * translation bug).  The `pickTranslateSpawn` unit test pins this invariant.
  *
  * Returns null if the resolved executable does not exist on disk.
  */
 export function getPythonExecutable(): string | null {
-  if (isDev) {
+  if (isDev()) {
     const exe = process.platform === 'win32'
       ? join(app.getAppPath(), '.venv', 'Scripts', 'python.exe')
       : join(app.getAppPath(), '.venv', 'bin', 'python')
     return existsSync(exe) ? exe : null
   }
 
-  // TODO: bundle Python under resources/python/ via electron-builder extraResources.
-  // Until then the packaged build falls back to the system Python (will break if absent).
+  // Packaged builds ship a PyInstaller bundle, not a standalone interpreter, so
+  // this path is expected NOT to exist; getTranscriberExePath() is the packaged
+  // entry point for both transcription and translation.  Kept as a defensive
+  // lookup in case a future build opts to bundle `resources/python/`.
   const exe = process.platform === 'win32'
     ? join(process.resourcesPath, 'python', 'python.exe')
     : join(process.resourcesPath, 'python', 'bin', 'python')

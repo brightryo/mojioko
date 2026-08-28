@@ -9,6 +9,7 @@ import type { AnimationType, AnimationDirection } from './cue-animation'
 // `style-preset.ts`.  Type-only (that module imports `SubtitleEntry` back),
 // so this does not create a runtime import cycle — same shape as `emphasis`.
 import type { StylePreset } from './style-preset'
+import type { TranslationToolId } from './translation-tools'
 export type { WhisperModelId }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +143,21 @@ export interface SubtitleEntryOriginal {
    * gap to change, so no split happens and nothing about the output moves.
    */
   lineSpacingPercent?: number
+  /**
+   * REQ-0392 (positioning-redesign Phase 2) — z-order.  Higher = nearer the
+   * front (drawn on top).  Additive field, `undefined` ≡ `0` — read everywhere
+   * through `resolveLayer` (mirrors `lineSpacingPercent` / `resolveLineSpacingPercent`).
+   *
+   * Maps to the ASS Dialogue **Layer** column on burn-in and to the overlay's
+   * CSS `z-index` in the preview; within one layer the tie-break is emission /
+   * DOM order (later on top), so a new or duplicated cue — appended after its
+   * peers — still paints in front at the default layer 0 (the Phase 1b default,
+   * unchanged).  `\pos` (positioning) and Layer (z-order) are orthogonal.
+   *
+   * z-order is a POSITION attribute, so it is deliberately NOT carried by a
+   * style preset (a preset must not reshuffle front/back — REQ-0392 §1).
+   */
+  layer?: number
 
   // ---------------------------------------------------------------------------
   // REQ-0277 Phase A — additional per-row style effects.  All optional +
@@ -461,6 +477,21 @@ export interface SubtitleEntry extends SubtitleEntryOriginal {
   /** Stable UUID — survives reordering. Display index recomputed at render time. */
   id: string
 
+  /**
+   * REQ-0400 — stable, human-readable display number for the cue ("字幕ID").
+   * The internal `id` is a UUID (unfriendly + hard to tell a duplicate from its
+   * source), so this additive field carries a small integer the inspector shows.
+   *
+   * Assigned once at creation in `assignCueNumbers` (`shared/cue-number.ts`),
+   * funnelled through the store's `setEntries` / `addEntry`, and monotonic per
+   * project — it is NOT the list-order index (sorting or filtering never changes
+   * it) and a duplicate always gets a fresh number so it is distinguishable.
+   * Persists verbatim with the entry (project file), so it is stable across
+   * reloads; legacy projects (field absent) are back-filled in array order on
+   * load.  Optional so pre-REQ-0400 files hydrate without migration.
+   */
+  cueNumber?: number
+
   isDeleted: boolean
   /** True when any field diverges from `original`. */
   isEdited: boolean
@@ -646,6 +677,39 @@ export type EncoderSetting = 'auto' | H264Encoder
 export type AudioMode = 'simple' | 'preserve'
 
 /**
+ * REQ-0460 — explicit encode-quality override for the CLI/MCP burn path.
+ *
+ * The GUI and CLI/MCP share `buildEncoderArgs`, whose per-encoder default is
+ * CONSTANT-QUALITY (`-cq 20` for nvenc, `-quality 70` for h264_mf, etc.) —
+ * content-adaptive and NOT a bitrate target.  This override lets a headless
+ * caller pin a value without changing that default philosophy.  All fields
+ * optional and mutually resolved by precedence: `bitrateKbps` > `crf` >
+ * `quality` > per-encoder default.  Omitting the whole object reproduces the
+ * pre-REQ-0460 args byte-for-byte.
+ */
+export interface EncodeQuality {
+  /**
+   * Constant-quality value on the CRF-like 0..51 scale (lower = better).
+   * Maps to the active encoder's quality slot: nvenc `-cq`, qsv
+   * `-global_quality`, amf `-qp_i`/`-qp_p`.  For h264_mf (0..100, higher =
+   * better) it is translated to `-quality` (documented approximation).
+   */
+  crf?: number
+  /**
+   * VBR target bitrate in kbps.  When set it takes precedence over `crf` /
+   * `quality` and switches the encoder to a bitrate target
+   * (`-b:v`/`-maxrate`/`-bufsize`) on every encoder.
+   */
+  bitrateKbps?: number
+  /**
+   * Generic quality on a 1..100 scale (higher = better).  Maps directly to
+   * h264_mf `-quality`; for the CQ-style encoders it is translated to a CQ
+   * value (documented approximation).  Lower precedence than `crf`.
+   */
+  quality?: number
+}
+
+/**
  * Step 3 output container choice.
  * - `'mp4'`        : force `.mp4` regardless of input.  ffmpeg invoked with
  *                    `-f mp4` and `-movflags +faststart` for SNS/Web streaming.
@@ -715,6 +779,34 @@ export interface AppSettings {
   fadeDurationSec: number
   activeModelId: WhisperModelId | null
   /**
+   * REQ-0405 — the currently ENABLED translation tool (MADLAD-400 size), or
+   * `null` when none is enabled.  Optional so settings files predating the
+   * translation feature hydrate cleanly (absent ≡ null ≡ disabled).  Phase 1
+   * only stores the selection; the translation itself is Phase 2.
+   */
+  translationToolActiveId?: TranslationToolId | null
+  /**
+   * REQ-0426 — 「翻訳」設定タブ: whether the inspector auto-translates on cue
+   * selection.  Optional so settings files predating this REQ hydrate cleanly
+   * (absent ≡ false ≡ off).  Renderer-owned (`incoming-wins`).
+   */
+  translationAutoEnabled?: boolean
+  /**
+   * REQ-0426 — 「翻訳」設定タブ: the MADLAD target-language code (`<2xx>`) the
+   * inspector translates INTO when auto-translate is on.  A curated string
+   * (see `TRANSLATION_TARGET_LANGS`); optional so old settings hydrate as the
+   * default 'en'.  Renderer-owned (`incoming-wins`).
+   */
+  translationTargetLang?: string
+  /**
+   * REQ-0443 §1 — preview playhead timecode verbosity.  `false`/absent (the
+   * default) = "simple" (M:SS, no ms/frame); `true` = "detailed"
+   * (M:SS.mmm (fF)).  Toggled by clicking the timecode under the preview.
+   * Optional so settings files predating this REQ hydrate as simple.
+   * Renderer-owned (`incoming-wins`).
+   */
+  playbackTimeDetailed?: boolean
+  /**
    * Currently selected subtitle font ID.  Drives both the CSS preview family
    * and the ASS `Style:` `Fontname` at burn-in time.  Optional because
    * existing settings files predating font selection do not contain it;
@@ -754,8 +846,26 @@ export interface AppSettings {
    * lazy existence check on use, silent fallback to the OS Videos
    * folder).  Optional in the persisted struct so settings.json files
    * predating this REQ hydrate cleanly.
+   *
+   * REQ-0518 — the LABEL became 「プロジェクト保存フォルダ」 and the OS fallback
+   * moved Videos → Documents.  The KEY is unchanged on purpose: renaming it
+   * would discard the folder every existing user had already chosen, and only
+   * the row's name and its unset-fallback were meant to change.
    */
   defaultProjectDir?: string | null
+  /**
+   * REQ-0518 — three more folder rows, same shape and same rules as the three
+   * above: nullable, folder-picker on Settings ▸ 一般, lazy existence check at
+   * dialog-open, silent per-row OS fallback (pictures / documents /
+   * documents).  Optional so settings.json files predating this REQ hydrate.
+   *
+   * Each one is WIRED, not merely stored — `shared/folder-settings.ts` names
+   * the dialog it feeds.  A setting that exists and changes nothing is the
+   * family REQ-0499 onward has been removing.
+   */
+  defaultImageDir?: string | null
+  defaultTextDir?: string | null
+  defaultSrtDir?: string | null
   /**
    * REQ-0150 — user-picked transcription accelerator.  `'cpu'` (default)
    * runs faster-whisper on the CPU path; `'gpu'` opts into CUDA via the
@@ -785,6 +895,37 @@ export interface AppSettings {
    * payload shape and the exhaustive field classification.
    */
   stylePresets?: StylePreset[]
+
+  /**
+   * REQ-0540 — the last animation parameters the user chose, per type.
+   *
+   * Renderer-owned (`incoming-wins`), so it MUST be sent on every save. Absent
+   * in every settings.json written before this REQ, which is exactly the
+   * fallback path `shared/animation-memory.ts` documents: no memory → the fixed
+   * `ANIMATION_TYPE_DEFAULTS` table → behaviour identical to before.
+   *
+   * Only `AnimationControls`' commit handlers write it. See
+   * `shared/animation-memory.ts` for the list of paths that must not, and why
+   * none of them can.
+   */
+  animationMemory?: import('./animation-memory').AnimationMemory
+
+  /**
+   * REQ-0551 — AI integration consent.
+   *
+   * Renderer-owned (`incoming-wins`), so it MUST be sent on every save.
+   * Absent in every settings.json written before this REQ, which is exactly
+   * the "already set up, never told" case the retroactive notice handles.
+   */
+  aiIntegration?: import('./ai-consent').AiIntegrationConsent
+
+  /**
+   * REQ-0458 §3 — metadata about the most recently exported `.mcpb` MCP bundle
+   * (app version + launch-spec revision + when).  The AI連携 tab compares its
+   * `launchSpecRevision` against the current one to tell the user whether a
+   * re-export is needed.  `undefined` until the first export.
+   */
+  lastMcpExport?: import('./mcp').McpExportRecord
 }
 
 // ---------------------------------------------------------------------------
@@ -818,4 +959,17 @@ export interface ModelsState {
 
 export type IpcOk<T> = { ok: true; data: T }
 export type IpcErr = { ok: false; error: { code: string; message: string } }
+/**
+ * REQ-0542 — what `settings:load` returns.
+ *
+ * `quarantine` describes THIS LAUNCH (a settings.json we could not use was
+ * moved aside), not a saved preference, which is why it rides alongside the
+ * settings rather than inside them — a field in `AppSettings` would need a
+ * merge rule and would be written back to disk forever.
+ */
+export interface SettingsLoadResult {
+  settings: AppSettings
+  quarantine: import('../main/ipc/settings-shape').SettingsQuarantineNotice | null
+}
+
 export type IpcResult<T> = IpcOk<T> | IpcErr

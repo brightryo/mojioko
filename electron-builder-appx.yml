@@ -20,6 +20,14 @@ files:
   - out/**/*
   - "!out/**/*.map"
 
+# REQ-0463 — unpack the MCP clean-stdout proxy + its shared chunk so it can be
+# run as a plain Node entry point (ELECTRON_RUN_AS_NODE) from app.asar.unpacked.
+# Kept in sync with electron-builder.yml (NSIS) and -appx-store.yml; see the
+# fuller rationale there.  Pinned by tests/unit/mcp-proxy-unpack-req-0463.test.ts.
+asarUnpack:
+  - "out/main/mcp-proxy.js"
+  - "out/main/chunks/**"
+
 extraResources:
   - from: resources/bin/ffmpeg
     to: bin/ffmpeg
@@ -58,6 +66,17 @@ extraResources:
     to: icons
     filter:
       - "icon.ico"
+
+# REQ-0459 §2 — declare the `.mojioko` file-type association so the MSIX/AppX
+# manifest carries a windows.fileTypeAssociation extension (double-click opens
+# the project). electron-builder generates the FileTypeAssociation from this.
+# Kept in sync with electron-builder.yml (NSIS side).
+fileAssociations:
+  - ext: mojioko
+    name: MOJIOKO Project
+    description: MOJIOKO subtitle project
+    icon: build/icon.ico
+    role: Editor
 
 win:
   target:

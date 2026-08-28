@@ -1,7 +1,9 @@
-import { parse } from 'opentype.js'
 import type { Font } from 'opentype.js'
 import { DEFAULT_FONT_ID, getFontMeta, type FontId } from '../../shared/fonts'
-import { pickTofuSubstitute } from '../../shared/glyph-substitute'
+// REQ-0456 — the pure parse→metrics extraction moved to `shared/font-entry.ts`
+// so the headless font loader builds identical entries.  This module keeps the
+// renderer cache / fetch / IPC plumbing around it.
+import { buildFontEntry, FALLBACK_LIBASS_SCALE as SHARED_FALLBACK_LIBASS_SCALE } from '../../shared/font-entry'
 import { ensureFontLoaded } from './font-registry'
 import { bumpFontCacheVersion } from '@/stores/font-cache-version-store'
 
@@ -28,8 +30,11 @@ export type SubtitleFont = Font
  * ~45 % vs the real glyph path (= `fontSizePx × libassScale ≈ × 0.69`),
  * producing spurious overflow + early line breaks for every row whose
  * per-row font wasn't cached at calc time.
+ *
+ * REQ-0456 — the value now lives in `shared/font-entry.ts` and is re-exported
+ * here so existing renderer imports (`overflow-calculator.ts`) are unchanged.
  */
-export const FALLBACK_LIBASS_SCALE = 0.6906
+export const FALLBACK_LIBASS_SCALE = SHARED_FALLBACK_LIBASS_SCALE
 
 interface FontEntry {
   font: Font
@@ -96,29 +101,12 @@ async function fetchFontBytes(fontId: FontId): Promise<ArrayBuffer> {
   return r.data
 }
 
+// REQ-0456 — parsing + metric extraction is `shared/font-entry.ts:buildFontEntry`
+// now (identical output on both the renderer and the headless side); this file
+// keeps only the cache / fetch / IPC wiring around it.  The returned shape
+// matches the local `FontEntry` interface field-for-field.
 function entryFromBytes(buf: ArrayBuffer): FontEntry {
-  const font = parse(buf)
-  const os2 = font.tables.os2
-  const winHeight = (os2.usWinAscent ?? 0) + (os2.usWinDescent ?? 0)
-  const libassScale = winHeight > 0 ? font.unitsPerEm / winHeight : FALLBACK_LIBASS_SCALE
-  // REQ-0160 — build the cmap coverage set once per font load.  opentype.js
-  // exposes each glyph's `unicodes: number[]` (reverse-mapped from the
-  // cmap tables); the .notdef glyph (index 0) never has any so it's
-  // naturally excluded, keeping the semantic "code point → has a real
-  // glyph" clean.  Uses the public `glyphs.get(i)` API — the internal
-  // `glyphs.glyphs` map is `private` in the TS types and would require
-  // a cast.  Cost: O(numGlyphs) at load, saves per-character work at
-  // every render / measure call.
-  const cmapCoverage = new Set<number>()
-  const numGlyphs = font.numGlyphs
-  for (let i = 0; i < numGlyphs; i++) {
-    const glyph = font.glyphs.get(i) as { unicodes?: number[] } | undefined
-    const unicodes = glyph?.unicodes
-    if (!unicodes) continue
-    for (const cp of unicodes) cmapCoverage.add(cp)
-  }
-  const tofuSubstitute = pickTofuSubstitute(cmapCoverage)
-  return { font, libassScale, unitsPerEm: font.unitsPerEm, winHeight, cmapCoverage, tofuSubstitute }
+  return buildFontEntry(buf)
 }
 
 /**
@@ -258,43 +246,6 @@ export function getLibassScale(): number {
   return getLibassScaleFor(activeFontId)
 }
 
-// ---------------------------------------------------------------------------
-// Measurement helpers (unchanged signatures — callers already pass the Font)
-// ---------------------------------------------------------------------------
-
-/**
- * Raw advance width in pixels for one character (no GPOS kerning, no libassScale).
- * Kept for call sites that need the unscaled opentype.js value.
- */
-export function glyphAdvancePx(font: Font, char: string, fontSizePx: number): number {
-  const g = font.charToGlyph(char)
-  return ((g.advanceWidth ?? 0) / font.unitsPerEm) * fontSizePx
-}
-
-/**
- * Kerning-aware, libass-compatible line width in pixels for a single line.
- *
- * The libassScale is looked up against the active font when called as
- * `measureLineWidth(font, text, size)` with the active font — but because
- * the function takes a Font argument that may belong to any font, we look
- * the scale up via the cache by identity-matching the cached entries.
- * In practice the active path covers >99 % of calls and the per-font
- * variant matches by reverse lookup; a stale Font (font ID evicted while
- * still referenced) gracefully falls back to FALLBACK_LIBASS_SCALE.
- */
-export function measureLineWidth(font: Font, text: string, fontSizePx: number): number {
-  let libassScale = FALLBACK_LIBASS_SCALE
-  for (const entry of fontCache.values()) {
-    if (entry.font === font) { libassScale = entry.libassScale; break }
-  }
-  const scale = (fontSizePx / font.unitsPerEm) * libassScale
-  const glyphs = font.stringToGlyphs(text)
-  let totalUnits = 0
-  for (let i = 0; i < glyphs.length; i++) {
-    totalUnits += glyphs[i].advanceWidth ?? 0
-    if (i + 1 < glyphs.length) {
-      totalUnits += font.getKerningValue(glyphs[i], glyphs[i + 1])
-    }
-  }
-  return totalUnits * scale
-}
+// REQ-0466 §2 — `glyphAdvancePx` / `measureLineWidth` removed (no callers).
+// Line-width measurement now lives inline in `overflow-calculator.ts`'s glyph
+// loop and in `shared/line-break-core.ts` (+ `font-metrics-node.ts` headless).

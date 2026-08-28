@@ -21,10 +21,24 @@ release/
 # .appx / loose-file expansion / signing 中間物が入るため絶対に追跡しない。
 dist-appx/
 
+# REQ-0558 §2-5 — 旧成果物の STALE 隔離先。
+#
+# REQ-0549 で `dist/` の中に隔離したところ、`build:win` の `rimraf out dist` が
+# 隔離ごと消した。そこで隔離先を `dist/` の外に出したが、**外に出した瞬間に
+# 上の 2 行の網からも外れる**。数百 MB の .exe / .appx / app.asar が置かれる
+# 場所なので、追跡対象になり得る状態のまま放置しない。
+dist-archive/
+
 # Python sidecar ビルド
 python-sidecar/dist/
 python-sidecar/build/
 python-sidecar/__pycache__/
+# REQ-0488 — PyInstaller の作業ディレクトリ (repo-root build/mojioko-transcriber/).
+# ビルドのたびに再生成される中間物 (Analysis-00.toc / PYZ-00.pyz / base_library.zip /
+# ステージ用 mojioko-transcriber.exe 等・~43MB)。出荷 exe は resources/bin/transcriber/
+# 側 (追跡対象) にあるので、この中間物は追跡しない。build/ 直下のライセンス・
+# electron-builder 設定は追跡対象のままにするため、ここだけをピンポイントで除外する。
+build/mojioko-transcriber/
 **/__pycache__/
 **/*.pyc
 **/*.pyo

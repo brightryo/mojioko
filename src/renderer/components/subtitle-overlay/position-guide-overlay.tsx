@@ -135,17 +135,20 @@ export function PositionGuideOverlay({
   const offsetX = isPinned ? Math.round((entry.posX as number) - anchor.x) : 0
   const offsetY = isPinned ? Math.round((entry.posY as number) - anchor.y) : 0
 
-  const guideLineColor = 'rgba(34, 197, 94, 0.85)'
-  const guideBoxColor = 'rgba(34, 197, 94, 0.85)'
+  // REQ-0413 — overlay chrome colours / label size centralised as CSS vars
+  // (see globals.css `--guide-*`); referenced verbatim so the look is
+  // unchanged.
+  const guideLineColor = 'var(--guide-line)'
+  const guideBoxColor = 'var(--guide-box)'
   const labelStyle: React.CSSProperties = {
     position: 'absolute',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    fontSize: '11px',
+    fontSize: 'var(--guide-label-font-size)',
     lineHeight: 1,
     padding: '2px 4px',
     borderRadius: '3px',
-    color: '#ffffff',
-    background: 'rgba(15, 23, 42, 0.85)',
+    color: 'var(--guide-label-fg)',
+    background: 'var(--guide-label-bg)',
     pointerEvents: 'none',
     whiteSpace: 'nowrap',
   }
@@ -260,8 +263,8 @@ export function PositionGuideOverlay({
           ...labelStyle,
           left: `${rect.left}px`,
           top: rect.top >= 18 ? `${rect.top - 18}px` : `${rect.bottom + 4}px`,
-          background: 'rgba(34, 197, 94, 0.95)',
-          color: '#062314',
+          background: 'var(--guide-offset-bg)',
+          color: 'var(--guide-offset-fg)',
           fontWeight: 600,
         }}
       >

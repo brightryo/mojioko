@@ -184,8 +184,9 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    // REQ-20260615-003 mira: title text-title → text-headline (16→15).
-    className={cn('text-headline font-semibold text-fg-primary leading-none', className)}
+    // REQ-0419 — role rule: dialog title = panel heading → text-title
+    // (was text-body). Central: moves every DialogTitle at once.
+    className={cn('text-title font-semibold text-fg-primary leading-none', className)}
     {...props}
   />
 ))

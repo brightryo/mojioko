@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { EmphasisPickerDialog } from '@/components/step2/emphasis-picker-dialog'
+import { TranslationPreview } from '@/components/timeline-view/translation-preview'
 import { ColorPicker } from '@/components/color-picker/color-picker'
 import { OpacityPercentSlider } from '@/components/subtitle-table/opacity-percent-slider'
 import { clampOpacityPercent } from '../../../shared/alpha'
@@ -158,28 +159,35 @@ export function TimelineBlockInspector({
   // is still loading; the offset row hides itself in that case.
   const video = useProjectStore((s) => s.video)
 
-  // REQ-20260615-033 — derive the offset row's display values from the
-  // alignment-based anchor.  When `posX`/`posY` are undefined the row
-  // is unpinned and offsets display as 0; entering non-zero values
-  // pins it via `applyOffset` below.  Recomputes whenever the entry
-  // changes (drag, undo/redo) OR a layout field changes (anchor moves),
-  // so the displayed offset always reflects the live distance from the
-  // current anchor (= the home position the row would snap back to on
-  // unpin).
+  // REQ-0395 (positioning-redesign Phase 3a) — the position row shows the
+  // cue's ANCHOR POINT as ABSOLUTE X/Y in video pixels (was the relative offset
+  // of REQ-20260615-033).  The single source of truth stays `posX`/`posY`:
+  //   - pinned   → show posX/posY directly (editable).
+  //   - unpinned → show the alignment-derived anchor (getAnchorAssPosition) =
+  //     the current on-screen position.  Editing it PINS the cue at that
+  //     coordinate (unlike the old offset row, absolute 0,0 is a real position,
+  //     so unpin is only via the explicit reset button).
+  // Recomputes whenever the entry changes (drag, undo/redo) or a layout field
+  // moves the anchor, so the shown X/Y always reflects the live position.
   const isPinned = entry.posX !== undefined && entry.posY !== undefined
-  const showOffsetRow = !isAudioOnly && !!video && video.hasVideoStream
-  let offsetX = 0
-  let offsetY = 0
-  if (showOffsetRow && video) {
-    const anchor = getAnchorAssPosition(
-      entry.horizontalPosition,
-      entry.verticalPosition,
-      entry.verticalMarginPx,
-      video.widthPx,
-      video.heightPx,
-    )
-    offsetX = isPinned ? Math.round((entry.posX as number) - anchor.x) : 0
-    offsetY = isPinned ? Math.round((entry.posY as number) - anchor.y) : 0
+  const showPositionRow = !isAudioOnly && !!video && video.hasVideoStream
+  let posDisplayX = 0
+  let posDisplayY = 0
+  if (showPositionRow && video) {
+    if (isPinned) {
+      posDisplayX = Math.round(entry.posX as number)
+      posDisplayY = Math.round(entry.posY as number)
+    } else {
+      const anchor = getAnchorAssPosition(
+        entry.horizontalPosition,
+        entry.verticalPosition,
+        entry.verticalMarginPx,
+        video.widthPx,
+        video.heightPx,
+      )
+      posDisplayX = Math.round(anchor.x)
+      posDisplayY = Math.round(anchor.y)
+    }
   }
 
   // Local draft so typing doesn't dispatch on every keystroke.  Initial
@@ -641,6 +649,9 @@ export function TimelineBlockInspector({
     applyStyleEdit(t('history.editLayout'),
       patchWithPreservedOffset({ verticalPosition: v }))
   }
+  // REQ-0430 — the z-order helpers (bringToFront / sendToBack) were removed
+  // with the inspector 重ね順 row.
+
   // REQ-20260615-059 B — `handleVerticalMarginBlur` retired here.
   // Margin commits now flow through `NumberStepperInput`'s `onCommit`
   // (still wrapped with `patchWithPreservedOffset` to preserve the
@@ -654,48 +665,39 @@ export function TimelineBlockInspector({
   // see.  Both posX/posY are set together (libass needs both for `\pos`)
   // and cleared together (unpin → row falls back to alignment-based
   // layout).  Reset = unpin without touching anything else.
-  function applyOffset(nextOffsetX: number, nextOffsetY: number) {
+  // REQ-0395 — set the ABSOLUTE anchor position (video px).  Always pins
+  // (posX/posY set as a pair); unpin is the explicit reset button below, since
+  // an absolute 0,0 is a legitimate coordinate (top-left), not "unset".  Clamped
+  // to the frame and integer-rounded, exactly as the drag handler does.
+  function applyAbsolutePosition(nextX: number, nextY: number) {
     if (!video || !video.hasVideoStream) return
-    if (nextOffsetX === 0 && nextOffsetY === 0) {
-      if (entry.posX === undefined && entry.posY === undefined) return
-      applyStyleEdit(t('history.editOffset'), { posX: undefined, posY: undefined })
-      return
-    }
-    const anchor = getAnchorAssPosition(
-      entry.horizontalPosition,
-      entry.verticalPosition,
-      entry.verticalMarginPx,
-      video.widthPx,
-      video.heightPx,
-    )
-    const clamped = clampAssPosition(
-      anchor.x + nextOffsetX,
-      anchor.y + nextOffsetY,
-      video.widthPx,
-      video.heightPx,
-    )
+    const clamped = clampAssPosition(nextX, nextY, video.widthPx, video.heightPx)
     const newPosX = Math.round(clamped.x)
     const newPosY = Math.round(clamped.y)
     if (newPosX === entry.posX && newPosY === entry.posY) return
-    applyStyleEdit(t('history.editOffset'), { posX: newPosX, posY: newPosY })
+    applyStyleEdit(t('history.editPosition'), { posX: newPosX, posY: newPosY })
   }
-  function handleOffsetXBlur(e: React.FocusEvent<HTMLInputElement>) {
+  function handlePosXBlur(e: React.FocusEvent<HTMLInputElement>) {
     const raw = parseInt(e.target.value, 10)
     if (isNaN(raw)) return
-    applyOffset(raw, offsetY)
+    // Editing one axis keeps the other at its current displayed value (which is
+    // posY when pinned, or the anchor's Y when unpinned — either way the value
+    // shown in the sibling input).
+    applyAbsolutePosition(raw, posDisplayY)
   }
-  function handleOffsetYBlur(e: React.FocusEvent<HTMLInputElement>) {
+  function handlePosYBlur(e: React.FocusEvent<HTMLInputElement>) {
     const raw = parseInt(e.target.value, 10)
     if (isNaN(raw)) return
-    applyOffset(offsetX, raw)
+    applyAbsolutePosition(posDisplayX, raw)
   }
-  function handleResetOffset() {
+  function handleResetPosition() {
+    // Unpin → fall back to alignment-based layout (margin respected again).
     if (entry.posX === undefined && entry.posY === undefined) return
-    applyStyleEdit(t('history.editOffset'), { posX: undefined, posY: undefined })
+    applyStyleEdit(t('history.editPosition'), { posX: undefined, posY: undefined })
   }
   /**
    * REQ-0127 Phase 2 — Enter on any of the inline numeric inputs
-   * (font size / offsetX / offsetY) commits the typed value via the
+   * (font size / position X / position Y) commits the typed value via the
    * existing onBlur path.  Blurring the input triggers the handler
    * with `e.target.value` still holding the typed string, matching
    * the click-away gesture and preserving the `key={entry.field}`
@@ -816,7 +818,8 @@ export function TimelineBlockInspector({
     commitText(draft)
     runDuplicateRow(entry, {
       history: t('history.duplicateRow'),
-      successToast: t('toast.rowDuplicated')
+      successToast: t('toast.rowDuplicated'),
+      maxLayerBlocked: t('toast.rowDuplicateMaxLayer')
     })
   }
 
@@ -962,7 +965,7 @@ export function TimelineBlockInspector({
               'flex items-center justify-center h-7 w-7 rounded',
               'transition-colors duration-150 hover:bg-surface-2',
               entry.isDeleted && !isTrimDeleted
-                ? 'text-primary-soft hover:text-primary-faint'
+                ? 'text-primary-soft hover:text-primary-soft'
                 : 'text-fg-tertiary hover:text-fg-primary'
             )}
           >
@@ -1019,6 +1022,11 @@ export function TimelineBlockInspector({
               multi-select): the inspector always targets exactly one row,
               and saving only READS it, so even a frozen row can be
               snapshotted. */}
+          {/* REQ-0337 §3 — style presets, pushed to the RIGHT END of the icon
+              row with `ml-auto` (those icons act on THIS ROW; a preset acts on
+              the whole style).  REQ-0404 — the cue display number ("字幕ID") is
+              NOT here; it lives at the right end of the panel TITLE row (see
+              step2.tsx `inspectorSlot`). */}
           {!isAudioOnly && (
             <StylePresetControls
               triggerVariant="toolbar"
@@ -1041,14 +1049,22 @@ export function TimelineBlockInspector({
           factors in posX/posY). */}
       <div className="flex flex-wrap gap-1 min-h-5">
         {entry.isEdited && !entry.isDeleted && (
-          <Badge variant="default">{t('state.edited')}</Badge>
+          <Badge variant="edited">{t('state.edited')}</Badge>
         )}
-        {/* REQ-121 — errors (timeInvalid / overDuration / invalidSize)
-            wear the danger variant; warnings (overlap / overflow /
-            emptyText) keep the warning amber. */}
+        {/* REQ-121 — errors (timeInvalid / invalidSize) wear the danger
+            variant; warnings (overlap / overflow / emptyText / overDuration)
+            keep the warning amber.
+            REQ-0530 — 時間超過 moved danger → warning with its reclassification
+            in `entry-warnings.ts`: the cue IS rendered now (truncated at the
+            end of the video), so a red "this is broken" badge overstated it.
+            The badge itself stays — the truncation still needs explaining.
+            REQ-0525 — and they STAY amber.  Only the 編集済み badge above
+            moved to the blue `edited` variant: being edited is not a
+            warning, and the point of the change is that the two stop
+            looking related. */}
         {warnings?.timeInvalid  && <Badge variant="danger">{t('badge.timeInvalid')}</Badge>}
         {warnings?.overlap      && <Badge variant="warning">{t('badge.overlap')}</Badge>}
-        {warnings?.overDuration && <Badge variant="danger">{t('badge.overDuration')}</Badge>}
+        {warnings?.overDuration && <Badge variant="warning">{t('badge.overDuration')}</Badge>}
         {warnings?.overflow     && <Badge variant="warning">{t('badge.overflow')}</Badge>}
         {warnings?.emptyText    && <Badge variant="warning">{t('badge.emptyText')}</Badge>}
         {warnings?.invalidSize  && <Badge variant="danger">{t('badge.invalidSize')}</Badge>}
@@ -1071,7 +1087,8 @@ export function TimelineBlockInspector({
           type="button"
           onClick={handleAdjustTime}
           className={cn(
-            'self-start flex items-center gap-1 h-6 px-2 rounded text-caption text-fg-tertiary',
+            // REQ-0421 (step2) — overlay reassignment: 時間を調整 button caption → body-sm.
+            'self-start flex items-center gap-1 h-6 px-2 rounded text-body-sm text-fg-tertiary',
             'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
           )}
         >
@@ -1097,7 +1114,7 @@ export function TimelineBlockInspector({
           type="button"
           onClick={() => setSubtitleSectionOpen((v) => !v)}
           aria-expanded={subtitleSectionOpen}
-          className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+          className="flex items-center gap-1.5 text-body-sm font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
         >
           {subtitleSectionOpen ? (
             <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
@@ -1128,6 +1145,18 @@ export function TimelineBlockInspector({
             'focus:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/30',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
+        />
+        {/* REQ-0410 / REQ-0426 / REQ-0427 / REQ-0435 — inspector translation
+            section: header (label · toggle · language · reset icon) + single-line
+            result + result dialog (copy / overwrite / editable).  The reset icon
+            (REQ-0435, consolidating the old REQ-0429 text button) and 「上書き」
+            both route through `commitText`, the same history-aware text-edit path
+            the subtitle textarea uses, so they round-trip through Undo (§21 N/A). */}
+        <TranslationPreview
+          sourceText={entry.text}
+          onOverwrite={commitText}
+          onResetToOriginal={() => commitText(entry.original.text.replace(/\\N/g, '\n'))}
+          resetDisabled={isFrozen || entry.text === entry.original.text}
         />
         {!isAudioOnly && (
           <>
@@ -1538,7 +1567,7 @@ export function TimelineBlockInspector({
             type="button"
             onClick={() => setLayoutSectionOpen((v) => !v)}
             aria-expanded={layoutSectionOpen}
-            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+            className="flex items-center gap-1.5 text-body-sm font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
           >
             {layoutSectionOpen ? (
               <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
@@ -1590,9 +1619,11 @@ export function TimelineBlockInspector({
             label={t('styleCell.marginV')}
             stopControlClickPropagation
             title={
-              entry.verticalPosition === 'center'
-                ? t('subtitlePosition.marginDisabledCenter')
-                : undefined
+              isPinned
+                ? t('subtitlePosition.marginDisabledPinned')
+                : entry.verticalPosition === 'center'
+                  ? t('subtitlePosition.marginDisabledCenter')
+                  : undefined
             }
           >
             {/* REQ-20260615-059 B — margin gets the ±10 chevron stepper
@@ -1617,7 +1648,7 @@ export function TimelineBlockInspector({
                 applyStyleEdit(t('history.editMargin'),
                   patchWithPreservedOffset({ verticalMarginPx: next }))
               }}
-              disabled={isFrozen || entry.verticalPosition === 'center'}
+              disabled={isFrozen || entry.verticalPosition === 'center' || isPinned}
               ariaLabel={t('subtitlePosition.margin')}
             />
           </StyleRow>
@@ -1644,6 +1675,9 @@ export function TimelineBlockInspector({
               fullWidth
             />
           </StyleRow>
+          {/* REQ-0430 — the z-order (重ね順) row was removed from the inspector.
+              `layer` still exists in the data model / burn-in ordering; only the
+              inspector control is retired. */}
           {/* REQ-20260615-033 — オフセット行.  Displays `posX-anchor.x` /
               `posY-anchor.y`; entering values writes back
               posX=anchor.x+offset, posY=anchor.y+offset.  X=Y=0 unpins
@@ -1656,18 +1690,22 @@ export function TimelineBlockInspector({
               now lives in the preview's position-guide overlay (drag
               affordance + distance rulers), which is more discoverable
               than a hover-only tooltip. */}
-          {showOffsetRow && (
-            <StyleRow label={t('styleCell.offset')} stopControlClickPropagation>
+          {showPositionRow && (
+            <StyleRow
+              label={t('styleCell.position')}
+              stopControlClickPropagation
+              title={t('styleCell.positionHint')}
+            >
               <div className="flex items-center gap-1">
                 <span className="text-caption text-fg-tertiary">X</span>
                 <input
                   type="number"
-                  defaultValue={offsetX}
-                  key={`offsetX-${entry.id}-${offsetX}`}
-                  onBlur={handleOffsetXBlur}
+                  defaultValue={posDisplayX}
+                  key={`posX-${entry.id}-${posDisplayX}`}
+                  onBlur={handlePosXBlur}
                   onKeyDown={handleNumericInputKeyDown}
                   disabled={isFrozen}
-                  aria-label={t('styleCell.offsetX')}
+                  aria-label={t('styleCell.positionX')}
                   className={cn(
                     'w-14 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
                     'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30',
@@ -1678,12 +1716,12 @@ export function TimelineBlockInspector({
                 <span className="text-caption text-fg-tertiary ml-1">Y</span>
                 <input
                   type="number"
-                  defaultValue={offsetY}
-                  key={`offsetY-${entry.id}-${offsetY}`}
-                  onBlur={handleOffsetYBlur}
+                  defaultValue={posDisplayY}
+                  key={`posY-${entry.id}-${posDisplayY}`}
+                  onBlur={handlePosYBlur}
                   onKeyDown={handleNumericInputKeyDown}
                   disabled={isFrozen}
-                  aria-label={t('styleCell.offsetY')}
+                  aria-label={t('styleCell.positionY')}
                   className={cn(
                     'w-14 h-7 rounded border border-line-strong bg-surface-0 px-1.5 text-center text-body text-fg-primary',
                     'focus:outline-none focus-visible:border-surface-4 focus-visible:ring-1 focus-visible:ring-primary/30',
@@ -1693,9 +1731,9 @@ export function TimelineBlockInspector({
                 />
                 <button
                   type="button"
-                  title={t('styleCell.offsetResetTitle')}
-                  aria-label={t('styleCell.offsetResetTitle')}
-                  onClick={handleResetOffset}
+                  title={t('styleCell.positionResetTitle')}
+                  aria-label={t('styleCell.positionResetTitle')}
+                  onClick={handleResetPosition}
                   disabled={isFrozen || !isPinned}
                   className={cn(
                     'flex items-center justify-center h-7 w-7 rounded ml-0.5',
@@ -1724,7 +1762,7 @@ export function TimelineBlockInspector({
             type="button"
             onClick={() => setAnimationSectionOpen((v) => !v)}
             aria-expanded={animationSectionOpen}
-            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+            className="flex items-center gap-1.5 text-body-sm font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
           >
             {animationSectionOpen ? (
               <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />
@@ -1769,7 +1807,7 @@ export function TimelineBlockInspector({
             type="button"
             onClick={() => setBackgroundSectionOpen((v) => !v)}
             aria-expanded={backgroundSectionOpen}
-            className="flex items-center gap-1.5 text-callout font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
+            className="flex items-center gap-1.5 text-body-sm font-semibold text-fg-secondary w-full text-left hover:text-fg-primary transition-colors duration-150 focus:outline-none focus-visible:outline-none"
           >
             {backgroundSectionOpen ? (
               <ChevronDown className="h-3.5 w-3.5 text-fg-tertiary" aria-hidden="true" />

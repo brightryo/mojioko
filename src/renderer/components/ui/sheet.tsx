@@ -8,7 +8,7 @@ import { useOverlayRegistration } from '@/hooks/use-overlay-registration'
  * REQ-20260615-023: Sheet primitive adapted from shadcn's new-york-v4
  * resizable.tsx pattern.  Built on the same `@radix-ui/react-dialog`
  * primitive MOJIOKO's `dialog.tsx` already uses, so no new dependency.
- * Visual tokens map to the project's `bg-popover` / `border-line-strong`
+ * Visual tokens map to the project's `bg-surface-1` / `border-line-strong`
  * scheme.
  *
  * Side defaults to `right` to match REQ-20260615-023.
@@ -66,7 +66,7 @@ const SheetContent = React.forwardRef<
       // drawer and transcription drawer close on Esc alongside every
       // other overlay (§2.2 uniform Esc semantics).
       className={cn(
-        'fixed z-50 flex flex-col gap-4 bg-popover text-fg-primary shadow-2xl shadow-black/60',
+        'fixed z-50 flex flex-col gap-4 bg-surface-1 text-fg-primary shadow-2xl shadow-black/60',
         // REQ-20260615-044 parity with DialogContent: Radix focuses the
         // content element on open and the browser would otherwise paint
         // its default outline.  The global suppressor in globals.css
@@ -118,7 +118,8 @@ const SheetTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('text-headline font-semibold text-fg-primary leading-none', className)}
+    // REQ-0419 — role rule: drawer title = panel heading → text-title (was text-body).
+    className={cn('text-title font-semibold text-fg-primary leading-none', className)}
     {...props}
   />
 ))

@@ -1,9 +1,8 @@
 import { memo, useMemo, useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X, HelpCircle,
-  ChevronFirst, ChevronLast, ChevronLeft, ChevronRight,
-  SlidersHorizontal
+  ZoomIn, ZoomOut, Magnet, GanttChartSquare, Scissors, X,
+  ChevronFirst, ChevronLast, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useProjectStore } from '@/stores/project-store'
@@ -25,7 +24,13 @@ import {
   formatRulerLabel,
   LAYOUT_MIN_BLOCK_SEC
 } from '@/lib/timeline-layout'
-import { computeDragPatch } from '@/lib/timeline-drag'
+import {
+  computeDragPatch,
+  computeLayerDragVisual,
+  buildMoveCommit,
+  AXIS_LOCK_THRESHOLD_PX,
+} from '@/lib/timeline-drag'
+import { resolveLayer } from '../../../shared/cue-placement'
 import {
   editedDuration,
   editedToOrig,
@@ -41,13 +46,13 @@ import {
   findNextBoundary
 } from '@/lib/timeline-boundaries'
 import type { EntryWarnings } from '@/lib/entry-warnings'
-// REQ-20260614-001 Phase 4 — the per-Block Inspector Popover was
-// retired.  `Popover` / `PopoverTrigger` / `PopoverContent` stay imported
-// because the same primitives still power the "How to use" help popover
-// in the toolbar (see ~l.1471).  `TimelineBlockInspector` is now rendered
-// by `step2.tsx`'s `inspectorSlot` (always-on right pane) and no longer
-// imported here.
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+// REQ-20260614-001 Phase 4 — the per-Block Inspector Popover was retired;
+// `TimelineBlockInspector` is rendered by `step2.tsx`'s `inspectorSlot`
+// (always-on right pane) and no longer imported here.
+// REQ-0521 §1-3 — the Radix `Popover` primitives are no longer imported either:
+// the "how to use" popover they powered moved into `help-popover.tsx`, shared
+// with the subtitle-list header.
+import { HelpPopover } from '@/components/help-popover'
 import { bumpRenderCount, measureSync } from '@/lib/perf-counter'
 import { scrubState } from '@/lib/scrub-state'
 import { SCRUB_SEEK_THROTTLE_ENABLED } from '../../../shared/constants'
@@ -71,6 +76,9 @@ const TRACK_GUTTER_LEFT_PX   = 56   // left gutter for track labels (T0, T1, …
 const ZOOM_STEP_PX           = 10
 /** Width of each resize handle (left/right edge of a block) in CSS pixels. */
 const RESIZE_HANDLE_PX       = 6
+// REQ-0465 §2 — render blocks/gridlines this many px beyond each edge of the
+// visible window so a scroll never briefly reveals an un-rendered block.
+const TIMELINE_VIRTUAL_BUFFER_PX = 600
 /**
  * Minimum block width (px) at which the top "timecode row" is rendered.
  * Below this the row is hidden entirely — showing only one end of the
@@ -255,7 +263,8 @@ interface BlockProps {
   topPx: number
   trackIndex: number
   /**
-   * REQ-20260614-001 Phase 3 — user single-selection (green ring/border).
+   * REQ-20260614-001 Phase 3 — user single-selection (green frame; REQ-0524
+   * dropped the extra `ring-2` that used to sit outside it).
    * Pre-Phase-3 this prop was named `isFocused` and conflated the user
    * selection with the playback follower.
    */
@@ -274,8 +283,12 @@ interface BlockProps {
    * forwarded through Block.
    */
   onSelect: (id: string, startSec: number) => void
-  /** Start a drag (resize or move) — TimelineView attaches window listeners. */
-  onStartDrag: (kind: DragKind, entry: SubtitleEntry, clientX: number) => void
+  /**
+   * Start a drag (resize or move) — TimelineView attaches window listeners.
+   * REQ-0399/0403 — `clientY` is threaded through too so a body 'move' drag can
+   * move the clip in 2D (time on X, layer on Y) at once.
+   */
+  onStartDrag: (kind: DragKind, entry: SubtitleEntry, clientX: number, clientY: number) => void
   /**
    * REQ-115 — live cut list, used to render the block-internal start/end
    * timecodes on the EDITED axis (= matches the ruler and burnin output).
@@ -284,7 +297,123 @@ interface BlockProps {
    * prop (= 3.9 perf budget unchanged).
    */
   cuts: CutList
+  /**
+   * REQ-0402 — true while THIS block is the one being dragged vertically (layer
+   * axis).  It floats under the cursor: lifted above its neighbours (`z`) with a
+   * grabbing ring, and its `topPx` is the follow position rather than its row.
+   */
+  isDragFloating?: boolean
 }
+
+/**
+ * REQ-0524 — the clip's fill and frame, one entry per visual state.
+ *
+ * Why a lookup and not the previous stack of conditional class strings: each
+ * branch used to append ANOTHER `bg-*` / `border-*` utility on top of the base
+ * pair and leave it to Tailwind's generated-stylesheet order to decide which
+ * declaration won.  That order is a property of Tailwind's own sort, not of the
+ * order they appear in the `cn()` call, so it is invisible from here and it
+ * changes when a colour is renamed — REQ-0524 renames the edited tint from
+ * `warning-soft` to `row-edited`, which sorts on the other side of
+ * `surface-3` and would have silently lost to the base fill.  Resolving to
+ * exactly one class per property removes the dependence outright.
+ *
+ * The frame width is NOT in this table: it is a plain `border` (1px) on the
+ * button in every state.  Only the colour varies.
+ */
+const BLOCK_TONE = {
+  normal: {
+    bg: 'bg-surface-3/70 hover:bg-surface-3',
+    border: 'border-surface-4/70 hover:border-fg-muted',
+    timecode: 'text-fg-secondary/80',
+  },
+  edited: {
+    /*
+     * REQ-0525 — 70 %, and NOT at a contrast ceiling any more.
+     *
+     * REQ-0524's yellow was pinned at 40 % because that was the most fill it
+     * could take before white text fell under 4.5:1.  That constraint was a
+     * property of the yellow, not of the design: #343FDF is a DARK blue, so
+     * piling it on over the near-black clips lane makes the fill darker, and
+     * the white text gets MORE readable, not less.  Measured over the lane:
+     *
+     *     alpha   fill            white text   green selection frame
+     *     0.40    rgb(36,41,105)     12.07:1        6.93:1
+     *     0.70    rgb(44,52,164)      9.02:1        5.19:1   ← chosen
+     *     1.00    rgb(52,63,223)      6.59:1        3.79:1
+     *
+     * Every row clears AA, so the value was picked for how the blue READS
+     * (the owner asked for "cyber"), with 100 % held back because that is
+     * where the green 1px selection frame starts to lose the fill.
+     *
+     * REQ-0525 §2-3 asked whether the timecode row still needs REQ-0524's
+     * undimming, now that the fill is no longer a bright yellow.  Measured,
+     * and the answer is yes: the shared `text-fg-secondary/80` over this fill
+     * comes to 4.29:1 — closer than the yellow's 2.37:1, but still under AA.
+     * So `text-fg-primary` stays.  (Estimating it would have shipped 4.29 as
+     * "about 4.8"; the gate is what caught it.)
+     *
+     * The frame goes to FULL opacity while the fill stays at 70 %, which is
+     * what keeps two touching edited clips separable: at 70/70 the border and
+     * the fill composite to nearly the same colour and the seam between
+     * neighbours all but disappeared (caught in the REQ-0525 screenshots, not
+     * by reasoning).  Full-vs-70 puts 60 units of RGB distance between them.
+     *
+     * That frees hover to move the FILL again (70 → 85 %), which REQ-0524's
+     * yellow could not afford — at 85 % white text is still 7.7:1 and the
+     * green selection frame is still 4.4:1.
+     *
+     * REQ-0526 — the three weights moved into `--row-edited-*-alpha` vars so
+     * the DEV token editor can move them on a running screen; the numbers
+     * quoted above are those vars' authored values.
+     *
+     * ─── REQ-0527 — everything above this line is now HISTORY ──────────────
+     *
+     * The owner drove the REQ-0526 panel and settled on a darker, cyan-ward
+     * blue (#343FDF → #00638a) at a much lighter fill (70 % → 30 %).  Frame
+     * stays at 100 %.  Re-measured on real pixels over the lane rgb(26,26,26):
+     *
+     *     surface              colour        vs REQ-0525
+     *     edited fill          rgb(18,48,59)   was rgb(44,52,164)
+     *     edited frame         rgb(0,99,138)   was rgb(52,63,223)
+     *     white body text      12.74:1         was  9.02:1
+     *     green selection frame 7.32:1         was  5.19:1
+     *
+     * Both text figures IMPROVED, because a 30 % dark-cyan fill barely lifts
+     * the near-black lane.  That is also the cost: the fill is now only 26 RGB
+     * units from a normal clip (was 115).  What separates the states at a
+     * glance is the FRAME — 99 units, and a saturated cyan against a grey.
+     * RES-0527 §2 puts both numbers to the owner rather than compensating here.
+     *
+     * ★ `hover:` intentionally resolves to the SAME colour as the base: the
+     * owner set fill and fill-hover both to 0.30, so an edited clip does not
+     * change under the cursor.  The classes stay in place so the pair remains
+     * one knob-turn apart if that is revisited — see globals.css.
+     *
+     * The timecode KEEPS `text-fg-primary`, but no longer because it has to:
+     * the shared `text-fg-secondary/80` over this fill now measures 5.84:1
+     * (REQ-0525 measured 4.29:1 over the old 70 % fill and had to undim).  It
+     * would pass AA today.  It is kept because the fill lost most of its
+     * separation from a normal clip, so the brighter timecode is now one of
+     * the few things carrying the state — dropping it would spend contrast the
+     * clip can no longer spare.  Removing the exception is a one-line change
+     * if the owner prefers the uniform look; RES-0527 §2-2 asks.
+     */
+    bg: 'bg-row-edited-fill hover:bg-row-edited-fill-hover',
+    border: 'border-row-edited-frame hover:border-row-edited-frame',
+    timecode: 'text-fg-primary',
+  },
+  overflow: {
+    bg: 'bg-destructive/15 hover:bg-destructive/25',
+    border: 'border-destructive/40 hover:border-destructive',
+    timecode: 'text-fg-secondary/80',
+  },
+  selected: {
+    bg: 'bg-primary/15 hover:bg-primary/15',
+    border: 'border-primary hover:border-primary',
+    timecode: 'text-fg-secondary/80',
+  },
+} as const
 
 function BlockImpl({
   entry,
@@ -298,6 +427,7 @@ function BlockImpl({
   onSelect,
   onStartDrag,
   cuts,
+  isDragFloating = false,
 }: BlockProps) {
   bumpRenderCount('Block')
   const { t } = useTranslation(['step2'])
@@ -307,12 +437,35 @@ function BlockImpl({
   })
   const displayText = entry.text.replace(/\\N/g, ' ').trim()
 
+  // REQ-0524 — resolve the clip's tone once, so exactly one bg/border pair
+  // reaches the class list.  Precedence is unchanged from the pre-0524 class
+  // stack it replaces: a deleted clip keeps the neutral fill (the
+  // `opacity-40 line-through` further down is what marks it), overflow
+  // outranks edited, and the green selection FILL only replaces a neutral
+  // fill — a selected edited / overflow clip keeps its state colour and shows
+  // the selection through the frame alone.
+  const tone: keyof typeof BLOCK_TONE = entry.isDeleted
+    ? 'normal'
+    : isOverflow
+      ? 'overflow'
+      : entry.isEdited
+        ? 'edited'
+        : 'normal'
+  const selectable = isUserSelected && !entry.isDeleted
+  const fillClass = selectable && tone === 'normal' ? BLOCK_TONE.selected.bg : BLOCK_TONE[tone].bg
+  const frameClass = selectable ? BLOCK_TONE.selected.border : BLOCK_TONE[tone].border
+
   // Click-vs-drag bookkeeping for the body button (Phase 4).  Pointerdown
   // records the origin; pointermove flips `moved` once the cursor crosses
   // the 3 px threshold; click swallows the open-popover action if `moved`
   // was set so a real drag never pops the inspector mid-motion.  Refs
   // (not state) so writes do not retrigger renders during the drag.
+  // REQ-0399 — the origin is now 2-D and `moved` trips on horizontal OR
+  // vertical travel, so a purely VERTICAL (layer) drag also swallows the
+  // trailing click (otherwise dropping a clip onto another track would
+  // additionally select + seek).
   const bodyDownXRef = useRef<number | null>(null)
+  const bodyDownYRef = useRef<number | null>(null)
   const bodyMovedRef = useRef(false)
   const BODY_DRAG_THRESHOLD_PX = 3
 
@@ -322,7 +475,7 @@ function BlockImpl({
       if (e.button !== 0) return
       e.stopPropagation()
       e.preventDefault()
-      onStartDrag(kind, entry, e.clientX)
+      onStartDrag(kind, entry, e.clientX, e.clientY)
     }
   }
 
@@ -337,19 +490,26 @@ function BlockImpl({
     // stopPropagation for the same kind of reason).
     e.stopPropagation()
     bodyDownXRef.current = e.clientX
+    bodyDownYRef.current = e.clientY
     bodyMovedRef.current = false
     // Kick off the 'move' drag eagerly — TimelineView's handler defers any
     // entry mutation until the pointer crosses the threshold (see the
     // dxPx check in applyDragPatch's 'move' branch).  Doing it on
     // pointerdown rather than after a debounce avoids a perceptible
     // "stickiness" at drag start.
-    onStartDrag('move', entry, e.clientX)
+    onStartDrag('move', entry, e.clientX, e.clientY)
   }
 
   function handleBodyPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
-    const down = bodyDownXRef.current
-    if (down === null) return
-    if (Math.abs(e.clientX - down) > BODY_DRAG_THRESHOLD_PX) {
+    const downX = bodyDownXRef.current
+    const downY = bodyDownYRef.current
+    if (downX === null || downY === null) return
+    // REQ-0399 — trip on horizontal OR vertical travel so a layer (vertical)
+    // drag is recognised as a drag and its trailing click is swallowed.
+    if (
+      Math.abs(e.clientX - downX) > BODY_DRAG_THRESHOLD_PX ||
+      Math.abs(e.clientY - downY) > BODY_DRAG_THRESHOLD_PX
+    ) {
       bodyMovedRef.current = true
     }
   }
@@ -357,6 +517,7 @@ function BlockImpl({
   function handleBodyClick(e: React.MouseEvent<HTMLButtonElement>) {
     e.stopPropagation()
     bodyDownXRef.current = null
+    bodyDownYRef.current = null
     if (bodyMovedRef.current) {
       // A drag happened — swallow the click so the inspector doesn't
       // pop open on top of the freshly-moved block.
@@ -393,12 +554,15 @@ function BlockImpl({
   // resize handles.
   return (
     <div
-      className="absolute"
+      className={cn('absolute', isDragFloating && 'z-30')}
       style={{
         left: `${leftPx}px`,
         top: `${topPx}px`,
         width: `${Math.max(2, widthPx)}px`,
-        height: `${BLOCK_HEIGHT_PX}px`
+        height: `${BLOCK_HEIGHT_PX}px`,
+        // REQ-0402 — a floating (vertically-dragged) block lifts above its
+        // neighbours so it reads as "picked up" while it glides between tracks.
+        ...(isDragFloating ? { boxShadow: '0 4px 12px hsl(0 0% 0% / 0.45)' } : null),
       }}
     >
       {/* Left edge handle.  z-index lifts it above the body so its 6 px
@@ -427,33 +591,79 @@ function BlockImpl({
         onClick={handleBodyClick}
         title={displayText}
         className={cn(
-          'absolute inset-0 flex flex-col justify-center gap-0.5 px-2 py-1 rounded-md text-left',
+          'absolute inset-0 flex flex-col justify-center gap-0.5 px-2 py-1 text-left',
           'transition-colors duration-150 select-none overflow-hidden',
-          'focus:outline-none focus-visible:outline-none',
-          'bg-surface-3/70 text-fg-primary border border-surface-4/70',
-          'hover:bg-surface-3 hover:border-fg-muted',
-          entry.isEdited && !entry.isDeleted && 'bg-warning-soft/15 border-warning-soft/40 hover:bg-warning-soft/25',
-          isOverflow && !entry.isDeleted && 'bg-destructive/15 border-destructive/40 hover:bg-destructive/25',
+          // REQ-0524 §2-2 — square corners.  Was `rounded-md` (3px after the
+          // REQ-0177 radius flattening).  The owner reads a clip's start edge
+          // against the 1px playhead, and a 3px arc pulls the topmost and
+          // bottommost pixels of that edge inward, so the clip appears to
+          // begin a couple of pixels later than it does.  Adjacent clips stay
+          // separable because each keeps its own 1px frame — two touching
+          // clips show a 2px seam.
+          'rounded-none',
+          // REQ-0524 §1 — ONE frame, 1px, identical in every state.  Before,
+          // selection added `ring-2 ring-primary` (a 2px outset box-shadow)
+          // ON TOP of this 1px border, so a clip's frame jumped 1 → 3px the
+          // moment it was clicked.  That is the "太さが曖昧" the owner
+          // reported: nothing else was changing width, the ring and the
+          // border were simply stacking.  Only the colour varies now — see
+          // BLOCK_TONE.
+          'border text-fg-primary',
+          fillClass,
+          frameClass,
           // REQ-20260614-001 補遺⑬: 再生アクティブ (sky) ハイライトは
           // 廃止。`focusedRowId` 自体は再生中の一覧自動スクロール (subtitle-
           // table.tsx) を駆動するため残してあるが、視覚的な色付けは行わない。
-          // 状態色は白 (通常) / 黄 (編集済み) / 赤 (overflow) / 緑 (ユーザー
+          // 状態色は白 (通常) / 青 (編集済み・REQ-0525 で黄から変更) /
+          // 赤 (overflow) / 緑 (ユーザー
           // 選択) の 4 色のみ。
           //
-          // REQ-088 #1 fix-up — pin `hover:border-primary` and (for the
-          // plain-active variant) `hover:bg-primary/15` so the base
-          // `hover:border-fg-muted` / `hover:bg-surface-3` declarations
-          // higher up in the class list cannot override the active
-          // green on hover.  Tailwind's `:hover` pseudo always wins
-          // over plain classes regardless of source order, so the
-          // active state must declare its own `hover:` variants to
-          // survive a cursor that's still over the freshly-clicked
-          // block.  Without these, the green border / bg disappeared
-          // while hovering and reappeared only after the cursor left
-          // the clip — confusing right after a click-to-activate
-          // since the user has not moved the cursor yet.  REQ-089.
-          isUserSelected && 'ring-2 ring-primary border-primary hover:border-primary text-fg-primary',
-          isUserSelected && !entry.isEdited && !isOverflow && !entry.isDeleted && 'bg-primary/15 hover:bg-primary/15',
+          // REQ-089 / REQ-088 #1 の教訓は BLOCK_TONE 側に移した: どの tone も
+          // 自前の `hover:` を宣言しているので、`:hover` が素のクラスに勝つ
+          // 件で選択中の緑が消える問題は構造的に起きない。
+          //
+          /*
+           * REQ-0534 §1 — there is DELIBERATELY no keyboard-focus indicator
+           * here.  REQ-0524 §1-4 added `focus-visible:border-fg-primary`; it
+           * was removed because nothing could ever make it paint.
+           *
+           * ## Why it could not fire
+           *
+           * `:focus-visible` only matches on KEYBOARD-derived focus, and Tab
+           * does not work anywhere in this app: `App.tsx`'s
+           * `useSuppressTabFocus()` registers a `keydown` listener on the
+           * document root in the CAPTURE phase and calls `preventDefault()` on
+           * every Tab — Shift+Tab included, dialogs and Radix portals included
+           * (REQ-20260614-001 補遺⑤).  That predates REQ-0524, so the
+           * indicator was unreachable the moment it was written.
+           *
+           * Measured, not assumed (RES-0533 §1): 90 synthetic Tab presses in
+           * the real app never moved `document.activeElement` off the first
+           * button.  The clip body itself is fine — a native `<button>`,
+           * `tabIndex 0`, not disabled, `aria-label` set, and `.focus()` works
+           * programmatically — so the block below is not what is missing.
+           *
+           * ## Why we are not fixing the reachability instead
+           *
+           * Owner decision (REQ-0534 §1): keyboard operation is out of scope.
+           * A mouse is listed as a requirement in the Microsoft Store entry,
+           * so a mouse-less environment is not a supported configuration.
+           * `aria-label` additions and keyboard selection movement are out for
+           * the same reason.
+           *
+           * ## If that is ever revisited
+           *
+           * Removing `useSuppressTabFocus()` is the first step, not the last.
+           * Also needed, per RES-0533 §1-2: the timeline's arrow keys are
+           * already taken (←/→ move the playhead, ↑/↓ zoom), so "move the
+           * selection to the next cue" needs a key assignment decision first;
+           * and `Delete` / `Ctrl+D` / `Ctrl+R` act on the current selection,
+           * which only the mouse can create today (`Ctrl+A` aside).  The
+           * indicator itself is one line and can come back with the border
+           * token — the CSS was correct (`--text-primary` ≈ white); only the
+           * route to it was missing.
+           */
+          'focus:outline-none',
           entry.isDeleted && 'opacity-40 line-through',
           !entry.isDeleted && 'cursor-grab active:cursor-grabbing'
         )}
@@ -464,7 +674,12 @@ function BlockImpl({
             (the user can't tell whether it's start or end), so we
             go all-or-nothing.  REQ-061. */}
         {widthPx >= TIME_ROW_MIN_BLOCK_WIDTH_PX && (
-          <div className="flex w-full items-baseline justify-between text-caption font-mono tabular-nums text-fg-secondary/80 leading-none">
+          <div className={cn(
+            'flex w-full items-baseline justify-between text-caption font-mono tabular-nums leading-none',
+            // REQ-0524 — follows the FILL, not the selection: the selected
+            // fill is a dark green tint, so it keeps the dimmed colour.
+            BLOCK_TONE[tone].timecode,
+          )}>
             <span>{formatEditedTimecode(entry.startSec, cuts)}</span>
             <span>{formatEditedTimecode(entry.endSec, cuts)}</span>
           </div>
@@ -513,8 +728,6 @@ interface PlayheadProps {
   cuts: CutList
   /** Current zoom (px / sec). */
   pixelsPerSec: number
-  /** Combined height of ruler + tracks, in pixels. */
-  totalHeightPx: number
 }
 
 /**
@@ -525,12 +738,13 @@ interface PlayheadProps {
  * volume shifts from "TimelineView + every memo + every Block prop
  * recompare" per tick to "this tiny sub-tree" per tick.
  *
- * The wrapping `memo` guards against `cuts` / `pixelsPerSec` /
- * `totalHeightPx` props churning identity on unrelated re-renders;
- * the body subscribes to the playhead slice so only playhead-driven
- * updates land in this component.
+ * The wrapping `memo` guards against `cuts` / `pixelsPerSec` props
+ * churning identity on unrelated re-renders; the body subscribes to the
+ * playhead slice so only playhead-driven updates land in this component.
+ * The line itself spans the full column via `top-0 bottom-0` (REQ-0397 §3),
+ * so it needs no height prop.
  */
-function PlayheadImpl({ cuts, pixelsPerSec, totalHeightPx }: PlayheadProps) {
+function PlayheadImpl({ cuts, pixelsPerSec }: PlayheadProps) {
   bumpRenderCount('Playhead')
   const videoCurrentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
   if (videoCurrentTimeSec < 0) return null
@@ -547,18 +761,32 @@ function PlayheadImpl({ cuts, pixelsPerSec, totalHeightPx }: PlayheadProps) {
       // rendered before the scissor markers, so a scissor passing
       // through the same column visually sits on top of the playhead
       // (matches the existing v1.2.0 behaviour).
-      className="absolute top-0 z-20 pointer-events-none"
+      //
+      // REQ-0397 §3 — `top-0 bottom-0` instead of a fixed height so the
+      // line always spans the full time-content column, including the
+      // bottom-anchor gap between the ruler and the bottom-justified
+      // tracks (the column is now taller than ruler + tracks when the
+      // viewport has slack).
+      className="absolute top-0 bottom-0 z-20 pointer-events-none"
       style={{
         left: `${leftPx}px`,
         width: '1px',
-        height: `${totalHeightPx}px`,
         background: 'hsl(var(--playhead))'
       }}
     >
-      {/* Top arrow head */}
+      {/* Top arrow head.
+          REQ-0532 §2-2/§2-3 — `sticky` rather than `absolute -top-px`, for the
+          same reason as the scissor icon: the red LINE spans the whole column
+          (`top-0 bottom-0`) and was always visible, but its head sat at the top
+          of the CONTENT and scrolled away once the layers overflowed, leaving
+          the user unable to see where the playhead's grabbable head was.
+          Sticky pins the head to the scrollport while the line keeps running
+          the full height, and horizontal scrolling still moves both (the
+          parent carries the `left` offset). */}
       <div
-        className="absolute -top-px -left-1.5 h-0 w-0"
+        className="sticky top-0 h-0 w-0"
         style={{
+          marginLeft: '-6px',
           borderLeft: '6px solid transparent',
           borderRight: '6px solid transparent',
           borderTop: '6px solid hsl(var(--playhead))'
@@ -644,10 +872,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   const setPixelsPerSec = useUiStore((s) => s.setTimelinePixelsPerSec)
   const snapEnabled = useUiStore((s) => s.timelineSnapEnabled)
   const setSnapEnabled = useUiStore((s) => s.setTimelineSnapEnabled)
-  // REQ-20260614-001 補遺⑧ — Row 2 (トリミング + 吸着) の表示状態。
-  // 1 行目右端の「ツール」ボタンで toggle。
-  const toolsExpanded = useUiStore((s) => s.step2TimelineToolsExpanded)
-  const toggleTools = useUiStore((s) => s.toggleStep2TimelineTools)
+  // REQ-0519 — 吸着 / トリミングの開閉トグル (REQ-20260614-001 補遺⑧ の
+  // `step2TimelineToolsExpanded`) は撤去した。両者は常時 Row 1 に出る。
   const scrollToRowId = useUiStore((s) => s.scrollToRowId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
   const isAudioOnly = useIsAudioOnly()
@@ -688,31 +914,18 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
     return Math.max(10, maxEnd * 1.2)
   }, [videoDurationSec, entries])
 
-  // REQ-20260613-002: snapshot the dragged entry's pre-drag startSec /
-  // endSec for the greedy track allocator to use, so that the dragged
-  // entry stays in its starting greedy slot (= same trackIndex) for the
-  // duration of the drag even as its live times diverge from neighbouring
-  // clips.  Set at handleStartDrag (below), cleared at pointerup.  When
-  // null, the layout call below passes `overrides: undefined` and the
-  // legacy single-arg behaviour applies (= existing tests / single-clip
-  // drags unchanged).
-  const [dragGreedyTimes, setDragGreedyTimes] = useState<
-    ReadonlyMap<string, { startSec: number; endSec: number }> | null
-  >(null)
-
+  // REQ-0466 §1 — the `dragGreedyTimes` drag row-pinning is gone.  It existed
+  // (REQ-20260613-002) so a horizontal drag wouldn't reshuffle greedy track
+  // rows, but since REQ-0396 rows are the stored `layer` (not time-derived), so
+  // a horizontal drag never changes a cue's row anyway (`layoutEntries` `void`s
+  // the old override).  Removing the plumbing changes nothing on screen.
+  // REQ-0528 §2-3 — `videoDurationSec` is passed as the HARD length so the
+  // ruler stops at the end of the footage instead of following an over-long
+  // cue past it.  It is `Infinity` in audio-only mode, which `layoutEntries`
+  // treats as "no hard duration" and falls back to spanning the entries.
   const layout = useMemo(
-    () =>
-      layoutEntries(
-        visibleEntries,
-        fallbackDurationSec,
-        LAYOUT_MIN_BLOCK_SEC,
-        // REQ-20260613-002: when a drag is active, the greedy allocator
-        // uses the dragged entry's snapshot times instead of its live
-        // times so the trackIndex stays pinned through every pointermove
-        // tick.  Null override → undefined → legacy single-arg behaviour.
-        dragGreedyTimes !== null ? { greedyTimes: dragGreedyTimes } : undefined,
-      ),
-    [visibleEntries, fallbackDurationSec, dragGreedyTimes]
+    () => layoutEntries(visibleEntries, fallbackDurationSec, LAYOUT_MIN_BLOCK_SEC, videoDurationSec),
+    [visibleEntries, fallbackDurationSec, videoDurationSec]
   )
 
   // Index in the unfiltered, unsorted entries array — used for the human-
@@ -800,13 +1013,33 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
     snapshot: SubtitleEntry
     /** Pointer clientX at drag-start — drag delta is computed from this. */
     originClientX: number
+    /** Pointer clientY at drag-start — REQ-0399 vertical (layer) delta. */
+    originClientY: number
+    /**
+     * REQ-0403 — a body 'move' drag has left the 4px click dead-zone and is now
+     * actively moving (2D).  Until then a click never nudges the clip.  Resize
+     * kinds ignore this (they move from the first pointermove).
+     */
+    moveStarted?: boolean
+    /**
+     * REQ-0402/0403 — the layer a 'move' drag will commit on release.  Updated
+     * each pointermove from the follow position; read once in `onUp`.  The layer
+     * is NOT written to the store during the drag (the block floats under the
+     * cursor instead), so this carries the pending value.
+     */
+    pendingLayer?: number
+    /**
+     * REQ-0462 — the SNAPPED time a 'move' drag will commit on release.  During
+     * the drag the store holds the RAW (1:1 cursor-following) time; these carry
+     * the snapped values from the last pointermove so `onUp` can apply them right
+     * before it builds the single move-commit.  `undefined` until the drag leaves
+     * the dead-zone (so a click commits nothing).
+     */
+    pendingStartSec?: number
+    pendingEndSec?: number
   }
 
   const activeDragRef = useRef<ActiveDrag | null>(null)
-  // `dragGreedyTimes` is declared earlier in the component (just before
-  // the `layout` memo) so the memo can read it as a dependency without
-  // a TDZ violation.  See the comment block at that declaration site
-  // for the full REQ-20260613-002 rationale.
 
   // Stable mirrors of the live values that the (mount-once) pointer
   // listeners need to read without re-attaching whenever React state
@@ -842,25 +1075,36 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   // but no longer kept on the component.
   const [snapGuidePx, setSnapGuidePx] = useState<number | null>(null)
 
+  // REQ-0402 — live visual for a vertical (layer) drag: the floating block's
+  // band-relative top (follows the cursor) and the row it will snap to (drives
+  // the target-track highlight).  Null except during a layer-axis drag.
+  const [layerDragVisual, setLayerDragVisual] = useState<
+    { entryId: string; blockTopPx: number; targetRowIndex: number } | null
+  >(null)
+
+  // REQ-0402 — the current top row index (= trackCount − 1), mirrored into a ref
+  // so the mount-once pointer handlers clamp a layer drag to exactly the rows
+  // that are rendered (matches the filtered layout the user sees).
+  const dragMaxRowRef = useRef(0)
+  useEffect(() => {
+    dragMaxRowRef.current = Math.max(0, layout.trackCount - 1)
+  })
+
   const handleStartDrag = useCallback(
-    (kind: DragKind, entry: SubtitleEntry, clientX: number) => {
+    (kind: DragKind, entry: SubtitleEntry, clientX: number, clientY: number) => {
       activeDragRef.current = {
         kind,
         entryId: entry.id,
         snapshot: { ...entry, original: { ...entry.original } },
-        originClientX: clientX
+        originClientX: clientX,
+        originClientY: clientY,
+        // REQ-0403 — a 'move' starts inert; it begins moving (2D) once the
+        // pointer leaves the 4px click dead-zone.  Resize kinds don't use this.
+        moveStarted: false,
       }
-      // REQ-20260613-002: pin the dragged entry's greedy slot to its
-      // pre-drag times so its trackIndex never changes mid-drag.  This
-      // is the core of the same-time-clip drag-swap fix: without this,
-      // the next render after the user moves the cursor 1 px would
-      // resort and reassign tracks if any other clip shared the
-      // dragged clip's old startSec.
-      setDragGreedyTimes(
-        new Map([[entry.id, { startSec: entry.startSec, endSec: entry.endSec }]])
-      )
       // REQ-20260614-001 Phase 4 — `setOpenInspectorId` retired with the
-      // popover; nothing to close at drag-start.
+      // popover; nothing to close at drag-start.  (REQ-0466 §1 removed the
+      // `dragGreedyTimes` row-pin — rows are layer-based, not time-based.)
     },
     []
   )
@@ -879,6 +1123,42 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       // TimelineView does not need to subscribe to videoCurrentTimeSec.
       const playhead = useUiStore.getState().videoCurrentTimeSec
       const dxPx = e.clientX - d.originClientX
+      const dyPx = e.clientY - d.originClientY
+
+      // REQ-0403 — 2D move.  A body 'move' drag now updates BOTH time (X, via the
+      // computeDragPatch pipeline below) and layer (Y, here) at once — no axis
+      // lock, so diagonal drags work and the clip never "freezes" when the
+      // cursor changes direction (the REQ-0399 lock is gone).  A 4px dead-zone
+      // still gates the START so a click never nudges the clip or mis-fires
+      // select/seek.  Resize kinds skip this and run the time pipeline directly.
+      if (d.kind === 'move') {
+        if (!d.moveStarted) {
+          if (
+            Math.abs(dxPx) < AXIS_LOCK_THRESHOLD_PX &&
+            Math.abs(dyPx) < AXIS_LOCK_THRESHOLD_PX
+          ) {
+            return // still inside the click dead-zone
+          }
+          d.moveStarted = true
+        }
+        // Y — the block floats under the cursor and previews the track it will
+        // snap to; the layer is committed once on release (REQ-0402 math, now
+        // running every move regardless of the X displacement).
+        const vis = computeLayerDragVisual(
+          resolveLayer(d.snapshot),
+          dyPx,
+          dragMaxRowRef.current,
+          TRACK_HEIGHT_PX,
+          BLOCK_VERTICAL_PAD_PX,
+        )
+        d.pendingLayer = vis.targetLayer
+        setLayerDragVisual({
+          entryId: d.entryId,
+          blockTopPx: vis.blockTopPx,
+          targetRowIndex: vis.targetRowIndex,
+        })
+        // Fall through → X (time) pipeline (computeDragPatch), committed live.
+      }
 
       // REQ-085 #1: the previous inline snap / clamp / round pipeline was
       // declared "verified" in RES-084 §1.1 on the strength of the snap-
@@ -941,15 +1221,24 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       // Build the minimal patch — different kinds touch different
       // fields to keep history pushes meaningful (a resize-end
       // shouldn't claim it touched startSec).
-      let patch: Partial<SubtitleEntry>
       if (d.kind === 'resize-start') {
-        patch = { startSec: result.startSec, isEdited: true }
+        // Resize is time-only and snaps live, unchanged (REQ-0462 §1).
+        useProjectStore.getState().updateEntry(d.entryId, { startSec: result.startSec, isEdited: true })
       } else if (d.kind === 'resize-end') {
-        patch = { endSec: result.endSec, isEdited: true }
+        useProjectStore.getState().updateEntry(d.entryId, { endSec: result.endSec, isEdited: true })
       } else {
-        patch = { startSec: result.startSec, endSec: result.endSec, isEdited: true }
+        // REQ-0462 — a 'move' drag follows the cursor 1:1: write the RAW
+        // (pre-snap) time live so the clip sticks to the pointer, and REMEMBER
+        // the snapped time (result.startSec/endSec) to apply on release.  The
+        // snap guide (setSnapGuidePx above) still shows where it will land.
+        d.pendingStartSec = result.startSec
+        d.pendingEndSec = result.endSec
+        useProjectStore.getState().updateEntry(d.entryId, {
+          startSec: result.rawStartSec,
+          endSec: result.rawEndSec,
+          isEdited: true,
+        })
       }
-      useProjectStore.getState().updateEntry(d.entryId, patch)
     }
 
     function onMove(e: PointerEvent) {
@@ -960,15 +1249,63 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
     function onUp() {
       const d = activeDragRef.current
       if (!d) return
+      // REQ-0462 — the move drag wrote the RAW (1:1-follow) time live; now that
+      // the gesture is over, apply the SNAPPED time so snap/adsorption lands on
+      // release.  Done BEFORE reading `cur` so the single move-commit below
+      // captures the snapped time AND the pending layer together — the two axes
+      // commit and revert as one, even if the pointer was cancelled mid-drag.
+      if (
+        d.kind === 'move' &&
+        d.pendingStartSec !== undefined &&
+        d.pendingEndSec !== undefined
+      ) {
+        useProjectStore.getState().updateEntry(d.entryId, {
+          startSec: d.pendingStartSec,
+          endSec: d.pendingEndSec,
+          isEdited: true,
+        })
+      }
       // Read the final entry state from the store; if nothing changed,
       // skip the history push and the commitTimeEdit re-sort.
       const cur = useProjectStore
         .getState()
         .entries.find((x) => x.id === d.entryId)
-      const movedTime =
+      if (d.kind === 'move') {
+        // REQ-0403 — a 2D move commits time AND layer in a SINGLE undo step.
+        // Time was written live during the drag; the layer is pending here.
+        // `buildMoveCommit` decides whether anything moved and produces the
+        // before/after entries (after = final time + pending layer), so one
+        // history op restores BOTH axes — whether the user moved in X, Y, or
+        // both.  `updateEntry` recomputes `isEdited`; `commitTimeEdit` re-sorts
+        // and scrolls to the row at its final time.
+        const before = d.snapshot
+        const commit =
+          cur !== undefined
+            ? buildMoveCommit(before, cur, d.pendingLayer ?? resolveLayer(before))
+            : null
+        if (commit) {
+          // Apply the pending layer now (time already applied live).  Reading
+          // `after` back from the store is unnecessary — `commit.after` already
+          // carries the final time (from `cur`) plus the pending layer.
+          useProjectStore.getState().updateEntry(before.id, { layer: commit.after.layer })
+          useHistoryStore.getState().push({
+            label: moveClipHistoryLabelRef.current,
+            undo: () => {
+              useProjectStore.getState().updateEntry(before.id, commit.before)
+              commitTimeEdit(before.id)
+            },
+            redo: () => {
+              useProjectStore.getState().updateEntry(before.id, commit.after)
+              commitTimeEdit(before.id)
+            },
+          })
+          commitTimeEdit(before.id)
+        }
+      } else if (
         cur !== undefined &&
         (cur.startSec !== d.snapshot.startSec || cur.endSec !== d.snapshot.endSec)
-      if (cur && movedTime) {
+      ) {
+        // Resize (start/end handle) — time-only, unchanged.
         const before = d.snapshot
         const after = { ...cur }
         useHistoryStore.getState().push({
@@ -986,19 +1323,21 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
       }
       activeDragRef.current = null
       setSnapGuidePx(null)
-      // REQ-20260613-002: release the greedy-time pin so the next
-      // layout pass reflects the final live times.  Block trackIndex
-      // is now allowed to settle to whatever greedy decides given the
-      // committed startSec values — any "snap" the user sees here is
-      // an honest result of the move they just made.
-      setDragGreedyTimes(null)
+      // REQ-0402 — drop the floating-block visual; the committed layer now
+      // places the block on its final row via the normal layout.
+      setLayerDragVisual(null)
     }
 
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+    // REQ-0462 §2 — finalize the SAME way on an abnormal end (pointercancel /
+    // capture loss), so a move that wrote its raw time live is never left as a
+    // half-commit (unsnapped time applied, layer dropped, no undo entry).
+    window.addEventListener('pointercancel', onUp)
     return () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
     }
   }, [])
 
@@ -1007,6 +1346,14 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   const timelineHistoryLabelRef = useRef('')
   useEffect(() => {
     timelineHistoryLabelRef.current = t('history.editTime')
+  })
+
+  // REQ-0403 — label for a 2D clip move (time and/or layer), same ref pattern so
+  // the mount-once pointerup handler reads a fresh translation.  One label
+  // covers the whole move; resize keeps `editTime`.
+  const moveClipHistoryLabelRef = useRef('')
+  useEffect(() => {
+    moveClipHistoryLabelRef.current = t('history.moveClip')
   })
 
   // -------------------------------------------------------------------------
@@ -1405,6 +1752,54 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
   // `pixelsPerSec` and `cuts` so the subscription rebuilds with fresh
   // closure values when zoom or cuts change.
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // REQ-0465 §2 — horizontal virtualization.  The timeline is one wide,
+  // horizontally-scrolling strip; at 10k cues almost all blocks sit far off
+  // screen.  Track the visible X window (scrollLeft + clientWidth) so only the
+  // blocks (and gridlines) intersecting it are rendered.  rAF-throttled so a
+  // scroll drag updates at most once per frame.
+  const [tlViewport, setTlViewport] = useState<{ left: number; width: number }>({ left: 0, width: 0 })
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    let raf = 0
+    const update = (): void => {
+      raf = 0
+      const left = el.scrollLeft
+      const width = el.clientWidth
+      setTlViewport((prev) => (prev.left === left && prev.width === width ? prev : { left, width }))
+    }
+    const schedule = (): void => { if (!raf) raf = requestAnimationFrame(update) }
+    update() // seed before first paint of the block list
+    el.addEventListener('scroll', schedule, { passive: true })
+    const ro = new ResizeObserver(schedule)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', schedule)
+      ro.disconnect()
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [])
+
+  // REQ-0465 §2 — the placements whose X-extent intersects the visible window
+  // (+ buffer).  Width 0 (pre-measurement) renders everything so the first paint
+  // is never short.  The dragged clip is always kept — during a move drag
+  // `layerDragVisual.entryId` is the dragged entry, and it floats under the
+  // cursor, so it must never blink out even if its committed leftPx scrolls off.
+  const visiblePlacements = useMemo(() => {
+    if (tlViewport.width === 0) return layout.placements
+    const minX = tlViewport.left - TIMELINE_VIRTUAL_BUFFER_PX
+    const maxX = tlViewport.left + tlViewport.width + TIMELINE_VIRTUAL_BUFFER_PX
+    const floatingId = layerDragVisual?.entryId
+    return layout.placements.filter(({ entry }) => {
+      if (entry.id === floatingId) return true
+      const pos = editedBlockPositions.get(entry.id)
+      const l = pos?.leftPx ?? entry.startSec * pixelsPerSec
+      const w = pos?.widthPx ?? (entry.endSec - entry.startSec) * pixelsPerSec
+      return l < maxX && l + w > minX
+    })
+  }, [layout.placements, editedBlockPositions, tlViewport, pixelsPerSec, layerDragVisual])
+
   useEffect(() => {
     function maybeScrollPlayheadIntoView(playhead: number): void {
       const el = scrollRef.current
@@ -1529,112 +1924,28 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
 
   return (
     <div className="flex flex-col h-full bg-surface-0">
-      {/* Toolbar — REQ-20260614-001 補遺⑧: 2 行構成。
-          Row 1 は常時表示（使い方 / ズーム / カーソル送り + 右端の
-          「ツール」トグル）。Row 2 はトグルで開閉し、トリミング操作と
-          吸着を含む。Row 1 に詰め込みすぎず、1 行目が最小ペイン幅でも
-          折り返さないようにするのが分割の目的。 */}
-      <div className="flex flex-col flex-shrink-0 border-b border-line bg-surface-1">
-      {/* Row 1 */}
-      <div className="flex items-center justify-between gap-2 px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          {/* REQ-122 — "How to use" Popover, anchored before the zoom
-              cluster.  Documents trimming, the scissor marker undo,
-              zoom + snap, and the "keep subtitles in a single row"
-              recommendation — the last item is the practical reason
-              the popover was added (preview vs. burnin diverge when
-              clips stack into multiple rows).
+      {/* Toolbar — REQ-0519: 2 行構成のまま、中身を組み替えた。
+          Row 1 = ［ズーム］［吸着］［トリミング］…右端に［使い方］。
+          Row 2 = カーソル送りの矢印だけを中央寄せ・低い高さで。
 
-              REQ-20260615-058 — the bare HelpCircle icon button was
-              easy to miss in the toolbar's icon strip.  The trigger
-              now wears a 1-px outline + the localised "使い方" /
-              "How to use" label so it reads as a distinct affordance
-              ("the guide to this whole pane") rather than a per-row
-              inline `?` tooltip.  Colour stays neutral grey so the
-              row of inline help icons elsewhere in the app does not
-              start looking inconsistent. */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                title={t('timeline.help.button')}
-                aria-label={t('timeline.help.button')}
-                className={cn(
-                  'inline-flex h-7 items-center gap-1 rounded-md border border-line bg-surface-0 px-2 text-caption text-fg-tertiary',
-                  'hover:bg-surface-2 hover:text-fg-primary hover:border-line-strong transition-colors duration-150',
-                )}
-              >
-                <HelpCircle className="h-3.5 w-3.5" />
-                <span>{t('timeline.help.button')}</span>
-              </button>
-            </PopoverTrigger>
-            <PopoverContent
-              // REQ-128 — open SIDEWAYS (to the right of the help
-              // button) instead of downward.  The help button sits at
-              // the very top-left of the timeline toolbar, so a
-              // downward-opening panel always pushes its bottom edge
-              // toward the viewport floor; long copy (English in
-              // particular) clipped the last section in REQ-127's
-              // 2x2 grid.  Pointing right escapes that constraint:
-              // the panel uses the wide horizontal space to the right
-              // of the toolbar, and Radix's collision avoidance flips
-              // it to the opposite side only if the right edge runs
-              // out (avoidCollisions defaults back to true here,
-              // unlike REQ-124's pin-down).
-              //
-              // The width + 2x2 grid from REQ-127 stay; the `max-h` +
-              // scroll fallback stays as belt-and-braces for unusually
-              // long future copy.
-              side="right"
-              align="start"
-              sideOffset={8}
-              avoidCollisions
-              collisionPadding={12}
-              className="w-[720px] p-4 space-y-3 text-fg-primary max-h-[calc(100vh-40px)] overflow-y-auto"
-            >
-              <div className="text-body font-semibold text-fg-primary">
-                {t('timeline.help.title')}
-              </div>
-              {/* REQ-127 — 2x2 grid.  Each cell is one help section; the
-                  amber-tinted single-row tip sits bottom-right so it is
-                  still the last thing the eye lands on while staying on
-                  the same fold as the rest. */}
-              <ul className="grid grid-cols-2 gap-x-5 gap-y-3 text-body-sm leading-relaxed">
-                <li>
-                  <div className="font-semibold text-fg-secondary">
-                    {t('timeline.help.trim.title')}
-                  </div>
-                  <div className="text-fg-tertiary">
-                    {t('timeline.help.trim.body')}
-                  </div>
-                </li>
-                <li>
-                  <div className="font-semibold text-fg-secondary">
-                    {t('timeline.help.scissor.title')}
-                  </div>
-                  <div className="text-fg-tertiary">
-                    {t('timeline.help.scissor.body')}
-                  </div>
-                </li>
-                <li>
-                  <div className="font-semibold text-fg-secondary">
-                    {t('timeline.help.zoom.title')}
-                  </div>
-                  <div className="text-fg-tertiary">
-                    {t('timeline.help.zoom.body')}
-                  </div>
-                </li>
-                <li>
-                  <div className="font-semibold text-warning-faint">
-                    {t('timeline.help.singleRow.title')}
-                  </div>
-                  <div className="text-fg-secondary">
-                    {t('timeline.help.singleRow.body')}
-                  </div>
-                </li>
-              </ul>
-            </PopoverContent>
-          </Popover>
+          REQ-20260614-001 補遺⑧ の「ツール」トグル（Row 2 を開閉し、
+          吸着とトリミングを隠していた）は撤去。分割の目的だった「Row 1 が
+          最小ペイン幅で折り返さない」は、開閉ではなく実測で担保する
+          (`tests/e2e/timeline-toolbar-layout.spec.ts`, 1280px × ja/en)。 */}
+      <div className="flex flex-col flex-shrink-0 border-b border-line bg-surface-1">
+      {/* Row 1 — 左から ズーム → 吸着 → トリミング、右端に 使い方。
+          `justify-between` ではなく「使い方」側の `ml-auto` で右寄せする:
+          前者だと要素間が均等に開いてしまい、ズーム・吸着・トリミングが
+          ひとまとまりに見えなくなる。 */}
+      <div className="flex items-center gap-3 px-3 py-1.5">
+        {/* Zoom cluster — [−][slider][+][readout].
+            `min-w-0` so this is the element that gives up width when row 1 gets
+            tight: the slider below can shrink, and it is the only control here
+            whose width is decorative rather than informational (the readout
+            still shows the exact px/sec, and [−]/[+] still step precisely).
+            Everything to its right is `shrink-0`. See the width budget in
+            `tests/e2e/timeline-toolbar-layout.spec.ts`. */}
+        <div className="flex items-center gap-2 min-w-0">
           <button
             type="button"
             onClick={handleZoomOut}
@@ -1665,7 +1976,12 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
             onChange={handleSliderChange}
             title={t('timeline.toolbar.zoomSlider')}
             aria-label={t('timeline.toolbar.zoomSlider')}
-            className="w-32"
+            // REQ-0519 — `min-w-[64px]` overrides a flex item's default
+            // `min-width: auto`, which would otherwise pin the slider at its
+            // intrinsic width and force row 1 to overflow once snap + trim
+            // moved up here.  64px still spans the full PPS range at ~4px per
+            // step, and only narrow panes ever see less than the 128px.
+            className="w-32 min-w-[64px]"
             style={{ accentColor: 'hsl(var(--primary))' }}
           />
           <button
@@ -1692,106 +2008,20 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               value the user reads off the toolbar — stops sitting one tier
               below the body text on the rest of the screen.  w-[72px] →
               w-[84px] for the wider 15-px tabular digits ("130 px/秒" was
-              previously ~70px, now ~80px). */}
-          <span className="font-mono tabular-nums text-body text-fg-muted select-none w-[84px] text-center">
+              previously ~70px, now ~80px).
+              REQ-0443 §2 — zoom readout (「50 px/秒」) body → body-sm. */}
+          <span className="font-mono tabular-nums text-body-sm text-fg-muted select-none w-[84px] text-center">
             {t('timeline.toolbar.zoomLevel', { pps: pixelsPerSec })}
           </span>
         </div>
 
-          {/* REQ-078 #2 — toolbar even-spacing.  Lifted the playhead-nav
-              cluster, the trim cluster, and the snap toggle out of their
-              former wrapping <div className="flex gap-3">; with
-              `justify-between` on the toolbar itself, the four top-level
-              children (zoom on the left, nav, trim, snap) now distribute
-              evenly across the row — zoom hugs the left edge, snap hugs
-              the right, and nav + trim sit at evenly spaced points in
-              between.  Nothing else moved. */}
-          {/* REQ-077 #4 — playhead navigation cluster.
-              [先頭へ] [前境界へ] [次境界へ] [末尾へ] */}
-          <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={handleNavFirst}
-              title={t('timeline.nav.first')}
-              aria-label={t('timeline.nav.first')}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
-                'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
-              )}
-            >
-              <ChevronFirst className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleNavPrev}
-              title={t('timeline.nav.prevBoundary')}
-              aria-label={t('timeline.nav.prevBoundary')}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
-                'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
-              )}
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleNavNext}
-              title={t('timeline.nav.nextBoundary')}
-              aria-label={t('timeline.nav.nextBoundary')}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
-                'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
-              )}
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleNavLast}
-              title={t('timeline.nav.last')}
-              aria-label={t('timeline.nav.last')}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
-                'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
-              )}
-            >
-              <ChevronLast className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          {/* REQ-20260614-001 補遺⑧ — Row 1 右端の「ツール」トグル。
-              押下で Row 2 (トリミング + 吸着) を表示/折り畳み。展開状態は
-              ui-store.step2TimelineToolsExpanded (session-only) に保持。
-              pressed state (zinc-800 bg) で開閉状態を視覚化。 */}
-          <button
-            type="button"
-            onClick={toggleTools}
-            title={toolsExpanded
-              ? t('timeline.toolbar.toolsTooltipCollapse')
-              : t('timeline.toolbar.toolsTooltipExpand')}
-            aria-label={t('timeline.toolbar.tools')}
-            aria-expanded={toolsExpanded}
-            className={cn(
-              'flex h-7 w-7 items-center justify-center rounded-md',
-              'transition-colors duration-150',
-              toolsExpanded
-                ? 'bg-surface-2 text-fg-secondary'
-                : 'text-fg-tertiary hover:text-fg-primary hover:bg-surface-2/60'
-            )}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-          </button>
-      </div>
-
-      {/* Row 2 — REQ-20260614-001 補遺⑩: 左から右に
-          [吸着] [トリミング (ラベル) [始点] [終点] [実行] [X (条件付)]]
-          の順に配置。吸着が左端、トリミングのグループは右側にひとまとまり
-          (border-md group)。始点 / 終点ボタンは再押下で解除 (補遺⑨で
-          一旦撤回した toggle off を復活)、X は両点一括解除。実行ボタンの
-          ラベルは「実行」(group label の「トリミング」と区別)。 */}
-      {toolsExpanded && (
-        <div className="flex items-center gap-3 px-3 py-1.5 border-t border-line/60">
-          {/* Snap toggle — Row 2 left end (補遺⑩ §修正1). */}
+          {/* 吸着 + トリミング — REQ-0519 で Row 2 から Row 1 のズームの右へ。
+              REQ-20260614-001 補遺⑩ の並び ([吸着] [トリミング (ラベル)
+              [始点] [終点] [実行] [X (条件付)]]) と挙動はそのまま:
+              始点 / 終点は再押下で解除、X は両点一括解除、実行ボタンの
+              ラベルは「実行」(group label の「トリミング」と区別)。
+              変わったのは所属する行だけである。 */}
+          {/* Snap toggle. */}
           <button
             type="button"
             onClick={() => setSnapEnabled(!snapEnabled)}
@@ -1799,7 +2029,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
             aria-label={t('timeline.toolbar.snap')}
             aria-pressed={snapEnabled}
             className={cn(
-              'flex h-7 items-center gap-1.5 px-2 rounded-md text-body-sm font-medium',
+              'flex h-7 shrink-0 items-center gap-1.5 px-2 rounded-md text-body-sm font-medium',
               'border transition-colors duration-150',
               snapEnabled
                 ? 'bg-surface-2 text-fg-secondary border-line-strong'
@@ -1813,8 +2043,8 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
           {/* Trim cluster — group label + 4 buttons (始点 / 終点 / 実行 /
               X-clear-both).  X は両点のうち少なくとも片方が set の
               ときだけ表示。 */}
-          <div className="flex items-center gap-2 rounded-md border border-line px-2 py-1">
-            <span className="text-label text-fg-muted select-none">
+          <div className="flex shrink-0 items-center gap-2 rounded-md border border-line px-2 py-1">
+            <span className="text-caption text-fg-muted select-none">
               {t('timeline.trim.toolbarLabel')}
             </span>
             {/* 始点 — 再押下で解除 (toggle off). 設定時は label に時刻チップ。 */}
@@ -1834,7 +2064,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
             >
               <span>{t('timeline.trim.setIn')}</span>
               {pendingCutInSec !== null && (
-                <span className="font-mono tabular-nums text-caption text-warning-faint/80">
+                <span className="font-mono tabular-nums text-caption text-warning-faint/80 whitespace-nowrap">
                   {formatEditedTimecode(pendingCutInSec, cuts)}
                 </span>
               )}
@@ -1856,7 +2086,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
             >
               <span>{t('timeline.trim.setOut')}</span>
               {pendingCutOutSec !== null && (
-                <span className="font-mono tabular-nums text-caption text-warning-faint/80">
+                <span className="font-mono tabular-nums text-caption text-warning-faint/80 whitespace-nowrap">
                   {formatEditedTimecode(pendingCutOutSec, cuts)}
                 </span>
               )}
@@ -1901,18 +2131,106 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               </button>
             )}
           </div>
-        </div>
-      )}
+
+          {/* REQ-122 / 0127 / 0128 / 0520 — the "how to use" guide for this pane.
+              REQ-0521 §1-3 — the popover itself now lives in
+              `components/help-popover.tsx`, shared with the subtitle-list
+              header; only the copy differs between the two.
+
+              REQ-0519 — sits at the RIGHT end of row 1. `ml-auto` eats the
+              remaining free space so it hugs the right edge and reads as
+              separate from the zoom / snap / trim group however wide those grow.
+              It therefore opens to the LEFT (the side with room). */}
+          <HelpPopover
+            label={t('timeline.help.button')}
+            title={t('timeline.help.title')}
+            triggerClassName="ml-auto"
+            sections={[
+              // `scope` carries the caution tint: it is the one cell stating
+              // hard limitations. See `help-popover.tsx`.
+              { title: t('timeline.help.scope.title'), body: t('timeline.help.scope.body'), tone: 'caution' },
+              { title: t('timeline.help.trim.title'), body: t('timeline.help.trim.body') },
+              { title: t('timeline.help.snap.title'), body: t('timeline.help.snap.body') },
+              { title: t('timeline.help.layers.title'), body: t('timeline.help.layers.body') },
+            ]}
+          />
       </div>
 
-      {/* Scroll container */}
+      {/* Row 2 — REQ-0519: 再生位置送りの矢印だけ。`justify-center` で
+          行の中央に置く（親の幅いっぱいを使うので、Row 1 の中身が伸び縮み
+          しても中央は動かない）。
+
+          高さ: 縦 padding を py-1.5 (6px) から py-0.5 (2px) に詰めた。
+          ボタン自体は h-7 w-7 (28x28 px) のままで、当たり判定は変えていない
+          — 削ったのは余白だけである。行の実測は 51px → 33px
+          (28 + 2*2 + 1px の border-t)。
+
+          REQ-077 #4 — [先頭へ] [前境界へ] [次境界へ] [末尾へ]。 */}
+      <div className="flex items-center justify-center px-3 py-0.5 border-t border-line/60">
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={handleNavFirst}
+            title={t('timeline.nav.first')}
+            aria-label={t('timeline.nav.first')}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
+            )}
+          >
+            <ChevronFirst className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={handleNavPrev}
+            title={t('timeline.nav.prevBoundary')}
+            aria-label={t('timeline.nav.prevBoundary')}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
+            )}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={handleNavNext}
+            title={t('timeline.nav.nextBoundary')}
+            aria-label={t('timeline.nav.nextBoundary')}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
+            )}
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={handleNavLast}
+            title={t('timeline.nav.last')}
+            aria-label={t('timeline.nav.last')}
+            className={cn(
+              'flex h-7 w-7 items-center justify-center rounded-md text-fg-tertiary',
+              'hover:bg-surface-2 hover:text-fg-primary transition-colors duration-150'
+            )}
+          >
+            <ChevronLast className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      </div>
+
+      {/* Scroll container.
+          REQ-0397 §3 — `flex flex-col` so the content wrapper below can be a
+          `flex-1` item that stretches to the viewport height, letting the tracks
+          bottom-justify (layer 0 pinned to the bottom of the timeline area). */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-auto"
+        className="flex-1 overflow-auto flex flex-col"
       >
         {!hasAnyVisible ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-fg-muted">
-            <GanttChartSquare className="h-8 w-8 text-fg-faint" />
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-fg-muted">
+            <GanttChartSquare className="h-8 w-8 text-fg-disabled" />
             {/* REQ-117 [2] — the timeline can never render deleted
                 entries by design (cuts collapsed their position, manual
                 deletes have no playable slot), so the generic "no entries
@@ -1931,44 +2249,49 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
           </div>
         ) : (
           <div
-            className="relative"
+            className="relative flex-1"
             style={{
               width: `${TRACK_GUTTER_LEFT_PX + widthPx}px`,
               minHeight: `${RULER_HEIGHT_PX + tracksHeightPx}px`
             }}
           >
-            {/* Track-label gutter — sticky to the left so labels stay visible
-                while the user scrolls horizontally. */}
+            {/* Track-label gutter — spans the full column height.
+                REQ-0397 §3 — the label rows are bottom-justified (a `flex-1`
+                spacer sits between the ruler-height spacer and the labels) so
+                they line up with the bottom-anchored track rows: layer 0 at the
+                bottom, higher layers above. */}
             <div
-              className="absolute top-0 left-0 z-10 bg-surface-1 border-r border-line"
-              style={{
-                width: `${TRACK_GUTTER_LEFT_PX}px`,
-                height: `${RULER_HEIGHT_PX + tracksHeightPx}px`
-              }}
+              className="absolute top-0 bottom-0 left-0 z-10 flex flex-col bg-surface-1 border-r border-line"
+              style={{ width: `${TRACK_GUTTER_LEFT_PX}px` }}
             >
-              {/* Spacer matching ruler height so labels line up with their tracks. */}
-              <div style={{ height: `${RULER_HEIGHT_PX}px` }} />
+              {/* Spacer matching ruler height so the labels never slide under
+                  the sticky ruler. */}
+              <div className="shrink-0" style={{ height: `${RULER_HEIGHT_PX}px` }} />
+              {/* Bottom-anchor spacer — eats the viewport slack above the labels. */}
+              <div className="flex-1" />
               {Array.from({ length: trackCount }).map((_, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-center border-b border-line/50"
+                  className="flex shrink-0 items-center justify-center border-b border-line/50"
                   style={{ height: `${TRACK_HEIGHT_PX}px` }}
                 >
-                  {/* 1-based labels: video-editing tools conventionally
-                      count tracks from 1 (Final Cut, Premiere, Resolve).
-                      The 0-based aria-label in Block stays 0-based for
-                      consistency with the placement.trackIndex value the
-                      smoke scripts query. */}
+                  {/* REQ-0396 / REQ-0397 §3 — row number == the row's z-order
+                      LAYER value.  Rows are bottom-anchored, so the bottom row is
+                      layer 0 and higher rows (1, 2, …) stack upward.
+                      `trackLayers[i]` is the layer for row i (row 0 = top =
+                      highest layer). */}
                   <span className="text-caption font-mono text-fg-muted select-none">
-                    {t('timeline.trackLabel', { index: i + 1 })}
+                    {t('timeline.trackLabel', { index: layout.trackLayers[i] ?? 0 })}
                   </span>
                 </div>
               ))}
             </div>
 
-            {/* Time-axis content (ruler + tracks + playhead) — offset by the gutter. */}
+            {/* Time-axis content (ruler + tracks + playhead) — offset by the
+                gutter, spans the full column height (`top-0 bottom-0`) so the
+                tracks can bottom-justify and the overlays span the whole area. */}
             <div
-              className="absolute top-0"
+              className="absolute top-0 bottom-0"
               style={{
                 left: `${TRACK_GUTTER_LEFT_PX}px`,
                 width: `${widthPx}px`
@@ -2013,7 +2336,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 />
               </div>
 
-              {/* Tracks area — REQ-20260613-009 §2-2: pointerdown +
+              {/* Tracks well — REQ-20260613-009 §2-2: pointerdown +
                   pointermove + pointerup implement a seek + scrub
                   gesture identical to the Ruler's.  Replaces the
                   previous click-only handler so the user can scrub
@@ -2021,7 +2344,16 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                   has been scrolled out of reach.  `touch-none`
                   matches the Ruler so touch devices route through
                   the pointer events instead of synthesised mouse
-                  events with delay. */}
+                  events with delay.
+
+                  REQ-0397 §3 — the well now spans the whole area below the
+                  ruler (`top: RULER, bottom: 0`) and the track ROWS are pinned
+                  to its bottom (the inner band below).  When the viewport has
+                  vertical slack the well shows dark headroom above the rows so
+                  layer 0 stays glued to the bottom of the timeline and higher
+                  layers grow upward — adding a layer (or duplicating up) never
+                  pushes the existing bottom rows down.  Scrub/seek works over
+                  the entire well, headroom included. */}
               <div
                 onPointerDown={handleTracksPointerDown}
                 onPointerMove={handleTracksPointerMove}
@@ -2035,80 +2367,122 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 // pick up the depth without introducing another
                 // divider line.  Ruler / gutter / toolbar stay at
                 // surface-1 (L 16 %) above.
-                className="relative touch-none bg-[hsl(0_0%_10%)]"
+                className="absolute left-0 right-0 touch-none bg-timeline-well"
                 style={{
-                  width: `${widthPx}px`,
-                  height: `${tracksHeightPx}px`
+                  top: `${RULER_HEIGHT_PX}px`,
+                  bottom: '0'
                 }}
               >
-                {/* Track horizontal separators */}
-                {Array.from({ length: trackCount }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="absolute left-0 right-0 border-b border-line/50"
-                    style={{
-                      top: `${(i + 1) * TRACK_HEIGHT_PX}px`,
-                      height: '0'
-                    }}
-                  />
-                ))}
-
-                {/* Major-tick vertical gridlines that extend through tracks
-                    for visual continuity with the ruler.  Edited axis. */}
+                {/* Major-tick vertical gridlines that extend through the whole
+                    well for visual continuity with the ruler.  Edited axis. */}
                 {(() => {
                   const stepSec = chooseRulerStepSec(pixelsPerSec)
                   const lines = []
+                  // REQ-0465 §2 — same horizontal virtualization as the blocks:
+                  // only emit gridline divs within the visible window (+buffer).
+                  // The loop is cheap; skipping the DOM nodes is the win at 10k+.
+                  const virt = tlViewport.width > 0
+                  const minX = tlViewport.left - TIMELINE_VIRTUAL_BUFFER_PX
+                  const maxX = tlViewport.left + tlViewport.width + TIMELINE_VIRTUAL_BUFFER_PX
                   for (let s = stepSec; s < editedTotalSec; s += stepSec) {
+                    const x = s * pixelsPerSec
+                    if (virt && (x < minX || x > maxX)) continue
                     lines.push(
                       <div
                         key={s}
                         className="absolute top-0 bottom-0 w-px bg-surface-2/50 pointer-events-none"
-                        style={{ left: `${s * pixelsPerSec}px` }}
+                        style={{ left: `${x}px` }}
                       />
                     )
                   }
                   return lines
                 })()}
 
-                {/* Blocks */}
-                {/* Blocks rendered directly inside the tracks container
-                    (no per-block wrapper).  The previous wrapper had
-                    `left:0 right:0` which made every entry's invisible
-                    wrapper span the entire track width — multiple entries
-                    on the same track ended up stacked in DOM order with
-                    the latest one intercepting all clicks on the track.
-                    Each Block is now absolutely positioned with its own
-                    explicit left/top/width so only the visible block
-                    rectangle catches pointer events. */}
-                {layout.placements.map(({ entry, trackIndex }) => {
-                  // REQ-074 1c: read pre-computed Edited-axis position
-                  // (origToEdited * pps).  Empty cuts → identical to the
-                  // legacy `entry.startSec * pixelsPerSec` calculation.
-                  const pos = editedBlockPositions.get(entry.id)
-                  const leftPx  = pos?.leftPx ?? entry.startSec * pixelsPerSec
-                  const widthBl = pos?.widthPx ?? (entry.endSec - entry.startSec) * pixelsPerSec
-                  const topPx   = trackIndex * TRACK_HEIGHT_PX + BLOCK_VERTICAL_PAD_PX
-                  const w       = warningsMap.get(entry.id) ?? null
-                  // Overflow tint suppressed in audio-only mode (matches the
-                  // table — `overflowMap` is empty there).
-                  const isOverflow = !isAudioOnly && (w?.overflow ?? false)
-                  return (
-                    <Block
-                      key={entry.id}
-                      entry={entry}
-                      leftPx={leftPx}
-                      widthPx={widthBl}
-                      topPx={topPx}
-                      trackIndex={trackIndex}
-                      isUserSelected={selectedEntryId === entry.id}
-                      isOverflow={isOverflow}
-                      displayIndex={indexOfEntry.get(entry.id) ?? 0}
-                      onSelect={handleSelectBlock}
-                      onStartDrag={handleStartDrag}
-                      cuts={cuts}
+                {/* Track-row band — pinned to the BOTTOM of the well so layer 0
+                    is the bottom-most row and higher layers stack upward
+                    (REQ-0397 §3).  Fixed height = trackCount rows; the block /
+                    separator `top` offsets are relative to this band, so the
+                    bottom-anchoring is purely the band's `bottom-0`. */}
+                <div
+                  className="absolute inset-x-0 bottom-0"
+                  style={{ height: `${tracksHeightPx}px` }}
+                >
+                  {/* REQ-0402 — target-track highlight during a vertical (layer)
+                      drag.  Shows which track the floating clip will snap to when
+                      released.  Rendered first so it sits behind the blocks. */}
+                  {layerDragVisual && (
+                    <div
+                      aria-hidden
+                      className="absolute left-0 right-0 pointer-events-none bg-primary/15 border-y border-primary/50"
+                      style={{
+                        top: `${layerDragVisual.targetRowIndex * TRACK_HEIGHT_PX}px`,
+                        height: `${TRACK_HEIGHT_PX}px`,
+                      }}
                     />
-                  )
-                })}
+                  )}
+
+                  {/* Track horizontal separators */}
+                  {Array.from({ length: trackCount }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="absolute left-0 right-0 border-b border-line/50"
+                      style={{
+                        top: `${(i + 1) * TRACK_HEIGHT_PX}px`,
+                        height: '0'
+                      }}
+                    />
+                  ))}
+
+                  {/* Blocks */}
+                  {/* Blocks rendered directly inside the row band
+                      (no per-block wrapper).  The previous wrapper had
+                      `left:0 right:0` which made every entry's invisible
+                      wrapper span the entire track width — multiple entries
+                      on the same track ended up stacked in DOM order with
+                      the latest one intercepting all clicks on the track.
+                      Each Block is now absolutely positioned with its own
+                      explicit left/top/width so only the visible block
+                      rectangle catches pointer events. */}
+                  {/* REQ-0465 §2 — only the blocks intersecting the visible
+                      window are rendered (see `visiblePlacements`); off-screen
+                      blocks are omitted from the DOM entirely. */}
+                  {visiblePlacements.map(({ entry, trackIndex }) => {
+                    // REQ-074 1c: read pre-computed Edited-axis position
+                    // (origToEdited * pps).  Empty cuts → identical to the
+                    // legacy `entry.startSec * pixelsPerSec` calculation.
+                    const pos = editedBlockPositions.get(entry.id)
+                    const leftPx  = pos?.leftPx ?? entry.startSec * pixelsPerSec
+                    const widthBl = pos?.widthPx ?? (entry.endSec - entry.startSec) * pixelsPerSec
+                    // REQ-0402 — while THIS clip is being dragged vertically it
+                    // floats under the cursor: use the live follow position
+                    // instead of its committed row's top.
+                    const isDragFloating = layerDragVisual?.entryId === entry.id
+                    const topPx   = isDragFloating
+                      ? layerDragVisual.blockTopPx
+                      : trackIndex * TRACK_HEIGHT_PX + BLOCK_VERTICAL_PAD_PX
+                    const w       = warningsMap.get(entry.id) ?? null
+                    // Overflow tint suppressed in audio-only mode (matches the
+                    // table — `overflowMap` is empty there).
+                    const isOverflow = !isAudioOnly && (w?.overflow ?? false)
+                    return (
+                      <Block
+                        key={entry.id}
+                        entry={entry}
+                        leftPx={leftPx}
+                        widthPx={widthBl}
+                        topPx={topPx}
+                        trackIndex={trackIndex}
+                        isUserSelected={selectedEntryId === entry.id}
+                        isOverflow={isOverflow}
+                        displayIndex={indexOfEntry.get(entry.id) ?? 0}
+                        onSelect={handleSelectBlock}
+                        onStartDrag={handleStartDrag}
+                        cuts={cuts}
+                        isDragFloating={isDragFloating}
+                      />
+                    )
+                  })}
+                </div>
               </div>
 
               {/* Snap guide — vertical line at the snap target's
@@ -2125,11 +2499,12 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                       to.
                     - The grid-kind branch rendered zinc-400 which
                       reads as white on the dark timeline background.
-                    - green-500 matches the focused block's `ring-2
-                      ring-primary border-primary` highlight in
-                      `BlockImpl` so the relationship "the selected
-                      block (green ring) is snapping to this line
-                      (green)" is immediately readable.
+                    - green-500 matches the focused block's
+                      `border-primary` frame in `BlockImpl` (REQ-0524
+                      removed the `ring-2` that used to sit outside it,
+                      but the colour is the same) so the relationship
+                      "the selected block (green frame) is snapping to
+                      this line (green)" is immediately readable.
                   `snapGuideKind` is still tracked through the drag
                   pipeline because the drag-snap unit tests assert on
                   it, but it no longer drives presentation.
@@ -2137,11 +2512,12 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               {snapGuidePx !== null && (
                 <div
                   aria-hidden
-                  className="absolute top-0 pointer-events-none"
+                  // REQ-0397 §3 — full-height (`top-0 bottom-0`) so the guide
+                  // spans the ruler, the bottom-anchor headroom, and the tracks.
+                  className="absolute top-0 bottom-0 pointer-events-none"
                   style={{
                     left: `${snapGuidePx}px`,
                     width: '1px',
-                    height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
                     background: 'hsl(var(--cursor-active) / 0.9)'
                   }}
                 />
@@ -2182,20 +2558,35 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                         start: formatEditedTimecode(c.startSec, cuts),
                         end: formatEditedTimecode(c.endSec, cuts),
                       })}
-                      className="absolute top-0 z-20 flex flex-col items-center pointer-events-auto"
+                      // REQ-0397 §3 — full-height marker (`top-0 bottom-0`); the
+                      // scissor icon sits at the top and the line (`flex-1`)
+                      // fills the rest down to the bottom of the tracks.
+                      //
+                      // REQ-0532 §2-6 — the BUTTON is pointer-transparent and
+                      // only the icon takes the pointer.  It spans the full
+                      // column height, so while it was `pointer-events-auto` it
+                      // swallowed every press in a 14 px strip and a clip
+                      // sitting under a cut could not be grabbed there.  The
+                      // click still reaches this button's handler because the
+                      // icon's event bubbles.
+                      className="absolute top-0 bottom-0 z-20 flex flex-col items-center pointer-events-none"
                       style={{
                         left: `${xPx - 7}px`,
-                        width: '14px',
-                        height: `${RULER_HEIGHT_PX + tracksHeightPx}px`
+                        width: '14px'
                       }}
                     >
-                      <div className="flex h-4 w-4 items-center justify-center rounded-sm bg-surface-2 text-warning-faint hover:bg-warning/30 hover:text-warning-very-faint transition-colors duration-150">
+                      {/* REQ-0532 §2-2 — the icon STICKS to the top of the
+                          scrollport.  It used to sit at `top-0` of the content
+                          column, which is taller than the viewport once there
+                          are 3+ layers, so scrolling down carried the scissors
+                          out of sight and the only way back to it was to scroll
+                          up (the owner's report).  `sticky` keeps it pinned
+                          while its column still scrolls, so the marker stays on
+                          the same time position horizontally — REQ-0532 §2-4. */}
+                      <div className="sticky top-0 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-surface-2 text-warning-faint hover:bg-warning/30 hover:text-warning-very-faint transition-colors duration-150 pointer-events-auto">
                         <Scissors className="h-3 w-3" />
                       </div>
-                      <div
-                        className="w-px bg-warning-soft/60 pointer-events-none"
-                        style={{ height: `${RULER_HEIGHT_PX + tracksHeightPx - 16}px` }}
-                      />
+                      <div className="w-px flex-1 bg-warning-soft/60 pointer-events-none" />
                     </button>
                   )
                 })}
@@ -2208,7 +2599,7 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                 pendingCutInSec < pendingCutOutSec && (
                   <div
                     aria-hidden
-                    className="absolute top-0 pointer-events-none"
+                    className="absolute top-0 bottom-0 pointer-events-none"
                     style={{
                       left: `${origToEdited(pendingCutInSec, cuts) * pixelsPerSec}px`,
                       width: `${
@@ -2216,7 +2607,6 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
                           origToEdited(pendingCutInSec, cuts)) *
                         pixelsPerSec
                       }px`,
-                      height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
                       background: 'hsl(var(--trim-overlay) / 0.15)'
                     }}
                   />
@@ -2224,11 +2614,10 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               {pendingCutInSec !== null && (
                 <div
                   aria-hidden
-                  className="absolute top-0 pointer-events-none"
+                  className="absolute top-0 bottom-0 pointer-events-none"
                   style={{
                     left: `${origToEdited(pendingCutInSec, cuts) * pixelsPerSec}px`,
                     width: '1px',
-                    height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
                     background: 'hsl(var(--trim-overlay) / 0.9)'
                   }}
                 />
@@ -2236,11 +2625,10 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               {pendingCutOutSec !== null && (
                 <div
                   aria-hidden
-                  className="absolute top-0 pointer-events-none"
+                  className="absolute top-0 bottom-0 pointer-events-none"
                   style={{
                     left: `${origToEdited(pendingCutOutSec, cuts) * pixelsPerSec}px`,
                     width: '1px',
-                    height: `${RULER_HEIGHT_PX + tracksHeightPx}px`,
                     background: 'hsl(var(--trim-overlay) / 0.9)'
                   }}
                 />
@@ -2254,7 +2642,6 @@ export function TimelineView({ warningsMap, videoDurationSec }: TimelineViewProp
               <Playhead
                 cuts={cuts}
                 pixelsPerSec={pixelsPerSec}
-                totalHeightPx={RULER_HEIGHT_PX + tracksHeightPx}
               />
             </div>
           </div>

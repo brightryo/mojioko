@@ -284,6 +284,70 @@ export interface CueLineAnchor {
  * A pinned cue (`\pos`, 機能B) uses its pinned point in place of the
  * edge-derived anchor, with the same per-line arithmetic around it.
  */
+/**
+ * REQ-0538 — the ONE point a cue rotates about.
+ *
+ * This is the cue block's own alignment point: the `base` that `cueLineAnchors`
+ * measures every line from. Written as its own function because rotation needs
+ * exactly that point and nothing else, and because deriving it a second time by
+ * hand is how the two would drift.
+ *
+ * ## Why a cue needs a single origin at all
+ *
+ * A multi-line cue is emitted as one event PER LINE, each with its own `\pos`,
+ * and `\frz` rotates an event about its own `\pos`. Left alone, that spins every
+ * line in place while their anchors stay stacked vertically — the block shears
+ * instead of rotating. The preview does the opposite: one element holds the
+ * whole cue and CSS rotates it as a rigid body. So the two renderers disagreed
+ * for any rotated multi-line cue, and REQ-0535's background (one shape, rotated
+ * as a unit) disagreed with the burn's own text.
+ *
+ * Rotating each line's ANCHOR about this origin, and letting `\frz` spin the
+ * line about its moved anchor, composes to a rigid rotation of the block — which
+ * is what the preview shows and what the background already did.
+ */
+export function cueBlockOrigin(input: CueLineAnchorInput): CueLineAnchor {
+  const { lineHeightsPx, playResX, playResY, marginLrPx } = input
+  const pinned = input.posX !== undefined && input.posY !== undefined
+  const x = pinned
+    ? (input.posX as number)
+    : input.horizontalPosition === 'left'
+      ? marginLrPx
+      : input.horizontalPosition === 'right'
+        ? playResX - marginLrPx
+        : playResX / 2
+  const centerOffset = input.centerOffsetPx ?? 0
+  void lineHeightsPx
+  const y = input.verticalPosition === 'bottom'
+    ? (pinned ? (input.posY as number) : playResY - input.verticalMarginPx)
+    : input.verticalPosition === 'top'
+      ? (pinned ? (input.posY as number) : input.verticalMarginPx)
+      : (pinned ? (input.posY as number) : playResY / 2 + centerOffset)
+  return { x, y }
+}
+
+/**
+ * Rotate a point about `origin` by `deg` CLOCKWISE.
+ *
+ * Clockwise because that is what the cue's `rotation` field means (and what CSS
+ * `rotate()` does); the ASS writer separately converts to `\frz`'s
+ * counter-clockwise convention. `y` grows downward, so a clockwise turn is the
+ * standard matrix with no sign flips.
+ */
+export function rotatePointClockwise(
+  p: CueLineAnchor,
+  origin: CueLineAnchor,
+  deg: number,
+): CueLineAnchor {
+  if (deg === 0) return p
+  const r = (deg * Math.PI) / 180
+  const c = Math.cos(r)
+  const s = Math.sin(r)
+  const dx = p.x - origin.x
+  const dy = p.y - origin.y
+  return { x: origin.x + dx * c - dy * s, y: origin.y + dx * s + dy * c }
+}
+
 export function cueLineAnchors(input: CueLineAnchorInput): CueLineAnchor[] {
   const { lineHeightsPx, playResX, playResY, marginLrPx } = input
   const lineCount = lineHeightsPx.length

@@ -1,8 +1,17 @@
+// REQ-0455 — MUST be the FIRST import: installs the stdout guard before any
+// other main-process module can write a stray byte to stdout in `mojioko mcp`.
+import './mcp/early-guard'
 import { app, BrowserWindow, ipcMain, Menu } from 'electron'
 import { join } from 'path'
 import { release } from 'os'
 import { APP_NAME, APP_DISPLAY, APP_VERSION } from '../shared/app-info'
 import { Channels } from '../shared/ipc-channels'
+import { existsSync } from 'fs'
+import { maybeRunCli, isCliInvocation, projectFileToOpen, projectFileFromSecondInstance } from './cli'
+import { writeMcpbBundle } from './mcp/mcpb'
+import { toolList, JOB_TOOLS } from './mcp/tools'
+import { getMcpLaunchSpec } from './mcp/launch'
+import type { McpExportResult, McpLaunchSpec } from '../shared/mcp'
 import { registerVideoHandlers } from './ipc/video'
 import { registerTranscriptionHandlers } from './ipc/transcription'
 import { registerBurninHandlers } from './ipc/burnin'
@@ -11,8 +20,12 @@ import { registerDialogHandlers } from './ipc/dialog'
 import { registerShellHandlers } from './ipc/shell'
 import { registerFontHandlers } from './ipc/font'
 import { registerGpuToolHandlers } from './ipc/gpu-tool'
+import { registerTranslationToolHandlers } from './ipc/translation-tool'
+import { registerTranslationHandlers } from './ipc/translation'
 import { registerDownloadHandlers } from './ipc/download'
+import { loadSettings, mutateSettings } from './services/settings-store'
 import { terminateSidecar } from './services/transcription-sidecar'
+import { terminateTranslationSidecar } from './services/translation-sidecar'
 import { execFileAsync } from './lib/child-process'
 import { detectAvailableEncoders, getBestEncoder } from './services/encoder-detector'
 import { buildMenu, rebuildMenu, setMenuLocked } from './menu'
@@ -45,6 +58,65 @@ let mainWin: BrowserWindow | null = null
  */
 function resolveWindowIconPath(): string {
   return join(getResourcesPath(), 'icons', 'icon.ico')
+}
+
+
+/**
+ * ★ REQ-0546 (RES-0543 F2) — do not let the window close over unsaved work.
+ *
+ * ## The paths this covers
+ *
+ * The × button, the taskbar close, Alt+F4 and the menu's 終了 all end up in one
+ * of two events: the window's `close`, or `app.quit()` → `before-quit`. Both
+ * are guarded, and both consult the SAME renderer answer.
+ *
+ * ## Why `before-quit` is guarded too, not just `close`
+ *
+ * The menu's 終了 calls `app.quit()`, and the existing `before-quit` listener
+ * terminates the Whisper and translation sidecars. Guarding only the window's
+ * `close` would let that listener run first, so a user who chose 終了 and then
+ * pressed キャンセル would be left in a live app with dead sidecars. Blocking at
+ * `before-quit` means the teardown is only ever reached on the pass where the
+ * quit is really happening.
+ *
+ * ## What it cannot cover
+ *
+ * An OS shutdown / sign-out (`session-end` on Windows) does not honour
+ * `preventDefault`, and neither does a crash or a kill. Those are the province
+ * of autosave (RES-0543 F2's larger half), which this REQ does not implement.
+ *
+ * ## The renderer decides
+ *
+ * main has no idea whether the document is dirty, so it asks. The renderer
+ * answers `discard` immediately when there is nothing to lose, so the ordinary
+ * "close an untouched app" path is one IPC round-trip and no dialog.
+ */
+let quitApproved = false
+let closeDecisionPending = false
+
+/** True once the user (or the renderer, on its behalf) has agreed to lose work. */
+export function isQuitApproved(): boolean {
+  return quitApproved
+}
+
+function requestCloseDecision(win: BrowserWindow): void {
+  // One outstanding question at a time: hammering the × must not stack up
+  // dialogs, and the renderer only tracks one.
+  if (closeDecisionPending) return
+  closeDecisionPending = true
+  win.webContents.send(Channels.appCloseRequested)
+}
+
+/**
+ * Guard shared by `close` and `before-quit`.  Returns true when the caller
+ * should block.
+ */
+function shouldBlockExit(win: BrowserWindow | null): boolean {
+  if (quitApproved) return false
+  // A window that is gone or whose renderer has crashed can never answer, and
+  // an app that cannot be quit is worse than one that loses a draft.
+  if (!win || win.isDestroyed() || win.webContents.isCrashed()) return false
+  return true
 }
 
 function createWindow(): BrowserWindow {
@@ -142,6 +214,17 @@ function createWindow(): BrowserWindow {
   Menu.setApplicationMenu(menu)
   mainWin = win
 
+  /*
+   * REQ-0546 — ask before closing.  `preventDefault` cancels this attempt; the
+   * renderer's answer either re-runs the close with `quitApproved` set, or
+   * leaves the app exactly as it was.
+   */
+  win.on('close', (event) => {
+    if (!shouldBlockExit(win)) return
+    event.preventDefault()
+    requestCloseDecision(win)
+  })
+
   return win
 }
 
@@ -152,7 +235,9 @@ async function checkPythonAvailable(): Promise<boolean> {
     try {
       await execFileAsync(bin, [...args, '--version'], { timeout: 3000 })
       return true
-    } catch { /* try next */ }
+    } catch {
+      /* try next */
+    }
   }
   return false
 }
@@ -166,6 +251,42 @@ function registerIpcHandlers(): void {
   // no settings, no side effects.
   ipcMain.handle(Channels.appIsMsix, (): boolean => {
     return isPackagedAsMsix(getCurrentProcessContext())
+  })
+
+  // REQ-0449 §4 — absolute path of the running executable = the CLI entry
+  // (`MOJIOKO.exe <command>`). Used by the Settings ▸ CLI "copy instructions"
+  // button. In dev this is electron.exe (expected).
+  ipcMain.handle(Channels.appGetCliPath, (): string => process.execPath)
+
+  // REQ-0452 — the launch spec (command/args) correct for dev vs packaged.
+  // Single source for the .mcpb export AND the renderer's config/command strings.
+  // REQ-0458 §3 — also attach the last-exported bundle record so the AI連携 tab
+  // can compare its launch-spec revision against the current one.
+  ipcMain.handle(Channels.appGetMcpLaunchSpec, async (): Promise<McpLaunchSpec> => {
+    const settings = await loadSettings()
+    return { ...getMcpLaunchSpec(), lastExport: settings.lastMcpExport ?? null }
+  })
+
+  // REQ-0451 §1 / REQ-0452 — write a .mcpb bundle (drag into Claude Desktop ▸
+  // Extensions). command/args are dev/packaged-correct; the manifest command is
+  // existence-checked as a safety net.
+  ipcMain.handle(Channels.appExportMcpBundle, async (_event, targetPath: unknown): Promise<McpExportResult> => {
+    if (typeof targetPath !== 'string' || !targetPath) throw new Error('invalid target path')
+    const spec = getMcpLaunchSpec()
+    const commandExists = existsSync(spec.command)
+    // REQ-0463 — the proxy script (args[0], asarUnpack'ed) is what actually runs;
+    // verify it exists so a regressed unpack config is caught at export time.
+    const proxyExists = typeof spec.args[0] === 'string' && existsSync(spec.args[0])
+    writeMcpbBundle(targetPath, spec.command, spec.args, spec.env, [...toolList(), ...JOB_TOOLS])
+    // REQ-0458 §3 — remember what we exported so the tab can flag staleness.
+    const record = {
+      appVersion: spec.appVersion,
+      launchSpecRevision: spec.launchSpecRevision,
+      exportedAtMs: Date.now(),
+      path: targetPath,
+    }
+    await mutateSettings((s) => { s.lastMcpExport = record; return { save: s, value: null } })
+    return { path: targetPath, isPackaged: spec.isPackaged, commandExists, proxyExists, appVersion: spec.appVersion, launchSpecRevision: spec.launchSpecRevision }
   })
 
   ipcMain.handle(Channels.appGetBuildInfo, async (): Promise<BuildInfo> => {
@@ -195,10 +316,12 @@ function registerIpcHandlers(): void {
       const text = await fsp.readFile(filePath, 'utf-8')
       return { ok: true as const, data: text }
     } catch (err) {
-      log.warn(`[app] readEula failed for lang=${resolved} at ${filePath}: ${(err as Error).message}`)
+      log.warn(
+        `[app] readEula failed for lang=${resolved} at ${filePath}: ${(err as Error).message}`
+      )
       return {
         ok: false as const,
-        error: { code: 'EULA_NOT_FOUND', message: (err as Error).message },
+        error: { code: 'EULA_NOT_FOUND', message: (err as Error).message }
       }
     }
   })
@@ -219,6 +342,8 @@ function registerIpcHandlers(): void {
   registerShellHandlers()
   registerFontHandlers()
   registerGpuToolHandlers()
+  registerTranslationToolHandlers()
+  registerTranslationHandlers()
   registerDownloadHandlers()
 }
 
@@ -238,13 +363,15 @@ async function logStartupEnvironment(): Promise<void> {
   log.info(`[startup] packaged: ${app.isPackaged}`)
 
   try {
-    const gpu = await app.getGPUInfo('basic') as Record<string, unknown>
+    const gpu = (await app.getGPUInfo('basic')) as Record<string, unknown>
     // 'basic' returns { auxAttributes, gpuDevice[], machineModelVersion, ... }.
     // gpuDevice is the interesting bit; everything else is noise in a log line.
     const devices = (gpu.gpuDevice as Array<Record<string, unknown>> | undefined) ?? []
     const primary = devices.find((d) => d.active) ?? devices[0]
     if (primary) {
-      log.info(`[startup] gpu:      vendorId=${primary.vendorId} deviceId=${primary.deviceId} active=${primary.active ?? false}`)
+      log.info(
+        `[startup] gpu:      vendorId=${primary.vendorId} deviceId=${primary.deviceId} active=${primary.active ?? false}`
+      )
     } else {
       log.info('[startup] gpu:      (no devices reported)')
     }
@@ -255,7 +382,9 @@ async function logStartupEnvironment(): Promise<void> {
   try {
     const available = await detectAvailableEncoders()
     const best = await getBestEncoder()
-    log.info(`[startup] ffmpeg encoders available: ${available.join(', ') || '(none)'} — best: ${best}`)
+    log.info(
+      `[startup] ffmpeg encoders available: ${available.join(', ') || '(none)'} — best: ${best}`
+    )
   } catch (err) {
     log.warn(`[startup] encoder detection failed: ${String(err)}`)
   }
@@ -263,30 +392,100 @@ async function logStartupEnvironment(): Promise<void> {
   log.info('==================================================')
 }
 
-app.whenReady().then(() => {
-  log.info(`[main] starting ${APP_DISPLAY}`)
-  void logStartupEnvironment()
-  registerVideoProtocol()
-  registerFontProtocol()
-  registerPreviewMixProtocol()
-  // REQ-086: remove any preview-mix .tmp left behind by a force-quit
-  // during a prior transcription run.  See `preview-mix.ts`.
-  cleanupStalePreviewMixTmp()
-  registerIpcHandlers()
-  createWindow()
+// REQ-0447 / REQ-0454 §1 — CLI/MCP dispatch is decided SYNCHRONOUSLY and BEFORE
+// any single-instance-lock or window logic. `mojioko mcp` (and every CLI
+// command) therefore runs regardless of a running GUI holding the lock — the
+// MCP server must serve even while the app is open (Claude Desktop launches it
+// independently). The lock + window-all-closed only exist in the GUI branch.
+if (isCliInvocation()) {
+  void maybeRunCli()
+} else {
+  // REQ-0449 — single-instance lock (GUI only): focus the existing window on a
+  // second launch, and let the CLI's `tools use` write guard detect a running GUI.
+  if (!app.requestSingleInstanceLock()) {
+    app.quit()
+  } else {
+    // REQ-0459 §1/§4 — a `.mojioko` double-click launched us: open it once the
+    // window's renderer is ready (a startup-only send; see createWindow below).
+    const startupProjectPath = projectFileToOpen()
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
+    app.on('second-instance', (_event, argv) => {
+      // REQ-0459 §3 — a second launch double-clicked a `.mojioko`: hand the
+      // path to the EXISTING window (no new process). The renderer confirms
+      // discarding an unsaved project before replacing it.  REQ-0484 — the
+      // delivered argv carries leading Chromium switches, so extraction scans
+      // past them; log the outcome (a null on a real double-click is the C3 bug).
+      const secondPath = projectFileFromSecondInstance(argv)
+      log.info(`[main] second-instance: open project = ${secondPath ?? '(none)'}`)
+      const win = BrowserWindow.getAllWindows()[0]
+      if (win) {
+        if (win.isMinimized()) win.restore()
+        win.focus()
+        if (secondPath) win.webContents.send(Channels.projectOpenPath, secondPath)
+      }
+    })
+    app.on('window-all-closed', () => {
+      if (process.platform !== 'darwin') app.quit()
+    })
+    app.whenReady().then(() => {
+      log.info(`[main] starting ${APP_DISPLAY}`)
+      void logStartupEnvironment()
+      registerVideoProtocol()
+      registerFontProtocol()
+      registerPreviewMixProtocol()
+      // REQ-086: remove any preview-mix .tmp left behind by a force-quit
+      // during a prior transcription run.  See `preview-mix.ts`.
+      cleanupStalePreviewMixTmp()
+      registerIpcHandlers()
+      const win = createWindow()
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
+      // REQ-0459 §4 — deliver the double-clicked project path to the renderer
+      // after it finishes loading, so ProjectOpenController can run the same
+      // open flow the menu uses (identity check, font warnings, etc.).
+      if (startupProjectPath) {
+        win.webContents.once('did-finish-load', () => {
+          win.webContents.send(Channels.projectOpenPath, startupProjectPath)
+        })
+      }
 
-app.on('before-quit', () => {
+      app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      })
+    })
+  }
+}
+
+app.on('before-quit', (event) => {
+  // REQ-0546 — block BEFORE the teardown below, not after: the menu's 終了 goes
+  // through here, and killing the sidecars for a quit the user then cancels
+  // would leave a live app that can no longer transcribe.
+  const win = BrowserWindow.getAllWindows()[0] ?? null
+  if (shouldBlockExit(win)) {
+    event.preventDefault()
+    requestCloseDecision(win as BrowserWindow)
+    return
+  }
   log.info('[main] before-quit: terminating sidecar')
   terminateSidecar()
+  terminateTranslationSidecar()
+})
+
+/**
+ * REQ-0546 — the renderer's verdict.
+ *
+ * `discard` marks the exit approved and re-issues the close, which now falls
+ * straight through both guards. `cancel` simply clears the pending flag; the
+ * app was never closing, because the original attempt was already prevented.
+ */
+ipcMain.handle(Channels.appCloseDecision, (_event, decision: 'discard' | 'cancel') => {
+  closeDecisionPending = false
+  if (decision !== 'discard') {
+    log.info('[main] close cancelled by the user')
+    return
+  }
+  quitApproved = true
+  log.info('[main] close approved — quitting')
+  app.quit()
 })
 
 app.on('web-contents-created', (_event, contents) => {

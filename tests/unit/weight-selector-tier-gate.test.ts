@@ -7,7 +7,7 @@ import {
   selectableWeightsForFamily,
   type FontId,
 } from '../../src/shared/fonts'
-import { canSelectFontInTier } from '../../src/renderer/lib/font-tier'
+import { canSelectFontInTier } from '../../src/shared/font-tier'
 
 /**
  * REQ-0282 — pins the free-tier weight/family gate for the

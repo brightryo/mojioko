@@ -7,9 +7,11 @@
  * up in the callers — this module only handles I/O + serialisation.
  */
 
+import { FOLDER_SETTINGS } from '../../shared/folder-settings'
 import { APP_VERSION } from '../../shared/app-info'
 import { useProjectStore } from '@/stores/project-store'
 import { useSettingsStore } from '@/stores/settings-store'
+import { unsavedTracker } from '@/lib/unsaved-changes'
 import {
   buildProjectFile,
   serializeProjectFile,
@@ -62,6 +64,10 @@ export async function saveCurrentProject(): Promise<SaveResult> {
     defaultName,
     settings.defaultProjectDir ?? undefined,
     [{ name: 'MOJIOKO Project', extensions: ['mojioko'] }],
+    // ★ REQ-0518 — this is the row whose DEFAULT moved: Videos → Documents.
+    // Only the fallback moved; a user who picked a folder keeps it, because
+    // the fallback is reached solely when `defaultProjectDir` is null.
+    FOLDER_SETTINGS.project.osFolder,
   )
   if (!targetPath) {
     return { ok: false, reason: 'cancelled' }
@@ -94,6 +100,10 @@ export async function saveCurrentProject(): Promise<SaveResult> {
   } catch (err) {
     return { ok: false, reason: 'io-error', message: String(err) }
   }
+  // REQ-0546 — what is in memory is now on disk.  Marked HERE rather than at
+  // the call sites so every route to a successful save clears the flag; a
+  // caller that forgot would reintroduce a spurious quit prompt.
+  unsavedTracker.markSaved()
   return { ok: true, path: targetPath }
 }
 
@@ -117,7 +127,15 @@ export async function pickAndParseProjectFile(): Promise<LoadFileResult> {
   const settings = useSettingsStore.getState()
   const targetPath = await openProjectDialog(settings.defaultProjectDir ?? undefined)
   if (!targetPath) return { ok: false, reason: 'cancelled' }
+  return parseProjectFileAtPath(targetPath)
+}
 
+/**
+ * REQ-0459 §4 — parse a `.mojioko` at a KNOWN path (no file picker), for the
+ * double-click / file-association open flow.  Same validation contract as
+ * `pickAndParseProjectFile`; the caller runs identity + font checks.
+ */
+export async function parseProjectFileAtPath(targetPath: string): Promise<LoadFileResult> {
   let raw: string
   try {
     raw = await readTextFile(targetPath)

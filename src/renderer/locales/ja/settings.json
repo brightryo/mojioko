@@ -3,9 +3,64 @@
   "tabs": {
     "general": "一般",
     "fonts": "フォント",
-    "defaultStyle": "字幕スタイル",
-    "whisper": "Whisper設定",
-    "shortcuts": "ショートカット"
+    "translation": "翻訳",
+    "shortcuts": "ショートカット",
+    "ai": "AI連携"
+  },
+  "ai": {
+    "title": "AI連携（MCP）",
+    "lead": "MOJIOKO は MCP 接続で、AI から自動で使えます。\n文字起こし・翻訳・字幕の焼き込みを、Claude に頼むだけで実行できます。",
+    "privacyTitle": "この機能を使うと、一部の情報がこの PC の外に出ます",
+    "desktopTitle": "Claude Desktop で使う",
+    "step1": "「MCP 拡張を書き出す」を押して mojioko.mcpb を保存する。",
+    "exportButton": "MCP 拡張を書き出す",
+    "step2": "Claude Desktop で 設定 > 拡張機能 > 詳細設定 > 「拡張機能をインストール」を開く。",
+    "step3": "保存した mojioko.mcpb を選択する。",
+    "step4": "「インストール」ボタンを押す。",
+    "step5": "あとは Claude に「この動画に字幕を付けて」と頼むだけ。",
+    "exportToast": "MCP 拡張（.mcpb）を書き出しました",
+    "devExportToast": "書き出しました（開発ビルド：この PC の開発環境でのみ動作します）",
+    "devNote": "開発ビルドから書き出したバンドルです。この PC の開発環境でのみ動作します。",
+    "commandMissing": "警告：実行ファイルが見つかりません。バンドルは正しく起動しない可能性があります。",
+    "proxyMissing": "警告：このビルドに MCP プロキシファイルが見つかりません。バンドルは起動しません。アプリを再インストールしてから書き出し直してください。",
+    "copyToast": "クリップボードにコピーしました",
+    "actionError": "操作に失敗しました",
+    "advancedTitle": "上級者向け（手動で設定する）",
+    "configDesc": "Claude Desktop の設定ファイル（claude_desktop_config.json）に貼る JSON。",
+    "copyConfigButton": "設定JSONをコピー",
+    "codeDesc": "Claude Code はターミナルで次のコマンドを実行して登録します。",
+    "copyCodeButton": "登録コマンドをコピー",
+    "clientsNote": "対応クライアント：Claude Desktop・Claude Code（claude.ai / Cowork では利用できません）。",
+    "cliRef": "CLI の詳細は `mojioko -h` で確認できます。",
+    "bundleStatusTitle": "書き出したバンドル",
+    "lastExport": "最後の書き出し：v{{version}}（起動仕様 rev {{rev}}）— {{date}}",
+    "neverExported": "まだバンドルを書き出していません。",
+    "reexportNeeded": "起動方法が変わりました（現在 rev {{rev}}）。バンドルを再書き出しし、Claude Desktop で入れ直してください。",
+    "reinstallNote": "再インストールが必要なのは、起動方法（command / args / env）またはアプリのインストール先が変わったときだけです。ツールの追加・変更・不具合修正はアプリ更新だけで反映されます。",
+    "consent": {
+      "title": "AI 連携を使うと、一部の情報がこの PC の外に出ます",
+      "lead": "MOJIOKO の処理そのものは、これまでどおりすべてこの PC で行われます。ただし AI アシスタントから操作する場合だけ、下記の情報が AI 提供者に渡ります。有効にする前にご確認ください。",
+      "staysLocalLabel": "この PC から出ないもの",
+      "staysLocal": "動画・音声ファイルそのもの。文字起こし・翻訳・焼き込みの処理も、これまでどおりこの PC 上だけで実行されます。",
+      "leavesLabel": "AI 提供者に送られるもの",
+      "leaves": "AI がツールを通じて読み書きする情報 — 字幕テキストの全文、ファイルのパス、動画の情報（長さ・解像度など）、そしてツールからの応答です。",
+      "provider": "送信先は、お使いの AI アシスタントの提供者（Claude をお使いの場合は Anthropic）です。その先での取り扱いは、その提供者の規約とプライバシーポリシーに従います。",
+      "alreadyExported": "すでに書き出した接続ファイル（.mcpb）や設定にも、同じことが当てはまります。現在の設定はそのまま使えます。",
+      "acceptGate": "理解したうえで続行",
+      "acceptNotice": "理解しました"
+    }
+  },
+  "translation": {
+    "hint": "文字起こし結果をインスペクタで自動翻訳します（プレビューのみ・字幕には書き込みません）。翻訳ツールの入手は STEP1 の「翻訳ツール」から。",
+    "needTool": "翻訳ツールが未ダウンロードです。STEP1 の「翻訳ツール」からダウンロードすると設定が有効になります。",
+    "autoTranslate": "自動翻訳",
+    "targetLang": "翻訳言語",
+    "lang_en": "英語",
+    "lang_ja": "日本語",
+    "lang_es": "スペイン語",
+    "lang_fr": "フランス語",
+    "lang_de": "ドイツ語",
+    "lang_pt": "ポルトガル語"
   },
   "general": {
     "language": "言語",
@@ -30,7 +85,20 @@
     "defaultProjectDir": "プロジェクト保存フォルダ",
     "folderPathUsingSystemVideos": "システムの Videos フォルダ",
     "folderPathBrowse": "参照…",
-    "folderPathClear": "クリア"
+    "folderPathClear": "クリア",
+    "folders": {
+      "videoInput": "動画入力フォルダ",
+      "videoOutput": "動画出力フォルダ",
+      "project": "プロジェクト保存フォルダ",
+      "image": "画像保存フォルダ",
+      "text": "テキスト保存フォルダ",
+      "srtInput": "SRT入力フォルダ"
+    },
+    "folderPlaceholder": {
+      "documents": "システムの ドキュメント フォルダ",
+      "pictures": "システムの ピクチャ フォルダ",
+      "videos": "システムの ビデオ フォルダ"
+    }
   },
   "fonts": {
     "hint": "フォントをクリックして既定フォントを選択します。フォントの追加およびダウンロードは有料版のみの機能です。"
@@ -59,5 +127,12 @@
     "editionNsis": "GitHub版（無料版）",
     "available": "利用可能",
     "notAvailable": "利用不可"
+  },
+  "quarantine": {
+    "title": "設定ファイルを退避しました",
+    "bodyForeign": "設定ファイル（settings.json）が MOJIOKO のものではない形式でした。上書きせずに退避し、既定値で起動しています。",
+    "bodyUnreadable": "設定ファイル（settings.json）を読み取れませんでした。上書きせずに退避し、既定値で起動しています。",
+    "savedTo": "退避先",
+    "hint": "心当たりが無い場合、古いバージョンの MOJIOKO が同じ設定フォルダを使っている可能性があります。そちらを起動するたびに設定ファイルが書き換えられるため、このお知らせが毎回表示されることがあります。退避したファイルは削除されていません。"
   }
 }

@@ -1,10 +1,11 @@
 {
   "title": "文字起こし",
-  "guidance": "Whisperモデルを選択し、入力ファイルを読み込んでから文字起こしを開始してください。",
+  "guidance": "文字起こしに使用するモデルを選択します。",
   "inputVideo": {
     "label": "入力ファイル",
     "hint": "動画: .mp4 .mkv  /  音声: .mp3 .wav .m4a .aac .flac .ogg",
     "placeholder": "ファイルを選択してください…",
+    "dropHint": "ドラッグ&ドロップで入力ファイルを指定",
     "chooseVideo": "ファイルを選択",
     "help": "文字起こしする動画または音声ファイル。動画は字幕焼き込み出力、音声はテキスト/SRT出力に対応します。",
     "infoLabel": "ファイル情報",
@@ -55,9 +56,9 @@
     "dialogDescription": "文字起こし時に各字幕の初期値として焼き込まれます。プレビューで確認しながら調整してください。"
   },
   "whisperModel": {
-    "label": "Whisperモデル",
+    "label": "文字起こしツール",
     "tooltip": "音声を文字に変換するエンジンです。モデルサイズが大きいほど精度が上がります。",
-    "descriptionLong": "Whisperは、音声を文字に変換するエンジンです。OpenAIが開発したオープンソースのライブラリで、無料で利用できます。すべての処理はあなたのPCの中だけで行われ、データが外部に送信されることはありません。使用したいモデルをダウンロードし、「使用する」を押して選択してください。",
+    "descriptionLong": "文字起こしツールは、音声を文字に変換します。OpenAI が開発した Whisper モデルを使います。文字起こしの処理はあなたの PC の中だけで行われ、音声が外部に送信されることはありません。使用したいモデルをダウンロードし、「使用する」を押して選択してください。",
     "descLargeV3Turbo": "高速・軽量。ダウンロードサイズは large-v3 の約半分。",
     "descLargeV3": "高精度・推奨。動作には高いスペックが必要。",
     "recommended": "推奨",
@@ -98,10 +99,36 @@
     "activate_success": "{{modelName}} を使用中に切り替えました",
     "install_success": "{{modelName}} のダウンロードが完了しました"
   },
+  "translationTool": {
+    "label": "翻訳ツール",
+    "optionalTag": "オプション",
+    "tooltip": "字幕を多言語へ翻訳するためのローカル翻訳エンジン（MADLAD-400）です。必要なときにダウンロードして有効化します。",
+    "descriptionLong": "翻訳ツールは、Google が開発した翻訳 AI です。日本語↔英語をはじめ多くの言語に対応し、翻訳はすべてこの PC の中だけで行われます（データは外部に送られません）。モデルをダウンロードして有効化すれば、字幕をワンクリックや一括でサッと翻訳できます。GPU を使うとさらに高速になります。",
+    "recommended": "推奨",
+    "size3b": "MADLAD-400 3B",
+    "size7b": "MADLAD-400 7B",
+    "desc3b": "軽量・高速。標準的なマシンでも動作します。",
+    "desc7b": "高品質でより自然な翻訳。容量・処理はやや重め。",
+    "approx": "約 {{size}}",
+    "download": "ダウンロード",
+    "downloading": "ダウンロード中…",
+    "eta": "残り {{time}}",
+    "downloaded": "ダウンロードしました",
+    "downloadFailed": "ダウンロードに失敗しました",
+    "cancel": "キャンセル",
+    "useThis": "使用する",
+    "inUse": "使用中",
+    "installedBadge": "ダウンロード済",
+    "enable": "有効化",
+    "enabled": "有効",
+    "enabledBadge": "有効",
+    "delete": "削除",
+    "actionFailed": "操作に失敗しました"
+  },
   "gpuTool": {
     "label": "処理デバイス",
     "tooltip": "文字起こしを CPU で実行するか、対応 NVIDIA GPU で実行するかを選びます。GPU 実行には CUDA/cuDNN ランタイム（約 1 GB）を 1 度だけダウンロードすれば以降オフラインで動作します。",
-    "descriptionLong": "文字起こしをCPUとGPUのどちらで処理するかを選べます。GPUを使うには CUDA / cuDNN ランタイムのダウンロードが必要です。ダウンロード後、使用したいデバイスを選択してください。",
+    "descriptionLong": "文字起こしをCPUとGPUのどちらで処理するかを選べます。GPUを使うには CUDA / cuDNN ランタイムのダウンロードが必要です。ダウンロード後、使用したいデバイスを選択してください。GPU は文字起こしだけでなく翻訳も高速化します。",
     "cpu": {
       "name": "CPU",
       "description": "追加ダウンロード不要。どのマシンでも動作します。",
@@ -109,7 +136,7 @@
       "selectableBadge": "利用可能"
     },
     "gpu": {
-      "name": "GPU（CUDA / cuDNN）",
+      "name": "GPU",
       "description": "NVIDIA GPU で高速に文字起こしします。CUDA / cuDNN ランタイム（約 {{size}}）を 1 度だけダウンロードします。",
       "activeBadge": "使用中",
       "readyBadge": "使用可能"
@@ -146,24 +173,27 @@
   "footer": {
     "modelStatus": "Whisper: {{model}} · 使用中",
     "modelNotDownloaded": "Whisper: モデル未選択",
-    "privacyNote": "すべての処理はこのPCで完結します"
+    "privacyNote": "文字起こしから焼き込みまで、この PC で処理します"
   },
   "action": {
-    "startTranscription": "文字起こし開始",
+    "startTranscription": "文字起こしを始める",
     "transcribingWaiting": "文字起こし中…",
     "transcribing": "文字起こし中… {{percent}}%"
   },
   "guard": {
     "noInput": "入力ファイルを選択してください",
-    "noModel": "Whisperモデルをダウンロード／選択してください",
+    "noModel": "文字起こしモデルをダウンロード／選択してください",
     "noAudio": "選択したビデオに音声トラックがありません",
     "pending": "未完了"
   },
   "drawer": {
     "title": "文字起こし",
-    "subtitle": "Whisper 設定と音声トラックを確認して実行します。",
+    "subtitle": "文字起こしをする音声トラックを選択します。",
     "advancedSection": "Whisper設定",
     "trackSection": "音声トラック",
+    "tabInput": "入力ファイル",
+    "tabStyle": "文字スタイル",
+    "tabWhisper": "Whisper設定",
     "startRun": "文字起こし開始",
     "cancelRun": "キャンセル",
     "close": "閉じる",
@@ -178,7 +208,7 @@
     "wordSubtitle": {
       "label": "単語ごとに文字起こし（試験的機能）",
       "description": "字幕を1〜3語ごとの短い単位で生成します。英語音声向けの試験的機能です。日本語音声では単語の切れ目が不自然になる場合があります。",
-      "lockedPaidOnly": "追加12書体は有料版（¥500 買い切り）でご利用いただけます"
+      "lockedPaidOnly": "有料版でのみ利用可能"
     }
   },
   "dialog": {
@@ -190,6 +220,7 @@
   "toast": {
     "videoLoaded": "ファイルを読み込みました",
     "probeError": "ファイルの解析に失敗しました: {{error}}",
+    "unsupportedFile": "対応していないファイル形式です",
     "transcriptionComplete": "文字起こし完了 · {{count}}件",
     "modelDownloadFailed": "ダウンロードに失敗しました: {{error}}",
     "modelDownloadFailedNetwork": "ネットワークが切れたため、ダウンロードを停止しました。接続を確認して再試行してください。",
@@ -241,8 +272,9 @@
   "fontPicker": {
     "title": "デフォルト字幕フォントの選択",
     "section1Description": "字幕のデフォルトフォントを選択します。",
+    "downloadInSettingsNote": "追加フォントの一覧・ダウンロードは「設定」＞「フォント」で行えます。",
     "listSectionTitle": "フォント一覧",
-    "listSectionDescription": "Noto Sans JP は9ウェイトすべて同梱で、無料版でもお使いいただけます。下の追加12書体は有料版（¥500 買い切り）でご利用いただけます。",
+    "listSectionDescription": "Noto Sans JP は9ウェイトすべて同梱で、無料版でもお使いいただけます。下の追加12書体は有料版（買い切り）でご利用いただけます。",
     "description": "フォントをクリックして既定フォントを選択します。フォントの追加およびダウンロードは有料版のみの機能です。",
     "action": {
       "viewLicense": "ライセンス",

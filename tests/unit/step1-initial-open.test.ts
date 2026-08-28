@@ -6,23 +6,26 @@ import { pickInitialOpenSection } from '../../src/renderer/routes/step1-initial-
  * decision.
  *
  * The rule is a one-liner today, but kept as a named helper so:
- *   1. The intent ("no model = open Whisper, else open input video") is
+ *   1. The intent ("no model = open Whisper, else all collapsed") is
  *      auditable in one place rather than buried in step1.tsx state init.
- *   2. A regression that flips the default (e.g. a future refactor that
- *      hardcodes 'inputVideo' again) is caught here instead of waiting
- *      for the new-user UX bug to resurface in a release smoke.
+ *   2. A regression that flips the default is caught here instead of
+ *      waiting for the new-user UX bug to resurface in a release smoke.
+ *
+ * REQ-0422 — the input-video card was removed from STEP1 (file selection
+ * moved into the setup drawer), so the happy path (a model is installed)
+ * now returns `null` = all accordions collapsed instead of `'inputVideo'`.
  */
 
-describe('REQ-072 — pickInitialOpenSection', () => {
+describe('REQ-072 / REQ-0422 — pickInitialOpenSection', () => {
   it('opens the Whisper accordion when no active model is installed', () => {
     expect(pickInitialOpenSection(null)).toBe('whisper')
   })
 
-  it('opens the input-video accordion when large-v3-turbo is active', () => {
-    expect(pickInitialOpenSection('large-v3-turbo')).toBe('inputVideo')
+  it('leaves all accordions collapsed when large-v3-turbo is active', () => {
+    expect(pickInitialOpenSection('large-v3-turbo')).toBeNull()
   })
 
-  it('opens the input-video accordion when large-v3 is active', () => {
-    expect(pickInitialOpenSection('large-v3')).toBe('inputVideo')
+  it('leaves all accordions collapsed when large-v3 is active', () => {
+    expect(pickInitialOpenSection('large-v3')).toBeNull()
   })
 })

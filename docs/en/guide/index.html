@@ -152,6 +152,61 @@
         </div>
       </details>
 
+      <!-- REQ-0491: editing-workflow walkthrough.  Placed after the feature-
+           highlight cluster (free/paid, fonts, word-chunk) and before the OBS /
+           SmartScreen troubleshooting FAQs.  Reuses `.qa` / `.qa-body`,
+           `.guide-list`, and `.screenshot-image`; images reference the
+           feature-demo assets under ../../images/ (tracked with this change). -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">Info</span>
+          <span class="q-text">After transcription — how to finish your subtitles</span>
+        </summary>
+        <div class="qa-body">
+          <p>Once transcription is done, you finish your subtitles in STEP 2. The overall flow is <strong>(1) fix the content → (2) style the look → (3) set the position → (4) translate (optional) → (5) export</strong>. Here is what you can do at each stage.</p>
+
+          <h4>1. Fix the content (list view / timeline view)</h4>
+          <p>In the <strong>list view</strong> you can edit each subtitle's text and its start / end times directly; it stays quick even with thousands of subtitles. Switch to <strong>MOJIOKO's timeline view</strong> to drag and resize subtitle blocks and adjust timing visually, and click on the track to move the playback position there. (This is separate from the DaVinci Resolve timeline mentioned further down this page.)</p>
+
+          <h4>2. Style the look</h4>
+          <p><strong>Karaoke highlighting</strong> — words change colour as they are spoken. Per subtitle you can choose between "Switch" (each word flips when it starts) and "Sweep" (the colour fills across each word), and you pick both the spoken and unspoken colours. Subtitles created by transcription follow the actual speech timing; imported or hand-typed subtitles split the display time evenly instead.</p>
+          <img src="../../images/out-karaoke.gif" alt="Karaoke highlighting demo: the subtitle's text colour fills in from the left as the words are spoken." class="screenshot-image" loading="lazy" />
+
+          <p><strong>Keyword emphasis</strong> — give chosen words their own colour and size so a single phrase stands out from the line.</p>
+          <img src="../../images/out-emphasis-en.png" alt="Keyword emphasis demo: one word in the subtitle is enlarged and shown in a different colour." class="screenshot-image" loading="lazy" />
+
+          <p><strong>Appear / disappear animations</strong> — choose from fade, scale, pop, and blur, with adjustable duration and strength.</p>
+          <img src="../../images/out-animation.gif" alt="Subtitle appear-animation demo." class="screenshot-image" loading="lazy" />
+
+          <p><strong>Colour, outline, shadow, opacity, line spacing, rotation, ALL CAPS</strong> — fine-tune the details: text and outline colour, drop shadow, text and outline opacity (set separately — making the text transparent while keeping the outline gives you hollow lettering), line spacing, rotation, and upper-casing Latin text.</p>
+
+          <p><strong>Style presets</strong> — save a look you have built and apply it to other subtitles in one click.</p>
+
+          <h4>3. Set the position</h4>
+          <p>Choose where the subtitle sits (vertical and horizontal placement). For vertical short-form video you can also offset a subtitle well past the frame edge.</p>
+          <img src="../../images/out-vertical-en.png" alt="Demo of subtitles placed on a vertical short-form video." class="screenshot-image" loading="lazy" />
+
+          <h4>4. Translate (optional)</h4>
+          <p>You can translate your subtitles into another language. The translation engine is downloaded once, the first time you use it. <strong>Your video and audio are never uploaded.</strong></p>
+
+          <h4>5. Export</h4>
+          <p>When your subtitles are ready, burn them into the video, or export them as SRT or plain text.</p>
+        </div>
+      </details>
+
+      <!-- REQ-0491: AI integration (advanced) — overview only per owner decision. -->
+      <details class="qa">
+        <summary>
+          <span class="qa-badge qa-badge-info">Info</span>
+          <span class="q-text">[Advanced] Driving MOJIOKO from an AI assistant (AI integration)</span>
+        </summary>
+        <div class="qa-body">
+          <p>MOJIOKO supports MCP (the Model Context Protocol), so an AI assistant such as Claude can run transcription, translation, and subtitle burn-in for you.</p>
+          <p>From Settings → AI integration, export the connection bundle (<code>.mcpb</code>) and load it into Claude Desktop to connect. You can also run the same operations from the command line (<code>mojioko</code>).</p>
+          <p>This is an advanced feature; only an overview is given here.</p>
+        </div>
+      </details>
+
       <!-- 1: OBS settings (revised title and opening, badge: important) -->
       <details class="qa">
         <summary>

@@ -1,30 +1,31 @@
 {
-  // REQ-0352 §3-2 — a type-check pass that actually covers a TEST file.
+  // REQ-0352 §3-2 / REQ-0464 §2 — a type-check pass that covers `tests/`.
   //
   // `tsconfig.node.json` / `tsconfig.web.json` include only `src/`, so nothing
-  // under `tests/` has ever been type-checked, and vitest strips types without
-  // checking them.  That matters here because the undo gate proves its
-  // coverage with `satisfies Record<OptionalKey, …>` — a COMPILE-time
-  // assertion.  Without this config that gate would claim an exhaustiveness it
-  // never verified, so the gate runs `tsc -p tsconfig.test.json` itself.
+  // under `tests/` was ever type-checked and vitest strips types without
+  // checking them.  That mattered first for the REQ-0352 undo gate (its
+  // `satisfies Record<OptionalKey, …>` is a COMPILE-time assertion), and more
+  // broadly it let test-only type drift accumulate silently — e.g. a
+  // `generateAss` / `estimateOverlayHeightPx` signature change that vitest
+  // could only catch at run time.
   //
-  // ## Why `include` is one file rather than `tests/**/*`
-  //
-  // Widening it to the whole suite surfaces **19 pre-existing type errors** in
-  // unrelated specs (stale `generateAss` arity in a REQ-0340 test, `'Delius'`
-  // no longer being a `FontId`, `SubtitleEntryOriginal` mismatches, Playwright
-  // `Page` typings).  Fixing those is worth doing — it would have caught
-  // REQ-0350's signature change before vitest did — but it is not this REQ's
-  // job and not a change to make immediately before a Store submission.
-  // Recorded in RES-0352; widen this `include` when they are cleaned up.
+  // REQ-0352 scoped `include` to a single gate file and DEFERRED widening it,
+  // recording the ~19 pre-existing errors it would surface.  REQ-0464 §2 is
+  // that deferred cleanup: those errors were fixed and `include` now covers the
+  // whole suite, so `npm run typecheck` (which runs `tsc -p` on this config)
+  // fails on any future test-side type break.
   "extends": "./tsconfig.web.json",
   "compilerOptions": {
     "composite": false,
     "noEmit": true,
+    "rootDir": ".",
     "types": ["node"]
   },
+  // `tests/**/*` is the suite; the ambient decls pull in the `window.electronAPI`
+  // global augmentation (`env.d.ts`) so renderer service imports resolve.
   "include": [
-    "tests/unit/undo-restores-optional-fields-req-0352.test.ts",
-    "src/**/*"
+    "tests/**/*",
+    "src/renderer/env.d.ts",
+    "src/**/*.d.ts"
   ]
 }

@@ -4,8 +4,9 @@ import { resolve, relative, isAbsolute, join } from 'path'
 import { homedir } from 'os'
 import { Channels } from '../../shared/ipc-channels'
 import { ALLOWED_EXTERNAL_URLS } from '../../shared/app-info'
-import { getModelsDir, getResourcesPath } from '../lib/paths'
+import { getModelsDir, getResourcesPath, getTranslationToolsDir } from '../lib/paths'
 import log from '../lib/logger'
+import { writeFileAtomic } from '../lib/atomic-write'
 
 /** Resolved home directory — computed once at module load time. */
 const HOME_DIR = homedir()
@@ -55,6 +56,13 @@ export function registerShellHandlers(): void {
     await shell.openPath(dir)
   })
 
+  // REQ-0408 — open the translation-tools directory (same pattern as models).
+  ipcMain.handle(Channels.shellOpenTranslationToolsFolder, async (): Promise<void> => {
+    const dir = getTranslationToolsDir()
+    mkdirSync(dir, { recursive: true })
+    await shell.openPath(dir)
+  })
+
   ipcMain.handle(Channels.shellOpenThirdPartyLicensesFolder, async (): Promise<void> => {
     // Resolve to the same directory in dev and packaged builds.  In dev the
     // licenses live at `<repo>/installer/licenses/`; packaged they ship via
@@ -75,7 +83,9 @@ export function registerShellHandlers(): void {
       log.warn(`[shell] shellWriteTextFile blocked: ${err}`)
       throw new Error(err)
     }
-    await fsp.writeFile(filePath, content, 'utf-8')
+    // REQ-0545 §1 — atomic: temp sibling -> fsync -> rename.  A crash or a full
+    // disk part-way through can no longer truncate an existing project file.
+    await writeFileAtomic(filePath, content)
   })
 
   /**

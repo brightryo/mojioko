@@ -248,25 +248,64 @@ describe('REQ-0336 §2 — the 発話タイミング toggle', () => {
   })
 })
 
-describe('REQ-0336 §1-6 — one decision surface', () => {
+describe('REQ-0336 §1-6 / REQ-0515 — one decision surface', () => {
   /**
    * `fade-opacity.ts` claimed in its JSDoc to "mirror" the writer and then
    * re-derived the same judgement independently; the two drifted (RES-0323).
-   * This pin makes the same drift a test failure: neither renderer may CALL
-   * `areWordsValidForText` for the karaoke decision — both must go through
-   * `resolveKaraokeTiming`.  (Prose references to the predicate are fine; the
-   * pattern below matches a call, not a mention.)
+   * This pin makes the same drift a test failure.
+   *
+   * ## What moved in REQ-0515, and why this got STRICTER rather than looser
+   *
+   * REQ-0336 pinned "neither renderer may call `areWordsValidForText`; both go
+   * through `resolveKaraokeTiming`".  That left the rest of the unit pipeline
+   * — pick the timing source, then `splitWordsAtHardBreaks` — written out in
+   * BOTH renderers, and REQ-0515 had to add a step to it
+   * (`projectCueWhitespaceOntoWords`, so the cue's own text spells the cue).
+   * Adding that step twice is the same bug class one level up, so the whole
+   * pipeline moved into `shared/karaoke-units.ts` and both renderers now call
+   * `resolveKaraokeUnits`.
+   *
+   * So the surface a renderer may touch is now NARROWER: it may not call
+   * `resolveKaraokeTiming` either, nor assemble the units itself.  The
+   * decision — all of it — lives in one module, and this test says where.
+   * (Prose references are fine; the patterns match calls, not mentions.)
    */
   const CONSUMERS = [
     'src/main/services/ass-generator.ts',
     'src/renderer/components/subtitle-overlay/subtitle-overlay.tsx',
   ]
+  /** Everything a renderer must NOT do for itself. */
+  const FORBIDDEN_IN_CONSUMERS = [
+    'areWordsValidForText',
+    'resolveKaraokeTiming',
+    'buildFallbackKaraokeUnits',
+    'splitWordsAtHardBreaks',
+    'projectCueWhitespaceOntoWords',
+  ]
+  const SURFACE = 'src/shared/karaoke-units.ts'
 
   for (const rel of CONSUMERS) {
-    it(`${rel} decides via resolveKaraokeTiming and nothing else`, () => {
+    it(`${rel} resolves karaoke units via ${SURFACE} and nothing else`, () => {
       const src = readFileSync(path.join(process.cwd(), rel), 'utf8')
-      expect(src).toContain('resolveKaraokeTiming(')
-      expect(src).not.toMatch(/areWordsValidForText\s*\(/)
+      expect(src).toMatch(/resolveKaraokeUnits\s*\(/)
+      for (const name of FORBIDDEN_IN_CONSUMERS) {
+        expect(src, `${rel} must not call ${name} itself`)
+          .not.toMatch(new RegExp(`${name}\\s*\\(`))
+      }
     })
   }
+
+  it(`${SURFACE} is the surface: it owns the timing choice and the unit build`, () => {
+    const src = readFileSync(path.join(process.cwd(), SURFACE), 'utf8')
+    // It must make the timing judgement through the REQ-0336 resolver…
+    expect(src).toMatch(/resolveKaraokeTiming\s*\(/)
+    // …and never re-derive that resolver's own predicate.
+    expect(src).not.toMatch(/areWordsValidForText\s*\(/)
+    // …and it must actually assemble the units (otherwise a consumer would
+    // have to, which the loop above forbids — the two assertions together
+    // leave no place for the pipeline to live except here).
+    expect(src).toMatch(/projectCueWhitespaceOntoWords\s*\(/)
+    expect(src).toMatch(/splitWordsAtHardBreaks\s*\(/)
+    expect(src).toMatch(/buildFallbackKaraokeUnits\s*\(/)
+  })
 })

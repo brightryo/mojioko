@@ -200,8 +200,9 @@ export function OutlineThicknessSlider({
           has something on screen to explain it. */}
       <span
         className={cn(
-          'w-10 text-caption font-mono tabular-nums text-right',
-          belowMin ? 'text-warning-soft' : 'text-muted-foreground'
+          // REQ-0421 (step2) — slider readout caption → body-sm.
+          'w-10 text-body-sm font-mono tabular-nums text-right',
+          belowMin ? 'text-warning-soft' : 'text-fg-secondary'
         )}
       >
         {draft}

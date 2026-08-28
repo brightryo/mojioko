@@ -19,6 +19,23 @@ export const Channels = {
   transcriptionUninstallModel: 'transcription:uninstallModel',
   transcriptionSetActiveModel: 'transcription:setActiveModel',
 
+  // REQ-0405 — translation-tool management (Phase 1: DL / enable / delete).
+  // Same shape as the Whisper model channels; download streams progress on a
+  // per-run channel (`translationTool:download:<uuid>`) with a `:cancel` sibling.
+  translationToolList: 'translationTool:list',
+  translationToolDownload: 'translationTool:download',
+  translationToolUninstall: 'translationTool:uninstall',
+  translationToolSetActive: 'translationTool:setActive',
+
+  // REQ-0410 — one-shot translate for the inspector auto-translate prototype.
+  // Resolves via the resident MADLAD sidecar; result is non-persisted.
+  translationTranslate: 'translation:translate',
+  // REQ-0430 — bulk translate: a list of sources in one sidecar call.
+  translationTranslateBatch: 'translation:translateBatch',
+  // REQ-0426 — warm the resident MADLAD sidecar (load model + tokenizer) so
+  // the first inspector translation after enabling 自動翻訳 is not cold.
+  translationPreload: 'translation:preload',
+
   fontList: 'font:list',
   fontDownload: 'font:download',
   fontUninstall: 'font:uninstall',
@@ -89,6 +106,12 @@ export const Channels = {
    */
   dialogOpenProject: 'dialog:openProject',
   /**
+   * REQ-0459 — main → renderer: open the `.mojioko` at this path (a double-click
+   * / file-association launch, or a second-instance launch handed to the
+   * existing window). The renderer runs the same open flow the menu uses.
+   */
+  projectOpenPath: 'project:openPath',
+  /**
    * REQ-0223 — SRT open dialog for the "import SRT" flow in step2.
    * Same shape as `dialogOpenProject`; filter narrowed to `.srt`.
    */
@@ -98,6 +121,7 @@ export const Channels = {
   shellShowInFolder: 'shell:showInFolder',
   shellOpenExternal: 'shell:openExternal',
   shellOpenModelsFolder: 'shell:openModelsFolder',
+  shellOpenTranslationToolsFolder: 'shell:openTranslationToolsFolder',
   shellOpenThirdPartyLicensesFolder: 'shell:openThirdPartyLicensesFolder',
   shellWriteTextFile: 'shell:writeTextFile',
   shellFileExists: 'shell:fileExists',
@@ -137,6 +161,14 @@ export const Channels = {
    * bulk-edit selector).  Pure read, no side effects.
    */
   appIsMsix: 'app:isMsix',
+  // REQ-0546 — quit guard.  main asks the renderer whether there is unsaved
+  // work; the renderer answers after showing its confirmation (or immediately,
+  // when there is nothing to lose).
+  appCloseRequested: 'app:closeRequested',
+  appCloseDecision: 'app:closeDecision',
+  appGetCliPath: 'app:getCliPath',
+  appGetMcpLaunchSpec: 'app:getMcpLaunchSpec',
+  appExportMcpBundle: 'app:exportMcpBundle',
 
   /** Native menu rebuild trigger */
   menuSetLanguage: 'menu:setLanguage',

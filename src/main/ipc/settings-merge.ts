@@ -111,20 +111,48 @@ export const SETTINGS_MERGE_RULES: { readonly [K in keyof AppSettings]-?: MergeR
   // authoritative — and it MUST be sent on every save, otherwise a delete
   // could not round-trip to disk.
   stylePresets: 'incoming-wins',
+  // REQ-0540: same shape as stylePresets — the renderer's animation controls
+  // are the only writer, so the payload is authoritative and must be sent on
+  // every save (an omitted key would drop the whole table, not keep it).
+  animationMemory: 'incoming-wins',
+  // REQ-0551: AI-integration consent. Renderer-owned; the same send-every-save
+  // obligation as the two above (an omitted key would drop the consent record
+  // and re-prompt a user who already agreed).
+  aiIntegration: 'incoming-wins',
 
   // --- main-owned, renderer sends a null sentinel each save ----------------
   activeModelId: 'incoming-else-existing',
+  // REQ-0405 — same rule as activeModelId: the incoming value wins unless it is
+  // undefined (a client that never sends the field keeps the persisted choice).
+  translationToolActiveId: 'incoming-else-existing',
+  // REQ-0426 — 「翻訳」設定タブ: renderer-owned (Settings dialog is the only
+  // writer), so the payload is authoritative.  App.tsx sends both on every
+  // save (see the payload) — required for `incoming-wins` to round-trip.
+  translationAutoEnabled: 'incoming-wins',
+  translationTargetLang: 'incoming-wins',
+  // REQ-0443 §1 — preview timecode verbosity; renderer-owned, App.tsx sends it
+  // on every save so `incoming-wins` round-trips.
+  playbackTimeDetailed: 'incoming-wins',
   lastInputDir: 'incoming-else-existing',
   lastOutputDir: 'incoming-else-existing',
   // REQ-0157: written only by the `gpu-tool:select` IPC; the renderer's store
   // does not track it at all.
   activeAccelerator: 'incoming-else-existing',
+  // REQ-0458 §3: written only by the `app:exportMcpBundle` IPC (mutateSettings);
+  // the renderer never sends it, so this always resolves to `existing`.
+  lastMcpExport: 'incoming-else-existing',
 
   // --- main-owned, where `null`/absent must stay distinguishable -----------
   // REQ-0158 / REQ-0194: `null` means "user cleared it with the × button".
   defaultInputDir: 'presence-wins',
   defaultOutputDir: 'presence-wins',
   defaultProjectDir: 'presence-wins',
+  // REQ-0518 — same rule as the three folder rows above: a folder the user
+  // picked must survive a partial save from a surface that does not know
+  // about it.
+  defaultImageDir: 'presence-wins',
+  defaultTextDir: 'presence-wins',
+  defaultSrtDir: 'presence-wins',
   // REQ-0279: written only by `fontList:recordSetVersion`; the renderer has
   // never sent it, so this always resolves to `existing`.
   fontSetInstalledVersion: 'presence-wins',

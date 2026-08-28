@@ -23,7 +23,7 @@ import type { BurninPosition } from '../../src/shared/types'
 const BS = String.fromCharCode(92) // backslash, kept out of string literals
 
 const video: VideoInfo = {
-  path: 'C:/x.mp4', widthPx: 1920, heightPx: 1080,
+  path: 'C:/x.mp4', hasVideoStream: true, widthPx: 1920, heightPx: 1080,
   durationSec: 10, fps: 30, container: 'mp4', videoCodec: 'h264',
   audioTracks: [], fileSizeBytes: 0,
 }

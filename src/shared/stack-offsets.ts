@@ -60,17 +60,26 @@ import type { SubtitleEntry } from './types'
  * lib stays free of component imports and unit tests can pass simple
  * constants (see tests/unit/active-entry.test.ts).
  *
- * Complexity: O(N²) in the worst case (each entry walks every prior).
- * Caller memoises on entries / scale changes only, so the cost is
- * paid once per entries mutation (~rare during playback), not per
- * playhead tick.
+ * **Input contract: `sortedEntries` MUST be ascending by `startSec`** (ties in
+ * caller order = ASS Dialogue order).  Every call site sorts (ass-generator's
+ * reference path), which is what the parameter name has always documented.
+ *
+ * Complexity: **O(N × C)** where C = the number of cues visible at once (the
+ * "same-instant" concurrency), via a sliding window over the active priors
+ * (REQ-0465 §1).  Because `startSec` is non-decreasing, a prior whose `endSec`
+ * has passed the current `startSec` can never overlap a LATER entry, so it is
+ * evicted once and never revisited — replacing the previous O(N²) rescan of
+ * every earlier entry.  For sequential subtitles (C≈1) this is linear; the
+ * output is **bit-identical** to the old rescan (pinned by
+ * `tests/unit/stack-offsets-equivalence-req-0465.test.ts`, which compares this
+ * against a naive reference on thousands of random sorted inputs), which is the
+ * absolute condition for a function shared with the burn path.
  */
 export function computeFixedStackOffsets(
   sortedEntries: readonly SubtitleEntry[],
   heightOf: (entry: SubtitleEntry) => number,
 ): Map<string, number> {
   const positions = new Map<string, number>()
-  const heights = new Map<string, number>()
 
   const groupKey = (e: SubtitleEntry): string =>
     `${e.horizontalPosition}_${e.verticalPosition}`
@@ -78,63 +87,67 @@ export function computeFixedStackOffsets(
   const isPinned = (e: SubtitleEntry): boolean =>
     e.posX !== undefined && e.posY !== undefined
 
+  // Sliding window of still-active priors (non-pinned entries already placed
+  // whose `endSec` has not yet passed the current `startSec`).  Each carries its
+  // FROZEN base (= verticalMarginPx-or-0 + its own offset) and height, so a
+  // later entry reads them without a Map lookup or recomputation.  Because the
+  // input is startSec-ascending, eviction (`endSec <= startSec`) is monotonic.
+  const active: { endSec: number; keyE: string; base: number; height: number }[] = []
+
   for (let i = 0; i < sortedEntries.length; i++) {
     const e = sortedEntries[i]
-    // Pinned entries (\pos) render at their own coordinates — exclude
-    // them from the stack entirely (no offset, not a prior for later
-    // entries).  Phase 6 wires the drag UI; the exclusion is encoded
-    // here so the algorithm is consistent through the whole feature.
+
+    // Evict priors that have ended at-or-before this entry's start (end is
+    // EXCLUSIVE, matching findActiveEntryId).  In-place compaction — no
+    // per-entry allocation.  A prior removed here can never overlap a later
+    // entry (its start is ≥ this one's), so it is gone for good.
+    {
+      let w = 0
+      for (let r = 0; r < active.length; r++) {
+        if (active[r].endSec > e.startSec) active[w++] = active[r]
+      }
+      active.length = w
+    }
+
+    // Pinned entries (\pos) render at their own coordinates — exclude them from
+    // the stack entirely (no offset, not a prior for later entries).
     if (isPinned(e)) continue
 
     const heightE = heightOf(e)
-    // REQ-0140 — center-aligned rows anchor at the viewport middle
-    // and ignore verticalMarginPx (mirrors libass `\an4/5/6`).  Treat
-    // their base as 0 so a `centre` group stacks around the middle,
-    // not around some MarginV-shifted point.  For `top` / `bottom`
-    // the pre-REQ-0140 semantics stay: base = the row's own MarginV.
+    // REQ-0140 — center-aligned rows anchor at the viewport middle and ignore
+    // verticalMarginPx (mirrors libass `\an4/5/6`).  Treat their base as 0 so a
+    // `centre` group stacks around the middle.  top/bottom keep base = MarginV.
     const marginVe = e.verticalPosition === 'center' ? 0 : e.verticalMarginPx
     const keyE = groupKey(e)
-    heights.set(e.id, heightE)
 
-    // Collect already-placed priors that:
-    //   - share alignment group with e (libass collides per group only)
-    //   - are not themselves pinned (pinned entries don't block stack)
-    //   - overlap e.startSec in time (start INCLUSIVE / end EXCLUSIVE,
-    //     same as findActiveEntryId boundary semantics)
+    // Same-group active priors, sorted by base ascending — identical set and
+    // order to the old full-rescan (which also filtered by group and time
+    // overlap, then sorted by base).  `active` already encodes the time-overlap
+    // (start ≤ e.start via input order, end > e.start via eviction above).
     const activePriors: { base: number; height: number }[] = []
-    for (let j = 0; j < i; j++) {
-      const p = sortedEntries[j]
-      if (isPinned(p)) continue
-      if (groupKey(p) !== keyE) continue
-      if (p.startSec <= e.startSec && p.endSec > e.startSec) {
-        const priorOffset = positions.get(p.id) ?? 0
-        // Same REQ-0140 rule applied to priors — for a centre group
-        // (only same-group priors reach this branch) MarginV is 0.
-        const priorMargin = p.verticalPosition === 'center' ? 0 : p.verticalMarginPx
-        const priorBase = priorMargin + priorOffset
-        activePriors.push({
-          base: priorBase,
-          height: heights.get(p.id) ?? 0,
-        })
-      }
+    for (const p of active) {
+      if (p.keyE === keyE) activePriors.push({ base: p.base, height: p.height })
     }
     activePriors.sort((a, b) => a.base - b.base)
 
-    // Greedy gap-fill — `effectiveBase` tracks the lowest position e
-    // can occupy without colliding with any prior we've seen so far.
-    // Start at e's own MarginV; for each prior in ascending order,
-    // either drop into the gap above (if a prior's base ≥ our top
-    // edge) or climb above the prior and continue.
+    // Greedy gap-fill — `effectiveBase` tracks the lowest position e can occupy
+    // without colliding with any prior we've seen so far.  Start at e's own
+    // MarginV; for each prior in ascending order, either drop into the gap above
+    // (if a prior's base ≥ our top edge) or climb above the prior and continue.
     let effectiveBase = marginVe
     for (const p of activePriors) {
       if (p.base >= effectiveBase + heightE) break
       effectiveBase = Math.max(effectiveBase, p.base + p.height)
     }
 
-    // Returned value is RELATIVE to entry.verticalMarginPx.  For the
-    // single-row case the result is 0 regardless of MarginV, matching
-    // the v1.0/v1.1 contract used by the existing tests.
+    // Returned value is RELATIVE to entry.verticalMarginPx.  For the single-row
+    // case the result is 0 regardless of MarginV (v1.0/v1.1 contract).
     positions.set(e.id, effectiveBase - marginVe)
+
+    // Register e as a prior for later overlapping entries.  Its base is
+    // `effectiveBase` (= marginVe + the offset just stored), matching exactly
+    // what the old code recomputed as `priorMargin + priorOffset`.
+    active.push({ endSec: e.endSec, keyE, base: effectiveBase, height: heightE })
   }
   return positions
 }

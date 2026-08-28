@@ -30,6 +30,7 @@
  */
 
 import type { SubtitleEntry, SubtitleEntryOriginal } from '../../shared/types'
+import { resolveLayer, MIN_LAYER } from '../../shared/cue-placement'
 
 /**
  * What happens to a field when a row is duplicated.
@@ -91,6 +92,10 @@ export const SUBTITLE_ENTRY_DUPLICATION = {
   posY: 'copy',
   // REQ-0332 — line spacing (行間).
   lineSpacingPercent: 'copy',
+  // REQ-0392/0396 — z-order.  `shift`: the duplicate is placed on the layer ONE
+  // ABOVE the source (front), so it lands on the row above the original instead
+  // of sharing (and overlapping) its row.  Recomputed in `buildDuplicateEntry`.
+  layer: 'shift',
   // --- style effects (REQ-0277 / REQ-0310) ----------------------------
   casing: 'copy',
   shadowDepth: 'copy',
@@ -128,6 +133,12 @@ export const SUBTITLE_ENTRY_DUPLICATION = {
   emphasizedWordIndices: 'deep-copy',
   // --- identity / bookkeeping -----------------------------------------
   id: 'regenerate',
+  // REQ-0400 — the duplicate must be DISTINGUISHABLE from its source, so it does
+  // NOT inherit the source's display number.  `reset` to `undefined` here; the
+  // store's `addEntry` then mints a fresh monotonic `cueNumber` (a pure builder
+  // cannot know the project-wide max).  Same reasoning as `id`, but the value
+  // is assigned by the store rather than passed in.
+  cueNumber: 'reset',
   isDeleted: 'reset',
   isEdited: 'reset',
   original: 'snapshot',
@@ -152,6 +163,52 @@ function cloneValue<T>(value: T): T {
   return typeof structuredClone === 'function'
     ? structuredClone(value)
     : (JSON.parse(JSON.stringify(value)) as T)
+}
+
+/**
+ * The `SubtitleEntry` fields whose values are objects/arrays and therefore must
+ * be structurally cloned to avoid two rows (or a row and a snapshot) sharing
+ * object identity.  Derived from the single classification above, so a field
+ * reclassified to / from `deep-copy` moves this set automatically.
+ */
+export const DEEP_COPY_FIELDS: ReadonlySet<keyof SubtitleEntry> = new Set(
+  (Object.entries(SUBTITLE_ENTRY_DUPLICATION) as [keyof SubtitleEntry, DuplicationRule][])
+    .filter(([, rule]) => rule === 'deep-copy')
+    .map(([key]) => key),
+)
+
+/**
+ * REQ-0464 — a history-safe snapshot of an entry for the Undo path.
+ *
+ * `applyBulk` / `applyStyleEdit` used `{ ...entry }`, a SHALLOW copy: the
+ * nested `deep-copy` fields (`subtitleBackground`, `words`, the emphasis
+ * arrays) were shared by reference with the live entry, so a later in-place
+ * mutation of one of those objects would silently rewrite the Undo target and
+ * Undo would restore the *mutated* value.  This returns a copy with exactly the
+ * nested fields cloned, so the snapshot is decoupled from the live store.
+ *
+ * `patch` (optional) narrows the clone to the nested fields the edit will
+ * actually touch — Undo only restores the patch's keys, so cloning `words` for
+ * a font-size edit would be wasted work on a select-all over thousands of rows.
+ * Omit it to clone every nested field (a full independent snapshot).
+ */
+export function deepSnapshotEntry(
+  entry: SubtitleEntry,
+  patch?: Partial<SubtitleEntry>,
+): SubtitleEntry {
+  const out: SubtitleEntry = { ...entry }
+  const keys = patch
+    ? (Object.keys(patch) as (keyof SubtitleEntry)[]).filter((k) => DEEP_COPY_FIELDS.has(k))
+    : [...DEEP_COPY_FIELDS]
+  for (const key of keys) {
+    // Only clone fields the row actually carries; an absent optional field stays
+    // absent (writing `undefined` would defeat `buildUndoPatch`'s "restore unset").
+    if (key in entry && entry[key] !== undefined) {
+      const rec = out as unknown as Record<string, unknown>
+      rec[key as string] = cloneValue((entry as unknown as Record<string, unknown>)[key as string])
+    }
+  }
+  return out
 }
 
 /**
@@ -183,15 +240,37 @@ function carryFields(entry: SubtitleEntry): SubtitleEntryOriginal {
  * *what the duplicate contains*, so the contents can be tested without
  * standing up the whole renderer.
  */
-export function buildDuplicateEntry(entry: SubtitleEntry, newId: string): SubtitleEntry {
+export function buildDuplicateEntry(
+  entry: SubtitleEntry,
+  newId: string,
+  /**
+   * REQ-0528 §1-2 — the layer the copy should land on, normally resolved by
+   * `findFreeLayerAbove` so the duplicate skips past any layer already occupied
+   * at these times.  Optional, and defaulting to the historical `source + 1`,
+   * because this function's contract is "what the duplicate CONTAINS" — layer
+   * SELECTION needs the whole entry list and therefore belongs to the caller.
+   * The default keeps this module usable (and unit-testable) standalone.
+   */
+  targetLayer?: number,
+): SubtitleEntry {
   const carried = carryFields(entry)
 
-  // `shift` currently classifies no field.  Typed as a `Pick` over the
-  // `shift` keys so that the moment someone reclassifies a field to
-  // `shift`, this object stops satisfying its type and `tsc` demands the
-  // recomputation be written — the classification cannot be changed
-  // without the behaviour following it.
-  const shifted: Pick<SubtitleEntryOriginal, KeysWithRule<'shift'>> = {}
+  // REQ-0396 — `shift` fields are recomputed for the duplicate rather than
+  // copied.  `layer` shifts up by one so the duplicate paints on the row/layer
+  // ABOVE the source (front), instead of sharing — and overlapping — its row.
+  // REQ-0397 §2 — clamped to `MIN_LAYER` so the copy is never negative (source+1
+  // is already ≥ 1 for any non-legacy source; the floor only guards a project
+  // that carries a legacy negative layer).  The timeline is bottom-anchored, so
+  // "one above" (front) is literally one row up the stack.
+  // (The `Pick` over `KeysWithRule<'shift'>` makes tsc demand exactly the shift
+  // fields, so reclassifying a field to `shift` without computing it fails.)
+  // REQ-0528 §1 — `targetLayer` (when the caller resolved one) replaces the
+  // blind `+ 1`.  The old expression only knew the SOURCE's layer, so two
+  // duplicates of the same cue both landed on source+1 and overlapped.
+  const shiftedLayer = Math.max(MIN_LAYER, targetLayer ?? resolveLayer(entry) + 1)
+  const shifted: Pick<SubtitleEntryOriginal, KeysWithRule<'shift'>> = {
+    layer: shiftedLayer,
+  }
 
   // Likewise for the non-carried rules: classifying a field as
   // `regenerate` / `reset` / `snapshot` and then forgetting to compute it
@@ -201,11 +280,17 @@ export function buildDuplicateEntry(entry: SubtitleEntry, newId: string): Subtit
     KeysWithRule<'regenerate'> | KeysWithRule<'reset'> | KeysWithRule<'snapshot'>
   > = {
     id: newId,
+    // REQ-0400 — left unset so the store's addEntry mints a fresh display number
+    // (the duplicate must not share the source's 字幕ID).
+    cueNumber: undefined,
     isDeleted: false,
     isEdited: true,
     // Independently cloned so the live row and its original snapshot
-    // never share object identity for any `deep-copy` field.
-    original: carryFields(entry),
+    // never share object identity for any `deep-copy` field.  REQ-0396: the
+    // snapshot carries the SHIFTED layer too, so the duplicate's baseline (and
+    // therefore Reset / isEdited) is the row it actually starts on, not the
+    // source's layer.
+    original: { ...carryFields(entry), layer: shiftedLayer },
   }
 
   return { ...carried, ...shifted, ...minted }

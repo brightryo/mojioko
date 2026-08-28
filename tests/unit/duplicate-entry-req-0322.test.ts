@@ -24,7 +24,7 @@ function makeRichEntry(): SubtitleEntry {
     outlineColorHex: '#000000',
     outlineThicknessPx: 3,
     fadeDurationSec: 0.2,
-    fontId: 'noto-sans-jp' as const,
+    fontId: 'noto-sans-jp-bold' as const,
     horizontalPosition: 'center' as const,
     verticalPosition: 'bottom' as const,
     verticalMarginPx: 40,
@@ -33,6 +33,8 @@ function makeRichEntry(): SubtitleEntry {
     // REQ-0332 — line spacing (行間); a non-default value so a dropped
     // `copy` classification shows up as a missing field, not a matching zero.
     lineSpacingPercent: -25,
+    // REQ-0392 — z-order; non-default so a dropped `copy` shows up as a miss.
+    layer: 7,
     casing: 'uppercase' as const,
     shadowDepth: 8, shadowColor: '#112233', shadowAlpha: 70,
     textAlpha: 90, outlineAlpha: 80,
@@ -65,6 +67,8 @@ function makeRichEntry(): SubtitleEntry {
   }
   return {
     id: 'src-1',
+    // REQ-0400 — display number present so the completeness check exercises it.
+    cueNumber: 12,
     ...original,
     isDeleted: false,
     isEdited: false,
@@ -148,6 +152,40 @@ describe('REQ-0322 §2 — duplicateRow carries every SubtitleEntry field', () =
     expect(dup.endSec).toBe(src.endSec)
   })
 
+  it('REQ-0396 — the duplicate lands on the layer ONE ABOVE the source (front)', () => {
+    // makeRichEntry has layer 7 → the duplicate shifts up to 8 (front / upper
+    // row), so it does not share and overlap the source's row.  The snapshot
+    // carries the shifted layer too, so the duplicate is not "edited" on layer.
+    const src = makeRichEntry() // layer: 7
+    const dup = buildDuplicateEntry(src, 'dup-layer')
+    expect(dup.layer).toBe(8)
+    expect(dup.original.layer).toBe(8)
+  })
+
+  it('REQ-0396 — a default (layer-absent) source duplicates to layer 1', () => {
+    const src = { ...makeRichEntry(), layer: undefined, original: { ...makeRichEntry().original, layer: undefined } }
+    const dup = buildDuplicateEntry(src, 'dup-default-layer')
+    expect(dup.layer).toBe(1) // resolveLayer(undefined) 0 → +1
+  })
+
+  it('REQ-0400 — the duplicate does NOT inherit the source cueNumber (reset for the store to mint)', () => {
+    const src = makeRichEntry() // cueNumber: 12
+    const dup = buildDuplicateEntry(src, 'dup-cuenum')
+    expect(dup.cueNumber).toBeUndefined() // store's addEntry assigns a fresh one
+  })
+
+  it('REQ-0397 §2 — the duplicate layer is never negative (legacy negative source clamps to 0)', () => {
+    // A project saved before the REQ-0397 §1 clamp may carry a negative layer.
+    // Duplicating such a cue must not produce another negative: -1 + 1 = 0, and
+    // an even-lower legacy layer is floored at 0 rather than staying negative.
+    const src = { ...makeRichEntry(), layer: -1, original: { ...makeRichEntry().original, layer: -1 } }
+    const dup = buildDuplicateEntry(src, 'dup-neg-layer')
+    expect(dup.layer).toBe(0)
+    expect(dup.original.layer).toBe(0)
+    const deep = { ...makeRichEntry(), layer: -5, original: { ...makeRichEntry().original, layer: -5 } }
+    expect(buildDuplicateEntry(deep, 'dup-neg-deep').layer).toBe(0)
+  })
+
   it('deep-copies mutable structures: no shared identity anywhere', () => {
     const src = makeRichEntry()
     const dup = buildDuplicateEntry(src, 'dup-6')
@@ -195,7 +233,7 @@ describe('REQ-0322 §2 — duplicateRow carries every SubtitleEntry field', () =
       .filter(([, rule]) => rule === 'copy' || rule === 'deep-copy')
       .map(([k]) => k)
     for (const k of carried) {
-      expect((dup.original as Record<string, unknown>)[k]).toEqual(
+      expect((dup.original as unknown as Record<string, unknown>)[k]).toEqual(
         (dup as unknown as Record<string, unknown>)[k],
       )
     }

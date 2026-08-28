@@ -273,8 +273,8 @@ export function AudioPreviewPanel() {
     <div className="flex h-full w-full flex-col">
       {/* Header — filename + open-in-folder shortcut, identical
           structure to VideoPreviewPanel. */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border/50 flex-shrink-0 min-w-0">
-        <span className="min-w-0 truncate text-body-sm text-foreground/80" title={video.path}>
+      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-line/50 flex-shrink-0 min-w-0">
+        <span className="min-w-0 truncate text-body-sm text-fg-primary/80" title={video.path}>
           {filename}
         </span>
         <button
@@ -282,8 +282,8 @@ export function AudioPreviewPanel() {
           onClick={() => { shellShowInFolder(video.path).catch(() => {}) }}
           title={t('videoPreview.showInFolder')}
           className={cn(
-            'flex-shrink-0 rounded p-0.5 text-muted-foreground transition-colors duration-150',
-            'hover:text-foreground focus:outline-none focus-visible:text-foreground'
+            'flex-shrink-0 rounded p-0.5 text-fg-secondary transition-colors duration-150',
+            'hover:text-fg-primary focus:outline-none focus-visible:text-fg-primary'
           )}
         >
           <FolderOpen className="h-4 w-4" />
@@ -293,7 +293,7 @@ export function AudioPreviewPanel() {
       {/* Body — centred play / pause button takes the flex-1 area. */}
       <div className="flex-1 min-h-0 flex items-center justify-center p-4 bg-surface-0">
         {hasError ? (
-          <span className="text-body-sm text-muted-foreground">{t('videoPreview.error')}</span>
+          <span className="text-body-sm text-fg-secondary">{t('videoPreview.error')}</span>
         ) : (
           <button
             type="button"
@@ -316,7 +316,7 @@ export function AudioPreviewPanel() {
       {/* Seekbar + time row — placed where VideoPreviewPanel's seekbar
           sits so the audio / video panels share the same lower-edge
           control surface. */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-border/50 flex-shrink-0">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-t border-line/50 flex-shrink-0">
         <input
           type="range"
           min={0}
@@ -329,7 +329,7 @@ export function AudioPreviewPanel() {
           className="flex-1 h-1.5 cursor-pointer accent-primary"
           aria-label={t('videoPreview.play')}
         />
-        <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-muted-foreground">
+        <span className="flex-shrink-0 select-none font-mono tabular-nums text-body-sm text-fg-secondary">
           {formatTime(editedCurrentTime)}&nbsp;/&nbsp;{formatTime(editedTotalSec)}
         </span>
       </div>

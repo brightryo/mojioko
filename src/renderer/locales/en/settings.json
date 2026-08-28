@@ -3,9 +3,64 @@
   "tabs": {
     "general": "General",
     "fonts": "Fonts",
-    "defaultStyle": "Subtitle Style",
-    "whisper": "Whisper",
-    "shortcuts": "Shortcuts"
+    "translation": "Translation",
+    "shortcuts": "Shortcuts",
+    "ai": "AI"
+  },
+  "ai": {
+    "title": "AI integration (MCP)",
+    "lead": "MOJIOKO connects to AI via MCP, so an assistant can drive it for you.\nJust ask Claude to transcribe, translate, or burn subtitles into a video.",
+    "privacyTitle": "Using this feature sends some information off this PC",
+    "desktopTitle": "Use with Claude Desktop",
+    "step1": "Click \"Export MCP extension\" and save mojioko.mcpb.",
+    "exportButton": "Export MCP extension",
+    "step2": "In Claude Desktop, open Settings > Extensions > Advanced > \"Install Extension\".",
+    "step3": "Select the saved mojioko.mcpb.",
+    "step4": "Click the \"Install\" button.",
+    "step5": "Then just ask Claude, e.g. \"add subtitles to this video\".",
+    "exportToast": "MCP extension (.mcpb) exported",
+    "devExportToast": "Exported (dev build — works only in this PC's dev environment)",
+    "devNote": "This bundle was exported from a development build; it only works in this PC's dev environment.",
+    "commandMissing": "Warning: the executable was not found; the bundle may not launch.",
+    "proxyMissing": "Warning: the MCP proxy file was not found in this build; the bundle will not launch. Reinstall the app and export again.",
+    "copyToast": "Copied to clipboard",
+    "actionError": "Action failed",
+    "advancedTitle": "Advanced (manual setup)",
+    "configDesc": "JSON to paste into Claude Desktop's config file (claude_desktop_config.json).",
+    "copyConfigButton": "Copy config JSON",
+    "codeDesc": "For Claude Code, run this command in your terminal to register.",
+    "copyCodeButton": "Copy register command",
+    "clientsNote": "Supported clients: Claude Desktop and Claude Code (not claude.ai / Cowork).",
+    "cliRef": "For CLI details, run `mojioko -h`.",
+    "bundleStatusTitle": "Exported bundle",
+    "lastExport": "Last export: v{{version}} (launch spec rev {{rev}}) — {{date}}",
+    "neverExported": "No bundle has been exported yet.",
+    "reexportNeeded": "The launch method changed (now rev {{rev}}). Re-export the bundle and re-install it in Claude Desktop.",
+    "reinstallNote": "Re-install needed only when the launch method (command / args / env) or the app's install location changes. Tool additions, changes and fixes apply with an app update alone.",
+    "consent": {
+      "title": "With AI integration, some information leaves this PC",
+      "lead": "MOJIOKO's own processing still happens entirely on this PC. What changes — only when an AI assistant drives it — is that the information below reaches your AI provider. Please read this before enabling it.",
+      "staysLocalLabel": "Stays on this PC",
+      "staysLocal": "Your video and audio files themselves. Transcription, translation and burn-in still run only on this PC, as before.",
+      "leavesLabel": "Sent to your AI provider",
+      "leaves": "Whatever the assistant reads and writes through the tools: the full subtitle text, file paths, information about the video (duration, resolution and so on), and the tools' replies.",
+      "provider": "These go to the provider of the assistant you use (Anthropic, if you use Claude). What happens to them there is governed by that provider's terms and privacy policy.",
+      "alreadyExported": "The same applies to any connection file (.mcpb) or configuration you have already exported. Your current setup keeps working.",
+      "acceptGate": "I understand — continue",
+      "acceptNotice": "I understand"
+    }
+  },
+  "translation": {
+    "hint": "Auto-translate cues in the inspector (preview only — never written to the subtitles). Get the translation tool from STEP 1 → Translation tool.",
+    "needTool": "No translation tool downloaded. Download one from STEP 1 → Translation tool to enable these settings.",
+    "autoTranslate": "Auto-translate",
+    "targetLang": "Target language",
+    "lang_en": "English",
+    "lang_ja": "Japanese",
+    "lang_es": "Spanish",
+    "lang_fr": "French",
+    "lang_de": "German",
+    "lang_pt": "Portuguese"
   },
   "general": {
     "language": "Language",
@@ -30,7 +85,20 @@
     "defaultProjectDir": "Project folder",
     "folderPathUsingSystemVideos": "System Videos folder",
     "folderPathBrowse": "Browse…",
-    "folderPathClear": "Clear"
+    "folderPathClear": "Clear",
+    "folders": {
+      "videoInput": "Video input folder",
+      "videoOutput": "Video output folder",
+      "project": "Project folder",
+      "image": "Image save folder",
+      "text": "Text save folder",
+      "srtInput": "SRT input folder"
+    },
+    "folderPlaceholder": {
+      "documents": "System Documents folder",
+      "pictures": "System Pictures folder",
+      "videos": "System Videos folder"
+    }
   },
   "fonts": {
     "hint": "Click a font to set it as the default. Adding and downloading fonts is a paid-version feature."
@@ -59,5 +127,12 @@
     "editionNsis": "GitHub (Free)",
     "available": "Available",
     "notAvailable": "Not available"
+  },
+  "quarantine": {
+    "title": "Your settings file was set aside",
+    "bodyForeign": "settings.json was not in this app's format. It has been moved aside rather than overwritten, and MOJIOKO started from its defaults.",
+    "bodyUnreadable": "settings.json could not be read. It has been moved aside rather than overwritten, and MOJIOKO started from its defaults.",
+    "savedTo": "Moved to",
+    "hint": "If this is unexpected, an older version of MOJIOKO may be using the same settings folder. It rewrites the file each time it runs, so this message can appear on every launch. The file that was set aside has not been deleted."
   }
 }

@@ -325,7 +325,7 @@ export function ColorPicker({
           the label here loses the paired X to avoid duplicate close
           affordances but is otherwise unchanged. */}
       <div className="flex items-start justify-between">
-        <p className="text-label font-medium uppercase tracking-wider text-fg-muted">
+        <p className="text-caption font-medium uppercase tracking-wider text-fg-muted">
           {t('colorPicker.basic')}
         </p>
         {!heading && (
@@ -363,7 +363,7 @@ export function ColorPicker({
       {onPairApply && (
         <div>
           <div className="mb-1.5 flex items-baseline gap-2">
-            <p className="text-label font-medium uppercase tracking-wider text-fg-muted">
+            <p className="text-caption font-medium uppercase tracking-wider text-fg-muted">
               {t('colorPicker.pairs')}
             </p>
             <span className="text-caption text-fg-disabled">{t('colorPicker.pairsHint')}</span>
@@ -384,7 +384,7 @@ export function ColorPicker({
       {/* Group 3: CUD palette (10) */}
       <div>
         <div className="mb-1.5 flex items-baseline gap-2">
-          <p className="text-label font-medium uppercase tracking-wider text-fg-muted">
+          <p className="text-caption font-medium uppercase tracking-wider text-fg-muted">
             {t('colorPicker.cud')}
           </p>
           <span className="text-caption text-fg-disabled">{t('colorPicker.cudHint')}</span>
@@ -404,7 +404,7 @@ export function ColorPicker({
       {/* Recent colors (capped to 5 by useUiStore.addRecentColor) */}
       {recentColors.length > 0 && (
         <div>
-          <p className="mb-1.5 text-label font-medium uppercase tracking-wider text-fg-muted">
+          <p className="mb-1.5 text-caption font-medium uppercase tracking-wider text-fg-muted">
             {t('colorPicker.recent')}
           </p>
           <div className="flex gap-1.5">
@@ -624,16 +624,18 @@ function PairSwatch({ pair, tooltip, onClick }: PairSwatchProps) {
         'transition-transform duration-100 hover:scale-105 focus:outline-none',
         'hover:ring-fg-muted'
       )}
-      style={{ backgroundColor: '#404040' }}
+      // REQ-0413 — neutral backdrop centralised as globals.css --swatch-preview-bg
+      // (theme-independent: stays dark to preview subtitle colours against).
+      style={{ backgroundColor: 'var(--swatch-preview-bg)' }}
     >
       {/* Subtitle-style preview text — text colour with outline-colour
           stroke, exactly how the burn-in renders.  paint-order: stroke
           fill mirrors SubtitleOverlay so the visible stroke is the
           OUTSIDE half.  REQ-0304 — dropped from `text-body` (15px) to
-          `text-callout` (13px) so "Aa" keeps clear margins in the
+          `text-body-sm` (13px) so "Aa" keeps clear margins in the
           narrower 8-column tile (~29px wide vs the old 5-column ~50px). */}
       <span
-        className="text-callout font-bold leading-none"
+        className="text-body-sm font-bold leading-none"
         style={{
           color: pair.text,
           WebkitTextStrokeWidth: '1.5px',

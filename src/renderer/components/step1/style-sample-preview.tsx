@@ -243,14 +243,14 @@ export function StyleSamplePreview({
   }, [sampleText, autoLineBreak, font, videoWidthPx, videoHeightPx, defaults])
 
   return (
-    // self-start: keep the card at its natural height instead of stretching
-    // to match the tall form column on the left of the dialog grid (default
-    // align-self for grid items is `stretch`).  Without this the card grows
-    // to ~500-600 px and the preview frame floats inside a sea of whitespace
-    // that visually reads as "縦長".
-    <div className="rounded-xl border border-border bg-card p-4 space-y-2 self-start">
+    // REQ-0441 — `self-start` removed.  It existed for an old dialog GRID layout
+    // (align-self:stretch would have made the card grow to the tall form column's
+    // height).  This component is now used only inside the drawer's tab2, which is
+    // a block-flow scroll box (REQ-0442), so align-self is inert either way and
+    // the vestigial class is dropped.  The card sizes to its content height.
+    <div className="rounded-xl border border-line bg-surface-1 p-4 space-y-2">
       <div className="flex items-center gap-1.5">
-        <Type className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        <Type className="h-4 w-4 text-fg-secondary flex-shrink-0" />
         <Label>
           {t('subtitleDefaults.previewLabel', 'プレビュー')}
         </Label>
@@ -259,7 +259,11 @@ export function StyleSamplePreview({
       <div className="flex justify-center w-full">
         <div
           ref={containerRef}
-          className="rounded-md bg-input border border-border relative overflow-hidden"
+          // REQ-0398 §1 — same overlay stacking-context isolation as the main
+          // video preview: `isolate` keeps the sample cue's z-index (mirrors its
+          // z-order layer) contained so it can never rise above the surrounding
+          // dialog chrome.
+          className="rounded-md bg-input border border-line relative overflow-hidden isolate"
           style={{
             aspectRatio,
             maxHeight: `${FRAME_MAX_HEIGHT_PX}px`,
@@ -282,7 +286,7 @@ export function StyleSamplePreview({
             // style is still legible against a plausible burn-in
             // background.  --background gives a near-black that mirrors
             // the typical "dark video" case the burn-in is designed for.
-            <div className="absolute inset-0 bg-background" />
+            <div className="absolute inset-0 bg-surface-0" />
           )}
           {containerWidth > 0 && (
             <SubtitleOverlay
@@ -294,7 +298,7 @@ export function StyleSamplePreview({
         </div>
       </div>
 
-      <p className="text-body-sm text-muted-foreground">
+      <p className="text-body-sm text-fg-secondary">
         {t(
           'subtitleDefaults.previewNote',
           '※ 近似表示です。書き出し後の動画で最終確認してください。'

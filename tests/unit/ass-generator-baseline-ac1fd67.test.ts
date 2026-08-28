@@ -6,24 +6,26 @@ import { generateAssLegacyFont as generateAss } from '../helpers/legacy-ass-font
 import type { SubtitleEntry, VideoInfo, BurninPosition } from '../../src/shared/types'
 
 /**
- * REQ-0278 — after glow removal, the ass-generator output MUST match
- * commit ac1fd67 (pre-Phase-A) byte-for-byte for every entry that
- * does not use casing / shadow / rotation.  Cases that DO use those
- * three effects are covered by ass-generator-style-effects.test.ts;
- * this file's job is the byte-identity pin for the "no new fields"
- * path so a future accidental re-introduction of a spurious tag
- * (e.g. a `\shad0` neutraliser, an ordering shuffle, or a whitespace
- * drift) fails CI loudly.
+ * REQ-0278 — this file pins the ass-generator output byte-for-byte for the
+ * "no new fields" path (no casing / shadow / rotation — those are in
+ * ass-generator-style-effects.test.ts), so a future accidental spurious tag
+ * (a `\shad0` neutraliser, an ordering shuffle, a whitespace drift) fails CI.
  *
- * Baselines below were extracted by:
- *   git worktree add /tmp/mojioko-ac1fd67 ac1fd67
- *   cd /tmp/mojioko-ac1fd67
- *   npx tsx extract-ass-baseline.mts   # runs the same fixtures as here
- * and pasted verbatim.  Any mismatch on the current tree means either
- * (a) ass-generator emitted extra tags that pre-Phase-A did not, or
- * (b) glow / other REQ-0277 leftover code is still writing into the
- * shared style-tag stack.  Either way — the byte-identity guarantee
- * of REQ-0278 §3 is broken and the diff has to be investigated.
+ * ★ REQ-0391 (positioning-redesign Phase 1b) — the baselines were REGENERATED
+ * as a deliberate correctness change (decision A).  The runtime is now
+ * all-`\pos`: MOJIOKO is the single positioning authority, so every unpinned
+ * cue carries a `\pos(...)` and its Dialogue MarginV column is `0` (was the
+ * MarginV distance).  A bottom-centre cue at verticalMarginPx 40 on 1920×1080
+ * now anchors at `\pos(960,1040)`.  The `\pos` placement's correctness is not
+ * asserted here — it is guarded in real MP4 pixels by `verify:pos-parity`,
+ * which burns the historical MarginV render and this `\pos` render and proves
+ * they match (Δ0 for a single cue).  This file's remaining job is unchanged:
+ * catch an UNINTENDED tag/ordering/whitespace drift on top of that shape.
+ * The PINNED baseline is untouched (pinned cues already emitted `\pos`).
+ *
+ * To re-baseline after a future intentional generator change, dump
+ * `generateAss(...)` for these fixtures and paste verbatim, then bump the REQ
+ * note above.  Do NOT hand-tweak the strings.
  */
 
 const video: VideoInfo = {
@@ -84,7 +86,7 @@ const BASELINE_PLAIN =
   '\n' +
   '[Events]\n' +
   'Format: Layer, Start, End, Style, MarginL, MarginR, MarginV, Effect, Text\n' +
-  'Dialogue: 0,0:00:00.00,0:00:02.00,Default,0,0,40,,{\\an2\\fs100\\c&H00FFFFFF&\\3c&H00000000&\\bord3}Hello World\n'
+  'Dialogue: 0,0:00:00.00,0:00:02.00,Default,0,0,0,,{\\an2\\pos(960,1040)\\fs100\\c&H00FFFFFF&\\3c&H00000000&\\bord3}Hello World\n'
 
 const BASELINE_CJK =
   BASELINE_PLAIN.replace('}Hello World\n', '}日本語テスト\n')
@@ -104,7 +106,7 @@ const BASELINE_BG_ENABLED =
   '\n' +
   '[Events]\n' +
   'Format: Layer, Start, End, Style, MarginL, MarginR, MarginV, Effect, Text\n' +
-  'Dialogue: 0,0:00:00.00,0:00:02.00,WithBox,0,0,40,,{\\an2\\fs100\\c&H00FFFFFF&\\3c&H00000000&\\bord3\\3c&H000000&\\3a&H4D&\\shad0}Hello World\n'
+  'Dialogue: 0,0:00:00.00,0:00:02.00,WithBox,0,0,0,,{\\an2\\pos(960,1040)\\fs100\\c&H00FFFFFF&\\3c&H00000000&\\bord3\\3c&H000000&\\3a&H4D&\\shad0}Hello World\n'
 
 const BASELINE_FADE =
   '[Script Info]\n' +
@@ -121,7 +123,7 @@ const BASELINE_FADE =
   '\n' +
   '[Events]\n' +
   'Format: Layer, Start, End, Style, MarginL, MarginR, MarginV, Effect, Text\n' +
-  'Dialogue: 0,0:00:00.00,0:00:02.00,Default,0,0,40,,{\\an2\\fs100\\c&H00FFFFFF&\\3c&H00000000&\\bord3\\fad(300,300)}Hello World\n'
+  'Dialogue: 0,0:00:00.00,0:00:02.00,Default,0,0,0,,{\\an2\\pos(960,1040)\\fs100\\c&H00FFFFFF&\\3c&H00000000&\\bord3\\fad(300,300)}Hello World\n'
 
 const BASELINE_PINNED =
   '[Script Info]\n' +

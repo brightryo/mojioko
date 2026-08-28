@@ -2,6 +2,7 @@
   "app": {
     "name": "MOJIOKO"
   },
+  "optional": "Optional",
   "nav": {
     "back": "Back",
     "continue": "Continue",
@@ -50,7 +51,9 @@
     "close": "Close"
   },
   "error": {
-    "unknown": "An unknown error occurred"
+    "unknown": "An unknown error occurred",
+    "settingsSaveFailed": "Settings could not be saved ({{reason}}). Check the free disk space, and whether another program is holding the file.",
+    "diskFull": "Not enough free disk space ({{drive}}: {{free}} GB free, at least {{required}} GB needed). Choose an output folder on another drive, or free some space."
   },
   "shortcuts": {
     "scopeGlobal": "Global",
@@ -90,6 +93,10 @@
     "cancel": "Cancel",
     "headingText": "Text colour",
     "headingOutline": "Outline colour"
+  },
+  "fontLang": {
+    "japaneseAria": "Japanese font",
+    "latinAria": "Latin font"
   },
   "fontLicenses": {
     "title": "Font licenses",
@@ -147,5 +154,30 @@
       "discardConfirmOk": "OK",
       "toastSuccess": "Project opened"
     }
+  },
+  "fontSubstitution": {
+    "tier": {
+      "title": "Paid-edition font replaced",
+      "action": "About the paid edition"
+    },
+    "missing": {
+      "title": "Font file not found",
+      "action": "Open font settings"
+    },
+    "detail": "{{pairs}} ({{count}} subtitle(s))"
+  },
+  "renderNotice": {
+    "linePitch": {
+      "title": "Line spacing does not scale in the output",
+      "detail": "On {{count}} multi-line cue(s) with a scaling animation, the glyphs scale but the gap between the lines does not. The preview shows it differently."
+    }
+  },
+  "quitConfirm": {
+    "title": "You have unsaved changes",
+    "desc": "If you quit without saving, these edits will be lost.",
+    "cancel": "Cancel",
+    "discard": "Quit without saving",
+    "saveAndQuit": "Save and quit",
+    "saving": "Saving…"
   }
 }

@@ -1,10 +1,11 @@
 {
   "title": "Transcribe",
-  "guidance": "Select a Whisper model, choose an input file, and start transcription.",
+  "guidance": "Select the model to use for transcription.",
   "inputVideo": {
     "label": "Input file",
     "hint": "Video: .mp4 .mkv  /  Audio: .mp3 .wav .m4a .aac .flac .ogg",
     "placeholder": "Select a file…",
+    "dropHint": "Drag & drop an input file here",
     "chooseVideo": "Choose file",
     "help": "Video or audio file to transcribe. Video supports burn-in output; audio supports text/SRT export only.",
     "infoLabel": "File info",
@@ -56,9 +57,9 @@
     "dialogDescription": "These seed values are burned into every subtitle at transcription time. Tweak them here and verify with the live preview."
   },
   "whisperModel": {
-    "label": "Whisper model",
+    "label": "Transcription tool",
     "tooltip": "The engine that converts audio to text. Larger models are more accurate but slower.",
-    "descriptionLong": "Whisper is an engine that converts audio into text. It's an open-source library developed by OpenAI and is free to use. All processing happens entirely on your PC; no data is sent externally. Download the model you want to use, then click \"Use this\" to select it.",
+    "descriptionLong": "The transcription tool converts audio into text. It uses the Whisper model developed by OpenAI. Transcription happens entirely on your PC; no audio is sent externally. Download the model you want to use, then click \"Use this\" to select it.",
     "descLargeV3Turbo": "Fast and lightweight. Roughly half the download size of large-v3.",
     "descLargeV3": "Higher quality, recommended. Needs more resources to run.",
     "recommended": "Recommended",
@@ -99,10 +100,36 @@
     "activate_success": "Switched to {{modelName}}",
     "install_success": "{{modelName}} downloaded successfully"
   },
+  "translationTool": {
+    "label": "Translation Tool",
+    "optionalTag": "Optional",
+    "tooltip": "A local translation engine (MADLAD-400) for translating subtitles into many languages. Download and enable it when you need it.",
+    "descriptionLong": "The translation tool is a translation AI developed by Google. It covers many languages including Japanese↔English, and every translation runs entirely on your PC (no data is sent externally). Download and enable a model, then translate subtitles in one click or in bulk. Using a GPU makes it even faster.",
+    "recommended": "Recommended",
+    "size3b": "MADLAD-400 3B",
+    "size7b": "MADLAD-400 7B",
+    "desc3b": "Lightweight and fast. Runs on typical machines.",
+    "desc7b": "Higher quality, more natural translations. Larger and heavier.",
+    "approx": "~{{size}}",
+    "download": "Download",
+    "downloading": "Downloading…",
+    "eta": "{{time}} left",
+    "downloaded": "Downloaded",
+    "downloadFailed": "Download failed",
+    "cancel": "Cancel",
+    "useThis": "Use this",
+    "inUse": "In use",
+    "installedBadge": "Downloaded",
+    "enable": "Enable",
+    "enabled": "Enabled",
+    "enabledBadge": "Enabled",
+    "delete": "Delete",
+    "actionFailed": "Action failed"
+  },
   "gpuTool": {
     "label": "Processing Device",
     "tooltip": "Choose CPU or a compatible NVIDIA GPU for transcription. GPU requires downloading CUDA/cuDNN runtimes (~1 GB) once; runs offline thereafter.",
-    "descriptionLong": "Choose whether to run transcription on CPU or GPU. Using the GPU requires downloading the CUDA / cuDNN runtimes first. After the download, select the device you want to use.",
+    "descriptionLong": "Choose whether to run transcription on CPU or GPU. Using the GPU requires downloading the CUDA / cuDNN runtimes first. After the download, select the device you want to use. A GPU speeds up not only transcription but translation too.",
     "cpu": {
       "name": "CPU",
       "description": "No download required. Works on every machine.",
@@ -110,7 +137,7 @@
       "selectableBadge": "Available"
     },
     "gpu": {
-      "name": "GPU (CUDA / cuDNN)",
+      "name": "GPU",
       "description": "Transcribes with an NVIDIA GPU. Downloads CUDA / cuDNN runtimes (~{{size}}) once.",
       "activeBadge": "In use",
       "readyBadge": "Ready"
@@ -147,24 +174,27 @@
   "footer": {
     "modelStatus": "Whisper: {{model}} · active",
     "modelNotDownloaded": "Whisper: no model selected",
-    "privacyNote": "All processing runs locally on this PC"
+    "privacyNote": "Transcription and burn-in run on this PC"
   },
   "action": {
-    "startTranscription": "Start transcription",
+    "startTranscription": "Start transcribing",
     "transcribingWaiting": "Transcribing…",
     "transcribing": "Transcribing… {{percent}}%"
   },
   "guard": {
     "noInput": "Select an input file to transcribe.",
-    "noModel": "Download or select a Whisper model.",
+    "noModel": "Download or select a transcription model.",
     "noAudio": "The selected video has no audio track.",
     "pending": "Pending"
   },
   "drawer": {
     "title": "Transcription",
-    "subtitle": "Review Whisper settings and the audio track, then run.",
+    "subtitle": "Choose the audio track to transcribe.",
     "advancedSection": "Whisper settings",
     "trackSection": "Audio track",
+    "tabInput": "Input file",
+    "tabStyle": "Subtitle style",
+    "tabWhisper": "Whisper settings",
     "startRun": "Start",
     "cancelRun": "Cancel",
     "close": "Close",
@@ -179,7 +209,7 @@
     "wordSubtitle": {
       "label": "Word-level transcription (experimental)",
       "description": "Generates subtitles in short 1–3 word chunks. An experimental feature for English audio. Results with Japanese audio may split words unnaturally.",
-      "lockedPaidOnly": "The 12 additional fonts come with the paid edition (one-time purchase)"
+      "lockedPaidOnly": "Paid-version only"
     }
   },
   "dialog": {
@@ -191,6 +221,7 @@
   "toast": {
     "videoLoaded": "File loaded",
     "probeError": "Failed to read file: {{error}}",
+    "unsupportedFile": "Unsupported file type",
     "transcriptionComplete": "Transcription complete · {{count}} lines",
     "modelDownloadFailed": "Download failed: {{error}}",
     "modelDownloadFailedNetwork": "The download stopped because the network connection was lost. Check your connection and try again.",
@@ -242,6 +273,7 @@
   "fontPicker": {
     "title": "Select default subtitle font",
     "section1Description": "Select the default subtitle font.",
+    "downloadInSettingsNote": "Browse and download additional fonts in Settings ▸ Fonts.",
     "listSectionTitle": "Font list",
     "listSectionDescription": "All nine Noto Sans JP weights ship with every edition, free included. The 12 additional fonts below come with the paid edition (one-time purchase).",
     "description": "Click a font to set it as the default. Adding and downloading fonts is a paid-version feature.",

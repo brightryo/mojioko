@@ -1128,6 +1128,30 @@ export function resolveRenderableFontId(
       .filter((f) => f.cssFontFamily === meta.cssFontFamily && isInstalled(f.id) && isSelectable(f.id))
       .sort((a, b) => Math.abs(a.weight - meta.weight) - Math.abs(b.weight - meta.weight))
     if (familyCandidates.length > 0) return familyCandidates[0].id
+
+    /**
+     * REQ-0508 §1-2 — step 2.5, for TIER-LOCKED requests only: keep the
+     * requested WEIGHT when dropping into the bundled family.  Anton (400)
+     * becomes Noto Regular rather than Noto SemiBold; Poppins Bold (700)
+     * becomes Noto Bold.
+     *
+     * Why only the tier branch: a font that is merely NOT INSTALLED is a
+     * temporary state the user can resolve by downloading it, and
+     * `DEFAULT_FONT_ID` is the right neutral placeholder for something that is
+     * about to be replaced by the real thing.  A TIER-LOCKED font will never
+     * resolve in this build, so its substitute is what the user permanently
+     * sees, and matching the weight preserves as much of the authored intent as
+     * a substitute can.  Keeping the two cases distinct also leaves the
+     * install-side ladder (REQ-0269 D-1, pinned in `font-families.test.ts`)
+     * exactly as it was.
+     */
+    if (!isSelectable(fontId)) {
+      const bundledFamily = FONT_REGISTRY.find((f) => f.id === DEFAULT_FONT_ID)?.cssFontFamily
+      const weightMatched = FONT_REGISTRY
+        .filter((f) => f.cssFontFamily === bundledFamily && isInstalled(f.id) && isSelectable(f.id))
+        .sort((a, b) => Math.abs(a.weight - meta.weight) - Math.abs(b.weight - meta.weight))
+      if (weightMatched.length > 0) return weightMatched[0].id
+    }
   }
   return DEFAULT_FONT_ID
 }

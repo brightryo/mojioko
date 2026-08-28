@@ -55,16 +55,18 @@ export function Breadcrumb({ title, description }: BreadcrumbProps) {
         centering wrapper is enough to make the pinning obvious.
       */}
       <div className="w-full flex items-baseline gap-3 px-4">
-        <h1 className="text-body-sm font-semibold text-fg-primary select-none">{title}</h1>
+        {/* REQ-0419 — role rule: screen name / page title = `display` (step
+            大見出し). Was text-body-sm (looked hardcoded — only followed the
+            body-sm token), briefly text-title; now `display`. */}
+        <h1 className="text-display font-semibold text-fg-primary select-none">{title}</h1>
         {description ? (
           <p
-            // REQ-0186 §2 — bumped one step from `text-caption` (12 px)
-            // to `text-body-sm` (13 px) so the top-strip description
-            // sits closer to the H1 in weight while still reading as
-            // supporting copy.  Applied to both routes' descriptions
-            // uniformly (step1 uses `t('guidance')`, step2 uses
-            // `t('subtitle')` — both flow through this component).
-            className="text-body-sm text-fg-tertiary select-none truncate min-w-0 flex-1"
+            // REQ-0186 §2 — top-strip description at text-body-sm.
+            // REQ-0419 §2 — colour lifted from text-fg-tertiary to
+            // text-fg-primary (normal text colour) so the guidance reads as
+            // primary copy, not dimmed.  Both routes flow through here
+            // (step1 = t('guidance'), step2 = t('subtitle')).
+            className="text-body-sm text-fg-primary select-none truncate min-w-0 flex-1"
           >
             {description}
           </p>

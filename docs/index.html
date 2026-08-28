@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MOJIOKO - 文字起こし字幕動画作成ツール（無料版・有料版）</title>
-  <meta name="description" content="MOJIOKO は、編集を終えた動画の音声を AI で文字起こしし、字幕を付けて書き出すデスクトップアプリです。動画を外部にアップロードせず、すべての処理をあなたの PC で行います。GitHub の無料版と、Microsoft Store の有料版（買い切り）から選べます。">
+  <!-- REQ-0569 §1-1: "すべての処理をあなたの PC で行います" was replaced. Since
+       v1.4.0's AI integration sends subtitle text and file paths to the user's
+       AI provider, "all processing" needs a qualifier that a meta description
+       has no room for — so it now names the two processes that are local
+       unconditionally, in the pillar card's own audited wording. -->
+  <meta name="description" content="MOJIOKO は、編集を終えた動画の音声を AI で文字起こしし、字幕を付けて書き出すデスクトップアプリです。動画を外部にアップロードせず、文字起こしも字幕の焼き込みもあなたの PC の中で処理します。GitHub の無料版と、Microsoft Store の有料版（買い切り）から選べます。">
   <link rel="icon" type="image/png" href="images/icon.png">
   <!-- REQ-0370 §3-1: Poppins for the MOJIOKO wordmark (nav brand + hero H1).
        preconnect + font-display: swap so the wordmark paints in the fallback
@@ -68,7 +73,12 @@
             <li>基本機能がすべて利用できます。文字起こし・編集・字幕テキスト出力・字幕動画出力を無料で利用できます。</li>
             <li>字幕フォントは Noto Sans JP の1種類です。ウェイト（太さ）は Thin から Black まで9段階から選べます。</li>
           </ul>
-          <a href="https://github.com/brightryo/mojioko/releases/download/v1.3.6/MOJIOKO.Setup.1.3.6.exe" class="version-card-btn">
+          <!-- REQ-0569 §1-2: sits BEFORE the button on purpose — the button
+               carries `margin-top: auto` to bottom-align across both cards,
+               so a note placed after it would knock the two buttons out of
+               line with each other. -->
+          <p class="version-card-note">インストーラ約 243MB</p>
+          <a href="https://github.com/brightryo/mojioko/releases/download/v1.4.0/MOJIOKO.Setup.1.4.0.exe" class="version-card-btn">
             ダウンロード
           </a>
         </div>
@@ -193,7 +203,8 @@
         <div class="pillar-card">
           <h3>動画を外部にアップロードしません</h3>
           <p>文字起こしも字幕の焼き込みも、すべてあなたの PC の中で処理します。</p>
-          <span class="pillar-note">※ AI モデルや追加フォントのダウンロードのみ、インターネットに接続します。</span>
+          <span class="pillar-note">※ AI モデルや追加フォントのダウンロードのみ、インターネットに接続します。
+            v1.4.0 の「AI 連携」を有効にした場合は、字幕テキストなどが AI 提供者に送信されます（動画そのものは送信されません）。<a href="privacy/#ai-mcp">詳細</a></span>
         </div>
         <div class="pillar-card">
           <h3>サブスクではありません</h3>
@@ -220,13 +231,57 @@
              RES-0364 for the full check of this claim).
            * the burn-in copy no longer implies MOJIOKO finishes the edit
          ============================================================ -->
+    <!-- ============================================================
+         v1.4.0 の新機能 (REQ-0564 §3-3)
+         ★ ACCURACY: the AI-integration card must keep its qualifier.
+         Enabling MCP sends subtitle text / file paths / video metadata to
+         the assistant's provider — the video itself still never leaves.
+         Saying only "AI から操作できます" would repeat the mistake the app
+         itself shipped with (REQ-0559): a locality claim next to a feature
+         that narrows it. Do not delete the note or the privacy link.
+         ============================================================ -->
+    <section class="features whats-new">
+      <h2>v1.4.0 の新機能</h2>
+
+      <div class="feature-item">
+        <div>
+          <img src="images/v140/s2-step2-emphasis.png" alt="キーワード強調と cue ごとのスタイル設定" class="feature-image" loading="lazy">
+        </div>
+        <div class="feature-content">
+          <h3>キーワード強調と、字幕1行ごとのスタイル</h3>
+          <p>伝えたい言葉だけを色と大きさで目立たせられます。フォント・サイズ・色・アウトライン・影・回転・行間・背景ボックスは、字幕1行ごとに変えられます。</p>
+        </div>
+      </div>
+
+      <div class="feature-item">
+        <div>
+          <img src="images/v140/s7-ai.png" alt="設定の AI 連携（MCP）タブ" class="feature-image" loading="lazy">
+        </div>
+        <div class="feature-content">
+          <h3>AI 連携（MCP）</h3>
+          <p>Claude などの AI アシスタントに「この動画に字幕を付けて」と頼むだけで、文字起こしから焼き込みまで実行できます。字幕の編集も AI に任せられます。</p>
+          <p class="feature-note">※ この機能を有効にすると、AI が読み書きする情報（字幕テキスト・ファイルのパス・動画の情報）が、お使いの AI アシスタントの提供者に送信されます。<strong>動画・音声ファイルそのものはこの PC から出ません。</strong>使うたびに確認ダイアログが表示されます。<a href="privacy/#ai-mcp">詳しく</a></p>
+        </div>
+      </div>
+
+      <div class="feature-item">
+        <div>
+          <img src="images/v140/s8-position.png" alt="字幕を画面上部に配置した編集画面" class="feature-image" loading="lazy">
+        </div>
+        <div class="feature-content">
+          <h3>見たままの位置決めと、安心して閉じられる編集</h3>
+          <p>プレビューでドラッグした位置が、そのまま書き出し結果になります。未保存のまま閉じようとすると確認し、設定ファイルの保存も途中で壊れない方式に変えました。</p>
+        </div>
+      </div>
+    </section>
+
     <section class="features">
       <h2>主な機能</h2>
 
       <!-- 機能1: 高精度な自動文字起こし -->
       <div class="feature-item">
         <div>
-          <img src="images/j1.png" alt="高精度な自動文字起こしの画面" class="feature-image" loading="lazy">
+          <img src="images/v140/s1-step1.png" alt="高精度な自動文字起こしの画面" class="feature-image" loading="lazy">
         </div>
         <div class="feature-content">
           <h3>高精度な自動文字起こし</h3>
@@ -239,8 +294,8 @@
       <!-- 機能1.5: GPU アクセラレーション（REQ-0227 で追加） -->
       <div class="feature-item reverse">
         <div>
-          <img src="images/j-gpu.png" alt="GPU アクセラレーションの設定画面" class="feature-image" loading="lazy"
-               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>GPU アクセラレーションの画面<br>(images/j-gpu.png)</div>';">
+          <img src="images/v140/s10-gpu.png" alt="GPU アクセラレーションの設定画面" class="feature-image" loading="lazy"
+               onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>GPU アクセラレーションの画面<br>(images/v140/s10-gpu.png)</div>';">
         </div>
         <div class="feature-content">
           <h3>GPU アクセラレーション</h3>
@@ -258,23 +313,23 @@
         </div>
         <div class="feature-grid">
           <div class="feature-grid-cell">
-            <img src="images/j2.png" alt="テキストと見た目を編集する画面" class="feature-image" loading="lazy">
+            <img src="images/v140/s9-inspector.png" alt="テキストと見た目を編集する画面" class="feature-image" loading="lazy">
             <h4>テキストも見た目も自由に編集</h4>
             <p>書き起こしたテキストの修正はもちろん、フォントの変更、文字の大きさ・色、アウトラインの色・太さまで、字幕の見た目を細かく調整できます。</p>
           </div>
           <div class="feature-grid-cell">
-            <img src="images/j3.png" alt="タイムラインで表示タイミングを調整する画面" class="feature-image" loading="lazy">
+            <img src="images/v140/s3-timeline.png" alt="タイムラインで表示タイミングを調整する画面" class="feature-image" loading="lazy">
             <h4>タイムラインで表示タイミングを調整</h4>
             <p>字幕が表示される長さを、タイムライン上でドラッグするだけで直感的に変更できます。</p>
           </div>
           <div class="feature-grid-cell">
-            <img src="images/j4.png" alt="字幕を一覧表示して編集する画面" class="feature-image" loading="lazy">
+            <img src="images/v140/s4-list.png" alt="字幕を一覧表示して編集する画面" class="feature-image" loading="lazy">
             <h4>一覧表示でまとめて確認・編集</h4>
             <p>書き起こした字幕を一覧で見渡して、まとめて確認・一括編集ができます。字幕が数千件あっても軽快に動きます。</p>
           </div>
           <div class="feature-grid-cell">
-            <img src="images/j-preset.png" alt="字幕スタイルのプリセットを保存・適用する画面" class="feature-image" loading="lazy"
-                 onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>スタイルプリセットの画面<br>(images/j-preset.png)</div>';">
+            <img src="images/v140/s11-preset.png" alt="字幕スタイルのプリセットを保存・適用する画面" class="feature-image" loading="lazy"
+                 onerror="this.outerHTML='<div class=&quot;screenshot-placeholder&quot;>スタイルプリセットの画面<br>(images/v140/s11-preset.png)</div>';">
             <h4>スタイルプリセットで使い回す</h4>
             <p>作り込んだ見た目を保存して、他の字幕にワンクリックで適用できます。</p>
           </div>
@@ -285,7 +340,7 @@
       <!-- 機能3: テキスト・SRT で書き出し -->
       <div class="feature-item reverse">
         <div>
-          <img src="images/j6.png" alt="テキスト・SRT で書き出す画面" class="feature-image" loading="lazy">
+          <img src="images/v140/s12-export.png" alt="テキスト・SRT で書き出す画面" class="feature-image" loading="lazy">
         </div>
         <div class="feature-content">
           <h3>テキスト・SRT で書き出し</h3>
@@ -296,10 +351,29 @@
         </div>
       </div>
 
-      <!-- 機能4: 字幕を焼き込んで動画出力 -->
+      <!-- 機能4: 多言語字幕（翻訳） — REQ-0572 §2-2 -->
       <div class="feature-item">
         <div>
-          <img src="images/j7.png" alt="字幕を焼き込んで動画を書き出す画面" class="feature-image" loading="lazy">
+          <!-- ★ REQ-0566 §2-1: this shot carries ENGLISH subtitles on the
+               Japanese page, which is the one place that is correct — the
+               section is about translating INTO another language, so the
+               caption below says so explicitly rather than leaving a reader
+               to wonder why the language flipped. -->
+          <img src="images/v140/s5-translate.png" alt="日本語の字幕を英語に翻訳した画面" class="feature-image" loading="lazy">
+          <p class="feature-caption">↑ 日本語の字幕を英語に翻訳した状態</p>
+        </div>
+        <div class="feature-content">
+          <h3>多言語字幕（翻訳）</h3>
+          <p>Google が開発した翻訳 AI「MADLAD-400」を追加でダウンロードすると、作った字幕をワンクリックや一括で別の言語に翻訳できます。日本語↔英語をはじめ、多くの言語に対応しています。</p>
+          <p>翻訳はこの PC の中で実行されます。翻訳のために字幕テキストが外部に送信されることはありません。GPU があればさらに高速です。</p>
+          <p class="feature-hint"><span class="feature-hint-label">💡 使い方</span>翻訳ツールは任意のダウンロードです。使わない場合はインストール不要で、アプリの容量も増えません。</p>
+        </div>
+      </div>
+
+      <!-- 機能5: 字幕を焼き込んで動画出力 -->
+      <div class="feature-item">
+        <div>
+          <img src="images/v140/s6-burn.png" alt="字幕を焼き込んで動画を書き出す画面" class="feature-image" loading="lazy">
         </div>
         <div class="feature-content">
           <h3>字幕を焼き込んで動画出力</h3>

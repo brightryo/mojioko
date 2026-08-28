@@ -56,7 +56,8 @@ export function SegmentGroup<T extends string>({
             disabled={disabled}
             onClick={() => onChange(o.value)}
             className={cn(
-              'flex-1 inline-flex items-center justify-center rounded-[3px] px-2 text-caption font-medium transition-colors duration-150',
+              // REQ-0421 (step2) — overlay reassignment: segment buttons (整列 左/中央/右・上/中央/下 + 黒/白 preset) caption → body-sm.
+              'flex-1 inline-flex items-center justify-center rounded-[3px] px-2 text-body-sm font-medium transition-colors duration-150',
               'focus:outline-none focus-visible:outline-none',
               selected
                 ? 'bg-primary text-fg-inverse'

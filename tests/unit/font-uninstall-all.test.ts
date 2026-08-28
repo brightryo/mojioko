@@ -95,7 +95,7 @@ describe('REQ-0281 §4 — uninstallAllFonts service pass-through', () => {
   })
 
   it('surfaces main-side failure to the caller unchanged', async () => {
-    ;(window.electronAPI as { fontUninstallAll: ReturnType<typeof vi.fn> }).fontUninstallAll
+    ;(window.electronAPI as unknown as { fontUninstallAll: ReturnType<typeof vi.fn> }).fontUninstallAll
       = vi.fn().mockResolvedValue({
         ok: false,
         error: { code: 'FONT_UNINSTALL_ALL_ERROR', message: 'rmdir failed' },

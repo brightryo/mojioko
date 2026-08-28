@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { motion, AnimatePresence } from 'framer-motion'
 import {
   Zap,
   Cpu,
@@ -23,6 +22,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { HelpIcon } from '@/components/help-icon'
+import { OptionalBadge } from '@/components/ui/optional-badge'
+import { AccordionCollapse } from '@/components/ui/accordion-collapse'
 import { cn } from '@/lib/utils'
 import { formatBytes } from '@/lib/format'
 import {
@@ -232,9 +233,13 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
         )}
       >
         <Zap className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-        <span className="text-headline font-semibold text-fg-secondary uppercase tracking-wider">
+        {/* REQ-0425 — dropped `uppercase` (see whisper-model-manager) for
+            consistent, as-authored section headers across STEP1. */}
+        <span className="text-body font-semibold text-fg-secondary tracking-wider">
           {t('gpuTool.label')}
         </span>
+        {/* REQ-0406 §1 — same [オプション] badge as the translation-tool section. */}
+        <OptionalBadge />
         <span onClick={(e) => e.stopPropagation()}>
           <HelpIcon content={t('gpuTool.tooltip')} />
         </span>
@@ -276,15 +281,8 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
       {/* Accordion body — 2 cards side-by-side.  Grid mirrors the
           Whisper model accordion's `grid grid-cols-2 gap-3` + width
           cap so the pair sits centred in the section. */}
-      <AnimatePresence initial={false}>
-        {isOpen && canOpen && state && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
+      <AccordionCollapse open={isOpen && canOpen && state !== null}>
+        {state && (
             <div className="space-y-3 pt-3">
               {/* REQ-0248 — mirror the Whisper model section's Long
                   description slot (`whisperModel.descriptionLong` at
@@ -318,9 +316,8 @@ export function GpuToolManager({ disabled, isOpen: controlledIsOpen, onOpenChang
                 />
               </div>
             </div>
-          </motion.div>
         )}
-      </AnimatePresence>
+      </AccordionCollapse>
 
       {/* Install-confirm dialog */}
       {dialogKind === 'install' && state && (
@@ -417,16 +414,11 @@ function CpuCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex items-center gap-2">
           <Cpu className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
-          <p className="text-headline font-semibold text-fg-primary leading-tight">
+          <p className="text-body font-semibold text-fg-primary leading-tight">
             {t('gpuTool.cpu.name')}
           </p>
         </div>
-        {isActive && (
-          <span className="flex-shrink-0 flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-primary text-fg-inverse">
-            <Check className="h-2.5 w-2.5" />
-            {t('gpuTool.cpu.activeBadge')}
-          </span>
-        )}
+        {/* REQ-0434 — active 「使用中」 badge removed (the button shows the state). */}
       </div>
 
       <p className="text-body-sm text-fg-muted leading-relaxed flex-1">
@@ -496,26 +488,29 @@ function GpuCard({
         <div className="min-w-0 flex items-center gap-2">
           <Zap className="h-4 w-4 text-fg-tertiary flex-shrink-0" />
           <div className="min-w-0">
-            <p className="text-headline font-semibold text-fg-primary leading-tight">
+            {/* REQ-0434 — tool name shortened to 「GPU」 (the CUDA / cuDNN detail
+                lives in the description) so it never wraps in the half-width
+                card; `truncate` is a safety net. */}
+            <p className="text-body font-semibold text-fg-primary leading-tight truncate">
               {t('gpuTool.gpu.name')}
             </p>
+            {/* REQ-0434 — the graphics-card name wraps (break-words) instead of
+                truncating, so long names like "NVIDIA GeForce RTX 3080 Ti" show
+                in full rather than "NVIDIA GeForce RTX 3…". */}
             <p
-              className={cn('text-body-sm mt-0.5 truncate', isActive ? 'text-primary-hover' : 'text-fg-disabled')}
+              className={cn('text-body-sm mt-0.5 break-words leading-tight', isActive ? 'text-primary-hover' : 'text-fg-disabled')}
               title={gpuName}
             >
               {gpuName}
             </p>
           </div>
         </div>
-        {isInstalled && (
-          <span
-            className={cn(
-              'flex-shrink-0 flex items-center gap-1 text-caption font-medium px-2 py-0.5 rounded-full whitespace-nowrap',
-              isActive ? 'bg-primary text-fg-inverse' : 'bg-row-selected/15 text-info',
-            )}
-          >
+        {/* REQ-0434 — active 「使用中」 badge removed; the downloaded-not-active
+            「使用可能」 badge stays. */}
+        {isInstalled && !isActive && (
+          <span className="flex-shrink-0 flex items-center gap-1 text-body-sm font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-row-selected/15 text-info">
             <Check className="h-2.5 w-2.5" />
-            {isActive ? t('gpuTool.gpu.activeBadge') : t('gpuTool.gpu.readyBadge')}
+            {t('gpuTool.gpu.readyBadge')}
           </span>
         )}
       </div>

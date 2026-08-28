@@ -7,7 +7,7 @@ import { substituteMissingGlyphs } from '../../shared/glyph-substitute'
 import { getCmapCoverageFor, getTofuSubstituteFor, loadSubtitleFontFor } from '../lib/font-metrics'
 import { listFonts } from '@/services/font'
 import { useAppEnvStore } from '@/stores/app-env-store'
-import { canSelectFontInTier } from '@/lib/font-tier'
+import { canSelectFontInTier } from '../../shared/font-tier'
 
 export interface BurninOptions {
   inputPath: string

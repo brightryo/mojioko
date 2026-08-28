@@ -7,12 +7,15 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { useProjectStore } from '@/stores/project-store'
+import { FOLDER_SETTINGS } from '../../../shared/folder-settings'
 import { useSettingsStore } from '@/stores/settings-store'
 import { useUiStore } from '@/stores/ui-store'
 import { saveFileDialog } from '@/services/dialog'
 import { exportFrame as ipcExportFrame } from '@/services/video'
+import { showRenderNoticeToasts } from '@/lib/render-notice-toast'
 import { BURNIN_DEFAULTS } from '../../../shared/burnin-defaults'
 import { KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
+import { origToEdited } from '../../../shared/cuts'
 
 /**
  * REQ-20260615-022: STEP2 footer's "image export" entry — opens a small
@@ -24,8 +27,9 @@ import { KARAOKE_STYLE_DEFAULT } from '../../../shared/karaoke-style'
  *
  * The current preview time is read from `useUiStore.videoCurrentTimeSec`
  * which the VideoPreviewPanel's `handleTimeUpdate` keeps synchronised
- * with `<video>.currentTime`.  This is the source / original axis, so
- * ffmpeg can seek the raw input directly.
+ * with `<video>.currentTime` — the source / original axis.  REQ-0531 puts
+ * it through `origToEdited` before it leaves this component, because the
+ * exporter's `timeSec` (like the seekbar's own label) is edited-axis.
  */
 export function ExportFrameButton() {
   const { t } = useTranslation(['step2'])
@@ -33,10 +37,31 @@ export function ExportFrameButton() {
   const entries = useProjectStore((s) => s.entries)
   const activeFontId = useSettingsStore((s) => s.activeFontId)
   // REQ-0121 — user-preferred output folder applied to the frame save dialog.
-  const defaultOutputDir = useSettingsStore((s) => s.defaultOutputDir)
+  // REQ-0518 — the still export has its OWN folder row now (画像保存フォルダ,
+  // falling back to Pictures).  It used to share 動画出力フォルダ, so an image
+  // landed next to the burned video.
+  const defaultImageDir = useSettingsStore((s) => s.defaultImageDir)
   // REQ-20260615-050 — fade lives per-entry; the still uses each entry's
   // own `fadeDurationSec`, no global slice is read here.
   const currentTimeSec = useUiStore((s) => s.videoCurrentTimeSec)
+  // REQ-0531 §2-1 — the project's cuts, forwarded so the exporter resolves the
+  // same cue set and phase the burn will.
+  const cuts = useProjectStore((s) => s.cuts)
+  /**
+   * REQ-0531 §2-1 — `videoCurrentTimeSec` is `<video>.currentTime`, i.e. the
+   * SOURCE axis; `ExportFrameRequest.timeSec` is the edited axis.
+   *
+   * This one conversion is what keeps the three surfaces agreeing.  The
+   * seekbar beside this button already labels the playhead
+   * `origToEdited(currentTime, cuts)` (`video-preview-panel.tsx`), so passing
+   * the raw value would export under a timestamp the user never saw, and the
+   * saved filename below would disagree with the number on screen.  It also
+   * means the still stays a picture of the frame currently displayed:
+   * `editedToOrig` inverts this on the other side.
+   *
+   * Identity when `cuts` is empty.
+   */
+  const editedTimeSec = origToEdited(currentTimeSec, cuts)
 
   const [open, setOpen] = useState(false)
   const [includeSubtitles, setIncludeSubtitles] = useState(true)
@@ -59,16 +84,19 @@ export function ExportFrameButton() {
     if (busy) return
 
     const stem = video.path.replace(/\\/g, '/').split('/').pop()?.replace(/\.[^.]+$/, '') ?? 'frame'
-    const timecode = formatTimecode(currentTimeSec)
+    // REQ-0531 §6 — edited-axis, so the timestamp in the filename is the one
+    // the seekbar was showing when the user pressed save.
+    const timecode = formatTimecode(editedTimeSec)
     const ext = format === 'jpg' ? 'jpg' : 'png'
     const defaultName = `${stem}_${timecode}.${ext}`
 
     const savePath = await saveFileDialog(
       defaultName,
-      defaultOutputDir ?? undefined,
+      defaultImageDir ?? undefined,
       format === 'jpg'
         ? [{ name: 'JPEG image', extensions: ['jpg', 'jpeg'] }, { name: 'All Files', extensions: ['*'] }]
-        : [{ name: 'PNG image', extensions: ['png'] }, { name: 'All Files', extensions: ['*'] }]
+        : [{ name: 'PNG image', extensions: ['png'] }, { name: 'All Files', extensions: ['*'] }],
+      FOLDER_SETTINGS.image.osFolder,
     )
     if (!savePath) return
 
@@ -78,11 +106,13 @@ export function ExportFrameButton() {
       const result = await ipcExportFrame({
         inputPath: video.path,
         outputPath: savePath,
-        timeSec: currentTimeSec,
+        timeSec: editedTimeSec,
         video,
         format,
         includeSubtitles,
         entries: includeSubtitles ? entries : undefined,
+        // REQ-0531 §2-1 — raw cues + cuts; the exporter runs the burn's fold.
+        cuts,
         subtitleBackground: {
           enabled: BURNIN_DEFAULTS.subtitleBackground.enabled,
           color: BURNIN_DEFAULTS.subtitleBackground.color,
@@ -100,6 +130,10 @@ export function ExportFrameButton() {
       })
       if (result.ok) {
         toast.success(t('videoPreview.exportFrame.success', { path: result.data.outputPath }))
+        // REQ-0510 §2-1 — a still is a file too, and it is the surface people
+        // use to check what a burn will look like; a decision it does not
+        // mention is a preview that lies about itself.
+        showRenderNoticeToasts(result.data.renderNotices, t)
       } else {
         toast.error(t('videoPreview.exportFrame.error', { error: result.error.message }))
       }

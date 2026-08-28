@@ -7,9 +7,14 @@ import { DEFAULT_LANGUAGE, type SupportedLanguage } from '../../shared/app-info'
 import { TRANSCRIPTION_DEFAULTS } from '../../shared/constants'
 import { migrateDeprecatedModelIds } from './migrate-model-settings'
 import type { AppSettings } from '../../shared/types'
-import { SettingsCorruptError } from '../../shared/errors'
+import {
+  classifySettingsFile,
+  type SettingsQuarantineNotice,
+  type SettingsQuarantineReason,
+} from '../ipc/settings-shape'
 import { detectOsLanguage } from '../lib/os-language'
 import log from '../lib/logger'
+import { writeFileAtomic } from '../lib/atomic-write'
 
 // REQ-20260615-065 S-4 — re-export so existing callers that imported
 // the migration from settings-store keep working without a path
@@ -65,6 +70,12 @@ function buildDefaults(language?: SupportedLanguage): AppSettings {
     // REQ-0194 — same shape as the REQ-0121 input/output folder defaults;
     // `null` = OS Videos fallback in the dialog handler.
     defaultProjectDir: null,
+    // REQ-0518 — unset is `null` for all six folder rows; the OS fallback is
+    // applied at dialog-open (`main/ipc/dialog.ts`), never written here, so a
+    // user who has chosen a folder keeps it when a default changes.
+    defaultImageDir: null,
+    defaultTextDir: null,
+    defaultSrtDir: null,
     // REQ-0150 — default the accelerator to CPU.  Every fresh install
     // and every settings.json older than v1.3.3 lands on CPU which
     // matches the pre-REQ-0150 behaviour (no GPU tools bundled = no
@@ -72,6 +83,33 @@ function buildDefaults(language?: SupportedLanguage): AppSettings {
     // after downloading the GPU tools.
     activeAccelerator: 'cpu'
   }
+}
+
+/**
+ * REQ-0542 — the one notice this launch has to deliver, or null.
+ *
+ * Module-level because `loadSettings` runs many times per launch (every
+ * `mutateSettings` starts with one) while the user must be told once. It is
+ * SET by the quarantine path and CLEARED by whoever takes it, so the second
+ * reader gets nothing.
+ *
+ * Headless (CLI / MCP) simply never takes it: there is no window to show a
+ * dialog in, the quarantine and its `log.warn` still happen, and the exit code
+ * is untouched — a settings file we could not read is not a reason to fail a
+ * burn that does not depend on it.
+ */
+let pendingQuarantineNotice: SettingsQuarantineNotice | null = null
+
+/** Read the startup notice and clear it, so it is shown exactly once. */
+export function takeSettingsQuarantineNotice(): SettingsQuarantineNotice | null {
+  const notice = pendingQuarantineNotice
+  pendingQuarantineNotice = null
+  return notice
+}
+
+/** Test seam: forget any pending notice (each test starts from silence). */
+export function __resetSettingsQuarantineNoticeForTests(): void {
+  pendingQuarantineNotice = null
 }
 
 export async function loadSettings(): Promise<AppSettings> {
@@ -84,6 +122,22 @@ export async function loadSettings(): Promise<AppSettings> {
   try {
     const raw = await fs.readFile(settingsPath, 'utf-8')
     const parsed = JSON.parse(raw) as AppSettings
+    // REQ-0542 — is this file even ours?  A previous iteration of MOJIOKO uses
+    // the same %APPDATA% folder and writes its own format WITH `version: 1`, so
+    // the version check below cannot tell the difference.  Move it aside rather
+    // than spreading its keys over the defaults and starting up looking like a
+    // fresh install — that is what made RES-0540 §5 invisible for a whole day.
+    const shape = classifySettingsFile(parsed)
+    if (shape.shape === 'foreign') {
+      log.warn(
+        `[settings] settings.json is not in this app's format ` +
+        `(known keys ${shape.knownKeys}, unknown ${shape.unknownKeys}` +
+        `${shape.sampleUnknown.length ? `: ${shape.sampleUnknown.join(', ')}` : ''}). ` +
+        `Quarantining it and starting from defaults.`,
+      )
+      await quarantineSettingsFile(settingsPath, 'foreign-format')
+      return buildDefaults(osLanguage)
+    }
     if (parsed.version !== CURRENT_VERSION) {
       log.warn('[settings] version mismatch, resetting to defaults')
       return buildDefaults(osLanguage)
@@ -122,10 +176,17 @@ export async function loadSettings(): Promise<AppSettings> {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       return buildDefaults(osLanguage)
     }
-    // Corrupt file — move it and return defaults
-    log.error('[settings] corrupt settings.json, resetting', err)
-    await recoverCorruptFile(settingsPath)
-    throw new SettingsCorruptError('settings.json was corrupt; reset to defaults')
+    // Unreadable file — move it aside and start from defaults.
+    //
+    // REQ-0542: this used to THROW `SettingsCorruptError`, which made
+    // `settings:load` reply `ok: false`; App.tsx returns early on that, so the
+    // user was told nothing and the app ran on the renderer store's built-in
+    // defaults.  Nothing ever consumed the error — no branch, no test — so the
+    // two unusable-file cases now behave identically: quarantine, defaults, and
+    // one notice.  One behaviour, one code path.
+    log.error('[settings] settings.json could not be read, resetting', err)
+    await quarantineSettingsFile(settingsPath, 'unreadable')
+    return buildDefaults(osLanguage)
   }
 }
 
@@ -134,19 +195,49 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
   await fs.mkdir(dirname(settingsPath), { recursive: true })
   await fs.mkdir(getModelsDir(), { recursive: true })
   await fs.mkdir(getAppDataPath(), { recursive: true })
-  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8')
+  // REQ-0545 §1 — atomic, for the same reason the project file is: a partial
+  // write here loses every preference the user has set.
+  await writeFileAtomic(settingsPath, JSON.stringify(settings, null, 2))
 }
 
-async function recoverCorruptFile(settingsPath: string): Promise<void> {
+/** `YYYYMMDD-HHMMSS` in local time — the name is for a human reading a folder. */
+function quarantineStamp(now: Date): string {
+  const p = (n: number, w = 2) => String(n).padStart(w, '0')
+  return `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}`
+    + `-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`
+}
+
+/**
+ * REQ-0542 — move the unusable file aside and remember to tell the user.
+ *
+ * RENAME, never delete or overwrite: the file is the only copy of settings we
+ * could not read, and it may be the only copy of something the user cares
+ * about. A timestamped name means a second occurrence does not clobber the
+ * first — and if the other program keeps rewriting the file, one quarantine per
+ * launch is the intended (and honest) outcome.
+ *
+ * The notice is set only when the rename SUCCEEDS. Telling the user "we moved
+ * it to X" when nothing was moved would send them looking for a file that is
+ * not there.
+ */
+async function quarantineSettingsFile(
+  settingsPath: string,
+  reason: SettingsQuarantineReason,
+): Promise<void> {
+  const quarantinedPath = join(
+    dirname(settingsPath),
+    `settings.json.quarantined-${quarantineStamp(new Date())}`,
+  )
   try {
-    const backupPath = join(
-      dirname(settingsPath),
-      `settings.corrupt.${Date.now()}.json`
-    )
-    await fs.rename(settingsPath, backupPath)
-  } catch {
-    // ignore rename failure
+    await fs.rename(settingsPath, quarantinedPath)
+  } catch (err) {
+    // A concurrent load may already have moved it; either way there is nothing
+    // left to quarantine and nothing truthful to report.
+    log.warn('[settings] could not quarantine settings.json', err)
+    return
   }
+  log.warn(`[settings] moved to ${quarantinedPath} (${reason})`)
+  pendingQuarantineNotice = { reason, quarantinedPath }
 }
 
 /**

@@ -1,8 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { Channels } from '../shared/ipc-channels'
-import type { VideoInfo, AppSettings, WhisperModelId, ModelsState } from '../shared/types'
+import type { VideoInfo, AppSettings, SettingsLoadResult, WhisperModelId, ModelsState } from '../shared/types'
 import type { FontsState, FontId } from '../shared/fonts'
 import type { GpuToolState } from '../shared/gpu-tool'
+import type { TranslationToolId, TranslationToolsState } from '../shared/translation-tools'
+import type { TranslateResult } from '../shared/translation'
+import type { McpLaunchSpec, McpExportResult } from '../shared/mcp'
 import type { TranscriptionStartRequest, BurninStartRequest, ModelCheckResult, BuildInfo, EncoderDetectionResult, ExportFrameRequest, ExportFrameResult, ActiveDownloadInfo } from '../shared/ipc-contracts'
 
 type OkResult<T> = { ok: true; data: T }
@@ -17,6 +20,13 @@ const electronAPI = {
   detectEncoders: (): Promise<EncoderDetectionResult> => ipcRenderer.invoke(Channels.appDetectEncoders),
   /** REQ-088 — true for MSIX/AppX (store) builds, false for NSIS. */
   isMsix: (): Promise<boolean> => ipcRenderer.invoke(Channels.appIsMsix),
+  /** REQ-0449 §4 — absolute path of the CLI executable (MOJIOKO.exe). */
+  getCliPath: (): Promise<string> => ipcRenderer.invoke(Channels.appGetCliPath),
+  /** REQ-0452 — the dev/packaged-correct MCP launch spec (command/args). */
+  getMcpLaunchSpec: (): Promise<McpLaunchSpec> => ipcRenderer.invoke(Channels.appGetMcpLaunchSpec),
+  /** REQ-0451/0452 — write a .mcpb bundle to `targetPath`; resolves an export result. */
+  exportMcpBundle: (targetPath: string): Promise<McpExportResult> =>
+    ipcRenderer.invoke(Channels.appExportMcpBundle, targetPath),
   /**
    * REQ-0258 — read the MOJIOKO EULA text for the current UI language.
    * Rejects with `EULA_NOT_FOUND` if the extraResources bundling is
@@ -33,12 +43,16 @@ const electronAPI = {
   saveFileDialog: (
     defaultName: string,
     defaultDir?: string,
-    filters?: { name: string; extensions: string[] }[]
+    filters?: { name: string; extensions: string[] }[],
+    // REQ-0518 — the OS folder to fall back to when `defaultDir` is unset or
+    // gone.  The save dialog serves every "produce a file" flow, so the
+    // fallback belongs to the CALLER's row, not to the handler.
+    fallbackOsFolder?: string,
   ): Promise<string | null> =>
-    ipcRenderer.invoke(Channels.dialogSaveFile, defaultName, defaultDir, filters),
+    ipcRenderer.invoke(Channels.dialogSaveFile, defaultName, defaultDir, filters, fallbackOsFolder),
   // REQ-0121 — folder picker used by Settings > General.
-  openDirectoryDialog: (defaultDir?: string): Promise<string | null> =>
-    ipcRenderer.invoke(Channels.dialogOpenDir, defaultDir),
+  openDirectoryDialog: (defaultDir?: string, fallbackOsFolder?: string): Promise<string | null> =>
+    ipcRenderer.invoke(Channels.dialogOpenDir, defaultDir, fallbackOsFolder),
   // REQ-0194 — .mojioko project file open dialog.
   openProjectDialog: (defaultDir?: string): Promise<string | null> =>
     ipcRenderer.invoke(Channels.dialogOpenProject, defaultDir),
@@ -73,6 +87,28 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.transcriptionUninstallModel, modelId),
   transcriptionSetActiveModel: (modelId: WhisperModelId): Promise<IpcResult<ModelsState>> =>
     ipcRenderer.invoke(Channels.transcriptionSetActiveModel, modelId),
+
+  // Translation tools (REQ-0405 — Phase 1: list / download / uninstall / setActive)
+  translationToolList: (): Promise<IpcResult<TranslationToolsState>> =>
+    ipcRenderer.invoke(Channels.translationToolList),
+  translationToolDownload: (toolId: TranslationToolId): Promise<IpcResult<{ channelId: string }>> =>
+    ipcRenderer.invoke(Channels.translationToolDownload, toolId),
+  translationToolDownloadCancel: (channelId: string): Promise<void> =>
+    ipcRenderer.invoke(`${Channels.translationToolDownload}:cancel`, channelId),
+  translationToolUninstall: (toolId: TranslationToolId): Promise<IpcResult<TranslationToolsState>> =>
+    ipcRenderer.invoke(Channels.translationToolUninstall, toolId),
+  translationToolSetActive: (toolId: TranslationToolId | null): Promise<IpcResult<TranslationToolsState>> =>
+    ipcRenderer.invoke(Channels.translationToolSetActive, toolId),
+  // REQ-0410 — one-shot translate for the inspector auto-translate prototype.
+  translationTranslate: (text: string, target: string): Promise<IpcResult<TranslateResult>> =>
+    ipcRenderer.invoke(Channels.translationTranslate, text, target),
+  translationTranslateBatch: (
+    texts: string[],
+    target: string,
+  ): Promise<IpcResult<{ texts: string[]; loadMs: number; translateMs: number }>> =>
+    ipcRenderer.invoke(Channels.translationTranslateBatch, texts, target),
+  translationPreload: (): Promise<IpcResult<{ loadMs: number }>> =>
+    ipcRenderer.invoke(Channels.translationPreload),
 
   // Fonts
   fontList: (): Promise<IpcResult<FontsState>> =>
@@ -121,7 +157,7 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.burninCancel, channelId),
 
   // Settings
-  settingsLoad: (): Promise<IpcResult<AppSettings>> =>
+  settingsLoad: (): Promise<IpcResult<SettingsLoadResult>> =>
     ipcRenderer.invoke(Channels.settingsLoad),
   settingsSave: (settings: AppSettings): Promise<IpcResult<null>> =>
     ipcRenderer.invoke(Channels.settingsSave, settings),
@@ -135,6 +171,8 @@ const electronAPI = {
     ipcRenderer.invoke(Channels.shellOpenExternal, url),
   shellOpenModelsFolder: (): Promise<void> =>
     ipcRenderer.invoke(Channels.shellOpenModelsFolder),
+  shellOpenTranslationToolsFolder: (): Promise<void> =>
+    ipcRenderer.invoke(Channels.shellOpenTranslationToolsFolder),
   shellOpenThirdPartyLicensesFolder: (): Promise<void> =>
     ipcRenderer.invoke(Channels.shellOpenThirdPartyLicensesFolder),
   shellWriteTextFile: (filePath: string, content: string): Promise<void> =>
@@ -144,6 +182,11 @@ const electronAPI = {
   // REQ-0194 — read `.mojioko` project files back as UTF-8 strings.
   shellReadTextFile: (filePath: string): Promise<string> =>
     ipcRenderer.invoke(Channels.shellReadTextFile, filePath),
+
+  // REQ-0546 — the renderer's answer to a close request: 'discard' lets the
+  // quit proceed, 'cancel' keeps the app open.
+  sendCloseDecision: (decision: 'discard' | 'cancel'): Promise<void> =>
+    ipcRenderer.invoke(Channels.appCloseDecision, decision),
 
   // Streaming event subscriptions
   subscribeToChannel: (channelId: string, cb: (payload: unknown) => void): (() => void) => {

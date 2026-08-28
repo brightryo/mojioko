@@ -106,7 +106,8 @@ export function LineSpacingSlider({
         style={{ accentColor: 'hsl(var(--primary))' }}
         aria-label={ariaLabel}
       />
-      <span className="w-12 text-caption text-muted-foreground font-mono tabular-nums text-right">
+      {/* REQ-0421 (step2) — slider readout caption → body-sm. */}
+      <span className="w-12 text-body-sm text-fg-secondary font-mono tabular-nums text-right">
         {draft > 0 ? `+${draft}%` : `${draft}%`}
       </span>
     </div>

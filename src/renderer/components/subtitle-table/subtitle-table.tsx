@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FileText, Clock, ChevronUp, ChevronDown } from 'lucide-react'
+import {
+  FileText, Clock, ArrowRight, Copy, Trash2, RotateCcw,
+  Pencil, Scissors, CircleAlert, Layers, Hourglass, Ban, Ruler, MoveVertical, WrapText,
+  type LucideIcon,
+} from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '@/lib/utils'
@@ -8,57 +12,71 @@ import { useProjectStore } from '@/stores/project-store'
 import { useHistoryStore } from '@/stores/history-store'
 import { useUiStore } from '@/stores/ui-store'
 import { useSettingsStore } from '@/stores/settings-store'
-import { TimeInput } from '@/components/time-input'
-import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-// REQ-20260614-001 補遺③ — most Style-column controls (font picker /
-// switch) live in the always-on right-pane Inspector.  REQ-0222 walked
-// back the per-row read-only display of textColor / outlineColor /
-// outlineThickness: those three are now editable in-place via the
-// same ColorPicker and OutlineThicknessSlider the Inspector uses.
-// REQ-0225 walked back REQ-0222's bulk-edit blockade — the row-level
-// pickers are now always available, matching the "time / size / text
-// stay editable during bulk edit" convention the rest of the row uses.
-import { ColorPicker } from '@/components/color-picker/color-picker'
-import { OutlineThicknessPopover } from '@/components/subtitle-table/outline-thickness-popover'
+import { HelpPopover } from '@/components/help-popover'
+import { RowStylePreview } from '@/components/subtitle-table/row-style-preview'
 import { useIsAudioOnly } from '@/hooks/use-input-mode'
 import { type EntryWarnings } from '@/lib/entry-warnings'
-import { commitTimeEdit } from '@/lib/commit-time-edit'
 import { commitTextEditWithHistory } from '@/lib/commit-text-edit'
+import { formatEditedTimecode, editedDurationOfEntry } from '@/lib/time'
+import {
+  duplicateRow as runDuplicateRow,
+  toggleDeleteRow as runToggleDeleteRow,
+} from '@/lib/entry-row-actions'
 import type { SubtitleEntry, RowState } from '../../../shared/types'
 import { effectiveEntryState, type ClipStatus, type CutList } from '../../../shared/cuts'
-import { FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX } from '../../../shared/constants'
 import { getFontMeta, isFontId } from '../../../shared/fonts'
 
-/** Step amount for the per-row size ↑/↓ buttons (REQ-039 #4). */
-const SIZE_STEP_PX = 10
+/**
+ * REQ-0473 §1 — two-tier list row.
+ *
+ * The REQ-0471 single-line 4-column row squeezed the time into a 184px meta
+ * column, so on a real (narrow) window the timecode truncated to "00:…→00:…".
+ * The row is now `[checkbox | content]`, with `content` a two-tier stack that
+ * gives the top tier the FULL row width:
+ *
+ *   ┌ top tier (small):  #  time "start → end · dur" (full) │ font name │ [dup][del]
+ *   └ bottom tier:        [state badges]                     │ text preview
+ *
+ * The checkbox column spans both tiers (grid row, vertically centred).  The
+ * text preview area is deliberately narrower than before — the freed width
+ * goes to the badge/state area on the left (owner spec §1).
+ */
+const TABLE_GRID_COLS = 'grid-cols-[34px_1fr]'
 
 /**
- * 8-column grid template used by both the table header and every row:
- *   1. checkbox column (32px) — multi-row selection for bulk edit
- *   2. row index           (36px)
- *   3. time start/end stack(110px)
- *   4. font size           (64px)
- *   5. per-row style block (220px)
- *   6. text                (flex 1fr)
- *   7. badges              (90px)
- *   8. row actions         (76px)
+ * REQ-0473 §1 / REQ-0474 §2 — fixed width of the bottom-tier state area (left
+ * of the text preview).  Narrowed from 150 to 120 once the badges became
+ * ICON-ONLY (REQ-0474 §2): ~16px per icon packs the common 1-3 states on one
+ * row and even the worst case (all states) into two, while the preview stays
+ * aligned across rows (fixed width) and gains the freed space.
  */
-// REQ-20260614-001 補遺④ — final list-view column layout:
-//   - Style cell now hosts a 3-row display-only reference block
-//     (text colour swatch / outline colour swatch / outline width
-//     number).  Clicks bubble to the row → selection.
-//   - Time cell shows start / end / "時間調整" stacked vertically
-//     (the legacy "|" separator was dropped — 3 rows on the dot).
-//   - Text cell shows the per-row font name (read-only) on row 1 and
-//     the editable text on rows 2-3.
-//   - Action icons (改行 / 削除 / リセット / 複製) are **removed** from
-//     the list — those flows live in the always-on right-pane
-//     Inspector.
-//
-// Columns: checkbox 32 | # 36 | time 130 | size 64 | style-ref 64 |
-//          text 1fr | state 90  (7 columns total)
-const TABLE_GRID_COLS = 'grid-cols-[32px_36px_130px_64px_64px_1fr_90px]'
+/**
+ * REQ-0474 §2 / REQ-0478 §2 — fixed width of the bottom-tier state area.  Moved
+ * to the RIGHT of the row (roughly under the top-tier duplicate/delete buttons)
+ * in REQ-0478.  ICON-ONLY (REQ-0474 §2): ~16px per icon packs the common 1-3
+ * states on one row.  ALWAYS reserved (even when a row has no badges) so the
+ * text area's right edge is constant across rows.  Owner "黄枠" measured ~100px;
+ * kept at 120 as a starting point — tune here if the difference reads.
+ */
+const BADGE_AREA_PX = 120
+/** Horizontal gap (px) between the text area and the (now right-hand) badges. */
+const BOTTOM_TIER_GAP_PX = 12
+/** Checkbox column width (px) — mirrors TABLE_GRID_COLS col 1. */
+const CHECKBOX_COL_PX = 34
+/**
+ * Content column's right padding (px) — the `pr-2` on the content div.  The
+ * top-tier actions AND the bottom-tier badges both sit this far from the row's
+ * right edge, so the badges land under the actions (REQ-0478 §2).
+ */
+const CONTENT_PR_PX = 8
+/**
+ * REQ-0478 §1 — OPTIONAL upper bound on the text area width.  Default `null` =
+ * NO cap: the text area is the whole remaining bottom-tier width (checkbox →
+ * badges).  Set a number to re-introduce a cap.  (Superseded REQ-0477's 545px
+ * right-aligned cap; the block is now left-anchored and fills the row.)
+ */
+const TEXT_COL_MAX_PX: number | null = null
 
 /** Fallback when warningsMap is missing an entry (deleted rows; race with stale memo). */
 const NO_WARNINGS: EntryWarnings = {
@@ -67,7 +85,8 @@ const NO_WARNINGS: EntryWarnings = {
   overlap: false,
   emptyText: false,
   invalidSize: false,
-  overflow: false
+  overflow: false,
+  verticalOverflow: false
 }
 
 function getRowState(entry: SubtitleEntry, isOverflow: boolean): RowState {
@@ -75,6 +94,54 @@ function getRowState(entry: SubtitleEntry, isOverflow: boolean): RowState {
   if (isOverflow) return 'overflow'
   if (entry.isEdited) return 'edited'
   return 'normal'
+}
+
+/**
+ * REQ-0474 §2 — a compact state indicator: a distinct-SHAPE lucide icon plus a
+ * native `title` tooltip carrying the full label.  Meaning is carried by the
+ * icon shape (+ tooltip), never by colour alone — colour only grades severity
+ * (danger / warning / neutral).  Icon-only packs the state area far tighter
+ * than the old text badges, which wrapped raggedly at a fixed 150px.
+ *
+ * REQ-0525 — `edited` joins the severity list so the pencil carries the same
+ * `--row-edited` blue as the row tint, the timeline clip and the inspector
+ * badge.  It is the only severity drawn as a FILLED chip, and that is forced
+ * rather than decorative: the blue as a GLYPH colour on this dark table falls
+ * well under the 3:1 floor for graphics, i.e. a blue pencil would simply be
+ * hard to see.  As a fill with a white glyph it clears AA.  Note also that
+ * being edited is not a severity at all, so looking unlike the danger/warning
+ * glyphs is correct.
+ *
+ * Re-measured at REQ-0527's #00638a (was #343FDF), real pixels against the
+ * table row background rgb(20,22,26): as a glyph 2.72:1 (was 2.52 — still far
+ * under 3:1), as a fill with the white glyph 6.11:1 (was 6.59).  The recolour
+ * does not change which of the two shapes is viable.
+ */
+function StatusIcon({
+  Icon,
+  label,
+  severity,
+}: {
+  Icon: LucideIcon
+  label: string
+  severity: 'danger' | 'warning' | 'neutral' | 'edited'
+}) {
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      role="img"
+      className={cn(
+        'flex h-4 w-4 items-center justify-center',
+        severity === 'danger' && 'text-destructive',
+        severity === 'warning' && 'text-warning-soft',
+        severity === 'neutral' && 'text-fg-secondary',
+        severity === 'edited' && 'rounded-sm bg-row-edited text-fg-primary'
+      )}
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </span>
+  )
 }
 
 interface CellEditorProps {
@@ -89,6 +156,13 @@ interface CellEditorProps {
    */
   onCommit: (v: string, textOnFocus: string) => void
   /**
+   * REQ-0471 §1 (d) — Escape discards the in-progress edit.  Because the
+   * onPreview stream has already written the typed text into the store
+   * (history-less), the parent restores the store to `originalValue` and
+   * closes the editor.  Also used by blur-with-no-change to close cleanly.
+   */
+  onCancel: (originalValue: string) => void
+  /**
    * REQ-0127 Phase 1 — fires per-keystroke with the current typed
    * value.  Callers wire this to `projectStore.updateEntryPreview`
    * (history-less writer) so the preview overlay reflects typing
@@ -98,7 +172,7 @@ interface CellEditorProps {
   multiline?: boolean
 }
 
-function CellEditor({ value, onCommit, onPreview, multiline }: CellEditorProps) {
+function CellEditor({ value, onCommit, onCancel, onPreview, multiline }: CellEditorProps) {
   const [draft, setDraft] = useState(value)
   const ref = useRef<HTMLTextAreaElement & HTMLInputElement>(null)
   // REQ-0127 Phase 1 — snapshot of the pre-focus value; the editor
@@ -113,6 +187,9 @@ function CellEditor({ value, onCommit, onPreview, multiline }: CellEditorProps) 
   // silently overwritten on the next blur.  Ref (not state) so the
   // change handler doesn't trigger a re-render purely to flip it.
   const dirtyRef = useRef(false)
+  // REQ-0471 §1 (d) — set by the Escape handler so the blur that follows
+  // does not re-commit (or re-cancel) the value; onCancel already ran.
+  const cancelledRef = useRef(false)
   // REQ-20260612-004: skip the value-sync effect while an IME
   // composition is in progress, since replacing the textarea's value
   // mid-composition resets the candidate window and corrupts the
@@ -126,12 +203,7 @@ function CellEditor({ value, onCommit, onPreview, multiline }: CellEditorProps) 
 
   // REQ-20260612-004: accept external value updates while the editor
   // is mounted, as long as the user hasn't typed into the buffer
-  // since the last commit and is not mid-IME-composition.  Without
-  // this, an `updateEntry({text})` from a sibling control (e.g. the
-  // wrap buttons in this row's action column) writes to the store
-  // but never reaches the displayed `draft`, so the textarea keeps
-  // showing the pre-wrap text and the next blur silently overwrites
-  // the wrap with that stale value.
+  // since the last commit and is not mid-IME-composition.
   useEffect(() => {
     if (dirtyRef.current) return
     if (isComposingRef.current) return
@@ -148,53 +220,56 @@ function CellEditor({ value, onCommit, onPreview, multiline }: CellEditorProps) 
     el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden'
   }, [draft, multiline])
 
-  // REQ-082: Ctrl+Enter / Esc removed.  onBlur (= click elsewhere or
-  // Tab away) still commits the typed value.
-
   const sharedClass = cn(
     'w-full bg-surface-2 rounded px-2 py-1 text-body text-fg-primary resize-none',
     'focus:outline-none'
   )
 
-  // REQ-20260612-004: only commit on blur when the user has actually
-  // typed something — otherwise an externally-driven `value` change
-  // (e.g. a wrap button that updated the store while focus was
-  // elsewhere on the row) would be re-committed as itself the next
-  // time the editor blurs, with no effect.  Worse, when the editor
-  // still holds a stale `draft` because the sync effect was gated
-  // (dirty / composing), an unconditional blur would write that
-  // stale draft back and undo the external update.
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) {
     dirtyRef.current = true
     const next = e.target.value
     setDraft(next)
-    // REQ-0127 Phase 1 — stream the typed value into the store via
-    // the history-less preview writer so the overlay lights up live.
-    // Skip while an IME composition is in progress; the composition-
-    // end handler flushes the final value into draft and re-runs
-    // preview from there.
     if (!isComposingRef.current) {
       onPreview?.(next)
     }
   }
   function handleBlur() {
-    if (!dirtyRef.current) return
-    dirtyRef.current = false
-    onCommit(draft, focusValueRef.current)
+    // Escape already ran onCancel + closed; swallow the trailing blur.
+    if (cancelledRef.current) {
+      cancelledRef.current = false
+      return
+    }
+    if (dirtyRef.current) {
+      dirtyRef.current = false
+      onCommit(draft, focusValueRef.current)
+    } else {
+      // No edit made — close the editor cleanly (restore is a no-op).
+      onCancel(focusValueRef.current)
+    }
+  }
+  // REQ-0471 §1 (d) — Enter inserts a newline (default); Ctrl/Cmd+Enter
+  // commits (via blur → handleBlur); Escape cancels and restores.
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      cancelledRef.current = true
+      onCancel(focusValueRef.current)
+      ref.current?.blur()
+      return
+    }
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      ref.current?.blur()
+    }
   }
   function handleCompositionStart() {
     isComposingRef.current = true
   }
   function handleCompositionEnd(e: React.CompositionEvent<HTMLTextAreaElement | HTMLInputElement>) {
     isComposingRef.current = false
-    // Treat a committed IME composition as a user edit so the next
-    // blur flushes the converted text.  `e.target.value` already
-    // reflects the post-composition value when this fires.
     dirtyRef.current = true
     const next = (e.target as HTMLTextAreaElement | HTMLInputElement).value
     setDraft(next)
-    // REQ-0127 Phase 1 — flush the IME-committed value into the
-    // preview stream so the overlay reflects the final composed text.
     onPreview?.(next)
   }
 
@@ -206,6 +281,7 @@ function CellEditor({ value, onCommit, onPreview, multiline }: CellEditorProps) 
         rows={1}
         onChange={handleChange}
         onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
         className={sharedClass}
@@ -219,6 +295,7 @@ function CellEditor({ value, onCommit, onPreview, multiline }: CellEditorProps) 
       value={draft}
       onChange={handleChange}
       onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
       onCompositionStart={handleCompositionStart}
       onCompositionEnd={handleCompositionEnd}
       className={sharedClass}
@@ -230,131 +307,55 @@ interface SubtitleRowProps {
   entry: SubtitleEntry
   displayIndex: number
   overflowStartIndex: number
-  /**
-   * REQ-20260614-001 Phase 3 — user single-selection (drives the green
-   * left-border highlight + the inspector content via the parent).
-   */
   isUserSelected: boolean
-  /** Click handler for the row body — caller writes `selectedEntryId`. */
   onSelect: (id: string) => void
-  /** Full warning bitmap for this entry — drives both badges and the Ready filter. */
   warnings: EntryWarnings
-  /** Register / unregister the row's DOM element for auto-scroll coordination. */
-  /** True when entry.startSec exceeds the video's total duration. */
   isStartExceedsDuration: boolean
-  /** True when entry.endSec exceeds the video's total duration. */
   isEndExceedsDuration: boolean
-  /** Open the shared time-editor dialog for this entry. */
   onAdjustTime: (entryId: string) => void
-  /** Whether this row is part of the bulk-edit selection. */
   isSelected: boolean
-  /** Click handler for the row's checkbox — caller decides toggle vs. range. */
   onCheckboxClick: (id: string, shiftKey: boolean) => void
-  /**
-   * REQ-103 — the row's 4-state classification (`normal` / `edited` /
-   * `manuallyDeleted` / `trimDeleted`).  Drives the primary status
-   * badge so the trim-deleted case is visually distinct from a
-   * manual delete (the two used to share the `state.deleted`
-   * badge).  Computed by the parent so the per-row component does
-   * not need its own `cuts` subscription.
-   */
   clipStatus: ClipStatus
-  /**
-   * REQ-115 — current cut list, forwarded to the row's TimeInputs so
-   * the displayed timecode is on the EDITED axis (= matches the SRT
-   * export, ruler, and video preview).  Stored as the SubtitleEntry
-   * value remains on the Original axis; the input applies
-   * `editedToOrig` on commit so persistence is unchanged.
-   */
   cuts: CutList
+  /** Measured text-column width, shared by every row (see table JSDoc). */
+  textColWidthPx: number
 }
 
-function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, onSelect, warnings, isStartExceedsDuration, isEndExceedsDuration, onAdjustTime, isSelected, onCheckboxClick, clipStatus, cuts }: SubtitleRowProps) {
+function SubtitleRow({
+  entry,
+  displayIndex,
+  overflowStartIndex,
+  isUserSelected,
+  onSelect,
+  warnings,
+  isStartExceedsDuration,
+  isEndExceedsDuration,
+  onAdjustTime,
+  isSelected,
+  onCheckboxClick,
+  clipStatus,
+  cuts,
+  textColWidthPx,
+}: SubtitleRowProps) {
   const isOverflow = overflowStartIndex !== -1
-  const isStartOverlap = warnings.overlap
-  // step1 namespace included so the size input's `title` tooltip can
-  // reuse the `subtitleDefaults.sizeHint` string defined for STEP 1's
-  // Subtitle Style dialog (REQ-034 #3).
-  const { t } = useTranslation(['step2', 'step1'])
+  const { t } = useTranslation(['step2'])
   const updateEntry = useProjectStore((s) => s.updateEntry)
-  // REQ-0127 Phase 1 — history-less preview writer used from CellEditor's
-  // onPreview so typing lights up the video overlay live.
   const updateEntryPreview = useProjectStore((s) => s.updateEntryPreview)
   const pushHistory = useHistoryStore((s) => s.push)
-  // REQ-028: in audio-only mode the size / style / font cells render
-  // empty so the grid stays in place (col widths unchanged) but the
-  // style controls are visually + functionally suppressed.
   const isAudioOnly = useIsAudioOnly()
-  // REQ-20260614-001 補遺④ — read the project-default font so rows
-  // that don't carry a `fontId` override still surface the inherited
-  // family name above the text editor.  Subscribed per-row; activeFontId
-  // changes infrequently (font selection is a global setting) so the
-  // re-render cost is negligible.
   const activeFontId = useSettingsStore((s) => s.activeFontId)
 
   const [editingText, setEditingText] = useState(false)
-  const [sizeWarning, setSizeWarning] = useState(false)
-
-  // REQ-0345 §3-6 — no DOM registry any more.  Both auto-scroll paths
-  // resolve a row's INDEX and call `scrollToIndex`, which works for rows the
-  // virtualizer has not mounted; a per-row element registry could only ever
-  // describe the ~20 rows on screen, and cost an effect on each of them.
-  const rowDivRef = useRef<HTMLDivElement>(null)
 
   const rowState = getRowState(entry, isOverflow)
-  // REQ-118 [2] — trim-deleted entries are frozen by spec §2.1.  Mirror
-  // the existing `entry.isDeleted` lockout (manual delete) so every
-  // editable affordance respects the same "no edits" rule for both
-  // deletion states.  The flag is read by every disabled-prop below and
-  // by the Restore / Delete button branch.
+  // REQ-118 [2] — trim-deleted entries are frozen by spec §2.1.
   const isTrimDeleted = clipStatus === 'trimDeleted'
   const isFrozen = entry.isDeleted || isTrimDeleted
 
-  function applyPatch(patch: Partial<SubtitleEntry>) {
-    updateEntry(entry.id, { ...patch, isEdited: true })
-  }
-
-  function withHistory(
-    label: string,
-    patch: Partial<SubtitleEntry>,
-    // REQ-0127 Phase 1 — like the inspector's applyStyleEdit(beforePatch),
-    // this override tells `undo` which fields to restore to which values
-    // instead of using the naive current-entry snapshot.  The text-cell
-    // path uses it because the preview stream has moved the store past
-    // the pre-focus value, so a naive snapshot would capture the typed
-    // text and Undo would be a no-op.
-    beforePatch?: Partial<SubtitleEntry>
-  ) {
-    const snapshot = { ...entry }
-    const undoState = beforePatch ? { ...snapshot, ...beforePatch } : snapshot
-    // Time-affecting patches (startSec / endSec) need a re-sort on undo /
-    // redo as well so the row visually lands at the position that matches
-    // its restored or re-applied time value.  Non-time patches (text, size,
-    // colour, fade) do not affect ordering and skip the resort.
-    const affectsTime = 'startSec' in patch || 'endSec' in patch
-    pushHistory({
-      label,
-      undo: () => {
-        updateEntry(entry.id, undoState)
-        if (affectsTime) useProjectStore.getState().sortByStartSec()
-      },
-      redo: () => {
-        updateEntry(entry.id, { ...snapshot, ...patch, isEdited: true })
-        if (affectsTime) useProjectStore.getState().sortByStartSec()
-      }
-    })
-    applyPatch(patch)
-  }
-
   function handleTextCommit(text: string, textOnFocus: string) {
     setEditingText(false)
-    // CellEditor uses real newlines internally; convert back to ASS \N on save.
     const normalized = text.replace(/\n/g, '\\N')
     const normalizedOnFocus = textOnFocus.replace(/\n/g, '\\N')
-    // REQ-0199 — routed through the shared helper.  Guard compares against the
-    // pre-focus value (NOT `entry.text`, which the preview stream already moved
-    // to match `normalized`) so real text edits push exactly one history op and
-    // Undo rewinds to what was on screen before the editor gained focus.
     commitTextEditWithHistory({
       entry,
       normalizedNew: normalized,
@@ -365,78 +366,43 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
     })
   }
 
-  function handleStartChange(v: number) {
-    // TimeInput fires onChange only on commit (Enter / blur), never during
-    // typing — so this is always a "user finished typing" event and the
-    // re-sort below never interrupts mid-edit.
-    if (v === entry.startSec) return
-    withHistory(t('history.editTime'), { startSec: v })
-    commitTimeEdit(entry.id)
+  // REQ-0471 §1 (d) — Escape / clean-close: restore the store text to the
+  // pre-focus value (the preview stream wrote the typed drafts there) and
+  // exit edit mode.  No history push — cancel leaves the undo stack clean.
+  function handleTextCancel(originalNewlineForm: string) {
+    setEditingText(false)
+    updateEntryPreview(entry.id, { text: originalNewlineForm.replace(/\n/g, '\\N') })
   }
 
-  function handleEndChange(v: number) {
-    if (v === entry.endSec) return
-    withHistory(t('history.editTime'), { endSec: v })
-    commitTimeEdit(entry.id)
+  function handleDuplicate() {
+    runDuplicateRow(entry, {
+      history: t('history.duplicateRow'),
+      successToast: t('toast.rowDuplicated'),
+      maxLayerBlocked: t('toast.rowDuplicateMaxLayer'),
+    })
   }
 
-  function handleSizeChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = parseInt(e.target.value, 10)
-    setSizeWarning(!isNaN(v) && (v < FONT_SIZE_MIN_PX || v > FONT_SIZE_MAX_PX))
+  function handleDeleteToggle() {
+    runToggleDeleteRow(entry, {
+      delete: t('history.deleteRow'),
+      restore: t('history.restoreRow'),
+    })
   }
 
-  function handleSizeBlur(e: React.FocusEvent<HTMLInputElement>) {
-    setSizeWarning(false)
-    const v = parseInt(e.target.value, 10)
-    if (isNaN(v) || v < 1) return
-    const clamped = Math.min(FONT_SIZE_MAX_PX, Math.max(FONT_SIZE_MIN_PX, v))
-    if (clamped === entry.fontSizePx) return
-    withHistory(t('history.editSize'), { fontSizePx: clamped })
-  }
-
-  // REQ-039 #4: ±SIZE_STEP_PX bump buttons.  Clamp to the same
-  // [FONT_SIZE_MIN_PX, FONT_SIZE_MAX_PX] range used by the typed-input
-  // blur handler so all three entry paths (typing, ↑, ↓) commit values
-  // inside the documented bounds.  Bumps that would land on the current
-  // value (already at limit) early-return so undo history stays clean.
-  function handleSizeBump(delta: number) {
-    const next = Math.min(
-      FONT_SIZE_MAX_PX,
-      Math.max(FONT_SIZE_MIN_PX, entry.fontSizePx + delta)
-    )
-    if (next === entry.fontSizePx) return
-    withHistory(t('history.editSize'), { fontSizePx: next })
-  }
-
-  // REQ-20260614-001 補遺③ — text-colour / outline-colour / fade /
-  // horizontal-position / vertical-position / margin / background-* /
-  // font-selector handlers were removed from SubtitleRow alongside the
-  // Style column slimming.  All those edits now happen via the always-on
-  // right-pane Inspector (which keeps its own handlers in
-  // `timeline-block-inspector.tsx`).  Size stays here because the row
-  // still renders a compact number input for it.
-
-  // REQ-20260614-001 補遺④ — Row-level Delete / Reset / AutoLineBreak /
-  // OverflowWrap / Duplicate handlers were retired from the list view.
-  // The action icon column is gone; those operations now live exclusively
-  // in the always-on right-pane Inspector (which keeps its own handlers
-  // in `timeline-block-inspector.tsx`).
-
-  // REQ-20260614-001 補遺④ — font-name display in the text column.
-  // Resolve `entry.fontId ?? activeFontId` then look up the canonical
-  // display name.  `isFontId` is defensive against stale settings (e.g.
-  // a fontId pointing at a removed family).
+  // REQ-0473 §1 — font name is shown for EVERY row in the top tier (centre),
+  // resolving the per-row override or the inherited project default.  Editing
+  // the font still lives in the Inspector / Bulk bar.
   const resolvedFontId = isFontId(entry.fontId) ? entry.fontId : activeFontId
   const rowFontDisplayName = getFontMeta(resolvedFontId).displayName
 
-  // REQ-20260614-001 補遺⑬: sky (再生アクティブ) ハイライトを撤去。残る
-  // 左 border 優先順位は 緑 (ユーザー選択) > HSL var (bulk-select) > 無し。
-  // bg は 緑 (選択) と amber/red (state tint) と HSL var (bulk-select) の
-  // 組み合わせ。再生中の自動スクロール (= focusedRowId 駆動の
-  // scrollIntoView) は別経路で維持されている (本ファイル下部の effect
-  // 参照)。
+  // REQ-0473 §1 — FULL timecodes (no compaction / truncation): the top tier
+  // has the whole row width, so "00:00:00.00 → 00:00:07.36" fits.
+  const startTc = formatEditedTimecode(entry.startSec, cuts)
+  const endTc = formatEditedTimecode(entry.endSec, cuts)
+  const durSec = editedDurationOfEntry(entry, cuts)
+
   const rowBg = cn(
-    'group grid items-start gap-0 border-b border-line/50 transition-colors duration-150',
+    'group grid items-stretch gap-0 border-b border-line/50 transition-colors duration-150',
     TABLE_GRID_COLS,
     isUserSelected
       ? 'border-l-2 border-l-primary'
@@ -445,24 +411,37 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
         : 'border-l-2 border-l-transparent',
     isUserSelected && rowState !== 'edited' && rowState !== 'overflow' && 'bg-surface-2/50',
     !isUserSelected && !isSelected && 'hover:bg-surface-2/20',
-    // REQ-20260614-001 補遺④ — actions column removed, so the previous
-    // `[&>*:not([data-row-actions])]` exemption is no longer needed.
-    // Every cell now fades together when the row is deleted.
     rowState === 'deleted' && 'opacity-40',
-    // State tints persist through selection (green) AND bulk-select.
-    // The multi-row HSL highlight (applied inline below) wants the row bg
-    // cleared so the variable colour shines through.
-    !isSelected && rowState === 'edited' && 'bg-warning-soft/[0.04]',
+    // REQ-0525 — off `warning-soft` and onto `--row-edited`, the single source
+    // the timeline clip and the inspector badge also read.  This was the only
+    // place still borrowing the warning family to mean "edited".
+    //
+    // Alpha raised 0.04 → 0.10, measured rather than kept: #343FDF is much
+    // darker than amber-400, so at 4 % over the row background it composited
+    // to rgb(30,33,44) — 7 units from an untinted row, i.e. invisible.  At
+    // 10 % it is ~19 units and reads as a faint blue cast without shouting in
+    // a dense table.
+    // REQ-0526 — the 0.10 moved into `--row-edited-row-alpha` (globals.css) so
+    // the DEV token editor can move it live; `row-edited-row-tint` still
+    // resolves through `--row-edited`.
+    //
+    // REQ-0527 — the alpha is UNCHANGED at 0.10, but the hue underneath it went
+    // darker still (#343FDF → #00638a), so the same 10 % now composites to
+    // rgb(18,30,37): 14 units from an untinted row, down from ~19.  That is
+    // back near the 4 %-era invisibility this comment's own reasoning rejected,
+    // and it is flagged in RES-0527 for the owner rather than silently
+    // compensated here — raising the alpha would undo a value the owner set on
+    // a live screen.
+    !isSelected && rowState === 'edited' && 'bg-row-edited-row-tint',
     !isSelected && rowState === 'overflow' && 'bg-destructive/[0.04]'
   )
 
+  const timeExceeds = isStartExceedsDuration || isEndExceedsDuration
+
   return (
     <div
-      ref={rowDivRef}
       className={rowBg}
       style={
-        // bulk-select HSL bg only when no single-row green highlight is
-        // also active.  (補遺⑬: sky 廃止により isPlaybackActive 条件は除去。)
         isSelected && !isUserSelected
           ? { backgroundColor: 'hsl(var(--row-selected) / var(--row-selected-alpha))' }
           : undefined
@@ -472,22 +451,12 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
         useUiStore.getState().setVideoSeekRequest(entry.startSec)
       }}
       role="row"
-      // aria-selected reflects the user-driven selection (= the inspector
-      // entry); the playback follower is a passive marker and does not
-      // change accessibility semantics.
       aria-selected={isUserSelected}
     >
-      {/* Selection checkbox — stopPropagation so toggling it does not also
-          set focusedRowId / seek the video.  Shift+click handled by the
-          parent table (range vs. toggle).
-          REQ-119 [1] — frozen rows (manual-delete OR trim-delete) cannot
-          enter the bulk-edit selection.  The disabled checkbox is the
-          first line of defence; the parent's "select all" and the
-          bulk-edit-bar apply paths apply the same `isFrozen` filter as
-          belt-and-braces (= even a programmatic selection cannot reach
-          a frozen row). */}
+      {/* Selection checkbox — 34px column spanning BOTH tiers (grid row,
+          vertically centred).  Full tap area via the full-height flex box. */}
       <div
-        className="flex items-center justify-center py-3"
+        className="flex items-center justify-center"
         onClick={(e) => e.stopPropagation()}
       >
         <Checkbox
@@ -502,350 +471,163 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
         />
       </div>
 
-      {/* # */}
-      <div className="flex items-center justify-center py-3 text-body-sm text-fg-muted font-mono tabular-nums">
-        {displayIndex}
-      </div>
-
-      {/* Time — REQ-20260614-001 補遺④ — vertical 3-row stack:
-              row 1: start time (TimeInput)
-              row 2: end time (TimeInput)
-              row 3: "時間調整" link (opens TimeEditorDialog)
-          The legacy "|" separator between start/end was dropped per
-          補遺④ (3 rows exactly). */}
-      <div className="flex flex-col gap-1 py-2 px-1">
-        <TimeInput
-          value={entry.startSec}
-          cuts={cuts}
-          onChange={handleStartChange}
-          disabled={isFrozen}
-          warning={isStartOverlap || isStartExceedsDuration}
-          title={isStartExceedsDuration ? t('warning.exceedsDuration') : undefined}
-        />
-        <TimeInput
-          value={entry.endSec}
-          cuts={cuts}
-          onChange={handleEndChange}
-          disabled={isFrozen}
-          warning={isEndExceedsDuration}
-          title={isEndExceedsDuration ? t('warning.exceedsDuration') : undefined}
-        />
-        {/* Adjust-time button — opens the shared modal time editor.
-            Hidden for deleted rows since editing a deleted row's time is a no-op.
-            `data-testid="adjust-time"` lets the green-button-color e2e click
-            the chip without depending on the localised label ("時間調整" /
-            "Adjust time"), so the test works under DEFAULT_LANGUAGE='en'.
-            Multiple rows render the same testid; the test uses `.first()`. */}
-        <button
-          type="button"
-          data-testid="adjust-time"
-          onClick={(e) => { e.stopPropagation(); onAdjustTime(entry.id) }}
-          disabled={isFrozen}
-          className={cn(
-            'mt-0.5 flex items-center justify-center gap-1 self-center',
-            'h-5 px-1.5 rounded text-micro text-fg-muted',
-            'hover:bg-surface-2 hover:text-fg-secondary transition-colors duration-100',
-            'disabled:opacity-30 disabled:pointer-events-none'
-          )}
-        >
-          <Clock className="h-3 w-3" />
-          {t('action.adjustTime')}
-        </button>
-      </div>
-
-      {/* Size — empty in audio mode (REQ-028).  Column width stays
-          reserved by the empty div so the grid template doesn't shift.
-          REQ-039 #4: ↑ / ↓ buttons stacked above and below the input
-          step the value by SIZE_STEP_PX (10) within FONT_SIZE_MIN_PX /
-          FONT_SIZE_MAX_PX.  Up = larger size, placed above; Down =
-          smaller, placed below — matches the visual metaphor of "above
-          = bigger". */}
-      <div className="flex items-center py-3 px-1">
-        {!isAudioOnly && (
-          <div
-            className="flex w-full flex-col items-stretch gap-0.5"
-            onClick={(e) => e.stopPropagation()}
-          >
+      {/* Content — two tiers (REQ-0473 §1).  Tight vertical padding to keep the
+          density loss from the second tier minimal (§3). */}
+      <div className="flex flex-col min-w-0 py-0.5 pr-2">
+        {/* ── Top tier: # + full time (left) | font (centre) | actions (right) ── */}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0 flex-shrink-0">
+            <span className="text-micro text-fg-muted font-mono tabular-nums">{displayIndex}</span>
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); handleSizeBump(+SIZE_STEP_PX) }}
-              disabled={isFrozen || entry.fontSizePx >= FONT_SIZE_MAX_PX}
-              title={t('action.sizeStepUp', { step: SIZE_STEP_PX, max: FONT_SIZE_MAX_PX })}
-              aria-label={t('action.sizeStepUp', { step: SIZE_STEP_PX, max: FONT_SIZE_MAX_PX })}
-              className={cn(
-                'flex h-4 items-center justify-center rounded text-fg-muted',
-                'hover:bg-surface-2 hover:text-fg-secondary transition-colors duration-100',
-                'disabled:opacity-30 disabled:pointer-events-none'
-              )}
-            >
-              <ChevronUp className="h-3 w-3" />
-            </button>
-            <input
-              type="number"
-              min={FONT_SIZE_MIN_PX}
-              max={FONT_SIZE_MAX_PX}
-              defaultValue={entry.fontSizePx}
-              key={entry.fontSizePx}
-              onChange={handleSizeChange}
-              onBlur={handleSizeBlur}
-              // REQ-0128 Phase 1 — Enter commits via blur, matching
-              // REQ-0127's DaVinci contract for every numeric input.
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+              data-testid="adjust-time"
+              onClick={(e) => { e.stopPropagation(); onAdjustTime(entry.id) }}
               disabled={isFrozen}
-              // REQ-034 #3: 64 px column has no room for an inline hint
-              // line, so surface the clamp range as a hover tooltip.
-              title={t('step1:subtitleDefaults.sizeHint', { min: FONT_SIZE_MIN_PX, max: FONT_SIZE_MAX_PX })}
+              title={timeExceeds ? t('warning.exceedsDuration') : t('action.adjustTime')}
               className={cn(
-                'w-full h-7 rounded border bg-surface-0 px-1 text-center text-body-sm text-fg-primary',
-                'focus:outline-none focus-visible:ring-1',
-                'disabled:opacity-40 disabled:cursor-not-allowed',
-                '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none',
-                sizeWarning
-                  ? 'border-warning-soft/60 focus-visible:ring-warning-soft/30'
-                  : 'border-line focus-visible:border-line-strong focus-visible:ring-primary/30'
-              )}
-            />
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); handleSizeBump(-SIZE_STEP_PX) }}
-              disabled={isFrozen || entry.fontSizePx <= FONT_SIZE_MIN_PX}
-              title={t('action.sizeStepDown', { step: SIZE_STEP_PX, min: FONT_SIZE_MIN_PX })}
-              aria-label={t('action.sizeStepDown', { step: SIZE_STEP_PX, min: FONT_SIZE_MIN_PX })}
-              className={cn(
-                'flex h-4 items-center justify-center rounded text-fg-muted',
-                'hover:bg-surface-2 hover:text-fg-secondary transition-colors duration-100',
-                'disabled:opacity-30 disabled:pointer-events-none'
+                'flex items-center gap-1 rounded px-1 -ml-1 text-micro font-mono tabular-nums whitespace-nowrap',
+                'text-fg-secondary hover:bg-surface-2 hover:text-fg-primary transition-colors duration-100',
+                'disabled:opacity-40 disabled:pointer-events-none',
+                timeExceeds && 'text-warning-soft'
               )}
             >
-              <ChevronDown className="h-3 w-3" />
+              <Clock className="h-3 w-3 flex-shrink-0 text-fg-muted" />
+              <span>{startTc}</span>
+              <ArrowRight className="h-2.5 w-2.5 flex-shrink-0 text-fg-muted" />
+              <span>{endTc}</span>
+              <span className="text-fg-muted">· {durSec.toFixed(2)}s</span>
             </button>
           </div>
-        )}
-      </div>
 
-      {/* REQ-20260614-001 補遺④ → REQ-0222 → REQ-0225 — style cell.
-          The three cells (text colour swatch / outline colour swatch /
-          outline width readout) are editable in-place: the two
-          swatches open the shared ColorPicker popover, the number
-          opens an OutlineThicknessPopover with the Inspector's
-          slider inside.  Both use the same per-frame preview
-          (`updateEntryPreview`) + close-time-commit (`withHistory`)
-          split the ColorPicker already established under REQ-0125.
+          {/* Centre: font name (always shown, truncates when long). */}
+          <span
+            title={rowFontDisplayName}
+            className="flex-1 min-w-0 text-center truncate text-micro text-fg-muted"
+          >
+            {isAudioOnly ? '' : rowFontDisplayName}
+          </span>
 
-          REQ-0225 removed the REQ-0222 bulk-edit blockade: since
-          the row's time / size / text inputs stay editable during a
-          bulk selection, gating just the style trio was inconsistent.
-          Row-level edits always apply to this row only; the bulk-edit
-          bar continues to be the surface for "apply to N selected
-          rows" separately.
-
-          `onClick={(e) => e.stopPropagation()}` on the outer div
-          keeps swatch/number clicks from bubbling to the row's own
-          select handler; without it every picker open would also
-          shift the Inspector to this row. */}
-      {isAudioOnly ? (
-        <div className="py-2 px-1" />
-      ) : (
-        <div
-          className="flex flex-col items-center justify-center gap-1 py-2 px-1"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <ColorPicker
-            value={entry.textColorHex}
-            onChange={(hex) =>
-              updateEntryPreview(entry.id, { textColorHex: hex })
-            }
-            onCommit={(hex, hexOnOpen) =>
-              withHistory(
-                t('history.editColor'),
-                { textColorHex: hex },
-                { textColorHex: hexOnOpen },
-              )
-            }
-            onPairApply={(text, outline) =>
-              withHistory(t('history.editColor'), {
-                textColorHex: text,
-                outlineColorHex: outline,
-              })
-            }
-            disabled={isFrozen}
-            swatchOnly
-            heading={t('common:colorPicker.headingText')}
-          />
-          <ColorPicker
-            value={entry.outlineColorHex}
-            onChange={(hex) =>
-              updateEntryPreview(entry.id, { outlineColorHex: hex })
-            }
-            onCommit={(hex, hexOnOpen) =>
-              withHistory(
-                t('history.editColor'),
-                { outlineColorHex: hex },
-                { outlineColorHex: hexOnOpen },
-              )
-            }
-            onPairApply={(text, outline) =>
-              withHistory(t('history.editColor'), {
-                textColorHex: text,
-                outlineColorHex: outline,
-              })
-            }
-            disabled={isFrozen}
-            swatchOnly
-            heading={t('common:colorPicker.headingOutline')}
-          />
-          <OutlineThicknessPopover
-            value={entry.outlineThicknessPx}
-            onPreview={(v) =>
-              updateEntryPreview(entry.id, { outlineThicknessPx: v })
-            }
-            onCommit={(v, valueOnOpen) =>
-              withHistory(
-                t('history.editStroke'),
-                { outlineThicknessPx: v },
-                { outlineThicknessPx: valueOnOpen },
-              )
-            }
-            disabled={isFrozen}
-            isFrozen={isFrozen}
-            ariaLabel={t('styleCell.outlineWidth')}
-          />
+          {/* Right: duplicate / delete — ALWAYS visible (REQ-0473 §1: no hover
+              dependency, better discoverability). */}
+          <div className="flex items-center gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            {!isFrozen && (
+              <button
+                type="button"
+                title={t('action.duplicateRow')}
+                aria-label={t('action.duplicateRow')}
+                onClick={(e) => { e.stopPropagation(); handleDuplicate() }}
+                className="flex h-5 w-5 items-center justify-center rounded text-fg-muted hover:bg-surface-2 hover:text-fg-secondary transition-colors"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {!isTrimDeleted && (
+              <button
+                type="button"
+                title={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
+                aria-label={entry.isDeleted ? t('action.restoreRow') : t('action.deleteRow')}
+                onClick={(e) => { e.stopPropagation(); handleDeleteToggle() }}
+                className={cn(
+                  'flex h-5 w-5 items-center justify-center rounded transition-colors',
+                  entry.isDeleted
+                    ? 'text-fg-muted hover:bg-surface-2 hover:text-fg-secondary'
+                    : 'text-fg-muted hover:bg-destructive/15 hover:text-destructive'
+                )}
+              >
+                {entry.isDeleted ? <RotateCcw className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+              </button>
+            )}
+          </div>
         </div>
-      )}
 
-      {/* Text column — REQ-20260614-001 補遺④:
-            row 1: font name (display only, truncates when long)
-            rows 2-3: editable text (CellEditor on click, otherwise
-                       static span with `line-clamp-3`)
-          The font name resolves entry.fontId → activeFontId fallback so
-          rows that inherit the project default still show the
-          inherited family name.  Click anywhere on the text editor
-          opens edit mode; clicks on the font label propagate up to
-          the row select (no edit affordance — font is changed in the
-          Inspector). */}
-      <div className="flex flex-col gap-1 my-1 min-w-0">
-      {!isAudioOnly && (
-        <span
-          title={rowFontDisplayName}
-          className="text-caption text-fg-muted truncate px-2 leading-none"
-        >
-          {rowFontDisplayName}
-        </span>
-      )}
-      <div
-        className={cn(
-          'flex items-start py-2 px-2 min-w-0 min-h-[36px] cursor-text rounded transition-all duration-150',
-          // Non-editing: always show a subtle inset border (no layout shift vs a real border)
-          !editingText && 'shadow-[inset_0_0_0_1px_hsl(var(--border-strong)/0.5)]',
-          // Hover: brighten border + light bg
-          !editingText && !isFrozen && 'hover:shadow-[inset_0_0_0_1px_hsl(var(--text-muted)/0.5)] hover:bg-surface-2/30',
-          // Editing: green border + bg
-          editingText && 'shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.5)] bg-surface-2/20'
-        )}
-        onClick={(e) => {
-          e.stopPropagation()
-          onSelect(entry.id)
-          useUiStore.getState().setVideoSeekRequest(entry.startSec)
-          // REQ-118 [2] — refuse to enter text-edit mode on trim-deleted
-          // entries (= spec §2.1 freeze); manual-delete behaviour
-          // unchanged.
-          if (!isFrozen) setEditingText(true)
-        }}
-      >
-        {editingText ? (
-          // Convert \N to real newlines for the textarea; handleTextCommit converts back.
-          <CellEditor
-            value={entry.text.replace(/\\N/g, '\n')}
-            onCommit={handleTextCommit}
-            onPreview={(text) => updateEntryPreview(entry.id, { text: text.replace(/\n/g, '\\N') })}
-            multiline
-          />
-        ) : isFrozen ? (
-          <span className="text-body leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-fg-muted cursor-text select-text">
-            {entry.text.replace(/\\N/g, '\n')}
-          </span>
-        ) : isOverflow ? (
-          <span className="text-body leading-relaxed break-words whitespace-pre-wrap line-clamp-3 cursor-text select-text">
-            <span className="text-fg-primary">{entry.text.replace(/\\N/g, '\n').slice(0, overflowStartIndex)}</span>
-            <span className="text-destructive">{entry.text.replace(/\\N/g, '\n').slice(overflowStartIndex)}</span>
-          </span>
-        ) : (
-          <span className="text-body leading-relaxed break-words whitespace-pre-wrap line-clamp-3 text-fg-primary cursor-text select-text">
-            {entry.text.replace(/\\N/g, '\n')}
-          </span>
-        )}
-      </div>
-      </div>
+        {/* ── Bottom tier: text preview (left, full width) | … gap … | state
+            badges (right, REQ-0478) ── */}
+        <div className="flex items-start min-w-0 mt-0.5 gap-3">
+          {/* Text preview — LEFT-anchored, fills the remaining width (REQ-0478
+              §1).  Fixed width = `textColWidthPx` so it matches the
+              `containerWidthPx` the shrink-to-fit maths uses (REQ-0476); no
+              horizontal padding so the fit-content block's left edge is constant
+              across rows.  Click to select + edit (unless frozen). */}
+          <div
+            style={{ width: `${textColWidthPx}px` }}
+            className={cn(
+              'flex items-center flex-shrink-0 min-w-0 min-h-[22px] rounded transition-colors duration-150',
+              !isFrozen && 'cursor-text',
+              !editingText && isUserSelected && 'bg-surface-2/10',
+              !editingText && !isFrozen && 'group-hover:bg-surface-2/20',
+              editingText && 'bg-surface-2/20 ring-1 ring-inset ring-primary/40'
+            )}
+            onClick={(e) => {
+              e.stopPropagation()
+              onSelect(entry.id)
+              useUiStore.getState().setVideoSeekRequest(entry.startSec)
+              if (!isFrozen && !editingText) setEditingText(true)
+            }}
+          >
+            {editingText ? (
+              <CellEditor
+                value={entry.text.replace(/\\N/g, '\n')}
+                onCommit={handleTextCommit}
+                onCancel={handleTextCancel}
+                onPreview={(text) => updateEntryPreview(entry.id, { text: text.replace(/\n/g, '\\N') })}
+                multiline
+              />
+            ) : isFrozen ? (
+              <span className="w-full text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 line-through text-fg-muted select-text">
+                {entry.text.replace(/\\N/g, '\n')}
+              </span>
+            ) : isAudioOnly ? (
+              <span className="w-full text-body-sm leading-relaxed break-words whitespace-pre-wrap line-clamp-3 text-fg-primary select-text">
+                {entry.text.replace(/\\N/g, '\n')}
+              </span>
+            ) : (
+              <RowStylePreview entry={entry} containerWidthPx={textColWidthPx} />
+            )}
+          </div>
 
-      {/* REQ-20260614-001 補遺④ — Actions column removed from the list
-          view.  改行 / 削除 / リセット / 複製 are exposed by the
-          always-on right-pane Inspector instead.  The State badges
-          below occupy the rightmost slot directly (TABLE_GRID_COLS has
-          7 columns now, not 8). */}
-
-      {/* State — shows all applicable badges simultaneously.
-          REQ-103 §C: split the legacy "削除済み" badge into two —
-          `manuallyDeleted` keeps the old `state.deleted` label, while
-          `trimDeleted` gets its own `state.trimDeleted` label so the
-          user can distinguish a row they intentionally deleted from
-          a row a cut consumed.  Both are still danger-styled and
-          both suppress the per-row warning badges (the warnings are
-          still computed and surfaced in the 警告 tab — they just
-          don't decorate a row that's already gone).
-          The `edited` badge fires for any row that `wasEdited`
-          (= REQ-103 §B cross-cutting `wasEdited` flag), so a row
-          that was manually edited and then manually deleted still
-          shows its `edited` badge alongside the `deleted` one — the
-          user can see at a glance that the row WAS edited before it
-          was removed. */}
-      <div className="flex flex-wrap items-center gap-1 py-3 px-1">
-        {/* REQ-20260615-036: the standalone "position-pinned" badge
-            was retired — offset edits now surface through the generic
-            "編集済み" badge below (driven by isEditedFromOriginal, which
-            already factors in posX/posY). */}
-        {clipStatus === 'manuallyDeleted' && (
-          <Badge variant="danger">{t('state.deleted')}</Badge>
-        )}
-        {clipStatus === 'trimDeleted' && (
-          <Badge variant="danger">{t('state.trimDeleted')}</Badge>
-        )}
-        {(entry.isEdited ||
-          // REQ-103: also surface "edited" badge for rows whose times
-          // were clamped by a head/tail cut (= `clipStatus === 'edited'`
-          // when not deleted, OR `wasEdited` on a deleted row).  We
-          // detect cut-induced edit by reading the precomputed status —
-          // if the row is 'edited' the clamp happened, and for deleted
-          // rows we still want the badge when `entry.isEdited` was true
-          // pre-deletion.
-          clipStatus === 'edited') && (
-          <Badge variant="default">{t('state.edited')}</Badge>
-        )}
-        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.timeInvalid && (
-          <Badge variant="danger">{t('badge.timeInvalid')}</Badge>
-        )}
-        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overlap && (
-          /* warning (amber), not danger — overlap is an intentional pattern
-             for stacked captions (libass renders both simultaneously) and
-             should NOT exclude the row from burn-in.  The amber styling
-             tells the user "this works, but heads-up". */
-          <Badge variant="warning">{t('badge.overlap')}</Badge>
-        )}
-        {/* REQ-121 — overDuration is an error (concat path can't include
-            an out-of-range time); badge promoted to danger. */}
-        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overDuration && (
-          <Badge variant="danger">{t('badge.overDuration')}</Badge>
-        )}
-        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overflow && (
-          <Badge variant="warning">{t('badge.overflow')}</Badge>
-        )}
-        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.emptyText && (
-          <Badge variant="warning">{t('badge.emptyText')}</Badge>
-        )}
-        {/* REQ-121 — invalidSize (fontSizePx ≤ 0) is an error (libass
-            cannot render); badge promoted to danger. */}
-        {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.invalidSize && (
-          <Badge variant="danger">{t('badge.invalidSize')}</Badge>
-        )}
+          {/* State — compact icon-only indicators (REQ-0474 §2), moved to the
+              RIGHT (REQ-0478 §2, under the top-tier actions).  Fixed width,
+              ALWAYS reserved so the text area's right edge is constant even on
+              rows with no badges. */}
+          <div
+            className="flex flex-wrap items-center justify-end gap-1 flex-shrink-0 self-center"
+            style={{ width: `${BADGE_AREA_PX}px` }}
+          >
+            {clipStatus === 'manuallyDeleted' && (
+              <StatusIcon Icon={Trash2} label={t('state.deleted')} severity="danger" />
+            )}
+            {clipStatus === 'trimDeleted' && (
+              <StatusIcon Icon={Scissors} label={t('state.trimDeleted')} severity="danger" />
+            )}
+            {(entry.isEdited || clipStatus === 'edited') && (
+              <StatusIcon Icon={Pencil} label={t('state.edited')} severity="edited" />
+            )}
+            {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.timeInvalid && (
+              <StatusIcon Icon={CircleAlert} label={t('badge.timeInvalid')} severity="danger" />
+            )}
+            {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overlap && (
+              <StatusIcon Icon={Layers} label={t('badge.overlap')} severity="warning" />
+            )}
+            {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overDuration && (
+              /* REQ-0530 — danger → warning: the cue is rendered (truncated
+                 at the end of the video) rather than dropped, so it is not an
+                 error any more.  See `entry-warnings.ts` isError. */
+              <StatusIcon Icon={Hourglass} label={t('badge.overDuration')} severity="warning" />
+            )}
+            {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.overflow && (
+              <StatusIcon Icon={WrapText} label={t('badge.overflow')} severity="warning" />
+            )}
+            {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.verticalOverflow && (
+              <StatusIcon Icon={MoveVertical} label={t('badge.verticalOverflow')} severity="warning" />
+            )}
+            {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.emptyText && (
+              <StatusIcon Icon={Ban} label={t('badge.emptyText')} severity="warning" />
+            )}
+            {clipStatus !== 'manuallyDeleted' && clipStatus !== 'trimDeleted' && warnings.invalidSize && (
+              <StatusIcon Icon={Ruler} label={t('badge.invalidSize')} severity="danger" />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -855,27 +637,17 @@ function SubtitleRow({ entry, displayIndex, overflowStartIndex, isUserSelected, 
 const AUTO_SCROLL_DEBOUNCE_MS = 3000
 
 /**
- * REQ-0345 §3-2 — seed height for a row that has not been measured yet.
+ * REQ-0345 §3-2 / REQ-0473 §3 — seed height for a row not yet measured.
  *
- * Only a starting guess: every mounted row is measured for real via
- * `measureElement`, and the virtualizer corrects both the total height and
- * the offsets from those measurements.  A row is `min-h-[36px]` plus the
- * cell's `py-2`, and grows with the caption's wrapped line count, so this is
- * the single-line case — the common one.
- *
- * It is deliberately NOT derived from `overflowMap`.  That map measures where
- * the SUBTITLE overflows the video frame in the burn-in font (opentype.js);
- * it says nothing about how this table cell wraps at this column width in the
- * UI font.  Using it here would create a second, wrong source of truth for
- * row height — the failure mode this project keeps repeating.
+ * Raised to ~48 for the two-tier row (top meta tier ~18px + bottom preview tier
+ * ~26px + padding).  Only a starting guess: every mounted row is measured for
+ * real via `measureElement`, and the virtualizer corrects total height and
+ * offsets from those measurements.  Deliberately NOT derived from `overflowMap`
+ * (that measures burn-in frame overflow, a different question).
  */
-const ROW_ESTIMATED_HEIGHT_PX = 52
+const ROW_ESTIMATED_HEIGHT_PX = 48
 
-/**
- * How long a newly-inserted row animates in (REQ-0345 §3-3).  Matches the
- * 150 ms the pre-virtualization `AnimatePresence` used, so an added row still
- * arrives the way it always has.
- */
+/** How long a newly-inserted row animates in (REQ-0345 §3-3). */
 const ROW_ENTER_ANIM_MS = 150
 
 export function SubtitleTable({
@@ -885,66 +657,17 @@ export function SubtitleTable({
   onAdjustTime,
   visibleEntries,
 }: {
-  /**
-   * Where each entry's text overflows (-1 = no overflow).  Required separately
-   * from `warningsMap` because the per-row text rendering needs the exact
-   * start index to colour the overflowing suffix.
-   */
   overflowMap: ReadonlyMap<string, number>
-  /** Per-entry warning bitmap; drives the Ready/Warnings filter and badges. */
   warningsMap: ReadonlyMap<string, EntryWarnings>
-  /** Video total duration in seconds; Infinity when no video is loaded. */
   videoDurationSec: number
-  /** Open the shared time-editor dialog for the given entry. */
   onAdjustTime: (entryId: string) => void
-  /**
-   * The rows to display, already filtered by the active tab — memoised in
-   * `step2.tsx` as `visibleEntries` (REQ-0345 §4-A).
-   *
-   * The table must NOT re-derive this.  It used to call the identical
-   * `filterEntries(...)` itself with no `useMemo`, so every render paid an
-   * O(N) pass AND produced a new array identity, which silently disabled
-   * `selectableIds` and `selectableSelectedCount` below — both of which list
-   * it as a dependency.  One filter, computed once, is also the only way the
-   * table and the route's Ctrl+A target list cannot drift.
-   */
   visibleEntries: readonly SubtitleEntry[]
 }) {
   const { t } = useTranslation(['step2'])
-  // REQ-0345 §4-A — no `entries` subscription.  The rows arrive already
-  // filtered via `visibleEntries`, which `step2.tsx` recomputes when
-  // `entries` changes, so subscribing here would only add a second wake-up
-  // for the same event.
-  // REQ-102: filterEntries is now cut-aware so the table tabs / counts
-  // agree with the timeline view and the ffmpeg burnin output.  See
-  // src/renderer/lib/subtitle-filter.ts for the predicate; this
-  // subscription wires the live cut list into that filter.
   const cuts = useProjectStore((s) => s.cuts)
   const tableFilter = useUiStore((s) => s.tableFilter)
-  // Two distinct slices:
-  //   selectedEntryId  = user single-selection  → green left border
-  //   focusedRowId      = playback follower      → drives auto-scroll only
-  // Row click writes selectedEntryId; the preview panel continues to
-  // write focusedRowId from `handleTimeUpdate`.  (補遺⑬: sky 視覚化は撤去、
-  // focusedRowId は下の scrollIntoView effect だけが参照する。)
   const selectedEntryId = useUiStore((s) => s.selectedEntryId)
   const setSelectedEntryId = useUiStore((s) => s.setSelectedEntryId)
-  // REQ-0345 §4-A — `focusedRowId` is deliberately NOT subscribed here.
-  //
-  // Nothing in this component's OUTPUT depends on it: the only reader is the
-  // auto-scroll effect below.  Subscribing at the top level made it an input
-  // to rendering anyway, and that cost a second full pass over every row on
-  // every row click — the click writes `videoSeekRequestSec`, the preview
-  // panel seeks, the resulting `timeupdate` writes `focusedRowId`
-  // (`video-preview-panel.tsx`), and the table re-rendered because of it.
-  // Two renders of N rows for one click.  The effect subscribes to the store
-  // directly instead, so the scroll still follows playback and the render is
-  // no longer involved.
-  // REQ-028: blank out the "Size" / "Style" header labels when the
-  // input is audio-only so the dead columns don't advertise themselves.
-  // Column widths stay reserved (TABLE_GRID_COLS unchanged) — only the
-  // labels disappear.
-  const isAudioOnly = useIsAudioOnly()
   const scrollToRowId = useUiStore((s) => s.scrollToRowId)
   const setScrollToRowId = useUiStore((s) => s.setScrollToRowId)
   const selectedRowIds = useUiStore((s) => s.selectedRowIds)
@@ -954,40 +677,50 @@ export function SubtitleTable({
 
   // The scroll viewport — also what the virtualizer measures against.
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  // Timestamp of the last user-initiated scroll.
-  // Auto-scroll is suppressed for AUTO_SCROLL_DEBOUNCE_MS after this.
   const lastUserScrollAt = useRef<number>(0)
-  // True while our own auto-scroll is executing so handleScroll
-  // does not misinterpret it as a user scroll and block the next auto-scroll.
   const isAutoScrollingRef = useRef(false)
   const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // REQ-0471 §0.4 — measured width of the text column, shared by every row's
+  // style preview so the scale (and therefore the relative type size) is
+  // identical across rows.  Measured once via ResizeObserver on the header's
+  // text cell (same grid column as the body rows), so N rows do NOT each spin
+  // up their own observer.
+  // REQ-0473 §1 — the text-preview area is the bottom-tier remainder after the
+  // checkbox column and the fixed-width badge area.  Derived from the scroll
+  // viewport width (one ResizeObserver, shared by every row) rather than a
+  // per-row measurement.
+  const [textColWidthPx, setTextColWidthPx] = useState(0)
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const recompute = () => {
+      // REQ-0478 §1 — the text area is the FULL remaining bottom-tier width:
+      // viewport − checkbox − content-right-pad − gap − badges (badges now on
+      // the right).  Left-anchored, no right margin (the badge area IS the right
+      // region).  Optional TEXT_COL_MAX_PX cap; default null = no cap.
+      const avail =
+        el.clientWidth -
+        CHECKBOX_COL_PX -
+        CONTENT_PR_PX -
+        BOTTOM_TIER_GAP_PX -
+        BADGE_AREA_PX
+      const capped = TEXT_COL_MAX_PX === null ? avail : Math.min(TEXT_COL_MAX_PX, avail)
+      setTextColWidthPx(Math.max(80, capped))
+    }
+    const obs = new ResizeObserver(recompute)
+    obs.observe(el)
+    recompute()
+    return () => obs.disconnect()
+  }, [])
 
-  // REQ-20260614-001 Phase 3 — auto-scroll continues to track the
-  // playback-active entry (= `focusedRowId`).  User clicks land on a
-  // row that is already visible, so they do not need to drive this
-  // scroll path; explicit "add / time-edit / duplicate" flows still go
-  // through the dedicated `scrollToRowId` signal below (centred, deferred).
-  //
-  // Suppressed while the user is actively scrolling the table manually.
-  //
-  // REQ-0345 §4-A — driven by a direct store subscription rather than by a
-  // rendered value, so a playback tick moves the scroll without re-rendering
-  // the rows.  `useUiStore.subscribe` fires on every store write, so the
-  // handler filters for an actual `focusedRowId` change itself; that check is
-  // two comparisons against N rows of reconciliation.
   useEffect(() => {
     let prevFocused = useUiStore.getState().focusedRowId
     const runAutoScroll = (focusedRowId: string | null) => {
       if (!focusedRowId) return
       if (Date.now() - lastUserScrollAt.current < AUTO_SCROLL_DEBOUNCE_MS) return
-      // REQ-0345 §3-6 — index, not element.  `align: 'auto'` reproduces the
-      // old `block: 'nearest'`: a row already on screen does not move.
       const index = indexByIdRef.current.get(focusedRowId)
       if (index === undefined) return
-      // Mark auto-scroll in progress so handleScroll ignores the scroll event
-      // that our own scroll fires (which would otherwise reset the debounce
-      // timer and block the *next* auto-scroll for 3 seconds).
       if (autoScrollTimerRef.current !== null) clearTimeout(autoScrollTimerRef.current)
       isAutoScrollingRef.current = true
       virtualizerRef.current.scrollToIndex(index, { align: 'auto', behavior: 'smooth' })
@@ -1005,45 +738,17 @@ export function SubtitleTable({
   }, [])
 
   function handleScroll() {
-    // Skip scroll events that originate from our own scrollIntoView() calls.
+    // Skip scroll events that originate from our own scrollToIndex() calls.
     if (isAutoScrollingRef.current) return
     lastUserScrollAt.current = Date.now()
   }
 
-  // Explicit "scroll this row into view" request — set by step2 after the
-  // user confirms an add or time-edit in the TimeEditorDialog.
-  //
-  // Separate from `focusedRowId` because new rows are inserted with
-  // `framer-motion` entry animation (height: 0 → auto over 150ms); calling
-  // `scrollIntoView` immediately while the row is still height:0 lets the
-  // browser compute a position that is wrong by the time the animation
-  // settles, so the viewport ends up in the wrong place (or doesn't move at
-  // all).  We defer the scroll past the animation, then use `block: 'center'`
-  // so the row is brought well inside the viewport rather than just to the
-  // nearest edge.
-  //
-  // Lifecycle guarantees (per spec):
-  //   - Timer is cleared on unmount via cleanup → no scrollIntoView fires on
-  //     an unmounted component.
-  //   - scrollToRowId is set to null only AFTER the timer fires, so leaving
-  //     Step 2 within the 200ms window simply drops the request (cleanup
-  //     cancels the timer; null isn't written; next mount will see the stale
-  //     id but the `if (el)` check skips when the row is missing).
-  //   - The post-consumption null write prevents re-firing if other state
-  //     changes cause a re-render before the timer.
   useEffect(() => {
     if (!scrollToRowId) return
     const targetId = scrollToRowId
     const timer = setTimeout(() => {
-      // REQ-0345 §3-6 — index, not element, so this reaches a row that is
-      // off-screen and therefore not mounted.  `align: 'center'` is the old
-      // `block: 'center'`: an added or time-edited row lands well inside the
-      // viewport rather than at its nearest edge.
       const index = indexByIdRef.current.get(targetId)
       if (index !== undefined) {
-        // Coordinate with the focus-based debounce so our own scroll event
-        // is not mistaken for a manual scroll (which would suppress the next
-        // auto-scroll for 3 seconds).
         if (autoScrollTimerRef.current !== null) clearTimeout(autoScrollTimerRef.current)
         isAutoScrollingRef.current = true
         virtualizerRef.current.scrollToIndex(index, { align: 'center', behavior: 'smooth' })
@@ -1057,81 +762,32 @@ export function SubtitleTable({
     return () => clearTimeout(timer)
   }, [scrollToRowId, setScrollToRowId])
 
-  // REQ-0345 §4-A — computed once in `step2.tsx`; see the prop's JSDoc.
   const filtered = visibleEntries
 
-  /**
-   * REQ-0345 §3 — render only the rows in (and near) the viewport.
-   *
-   * Every entry used to be a live DOM subtree: 10,000 rows measured 339,348
-   * elements, ~34 per row, including three Radix Popover roots and ~9 store
-   * subscriptions each.  Opening the list tab at that size took 41 s and
-   * selecting one row took 25 s — and neither is fixable by memoisation,
-   * because the first is the cost of MOUNTING those nodes and the second is
-   * the cost of reconciling them.  The only cure is not to create them.
-   *
-   * `getItemKey` returns the entry id rather than the index so React keeps a
-   * row's state attached to the row (not to a slot) when entries are inserted
-   * or removed above it — the same reason the previous `.map` keyed on
-   * `entry.id`.
-   */
   const rowVirtualizer = useVirtualizer({
     count: filtered.length,
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => ROW_ESTIMATED_HEIGHT_PX,
     getItemKey: (index) => filtered[index]?.id ?? index,
-    // Rows above and below the viewport, so a fast wheel scroll has content
-    // ready instead of blank space.  Cheap: each one is a normal row.
     overscan: 8,
   })
 
-  /**
-   * id → position in `filtered`, for the two auto-scroll paths below.
-   *
-   * They used to look the row's DOM element up in `rowRefs` and call
-   * `scrollIntoView`.  With virtualization an off-screen row HAS no element,
-   * so that lookup would return undefined and the scroll would silently not
-   * happen — which is exactly how playback-follow would break without any
-   * error to notice.  Both now resolve an INDEX and let the virtualizer
-   * scroll to it, which works whether or not the row is currently mounted.
-   */
   const indexById = useMemo(() => {
     const m = new Map<string, number>()
     for (let i = 0; i < filtered.length; i++) m.set(filtered[i].id, i)
     return m
   }, [filtered])
-  // Held in refs so the store-subscription effect below can stay mounted once
-  // (`[]` deps) instead of re-subscribing on every list change.
   const indexByIdRef = useRef(indexById)
   indexByIdRef.current = indexById
   const virtualizerRef = useRef(rowVirtualizer)
   virtualizerRef.current = rowVirtualizer
 
-  /**
-   * REQ-0345 §3-3 — ids that just appeared, so only THEY animate in.
-   *
-   * Pre-virtualization every row lived inside `<AnimatePresence>` with
-   * `layout`, which animated height on mount and unmount.  Under
-   * virtualization mount/unmount is what SCROLLING does, so keeping that
-   * would replay the insert animation on every row that scrolls into view —
-   * visibly wrong, and expensive.  The animation users actually care about is
-   * the one that marks a row being added, so that is the one kept: this set
-   * holds ids present now but absent from the previous list, and only those
-   * rows get the transition.
-   *
-   * Exit animation is not preserved; see the RES.  A removed row's slot is
-   * reclaimed by the virtualizer immediately, so there is nothing left to
-   * animate out.
-   */
   const [enteringIds, setEnteringIds] = useState<ReadonlySet<string>>(() => new Set())
   const knownIdsRef = useRef<Set<string> | null>(null)
   useEffect(() => {
     const current = new Set(filtered.map((e) => e.id))
     const known = knownIdsRef.current
     knownIdsRef.current = current
-    // First population (mount, view switch, or an import) must not animate:
-    // that is the `initial={false}` the old AnimatePresence carried, and
-    // animating 10,000 rows at once is precisely what this REQ removes.
     if (known === null) return
     const fresh: string[] = []
     for (const id of current) if (!known.has(id)) fresh.push(id)
@@ -1153,14 +809,6 @@ export function SubtitleTable({
     TABLE_GRID_COLS
   )
 
-  // REQ-119 [1] — bulk-edit cannot reach a frozen row (= manually-deleted
-  // OR trim-deleted per REQ-118 spec §2.1).  Compute a "selectable"
-  // subset of the visible rows so the header "select all" toggle, the
-  // Shift+click range, and the per-row checkbox all agree on the same
-  // exclusion rule.  Storage selection (`selectedRowIds`) keeps its
-  // existing shape; we just narrow what the header adds.  The Shift+
-  // click range expansion runs against `selectableIds`, which means the
-  // user can never drag a selection across a frozen row.
   const selectableIds = useMemo(
     () =>
       filtered
@@ -1173,19 +821,6 @@ export function SubtitleTable({
     [filtered, cuts],
   )
 
-  // Header checkbox state — three values:
-  //   - true            : every visible row is selected
-  //   - false           : no visible row is selected
-  //   - 'indeterminate' : some visible rows are selected
-  // Selection retention across filters means selectedRowIds can contain rows
-  // that aren't currently visible; the header only reflects the *visible*
-  // subset so clicking it produces a deterministic outcome for what the user
-  // can see.
-  // REQ-119 [1] — header checkbox state mirrors the SELECTABLE subset
-  // (= frozen rows are excluded from "all rows selected" calculations).
-  // When the visible tab is entirely frozen (= the Deleted tab), the
-  // selectable set is empty and the header checkbox stays unchecked +
-  // disabled so the user has no way to bulk-select frozen rows.
   const selectableSelectedCount = useMemo(() => {
     let n = 0
     for (const id of selectableIds) if (selectedRowIds.has(id)) n++
@@ -1200,11 +835,6 @@ export function SubtitleTable({
   const headerCheckDisabled = selectableIds.length === 0
 
   function handleHeaderCheckboxClick() {
-    // Toggle semantics:
-    //   - any SELECTABLE row selected → clear selectable rows from selection
-    //     (rows hidden by the filter, and frozen rows in the current
-    //      filter, are intentionally preserved)
-    //   - none selected → add all SELECTABLE rows (= frozen rows skipped)
     if (selectableSelectedCount > 0) {
       const next = new Set(selectedRowIds)
       for (const id of selectableIds) next.delete(id)
@@ -1217,19 +847,17 @@ export function SubtitleTable({
   }
 
   function handleRowCheckboxClick(id: string, shiftKey: boolean) {
-    // REQ-119 [1] — Shift+click range uses selectableIds so dragging
-    // across a frozen row never adds it to the selection.  Single-click
-    // toggling is already guarded by the per-row `disabled={isFrozen}`
-    // in SubtitleRow.
     if (shiftKey) selectRowRange(id, selectableIds)
     else toggleRowSelected(id)
   }
 
   return (
     <div className="flex flex-col h-full">
+      {/* REQ-0473 §1 — two-column header: select-all checkbox + a single label
+          band (the per-column labels no longer map onto the two-tier row). */}
       <div className={headerCols}>
         <div
-          className="flex items-center justify-center py-2"
+          className="flex items-center justify-center py-1.5"
           onClick={(e) => e.stopPropagation()}
         >
           <Checkbox
@@ -1243,27 +871,29 @@ export function SubtitleTable({
             aria-label={t('table.selectAllAria')}
           />
         </div>
-        {/* REQ-072 Phase 3c: column headers shifted from 11/medium uppercase
-            (chrome label tier) to 13/semibold non-uppercase (callout / item
-            name tier).  Apple HIG, VSCode, Notion, Linear all use
-            sentence-case for table headers — uppercase + tracking-wider
-            made these read as decorative chrome rather than as item names
-            that pair with the cell values below.  Color also lifted from
-            zinc-500 to zinc-300 so the headers carry the item-name weight
-            of a real label. */}
-        <div className="py-2 px-1 text-caption font-normal text-fg-secondary text-center">{t('table.colIndex')}</div>
-        <div className="py-2 px-1 text-caption font-normal text-fg-secondary">{t('table.colTime')}</div>
-        <div className="py-2 px-1 text-caption font-normal text-fg-secondary">{isAudioOnly ? '' : t('table.colSize')}</div>
-        {/* REQ-20260614-001 補遺④ — column 5: style-reference block
-            (text colour / outline colour / outline width — display
-            only).  No header label since the cell content is purely
-            visual reference. */}
-        <div className="py-2 px-1 text-caption font-normal text-fg-secondary"></div>
-        <div className="py-2 px-2 text-caption font-normal text-fg-secondary">{t('table.colText')}</div>
-        {/* REQ-20260614-001 補遺④ — actions column removed.  Action
-            icons (改行 / 削除 / リセット / 複製) now live exclusively
-            in the right-pane Inspector. */}
-        <div className="py-2 px-1 text-caption font-normal text-fg-secondary">{t('table.colState')}</div>
+        {/* REQ-0521 §1 — the 「時間」/「テキスト」 labels are gone. REQ-0473 had
+            already collapsed the per-column labels into one band because they no
+            longer mapped onto the two-tier row, which left them naming nothing in
+            particular; the row itself STAYS because it carries the select-all
+            checkbox (the column to the left), which spans both tiers.
+            The band now holds only the "how to use" guide, right-aligned into
+            the slot 「テキスト」 used to occupy. */}
+        {/* `py-0.5`: the h-7 trigger is taller than the 12px labels it replaced,
+            so the band drives the header's height now. Trimming the padding
+            keeps the header at 33px instead of 37px — same reasoning as
+            REQ-0519's row 2 (cut the padding, never the hit target). */}
+        <div className="flex items-center justify-end py-0.5 pr-2">
+          <HelpPopover
+            label={t('table.help.button')}
+            title={t('table.help.title')}
+            sections={[
+              { title: t('table.help.bulk.title'), body: t('table.help.bulk.body') },
+              // The caution tint: this is the cell explaining that the row
+              // preview deliberately does NOT show some of the style.
+              { title: t('table.help.preview.title'), body: t('table.help.preview.body'), tone: 'caution' },
+            ]}
+          />
+        </div>
       </div>
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto" onScroll={handleScroll}>
         {filtered.length === 0 ? (
@@ -1272,14 +902,10 @@ export function SubtitleTable({
             animate={{ opacity: 1 }}
             className="flex flex-col items-center justify-center gap-3 py-16"
           >
-            <FileText className="h-8 w-8 text-fg-faint" />
+            <FileText className="h-8 w-8 text-fg-disabled" />
             <p className="text-body font-medium text-fg-tertiary">{t(emptyKey)}</p>
           </motion.div>
         ) : (
-          // REQ-0345 §3 — the spacer carries the FULL scroll height so the
-          // scrollbar is honest about how many rows exist, while only the
-          // windowed rows are in the DOM.  Absolute positioning inside it is
-          // what lets the list skip straight to an offset.
           <div
             style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}
           >
@@ -1290,10 +916,6 @@ export function SubtitleTable({
               return (
                 <div
                   key={virtualRow.key}
-                  // `data-index` + this ref are how `measureElement` reports
-                  // the row's REAL height back (REQ-0345 §3-2): rows grow with
-                  // the caption's wrapped line count, so the seed estimate is
-                  // corrected per row as each one mounts.
                   data-index={virtualRow.index}
                   ref={rowVirtualizer.measureElement}
                   style={{
@@ -1304,39 +926,28 @@ export function SubtitleTable({
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >
-                  {/* REQ-0345 §3-3 — only a row that was just INSERTED
-                      animates.  Scrolling mounts and unmounts rows constantly
-                      now, so animating on mount would fire on every scroll. */}
                   <div
                     className={cn(
                       isEntering && 'motion-safe:animate-in motion-safe:fade-in',
                     )}
                     style={isEntering ? { animationDuration: `${ROW_ENTER_ANIM_MS}ms` } : undefined}
                   >
-                <SubtitleRow
-                  entry={entry}
-                  displayIndex={virtualRow.index + 1}
-                  overflowStartIndex={overflowMap.get(entry.id) ?? -1}
-                  // user single-selection drives the green left-border + the
-                  // inspector content.  (補遺⑬: sky 廃止により isPlaybackActive
-                  // は撤去。focusedRowId は本ファイル下部の effect が
-                  // 自動スクロール用にのみ参照する。)
-                  isUserSelected={selectedEntryId === entry.id}
-                  onSelect={setSelectedEntryId}
-                  warnings={warningsMap.get(entry.id) ?? NO_WARNINGS}
-                  isStartExceedsDuration={entry.startSec > videoDurationSec}
-                  isEndExceedsDuration={entry.endSec > videoDurationSec}
-                  onAdjustTime={onAdjustTime}
-                  isSelected={selectedRowIds.has(entry.id)}
-                  onCheckboxClick={handleRowCheckboxClick}
-                  // REQ-103 — derive the row's 4-state classification
-                  // from the live cut list.  Cuts is a small array; per-
-                  // row recompute is O(cuts.length).
-                  clipStatus={effectiveEntryState(entry, cuts).status}
-                  // REQ-115 — forward the live cut list so the row's
-                  // TimeInputs display Edited-axis timecodes.
-                  cuts={cuts}
-                />
+                    <SubtitleRow
+                      entry={entry}
+                      displayIndex={virtualRow.index + 1}
+                      overflowStartIndex={overflowMap.get(entry.id) ?? -1}
+                      isUserSelected={selectedEntryId === entry.id}
+                      onSelect={setSelectedEntryId}
+                      warnings={warningsMap.get(entry.id) ?? NO_WARNINGS}
+                      isStartExceedsDuration={entry.startSec > videoDurationSec}
+                      isEndExceedsDuration={entry.endSec > videoDurationSec}
+                      onAdjustTime={onAdjustTime}
+                      isSelected={selectedRowIds.has(entry.id)}
+                      onCheckboxClick={handleRowCheckboxClick}
+                      clipStatus={effectiveEntryState(entry, cuts).status}
+                      cuts={cuts}
+                      textColWidthPx={textColWidthPx}
+                    />
                   </div>
                 </div>
               )

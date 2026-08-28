@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mergeSettingsForSave } from '../../src/main/ipc/settings-merge'
 import { deriveFontStatus, FONT_SET_VERSION } from '../../src/shared/fonts'
 import type { AppSettings } from '../../src/shared/types'
+import { appSettingsPayloadKeys } from '../helpers/app-settings-payload'
 
 /**
  * REQ-0279 — end-to-end intent test.  Simulates the exact production
@@ -28,11 +29,20 @@ import type { AppSettings } from '../../src/shared/types'
  * mergeSettingsForSave cannot silently reintroduce the bug.
  */
 
+/**
+ * The shape App.tsx sends on every debounced auto-save.
+ *
+ * REQ-0511 M4 — this used to say "kept in sync manually" and claimed the test
+ * would "catch the drift". It could not: the only drift check was
+ * `expect('fontSetInstalledVersion' in rendererPayload).toBe(false)`, which
+ * compares this literal against ITSELF and is true no matter what App.tsx does.
+ * It had in fact drifted by four keys (`translationAutoEnabled`,
+ * `translationTargetLang`, `playbackTimeDetailed`, `stylePresets`), all added
+ * after the fixture was written. Those are restored below, and the drift check
+ * now reads App.tsx (see the first `it` in the suite) — so the next omission
+ * fails here instead of quietly making this scenario fictional.
+ */
 function makeRendererPayload(): AppSettings {
-  // Byte-for-byte the shape App.tsx:190-232 sends today.  Kept in
-  // sync manually — if App.tsx ever gains a `fontSetInstalledVersion`
-  // field, this test will catch the drift because the deep-equality
-  // check on step 3's write below still needs to hold.
   return {
     version: 1,
     language: 'ja',
@@ -63,10 +73,39 @@ function makeRendererPayload(): AppSettings {
     defaultInputDir: null,
     defaultOutputDir: null,
     defaultProjectDir: null,
+    // REQ-0518 — three more folder rows in the payload.
+    defaultImageDir: null,
+    defaultTextDir: null,
+    defaultSrtDir: null,
+    // REQ-0511 M4 — the four keys the fixture had fallen behind on. Values
+    // mirror a default install; only their PRESENCE matters to this scenario.
+    translationAutoEnabled: false,
+    translationTargetLang: 'en',
+    playbackTimeDetailed: false,
+    stylePresets: [],
+    // REQ-0540 — the per-type animation memory joined the payload.
+    animationMemory: {},
+    // REQ-0551 — the AI-integration consent record joined the payload.
+    aiIntegration: {},
   }
 }
 
 describe('REQ-0279 — bulk DL end-to-end sequence preserves setIsCurrent', () => {
+  /**
+   * REQ-0511 M4 — the drift check the fixture's comment used to promise.
+   *
+   * The whole scenario rests on "this is what the renderer sends". If App.tsx
+   * gains a key and this copy does not, the merge below is exercised against a
+   * payload no build ever produces, and it keeps passing while proving nothing
+   * about the app. Reading App.tsx is the only way to know.
+   */
+  it('the fixture matches the payload App.tsx actually sends', () => {
+    const sent = appSettingsPayloadKeys().sort()
+    const fixture = Object.keys(makeRendererPayload()).sort()
+    expect(sent.length, 'the App.tsx payload parser found nothing — re-point it').toBeGreaterThan(10)
+    expect(fixture, 'this fixture has drifted from App.tsx; add/remove the keys listed in the diff').toEqual(sent)
+  })
+
   it('recordSetVersion=3 survives a subsequent debounced auto-save, and deriveFontStatus reports installed', () => {
     // Step 3 result: recordFontSetVersion has just written
     // fontSetInstalledVersion=3 into on-disk settings.
@@ -98,13 +137,18 @@ describe('REQ-0279 — bulk DL end-to-end sequence preserves setIsCurrent', () =
     expect(setIsCurrent).toBe(true)
     expect(deriveFontStatus(false, true, setIsCurrent)).toBe('installed')
 
-    // Contrast: same disk state (installed=true) but with the
-    // pre-fix merge behaviour (stamp wiped) — this is the bug we
-    // fixed, checked by re-simulating the bad path locally.
-    const buggyMerged = { ...rendererPayload }  // no fontSetInstalledVersion — the pre-fix result
-    const buggySetIsCurrent = (buggyMerged as AppSettings).fontSetInstalledVersion === FONT_SET_VERSION
-    expect(buggySetIsCurrent).toBe(false)
-    expect(deriveFontStatus(false, true, buggySetIsCurrent)).toBe('not-installed')
+    // ILLUSTRATION, NOT A CHECK (REQ-0511 L1). The three lines below spread a
+    // local object that has no `fontSetInstalledVersion` and then assert it has
+    // none: true by construction, and true whatever `mergeSettingsForSave`
+    // does. It is kept because it states the symptom in code — "no stamp ⇒
+    // not-installed even though the bytes are on disk" — but it protects
+    // nothing on its own. The protection is `expect(merged.
+    // fontSetInstalledVersion).toBe(FONT_SET_VERSION)` above, which runs the
+    // real merge; if that ever breaks, this pair still passes.
+    const preFixShape = { ...rendererPayload } // what the pre-fix merge produced
+    const preFixSetIsCurrent = (preFixShape as AppSettings).fontSetInstalledVersion === FONT_SET_VERSION
+    expect(preFixSetIsCurrent).toBe(false)
+    expect(deriveFontStatus(false, true, preFixSetIsCurrent)).toBe('not-installed')
   })
 
   it('a fresh-install save (no prior record) leaves the stamp undefined and status not-installed', () => {

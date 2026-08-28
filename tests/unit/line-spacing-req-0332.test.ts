@@ -42,7 +42,7 @@ function entry(p: Partial<SubtitleEntry>): SubtitleEntry {
     text: 'AAA\\NBBB',
     fontSizePx: 100,
     textColorHex: '#FFFFFF', outlineColorHex: '#000000', outlineThicknessPx: 3,
-    fadeDurationSec: 0, fontId: 'noto-sans-jp',
+    fadeDurationSec: 0, fontId: 'noto-sans-jp-bold',
     horizontalPosition: 'center', verticalPosition: 'bottom', verticalMarginPx: 40,
     subtitleBackground: { enabled: false, color: 'black', opacityPercent: 60 },
     isDeleted: false, isEdited: false, animationType: 'none',
@@ -206,12 +206,18 @@ describe('REQ-0332 §3 — the splitter is a no-op at 0 %', () => {
     })).toThrow()
   })
 
-  it('★ a 0 % cue emits ONE event with no `\\pos`', () => {
+  it('★ a 0 % cue now splits into per-line `\\pos` events (all-\\pos, REQ-0391)', () => {
     const lines = dialogues(ass([entry({})]))
-    expect(lines).toHaveLength(1)
-    expect(lines[0]).not.toContain('\\pos')
-    expect(lines[0]).toContain('AAA\\NBBB')
-    // …and an explicit 0 is byte-identical to the absent field.
+    // REQ-0391 — all-\pos: MOJIOKO positions every cue, so even a 0 % multi-line
+    // cue emits one \pos event per display line (was one \N-joined event).  At
+    // 0 % the pitch is fontSizePx (100), so on 1080p / bottom / MarginV 40 the
+    // two lines land at 940 and 1040.
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toContain('\\pos(960,940)')
+    expect(lines[1]).toContain('\\pos(960,1040)')
+    expect(lines[0]).toContain('}AAA')
+    expect(lines[1]).toContain('}BBB')
+    // …and an explicit 0 is still byte-identical to the absent field.
     expect(ass([entry({ lineSpacingPercent: 0 })])).toBe(ass([entry({})]))
   })
 
@@ -234,7 +240,7 @@ describe('REQ-0332 §3 — splitting', () => {
     for (const l of lines) expect(l).toMatch(/Default,0,0,0,,/)
   })
 
-  it('★ a split cue drags its whole simultaneously-visible group along', () => {
+  it('every simultaneously-visible cue self-positions at its own margin — no stacking (REQ-0391)', () => {
     const lines = dialogues(ass([
       entry({ id: 'a', text: 'AAA\\NBBB', lineSpacingPercent: -50 }),
       entry({ id: 'b', text: 'CCC', startSec: 1, endSec: 4 }),
@@ -242,21 +248,24 @@ describe('REQ-0332 §3 — splitting', () => {
     expect(lines).toHaveLength(3)
     // Every cue on screen is positioned by us — never a mix of authorities.
     for (const l of lines) expect(l).toContain('\\pos(')
-    // …and the unsplit neighbour clears the split cue's ink extent:
-    // height = 1×50 + 100 + 2×3 = 156 ⇒ 1080 − (40 + 156).
-    expect(lines[2]).toContain('\\pos(960,884)')
+    // REQ-0391 — no auto-stacking (WYSIWYG): the neighbour 'CCC' sits at its OWN
+    // margin (1080−40 = 1040); it is NOT pushed up to clear the split cue's ink
+    // extent the way the pre-1b fix_collisions replication did.
+    expect(lines[2]).toContain('\\pos(960,1040)')
   })
 
-  it('a cue that never shares a frame with a split cue is left to libass', () => {
+  it('a cue that never shares a frame with another is STILL self-positioned (all-\\pos, REQ-0391)', () => {
     const lines = dialogues(ass([
       entry({ id: 'a', text: 'AAA\\NBBB', startSec: 0, endSec: 2, lineSpacingPercent: -50 }),
       entry({ id: 'b', text: 'CCC', startSec: 5, endSec: 8 }),
     ]))
     expect(lines).toHaveLength(3)
-    expect(lines[2]).not.toContain('\\pos(')
+    // REQ-0391 — libass no longer places anything; every cue gets its own \pos
+    // regardless of whether it shares a frame with a split cue.
+    expect(lines[2]).toContain('\\pos(960,1040)')
   })
 
-  it('a pinned cue splits around its pin without dragging anyone', () => {
+  it('a pinned cue splits around its pin; neighbours self-position independently (REQ-0391)', () => {
     const lines = dialogues(ass([
       entry({ id: 'a', posX: 400, posY: 800, lineSpacingPercent: 100 }),
       entry({ id: 'b', text: 'CCC' }),
@@ -264,10 +273,11 @@ describe('REQ-0332 §3 — splitting', () => {
     expect(lines).toHaveLength(3)
     expect(lines[0]).toContain('\\pos(400,600)')
     expect(lines[1]).toContain('\\pos(400,800)')
-    expect(lines[2]).not.toContain('\\pos(')
+    // REQ-0391 — 'b' is now self-positioned too (all-\pos), at its own margin.
+    expect(lines[2]).toContain('\\pos(960,1040)')
   })
 
-  it('★ karaoke: a continuation line opens with its own leading silence', () => {
+  it('★ karaoke: every cue splits per line now, and a continuation line opens with its own leading silence (REQ-0391)', () => {
     // `\k` is an EVENT-local clock and every split line's event spans the
     // whole cue, so without a leading block line 2 would sweep from t=0 and
     // the lines would run in parallel.
@@ -275,13 +285,16 @@ describe('REQ-0332 §3 — splitting', () => {
       { startSec: 0, endSec: 1.5, text: 'AAA' },
       { startSec: 3.5, endSec: 5, text: ' BBB' },
     ]
-    const joined = dialogues(generateAss(
+    // REQ-0391 — all-\pos: even a 0 % karaoke cue is split per line now, so both
+    // spacings produce two events and line 2 carries its OWN leading silence
+    // (`\k350` = time before BBB); there is no `\N`-joined form any more.
+    const noSpacing = dialogues(generateAss(
       [entry({ karaokeEnabled: true, words })], video, burnin, undefined,
       'Noto Sans JP SemiBold', true, 'sweep',
     ))
-    expect(joined).toHaveLength(1)
-    // Joined form: the silence sits BEFORE the `\N` (RES-0330 §1-3).
-    expect(joined[0]).toContain('{\\k200}\\N')
+    expect(noSpacing).toHaveLength(2)
+    expect(noSpacing[1]).toContain('{\\k350}{\\kf150}BBB')
+    expect(noSpacing[1]).not.toContain('\\N')
 
     const split = dialogues(generateAss(
       [entry({ karaokeEnabled: true, words, lineSpacingPercent: 50 })], video, burnin, undefined,

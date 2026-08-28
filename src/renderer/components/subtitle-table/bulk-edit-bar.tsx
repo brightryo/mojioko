@@ -17,7 +17,10 @@ import { LineSpacingSlider } from '@/components/subtitle-table/line-spacing-slid
 import { LINE_SPACING_DEFAULT_PERCENT } from '../../../shared/line-spacing'
 import { FamilyWeightSelector } from '@/components/subtitle-table/family-weight-selector'
 import { buildUndoPatch } from '../../../shared/history-patch'
+import { deepSnapshotEntry } from '@/lib/duplicate-entry'
+import { buildColorPairPreSnapshots, pickFirstSelectedToggles } from '@/lib/bulk-edit-undo'
 import { StyleRow } from '@/components/subtitle-table/style-row'
+import { BulkTranslate } from '@/components/subtitle-table/bulk-translate'
 // REQ-0335 §3 — style presets.
 import { StylePresetControls } from '@/components/style-preset/style-preset-controls'
 import { buildStylePreset, resolveStylePresetPatch } from '@/lib/style-preset-apply'
@@ -374,6 +377,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // while empty so users won't see these).
   const initialLayout = pickFirstSelectedLayout(selectedRowIds)
   const initialSegments = pickUniformLayoutSegments(selectedRowIds)
+  // REQ-0464 — seed the toggle Switches (karaoke / 発話タイミング / casing) from the
+  // first selected row so they render controlled, reflecting the selection's
+  // actual state rather than always showing OFF.
+  const initialToggles = pickFirstSelectedToggles(selectedRowIds, useProjectStore.getState().entries)
   // REQ-20260615-059 C — `null` represents the "selection has mixed
   // values for this field" state.  The BulkSegmentGroup renders no
   // segment highlighted in that case; on click the chosen value is
@@ -385,6 +392,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   const [bgEnabledDraft, setBgEnabledDraft]     = useState<boolean>(initialLayout?.bgEnabled ?? false)
   const [bgColorDraft, setBgColorDraft]         = useState<'black' | 'white'>(initialLayout?.bgColor ?? 'black')
   const [bgOpacityDraft, setBgOpacityDraft]     = useState<string>(String(initialLayout?.bgOpacityPercent ?? 50))
+  // REQ-0464 — controlled state for the three toggle Switches.
+  const [karaokeEnabledDraft, setKaraokeEnabledDraft] = useState<boolean>(initialToggles?.karaokeEnabled ?? false)
+  const [karaokeWordTimingsDraft, setKaraokeWordTimingsDraft] = useState<boolean>(initialToggles?.karaokeUseWordTimings ?? false)
+  const [casingDraft, setCasingDraft] = useState<boolean>(initialToggles?.casingUppercase ?? false)
 
   // Re-seed every draft when the selection itself changes.  Reads
   // `entries` via getState() so the effect only fires on selection
@@ -435,6 +446,14 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
       setBgColorDraft(layout.bgColor)
       setBgOpacityDraft(String(layout.bgOpacityPercent))
     }
+    // REQ-0464 — re-seed the toggle Switches from the first selected row on
+    // every selection change (same convention as the layout drafts above).
+    const toggles = pickFirstSelectedToggles(selectedRowIds, useProjectStore.getState().entries)
+    if (toggles) {
+      setKaraokeEnabledDraft(toggles.karaokeEnabled)
+      setKaraokeWordTimingsDraft(toggles.karaokeUseWordTimings)
+      setCasingDraft(toggles.casingUppercase)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: activeFontId re-seed happens on selection change only, not on unrelated activeFont mutations.
   }, [selectedRowIds])
 
@@ -477,7 +496,10 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         if (!e) continue
         if (e.isDeleted) continue
         if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
-        snapshots.set(id, { ...e })
+        // REQ-0464 — deep-copy the nested fields the patch touches so the Undo
+        // snapshot is decoupled from later in-place mutations of the live entry
+        // (a shallow `{ ...e }` shared `subtitleBackground` etc. by reference).
+        snapshots.set(id, deepSnapshotEntry(e, patch))
       }
     })
     if (snapshots.size === 0) return
@@ -546,6 +568,41 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     })
     measureSync('bulk.apply', apply)
     measureSync('bulk.onApplied', () => onApplied(snapshots.size, label))
+  }
+
+  // REQ-0430 — bulk translate write-back.  Like `applyBulk` but each row gets a
+  // DIFFERENT text (its translation), applied in ONE history op so the whole
+  // bulk translate is a single Undo.  Called only after every translation has
+  // been collected (see BulkTranslate), so there is no partial state to roll
+  // back on cancel — cancel simply never reaches here.
+  function applyTranslations(textById: Map<string, string>, label: string) {
+    const all = useProjectStore.getState().entries
+    const cuts = useProjectStore.getState().cuts
+    const byId = new Map(all.map((e) => [e.id, e]))
+    const snapshots = new Map<string, SubtitleEntry>()
+    for (const id of textById.keys()) {
+      const e = byId.get(id)
+      if (!e || e.isDeleted) continue
+      if (effectiveEntryState(e, cuts).status === 'trimDeleted') continue
+      snapshots.set(id, { ...e })
+    }
+    if (snapshots.size === 0) return
+
+    const appliedById = new Map<string, Partial<SubtitleEntry>>()
+    for (const id of snapshots.keys()) {
+      appliedById.set(id, { text: textById.get(id) ?? '', isEdited: true })
+    }
+    const apply = () => useProjectStore.getState().updateEntriesBatch(appliedById)
+    const revert = () => {
+      const perRow = new Map<string, Partial<SubtitleEntry>>()
+      for (const [id, snap] of snapshots) {
+        perRow.set(id, buildUndoPatch(snap, appliedById.get(id)!, undefined))
+      }
+      useProjectStore.getState().updateEntriesBatch(perRow)
+    }
+    useHistoryStore.getState().push({ label, undo: revert, redo: apply })
+    apply()
+    onApplied(snapshots.size, label)
   }
 
   // ---------------------------------------------------------------------
@@ -689,9 +746,19 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // updates squashed into one undo / redo step matches the user's mental
   // model of "I picked a pair".
   function handleColorPairCommit(textHex: string, outlineHex: string) {
+    // REQ-0464 — consume BOTH colour "before" maps (populated if the user
+    // dragged the saturation picker before clicking a pair) and clear them, so
+    // Undo rewinds each row to its pre-drag text+outline colour instead of the
+    // preview value the store already holds.  Matches the single-colour paths.
+    const textBefore = bulkTextColorBeforeRef.current
+    const outlineBefore = bulkOutlineColorBeforeRef.current
+    bulkTextColorBeforeRef.current = null
+    bulkOutlineColorBeforeRef.current = null
+    const preSnapshots = buildColorPairPreSnapshots(selectedRowIds, textBefore, outlineBefore)
     applyBulk(
       { textColorHex: textHex, outlineColorHex: outlineHex },
-      t('bulk.history.colorPair', { count: selectedRowIds.size })
+      t('bulk.history.colorPair', { count: selectedRowIds.size }),
+      preSnapshots
     )
     setColorDraftText(textHex)
     setColorDraftOutline(outlineHex)
@@ -798,6 +865,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // toggle-on behaviour.  REQ-0278 dropped the glow bulk-toggle here
   // (see SPECIFICATION.md §11).
   function handleCasingBulk(on: boolean) {
+    setCasingDraft(on) // REQ-0464 — keep the controlled Switch in sync.
     applyBulk(
       { casing: on ? 'uppercase' : 'none' },
       t('bulk.history.casing', { count: selectedRowIds.size }),
@@ -854,6 +922,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // default.  Free tier: the row is hidden entirely (tier gate above),
   // so this handler is unreachable on NSIS builds.
   function handleKaraokeBulkToggle(on: boolean) {
+    setKaraokeEnabledDraft(on) // REQ-0464 — keep the controlled Switch in sync.
     applyBulk(
       on
         ? {
@@ -873,6 +942,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
   // flag.  The tooltip says so rather than a badge (no duplicate ON/OFF
   // surface).
   function handleKaraokeWordTimingsBulkToggle(on: boolean) {
+    setKaraokeWordTimingsDraft(on) // REQ-0464 — keep the controlled Switch in sync.
     applyBulk(
       { karaokeUseWordTimings: on },
       t('bulk.history.karaoke', { count: selectedRowIds.size }),
@@ -1189,13 +1259,13 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
     >
       {/* Top: count + clear */}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-body-sm font-medium text-foreground tabular-nums">
+        <span className="text-body-sm font-medium text-fg-primary tabular-nums">
           {countLabel}
         </span>
         <button
           type="button"
           onClick={clearRowSelection}
-          className="flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors duration-150"
+          className="flex items-center justify-center h-6 w-6 rounded text-fg-secondary hover:bg-accent hover:text-accent-foreground transition-colors duration-150"
           aria-label={t('bulk.clearSelection')}
           title={t('bulk.clearSelection')}
         >
@@ -1210,7 +1280,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           with `border-y` so a hairline sits both above and below the
           icon row, visually marking it as "actions that apply across
           the selection" before the styled-property sections below. */}
-      <div className="flex items-center gap-2 border-y border-border/60 py-2">
+      <div className="flex items-center gap-2 border-y border-line/60 py-2">
         <button
           type="button"
           onClick={handleAutoLineBreakApply}
@@ -1218,8 +1288,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           aria-label={t('bulk.autoLineBreakHelp')}
           className={cn(
             'inline-flex items-center justify-center',
-            'h-7 w-7 rounded border bg-input text-foreground',
-            'border-border hover:border-line-strong transition-colors duration-150',
+            'h-7 w-7 rounded border bg-input text-fg-primary',
+            'border-line hover:border-line-strong transition-colors duration-150',
             'focus:outline-none focus-visible:outline-none',
           )}
         >
@@ -1232,8 +1302,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           aria-label={t('bulk.overflowWrapHelp')}
           className={cn(
             'inline-flex items-center justify-center',
-            'h-7 w-7 rounded border bg-input text-foreground',
-            'border-border hover:border-line-strong transition-colors duration-150',
+            'h-7 w-7 rounded border bg-input text-fg-primary',
+            'border-line hover:border-line-strong transition-colors duration-150',
             'focus:outline-none focus-visible:outline-none',
           )}
         >
@@ -1254,7 +1324,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             not labelled button"; the row decides its own chrome. */}
         <StylePresetControls
           triggerVariant="toolbar"
-          className="ml-auto border border-border bg-input text-foreground hover:border-line-strong hover:bg-input"
+          className="ml-auto border border-line bg-input text-fg-primary hover:border-line-strong hover:bg-input"
           onSaveCurrent={presetSaveSource ? handleSavePreset : null}
           onApply={handleApplyPreset}
         />
@@ -1264,8 +1334,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
           背景色 の 3 セクションにグルーピングし、単一選択 Inspector の
           並びを bulk 側でも踏襲する。Font picker は補遺⑪ までは下の方に
           並んでいたが、字幕セクションの先頭に移して Inspector 側と
-          整合させた。各セクションは `border-t border-border/60 pt-2`
-          で区切り線、見出しは `text-body font-semibold text-foreground`
+          整合させた。各セクションは `border-t border-line/60 pt-2`
+          で区切り線、見出しは `text-body font-semibold text-fg-primary`
           で表示。 */}
       <div className="flex flex-col">
         {/* § 字幕 — Font, Size, Text colour, Outline colour, Outline
@@ -1276,9 +1346,13 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             `border-y`, which would otherwise double up with this top
             border into a 2-px line. */}
         <div className="flex flex-col gap-2 pt-2">
-          <div className="text-body font-semibold text-foreground">
+          <div className="text-body font-semibold text-fg-primary">
             {t('timeline.inspector.subtitleSection')}
           </div>
+          {/* REQ-0430 — bulk translate: language + Translate button (gated on a
+              downloaded+enabled tool).  Translates every selected cue and
+              overwrites its text as one undoable op (see BulkTranslate). */}
+          <BulkTranslate selectedRowIds={selectedRowIds} onApply={applyTranslations} />
           {/* REQ-0275 §5 — two-tier family + weight picker for bulk.
               Uses activeFontId as the display seed when no rows are
               selected or a heterogeneous selection collapses.  Bulk
@@ -1416,7 +1490,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               {/* `min-w-0` so the 「タイミング」 label truncates rather than
                   pushing the second Switch out of the shared control column. */}
               <div className="flex min-w-0 items-center gap-2">
-                <Switch onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
+                <Switch checked={karaokeEnabledDraft} onCheckedChange={handleKaraokeBulkToggle} aria-label={t('styleCell.karaoke')} />
                 <ColorPicker
                   value={karaokeHighlightDraft}
                   onChange={handleKaraokeHighlightBulkPreview}
@@ -1433,6 +1507,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
                         {t('styleCell.karaokeWordTimingsShort')}
                       </span>
                       <Switch
+                        checked={karaokeWordTimingsDraft}
                         onCheckedChange={handleKaraokeWordTimingsBulkToggle}
                         aria-label={t('styleCell.karaokeWordTimings')}
                       />
@@ -1479,7 +1554,7 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
               (they read each row's own spans when measuring). */}
           {/* REQ-0299 §3 — casing state text ("ALL CAPS") removed. */}
           <StyleRow label={t('styleCell.casing')}>
-            <Switch onCheckedChange={handleCasingBulk} aria-label={t('styleCell.casing')} />
+            <Switch checked={casingDraft} onCheckedChange={handleCasingBulk} aria-label={t('styleCell.casing')} />
           </StyleRow>
           <StyleRow label={t('styleCell.rotation')}>
             <NumberStepperInput
@@ -1497,8 +1572,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         </div>
 
         {/* § レイアウト — Horizontal, Vertical, Margin. */}
-        <div className="flex flex-col gap-2 border-t border-border/60 pt-2 mt-2">
-          <div className="text-body font-semibold text-foreground">
+        <div className="flex flex-col gap-2 border-t border-line/60 pt-2 mt-2">
+          <div className="text-body font-semibold text-fg-primary">
             {t('timeline.inspector.layoutSection')}
           </div>
           <StyleRow label={t('styleCell.layoutH')}>
@@ -1579,8 +1654,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
             subtitle / layout / animation / background to match the
             inspector exactly.  Uses the SAME `AnimationControls`
             component, so the two surfaces cannot drift apart. */}
-        <div className="flex flex-col gap-2 border-t border-border/60 pt-2 mt-2">
-          <div className="text-body font-semibold text-foreground">
+        <div className="flex flex-col gap-2 border-t border-line/60 pt-2 mt-2">
+          <div className="text-body font-semibold text-fg-primary">
             {t('timeline.inspector.animationSection')}
           </div>
           <AnimationControls
@@ -1593,8 +1668,8 @@ export function BulkEditBar({ onApplied }: BulkEditBarProps) {
         {/* § 背景色 — Bg ON/OFF, Bg colour, Opacity.  REQ-0096 attaches a
             HelpIcon to the section heading explaining the libass-spec rule
             that enabling BG disables the outline color. */}
-        <div className="flex flex-col gap-2 border-t border-border/60 pt-2 mt-2">
-          <div className="text-body font-semibold text-foreground flex items-center gap-1.5">
+        <div className="flex flex-col gap-2 border-t border-line/60 pt-2 mt-2">
+          <div className="text-body font-semibold text-fg-primary flex items-center gap-1.5">
             <span>{t('timeline.inspector.backgroundSection')}</span>
             <HelpIcon content={t('timeline.inspector.backgroundSectionHelp')} />
           </div>

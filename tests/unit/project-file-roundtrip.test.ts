@@ -95,7 +95,7 @@ const sampleEntries: SubtitleEntry[] = [
   makeEntry('e-002', 6.3, 9.8, '2 番目の字幕。編集済み。', {
     text: '2 番目の字幕。編集済み。',
     isEdited: true,
-    fontId: 'delagothicone',
+    fontId: 'dela-gothic-one',
   }),
   makeEntry('e-003', 11.0, 14.2, 'アイテムを取得しました。', {
     posX: 960,
@@ -314,8 +314,8 @@ describe('checkIdentity', () => {
 describe('collectUsedFontIds', () => {
   it('collects explicit fontId overrides plus the inherited default', () => {
     const fonts = collectUsedFontIds(sampleEntries, 'noto-sans-jp-semibold')
-    // e-002 has explicit `delagothicone`; e-001/e-003/e-004 inherit.
-    expect(fonts).toContain('delagothicone')
+    // e-002 has explicit `dela-gothic-one`; e-001/e-003/e-004 inherit.
+    expect(fonts).toContain('dela-gothic-one')
     expect(fonts).toContain('noto-sans-jp-semibold')
     expect(fonts).toHaveLength(2)
   })

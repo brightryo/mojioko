@@ -54,7 +54,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
@@ -65,6 +65,12 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
  *
  * - `main.py`      — `Analysis([...])` entry point in the spec.
  * - `word_split.py` — declared as `hiddenimports`, so it IS bundled.
+ * - `translate.py` — REQ-0494: the MADLAD translation sidecar, reached via
+ *   main.py's `translate` subcommand and declared as a `hiddenimport`, so it IS
+ *   bundled.  Editing it without a rebuild ships old TRANSLATION code — the same
+ *   class of stale-binary bug (REQ-0287) this gate exists for, now that
+ *   translation runs from the bundled exe rather than the .venv (REQ-0494).
+ * - `gpu_dll.py` — shared CUDA preload, also a `hiddenimport`, also bundled.
  * - the spec itself — changes `hiddenimports` / `collect_all` / onedir-ness.
  *
  * Deliberately EXCLUDED, to keep false positives at zero:
@@ -77,8 +83,42 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const SOURCE_FILES = [
   'python-sidecar/main.py',
   'python-sidecar/word_split.py',
+  'python-sidecar/translate.py',
+  'python-sidecar/gpu_dll.py',
   'mojioko-transcriber.spec',
 ]
+
+/**
+ * REQ-0511 L4 — a NEW sidecar module must not be able to go unhashed silently.
+ *
+ * `SOURCE_FILES` is hand-written, and that is deliberate (see the exclusions
+ * above): auto-hashing every `.py` would stop builds over test edits. But a
+ * hand-written list has the failure this gate exists to prevent — add
+ * `foo.py`, import it from `main.py`, forget this list, and editing `foo.py`
+ * never marks the bundle stale again. Auto-enumeration is the wrong fix;
+ * forcing a DECISION is the right one, so every `.py` in the sidecar must
+ * appear in exactly one of the two lists below.
+ */
+const NOT_BUNDLED = [
+  // Tests are not packaged; editing one must not block a build.
+  /^test_.*\.py$/,
+]
+
+function assertEverySidecarSourceIsClassified() {
+  const dir = path.join(REPO_ROOT, 'python-sidecar')
+  const unclassified = readdirSync(dir)
+    .filter((name) => name.endsWith('.py'))
+    .filter((name) => !NOT_BUNDLED.some((re) => re.test(name)))
+    .filter((name) => !SOURCE_FILES.includes(`python-sidecar/${name}`))
+  if (unclassified.length > 0) {
+    console.error(
+      `FAIL — python-sidecar module(s) in neither SOURCE_FILES nor NOT_BUNDLED: ${unclassified.join(', ')}\n` +
+      '  Add each to SOURCE_FILES (it is bundled, so editing it must mark the build stale)\n' +
+      '  or to NOT_BUNDLED with a reason (it is not packaged).',
+    )
+    process.exit(1)
+  }
+}
 
 /**
  * Kept OUTSIDE `resources/bin/transcriber/` on purpose: the documented build
@@ -136,6 +176,11 @@ function writeStamp() {
 
 function verify() {
   const stampAbs = path.join(REPO_ROOT, STAMP_PATH)
+  // REQ-0511 L4 — before comparing hashes, make sure the LIST being hashed
+  // still covers every sidecar module. This one blocks even in the SKIP cases
+  // below, because an unclassified module is a gap in the gate itself rather
+  // than an ambiguity about a particular build.
+  assertEverySidecarSourceIsClassified()
 
   // --- ambiguity cases: say so, do not block --------------------------------
   if (!existsSync(path.join(REPO_ROOT, ARTIFACT_PATH))) {

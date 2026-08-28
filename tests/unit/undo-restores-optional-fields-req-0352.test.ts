@@ -47,6 +47,9 @@ const SAMPLES = {
   posX: 100,
   posY: 200,
   lineSpacingPercent: -30,
+  layer: 5, // REQ-0392 — z-order
+  cueNumber: 5, // REQ-0400 — display number (identity; assigned by the store)
+
   casing: 'uppercase',
   rotation: 90,
   shadowDepth: 12,
@@ -88,9 +91,10 @@ describe('REQ-0352 — undo restores optional fields to UNSET', () => {
      * that `satisfies` would never be evaluated and this file would claim an
      * exhaustiveness nobody verified.  So the check is run here, for real.
      *
-     * `tsconfig.test.json` exists for this and explains why its `include` is
-     * one file rather than the whole suite (19 pre-existing type errors in
-     * unrelated specs — see RES-0352).
+     * `tsconfig.test.json` exists for this.  REQ-0352 scoped its `include` to
+     * this one file (deferring ~19 pre-existing errors in unrelated specs);
+     * REQ-0464 §2 fixed those and widened `include` to the whole suite, so this
+     * spawn now type-checks every test — a broader gate than the table alone.
      */
     // `shell: true` because on Windows the launcher is a `.cmd`, which
     // CreateProcess cannot execute directly.  Without it `status` comes back
