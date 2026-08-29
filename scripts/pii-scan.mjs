@@ -6,10 +6,25 @@
  *
  *   1. INTERNAL_DOC_PATHS — `CLAUDE.md` / `dev-docs/` must never appear
  *      among tracked-or-staged files.  Path check; no content read.
+ *      Also a ROOT-LEVEL `*.md` ALLOWLIST: only the public docs
+ *      (README / CHANGELOG / PRIVACY / LICENSE, with `_JA` variants) may
+ *      be tracked at the repo root — any *other* new root `.md` is an
+ *      instant block, because that is the shape a stray internal report
+ *      (`report.md`, RES-0579 §2-3 A) takes.  Allow-listing names is the
+ *      point: we cannot enumerate every bad name, so we enumerate the
+ *      good ones and block the rest.
  *
  *   2. GENERIC_PATTERNS — regexes that catch common PII shapes
- *      (email addresses, `C:\Users\<name>\`, `D:\dev`, `D:/dev`)
- *      so the tripwire works on a fresh clone with no dictionary yet.
+ *      (email addresses, `C:\Users\<name>\`, `D:\dev`, credential
+ *      assignments such as `password:`/`certificatePassword:`) so the
+ *      tripwire works on a fresh clone with no dictionary yet.  The path
+ *      regexes match the ESCAPED source form (`C:\\Users\\x`) as well as
+ *      the raw form — TS/JS/YAML on disk carry doubled backslashes, and
+ *      matching only the raw form (RES-0579 §3-4 hole 2) is why real
+ *      usernames slipped through a green gate.  Well-known placeholder
+ *      usernames (`user`/`test`/`me`/`x`/`someone`/…) and the bare
+ *      project path `D:\dev\mojioko` (owner-accepted, RES-0579 F) are
+ *      exempted so fixtures stay green; a *real* username is not.
  *
  *   3. LOCAL DICTIONARY (`.pii-blocklist`) — owner-managed file with
  *      the actual blocklist words (real name, kana, personal account,
@@ -38,11 +53,16 @@
  * Exclusions (paths NEVER scanned, even when the tracker lists them):
  *   - `node_modules/`, `resources/bin/`, `installer/licenses/`
  *     (bundled third-party content with verbatim author metadata).
- *   - `src/renderer/locales/`, `docs/`, `build/license_*` (deliberate
- *     brand mentions / UI strings).
- *   - `scripts/` itself (the scanner and hooks reference the patterns
- *     literally; running the rules against the rules creates infinite
- *     false-positives).
+ *   - `src/renderer/locales/`, `build/license_*` (deliberate brand
+ *     mentions / UI strings).
+ *   - `scripts/pii-scan.mjs` and `scripts/hooks/` ONLY (this scanner and
+ *     the hooks reference the patterns literally; running the rules
+ *     against the rules is a self-hit).  The REST of `scripts/` and all
+ *     of `docs/` are NOT excluded any more (RES-0579 §3-4 hole 1): they
+ *     are shipped code / the public site, exactly where a leak matters,
+ *     and blanket-excluding them is how `scripts/shots/index.mjs`'s dev
+ *     paths reached origin.  Brand false-positives are absorbed by
+ *     ALLOWED_TOKENS, not by excluding the directory.
  *   - `package-lock.json` (npm metadata pollutes with author emails).
  *   - `.pii-blocklist`, `.git/` (the dictionary file and git internals).
  *
@@ -75,11 +95,46 @@ const INTERNAL_DOC_PATHS = [
   /^dev-docs\//,
 ]
 
+// Root-level *.md allowlist (Layer 1, second half).  Only these public
+// documents may be tracked at the repo root.  Any *other* root `.md`
+// (e.g. a stray `report.md`) is an instant block — we enumerate the
+// allowed names and reject the rest, rather than trying to name every
+// bad file.  `_JA` variants included.  Nested `.md` (under src/, docs/,
+// python-sidecar/, …) is out of scope here — this is about the root,
+// which is where internal reports have historically landed.
+const ROOT_MD_ALLOWLIST = new Set([
+  'README.md',
+  'README_JA.md',
+  'CHANGELOG.md',
+  'CHANGELOG_JA.md',
+  'PRIVACY.md',
+  'PRIVACY_JA.md',
+  'LICENSE.md',
+  'SECURITY.md',
+  'CONTRIBUTING.md',
+  'CODE_OF_CONDUCT.md',
+])
+
+function isDisallowedRootMd(path) {
+  // Root level == no slash in the (already forward-slashed) path.
+  if (path.includes('/')) return false
+  if (!/\.md$/i.test(path)) return false
+  return !ROOT_MD_ALLOWLIST.has(path)
+}
+
 // ---------------------------------------------------------------------------
 // Layer 2: generic patterns (work without a local dictionary).
 // `exemptions` are regexes that, if they match the same substring,
 // downgrade the hit to "not PII".  Kept narrow.
 // ---------------------------------------------------------------------------
+// Conventional placeholder usernames.  A `C:\Users\<name>` whose name is
+// one of these is a fixture, not a person, and is exempted.  A real
+// username (`MyPC`, `brightryo`) is NOT here, so it is caught.  New test
+// fixtures must use one of these names (or add one here deliberately) —
+// that is the gate, spelled as an allowlist.
+const PLACEHOLDER_USERS =
+  '(?:user|users|public|default|all|test|testuser|me|you|someone|somebody|example|sample|demo|x|foo|bar|baz|name|username|admin|runneradmin)'
+
 const GENERIC_PATTERNS = [
   {
     name: 'email',
@@ -90,16 +145,41 @@ const GENERIC_PATTERNS = [
     ],
   },
   {
+    // `[\\/]+` matches the escaped source form `C:\\Users\\x` (two literal
+    // backslashes on disk) as well as the raw `C:\Users\x` and POSIX-y
+    // `C:/Users/x`.  Matching only the raw form was RES-0579 hole 2.
     name: 'C:\\Users\\<name>',
-    regex: /C:[\\/]Users[\\/]\w+/g,
+    regex: /C:[\\/]+Users[\\/]+\w+/g,
     exemptions: [
-      /^C:[\\/]Users[\\/](?:user|Public|Default|All Users|All)$/i,
+      new RegExp(`^C:[\\\\/]+Users[\\\\/]+${PLACEHOLDER_USERS}$`, 'i'),
     ],
   },
   {
     name: 'D:\\dev personal path',
-    regex: /D:[\\/]dev/g,
-    exemptions: [],
+    regex: /D:[\\/]+dev(?:[\\/]+\w+)?/g,
+    // `D:\dev\mojioko` (drive + project name, no username) is owner-accepted
+    // as non-identifying — RES-0579 F.  It stays in test fixtures by owner
+    // decision (REQ-0580 §1-4), so the gate exempts exactly that path and
+    // still catches any other `D:\dev\<something>`.
+    exemptions: [
+      /^D:[\\/]+dev[\\/]+mojioko$/i,
+      /^D:[\\/]+dev$/i,
+    ],
+  },
+  {
+    // Credential assignments — `password: x`, `certificatePassword: x`,
+    // `api_key = "x"`.  Quotes optional (YAML routinely omits them); this
+    // is why `certificatePassword: mojioko-dev` (RES-0579 B) went undetected
+    // for months — there was no credential pattern at all (hole 3).
+    name: 'credential assignment',
+    regex:
+      /\b(?:password|passphrase|secret|api[_-]?key|access[_-]?token|client[_-]?secret|certificate[_-]?password)\b\s*[:=]\s*['"]?[^\s'"#,;)]{3,}/gi,
+    exemptions: [
+      // Type annotations / literals that are not secrets.
+      /[:=]\s*['"]?(?:string|number|boolean|bool|null|undefined|any|unknown|true|false|void|Record|Array|Promise|object)\b/i,
+      // References / expressions rather than an inline literal value.
+      /[:=]\s*['"]?(?:process\.env|import\b|require\(|config\b|opts\b|options\b|this\.|env\b|args\b|argv\b|\$\{|\{)/i,
+    ],
   },
 ]
 
@@ -113,9 +193,11 @@ const EXCLUDED_PATH_PATTERNS = [
   /^resources\/bin\//,
   /^installer\/licenses\//,
   /^src\/renderer\/locales\//,
-  /^docs\//,
   /^build\/license_/,
-  /^scripts\//,
+  // Only the scanner itself and the hooks — NOT all of scripts/ or docs/
+  // (RES-0579 §3-4 hole 1).  These reference the patterns literally.
+  /^scripts\/pii-scan\.mjs$/,
+  /^scripts\/hooks\//,
   /^package-lock\.json$/,
   /^\.pii-blocklist$/,
   /^\.git\//,
@@ -249,6 +331,12 @@ if (MODE === 'history') {
       if (re.test(path)) {
         hits.push({ file: path, line: 0, token: '[internal-doc-path]' })
       }
+    }
+
+    // Layer 1 (second half): a root-level *.md that is not on the public
+    // allowlist is an instant block — the shape a stray internal report takes.
+    if (isDisallowedRootMd(path)) {
+      hits.push({ file: path, line: 0, token: '[non-allowlisted root .md]' })
     }
 
     if (isPathExcluded(path)) continue

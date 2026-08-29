@@ -14,6 +14,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "scan:pii": "node scripts/pii-scan.mjs",
+    "audit:public": "node scripts/audit-public/index.mjs",
+    "verify:site-claims": "node scripts/verify-site-claims/index.mjs",
     "verify:outline-ring": "node scripts/verify-outline-ring/index.mjs",
     "verify:ring-paint": "node scripts/verify-ring-paint/index.mjs",
     "verify:cli-smoke": "node scripts/cli-smoke.mjs",
