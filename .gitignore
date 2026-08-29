@@ -232,9 +232,15 @@ benchmark-results/
 # REQ-20260615-045 F — internal development resources excluded from
 # the public repository.  Kept locally for development (CLAUDE.md is
 # the canonical agent instruction set; dev-docs/ is the spec / design /
-# build / font-validation reference).  Past history on origin/main
-# still contains these files — a separate history-rewrite decision is
-# required to scrub them retroactively.
+# build / font-validation reference).
+#
+# REQ-0580 §1-6 — the previous note here claimed origin/main history "still
+# contains these files"; the full-history audit (RES-0579 §1-2) checked all
+# 13,642 reachable objects and found ZERO occurrences of CLAUDE.md / dev-docs/
+# / .claude/ / REQ-RES docs in published history — they were never pushed.
+# The one internal doc that DID linger in history is a stray root `report.md`
+# (RES-0579 §2-3 A); the owner chose to neutralise it via the CHANGELOG font-
+# license note (REQ-0580 A = option b) rather than rewrite published history.
 # ============================================
 /CLAUDE.md
 /dev-docs/
