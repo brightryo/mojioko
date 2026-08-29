@@ -83,13 +83,14 @@ win:
     - target: appx
       arch: x64
   icon: build/icon.ico
-  # INSTRUCT-MSIX-VERIFY-v1.3.1 STEP1 — self-signed sideload cert.
-  # The PFX is at the path below (gitignored; *.pfx pattern in .gitignore).
-  # Its Subject is "CN=brightryo", which must match the `publisher` field
-  # under `appx:` below exactly.  The owner separately registers the
-  # companion `.cer` into LocalMachine\TrustedPeople in STEP2 (admin).
-  certificateFile: dist-appx/mojioko-msix-dev.pfx
-  certificatePassword: mojioko-dev
+  # REQ-0580 §1-1 — the self-signed sideload signing step is removed.
+  # AppX signing never actually established on this machine (RES-0572 §6-a),
+  # and sideload verification is done via loose registration
+  # (Add-AppxPackage -Register on the unpacked layout) instead, so the
+  # `certificateFile` / `certificatePassword` pair here bought nothing but a
+  # plaintext credential in a public repo (RES-0579 B).  Removed entirely.
+  # If real sideload signing is ever needed, pass CSC_LINK / CSC_KEY_PASSWORD
+  # via the environment (electron-builder reads them) — never inline.
 
 # AppX-specific options.
 #
