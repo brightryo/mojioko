@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.4.0] - unreleased
+## [1.4.0] - 2026-08-28
 
 **Every feature in this release works in both editions.**  The only
 difference between them is the font package: the paid (Microsoft Store)
@@ -522,6 +522,13 @@ error / warning model.
 
 Second minor-line release: per-row font selection, audio file input, expanded
 colour palette, and settings dialog organisation.
+
+> **Font license note.** As of this release, every bundled and downloadable
+> font ships the font author's upstream `OFL.txt` verbatim next to the font
+> file. The very first builds bundled Noto Sans JP without its correct
+> per-font OFL text; that packaging defect was corrected here (v1.1.1) and
+> in every release since. If you have an earlier build, updating brings the
+> license files into compliance — no action is needed on your part.
 
 ### Added
 
