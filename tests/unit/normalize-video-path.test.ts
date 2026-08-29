@@ -74,7 +74,7 @@ describe('normalizeVideoPath', () => {
   })
 
   it('accepts CJK / Japanese full-width symbols and non-Windows drive letters', () => {
-    const jaPath = 'C:\\Users\\brightryo\\動画\\切り抜き — 全角括弧【テスト】＆記号.mp4'
+    const jaPath = 'C:\\Users\\test\\動画\\切り抜き — 全角括弧【テスト】＆記号.mp4'
     const result = normalizeVideoPath(jaPath, { existsFn: () => true })
     expect(result).toEqual({ ok: true, path: jaPath })
   })

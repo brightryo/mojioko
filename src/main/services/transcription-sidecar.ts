@@ -77,8 +77,10 @@ function resolveSidecarSpawn(): { exe: string; args: string[]; mode: 'bundled' |
   }
 
   if (!app.isPackaged) {
+    // REQ-0580 §1-3 — generic placeholder path, symmetric with the POSIX
+    // branch below; never embed a specific dev machine's project path here.
     const hint = process.platform === 'win32'
-      ? 'cd D:\\dev\\mojioko\r\npy -3.11 -m venv .venv\r\n.\\.venv\\Scripts\\Activate.ps1\r\npip install -r python-sidecar\\requirements.txt'
+      ? 'cd path\\to\\mojioko\r\npy -3.11 -m venv .venv\r\n.\\.venv\\Scripts\\Activate.ps1\r\npip install -r python-sidecar\\requirements.txt'
       : 'cd /path/to/mojioko\npython3.11 -m venv .venv\nsource .venv/bin/activate\npip install -r python-sidecar/requirements.txt'
     throw new Error(
       `.venv が見つかりません。プロジェクトルートで以下を実行してください:\n${hint}`

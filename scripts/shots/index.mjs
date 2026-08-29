@@ -52,8 +52,12 @@ function arg(name, fallback) {
   const i = process.argv.indexOf('--' + name)
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback
 }
-const VIDEO_DIR = arg('videos', String.raw`C:\Users\MyPC\Videos\GamePlay`)
-const SRT_DIR = arg('srt', String.raw`C:\Users\MyPC\Videos\SRT`)
+// REQ-0580 §1-2 — no hardcoded dev-machine default paths.  Supply the source
+// dirs on the command line, or via the MOJIOKO_SHOTS_VIDEOS / MOJIOKO_SHOTS_SRT
+// environment variables.  A missing value stops with guidance (below) instead
+// of silently reaching into one particular developer's home Videos folder.
+const VIDEO_DIR = arg('videos', process.env.MOJIOKO_SHOTS_VIDEOS)
+const SRT_DIR = arg('srt', process.env.MOJIOKO_SHOTS_SRT)
 const ONLY = (arg('only', '') || '').split(',').filter(Boolean)
 /** REQ-0568 §2-3 — where to leave the prepared .mojioko files, if anywhere. */
 const KEEP_PROJECTS = arg('keep-projects', '')
@@ -86,6 +90,18 @@ const OTHER_LANG = PAGE_LANG === 'ja' ? 'en' : 'ja'
 const TARGET = arg('target', 'site')
 if (!TARGETS[TARGET]) {
   console.error(`shots: unknown --target ${TARGET} (expected ${Object.keys(TARGETS).join(' | ')})`)
+  process.exit(2)
+}
+
+// REQ-0580 §1-2 — require the source directories explicitly.
+if (!VIDEO_DIR || !SRT_DIR) {
+  console.error(
+    'shots: source directories are required.\n' +
+      '  Pass them on the command line:\n' +
+      '    npm run shots -- --videos <video-dir> --srt <srt-dir>\n' +
+      '  or set them in the environment:\n' +
+      '    MOJIOKO_SHOTS_VIDEOS=<video-dir> MOJIOKO_SHOTS_SRT=<srt-dir> npm run shots',
+  )
   process.exit(2)
 }
 const WIN = TARGETS[TARGET]
